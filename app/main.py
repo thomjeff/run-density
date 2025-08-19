@@ -1,11 +1,11 @@
 import time
 from typing import Any, Dict, List, Optional, Union
 
-from fastapi import FastAPI, Request, Response, HTTPException
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-# Lazy import: your real logic should be placed in app/density.py and app/overlap.py
+# Lazy import: plug in your real engines here
 try:
     from . import density as density_mod
 except Exception:
@@ -18,13 +18,6 @@ except Exception:
 
 app = FastAPI(title="run-congestion API (Cloud Run)", version="2025-08-19")
 
-class SegmentStr(str):
-    """
-    String encoding: "EventA,EventB,from_km,to_km,width_m,direction"
-    Example: "10K,Half,0.00,2.74,3.0,uni" or "10K,,2.74,5.80,1.5,bi"
-    """
-    pass
-
 class SegmentObj(BaseModel):
     eventA: str
     eventB: Optional[str] = None
@@ -36,7 +29,8 @@ class SegmentObj(BaseModel):
 class DensityPayload(BaseModel):
     paceCsv: str
     startTimes: Dict[str, float]
-    segments: List[Union[SegmentStr, SegmentObj]]
+    # Accept either inline string "10K,Half,0.00,2.74,3.0,uni" or object form
+    segments: List[Union[str, SegmentObj]]
     stepKm: float = 0.03
     timeWindow: float = 60.0
 
@@ -65,7 +59,11 @@ def health() -> Dict[str, Any]:
 
 @app.get("/ready")
 def ready() -> Dict[str, Any]:
-    return {"ok": True, "density_loaded": density_mod is not None, "overlap_loaded": overlap_mod is not None}
+    return {
+        "ok": True,
+        "density_loaded": bool(density_mod and hasattr(density_mod, "run_density")),
+        "overlap_loaded": bool(overlap_mod and hasattr(overlap_mod, "analyze_overlaps")),
+    }
 
 def _resp_with_timing(data: Any, t0: float, headers: Optional[Dict[str, str]] = None) -> JSONResponse:
     elapsed = time.perf_counter() - t0
@@ -73,8 +71,8 @@ def _resp_with_timing(data: Any, t0: float, headers: Optional[Dict[str, str]] = 
     hdrs["X-Compute-Seconds"] = f"{elapsed:.2f}"
     return JSONResponse(content=data, headers=hdrs)
 
-def _parse_segments(segments: List[Union[str, dict]]) -> List[dict]:
-    parsed = []
+def _parse_segments(segments: List[Union[str, dict, SegmentObj]]) -> List[dict]:
+    parsed: List[dict] = []
     for s in segments:
         if isinstance(s, str):
             parts = [p.strip() for p in s.split(",")]
@@ -90,9 +88,18 @@ def _parse_segments(segments: List[Union[str, dict]]) -> List[dict]:
                 "width": float(width_m),
                 "direction": direction,
             })
-        else:
-            # Pydantic already validated keys via SegmentObj if used by client
-            seg = SegmentObj(**s) if isinstance(s, dict) else s
+        elif isinstance(s, SegmentObj):
+            parsed.append({
+                "eventA": s.eventA,
+                "eventB": s.eventB,
+                "from": s.from_,
+                "to": s.to,
+                "width": s.width,
+                "direction": s.direction,
+            })
+        elif isinstance(s, dict):
+            # tolerate dicts from clients not using pydantic on their side
+            seg = SegmentObj(**s)
             parsed.append({
                 "eventA": seg.eventA,
                 "eventB": seg.eventB,
@@ -101,6 +108,8 @@ def _parse_segments(segments: List[Union[str, dict]]) -> List[dict]:
                 "width": seg.width,
                 "direction": seg.direction,
             })
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported segment entry: {type(s)}")
     return parsed
 
 @app.post("/api/density")
