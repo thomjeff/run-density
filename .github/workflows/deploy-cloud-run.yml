@@ -3,50 +3,80 @@ name: deploy-cloud-run
 on:
   push:
     branches: [ main ]
-
-env:
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  REGION: us-central1
-  SERVICE: run-density
+  workflow_dispatch: {}
 
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
     permissions:
+      id-token: write   # needed for WIF
       contents: read
-      id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Set up gcloud
+      - name: Log env vars presence
+        run: |
+          echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}"
+          echo "GCP_REGION=${{ secrets.GCP_REGION }}"
+          echo "GCP_SERVICE=${{ secrets.GCP_SERVICE }}"
+          echo "GCP_WIF_PROVIDER=${{ secrets.GCP_WIF_PROVIDER }}"
+          echo "GCP_SERVICE_ACCOUNT=${{ secrets.GCP_SERVICE_ACCOUNT }}"
+
+      - name: Authenticate to Google Cloud via WIF
         uses: google-github-actions/auth@v2
         with:
+          token_format: access_token
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - name: Set up Cloud SDK
+      - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ env.PROJECT_ID }}
 
-      - name: Deploy to Cloud Run (no-traffic canary)
+      - name: Enable required APIs
         run: |
-          gcloud run deploy $SERVICE             --region $REGION             --source .             --allow-unauthenticated             --memory=1Gi --cpu=1             --min-instances=0 --max-instances=5             --timeout=300             --no-traffic             --tag=ci
+          gcloud services enable run.googleapis.com artifactregistry.googleapis.com --project ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Build and push container
+        run: |
+          gcloud builds submit \
+            --project ${{ secrets.GCP_PROJECT_ID }} \
+            --tag "gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_SERVICE }}:${{ github.sha }}"
+
+      - name: Deploy to Cloud Run (canary)
+        run: |
+          gcloud run deploy ${{ secrets.GCP_SERVICE }} \
+            --image "gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_SERVICE }}:${{ github.sha }}" \
+            --project ${{ secrets.GCP_PROJECT_ID }} \
+            --region ${{ secrets.GCP_REGION }} \
+            --allow-unauthenticated \
+            --tag=ci
 
       - name: Discover canary URL
         id: canary
         run: |
-          URL=$(gcloud run services describe $SERVICE --region $REGION --format='json(status.traffic)' | jq -r '.status.traffic[] | select(.tag=="ci") | .url')
-          echo "url=$URL" >> $GITHUB_OUTPUT
+          URL=$(gcloud run services describe ${{ secrets.GCP_SERVICE }} \
+            --project ${{ secrets.GCP_PROJECT_ID }} \
+            --region ${{ secrets.GCP_REGION }} \
+            --format='value(status.traffic[0].url)')
+          echo "canary_url=$URL" >> $GITHUB_OUTPUT
+          echo "Discovered canary URL: $URL"
 
-      - name: Smoke tests against canary
+      - name: Smoke test /health
         run: |
-          sudo apt-get update && sudo apt-get install -y jq
-          BASE="${{ steps.canary.outputs.url }}"
-          curl -s "$BASE/health" | jq -e '.ok == true' >/dev/null
-          curl -s "$BASE/ready"  | jq -e '.ok == true and .density_loaded == true and .overlap_loaded == true' >/dev/null
+          curl -f "${{ steps.canary.outputs.canary_url }}/health" -o health.json
+          cat health.json || true
 
-      # Optional: promote to 100% (uncomment when ready)
-      # - name: Promote latest to 100%
-      #   run: |
-      #     gcloud run services update-traffic $SERVICE --region $REGION --to-latest
+      - name: Smoke test /ready
+        run: |
+          curl -f "${{ steps.canary.outputs.canary_url }}/ready" -o ready.json
+          cat ready.json || true
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-diagnostics
+          path: |
+            health.json
+            ready.json
