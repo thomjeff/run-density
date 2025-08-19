@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OverlapResponse",
+  "type": "object",
+  "required": [
+    "ok",
+    "engine",
+    "steps",
+    "peak"
+  ],
+  "properties": {
+    "ok": {
+      "type": "boolean"
+    },
+    "engine": {
+      "type": "string",
+      "const": "overlap"
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "peak": {
+      "type": "object"
+    }
+  }
+}

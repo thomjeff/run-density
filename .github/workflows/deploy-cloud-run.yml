@@ -1,0 +1,52 @@
+name: deploy-cloud-run
+
+on:
+  push:
+    branches: [ main ]
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+  SERVICE: run-density
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up gcloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Deploy to Cloud Run (no-traffic canary)
+        run: |
+          gcloud run deploy $SERVICE             --region $REGION             --source .             --allow-unauthenticated             --memory=1Gi --cpu=1             --min-instances=0 --max-instances=5             --timeout=300             --no-traffic             --tag=ci
+
+      - name: Discover canary URL
+        id: canary
+        run: |
+          URL=$(gcloud run services describe $SERVICE --region $REGION --format='json(status.traffic)' | jq -r '.status.traffic[] | select(.tag=="ci") | .url')
+          echo "url=$URL" >> $GITHUB_OUTPUT
+
+      - name: Smoke tests against canary
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq
+          BASE="${{ steps.canary.outputs.url }}"
+          curl -s "$BASE/health" | jq -e '.ok == true' >/dev/null
+          curl -s "$BASE/ready"  | jq -e '.ok == true and .density_loaded == true and .overlap_loaded == true' >/dev/null
+
+      # Optional: promote to 100% (uncomment when ready)
+      # - name: Promote latest to 100%
+      #   run: |
+      #     gcloud run services update-traffic $SERVICE --region $REGION --to-latest
