@@ -1,95 +1,69 @@
 name: deploy-cloud-run
 
 on:
-  workflow_dispatch:
   push:
     branches: [ main ]
+  workflow_dispatch: {}
 
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write      # for WIF
 
-    env:
-      GCP_PROJECT_ID:        ${{ secrets.GCP_PROJECT_ID }}
-      GCP_REGION:            ${{ secrets.GCP_REGION }}
-      GCP_SERVICE:           ${{ secrets.GCP_SERVICE }}
-      GCP_WIF_PROVIDER:      ${{ secrets.GCP_WIF_PROVIDER }}
-      GCP_SERVICE_ACCOUNT:   ${{ secrets.GCP_SERVICE_ACCOUNT }}
+    permissions:
+      id-token: write   # needed for WIF
+      contents: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Auth to Google Cloud (WIF)
+      - name: gcloud info
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          version: '>= 533.0.0'  # recent gcloud
+
+      - name: Authenticate to Google Cloud via WIF
         uses: google-github-actions/auth@v2
         with:
           token_format: access_token
-          workload_identity_provider: ${{ env.GCP_WIF_PROVIDER }}
-          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - name: Setup gcloud
+      - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Build container (Cloud Build)
+      - name: Enable required APIs (idempotent)
         run: |
-          set -euo pipefail
+          gcloud services enable \
+            run.googleapis.com \
+            artifactregistry.googleapis.com \
+            cloudbuild.googleapis.com \
+            --project "${{ secrets.GCP_PROJECT_ID }}"
+
+      - name: Build and push container (Cloud Build)
+        run: |
           gcloud builds submit \
-            --project "${GCP_PROJECT_ID}" \
-            --tag "gcr.io/${GCP_PROJECT_ID}/${GCP_SERVICE}:${{ github.sha }}"
+            --project "${{ secrets.GCP_PROJECT_ID }}" \
+            --tag "gcr.io/${{ secrets.GCP_PROJECT_ID }}/run-density:${{ github.sha }}"
 
-      - name: Deploy to Cloud Run (canary)
-        id: deploy
+      - name: Deploy to Cloud Run (latest)
         run: |
-          set -euo pipefail
-          gcloud run deploy "${GCP_SERVICE}" \
-            --project "${GCP_PROJECT_ID}" \
-            --region "${GCP_REGION}" \
-            --image "gcr.io/${GCP_PROJECT_ID}/${GCP_SERVICE}:${{ github.sha }}" \
+          gcloud run deploy run-density \
+            --image "gcr.io/${{ secrets.GCP_PROJECT_ID }}/run-density:${{ github.sha }}" \
+            --region "${{ secrets.GCP_REGION }}" \
             --allow-unauthenticated \
-            --tag canary \
-            --no-traffic \
-            --memory=1Gi --cpu=1 --timeout=300
+            --memory=1Gi --cpu=1 \
+            --min-instances=0 --max-instances=3 \
+            --timeout=300 \
+            --project "${{ secrets.GCP_PROJECT_ID }}" \
+            --quiet
 
-          CANARY_URL="$(gcloud run revisions list \
-            --service="${GCP_SERVICE}" --project "${GCP_PROJECT_ID}" \
-            --region "${GCP_REGION}" --format='table(NAME,TAGS,URL)' \
-            | awk '/canary/ {print $3; exit}')"
-          echo "canary_url=${CANARY_URL}" >> "$GITHUB_OUTPUT"
-          printf '{ "url": "%s" }\n' "${CANARY_URL}" > canary_service.json
-          cat canary_service.json
-
-      - name: Smoke test canary
-        id: smoke
+      - name: Smoke: health & ready
+        shell: bash
+        env:
+          BASE: ${{ secrets.SERVICE_BASE_URL }}
         run: |
           set -euo pipefail
-          BASE="${{ steps.deploy.outputs.canary_url }}"
-          echo "BASE=${BASE}"
-          curl -fsSL "${BASE}/health" -H 'Accept: application/json' | tee health.json
-          curl -fsSL "${BASE}/ready"  -H 'Accept: application/json' | tee ready.json
-          curl -fsSL -X POST "${BASE}/api/density" \
-            -H "Content-Type: application/json" -H "Accept: application/json" \
-            -d '{"paceCsv":"https://raw.githubusercontent.com/thomjeff/run-congestion/main/data/your_pace_data.csv","startTimes":{"10K":440,"Half":460},"segments":["10K,Half,0.00,0.03,3.0,uni"],"stepKm":0.03,"timeWindow":60}' \
-            | jq '.engine' | tee density_engine.txt
-          echo "ok=true" >> "$GITHUB_OUTPUT"
-
-      - name: Upload diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: canary-diagnostics
-          path: |
-            canary_service.json
-            health.json
-            ready.json
-            density_engine.txt
-          if-no-files-found: ignore
-
-      - name: Shift traffic to latest (only if smoke passed)
-        if: steps.smoke.outputs.ok == 'true'
-        run: |
-          gcloud run services update-traffic "${GCP_SERVICE}" \
-            --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" \
-            --to-latest
+          echo "▶ $BASE/health"; curl -sSf "$BASE/health" | jq .
+          echo "▶ $BASE/ready";  curl -sSf "$BASE/ready"  | jq .
+          echo "✅ Smoke passed"
