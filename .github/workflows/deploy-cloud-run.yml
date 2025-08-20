@@ -1,61 +1,75 @@
 name: deploy-cloud-run
 
 on:
+  workflow_dispatch:
   push:
     branches: [ main ]
-  workflow_dispatch:
 
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: read
+      id-token: write   # required for WIF
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Auth to Google Cloud (WIF)
+      # Authenticate to Google Cloud via Workload Identity Federation
+      - name: Auth (WIF)
+        id: auth
         uses: google-github-actions/auth@v2
         with:
-          token_format: access_token
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - name: Set up gcloud
+      - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-      - name: Enable required APIs (idempotent)
+      - name: gcloud info
         run: |
-          gcloud services enable \
-            run.googleapis.com \
-            cloudbuild.googleapis.com \
-            artifactregistry.googleapis.com \
-            iamcredentials.googleapis.com \
-            --project "${{ secrets.GCP_PROJECT_ID }}"
+          gcloud --version
+          gcloud config set project "${{ secrets.GCP_PROJECT_ID }}"
+          gcloud services list --enabled || true
 
-      - name: Build & push container (Cloud Build)
+      # Build container with Cloud Build (source is the repo root)
+      - name: Build (Cloud Build)
         run: |
-          gcloud builds submit . \
+          gcloud builds submit \
             --project "${{ secrets.GCP_PROJECT_ID }}" \
-            --tag "gcr.io/${{ secrets.GCP_PROJECT_ID }}/run-density:${{ github.sha }}"
+            --gcs-log-dir="gs://cloud-build-logs-${{ secrets.GCP_PROJECT_ID }}/" \
+            --tag "gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_SERVICE }}:${{ github.sha }}"
 
-      - name: Deploy to Cloud Run (LATEST)
+      # Deploy to Cloud Run (LATEST, no canary)
+      - name: Deploy to Cloud Run
         run: |
-          gcloud run deploy run-density \
-            --image "gcr.io/${{ secrets.GCP_PROJECT_ID }}/run-density:${{ github.sha }}" \
+          gcloud run deploy "${{ secrets.GCP_SERVICE }}" \
+            --project "${{ secrets.GCP_PROJECT_ID }}" \
             --region "${{ secrets.GCP_REGION }}" \
+            --image "gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_SERVICE }}:${{ github.sha }}" \
+            --platform managed \
             --allow-unauthenticated \
             --memory=1Gi --cpu=1 \
             --min-instances=0 --max-instances=3 \
-            --timeout=300
+            --timeout=300 \
+            --quiet
 
-      - name: "Smoke: /health and /ready"
-        shell: bash
+      # Discover the service URL to hit
+      - name: Fetch URL
+        id: url
+        run: |
+          URL=$(gcloud run services describe "${{ secrets.GCP_SERVICE }}" \
+              --project "${{ secrets.GCP_PROJECT_ID }}" \
+              --region "${{ secrets.GCP_REGION }}" \
+              --format='value(status.url)')
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      # Smoke tests
+      - name: Smoke: /health and /ready
         run: |
           set -euo pipefail
-          curl -fsSL "${{ secrets.SERVICE_BASE_URL }}/health" | jq .
-          curl -fsSL "${{ secrets.SERVICE_BASE_URL }}/ready"  | jq .
+          URL="${{ steps.url.outputs.url }}"
+          echo "Hitting $URL ..."
+          curl -fsS "$URL/health" | jq . || (echo "health failed" && exit 1)
+          curl -fsS "$URL/ready"  | jq . || (echo "ready failed" && exit 1)
