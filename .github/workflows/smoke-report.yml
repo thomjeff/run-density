@@ -1,0 +1,51 @@
+name: smoke-report
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/report-format
+      - feature/*
+      - main
+
+jobs:
+  smoke-report:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # required for Workload Identity Federation
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Auth (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Discover Cloud Run URL
+        id: url
+        run: |
+          URL=$(gcloud run services describe "${{ secrets.GCP_SERVICE }}"                   --project "${{ secrets.GCP_PROJECT_ID }}"                   --region "${{ secrets.GCP_REGION }}"                   --format='value(status.url)')
+          echo "service_url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Make smoke helper executable
+        run: chmod +x ci/smoke-report.sh
+
+      - name: "Smoke: /health, /ready, and /api/report"
+        env:
+          BASE_URL: ${{ steps.url.outputs.service_url }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE_URL}" ]; then
+            echo "ERROR: BASE_URL is empty" >&2
+            exit 1
+          fi
+          ./ci/smoke-report.sh
