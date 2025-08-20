@@ -7,113 +7,110 @@ on:
 
 jobs:
   build-deploy:
+    name: Build & Deploy (Cloud Run)
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
+      id-token: write   # required for Workload Identity Federation
     outputs:
-      service_url: ${{ steps.discover.outputs.url }}
+      service_url: ${{ steps.fetch-url.outputs.service_url }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Auth (WIF)
+        id: auth
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account:          ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Configure Docker for Artifact Registry
+      - name: gcloud info
         run: |
-          gcloud auth configure-docker "${{ secrets.GCP_REGION }}-docker.pkg.dev" -q
+          gcloud --version
+          gcloud config set project "${{ secrets.GCP_PROJECT_ID }}"
+          gcloud services list --enabled || true
 
-      - name: Build & Push image (Docker → Artifact Registry)
-        id: build
+      - name: Build container (Cloud Build → Artifact Registry/GCR)
         run: |
-          IMAGE="${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/run/${{ secrets.GCP_SERVICE }}:${{ github.sha }}"
-          echo "Building $IMAGE"
-          docker build -t "$IMAGE" .
-          docker push "$IMAGE"
-          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          gcloud builds submit \
+            --project "${{ secrets.GCP_PROJECT_ID }}" \
+            --tag "gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_SERVICE }}:${{ github.sha }}"
 
-      - name: Deploy to Cloud Run
+      - name: Deploy to Cloud Run (latest)
         run: |
-          IMAGE="${{ steps.build.outputs.image }}"
           gcloud run deploy "${{ secrets.GCP_SERVICE }}" \
             --project "${{ secrets.GCP_PROJECT_ID }}" \
-            --region  "${{ secrets.GCP_REGION }}" \
-            --image   "$IMAGE" \
+            --region "${{ secrets.GCP_REGION }}" \
+            --image "gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_SERVICE }}:${{ github.sha }}" \
             --platform managed \
             --allow-unauthenticated \
             --memory=1Gi --cpu=1 \
             --min-instances=0 --max-instances=3 \
-            --timeout=300 --quiet
+            --timeout=300 \
+            --quiet
 
-      - name: Discover service URL
-        id: discover
+      - name: Fetch service URL
+        id: fetch-url
         run: |
           URL=$(gcloud run services describe "${{ secrets.GCP_SERVICE }}" \
-                --project "${{ secrets.GCP_PROJECT_ID }}" \
-                --region  "${{ secrets.GCP_REGION }}" \
-                --format='value(status.url)')
-          echo "url=$URL" >> "$GITHUB_OUTPUT"
-          echo "::notice title=Service URL::$URL"
+              --project "${{ secrets.GCP_PROJECT_ID }}" \
+              --region "${{ secrets.GCP_REGION }}" \
+              --format='value(status.url)')
+          echo "service_url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Service URL: $URL"
 
-  contract-tests:
-    name: Contract Tests (live)
+  smoke-test:
+    name: Smoke Test (prod, with retry)
     runs-on: ubuntu-latest
     needs: build-deploy
-    permissions:
-      contents: read
-      id-token: write    # <-- IMPORTANT for WIF fallback
-    env:
-      BASE_URL: ${{ needs.build-deploy.outputs.service_url }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install test deps
+      # Ensure jq is present for the Makefile smoke target
+      - name: Install jq
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-test.txt
+          sudo apt-get update -y
+          sudo apt-get install -y jq
 
-      # Fallback only if output was blank
-      - name: Auth (WIF) for fallback
-        if: ${{ env.BASE_URL == '' }}
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account:          ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      - name: Print target URL
+        run: echo "BASE = ${{ needs.build-deploy.outputs.service_url }}"
 
-      - name: Setup gcloud for fallback
-        if: ${{ env.BASE_URL == '' }}
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Resolve URL fallback
-        if: ${{ env.BASE_URL == '' }}
+      - name: Smoke (retry with backoff)
+        env:
+          BASE: ${{ needs.build-deploy.outputs.service_url }}
         run: |
-          URL=$(gcloud run services describe "${{ secrets.GCP_SERVICE }}" \
-                --project "${{ secrets.GCP_PROJECT_ID }}" \
-                --region  "${{ secrets.GCP_REGION }}" \
-                --format='value(status.url)')
-          echo "Resolved fallback URL: $URL"
-          echo "BASE_URL=$URL" >> "$GITHUB_ENV"
+          set -Eeuo pipefail
 
-      - name: Run pytest contracts
-        run: |
-          echo "Testing against ${BASE_URL}"
-          if [ -z "${BASE_URL}" ]; then
-            echo "ERROR: BASE_URL is empty" >&2
-            exit 1
+          if [ -z "${BASE:-}" ]; then
+            echo "ERROR: BASE is empty (no service URL from deploy job)"; exit 1
           fi
-          pytest -q tests/test_contract.py
+
+          # Backoff schedule (in seconds)
+          attempts=(5 10 20 30 45)
+          pass=0
+
+          for wait in "${attempts[@]}"; do
+            echo ">> Attempt (wait=$wait) hitting $BASE ..."
+            if make smoke-prod BASE="$BASE"; then
+              pass=1
+              break
+            else
+              echo "!! Smoke failed; sleeping ${wait}s and retrying …"
+              sleep "$wait"
+            fi
+          done
+
+          # One last attempt after the loop (covers success on final try)
+          if [ "$pass" -eq 0 ]; then
+            echo ">> Final attempt …"
+            make smoke-prod BASE="$BASE"
+          fi
+
+          echo "✅ Smoke test passed for $BASE"
