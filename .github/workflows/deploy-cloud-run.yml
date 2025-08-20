@@ -93,7 +93,7 @@ jobs:
       contents: read
 
     steps:
-      - name: Smoke: /health, /ready, tiny /api/density (retry)
+      - name: "Smoke: /health, /ready, tiny /api/density (retry)"
         env:
           BASE_URL: ${{ needs.build-deploy.outputs.service_url }}
         run: |
