@@ -10,9 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
+      id-token: write              # required for WIF
     outputs:
       service_url: ${{ steps.discover.outputs.url }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,19 +32,17 @@ jobs:
           gcloud auth configure-docker "${{ secrets.GCP_REGION }}-docker.pkg.dev" -q
 
       - name: Build & Push image (Docker → Artifact Registry)
+        id: build
         run: |
           IMAGE="${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/run/${{ secrets.GCP_SERVICE }}:${{ github.sha }}"
+          echo "Building $IMAGE"
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
       - name: Deploy to Cloud Run
         run: |
-          IMAGE="${{ steps.build-deploy.outputs.image || '' }}"
-          # fall back to recomputing IMAGE if outputs not available in same job shell
-          if [ -z "$IMAGE" ]; then
-            IMAGE="${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/run/${{ secrets.GCP_SERVICE }}:${{ github.sha }}"
-          fi
+          IMAGE="${{ steps.build.outputs.image }}"
           gcloud run deploy "${{ secrets.GCP_SERVICE }}" \
             --project "${{ secrets.GCP_PROJECT_ID }}" \
             --region  "${{ secrets.GCP_REGION }}" \
@@ -62,6 +61,7 @@ jobs:
                 --region  "${{ secrets.GCP_REGION }}" \
                 --format='value(status.url)')
           echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Service URL: $URL"
 
   contract-tests:
     name: Contract Tests (live)
@@ -69,6 +69,7 @@ jobs:
     needs: build-deploy
     env:
       BASE_URL: ${{ needs.build-deploy.outputs.service_url }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -81,9 +82,13 @@ jobs:
       - name: Install test deps
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-test.txt
+          pip install pytest requests jsonschema==4.22.0
 
       - name: Run pytest contracts
         run: |
           echo "Testing against ${BASE_URL}"
+          if [ -z "${BASE_URL}" ]; then
+            echo "ERROR: BASE_URL is empty" >&2
+            exit 1
+          fi
           pytest -q tests/test_contract.py
