@@ -13,9 +13,6 @@ jobs:
       contents: read
       id-token: write   # WIF required
 
-    outputs:
-      service_url: ${{ steps.url.outputs.service_url }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,16 +36,11 @@ jobs:
           REPO_SEC:   ${{ secrets.GCP_AR_REPO }}   # may be empty
         run: |
           set -euo pipefail
-
-          # fallbacks
           REPO="${REPO_SEC:-run}"   # default to 'run' if secret is empty
-
           echo "REGION=${REGION}"       | tee -a "$GITHUB_OUTPUT"
           echo "PROJECT_ID=${PROJECT_ID}" | tee -a "$GITHUB_OUTPUT"
           echo "SERVICE=${SERVICE}"     | tee -a "$GITHUB_OUTPUT"
           echo "REPO=${REPO}"           | tee -a "$GITHUB_OUTPUT"
-
-          # Configure docker to push to Artifact Registry in REGION
           gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
       - name: "Build & Push image (Docker → Artifact Registry)"
@@ -89,35 +81,47 @@ jobs:
             --min-instances=0 --max-instances=3 \
             --timeout=300 --quiet
 
-      - name: "Fetch service URL"
-        id: url
-        env:
-          REGION:     ${{ steps.params.outputs.REGION }}
-          PROJECT_ID: ${{ steps.params.outputs.PROJECT_ID }}
-          SERVICE:    ${{ steps.params.outputs.SERVICE }}
-        run: |
-          URL=$(gcloud run services describe "${SERVICE}" \
-            --project "${PROJECT_ID}" --region "${REGION}" \
-            --format='value(status.url)')
-          echo "service_url=${URL}" >> "$GITHUB_OUTPUT"
-          echo "Service URL: ${URL}"
-
   smoke-prod:
     name: Smoke Test (prod, with retry)
     runs-on: ubuntu-latest
     needs: build-deploy
     permissions:
       contents: read
+      id-token: write   # we auth again to read the service URL
 
     steps:
-      - name: "Smoke: /health, /ready, tiny /api/density (retry)"
+      - name: Auth (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account:         ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: "Resolve URL"
+        id: url
         env:
-          BASE_URL: ${{ needs.build-deploy.outputs.service_url }}
+          REGION:     ${{ secrets.GCP_REGION }}
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          SERVICE:    ${{ secrets.GCP_SERVICE }}
         run: |
           set -euo pipefail
-          if [ -z "${BASE_URL}" ]; then
-            echo "ERROR: BASE_URL is empty"; exit 1
+          URL=$(gcloud run services describe "${SERVICE}" \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --format='value(status.url)')
+          if [ -z "$URL" ]; then
+            echo "ERROR: service URL is empty"; exit 1
           fi
+          echo "BASE_URL=${URL}" >> "$GITHUB_OUTPUT"
+          echo "Resolved service URL: ${URL}"
+
+      - name: "Smoke: /health, /ready, tiny /api/density (retry)"
+        env:
+          BASE_URL: ${{ steps.url.outputs.BASE_URL }}
+        run: |
+          set -euo pipefail
           echo "Testing against ${BASE_URL}"
 
           attempt() {
