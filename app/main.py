@@ -4,6 +4,8 @@ from typing import Any, Dict, List, Optional, Union
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from fastapi import Body
+from .reporting import format_report, coerce_clock
 
 # Lazy import: plug in your real engines here
 try:
@@ -154,3 +156,94 @@ def api_overlap(payload: OverlapPayload, request: Request) -> JSONResponse:
         raise
     except Exception as e:
         return _resp_with_timing({"error": str(e)}, t0, headers={"X-Error": "1"})
+# app/main.py (add imports at top)
+from fastapi import Body
+from .reporting import format_report, coerce_clock
+
+@app.post("/api/report")
+def report_endpoint(payload: dict = Body(...)):
+    """
+    Expected payload (minimum):
+    {
+      "eventA": "10K",
+      "eventB": "Half",
+      "from": 0.00,
+      "to": 2.74,
+      "segment_name": "A",
+      "segment_label": "Start to Friel",
+      "direction": "uni",
+      "width_m": 3.0,
+      "startTimes": {"10K": 440, "Half": 460},            # seconds-from-some-t0 (optional)
+      "startTimesClock": {"10K":"07:20:00","Half":"07:40:00"},  # pretty clocks (optional)
+      // plus whatever you already pass for engines (paceCsv, stepKm, timeWindow, etc.)
+    }
+    """
+    # pull the basics
+    eventA = payload["eventA"]
+    eventB = payload["eventB"]
+    from_km = float(payload["from"])
+    to_km   = float(payload["to"])
+
+    segment_name  = payload.get("segment_name", "?")
+    segment_label = payload.get("segment_label", segment_name)
+
+    direction = payload.get("direction", "uni")
+    width_m   = float(payload.get("width_m", 3.0 if direction == "uni" else 1.5))
+
+    # start times (either nice clocks or seconds)
+    st_clk = (payload.get("startTimesClock") or {})
+    st_sec = (payload.get("startTimes") or {})
+    startA = coerce_clock(st_clk.get(eventA), st_sec.get(eventA))
+    startB = coerce_clock(st_clk.get(eventB), st_sec.get(eventB))
+
+    # === call your existing engines here ===
+    # You likely already POST to /api/density or invoke density.over segments internally.
+    # The following is a sketch of values you should map from your current results.
+
+    # runner totals
+    runners_A = int(payload.get("runnersA", 0))  # replace from your density result
+    runners_B = int(payload.get("runnersB", 0))
+
+    # overlap segment actually used (if narrower than [from_km,to_km])
+    overlap_from_km = payload.get("overlap_from_km")  # replace with engine result
+    overlap_to_km   = payload.get("overlap_to_km")
+
+    # first overlap (time + km + bibs if you have them)
+    first_overlap_clock   = payload.get("first_overlap_clock")      # e.g. "07:48:15"
+    first_overlap_seconds = payload.get("first_overlap_seconds")    # in case you only have seconds
+    first_overlap_km      = payload.get("first_overlap_km")
+    first_overlap_bibA    = payload.get("first_overlap_bibA")
+    first_overlap_bibB    = payload.get("first_overlap_bibB")
+
+    # peak
+    peak = (payload.get("peak") or {})
+    peak_total = peak.get("combined")
+    peak_A     = peak.get("A")
+    peak_B     = peak.get("B")
+    peak_km    = peak.get("km")
+    peak_areal = peak.get("areal_density")
+
+    text = format_report(
+        eventA=eventA, eventB=eventB, from_km=from_km, to_km=to_km,
+        segment_name=segment_name, segment_label=segment_label,
+        direction=direction, width_m=width_m,
+        runners_A=runners_A, runners_B=runners_B,
+        overlap_from_km=overlap_from_km, overlap_to_km=overlap_to_km,
+        first_overlap_clock=first_overlap_clock,
+        first_overlap_seconds=first_overlap_seconds,
+        first_overlap_km=first_overlap_km,
+        first_overlap_bibA=first_overlap_bibA, first_overlap_bibB=first_overlap_bibB,
+        peak_total=peak_total, peak_A=peak_A, peak_B=peak_B,
+        peak_km=peak_km, peak_areal_density=peak_areal
+    )
+
+    # stitch start times into the placeholder line:
+    text = text.replace(
+        "{__START_TIMES__}",
+        f"Start: {eventA} {startA}, {eventB} {startB}"
+    )
+
+    return {
+        "ok": True,
+        "report": text
+    }
