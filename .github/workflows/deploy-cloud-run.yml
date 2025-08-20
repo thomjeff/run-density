@@ -38,7 +38,6 @@ jobs:
         run: |
           gcloud builds submit \
             --project "${{ secrets.GCP_PROJECT_ID }}" \
-            --gcs-log-dir="gs://cloud-build-logs-${{ secrets.GCP_PROJECT_ID }}/" \
             --tag "gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_SERVICE }}:${{ github.sha }}"
 
       # Deploy to Cloud Run (LATEST, no canary)
