@@ -10,83 +10,88 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write   # required for WIF
+      id-token: write  # required for Workload Identity Federation
 
-    env:
-      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-      GCP_REGION:     ${{ secrets.GCP_REGION }}
-      GCP_SERVICE:    ${{ secrets.GCP_SERVICE }}
-      # Artifact Registry repo name (must exist in GCP_REGION)
-      AR_REPO:        run
+    outputs:
+      service_url: ${{ steps.url.outputs.url }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Authenticate to Google Cloud via Workload Identity Federation
-      - name: Auth (WIF)
-        id: auth
+      - name: Auth (Workload Identity Federation)
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account:           ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ env.GCP_PROJECT_ID }}
 
-      - name: gcloud info
-        run: |
-          gcloud --version
-          gcloud config set project "${GCP_PROJECT_ID}"
-          gcloud services list --enabled || true
-
-      # Docker login for Artifact Registry in the chosen region
       - name: Configure Docker for Artifact Registry
-        run: |
-          gcloud auth configure-docker ${GCP_REGION}-docker.pkg.dev -q
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev -q
 
-      # Build & push image with Docker (no Cloud Build / no _cloudbuild bucket)
       - name: Build & Push image (Docker → Artifact Registry)
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          REGION: ${{ secrets.GCP_REGION }}
+          SERVICE: ${{ secrets.GCP_SERVICE }}
         run: |
-          set -euo pipefail
-          IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPO}/${GCP_SERVICE}:${GITHUB_SHA}"
-          echo "Building $IMAGE ..."
-          docker build -t "$IMAGE" .
-          docker push "$IMAGE"
-          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
-        id: image
+          IMAGE="us-central1-docker.pkg.dev/${PROJECT_ID}/run/${SERVICE}:${{ github.sha }}"
+          echo "Building ${IMAGE} ..."
+          docker build -t "${IMAGE}" .
+          docker push "${IMAGE}"
+          echo "IMAGE=${IMAGE}" >> $GITHUB_ENV
 
-      # Deploy to Cloud Run (LATEST)
       - name: Deploy to Cloud Run
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          REGION: ${{ secrets.GCP_REGION }}
+          SERVICE: ${{ secrets.GCP_SERVICE }}
         run: |
-          gcloud run deploy "${GCP_SERVICE}" \
-            --project "${GCP_PROJECT_ID}" \
-            --region  "${GCP_REGION}" \
-            --image   "${{ steps.image.outputs.image }}" \
-            --platform managed \
-            --allow-unauthenticated \
-            --memory=1Gi --cpu=1 \
-            --min-instances=0 --max-instances=3 \
-            --timeout=300 \
-            --quiet
+          gcloud run deploy "${SERVICE}"             --project "${PROJECT_ID}"             --region "${REGION}"             --image "${IMAGE}"             --platform managed             --allow-unauthenticated             --memory=1Gi --cpu=1             --min-instances=0 --max-instances=3             --timeout=300             --quiet
 
-      # Discover the service URL
       - name: Fetch URL
         id: url
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          REGION: ${{ secrets.GCP_REGION }}
+          SERVICE: ${{ secrets.GCP_SERVICE }}
         run: |
-          URL=$(gcloud run services describe "${GCP_SERVICE}" \
-              --project "${GCP_PROJECT_ID}" \
-              --region  "${GCP_REGION}" \
-              --format='value(status.url)')
-          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          URL=$(gcloud run services describe "${SERVICE}"               --project "${PROJECT_ID}"               --region "${REGION}"               --format='value(status.url)')
+          echo "url=${URL}" >> "$GITHUB_OUTPUT"
+          echo "Service URL: ${URL}"
 
-      # Smoke tests
       - name: "Smoke: /health and /ready"
         run: |
           set -euo pipefail
           URL="${{ steps.url.outputs.url }}"
-          echo "Hitting $URL ..."
-          curl -fsS "$URL/health" | jq .
-          curl -fsS "$URL/ready"  | jq .
+          echo "Hitting ${URL} ..."
+          curl -fsS "${URL}/health" | jq .
+          curl -fsS "${URL}/ready"  | jq .
+
+  contracts:
+    name: Contract Tests (live)
+    runs-on: ubuntu-latest
+    needs: build-deploy
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest
+
+      - name: Run pytest contracts
+        env:
+          BASE_URL: ${{ needs.build-deploy.outputs.service_url }}
+        run: |
+          echo "Testing against ${BASE_URL}"
+          pytest -q tests/test_contract.py

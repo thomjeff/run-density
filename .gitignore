@@ -1,0 +1,38 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+*.egg-info/
+*.egg
+*.coverage
+.coverage.*
+.pytest_cache/
+
+# Virtual environments
+.venv/
+env/
+venv/
+
+# IDE/editor junk
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local configs
+.python-version
+
+# Logs & temp
+*.log
+*.tmp
+*.bak
+
+# Build / dist
+dist/
+build/
+*.egg-info/
