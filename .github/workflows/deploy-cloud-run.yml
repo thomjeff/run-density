@@ -1,105 +1,108 @@
 name: deploy-cloud-run
 
 on:
+  workflow_dispatch:
   push:
     branches: [ main ]
-  workflow_dispatch: {}
 
 jobs:
   build-deploy:
-    name: Build → Canary → Smoke
     runs-on: ubuntu-latest
+
     permissions:
-      id-token: write
       contents: read
+      id-token: write   # for WIF
+
+    env:
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GCP_REGION:     ${{ secrets.GCP_REGION }}
+      GCP_SERVICE:    ${{ secrets.GCP_SERVICE }}     # e.g., run-density
+      GCP_WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER }} # full provider name
+      GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }} # SA email
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Verify required secrets are present
-        run: |
-          die(){ echo "::error::${1}"; exit 1; }
-          [ -n "${{ secrets.GCP_PROJECT_ID }}" ] || die "GCP_PROJECT_ID missing"
-          [ -n "${{ secrets.GCP_REGION }}" ] || die "GCP_REGION missing"
-          [ -n "${{ secrets.GCP_SERVICE }}" ] || die "GCP_SERVICE missing"
-          [ -n "${{ secrets.GCP_WIF_PROVIDER }}" ] || die "GCP_WIF_PROVIDER missing"
-          [ -n "${{ secrets.GCP_SERVICE_ACCOUNT }}" ] || die "GCP_SERVICE_ACCOUNT missing"
-          echo "All required secrets are present."
-
-      - name: Auth via Workload Identity Federation
-        id: auth
+      - name: Auth to Google Cloud (WIF)
         uses: google-github-actions/auth@v2
         with:
           token_format: access_token
-          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ env.GCP_WIF_PROVIDER }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-      - name: gcloud info
+      - name: Enable required APIs
         run: |
-          gcloud --version
-          gcloud config list
+          gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com \
+            --project "${GCP_PROJECT_ID}"
 
-      - name: Enable required APIs (idempotent)
+      - name: Build container with Cloud Build
         run: |
-          set -euxo pipefail
-          gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com iamcredentials.googleapis.com --project "${{ secrets.GCP_PROJECT_ID }}"
+          set -euo pipefail
+          gcloud builds submit \
+            --project "${GCP_PROJECT_ID}" \
+            --tag "gcr.io/${GCP_PROJECT_ID}/${GCP_SERVICE}:${{ github.sha }}"
 
-      - name: Build & push container (Cloud Build)
+      - name: Deploy to Cloud Run (canary)
+        id: deploy
         run: |
-          set -euxo pipefail
-          gcloud builds submit             --project "${{ secrets.GCP_PROJECT_ID }}"             --tag "gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_SERVICE }}:${{ github.sha }}"
+          set -euo pipefail
+          gcloud run deploy "${GCP_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --image "gcr.io/${GCP_PROJECT_ID}/${GCP_SERVICE}:${{ github.sha }}" \
+            --allow-unauthenticated \
+            --tag canary \
+            --no-traffic \
+            --memory=1Gi --cpu=1 --timeout=300
 
-      - name: Deploy to Cloud Run (no-traffic canary)
-        run: |
-          set -euxo pipefail
-          gcloud run deploy "${{ secrets.GCP_SERVICE }}"             --image "gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_SERVICE }}:${{ github.sha }}"             --project "${{ secrets.GCP_PROJECT_ID }}"             --region "${{ secrets.GCP_REGION }}"             --allow-unauthenticated             --memory=1Gi --cpu=1             --timeout=300             --min-instances=0 --max-instances=5             --no-traffic             --tag=ci
+          # capture service URL for canary tag
+          URL="$(gcloud run services describe "${GCP_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" \
+            --format='value(status.url)')"
 
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
+          # Turn the base URL into the tag URL: https://canary---SERVICE-<hash>-<region>.a.run.app
+          # gcloud provides it directly via 'list-urls' in newer versions; fallback here:
+          CANARY_URL="$(gcloud run services list-urls --platform=managed \
+            --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" \
+            --service "${GCP_SERVICE}" 2>/dev/null | awk '/canary/ {print $1}')"
 
-      - name: Describe service & discover canary URL
-        id: canary
-        run: |
-          set -euxo pipefail
-          gcloud run services describe "${{ secrets.GCP_SERVICE }}"             --project "${{ secrets.GCP_PROJECT_ID }}"             --region "${{ secrets.GCP_REGION }}"             --format=json > canary_service.json
-          echo "Service description saved to canary_service.json"
-          echo "Traffic:"
-          jq '.status.traffic' canary_service.json || true
-          URL=$(jq -r '.status.traffic[] | select(.tag=="ci") | .url' canary_service.json | head -n1)
-          if [ -z "$URL" ] || [ "$URL" = "null" ]; then
-            echo "::warning::No tag=ci found; falling back to first URL"
-            URL=$(jq -r '.status.traffic[0].url' canary_service.json)
+          if [[ -z "${CANARY_URL}" ]]; then
+            # fallback: query revisions and fetch tag URL
+            CANARY_URL="$(gcloud run revisions list --service="${GCP_SERVICE}" \
+              --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" \
+              --format='table(NAME,TAGS,URL)' | awk '/canary/ {print $3; exit}')"
           fi
-          if [ -z "$URL" ] || [ "$URL" = "null" ]; then
-            echo "::error::No service URL discovered from status.traffic"
-            exit 1
-          fi
-          echo "url=$URL" >> "$GITHUB_OUTPUT"
-          echo "Canary URL: $URL"
 
-      - name: Smoke test /health
+          echo "canary_url=${CANARY_URL}" >> "$GITHUB_OUTPUT"
+
+          # Write JSON summary expected by artifact step
+          printf '{ "url": "%s" }\n' "${CANARY_URL}" > canary_service.json
+          cat canary_service.json
+
+      - name: Smoke test canary
+        id: smoke
         run: |
-          set -euxo pipefail
-          BASE="${{ steps.canary.outputs.url }}"
-          echo "GET $BASE/health"
-          curl -sS -f "$BASE/health" -H 'Accept: application/json' -o health.json
-          cat health.json || true
+          set -euo pipefail
+          BASE="${{ steps.deploy.outputs.canary_url }}"
+          echo "BASE=${BASE}"
 
-      - name: Smoke test /ready
-        run: |
-          set -euxo pipefail
-          BASE="${{ steps.canary.outputs.url }}"
-          echo "GET $BASE/ready"
-          curl -sS -f "$BASE/ready" -H 'Accept: application/json' -o ready.json
-          cat ready.json || true
+          # health / ready
+          curl -fsSL "${BASE}/health" -H 'Accept: application/json' | tee health.json
+          curl -fsSL "${BASE}/ready"  -H 'Accept: application/json' | tee ready.json
 
-      - name: Upload diagnostics (always)
+          # minimal density ping (very small payload)
+          curl -fsSL -X POST "${BASE}/api/density" \
+            -H "Content-Type: application/json" -H "Accept: application/json" \
+            -d '{"paceCsv":"https://raw.githubusercontent.com/thomjeff/run-congestion/main/data/your_pace_data.csv","startTimes":{"10K":440,"Half":460},"segments":["10K,Half,0.00,0.03,3.0,uni"],"stepKm":0.03,"timeWindow":60}' \
+            | jq '.engine' | tee density_engine.txt
+
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload canary artifacts (best-effort)
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -108,3 +111,12 @@ jobs:
             canary_service.json
             health.json
             ready.json
+            density_engine.txt
+          if-no-files-found: ignore
+
+      - name: Shift traffic to latest if smoke passed
+        if: steps.smoke.outputs.ok == 'true'
+        run: |
+          gcloud run services update-traffic "${GCP_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" \
+            --to-latest
