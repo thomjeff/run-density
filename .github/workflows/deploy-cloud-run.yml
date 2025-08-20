@@ -12,6 +12,13 @@ jobs:
       contents: read
       id-token: write   # required for WIF
 
+    env:
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GCP_REGION:     ${{ secrets.GCP_REGION }}
+      GCP_SERVICE:    ${{ secrets.GCP_SERVICE }}
+      # Artifact Registry repo name (must exist in GCP_REGION)
+      AR_REPO:        run
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,31 +29,42 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          service_account:           ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
 
       - name: gcloud info
         run: |
           gcloud --version
-          gcloud config set project "${{ secrets.GCP_PROJECT_ID }}"
+          gcloud config set project "${GCP_PROJECT_ID}"
           gcloud services list --enabled || true
 
-      # Build container with Cloud Build (source is the repo root)
-      - name: Build (Cloud Build)
+      # Docker login for Artifact Registry in the chosen region
+      - name: Configure Docker for Artifact Registry
         run: |
-          gcloud builds submit \
-            --project "${{ secrets.GCP_PROJECT_ID }}" \
-            --tag "gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_SERVICE }}:${{ github.sha }}"
+          gcloud auth configure-docker ${GCP_REGION}-docker.pkg.dev -q
 
-      # Deploy to Cloud Run (LATEST, no canary)
+      # Build & push image with Docker (no Cloud Build / no _cloudbuild bucket)
+      - name: Build & Push image (Docker → Artifact Registry)
+        run: |
+          set -euo pipefail
+          IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPO}/${GCP_SERVICE}:${GITHUB_SHA}"
+          echo "Building $IMAGE ..."
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+        id: image
+
+      # Deploy to Cloud Run (LATEST)
       - name: Deploy to Cloud Run
         run: |
-          gcloud run deploy "${{ secrets.GCP_SERVICE }}" \
-            --project "${{ secrets.GCP_PROJECT_ID }}" \
-            --region "${{ secrets.GCP_REGION }}" \
-            --image "gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_SERVICE }}:${{ github.sha }}" \
+          gcloud run deploy "${GCP_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region  "${GCP_REGION}" \
+            --image   "${{ steps.image.outputs.image }}" \
             --platform managed \
             --allow-unauthenticated \
             --memory=1Gi --cpu=1 \
@@ -54,13 +72,13 @@ jobs:
             --timeout=300 \
             --quiet
 
-      # Discover the service URL to hit
+      # Discover the service URL
       - name: Fetch URL
         id: url
         run: |
-          URL=$(gcloud run services describe "${{ secrets.GCP_SERVICE }}" \
-              --project "${{ secrets.GCP_PROJECT_ID }}" \
-              --region "${{ secrets.GCP_REGION }}" \
+          URL=$(gcloud run services describe "${GCP_SERVICE}" \
+              --project "${GCP_PROJECT_ID}" \
+              --region  "${GCP_REGION}" \
               --format='value(status.url)')
           echo "url=$URL" >> "$GITHUB_OUTPUT"
 
@@ -70,5 +88,5 @@ jobs:
           set -euo pipefail
           URL="${{ steps.url.outputs.url }}"
           echo "Hitting $URL ..."
-          curl -fsS "$URL/health" | jq . || (echo "health failed" && exit 1)
-          curl -fsS "$URL/ready"  | jq . || (echo "ready failed" && exit 1)
+          curl -fsS "$URL/health" | jq .
+          curl -fsS "$URL/ready"  | jq .
