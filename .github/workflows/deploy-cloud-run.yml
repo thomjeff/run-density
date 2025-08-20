@@ -1,116 +1,133 @@
 name: deploy-cloud-run
 
 on:
+  workflow_dispatch:
   push:
     branches: [ main ]
-  workflow_dispatch:
 
 jobs:
   build-deploy:
-    name: Build & Deploy (Cloud Run)
+    name: Build & Deploy (Docker → Artifact Registry → Cloud Run)
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write   # required for Workload Identity Federation
-    outputs:
-      service_url: ${{ steps.fetch-url.outputs.service_url }}
+      id-token: write           # required for WIF auth
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Authenticate to Google Cloud via Workload Identity Federation
       - name: Auth (WIF)
         id: auth
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          service_account:         ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: gcloud info
+      # Allow docker to push to Artifact Registry in your region
+      - name: Configure Docker for Artifact Registry
         run: |
-          gcloud --version
-          gcloud config set project "${{ secrets.GCP_PROJECT_ID }}"
-          gcloud services list --enabled || true
+          gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev --quiet
 
-      - name: Build container (Cloud Build → Artifact Registry/GCR)
+      # Build & push image using Docker on the GitHub runner
+      - name: Build & Push image (Docker → Artifact Registry/GAR)
+        env:
+          REGION:      ${{ secrets.GCP_REGION }}
+          PROJECT_ID:  ${{ secrets.GCP_PROJECT_ID }}
+          REPO:        ${{ secrets.GCP_AR_REPO }}     # e.g. "run"
+          SERVICE:     ${{ secrets.GCP_SERVICE }}     # e.g. "run-density"
+          SHA:         ${{ github.sha }}
         run: |
-          gcloud builds submit \
-            --project "${{ secrets.GCP_PROJECT_ID }}" \
-            --tag "gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_SERVICE }}:${{ github.sha }}"
+          set -euo pipefail
+          DOMAIN="${REGION}-docker.pkg.dev"
+          IMAGE="${DOMAIN}/${PROJECT_ID}/${REPO}/${SERVICE}:${SHA}"
+          echo "Building $IMAGE"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
+      # Deploy the pushed image to Cloud Run
       - name: Deploy to Cloud Run (latest)
+        env:
+          REGION:      ${{ secrets.GCP_REGION }}
+          PROJECT_ID:  ${{ secrets.GCP_PROJECT_ID }}
+          SERVICE:     ${{ secrets.GCP_SERVICE }}
+          SHA:         ${{ github.sha }}
+          REPO:        ${{ secrets.GCP_AR_REPO }}
         run: |
-          gcloud run deploy "${{ secrets.GCP_SERVICE }}" \
-            --project "${{ secrets.GCP_PROJECT_ID }}" \
-            --region "${{ secrets.GCP_REGION }}" \
-            --image "gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_SERVICE }}:${{ github.sha }}" \
+          set -euo pipefail
+          DOMAIN="${REGION}-docker.pkg.dev"
+          IMAGE="${DOMAIN}/${PROJECT_ID}/${REPO}/${SERVICE}:${SHA}"
+          gcloud run deploy "${SERVICE}" \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --image  "${IMAGE}" \
             --platform managed \
             --allow-unauthenticated \
             --memory=1Gi --cpu=1 \
             --min-instances=0 --max-instances=3 \
-            --timeout=300 \
-            --quiet
+            --timeout=300 --quiet
 
+      # Grab the service URL for the smoke job
       - name: Fetch service URL
-        id: fetch-url
+        id: url
+        env:
+          REGION:      ${{ secrets.GCP_REGION }}
+          PROJECT_ID:  ${{ secrets.GCP_PROJECT_ID }}
+          SERVICE:     ${{ secrets.GCP_SERVICE }}
         run: |
-          URL=$(gcloud run services describe "${{ secrets.GCP_SERVICE }}" \
-              --project "${{ secrets.GCP_PROJECT_ID }}" \
-              --region "${{ secrets.GCP_REGION }}" \
-              --format='value(status.url)')
+          URL=$(gcloud run services describe "${SERVICE}" \
+            --project "${PROJECT_ID}" --region "${REGION}" \
+            --format='value(status.url)')
           echo "service_url=$URL" >> "$GITHUB_OUTPUT"
           echo "Service URL: $URL"
 
-  smoke-test:
+  smoke-prod:
     name: Smoke Test (prod, with retry)
     runs-on: ubuntu-latest
     needs: build-deploy
+    permissions:
+      contents: read   # no cloud auth needed to hit public URL
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # Ensure jq is present for the Makefile smoke target
-      - name: Install jq
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y jq
-
-      - name: Print target URL
-        run: echo "BASE = ${{ needs.build-deploy.outputs.service_url }}"
-
-      - name: Smoke (retry with backoff)
+      - name: Smoke: /health, /ready, tiny /api/density (retry)
         env:
-          BASE: ${{ needs.build-deploy.outputs.service_url }}
+          BASE_URL: ${{ needs.build-deploy.outputs.service_url || '' }}
         run: |
-          set -Eeuo pipefail
+          set -euo pipefail
 
-          if [ -z "${BASE:-}" ]; then
-            echo "ERROR: BASE is empty (no service URL from deploy job)"; exit 1
+          # Read the output from the previous job in a portable way
+          BASE_URL="${{ needs.build-deploy.outputs.service_url }}"
+          if [ -z "${BASE_URL}" ]; then
+            echo "ERROR: BASE_URL is empty"; exit 1
           fi
+          echo "Testing against ${BASE_URL}"
 
-          # Backoff schedule (in seconds)
-          attempts=(5 10 20 30 45)
-          pass=0
+          attempt() {
+            echo "Attempt $1:"
+            set -e
+            curl -fsS "${BASE_URL}/health" | jq -e '.ok == true' >/dev/null
+            curl -fsS "${BASE_URL}/ready"  | jq -e '.ok == true and .density_loaded and .overlap_loaded' >/dev/null
+            curl -fsS -X POST "${BASE_URL}/api/density" \
+              -H "Content-Type: application/json" -H "Accept: application/json" \
+              -d '{
+                    "paceCsv":"https://raw.githubusercontent.com/thomjeff/run-congestion/main/data/your_pace_data.csv",
+                    "startTimes":{"10K":440,"Half":460},
+                    "segments":[{"eventA":"10K","eventB":"Half","from":0.00,"to":2.74,"width":3.0,"direction":"uni"}],
+                    "stepKm":0.03,"timeWindow":60
+                  }' \
+              | jq -e '.engine == "density" and .segments[0].peak.combined > 0' >/dev/null
+          }
 
-          for wait in "${attempts[@]}"; do
-            echo ">> Attempt (wait=$wait) hitting $BASE ..."
-            if make smoke-prod BASE="$BASE"; then
-              pass=1
-              break
-            else
-              echo "!! Smoke failed; sleeping ${wait}s and retrying …"
-              sleep "$wait"
+          n=0; until [ $n -ge 5 ]; do
+            if attempt $((n+1)); then
+              echo "✅ Smoke passed for ${BASE_URL}"; exit 0
             fi
+            n=$((n+1)); echo "retrying in 8s..."; sleep 8
           done
 
-          # One last attempt after the loop (covers success on final try)
-          if [ "$pass" -eq 0 ]; then
-            echo ">> Final attempt …"
-            make smoke-prod BASE="$BASE"
-          fi
-
-          echo "✅ Smoke test passed for $BASE"
+          echo "❌ Smoke failed after retries"; exit 1
