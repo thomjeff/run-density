@@ -11,9 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write    # required for Workload Identity Federation
+      id-token: write   # WIF required
 
-    # expose the service URL to the next job
     outputs:
       service_url: ${{ steps.url.outputs.service_url }}
 
@@ -25,43 +24,61 @@ jobs:
         id: auth
         uses: google-github-actions/auth@v2
         with:
-            workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-            service_account:         ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account:         ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Configure Docker for Artifact Registry
-        run: |
-          gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev --quiet
-
-      - name: Build & Push image (Docker → Artifact Registry)
-        env:
-          REGION:     ${{ secrets.GCP_REGION }}
-          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          REPO:       ${{ secrets.GCP_AR_REPO }}     # e.g. "run"
-          SERVICE:    ${{ secrets.GCP_SERVICE }}     # e.g. "run-density"
-          SHA:        ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          DOMAIN="${REGION}-docker.pkg.dev"
-          IMAGE="${DOMAIN}/${PROJECT_ID}/${REPO}/${SERVICE}:${SHA}"
-          echo "Building $IMAGE"
-          docker build -t "$IMAGE" .
-          docker push "$IMAGE"
-          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
-
-      - name: Deploy to Cloud Run (latest)
+      - name: "Resolve parameters & configure Docker"
+        id: params
         env:
           REGION:     ${{ secrets.GCP_REGION }}
           PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           SERVICE:    ${{ secrets.GCP_SERVICE }}
-          REPO:       ${{ secrets.GCP_AR_REPO }}
+          REPO_SEC:   ${{ secrets.GCP_AR_REPO }}   # may be empty
+        run: |
+          set -euo pipefail
+
+          # fallbacks
+          REPO="${REPO_SEC:-run}"   # default to 'run' if secret is empty
+
+          echo "REGION=${REGION}"       | tee -a "$GITHUB_OUTPUT"
+          echo "PROJECT_ID=${PROJECT_ID}" | tee -a "$GITHUB_OUTPUT"
+          echo "SERVICE=${SERVICE}"     | tee -a "$GITHUB_OUTPUT"
+          echo "REPO=${REPO}"           | tee -a "$GITHUB_OUTPUT"
+
+          # Configure docker to push to Artifact Registry in REGION
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: "Build & Push image (Docker → Artifact Registry)"
+        env:
+          REGION:     ${{ steps.params.outputs.REGION }}
+          PROJECT_ID: ${{ steps.params.outputs.PROJECT_ID }}
+          SERVICE:    ${{ steps.params.outputs.SERVICE }}
+          REPO:       ${{ steps.params.outputs.REPO }}
           SHA:        ${{ github.sha }}
         run: |
           set -euo pipefail
           DOMAIN="${REGION}-docker.pkg.dev"
           IMAGE="${DOMAIN}/${PROJECT_ID}/${REPO}/${SERVICE}:${SHA}"
+          echo "Building IMAGE=${IMAGE}"
+          docker build -t "${IMAGE}" .
+          docker push "${IMAGE}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+
+      - name: "Deploy to Cloud Run (latest)"
+        env:
+          REGION:     ${{ steps.params.outputs.REGION }}
+          PROJECT_ID: ${{ steps.params.outputs.PROJECT_ID }}
+          SERVICE:    ${{ steps.params.outputs.SERVICE }}
+          REPO:       ${{ steps.params.outputs.REPO }}
+          SHA:        ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          DOMAIN="${REGION}-docker.pkg.dev"
+          IMAGE="${DOMAIN}/${PROJECT_ID}/${REPO}/${SERVICE}:${SHA}"
+          echo "Deploying IMAGE=${IMAGE}"
           gcloud run deploy "${SERVICE}" \
             --project "${PROJECT_ID}" \
             --region "${REGION}" \
@@ -72,18 +89,18 @@ jobs:
             --min-instances=0 --max-instances=3 \
             --timeout=300 --quiet
 
-      - name: Fetch service URL
+      - name: "Fetch service URL"
         id: url
         env:
-          REGION:     ${{ secrets.GCP_REGION }}
-          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          SERVICE:    ${{ secrets.GCP_SERVICE }}
+          REGION:     ${{ steps.params.outputs.REGION }}
+          PROJECT_ID: ${{ steps.params.outputs.PROJECT_ID }}
+          SERVICE:    ${{ steps.params.outputs.SERVICE }}
         run: |
           URL=$(gcloud run services describe "${SERVICE}" \
             --project "${PROJECT_ID}" --region "${REGION}" \
             --format='value(status.url)')
-          echo "service_url=$URL" >> "$GITHUB_OUTPUT"
-          echo "Service URL: $URL"
+          echo "service_url=${URL}" >> "$GITHUB_OUTPUT"
+          echo "Service URL: ${URL}"
 
   smoke-prod:
     name: Smoke Test (prod, with retry)
