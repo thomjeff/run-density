@@ -1,5 +1,7 @@
 # Run Density
 
+[![Smoke Tests](https://github.com/thomjeff/run-density/actions/workflows/smoke-report.yml/badge.svg)](https://github.com/thomjeff/run-density/actions/workflows/smoke-report.yml)
+
 ## Overview
 This service models runner density on shared course segments using a density engine and overlap analysis.  
 It is containerized and deployed to Google Cloud Run.
