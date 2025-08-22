@@ -1,0 +1,34 @@
+{
+  "eventA": "10K",
+  "eventB": "Half",
+  "from": 5.81,
+  "to": 8.1,
+  "segment_name": "C",
+  "segment_label": "Friel to Station/Barker",
+  "direction": "uni",
+  "width_m": 3.0,
+  "startTimes": {
+    "10K": 1200,
+    "Half": 2400
+  },
+  "startTimesClock": {
+    "10K": "07:20:00",
+    "Half": "07:40:00"
+  },
+  "runnersA": 355,
+  "runnersB": 895,
+  "overlap_from_km": 5.81,
+  "overlap_to_km": 8.1,
+  "first_overlap_clock": "07:59:54",
+  "first_overlap_km": 5.81,
+  "first_overlap_bibA": "1444",
+  "first_overlap_bibB": "1618",
+  "peak": {
+    "km": 8.09,
+    "A": 355,
+    "B": 895,
+    "combined": 1250,
+    "areal_density": 2.52
+  },
+  "report": true
+}
