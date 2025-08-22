@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.2.0] – 2025-08-21
+### Added
+- Human-readable reporting endpoint (`/api/report`)  
+  - Outputs overlap segments in plain English with segment labels, start times, runner counts, overlap timing, and peak density.  
+  - Includes density expressed in ppl/m² with color-coded zone labels (green → dark-red).  
+- CI/CD improvements:  
+  - GitHub Actions workflow for deployment (`deploy-cloud-run.yml`).  
+  - Smoke tests (`smoke-report.yml`) with badges in README.md.  
+  - Added `VERIFY.md` for manual endpoint verification.  
+  - Added `smoke-report.sh` for local/GCP smoke checks.  
+- Repo hygiene:  
+  - `.gitignore` tuned for Python/macOS/venv.  
+  - `.python-version` (3.12.5) and `Makefile` with helper targets (`run-local`, `smoke-local`, `smoke-prod`).  
+
+### Changed
+- Documentation refreshed (README.md) with updated install/run/deploy steps.  
+- Clarified guardrails: always use Docker + Artifact Registry for builds (no Cloud Build).  
+
+### Fixed
+- Consistent segment labels by integrating `overlaps.csv` with names (e.g. “Start to Friel”).  
+- Smoke tests now validated both locally and on GCP.  
+
 ## [v1.1.1] - 2025-08-20
 ### Added
 - Introduced GitHub Actions workflow with **Docker → Artifact Registry → Cloud Run** deployment.
