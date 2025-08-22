@@ -1,0 +1,63 @@
+name: test-runner
+
+on:
+  workflow_dispatch:   # run manually from GitHub UI
+
+jobs:
+  run-test-cases:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate secret
+        run: |
+          if [ -z "${{ secrets.PROD_BASE_URL }}" ]; then
+            echo "❌ PROD_BASE_URL secret not set"
+            exit 1
+          fi
+
+      - name: Ensure jq is available
+        run: |
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y jq
+          fi
+
+      - name: Run all cases in ci/cases/
+        env:
+          BASE_URL: ${{ secrets.PROD_BASE_URL }}
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          chmod +x ci/test_runner.sh
+
+          found_any=false
+          status=0
+          for f in ci/cases/*.json; do
+            if [ -f "$f" ]; then
+              found_any=true
+              name="$(basename "$f" .json)"
+              echo "▶ Running case: $name ($f)"
+              if ./ci/test_runner.sh "$f" "$BASE_URL" > "reports/${name}.txt"; then
+                echo "✅ Case ${name} OK"
+              else
+                echo "❌ Case ${name} FAILED"
+                status=1
+              fi
+            fi
+          done
+
+          if [ "$found_any" = false ]; then
+            echo "⚠️ No JSON cases found in ci/cases/. Add files like ci/cases/A.json"
+            exit 1
+          fi
+
+          exit $status
+
+      - name: Upload reports artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-runner-reports
+          path: reports/
