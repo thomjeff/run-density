@@ -123,7 +123,8 @@ jobs:
           curl -fsSI "https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv" | head -n1 | grep "200"
           curl -fsSI "https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv"    | head -n1 | grep "200"
           
-      - name: "Smoke: /health, /ready, tiny /api/density (retry)"
+      - name: "Smoke: /health, /ready, /api/density (retry, v1.3 payload)"
+        shell: bash
         env:
           BASE_URL: ${{ steps.url.outputs.BASE_URL }}
         run: |
@@ -133,20 +134,26 @@ jobs:
           attempt() {
             echo "Attempt $1:"
             set -e
+            # basic liveness
             curl -fsS "${BASE_URL}/health" | jq -e '.ok == true' >/dev/null
+            # engine readiness (both loaders)
             curl -fsS "${BASE_URL}/ready"  | jq -e '.ok == true and .density_loaded and .overlap_loaded' >/dev/null
+
+            # density with new overlapsCsv payload (no legacy `segments`)
             curl -fsS -X POST "${BASE_URL}/api/density" \
               -H "Content-Type: application/json" -H "Accept: application/json" \
               -d '{
                     "paceCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv",
-                    "startTimes":{"10K":440,"Half":460},
-                    "segments":[{"eventA":"10K","eventB":"Half","from":0.00,"to":2.74,"width":3.0,"direction":"uni"}],
-                    "stepKm":0.03,"timeWindow":60
+                    "overlapsCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv",
+                    "startTimes":{"Full":420,"10K":440,"Half":460},
+                    "stepKm":0.03,
+                    "timeWindow":60
                   }' \
-              | jq -e '.engine == "density" and .segments[0].peak.combined > 0' >/dev/null
+            | jq -e '.engine == "density" and (.segments|length) > 0' >/dev/null
           }
 
-          n=0; until [ $n -ge 5 ]; do
+          n=0
+          until [ $n -ge 5 ]; do
             if attempt $((n+1)); then
               echo "✅ Smoke passed for ${BASE_URL}"; exit 0
             fi
