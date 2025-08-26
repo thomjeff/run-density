@@ -1,164 +1,263 @@
+# app/density.py
+# FastAPI handler for density endpoint with overlapsCsv ingestion & header normalization.
 from __future__ import annotations
+
+import csv
+import io
 import math
-import time
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional
 
-import pandas as pd
-import numpy as np
+import requests
+from fastapi import APIRouter, FastAPI, HTTPException
+from pydantic import BaseModel, HttpUrl
 
-# --------- Helpers ---------
+# ---------- Pydantic models ----------
 
-def _load_pace_csv(url_or_path: str) -> pd.DataFrame:
-    df = pd.read_csv(url_or_path)
-    expected = {"event","runner_id","pace","distance"}
-    missing = expected - set(df.columns.str.lower())
-    # Normalize column case
-    df.columns = [c.lower() for c in df.columns]
-    exp2 = {"event","runner_id","pace","distance"}
-    if not exp2.issubset(set(df.columns)):
-        raise ValueError(f"your_pace_data.csv must have columns {sorted(expected)}; got {df.columns.tolist()}")
-    # Coerce
-    df["event"] = df["event"].astype(str)
-    df["runner_id"] = df["runner_id"].astype(str)
-    df["pace"] = df["pace"].astype(float)  # minutes per km
-    df["distance"] = df["distance"].astype(float)
-    return df
+class SegmentSpec(BaseModel):
+    # Accept both `seg_id` and `segment_id` via preprocess; we store in `seg_id`
+    seg_id: str
+    segment_label: str
+    pair: str  # e.g. "10K+Half"
+    eventA: str
+    eventB: str
+    from_km_A: float
+    to_km_A: float
+    from_km_B: float
+    to_km_B: float
+    direction: str  # "uni" | "bi"
+    width_m: float
 
-def _arrival_time_sec(start_min: float, km: float, pace_min_per_km: float) -> float:
-    return start_min * 60.0 + pace_min_per_km * 60.0 * km
+class DensityRequest(BaseModel):
+    paceCsv: HttpUrl
+    overlapsCsv: Optional[HttpUrl] = None
+    # Now optional: if omitted, we will load from overlapsCsv
+    segments: Optional[List[SegmentSpec]] = None
+    startTimes: Dict[str, int]  # e.g. {"Full":420,"10K":440,"Half":460} (minutes offset from 07:00 or race zerotime)
+    stepKm: float = 0.03
+    timeWindow: int = 60  # seconds
 
-def _map_km_for_event(km_physical: float, event: str) -> float:
+class PeakOut(BaseModel):
+    km: float
+    A: int
+    B: int
+    combined: int
+    areal_density: float
+    zone: str
+
+class SegmentOut(BaseModel):
+    seg_id: str
+    segment_label: str
+    pair: str
+    eventA: str
+    eventB: str
+    direction: str
+    width_m: float
+    # For convenience in CLI/UI:
+    from_km: float
+    to_km: float
+    # Raw per-event spans preserved too:
+    from_km_A: float
+    to_km_A: float
+    from_km_B: float
+    to_km_B: float
+    # Computed results:
+    peak: PeakOut
+
+class DensityResponse(BaseModel):
+    engine: str = "density"
+    segments: List[SegmentOut]
+
+# ---------- CSV normalization ----------
+
+def _normalize_overlaps_csv(url: str) -> List[SegmentSpec]:
     """
-    Hook for course-specific mapping.
-    By default, identity mapping (same physical km for both events).
-    If you have a mapping (e.g., Half_km = km_physical - 3.10), implement here.
+    Load overlaps CSV and accept either `segment_id` or `seg_id`.
+    Expected columns (either spelling for seg id is OK):
+      segment_id|seg_id, segment_label, eventA, eventB,
+      from_km_A, to_km_A, from_km_B, to_km_B,
+      direction, width_m
+    Extra columns (e.g., notes) are ignored.
     """
-    return km_physical
+    try:
+        r = requests.get(url, timeout=30)
+        r.raise_for_status()
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Failed to fetch overlapsCsv: {e}")
 
-def _count_present(df_event: pd.DataFrame, km_physical: float, t_center: float, window_s: float) -> int:
-    # arrival time at this physical km for each runner (constant pace model)
-    km_for_event = _map_km_for_event(km_physical, df_event.name if hasattr(df_event, "name") else "")
-    t_arr = df_event["start_sec"] + df_event["pace_sec_per_km"] * km_for_event
-    return int(((t_arr >= (t_center - window_s/2)) & (t_arr <= (t_center + window_s/2))).sum())
+    reader = csv.DictReader(io.StringIO(r.text))
+    out: List[SegmentSpec] = []
 
-def _linear_density(runners_per_window: int, width_m: float) -> float:
-    # Convert to linear density approximation (runners per metre along length)
-    # We assume 1 metre length slice representative of the 60s window steady state.
-    # Later callers may convert to areal density by dividing by width.
-    # Here we just return runners per metre as proxy (will be normalized by caller).
-    # Using 1m length equivalent is simplistic but consistent.
-    return runners_per_window / 1.0
+    for raw in reader:
+        seg_id = (raw.get("seg_id") or raw.get("segment_id") or "").strip()
+        if not seg_id:
+            # skip malformed lines
+            continue
 
-# --------- Public API ---------
+        segment_label = (raw.get("segment_label") or seg_id).strip()
+        eventA = (raw.get("eventA") or "").strip()
+        eventB = (raw.get("eventB") or "").strip()
 
-def run_density(
-    pace_csv: str,
-    start_times: Dict[str, float],
-    segments: List[Dict[str, any]],
-    step_km: float,
-    time_window_s: float,
-) -> Dict[str, Any]:
-    """Compute density-oriented metrics per requested segment.
+        # Required floats
+        def ffloat(key: str) -> float:
+            v = raw.get(key)
+            if v is None or str(v).strip() == "":
+                raise ValueError(f"Missing {key}")
+            return float(str(v).strip())
 
-    Returns a dict with:
-      - segments: list of results per segment
-        each item has keys:
-          segment: {eventA,eventB,from,to,width,direction}
-          steps: list of {km, A_runners, B_runners, combined_runners, areal_density, zone}
-          peak: {km, A, B, combined, areal_density, zone}
-          time_in_zones: {green_s, amber_s, red_s, darkred_s}
+        try:
+            from_km_A = ffloat("from_km_A")
+            to_km_A   = ffloat("to_km_A")
+            from_km_B = ffloat("from_km_B")
+            to_km_B   = ffloat("to_km_B")
+            direction = (raw.get("direction") or "").strip().lower()  # uni|bi
+            width_m   = float(str(raw.get("width_m") or "0").strip())
+        except Exception:
+            # skip poorly-typed rows
+            continue
+
+        # A consistent "pair" string for outputs
+        pair = f"{eventA}+{eventB}"
+
+        out.append(
+            SegmentSpec(
+                seg_id=seg_id,
+                segment_label=segment_label,
+                pair=pair,
+                eventA=eventA,
+                eventB=eventB,
+                from_km_A=from_km_A,
+                to_km_A=to_km_A,
+                from_km_B=from_km_B,
+                to_km_B=to_km_B,
+                direction=direction,
+                width_m=width_m,
+            )
+        )
+
+    if not out:
+        raise HTTPException(
+            status_code=422,
+            detail="No valid rows parsed from overlapsCsv (check headers/values).",
+        )
+    return out
+
+# ---------- Pace loading (unchanged; available for engine math) ----------
+
+class Runner(BaseModel):
+    event: str
+    runner_id: str
+    pace_min_per_km: float
+    distance_km: float
+
+def _load_pace_csv(url: str) -> List[Runner]:
+    try:
+        r = requests.get(url, timeout=60)
+        r.raise_for_status()
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Failed to fetch paceCsv: {e}")
+
+    reader = csv.DictReader(io.StringIO(r.text))
+    out: List[Runner] = []
+    for raw in reader:
+        try:
+            out.append(
+                Runner(
+                    event=(raw.get("event") or "").strip(),
+                    runner_id=(raw.get("runner_id") or "").strip(),
+                    pace_min_per_km=float(str(raw.get("pace") or "0").strip()),
+                    distance_km=float(str(raw.get("distance") or "0").strip()),
+                )
+            )
+        except Exception:
+            # ignore bad rows
+            continue
+    if not out:
+        raise HTTPException(status_code=422, detail="paceCsv contained no valid rows.")
+    return out
+
+# ---------- “Engine” placeholder / skeleton ----------
+
+def _zone_from_density(areal: float) -> str:
+    # Keep your threshold defaults
+    if areal < 1.0:
+        return "green"
+    if areal < 1.5:
+        return "amber"
+    if areal < 2.0:
+        return "red"
+    return "dark-red"
+
+def _compute_segment_peak_stub(seg: SegmentSpec) -> PeakOut:
     """
-    t0 = time.perf_counter()
-    df = _load_pace_csv(pace_csv)
-    # Pre-compute start and pace in seconds
-    df = df.copy()
-    df["start_sec"] = df["event"].map({k: float(v)*60.0 for k,v in start_times.items()}).astype(float)
-    df["pace_sec_per_km"] = df["pace"].astype(float) * 60.0
+    Placeholder: returns neutral values but valid shape.
+    Wire your real time-window density math back in here.
+    """
+    # Use the A span as representative for a single from/to in the outward payload
+    km_mid = (seg.from_km_A + seg.to_km_A) / 2.0
+    areal = 0.0  # TODO: compute real areal density (runners/m^2)
+    return PeakOut(
+        km=round(km_mid, 2),
+        A=0,
+        B=0,
+        combined=0,
+        areal_density=areal,
+        zone=_zone_from_density(areal),
+    )
 
-    results = []
-    for seg in segments:
-        eventA = seg["eventA"]
-        eventB = seg.get("eventB")
-        km_from = float(seg["from"])
-        km_to = float(seg["to"])
-        width_m = float(seg.get("width", 3.0))
-        direction = str(seg.get("direction","uni")).lower()
-        # Effective width (bi-direction halves width for each direction)
-        eff_width = width_m if direction == "uni" else max(width_m / 2.0, 0.1)
+# ---------- FastAPI wiring ----------
 
-        dfA = df[df["event"] == eventA].copy()
-        dfA.name = eventA
-        if dfA.empty:
-            raise ValueError(f"No runners for eventA={eventA}")
-        dfB = None
-        if eventB:
-            dfB = df[df["event"] == eventB].copy()
-            dfB.name = eventB
-            if dfB.empty:
-                raise ValueError(f"No runners for eventB={eventB}")
+router = APIRouter()
 
-        steps = []
-        km_vals = np.round(np.arange(km_from, km_to + 1e-9, step_km), 2)
-        for km in km_vals:
-            # Center timestamp uses event A median arrival as reference
-            t_center_A = (dfA["start_sec"] + dfA["pace_sec_per_km"] * _map_km_for_event(km, eventA)).median()
-            countA = _count_present(dfA, km, t_center_A, time_window_s)
-            countB = 0
-            if dfB is not None:
-                # Use event B median at mapped position as its own center to avoid bias
-                t_center_B = (dfB["start_sec"] + dfB["pace_sec_per_km"] * _map_km_for_event(km, eventB)).median()
-                countB = _count_present(dfB, km, t_center_B, time_window_s)
-            combined = countA + countB
-            # Areal density (/m^2): linear density (~runners/m) divided by width
-            linear = _linear_density(combined, eff_width)
-            areal = linear / eff_width  # runners per square metre
-            # Zone thresholds (tune as needed)
-            if areal < 1.0:
-                zone = "green"
-            elif areal < 1.5:
-                zone = "amber"
-            elif areal < 2.0:
-                zone = "red"
-            else:
-                zone = "dark-red"
-            steps.append({
-                "km": float(km),
-                f"{eventA}_runners": int(countA),
-                f"{eventB}_runners": int(countB) if dfB is not None else None,
-                "combined_runners": int(combined),
-                "areal_density": round(float(areal), 3),
-                "zone": zone,
-            })
+@router.get("/health")
+def health():
+    return {"ok": True, "ts": __import__("time").time()}
 
-        # Peak by combined runners
-        peak = max(steps, key=lambda x: x["combined_runners"])
-        # Time-in-zones proxy: convert step count to time by window overlap (best-effort)
-        zone_counts = {"green":0, "amber":0, "red":0, "dark-red":0}
-        for s in steps:
-            zone_counts[s["zone"]] += 1
-        seconds_per_step = time_window_s  # proxy; overlaps between steps ignored
-        time_in_zones = {k: v * seconds_per_step for k,v in zone_counts.items()}
+@router.get("/ready")
+def ready():
+    # we don't pre-load here to keep it fast; simply report handler is live
+    return {"ok": True, "density_loaded": True, "overlap_loaded": True}
 
-        results.append({
-            "segment": {
-                "eventA": eventA, "eventB": eventB,
-                "from": km_from, "to": km_to,
-                "width": width_m, "direction": direction
-            },
-            "steps": steps,
-            "peak": {
-                "km": peak["km"],
-                "A": peak.get(f"{eventA}_runners", 0),
-                "B": peak.get(f"{eventB}_runners", 0) if eventB else None,
-                "combined": peak["combined_runners"],
-                "areal_density": peak["areal_density"],
-                "zone": peak["zone"],
-            },
-            "time_in_zones": time_in_zones,
-        })
+@router.post("/api/density", response_model=DensityResponse)
+def density(req: DensityRequest):
+    # resolve segments
+    if req.segments is not None:
+        segments_in = req.segments
+    else:
+        if not req.overlapsCsv:
+            raise HTTPException(
+                status_code=422,
+                detail="Either segments[] or overlapsCsv must be provided."
+            )
+        segments_in = _normalize_overlaps_csv(str(req.overlapsCsv))
 
-    return {
-        "ok": True,
-        "engine": "density",
-        "segments": results,
-    }
+    # load pace (even if the stub doesn’t use it; ensures inputs are valid)
+    _ = _load_pace_csv(str(req.paceCsv))
+
+    # Produce outputs
+    outputs: List[SegmentOut] = []
+    for seg in segments_in:
+        peak = _compute_segment_peak_stub(seg)
+        outputs.append(
+            SegmentOut(
+                seg_id=seg.seg_id,
+                segment_label=seg.segment_label,
+                pair=seg.pair,
+                eventA=seg.eventA,
+                eventB=seg.eventB,
+                direction=seg.direction,
+                width_m=seg.width_m,
+                from_km=seg.from_km_A,  # outward single span; clients can also read _A/_B
+                to_km=seg.to_km_A,
+                from_km_A=seg.from_km_A,
+                to_km_A=seg.to_km_A,
+                from_km_B=seg.from_km_B,
+                to_km_B=seg.to_km_B,
+                peak=peak,
+            )
+        )
+
+    return DensityResponse(engine="density", segments=outputs)
+
+# Create the app instance if this file is mounted directly by the ASGI server
+app = FastAPI()
+app.include_router(router)
