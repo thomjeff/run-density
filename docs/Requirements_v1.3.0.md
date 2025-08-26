@@ -1,7 +1,7 @@
 # run-density v1.3.0 Requirements
 
 ## Overview
-Version 1.3.0 builds on v1.2.0 by introducing structured overlap metadata, three-event support, and human-readable reporting. It also aligns all data sources with the **run-density** repository instead of **run-congestion**.
+Version 1.3.0 builds on v1.2.0 by introducing structured overlap metadata, three-event support, and human-readable reporting. It also aligns all data sources with the **run-density** repository instead of **run-density**.
 
 ---
 
