@@ -3,7 +3,7 @@ set -euo pipefail
 
 : "${PROJECT_ID:?Set PROJECT_ID}"
 : "${REGION:=us-central1}"
-: "${SERVICE:=run-congestion}"
+: "${SERVICE:=run-density}"
 
 gcloud config set project "$PROJECT_ID"
 

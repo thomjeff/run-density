@@ -10,7 +10,7 @@ curl -s "$BASE/ready" | jq .
 
 echo "Density:"
 curl -s -X POST "$BASE/api/density" -H "Content-Type: application/json" -d '{
-  "paceCsv":"https://raw.githubusercontent.com/thomjeff/run-congestion/main/data/your_pace_data.csv",
+  "paceCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv",
   "startTimes":{"10K":440,"Half":460},
   "segments":[
     "10K,Half,0.00,2.74,3.0,uni",
@@ -23,7 +23,7 @@ curl -s -X POST "$BASE/api/density" -H "Content-Type: application/json" -d '{
 
 echo "Overlap:"
 curl -s -X POST "$BASE/api/overlap" -H "Content-Type: application/json" -d '{
-  "paceCsv":"https://raw.githubusercontent.com/thomjeff/run-congestion/main/data/your_pace_data.csv",
+  "paceCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv",
   "startTimes":{"10K":440,"Half":460},
   "eventA":"10K","eventB":"Half",
   "from":0.00,"to":2.74,

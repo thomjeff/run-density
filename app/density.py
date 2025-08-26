@@ -14,7 +14,7 @@ from pydantic import BaseModel, HttpUrl
 # ---------- Pydantic models ----------
 
 class SegmentSpec(BaseModel):
-    # Accept both `seg_id` and `segment_id` via preprocess; we store in `seg_id`
+    # Accept `seg_id`; we store in `seg_id`
     seg_id: str
     segment_label: str
     pair: str  # e.g. "10K+Half"
@@ -71,9 +71,9 @@ class DensityResponse(BaseModel):
 
 def _normalize_overlaps_csv(url: str) -> List[SegmentSpec]:
     """
-    Load overlaps CSV and accept either `segment_id` or `seg_id`.
-    Expected columns (either spelling for seg id is OK):
-      segment_id|seg_id, segment_label, eventA, eventB,
+    Load overlaps CSV and accept only `seg_id`.
+    Expected columns:
+      seg_id, segment_label, eventA, eventB,
       from_km_A, to_km_A, from_km_B, to_km_B,
       direction, width_m
     Extra columns (e.g., notes) are ignored.
@@ -88,7 +88,7 @@ def _normalize_overlaps_csv(url: str) -> List[SegmentSpec]:
     out: List[SegmentSpec] = []
 
     for raw in reader:
-        seg_id = (raw.get("seg_id") or raw.get("segment_id") or "").strip()
+        seg_id = (raw.get("seg_id") or "").strip()
         if not seg_id:
             # skip malformed lines
             continue

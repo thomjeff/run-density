@@ -8,14 +8,14 @@ Checks for:
 - allowed event names
 - allowed direction
 - distance plausibility
-- gaps/overlaps within same segment_id + event
+- gaps/overlaps within same seg_id + event
 """
 
 import sys
 import pandas as pd
 
 REQUIRED_COLS = [
-    "segment_id","segment_label","eventA","eventB",
+    "seg_id","segment_label","eventA","eventB",
     "from_km_A","to_km_A","from_km_B","to_km_B",
     "direction","width_m","notes"
 ]
@@ -34,7 +34,7 @@ def main(path):
 
     # Row-wise checks
     for i,row in df.iterrows():
-        sid = row["segment_id"]
+        sid = row["seg_id"]
         eA,eB = row["eventA"],row["eventB"]
         fA,tA,fB,tB = row["from_km_A"],row["to_km_A"],row["from_km_B"],row["to_km_B"]
 
@@ -64,8 +64,8 @@ def main(path):
     for ev in ALLOWED_EVENTS:
         for side in ("A","B"):
             col_from,col_to = f"from_km_{side}",f"to_km_{side}"
-            segs = df[df[f"event{side}"]==ev].sort_values([ "segment_id", col_from ])
-            for sid,group in segs.groupby("segment_id"):
+            segs = df[df[f"event{side}"]==ev].sort_values([ "seg_id", col_from ])
+            for sid,group in segs.groupby("seg_id"):
                 prev = None
                 for _,row in group.iterrows():
                     if prev is not None and row[col_from] > prev:

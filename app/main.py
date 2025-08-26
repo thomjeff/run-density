@@ -18,7 +18,7 @@ try:
 except Exception:
     overlap_mod = None
 
-app = FastAPI(title="run-congestion API (Cloud Run)", version="2025-08-19")
+app = FastAPI(title="run-density API (Cloud Run)", version="2025-08-19")
 
 class SegmentObj(BaseModel):
     eventA: str
@@ -51,7 +51,7 @@ class OverlapPayload(BaseModel):
 def root() -> Dict[str, Any]:
     return {
         "ok": True,
-        "service": "run-congestion",
+        "service": "run-density",
         "endpoints": ["/health", "/ready", "/api/density", "/api/overlap"],
     }
 

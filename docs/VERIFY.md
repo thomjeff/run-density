@@ -31,7 +31,7 @@ curl -fsS "$BASE/health" | jq .
 curl -fsS "$BASE/ready"  | jq .
 
 curl -fsS -X POST "$BASE/api/density"   -H "Content-Type: application/json"   -d '{
-    "paceCsv":"https://raw.githubusercontent.com/thomjeff/run-congestion/main/data/your_pace_data.csv",
+    "paceCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv",
     "startTimes":{"10K":440,"Half":460},
     "segments":[{"eventA":"10K","eventB":"Half","from":0.00,"to":2.74,"width":3.0,"direction":"uni"}],
     "stepKm":0.03,

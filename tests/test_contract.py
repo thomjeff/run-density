@@ -14,7 +14,7 @@ def test_health_ready():
 
 def test_density_contract():
     payload = {
-        "paceCsv":"https://raw.githubusercontent.com/thomjeff/run-congestion/main/data/your_pace_data.csv",
+        "paceCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv",
         "startTimes":{"10K":440,"Half":460},
         "segments":[
             "10K,Half,0.00,2.74,3.0,uni",
@@ -31,7 +31,7 @@ def test_density_contract():
 
 def test_overlap_contract():
     payload = {
-        "paceCsv":"https://raw.githubusercontent.com/thomjeff/run-congestion/main/data/your_pace_data.csv",
+        "paceCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv",
         "startTimes":{"10K":440,"Half":460},
         "eventA":"10K","eventB":"Half",
         "from":0.00,"to":2.74,

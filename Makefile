@@ -47,7 +47,7 @@ _smoke:
 	$(CURL) -fsS "$$BASE/health" | $(JQ) -e '.ok == true' >/dev/null && echo "health OK"; \
 	$(CURL) -fsS "$$BASE/ready"  | $(JQ) -e '.ok == true and .density_loaded and .overlap_loaded' >/dev/null && echo "ready OK"; \
 	printf '%s\n' '{ \
-	  "paceCsv":"https://raw.githubusercontent.com/thomjeff/run-congestion/main/data/your_pace_data.csv", \
+	  "paceCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv", \
 	  "startTimes":{"10K":440,"Half":460}, \
 	  "segments":[{"eventA":"10K","eventB":"Half","from":0.00,"to":2.74,"width":3.0,"direction":"uni"}], \
 	  "stepKm":0.03,"timeWindow":60 \
