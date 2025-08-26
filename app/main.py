@@ -1,29 +1,36 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
+# app/main.py
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.density import DensityPayload, run_density
 
-app = FastAPI(title="run-density", version="v1.3.0")
+app = FastAPI(title="run-density", version="1.3.0")
 
-# simple flags the smoke test expects
-DENSITY_LOADED = True
-OVERLAP_LOADED = True
+# CORS: allow all (safe for internal / testing use; tighten if exposing)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 @app.get("/health")
-def health():
+async def health():
     return {"ok": True}
 
+
 @app.get("/ready")
-def ready():
-    # both loaders are wired via run-time fetch; expose flags for the smoke test
-    return {"ok": True, "density_loaded": DENSITY_LOADED, "overlap_loaded": OVERLAP_LOADED}
+async def ready():
+    # In real systems you’d check caches or preloaded resources here
+    return {"ok": True, "density_loaded": True, "overlap_loaded": True}
+
 
 @app.post("/api/density")
-def api_density(payload: DensityPayload):
-    try:
-        result = run_density(payload)
-        return JSONResponse(result)
-    except HTTPException:
-        raise
-    except Exception as e:
-        # never leak stacktraces to the client
-        raise HTTPException(status_code=500, detail=str(e))
+async def api_density(payload: DensityPayload):
+    """
+    POST with body matching DensityPayload.
+    - Either supply 'segments' inline OR 'overlapsCsv'.
+    - 'paceCsv' is always required.
+    """
+    result = run_density(payload)
+    return result

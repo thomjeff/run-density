@@ -1,6 +1,12 @@
 fastapi==0.110.0
+starlette==0.36.3
 uvicorn==0.30.0
 gunicorn==21.2.0
+
 pydantic==2.6.4
+typing-extensions>=4.8.0,<5
+
 pandas==2.2.2
 numpy==1.26.4
+
+requests==2.32.3
