@@ -144,7 +144,7 @@ jobs:
               -H "Content-Type: application/json" -H "Accept: application/json" \
               -d '{
                     "paceCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv",
-                    "overlapsCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv",
+                    "overlapsCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps_smoke.csv",
                     "startTimes":{"Full":420,"10K":440,"Half":460},
                     "stepKm":0.03,
                     "timeWindow":60

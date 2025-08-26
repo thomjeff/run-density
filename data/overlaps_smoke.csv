@@ -1,0 +1,2 @@
+﻿seg_id,segment_label,eventA,eventB,from_km_A,to_km_A,from_km_B,to_km_B,direction,width_m,notes
+SMK1,Start → Friel,10K,Half,0,2.7,0,2.7,uni,3,Minimal row for smoke
