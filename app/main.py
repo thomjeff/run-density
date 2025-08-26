@@ -1,26 +1,40 @@
-# app/main.py
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
-from app.density import DensityPayload, run_density
+from fastapi.middleware.cors import CORSMiddleware
+from app.density import DensityPayload, run_density, READY_FLAGS
 
-app = FastAPI(title="run-density", version="1.3.0")
+app = FastAPI(title="run-density", version="v1.3.0")
+
+# CORS (relax as needed)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
+)
 
 @app.get("/health")
 def health():
-    return {"ok": True}
+    return {"ok": True, "ts": __import__("time").time()}
 
 @app.get("/ready")
 def ready():
-    # Keep this simple. We defer real checks to CI’s “200 HEAD” step.
-    return {"ok": True, "density_loaded": True, "overlap_loaded": True}
+    return {
+        "ok": True,
+        "density_loaded": READY_FLAGS.get("density_loaded", False),
+        "overlap_loaded": READY_FLAGS.get("overlap_loaded", False),
+    }
 
 @app.post("/api/density")
-def density(payload: DensityPayload):
+def api_density(payload: DensityPayload):
+    """
+    Requires:
+      - paceCsv (event,runner_id,pace,distance)
+      - overlapsCsv (seg_id,segment_label,eventA,eventB,from_km_A,to_km_A,from_km_B,to_km_B,direction,width_m)
+      - startTimes minutes offsets, e.g. {"Full":420,"10K":440,"Half":460}
+      - stepKm, timeWindow (seconds)
+    Returns: { engine: "density", segments: [ {seg_id, segment_label, peak: {...}} ] }
+    """
     try:
-        result = run_density(payload)
-        return JSONResponse(result)
+        return run_density(payload)
     except HTTPException:
         raise
     except Exception as e:
-        # Surface as 500 so your smoke sees failure clearly if something breaks.
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"density/run failed: {e}")
