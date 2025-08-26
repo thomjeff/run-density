@@ -117,7 +117,7 @@ jobs:
           echo "BASE_URL=${URL}" >> "$GITHUB_OUTPUT"
           echo "Resolved service URL: ${URL}"
 
-      - name: Sanity: data URLs resolve (200)
+      - name: Sanity data URLs resolve (200)
         run: |
           set -euo pipefail
           curl -fsSI "https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv" | head -n1 | grep "200"
