@@ -1,7 +1,7 @@
-# app/density.py
 from __future__ import annotations
 
 import io
+import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -12,52 +12,46 @@ from pydantic import BaseModel, Field
 
 
 # -----------------------------
+# Config
+# -----------------------------
+
+ZONE_THRESHOLDS = {
+    "green": 0.0,     # < 1.0
+    "amber": 1.0,     # 1.0–1.5
+    "red":   1.5,     # 1.5–2.0
+    "dark-red": 2.0,  # ≥ 2.0
+}
+
+EPS = 1e-9
+
+
+# -----------------------------
 # Pydantic models (request/response)
 # -----------------------------
 
-class StartTimes(BaseModel):
-    """Start offsets in minutes after race clock 0."""
-    Full: Optional[int] = None
-    Half: Optional[int] = None
-    tenK: Optional[int] = Field(default=None, alias="10K")  # Accept "10K" in JSON
-
-    def get(self, event: str) -> int:
-        if event == "Full" and self.Full is not None:
-            return self.Full
-        if event == "Half" and self.Half is not None:
-            return self.Half
-        if event == "10K" and self.tenK is not None:
-            return self.tenK
-        # If missing, default to 0 (better: provide them in requests)
-        return 0
-
-
-class AdHocSegment(BaseModel):
-    """For manual single/pairwise requests (legacy handy path)."""
+class SegmentIn(BaseModel):
     eventA: str
     eventB: str
-    from_: float = Field(..., alias="from")
-    to: float
-    direction: str = Field(..., pattern="^(uni|bi)$")
+    from_: float = Field(..., alias="from")  # A’s km-from
+    to: float                                 # A’s km-to
+    direction: str
     width_m: float
-
 
 class DensityPayload(BaseModel):
     paceCsv: str
-    overlapsCsv: Optional[str] = None  # preferred for full run
-    startTimes: StartTimes
+    overlapsCsv: Optional[str] = None
+    startTimes: Dict[str, int]  # minutes offsets; keys: "Full","Half","10K"
+    segments: Optional[List[SegmentIn]] = None
     stepKm: float = 0.03
-    timeWindow: float = 60.0
-    # Legacy/manual fallback: if provided, we’ll compute only these segments
-    segments: Optional[List[AdHocSegment]] = None
+    timeWindow: int = 60
 
 
 # -----------------------------
-# Internal data models
+# Internal structures
 # -----------------------------
 
 @dataclass
-class OverlapSeg:
+class OverlapRow:
     seg_id: str
     segment_label: str
     eventA: str
@@ -66,358 +60,337 @@ class OverlapSeg:
     to_km_A: float
     from_km_B: float
     to_km_B: float
-    direction: str  # "uni" | "bi"
+    direction: str
     width_m: float
 
+@dataclass
+class SegResult:
+    seg_id: str
+    segment_label: str
+    eventA: str
+    eventB: str
+    from_km_A: float
+    to_km_A: float
+    from_km_B: float
+    to_km_B: float
+    direction: str
+    width_m: float
+    peak: dict
+    first_overlap: Optional[dict]
+    trace: Optional[List[dict]]
+
 
 # -----------------------------
-# Utilities
+# Helpers
 # -----------------------------
 
-def _http_get_text(url: str) -> str:
+def _download_csv(url: str) -> pd.DataFrame:
     try:
         r = requests.get(url, timeout=20)
         r.raise_for_status()
-        return r.text
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to fetch: {url} ({e})")
+        raise HTTPException(status_code=422, detail=f"Failed to fetch CSV: {url} ({e})")
+    try:
+        return pd.read_csv(io.StringIO(r.text))
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Failed to parse CSV: {url} ({e})")
 
-
-def _sec_to_clock(sec: float) -> str:
-    sec = max(0.0, float(sec))
-    hh = int(sec // 3600)
-    mm = int((sec % 3600) // 60)
-    ss = int(round(sec % 60))
-    return f"{hh:02d}:{mm:02d}:{ss:02d}"
-
-
-def _zone_from_density(d: float) -> str:
-    # thresholds you approved
-    if d >= 2.0:
-        return "dark-red"
-    if d >= 1.5:
-        return "red"
-    if d >= 1.0:
+def _zone_for(density: float) -> str:
+    if density < ZONE_THRESHOLDS["amber"]:
+        return "green"
+    if density < ZONE_THRESHOLDS["red"]:
         return "amber"
-    return "green"
+    if density < ZONE_THRESHOLDS["dark-red"]:
+        return "red"
+    return "dark-red"
 
+def _km_samples(a: float, b: float, step: float) -> List[float]:
+    if step <= 0:  # guard
+        return [a, b]
+    # Ensure inclusive of the end
+    n = max(1, int(math.floor((b - a) / step)) + 1)
+    xs = [a + i * step for i in range(n)]
+    if xs[-1] + EPS < b:
+        xs.append(b)
+    xs[0] = a
+    xs[-1] = b
+    return xs
 
-def _load_pace_csv(url: str) -> pd.DataFrame:
-    """
-    Expected columns:
-      event, runner_id, pace, distance
-    - pace is minutes per km (float)
-    - distance is total race distance in km
-    """
-    text = _http_get_text(url)
-    df = pd.read_csv(io.StringIO(text))
-    needed = {"event", "runner_id", "pace", "distance"}
-    missing = needed - set(df.columns)
-    if missing:
-        raise HTTPException(status_code=422, detail=f"paceCsv missing columns: {sorted(missing)}")
-    return df
+def _count_in_window(arrivals: pd.Series, t0: float, window: float) -> int:
+    if arrivals is None or len(arrivals) == 0:
+        return 0
+    arr = arrivals.values
+    return int(((arr >= t0) & (arr <= t0 + window)).sum())
 
+def _arrival_times_for_event(df_event: pd.DataFrame, start_offset_min: int, km: float) -> pd.Series:
+    """
+    arrival_time_seconds = start_offset_seconds + pace_min_per_km * 60 * km
+    Only count runners whose total distance >= km (to avoid counting 10K runners beyond 10 km, etc.)
+    """
+    if df_event.empty:
+        return pd.Series(dtype=float)
+    eligible = df_event[df_event["distance"] + EPS >= km]
+    if eligible.empty:
+        return pd.Series(dtype=float)
+    return (start_offset_min * 60.0) + eligible["pace"] * 60.0 * km
 
-def _load_overlaps_csv(url: str) -> List[OverlapSeg]:
+def _weighted_speed(df_event: pd.DataFrame) -> float:
     """
-    Expected columns (your current schema):
-      seg_id,segment_label,eventA,eventB,
-      from_km_A,to_km_A,from_km_B,to_km_B,
-      direction,width_m,notes
+    Return a conservative longitudinal speed estimate in m/s for a cohort,
+    using the *fastest* typical runner (lower pace) among those present.
+    pace (min/km) -> speed = 1000 / (pace*60) m/s
     """
-    text = _http_get_text(url)
-    df = pd.read_csv(io.StringIO(text))
-    required = [
-        "seg_id", "segment_label", "eventA", "eventB",
-        "from_km_A", "to_km_A", "from_km_B", "to_km_B",
-        "direction", "width_m"
+    if df_event.empty:
+        return 0.0
+    p_min = float(eligible_min := df_event["pace"].min())
+    if p_min <= 0:
+        return 0.0
+    return 1000.0 / (p_min * 60.0)
+
+def _build_overlap_rows_from_csv(df: pd.DataFrame) -> List[OverlapRow]:
+    # Required headers (per your final overlaps.csv)
+    needed = [
+        "seg_id","segment_label","eventA","eventB",
+        "from_km_A","to_km_A","from_km_B","to_km_B",
+        "direction","width_m"
     ]
-    missing = [c for c in required if c not in df.columns]
-    if missing:
-        raise HTTPException(status_code=422, detail=f"overlapsCsv missing columns: {missing}")
+    for c in needed:
+        if c not in df.columns:
+            raise HTTPException(status_code=422, detail=f"overlapsCsv missing column: {c}")
 
-    rows: List[OverlapSeg] = []
+    rows: List[OverlapRow] = []
     for _, r in df.iterrows():
-        rows.append(
-            OverlapSeg(
-                seg_id=str(r["seg_id"]),
-                segment_label=str(r["segment_label"]),
-                eventA=str(r["eventA"]),
-                eventB=str(r["eventB"]),
-                from_km_A=float(r["from_km_A"]),
-                to_km_A=float(r["to_km_A"]),
-                from_km_B=float(r["from_km_B"]),
-                to_km_B=float(r["to_km_B"]),
-                direction=str(r["direction"]).strip().lower(),
-                width_m=float(r["width_m"]),
-            )
-        )
+        rows.append(OverlapRow(
+            seg_id=str(r["seg_id"]),
+            segment_label=str(r["segment_label"]),
+            eventA=str(r["eventA"]),
+            eventB=str(r["eventB"]),
+            from_km_A=float(r["from_km_A"]),
+            to_km_A=float(r["to_km_A"]),
+            from_km_B=float(r["from_km_B"]),
+            to_km_B=float(r["to_km_B"]),
+            direction=str(r["direction"]).strip().lower(),
+            width_m=float(r["width_m"]),
+        ))
     return rows
 
+def _build_overlap_rows_from_segments(segments: List[SegmentIn]) -> List[OverlapRow]:
+    rows: List[OverlapRow] = []
+    for i, s in enumerate(segments, start=1):
+        rows.append(OverlapRow(
+            seg_id=f"S{i}",
+            segment_label=f"Ad-hoc {i}",
+            eventA=s.eventA, eventB=s.eventB,
+            from_km_A=float(s.from_), to_km_A=float(s.to),
+            from_km_B=float(s.from_), to_km_B=float(s.to),
+            direction=s.direction.strip().lower(),
+            width_m=float(s.width_m),
+        ))
+    return rows
+
+def _first_overlap_clock(tA_min: Optional[float], tB_min: Optional[float]) -> Optional[str]:
+    if tA_min is None or tB_min is None:
+        return None
+    secs = min(tA_min, tB_min)
+    hh = int(secs // 3600); mm = int((secs % 3600) // 60); ss = int(secs % 60)
+    return f"{hh:02d}:{mm:02d}:{ss:02d}"
+
+def _format_first_overlap(km: Optional[float], clock: Optional[str]) -> Optional[dict]:
+    if km is None or clock is None:
+        return None
+    return {"clock": clock, "km": km}
+
 
 # -----------------------------
-# Core per-sample math
+# Core density computation
 # -----------------------------
 
-def _arrival_secs_series(rows: pd.DataFrame, event: str, km_event: float, start_times_min: Dict[str, int]) -> pd.Series:
-    if rows.empty:
-        return pd.Series([], dtype=float)
-    # arrival time to km_event from the event start gun, in seconds
-    # t = start_offset*60 + km_event * pace_min_per_km * 60
-    t = start_times_min.get(event, 0) * 60.0 + km_event * (rows["pace"] * 60.0)
-    return t
-
-
-def _window_load(rows: pd.DataFrame, time_window: float) -> float:
-    """Flow-ish proxy: weight by 1/pace; scale by window seconds."""
-    if rows.empty:
-        return 0.0
-    w = 1.0 / rows["pace"]  # 1/(min/km)
-    W = w.sum()
-    if W <= 0:
-        return 0.0
-    return time_window * float(W)
-
-
-def _weighted_speed(rows: pd.DataFrame) -> float:
-    """Weighted average speed (m/s) using 1/pace weights."""
-    if rows.empty:
-        return 0.0
-    v = 1000.0 / (rows["pace"] * 60.0)  # m/s
-    w = 1.0 / rows["pace"]
-    vw = (v * w).sum() / w.sum()
-    return float(vw)
-
-
-def _sample_metrics_pair(
-    p: float,  # 0..1 position along the physical segment
-    seg: OverlapSeg,
-    pace_df: pd.DataFrame,         # event, runner_id, pace(min/km), distance(km)
-    start_times_min: Dict[str, int],
-    time_window: float,
-) -> dict:
+def _segment_density(
+    seg: OverlapRow,
+    df_pace: pd.DataFrame,
+    startTimes: Dict[str, int],
+    stepKm: float,
+    timeWindow: int,
+    debug: bool
+) -> SegResult:
     """
-    Compute metrics at proportion p. We map p -> kmA, kmB per their own ranges.
+    For each sample along the segment, compute:
+      - arrivals of A and B in [t0, t0+timeWindow], where t0 is earliest presence at that sample
+      - combined count, areal density (uni uses width, bi uses width/2)
+      - track the peak over samples; compute first_overlap as earliest sample both present
     """
-    kmA = seg.from_km_A + p * (seg.to_km_A - seg.from_km_A)
-    kmB = seg.from_km_B + p * (seg.to_km_B - seg.from_km_B)
 
-    # Runners who still have distance >= kmX for each event
-    A_rows = pace_df[(pace_df["event"] == seg.eventA) & (pace_df["distance"] >= kmA)]
-    B_rows = pace_df[(pace_df["event"] == seg.eventB) & (pace_df["distance"] >= kmB)]
+    # filter by event
+    dfA = df_pace[df_pace["event"] == seg.eventA]
+    dfB = df_pace[df_pace["event"] == seg.eventB]
 
-    tA = _arrival_secs_series(A_rows, seg.eventA, kmA, start_times_min)
-    tB = _arrival_secs_series(B_rows, seg.eventB, kmB, start_times_min)
-    tA_min = float(tA.min()) if len(tA) else None
-    tB_min = float(tB.min()) if len(tB) else None
+    stA = int(startTimes.get(seg.eventA, 0))
+    stB = int(startTimes.get(seg.eventB, 0))
 
-    loadA = _window_load(A_rows, time_window)
-    loadB = _window_load(B_rows, time_window)
-    combined = int(round(loadA + loadB))
+    # sample grids
+    kmAs = _km_samples(seg.from_km_A, seg.to_km_A, stepKm)
+    kmBs = _km_samples(seg.from_km_B, seg.to_km_B, stepKm)
+    # ensure same length by pairing by index proportionally
+    # (assume same physical stretch; pair samples by relative index)
+    n = max(len(kmAs), len(kmBs))
+    if len(kmAs) != n:
+        kmAs = _km_samples(seg.from_km_A, seg.to_km_A, (seg.to_km_A - seg.from_km_A) / max(1, n - 1))
+    if len(kmBs) != n:
+        kmBs = _km_samples(seg.from_km_B, seg.to_km_B, (seg.to_km_B - seg.from_km_B) / max(1, n - 1))
 
-    # Effective width (bi halves the usable width)
+    # precompute effective width and longitudinal speed estimate
     width_eff = seg.width_m if seg.direction == "uni" else max(0.1, seg.width_m / 2.0)
-
-    # Longitudinal span in same window uses the faster cohort (conservative crowding)
-    vA = _weighted_speed(A_rows)
-    vB = _weighted_speed(B_rows)
+    vA = _weighted_speed(dfA)  # m/s
+    vB = _weighted_speed(dfB)
     v_eff = max(vA, vB)
-    if v_eff <= 0.0:
-        return {
-            "p": p,
-            "kmA": kmA, "kmB": kmB,
-            "A": 0, "B": 0, "combined": 0,
-            "areal_density": 0.0,
-            "tA_min": tA_min, "tB_min": tB_min
-        }
+    # if v_eff == 0 we’ll guard when used
 
-    span_m = v_eff * time_window
-    area_m2 = max(0.1, width_eff * span_m)
-    areal_density = float(combined) / area_m2
-
-    return {
-        "p": p,
-        "kmA": kmA, "kmB": kmB,
-        "A": int(round(loadA)),
-        "B": int(round(loadB)),
-        "combined": combined,
-        "areal_density": areal_density,
-        "tA_min": tA_min, "tB_min": tB_min
+    peak = {
+        "km": kmAs[0],
+        "A": 0, "B": 0, "combined": 0,
+        "areal_density": 0.0,
+        "zone": "green",
     }
+    first_overlap_km: Optional[float] = None
+    first_overlap_clock_str: Optional[str] = None
+
+    trace_rows: List[dict] = []
+
+    for kA, kB in zip(kmAs, kmBs):
+        tA_arr = _arrival_times_for_event(dfA, stA, kA)
+        tB_arr = _arrival_times_for_event(dfB, stB, kB)
+        tA_min = float(tA_arr.min()) if len(tA_arr) else None
+        tB_min = float(tB_arr.min()) if len(tB_arr) else None
+
+        if tA_min is None and tB_min is None:
+            if debug:
+                trace_rows.append({
+                    "kmA": kA, "kmB": kB,
+                    "A": 0, "B": 0, "combined": 0,
+                    "areal_density": 0.0,
+                    "note": "no presence"
+                })
+            continue
+
+        t0 = min([t for t in [tA_min, tB_min] if t is not None])
+
+        A_cnt = _count_in_window(tA_arr, t0, timeWindow) if tA_min is not None else 0
+        B_cnt = _count_in_window(tB_arr, t0, timeWindow) if tB_min is not None else 0
+        combined = A_cnt + B_cnt
+
+        if v_eff > 0:
+            span_m = v_eff * timeWindow
+            area_m2 = max(0.1, width_eff * span_m)
+            areal = float(combined) / area_m2
+        else:
+            areal = 0.0
+
+        zone = _zone_for(areal)
+
+        if debug:
+            trace_rows.append({
+                "kmA": kA, "kmB": kB,
+                "t0": t0,
+                "A": A_cnt, "B": B_cnt, "combined": combined,
+                "width_eff": width_eff, "v_eff": v_eff,
+                "areal_density": areal, "zone": zone
+            })
+
+        # set first overlap (first sample where both have presence)
+        if first_overlap_km is None and (tA_min is not None) and (tB_min is not None):
+            first_overlap_km = (kA + kB) / 2.0
+            first_overlap_clock_str = _first_overlap_clock(tA_min, tB_min)
+
+        # track peak by areal density; if tie, prefer higher combined
+        better = (areal > peak["areal_density"] + EPS) or (
+            abs(areal - peak["areal_density"]) <= EPS and combined > peak["combined"]
+        )
+        if better:
+            peak = {
+                "km": float((kA + kB) / 2.0),
+                "A": int(A_cnt),
+                "B": int(B_cnt),
+                "combined": int(combined),
+                "areal_density": float(areal),
+                "zone": zone,
+            }
+
+    return SegResult(
+        seg_id=seg.seg_id,
+        segment_label=seg.segment_label,
+        eventA=seg.eventA, eventB=seg.eventB,
+        from_km_A=seg.from_km_A, to_km_A=seg.to_km_A,
+        from_km_B=seg.from_km_B, to_km_B=seg.to_km_B,
+        direction=seg.direction, width_m=seg.width_m,
+        peak=peak,
+        first_overlap=_format_first_overlap(first_overlap_km, first_overlap_clock_str),
+        trace=(trace_rows if debug else None)
+    )
 
 
 # -----------------------------
-# Public entry point
+# Public entrypoint
 # -----------------------------
 
 def run_density(payload: DensityPayload, seg_id: Optional[str] = None, debug: bool = False) -> dict:
-    """
-    Computes density segments.
+    # Load pace data
+    df = _download_csv(payload.paceCsv)
+    # enforce required cols: event, runner_id, pace, distance
+    need = ["event", "runner_id", "pace", "distance"]
+    for c in need:
+        if c not in df.columns:
+            raise HTTPException(status_code=422, detail=f"paceCsv missing column: {c}")
+    # Types
+    df["event"] = df["event"].astype(str)
+    df["runner_id"] = df["runner_id"]
+    df["pace"] = pd.to_numeric(df["pace"], errors="coerce")
+    df["distance"] = pd.to_numeric(df["distance"], errors="coerce")
+    df = df.dropna(subset=["pace", "distance"])
 
-    If payload.overlapsCsv is provided:
-      - Loads all overlap rows and computes all segments (optionally filter ?seg_id=).
-    Else if payload.segments is provided:
-      - Computes only the ad-hoc segment(s) from the body.
-    """
-    # 1) load inputs
-    pace_df = _load_pace_csv(payload.paceCsv)
-    start_times_min = {
-        "Full": payload.startTimes.Full or 0,
-        "Half": payload.startTimes.Half or 0,
-        "10K":  payload.startTimes.tenK or 0,
-    }
-    stepKm = float(payload.stepKm)
-    timeWindow = float(payload.timeWindow)
-
-    # Build the overlap list
-    overlaps: List[OverlapSeg] = []
+    # Build overlap rows
+    overlaps: List[OverlapRow]
     if payload.overlapsCsv:
-        all_rows = _load_overlaps_csv(payload.overlapsCsv)
-        if seg_id:
-            overlaps = [r for r in all_rows if r.seg_id == seg_id]
-            if not overlaps:
-                raise HTTPException(status_code=404, detail=f"seg_id '{seg_id}' not found in overlapsCsv")
-        else:
-            overlaps = all_rows
+        df_over = _download_csv(payload.overlapsCsv)
+        overlaps = _build_overlap_rows_from_csv(df_over)
     elif payload.segments:
-        # Translate ad-hoc segments into OverlapSeg stubs
-        for i, s in enumerate(payload.segments, start=1):
-            overlaps.append(
-                OverlapSeg(
-                    seg_id=f"adhoc-{i}",
-                    segment_label=f"AdHoc {i}",
-                    eventA=s.eventA, eventB=s.eventB,
-                    from_km_A=s.from_, to_km_A=s.to,
-                    from_km_B=s.from_, to_km_B=s.to,
-                    direction=s.direction, width_m=s.width_m
-                )
-            )
+        overlaps = _build_overlap_rows_from_segments(payload.segments)
     else:
-        raise HTTPException(status_code=422, detail="Provide either overlapsCsv or segments in request body")
+        raise HTTPException(status_code=422, detail="Provide either overlapsCsv or segments[]")
 
-    # 2) compute for each overlap
-    out_segments: List[dict] = []
+    # Optional filter by seg_id
+    if seg_id:
+        overlaps = [o for o in overlaps if o.seg_id == seg_id]
+        if not overlaps:
+            raise HTTPException(status_code=422, detail=f"seg_id not found: {seg_id}")
 
-    for seg in overlaps:
-        # Create a proportional grid along the segment
-        # Use arc-length on A as baseline for resolution
-        spanA = abs(seg.to_km_A - seg.from_km_A)
-        if spanA <= 0:
-            # zero-length guard
-            samples = []
-        else:
-            nsteps = max(1, int(round(spanA / stepKm)))
-            # nsteps points across [0,1]
-            samples = []
-            for j in range(nsteps + 1):
-                p = j / nsteps
-                m = _sample_metrics_pair(
-                    p=p,
-                    seg=seg,
-                    pace_df=pace_df,
-                    start_times_min=start_times_min,
-                    time_window=timeWindow,
-                )
-                samples.append(m)
+    results: List[SegResult] = []
+    for o in overlaps:
+        results.append(
+            _segment_density(
+                o, df, payload.startTimes, payload.stepKm, payload.timeWindow, debug
+            )
+        )
 
-        # first_overlap: earliest time where both cohorts exist at the same proportional place
-        first_k = None
-        first_t = None
-        for m in samples:
-            if m["tA_min"] is not None and m["tB_min"] is not None:
-                t_here = max(m["tA_min"], m["tB_min"])
-                if first_t is None or t_here < first_t:
-                    first_t = t_here
-                    # pick a representative km; we’ll report A’s km for readability
-                    first_k = m["kmA"]
-
-        first_overlap = None
-        if first_k is not None and first_t is not None:
-            first_overlap = {
-                "clock": _sec_to_clock(first_t),
-                "km": round(first_k, 2)
-            }
-
-        # peak by areal density (break ties by combined desc, then smaller km)
-        peak = None
-        for m in samples:
-            if peak is None:
-                peak = m
-            else:
-                if (m["areal_density"] > peak["areal_density"]) or \
-                   (m["areal_density"] == peak["areal_density"] and m["combined"] > peak["combined"]) or \
-                   (m["areal_density"] == peak["areal_density"] and m["combined"] == peak["combined"] and m["kmA"] < peak["kmA"]):
-                    peak = m
-
-        if peak is None:
-            # empty segment
-            seg_out = {
-                "seg_id": seg.seg_id,
-                "segment_label": seg.segment_label,
-                "eventA": seg.eventA,
-                "eventB": seg.eventB,
-                "from_km_A": seg.from_km_A,
-                "to_km_A": seg.to_km_A,
-                "from_km_B": seg.from_km_B,
-                "to_km_B": seg.to_km_B,
-                "direction": seg.direction,
-                "width_m": seg.width_m,
-                "peak": {
-                    "km": round(seg.from_km_A, 2),
-                    "A": 0, "B": 0, "combined": 0,
-                    "areal_density": 0.0,
-                    "zone": _zone_from_density(0.0)
-                },
-                "first_overlap": None,
-                "trace": None if not debug else [],
-            }
-            out_segments.append(seg_out)
-            continue
-
-        peak_info = {
-            "km": round(peak["kmA"], 2),  # report A km
-            "A": peak["A"],
-            "B": peak["B"],
-            "combined": peak["combined"],
-            "areal_density": peak["areal_density"],
-            "zone": _zone_from_density(peak["areal_density"]),
-        }
-
-        trace_payload = None
-        if debug:
-            # keep reasonable size
-            trace_payload = [
-                {
-                    "p": round(m["p"], 3),
-                    "kmA": round(m["kmA"], 3),
-                    "kmB": round(m["kmB"], 3),
-                    "A": m["A"], "B": m["B"],
-                    "combined": m["combined"],
-                    "areal_density": m["areal_density"],
-                    "tA_min": m["tA_min"],
-                    "tB_min": m["tB_min"]
-                }
-                for m in samples[:300]
-            ]
-
-        seg_out = {
-            "seg_id": seg.seg_id,
-            "segment_label": seg.segment_label,
-            "eventA": seg.eventA,
-            "eventB": seg.eventB,
-            "from_km_A": seg.from_km_A,
-            "to_km_A": seg.to_km_A,
-            "from_km_B": seg.from_km_B,
-            "to_km_B": seg.to_km_B,
-            "direction": seg.direction,
-            "width_m": seg.width_m,
-            "peak": peak_info,
-            "first_overlap": first_overlap,
-            "trace": trace_payload,
-        }
-        out_segments.append(seg_out)
-
-    return {
+    # Shape the response
+    out = {
         "engine": "density",
-        "segments": out_segments
+        "segments": [
+            {
+                "seg_id": r.seg_id,
+                "segment_label": r.segment_label,
+                "eventA": r.eventA,
+                "eventB": r.eventB,
+                "from_km_A": r.from_km_A,
+                "to_km_A": r.to_km_A,
+                "from_km_B": r.from_km_B,
+                "to_km_B": r.to_km_B,
+                "direction": r.direction,
+                "width_m": r.width_m,
+                "peak": r.peak,
+                "first_overlap": r.first_overlap,
+                "trace": r.trace if debug else None,
+            }
+            for r in results
+        ],
     }
+    return out
