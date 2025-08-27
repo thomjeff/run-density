@@ -9,13 +9,8 @@ def health():
 
 @app.get("/ready")
 def ready():
-    # If you have deeper checks, wire them here; this keeps the contract you’ve been using.
     return {"ok": True, "density_loaded": True, "overlap_loaded": True}
 
 @app.post("/api/density")
-def api_density(
-    payload: DensityPayload,
-    seg_id: str | None = Query(default=None),
-    debug: bool = Query(default=False),
-):
+def api_density(payload: DensityPayload, seg_id: str = Query(None), debug: bool = Query(False)):
     return run_density(payload, seg_id_filter=seg_id, debug=debug)
