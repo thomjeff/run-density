@@ -1,7 +1,13 @@
 seg_id,segment_label,eventA,eventB,from_km_A,to_km_A,from_km_B,to_km_B,direction,width_m,notes
-A1,Start to Friel,10K,Half,0,2.7,0,2.7,uni,10,Shared opening stretch
-A2,Start to Friel,10K,Full,0,2.7,0,2.7,uni,10,Shared opening stretch
-A3,Start to Friel,Half,Full,0,2.7,0,2.7,uni,10,Shared opening stretch
+A1a,Start to Queen/Regent,10K,Half,0,0.9,0,0.9,uni,10,Shared start to Queen/Regent at PSAB
+A1b,PSAB to WSB mid-point,10K,Half,0.9,1.8,0.9,1.8,uni,10,PSAB to WSB mid-point
+A1c,WSB mid-point to Friel,10K,Half,1.8,2.7,1.8,2.7,uni,10,WSB mid-point to Friel
+A2a,Start to Queen/Regent,10K,Full,0,0.9,0,0.9,uni,10,Shared start to Queen/Regent at PSAB
+A2b,PSAB to WSB mid-point,10K,Full,0.9,1.8,0.9,1.8,uni,10,PSAB to WSB mid-point
+A2c,WSB mid-point to Friel,10K,Full,1.8,2.7,1.8,2.7,uni,10,WSB mid-point to Friel
+A3a,Start to Queen/Regent,Half,Full,0,0.9,0,0.9,uni,10,Shared start to Queen/Regent at PSAB
+A3b,PSAB to WSB mid-point,Half,Full,0.9,1.8,0.9,1.8,uni,10,PSAB to WSB mid-point
+A3c,WSB mid-point to Friel,Half,Full,1.8,2.7,1.8,2.7,uni,10,WSB mid-point to Friel
 B1,Friel to 10K Turn (outbound),10K,Full,2.7,4.25,2.7,4.25,uni,3,Same-direction 10K & Full outbound
 B2,Friel to 10K Turn (out vs return),10K,10K,2.7,4.25,4.25,5.81,bi,1.5,10K outbound meets 10K return
 C1,10K Turn to Friel (return) vs Full (early),10K,Full,4.25,5.81,14.8,16.33,bi,1.5,Opposite directions on same segment (early Full window)
