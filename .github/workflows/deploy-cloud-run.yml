@@ -117,7 +117,7 @@ jobs:
           curl -fsSI "https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv" | head -n1 | grep "200"
           curl -fsSI "https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv"    | head -n1 | grep "200"
 
-      - name: Smoke: /health, /ready, /api/density (retry, v1.3 payload)
+      - name: "Smoke: /health, /ready, /api/density (retry, v1.3 payload)"
         env:
           BASE_URL: ${{ needs.build-deploy.outputs.service_url }}
         run: |
