@@ -11,9 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write  # WIF required
+      id-token: write   # required for WIF
 
-    # expose the service URL to the next job
+    # Expose service URL to downstream jobs
     outputs:
       service_url: ${{ steps.url.outputs.service_url }}
 
@@ -37,14 +37,14 @@ jobs:
           REGION:     ${{ secrets.GCP_REGION }}
           PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           SERVICE:    ${{ secrets.GCP_SERVICE }}
-          REPO_SEC:   ${{ secrets.GCP_AR_REPO }}   # may be empty
+          REPO_SEC:   ${{ secrets.GCP_AR_REPO }}   # optional; defaults to "run"
         run: |
           set -euo pipefail
-          REPO="${REPO_SEC:-run}"   # default to 'run' if secret is empty
-          echo "REGION=${REGION}"       | tee -a "$GITHUB_OUTPUT"
-          echo "PROJECT_ID=${PROJECT_ID}" | tee -a "$GITHUB_OUTPUT"
-          echo "SERVICE=${SERVICE}"     | tee -a "$GITHUB_OUTPUT"
-          echo "REPO=${REPO}"           | tee -a "$GITHUB_OUTPUT"
+          REPO="${REPO_SEC:-run}"
+          echo "REGION=${REGION}"       >> "$GITHUB_OUTPUT"
+          echo "PROJECT_ID=${PROJECT_ID}" >> "$GITHUB_OUTPUT"
+          echo "SERVICE=${SERVICE}"     >> "$GITHUB_OUTPUT"
+          echo "REPO=${REPO}"           >> "$GITHUB_OUTPUT"
           gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
       - name: Build & Push image (Docker → Artifact Registry)
@@ -104,7 +104,7 @@ jobs:
           echo "Resolved service URL: ${URL}"
 
   smoke-prod:
-    name: Smoke Test (prod, with retry)
+    name: "Smoke Test (prod, with retry)"
     runs-on: ubuntu-latest
     needs: build-deploy
     permissions:
@@ -115,7 +115,7 @@ jobs:
         run: |
           set -euo pipefail
           curl -fsSI "https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv" | head -n1 | grep "200"
-          curl -fsSI "https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv"    | head -n1 | grep "200"
+          curl -fsSI "https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv"       | head -n1 | grep "200"
 
       - name: "Smoke: /health, /ready, /api/density (retry, v1.3 payload)"
         env:
@@ -132,10 +132,9 @@ jobs:
             set -e
             # liveness
             curl -fsS "${BASE_URL}/health" | jq -e '.ok == true' >/dev/null
-            # readiness (both loaders)
+            # readiness
             curl -fsS "${BASE_URL}/ready"  | jq -e '.ok == true and .density_loaded and .overlap_loaded' >/dev/null
-
-            # density using the CSV-based overlaps (no legacy segment payload)
+            # density using CSV overlaps
             curl -fsS -X POST "${BASE_URL}/api/density" \
               -H "Content-Type: application/json" -H "Accept: application/json" \
               -d '{
