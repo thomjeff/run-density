@@ -1,5 +1,35 @@
 # Changelog
+## [1.3.3] – 2025-08-27
 
+### 🔧 Fixes & Improvements
+- **Shared Start Window Fix**  
+  Corrected logic so overlapping events respect their distinct start times rather than producing artificial overlaps.  
+  *Example: A1a (Start to Queen/Regent) now shows only 10K counts at 07:20, Half is correctly excluded.*
+
+- **New Metric: `crowd_density`**  
+  Added a human-intuitive density measure expressed as *runners per m²*, configurable with a `depth_m` parameter (default: 3.0m).  
+  This complements `areal_density` and provides better interpretability of congestion.
+
+- **Start-Line Splits**  
+  Segments A1, A2, A3 were subdivided into finer spans (~0.9 km each) to capture how the field disperses downstream from the start.  
+  Early peaks are concentrated at 0.0 km, then densities taper in later sub-segments.
+
+- **Stability**  
+  Local and prod smoke tests passed; 40 segments returned.  
+  Non-green congestion zones align with expected field sizes and course widths.
+
+### 📊 Sample Outputs
+- **A1a**: peak = 586, areal_density = 58.6, crowd_density = 19.5 → *dark-red*.  
+- **A1b**: peak = 20, areal_density = 2.0, crowd_density = 0.67 → *green*.  
+- **A2a/A3a**: peak values corrected, tapering visible over ~1 km.
+
+---
+
+**Next steps (v1.3.4-dev):**
+- Add bib-level trace outputs.  
+- Validate bi-direction edge cases (e.g., H3).  
+- Explore export options for human-readable outputs alongside JSON.
+  
 ## [1.3.2] – 2025-08-27
 ### Added
 - Per-segment debug view: GET /api/density?seg_id=<ID>&debug=true now returns a focused segment with first_overlap and a short trace sample for quick inspection.
