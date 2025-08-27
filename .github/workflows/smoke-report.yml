@@ -1,0 +1,80 @@
+name: smoke-report
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GCP_REGION:      ${{ secrets.GCP_REGION }}
+      GCP_SERVICE:     ${{ secrets.GCP_SERVICE }}
+
+    steps:
+      - name: Auth (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account:          ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Resolve URL
+        id: url
+        run: |
+          set -euo pipefail
+          URL=$(gcloud run services describe "$GCP_SERVICE" --region "$GCP_REGION" --format='value(status.url)')
+          if [ -z "$URL" ]; then
+            echo "Failed to resolve service URL" >&2
+            exit 1
+          fi
+          echo "BASE_URL=$URL" >> "$GITHUB_ENV"
+          echo "Service URL: $URL"
+
+      - name: Health and ready
+        run: |
+          set -euo pipefail
+          curl -fsS "$BASE_URL/health" | jq -e '.ok == true' >/dev/null
+          curl -fsS "$BASE_URL/ready"  | jq -e '.ok == true and .density_loaded and .overlap_loaded' >/dev/null
+
+      - name: "Smoke tiny density (retry)"
+        run: |
+          set -euo pipefail
+          payload='{
+            "paceCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv",
+            "overlapsCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv",
+            "startTimes":{"Full":420,"10K":440,"Half":460},
+            "segments":[
+              {"seg_id":"SMOKE","segment_label":"Start→Friel",
+               "eventA":"10K","eventB":"Half",
+               "from":0.00,"to":2.70,"direction":"uni","width_m":3.0}
+            ],
+            "stepKm":0.03,
+            "timeWindow":60
+          }'
+
+          attempt() {
+            echo "Attempt $1:"
+            body=$(curl -fsS -X POST "$BASE_URL/api/density" \
+                    -H "Content-Type: application/json" -d "$payload") || { echo "$body"; return 1; }
+            echo "$body" | jq -e '.engine=="density" and (.segments|length)>=1 and (.segments[0].peak.combined|tonumber) >= 0' >/dev/null \
+              && echo "density OK" \
+              || { echo "Unexpected response:"; echo "$body" | jq .; return 1; }
+          }
+
+          n=0
+          until [ $n -ge 5 ]; do
+            if attempt $((n+1)); then exit 0; fi
+            n=$((n+1))
+            echo "retrying in 8s…"
+            sleep 8
+          done
+          echo "density smoke failed" >&2
+          exit 1
