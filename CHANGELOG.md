@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.3.2] – 2025-08-27
+### Added
+- Per-segment debug view: GET /api/density?seg_id=<ID>&debug=true now returns a focused segment with first_overlap and a short trace sample for quick inspection.
+- Query filter: Support ?seg_id=<ID> to compute/return a single segment from overlaps.csv.
+
+### Changed
+- Canonical overlaps schema: API and engine now only accept seg_id (we removed legacy segment_id).
+- Start time model: {"10K": 440} is now a first-class field (no leading underscore). Internal model normalized (TenK) with alias mapping for request/response stability.
+- Areal density sanity: Correct handling of minutes-per-km (pace) and direction/width rules: direction: "bi" halves the effective width (width_m / 2); Areal density reported as people per m² using the effective width.
+- Main ↔ engine alignment: main.py now calls run_density(payload, seg_id_filter=…, debug=…) to prevent drift and 422/500 mismatches.
+
+### Fixed
+- Intermittent 422/500 errors stemming from mismatched parameter names and optional JSON fields.
+- Local/prod smoke parity (both return stable counts; A1 spot-check matches across environments).
+- Minor CSV header gotchas (e.g., accidental segmenttolabel) — stricter validation paths.
+
+### Developer experience
+- Make targets stabilized (run-local, stop-local, smoke-local, smoke-prod) on port 8081.
+- Clearer error surfaces in /api/density (500 returns {"error": "..."}" with concise message).
+- Pinned/verified deps (FastAPI / Starlette / Pydantic / Requests) for Python 3.12 runtime.
+
 ## [1.3.1] – 2025-08-27
 Stability release that operationalized density engine.
 
