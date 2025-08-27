@@ -36,3 +36,4 @@ venv/
 dist/
 build/
 *.egg-info/
+peaks.csv
