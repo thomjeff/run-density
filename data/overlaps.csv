@@ -1,41 +1,41 @@
-seg_id,segment_label,eventA,eventB,from_km_A,to_km_A,from_km_B,to_km_B,direction,width_m,notes
-A1,Start _ Friel,10K,Half,0,2.7,0,2.7,uni,3,Shared opening stretch
-A2,Start _ Friel,10K,Full,0,2.7,0,2.7,uni,3,Shared opening stretch
-A3,Start _ Friel,Half,Full,0,2.7,0,2.7,uni,3,Shared opening stretch
-B1,Friel _ 10K Turn (outbound),10K,Full,2.7,4.25,2.7,4.25,uni,3,Same-direction 10K & Full outbound
-B2,Friel _ 10K Turn (out vs return),10K,10K,2.7,4.25,4.25,5.81,bi,1.5,10K outbound meets 10K return
-C1,10K Turn _ Friel (return) vs Full (early),10K,Full,4.25,5.81,14.8,16.33,bi,1.5,Opposite directions on same segment (early Full window)
-C2,10K Turn _ Friel (return) vs Full (late),10K,Full,4.25,5.81,2.7,4.25,bi,1.5,Opposite directions on same segment (late Full window)
-D1,Friel _ 10K Turn (Full only),Full,Full,2.7,4.25,2.7,4.25,uni,3,Full outbound to 10K Turn
-D2,10K Turn _ 14.8km (Full only),Full,Full,4.25,14.8,4.25,14.8,uni,3,Full exclusive middle segment
-E1,Friel _ 10K Turn (late overlaps),10K,Full,2.7,4.25,14.8,16.33,bi,1.5,Faster Full may meet slowest 10K
-F1,Friel _ 10K Return (continuing),10K,10K,5.81,8.1,5.81,8.1,uni,3,Continuity row to verify no distance gaps.
-F2,Friel _ Station/Barker (shared path),10K,Half,5.81,8.1,2.7,4.95,uni,3,10K after turnaround overlaps Half outbound
-F3,Friel _ Station/Barker (shared path),10K,Full,5.81,8.1,16.33,18.59,uni,3,10K outbound toward turnaround overlaps Full outbound
-F4,Friel _ Station/Barker,Half,Full,2.7,4.95,16.33,18.59,uni,3,Half and Full outbound together on same stretch
-G1,Station/Barker _ Queen Square (10K to Finish),10K,10K,8.1,10,8.1,10,uni,3,10K finish approach
-G2,Station/Barker _ Queen Square (Half to Finish),Half,Half,19.35,21.1,19.35,21.1,uni,3,Half finish approach
-G3,Station/Barker _ Queen Square (Full loop inbound),Full,Full,18.59,20.54,18.59,20.54,uni,3,Full inbound to Queen Square
-G4,Station/Barker _ Queen Square (Full final finish),Full,Full,40.5,42.2,40.5,42.2,uni,3,Full finish approach
-G5,Station/Barker _ Queen Square (10K & Half finishes),10K,Half,8.1,10,19.35,21.1,uni,3,Shared finish segment
-G6,Station/Barker _ Queen Square (10K & Full final finish),10K,Full,8.1,10,40.5,42.2,uni,3,Shared finish segment
-G7,Station/Barker _ Queen Square (Half & Full final finish),Half,Full,19.35,21.1,40.5,42.2,uni,3,Shared finish segment
-G8,Station/Barker _ Queen Square (Half finish & Full loop inbound),Half,Full,19.35,21.1,18.59,20.54,uni,3,Overlap at QS inbound
-G9,Station/Barker _ Queen Square (10K finish & Full loop inbound),10K,Full,8.1,10,18.59,20.54,uni,3,Overlap at QS inbound
+seg_id,segmenttolabel,eventA,eventB,from_km_A,to_km_A,from_km_B,to_km_B,direction,width_m,notes
+A1,Start to Friel,10K,Half,0,2.7,0,2.7,uni,3,Shared opening stretch
+A2,Start to Friel,10K,Full,0,2.7,0,2.7,uni,3,Shared opening stretch
+A3,Start to Friel,Half,Full,0,2.7,0,2.7,uni,3,Shared opening stretch
+B1,Friel to 10K Turn (outbound),10K,Full,2.7,4.25,2.7,4.25,uni,3,Same-direction 10K & Full outbound
+B2,Friel to 10K Turn (out vs return),10K,10K,2.7,4.25,4.25,5.81,bi,1.5,10K outbound meets 10K return
+C1,10K Turn to Friel (return) vs Full (early),10K,Full,4.25,5.81,14.8,16.33,bi,1.5,Opposite directions on same segment (early Full window)
+C2,10K Turn to Friel (return) vs Full (late),10K,Full,4.25,5.81,2.7,4.25,bi,1.5,Opposite directions on same segment (late Full window)
+D1,Friel to 10K Turn (Full only),Full,Full,2.7,4.25,2.7,4.25,uni,3,Full outbound to 10K Turn
+D2,10K Turn to 14.8km (Full only),Full,Full,4.25,14.8,4.25,14.8,uni,3,Full exclusive middle segment
+E1,Friel to 10K Turn (late overlaps),10K,Full,2.7,4.25,14.8,16.33,bi,1.5,Faster Full may meet slowest 10K
+F1,Friel to 10K Return (continuing),10K,10K,5.81,8.1,5.81,8.1,uni,3,Continuity row to verify no distance gaps.
+F2,Friel to Station/Barker (shared path),10K,Half,5.81,8.1,2.7,4.95,uni,3,10K after turnaround overlaps Half outbound
+F3,Friel to Station/Barker (shared path),10K,Full,5.81,8.1,16.33,18.59,uni,3,10K outbound toward turnaround overlaps Full outbound
+F4,Friel to Station/Barker,Half,Full,2.7,4.95,16.33,18.59,uni,3,Half and Full outbound together on same stretch
+G1,Station/Barker to Queen Square (10K to Finish),10K,10K,8.1,10,8.1,10,uni,3,10K finish approach
+G2,Station/Barker to Queen Square (Half to Finish),Half,Half,19.35,21.1,19.35,21.1,uni,3,Half finish approach
+G3,Station/Barker to Queen Square (Full loop inbound),Full,Full,18.59,20.54,18.59,20.54,uni,3,Full inbound to Queen Square
+G4,Station/Barker to Queen Square (Full final finish),Full,Full,40.5,42.2,40.5,42.2,uni,3,Full finish approach
+G5,Station/Barker to Queen Square (10K & Half finishes),10K,Half,8.1,10,19.35,21.1,uni,3,Shared finish segment
+G6,Station/Barker to Queen Square (10K & Full final finish),10K,Full,8.1,10,40.5,42.2,uni,3,Shared finish segment
+G7,Station/Barker to Queen Square (Half & Full final finish),Half,Full,19.35,21.1,40.5,42.2,uni,3,Shared finish segment
+G8,Station/Barker to Queen Square (Half finish & Full loop inbound),Half,Full,19.35,21.1,18.59,20.54,uni,3,Overlap at QS inbound
+G9,Station/Barker to Queen Square (10K finish & Full loop inbound),10K,Full,8.1,10,18.59,20.54,uni,3,Overlap at QS inbound
 H1,Queen Square Loop (Full only),Full,Full,20.54,21.65,20.54,21.65,uni,3,Full-only loop inside Queen Square
-H2,Queen Square _ Station/Barker (Full returning vs 10K finish),Full,10K,21.65,23.26,8.1,10,bi,1.5,Full returning faces 10K finishers
-H3,Queen Square _ Station/Barker (Full returning vs Half finish),Full,Half,21.65,23.26,19.35,21.1,bi,1.5,Full returning faces Half finishers
-I1,Station/Barker _ Bridge/Mill (Half outbound),Half,Half,4.95,10.84,4.95,10.84,uni,3,Half outbound toward Bridge/Mill
-I2,Station/Barker _ Bridge/Mill (Full outbound),Full,Full,23.26,29.06,23.26,29.06,uni,3,Full outbound toward Bridge/Mill
-I3,Station/Barker _ Bridge/Mill (Half + Full co-direction),Half,Full,4.95,10.84,23.26,29.06,uni,3,Half + Full share same direction
-J1,Bridge/Mill _ Half Turn (Half outbound),Half,Half,10.84,13.43,10.84,13.43,uni,3,Half outbound toward Half Turn (co-direction)
-J2,Bridge/Mill _ Half Turn (Full outbound),Full,Full,29.06,31.64,29.06,31.64,uni,3,Full outbound toward Half Turn (co-direction)
-J3,Bridge/Mill _ Half Turn (Half + Full co-direction),Half,Full,10.84,13.43,29.06,31.64,uni,3,Half + Full share the same path outbound
-K1,Half Turn _ Full Turn (Full outbound spur),Full,Full,31.64,33.11,31.64,33.11,uni,3,Full continues past Half Turn to Full Turn
-K2,Full Turn _ Half Turn (Full returning spur),Full,Full,33.11,34.34,33.11,34.34,uni,3,Full returns from Full Turn back to Half Turn
-L1,Half Turn _ Bridge/Mill (Half returning),Half,Half,13.43,16.02,13.43,16.02,uni,3,Half returning to Bridge/Mill
-L2,Half Turn _ Bridge/Mill (Full returning),Full,Full,34.34,35.47,34.34,36.92,uni,3,Full returning to Bridge/Mill (same path as Half return)
-L3,Half Turn _ Bridge/Mill (Half + Full co-direction return),Half,Full,13.43,16.02,34.34,36.92,uni,3,Half + Full co-direction on return leg
+H2,Queen Square to Station/Barker (Full returning vs 10K finish),Full,10K,21.65,23.26,8.1,10,bi,1.5,Full returning faces 10K finishers
+H3,Queen Square to Station/Barker (Full returning vs Half finish),Full,Half,21.65,23.26,19.35,21.1,bi,1.5,Full returning faces Half finishers
+I1,Station/Barker to Bridge/Mill (Half outbound),Half,Half,4.95,10.84,4.95,10.84,uni,3,Half outbound toward Bridge/Mill
+I2,Station/Barker to Bridge/Mill (Full outbound),Full,Full,23.26,29.06,23.26,29.06,uni,3,Full outbound toward Bridge/Mill
+I3,Station/Barker to Bridge/Mill (Half + Full co-direction),Half,Full,4.95,10.84,23.26,29.06,uni,3,Half + Full share same direction
+J1,Bridge/Mill to Half Turn (Half outbound),Half,Half,10.84,13.43,10.84,13.43,uni,3,Half outbound toward Half Turn (co-direction)
+J2,Bridge/Mill to Half Turn (Full outbound),Full,Full,29.06,31.64,29.06,31.64,uni,3,Full outbound toward Half Turn (co-direction)
+J3,Bridge/Mill to Half Turn (Half + Full co-direction),Half,Full,10.84,13.43,29.06,31.64,uni,3,Half + Full share the same path outbound
+K1,Half Turn to Full Turn (Full outbound spur),Full,Full,31.64,33.11,31.64,33.11,uni,3,Full continues past Half Turn to Full Turn
+K2,Full Turn to Half Turn (Full returning spur),Full,Full,33.11,34.34,33.11,34.34,uni,3,Full returns from Full Turn back to Half Turn
+L1,Half Turn to Bridge/Mill (Half returning),Half,Half,13.43,16.02,13.43,16.02,uni,3,Half returning to Bridge/Mill
+L2,Half Turn to Bridge/Mill (Full returning),Full,Full,34.34,35.47,34.34,36.92,uni,3,Full returning to Bridge/Mill (same path as Half return)
+L3,Half Turn to Bridge/Mill (Half + Full co-direction return),Half,Full,13.43,16.02,34.34,36.92,uni,3,Half + Full co-direction on return leg
 L4,Bridge/Mill sector counter-flow (optional),Full,Half,34.34,36.92,10.84,13.43,bi,1.5,Full returning may face late Half outbound (counter-flow on this sector)
-M1,Bridge/Mill _ Station/Barker (Full returning vs Half outbound),Full,Half,36.92,40.5,16.02,19.35,uni,3,Full returning faces Half outbound (counter-flow)
-M2,Bridge/Mill _ Station/Barker (Full returning vs Full outbound),Full,Full,36.92,40.5,36.92,40.5,uni,3,Faster Fulls returning vs slower Fulls still outbound (counter-flow)
+M1,Bridge/Mill to Station/Barker (Full returning vs Half outbound),Full,Half,36.92,40.5,16.02,19.35,uni,3,Full returning faces Half outbound (counter-flow)
+M2,Bridge/Mill to Station/Barker (Full returning vs Full outbound),Full,Full,36.92,40.5,36.92,40.5,uni,3,Faster Fulls returning vs slower Fulls still outbound (counter-flow)
