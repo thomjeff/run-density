@@ -18,4 +18,4 @@ def api_density(
     seg_id: str | None = Query(default=None),
     debug: bool = Query(default=False),
 ):
-    return run_density(payload, seg_id=seg_id, debug=debug)
+    return run_density(payload, seg_id_filter=seg_id, debug=debug)
