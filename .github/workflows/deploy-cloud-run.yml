@@ -1,53 +1,58 @@
 name: deploy-cloud-run
 
 on:
-  workflow_dispatch:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build-deploy:
-    name: Build & Deploy (Docker → Artifact Registry → Cloud Run)
+    name: "Build & Deploy (Docker → Artifact Registry → Cloud Run)"
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write   # required for WIF
-
-    # Expose service URL to downstream jobs
+      id-token: write
     outputs:
-      service_url: ${{ steps.url.outputs.service_url }}
+      base_url: ${{ steps.resolve.outputs.BASE_URL }}
 
     steps:
-      - name: Checkout
+      - name: "Checkout"
         uses: actions/checkout@v4
 
-      - name: Auth (WIF)
-        id: auth
+      - name: "Auth (WIF)"
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account:         ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          service_account:          ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - name: Setup gcloud
+      - name: "Setup gcloud"
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Resolve parameters & configure Docker
+      - name: "Resolve parameters & configure Docker"
         id: params
         env:
           REGION:     ${{ secrets.GCP_REGION }}
           PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           SERVICE:    ${{ secrets.GCP_SERVICE }}
-          REPO_SEC:   ${{ secrets.GCP_AR_REPO }}   # optional; defaults to "run"
+          REPO_SEC:   ${{ secrets.GCP_AR_REPO }} # optional; defaults to 'run'
         run: |
           set -euo pipefail
+
+          # fail fast on required secrets
+          for v in REGION PROJECT_ID SERVICE; do
+            if [ -z "${!v:-}" ]; then echo "ERROR: $v secret is empty"; exit 1; fi
+          done
+
           REPO="${REPO_SEC:-run}"
+
           echo "REGION=${REGION}"       >> "$GITHUB_OUTPUT"
           echo "PROJECT_ID=${PROJECT_ID}" >> "$GITHUB_OUTPUT"
           echo "SERVICE=${SERVICE}"     >> "$GITHUB_OUTPUT"
           echo "REPO=${REPO}"           >> "$GITHUB_OUTPUT"
+
           gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
-      - name: Build & Push image (Docker → Artifact Registry)
+      - name: "Build & Push image (Docker → Artifact Registry)"
         env:
           REGION:     ${{ steps.params.outputs.REGION }}
           PROJECT_ID: ${{ steps.params.outputs.PROJECT_ID }}
@@ -63,7 +68,7 @@ jobs:
           docker push "${IMAGE}"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
 
-      - name: Deploy to Cloud Run (latest)
+      - name: "Deploy to Cloud Run (latest)"
         env:
           REGION:     ${{ steps.params.outputs.REGION }}
           PROJECT_ID: ${{ steps.params.outputs.PROJECT_ID }}
@@ -85,22 +90,22 @@ jobs:
             --min-instances=0 --max-instances=3 \
             --timeout=300 --quiet
 
-      - name: Resolve URL
-        id: url
+      - name: "Resolve service URL"
+        id: resolve
         env:
-          REGION:     ${{ secrets.GCP_REGION }}
-          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          SERVICE:    ${{ secrets.GCP_SERVICE }}
+          REGION:     ${{ steps.params.outputs.REGION }}
+          PROJECT_ID: ${{ steps.params.outputs.PROJECT_ID }}
+          SERVICE:    ${{ steps.params.outputs.SERVICE }}
         run: |
           set -euo pipefail
           URL=$(gcloud run services describe "${SERVICE}" \
             --project "${PROJECT_ID}" \
-            --region "${REGION}" \
+            --region  "${REGION}" \
             --format='value(status.url)')
-          if [ -z "$URL" ]; then
+          if [ -z "${URL}" ]; then
             echo "ERROR: service URL is empty"; exit 1
           fi
-          echo "service_url=${URL}" >> "$GITHUB_OUTPUT"
+          echo "BASE_URL=${URL}" >> "$GITHUB_OUTPUT"
           echo "Resolved service URL: ${URL}"
 
   smoke-prod:
@@ -109,48 +114,54 @@ jobs:
     needs: build-deploy
     permissions:
       contents: read
+      id-token: write
 
     steps:
+      - name: "Auth (WIF)"
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account:          ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: "Setup gcloud"
+        uses: google-github-actions/setup-gcloud@v2
+
       - name: "Sanity: data URLs resolve (200)"
         run: |
           set -euo pipefail
           curl -fsSI "https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv" | head -n1 | grep "200"
-          curl -fsSI "https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv"       | head -n1 | grep "200"
+          curl -fsSI "https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv"    | head -n1 | grep "200"
 
-      - name: "Smoke: /health, /ready, /api/density (retry, v1.3 payload)"
+      - name: "Smoke health/ready/density (retry)"
         env:
-          BASE_URL: ${{ needs.build-deploy.outputs.service_url }}
+          BASE_URL: ${{ needs.build-deploy.outputs.base_url }}
         run: |
           set -euo pipefail
-          if [ -z "${BASE_URL}" ]; then
-            echo "ERROR: BASE_URL is empty"; exit 1
-          fi
+          if [ -z "${BASE_URL}" ]; then echo "ERROR: BASE_URL is empty"; exit 1; fi
           echo "Testing against ${BASE_URL}"
 
           attempt() {
             echo "Attempt $1:"
             set -e
-            # liveness
             curl -fsS "${BASE_URL}/health" | jq -e '.ok == true' >/dev/null
-            # readiness
             curl -fsS "${BASE_URL}/ready"  | jq -e '.ok == true and .density_loaded and .overlap_loaded' >/dev/null
-            # density using CSV overlaps
             curl -fsS -X POST "${BASE_URL}/api/density" \
               -H "Content-Type: application/json" -H "Accept: application/json" \
               -d '{
                     "paceCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv",
-                    "overlapsCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps_smoke.csv",
+                    "overlapsCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv",
                     "startTimes":{"Full":420,"10K":440,"Half":460},
                     "stepKm":0.03,
                     "timeWindow":60
                   }' \
-            | jq -e '.engine == "density" and (.segments|length) > 0' >/dev/null
+              | jq -e '.engine == "density" and (.segments|length) > 0' >/dev/null
           }
 
           n=0
           until [ $n -ge 5 ]; do
             if attempt $((n+1)); then
-              echo "✅ Smoke passed for ${BASE_URL}"; exit 0
+              echo "✅ Smoke passed for ${BASE_URL}"
+              exit 0
             fi
             n=$((n+1)); echo "retrying in 8s..."; sleep 8
           done
