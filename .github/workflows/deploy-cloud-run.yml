@@ -15,7 +15,7 @@ jobs:
 
     # expose the service URL to the next job
     outputs:
-      service_url: ${{ steps.url.outputs.BASE_URL }}
+      service_url: ${{ steps.url.outputs.service_url }}
 
     steps:
       - name: Checkout
