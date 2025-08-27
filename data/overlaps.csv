@@ -1,4 +1,4 @@
-seg_id,segmenttolabel,eventA,eventB,from_km_A,to_km_A,from_km_B,to_km_B,direction,width_m,notes
+seg_id,segment_label,eventA,eventB,from_km_A,to_km_A,from_km_B,to_km_B,direction,width_m,notes
 A1,Start to Friel,10K,Half,0,2.7,0,2.7,uni,3,Shared opening stretch
 A2,Start to Friel,10K,Full,0,2.7,0,2.7,uni,3,Shared opening stretch
 A3,Start to Friel,Half,Full,0,2.7,0,2.7,uni,3,Shared opening stretch
