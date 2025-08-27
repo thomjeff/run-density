@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.1] – 2025-08-27
+Stability release that operationalized density engine.
+
+## [1.3.0] – 2025-08-27
+Stability release
+
 ## [1.2.0] – 2025-08-21
 ### Added
 - Human-readable reporting endpoint (`/api/report`)  
