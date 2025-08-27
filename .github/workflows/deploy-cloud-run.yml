@@ -100,7 +100,7 @@ jobs:
           if [ -z "$URL" ]; then
             echo "ERROR: service URL is empty"; exit 1
           fi
-          echo "BASE_URL=${URL}" >> "$GITHUB_OUTPUT"
+          echo "service_url=${URL}" >> "$GITHUB_OUTPUT"
           echo "Resolved service URL: ${URL}"
 
   smoke-prod:
