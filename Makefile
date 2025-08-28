@@ -63,6 +63,17 @@ endif
 	| jq -e '.engine=="density" and (.segments|length)>0' >/dev/null && echo "density OK" || (echo "density FAILED" && exit 1)
 	@echo "✅ smoke-prod passed"
 
+smoke-crowd:
+	@echo ">> zoneMetric=crowd with custom cuts"
+	@curl -s -X POST "$(BASE)/api/density" \
+	  -H 'Content-Type: application/json' \
+	  -d '{"paceCsv":"$(PACE)","overlapsCsv":"$(OVLS)",
+	       "startTimes":{"Full":420,"10K":440,"Half":460},
+	       "stepKm":0.03,"timeWindow":60,"depth_m":3.0,
+	       "zoneMetric":"crowd","zones":{"crowd":[1.0,2.0,4.0,8.0]}}' \
+	| jq -r '.segments | map(select(.peak.zone!="green")) | .[:8][] |
+	         "\(.seg_id)\tareal=\(.peak.areal_density)\tcrowd=\(.peak.crowd_density)\tzone=\(.peak.zone)"'
+
 clean-venv:
 	@rm -rf .venv
 	@echo "Removed .venv"
