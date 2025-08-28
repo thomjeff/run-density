@@ -1,4 +1,40 @@
 # Changelog
+
+## [1.3.4] – 2025-08-27
+
+### Added
+- Custom zoning metric & thresholds
+- New zoneMetric request field: "areal" (default) or "crowd".
+- Optional zones object to override 5-band cuts:
+- zones.areal: e.g. [7.5, 15, 30, 50]
+- zones.crowd: e.g. [1, 2, 4, 8] (pax / m²)
+- Crowd density output (peak.crowd_density) alongside peak.areal_density.
+- CSV export endpoint: POST /api/peaks.csv streams per-segment peaks (includes areal, crowd, zone).
+
+### Changed
+- Per-segment binning: very short segments now auto-reduce stepKm so each span has ≥1 bin.
+- Zoning logic refactored:
+- Generic _zone_from_metric + _zone_for_density choose cuts from zones and metric from zoneMetric.
+- Bi-direction segments halve effective width before density.
+- Validation & errors: clearer 422s for missing start times, invalid thresholds, or bad params.
+
+### Fixed
+- Eliminated intermittent 500s caused by stale helpers and unbound loop vars during recent refactors.
+- peaks.csv now streams correctly and respects zoneMetric/zones.
+
+### Dev / DX
+- New Makefile smokes:
+- make smoke-areal — custom areal cuts
+- make smoke-crowd — custom crowd cuts
+- Debug traces are bounded (trace[:50]) when ?debug=true to keep payloads lightweight.
+
+### Compatibility
+- Request remains backward-compatible:
+- If zones is omitted, defaults apply.
+- If zoneMetric is omitted, "areal" is used.
+- Existing fields (paceCsv, overlapsCsv, startTimes, stepKm, timeWindow, depth_m) unchanged.
+
+
 ## [1.3.3] – 2025-08-27
 
 ### 🔧 Fixes & Improvements

@@ -49,15 +49,17 @@ jobs:
           set -euo pipefail
           payload='{
             "paceCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv",
-            "overlapsCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv",
-            "startTimes":{"Full":420,"10K":440,"Half":460},
+            "startTimes":{"10K":440,"Half":460},
             "segments":[
               {"seg_id":"SMOKE","segment_label":"Start→Friel",
                "eventA":"10K","eventB":"Half",
-               "from":0.00,"to":2.70,"direction":"uni","width_m":3.0}
+               "from_km_A":0.00,"to_km_A":2.70,
+               "from_km_B":0.00,"to_km_B":2.70,
+               "direction":"uni","width_m":3.0}
             ],
             "stepKm":0.03,
-            "timeWindow":60
+            "timeWindow":60,
+            "depth_m":3.0
           }'
 
           attempt() {
