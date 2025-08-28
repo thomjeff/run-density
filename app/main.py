@@ -1,6 +1,6 @@
 # app/main.py
 from __future__ import annotations
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.responses import JSONResponse, PlainTextResponse
 from app.density import DensityPayload, run_density
@@ -88,22 +88,42 @@ def api_segments_csv(payload: DensityPayload):
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.post("/api/peaks.csv")
-def api_peaks_csv(payload: DensityPayload):
+def api_peaks_csv(payload: DensityPayload, request: Request):
     """
     Compute density then stream a CSV with per-segment peaks.
     Columns: seg_id,segment_label,direction,width_m,first_clock,first_km,
              peak_km,A,B,combined,areal_density,crowd_density,zone
     """
-    result = run_density(payload, seg_id_filter=None, debug=False)
-    rows = []
-    for seg in result["segments"]:
-        peak = seg["peak"]
+    # Optional query overrides
+    seg_id = request.query_params.get("seg_id")
+    zone_metric_qp = request.query_params.get("zoneMetric")
+    if zone_metric_qp:
+        payload.zoneMetric = zone_metric_qp  # override if present
+
+    # Compute
+    result = run_density(payload, seg_id_filter=seg_id, debug=False)
+    segments = result.get("segments", [])
+
+    # Build CSV in-memory
+    import io, csv
+    buf = io.StringIO()
+    fieldnames = [
+        "seg_id", "segment_label", "direction", "width_m",
+        "first_clock", "first_km",
+        "peak_km", "A", "B", "combined",
+        "areal_density", "crowd_density", "zone",
+    ]
+    writer = csv.DictWriter(buf, fieldnames=fieldnames)
+    writer.writeheader()
+
+    for seg in segments:
+        peak = seg.get("peak", {}) or {}
         first = seg.get("first_overlap") or {"clock": None, "km": None}
-        rows.append({
-            "seg_id": seg["seg_id"],
-            "segment_label": seg["segment_label"],
-            "direction": seg["direction"],
-            "width_m": seg["width_m"],
+        writer.writerow({
+            "seg_id": seg.get("seg_id"),
+            "segment_label": seg.get("segment_label"),
+            "direction": seg.get("direction"),
+            "width_m": seg.get("width_m"),
             "first_clock": first.get("clock"),
             "first_km": first.get("km"),
             "peak_km": peak.get("km"),
@@ -115,16 +135,5 @@ def api_peaks_csv(payload: DensityPayload):
             "zone": peak.get("zone"),
         })
 
-    # stream CSV
-    buf = io.StringIO()
-    fieldnames = [
-        "seg_id","segment_label","direction","width_m",
-        "first_clock","first_km","peak_km","A","B","combined",
-        "areal_density","crowd_density","zone"
-    ]
-    writer = csv.DictWriter(buf, fieldnames=fieldnames)
-    writer.writeheader()
-    for r in rows:
-        writer.writerow(r)
-    buf.seek(0)
-    return StreamingResponse(buf, media_type="text/csv")      
+    # Stream it back
+    return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv") 
