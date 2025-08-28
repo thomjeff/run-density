@@ -10,6 +10,8 @@ import requests
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
+print("run_density: single-loop v1.3.4 marker", flush=True)
+
 # -----------------------------
 # Models
 # -----------------------------
@@ -421,42 +423,30 @@ def _validate_params(step_km: float, time_window: int, depth_m: float):
         _fail_422(f"depth_m must be > 0, got {depth_m}")
 
 
-def _validate_overlaps(overlaps: list, start_times) -> None:
+def _validate_overlaps(overlaps: List["OverlapSeg"], start_times: "StartTimes") -> None:
     """
-    Ensures each segment has sane geometry and referenced events exist in startTimes.
-    Expects items shaped like Segment dataclass you've already got (seg_id, eventA, eventB, ...).
+    Validate segments + ensure startTimes has the events each segment references.
+    Raises HTTP 422 with a clear message if anything is off.
     """
-    if overlaps is None:
-        _fail_422("No overlaps were supplied (overlapsCsv empty or segments list missing).")
-    if not isinstance(overlaps, list) or len(overlaps) == 0:
-        _fail_422("No segments found in overlaps input.")
+    def _fail_422(msg: str) -> None:
+        raise HTTPException(status_code=422, detail=msg)
 
-    valid_dirs = {"uni", "bi"}
-    for idx, seg in enumerate(overlaps, start=1):
-        where = f"seg_id={getattr(seg, 'seg_id', f'#{idx}')}"
-        try:
-            dir_norm = seg.direction.strip().lower()
-        except Exception:
-            dir_norm = ""
+    for idx, s in enumerate(overlaps):
+        where = f"overlaps[{idx}] (seg_id={s.seg_id})"
 
-        # geometry
-        if seg.from_km_A is None or seg.to_km_A is None:
-            _fail_422(f"{where}: from_km_A/to_km_A must be provided.")
-        if seg.from_km_B is None or seg.to_km_B is None:
-            _fail_422(f"{where}: from_km_B/to_km_B must be provided.")
-        if seg.from_km_A > seg.to_km_A:
-            _fail_422(f"{where}: from_km_A ({seg.from_km_A}) > to_km_A ({seg.to_km_A}).")
-        if seg.from_km_B > seg.to_km_B:
-            _fail_422(f"{where}: from_km_B ({seg.from_km_B}) > to_km_B ({seg.to_km_B}).")
-        if seg.width_m is None or seg.width_m <= 0:
-            _fail_422(f"{where}: width_m must be > 0, got {seg.width_m}.")
+        # Basic numeric sanity
+        if s.from_km_A > s.to_km_A:
+            _fail_422(f"{where}: from_km_A ({s.from_km_A}) > to_km_A ({s.to_km_A}).")
+        if s.from_km_B > s.to_km_B:
+            _fail_422(f"{where}: from_km_B ({s.from_km_B}) > to_km_B ({s.to_km_B}).")
+        if s.width_m is None or s.width_m <= 0:
+            _fail_422(f"{where}: width_m must be > 0, got {s.width_m}.")
+        dir_norm = (s.direction or "").strip().lower()
+        if dir_norm not in {"uni", "bi"}:
+            _fail_422(f"{where}: direction must be 'uni' or 'bi', got '{s.direction}'.")
 
-        # direction
-        if dir_norm not in valid_dirs:
-            _fail_422(f"{where}: direction must be 'uni' or 'bi', got '{seg.direction}'.")
-
-        # start times present for referenced events (use has() to avoid masking with 0)
-        needed = (seg.eventA, seg.eventB)
+        # Make sure the segment’s events have start times
+        needed = {s.eventA, s.eventB}
         for ev in needed:
             if ev not in {"Full", "Half", "10K"}:
                 _fail_422(f"{where}: unknown event '{ev}' (expected one of Full/Half/10K).")
@@ -468,22 +458,43 @@ def _validate_overlaps(overlaps: list, start_times) -> None:
 
 def run_density(payload: DensityPayload, seg_id_filter: Optional[str] = None, debug: bool = False):
     overlaps = _load_overlaps(payload.overlapsCsv, payload.segments)
+
+    # Filter by seg_id as early as possible
     if seg_id_filter:
         overlaps = [o for o in overlaps if o.seg_id == seg_id_filter]
 
+    # Prevent UnboundLocalError if any pre-loop path references `seg`
+    seg = None  # type: ignore[assignment]
+
+    # Validate early so the rest of the code can assume good inputs
+    _validate_params(
+        step_km=payload.stepKm,
+        time_window=payload.timeWindow,
+        depth_m=payload.depth_m,
+    )
+    _validate_overlaps(overlaps, payload.startTimes)
+
+    # Load pace data once
     pace_df = _load_pace_df(payload.paceCsv)
 
-    # NEW: validate inputs early
-    _validate_params(step_km=payload.stepKm, time_window=payload.timeWindow, depth_m=payload.depth_m)
-    _validate_overlaps(overlaps, payload.startTimes)
-    
     results: List[Dict] = []
-    for seg in overlaps:
+    for s in overlaps:
+        # Per-segment step fallback for very short spans (guarantee ≥ 1 bin)
+        spanA = s.to_km_A - s.from_km_A
+        spanB = s.to_km_B - s.from_km_B
+        seg_step = payload.stepKm
+        eps = 1e-9
+        if spanA + eps < seg_step or spanB + eps < seg_step:
+            seg_step = max(spanA, spanB)
+            if seg_step <= eps:
+                seg_step = eps  # still guarantee at least one bin
+
+        # Build the trace at this per-segment step
         trace, first_overlap_obj = trace_segment(
-            seg=seg,
+            seg=s,
             df=pace_df,
             start_times=payload.startTimes,
-            step_km=payload.stepKm,
+            step_km=seg_step,                 # per-segment step
             time_window_s=payload.timeWindow,
             debug=debug,
         )
@@ -496,12 +507,12 @@ def run_density(payload: DensityPayload, seg_id_filter: Optional[str] = None, de
             peak_B = peak_row["B"]
             peak_combined = peak_row["combined"]
         else:
-            peak_km = seg.from_km_A
+            peak_km = s.from_km_A
             peak_A = peak_B = peak_combined = 0
 
         # Effective width (halve for bi-direction segments)
-        effective_width = seg.width_m
-        if seg.direction.strip().lower() == "bi":
+        effective_width = s.width_m
+        if s.direction.strip().lower() == "bi":
             effective_width = max(effective_width / 2.0, 1e-9)
 
         # Areal density (pax per metre of width)
@@ -509,22 +520,19 @@ def run_density(payload: DensityPayload, seg_id_filter: Optional[str] = None, de
 
         # Crowd density (pax per m^2), using depth_m
         crowd_density = peak_combined / max(effective_width * payload.depth_m, 1e-9)
-        zone = _zone_for_density(areal_density=areal_density, crowd_density=crowd_density, payload=payload)
 
-        # Zone selection based on requested metric + cuts
-        metric_name = (payload.zoneMetric or "areal").strip().lower()
-        if metric_name == "crowd":
-            cuts = payload.zones.crowd if (payload.zones and payload.zones.crowd) else None
-            zone = _zone_from_metric(crowd_density, cuts)
-        else:
-            cuts = payload.zones.areal if (payload.zones and payload.zones.areal) else None
-            zone = _zone_from_metric(areal_density, cuts)
+        # Zone selection (supports areal or crowd with optional custom cuts)
+        zone = _zone_for_density(
+            areal_density=areal_density,
+            crowd_density=crowd_density,
+            payload=payload,
+        )
 
         results.append({
-            "seg_id": seg.seg_id,
-            "segment_label": seg.segment_label,
-            "direction": seg.direction,
-            "width_m": seg.width_m,
+            "seg_id": s.seg_id,
+            "segment_label": s.segment_label,
+            "direction": s.direction,
+            "width_m": s.width_m,
             "first_overlap": first_overlap_obj,
             "peak": {
                 "km": peak_km,
@@ -535,12 +543,11 @@ def run_density(payload: DensityPayload, seg_id_filter: Optional[str] = None, de
                 "crowd_density": crowd_density,
                 "zone": zone,
             },
-            # Bound the debug payload to avoid huge responses
-            "trace": (trace[:50] if debug and trace else None),
             "trace": (trace[:50] if debug and trace else None),
         })
 
     return {"engine": "density", "segments": results}
+
 def export_peaks_csv(segments: List[Dict], filepath: str = "peaks.csv") -> None:
     """
     Export peak values from segments to a CSV file.
