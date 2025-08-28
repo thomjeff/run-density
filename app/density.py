@@ -187,6 +187,31 @@ def _load_overlaps(overlapsCsv: Optional[str], inline_segments: Optional[List[Di
     return out
 
 
+def preview_segments(payload: "DensityPayload") -> List[Dict]:
+    """
+    Return validated overlaps as plain dicts for QA/inspection, including length_km.
+    Does not run density math.
+    """
+    overlaps = _load_overlaps(payload.overlapsCsv, payload.segments)
+    out: List[Dict] = []
+    for s in overlaps:
+        lengthA = max(0.0, float(s.to_km_A - s.from_km_A))
+        lengthB = max(0.0, float(s.to_km_B - s.from_km_B))
+        out.append({
+            "seg_id": s.seg_id,
+            "segment_label": s.segment_label,
+            "direction": s.direction,
+            "width_m": float(s.width_m),
+            "eventA": s.eventA,
+            "from_km_A": float(s.from_km_A),
+            "to_km_A": float(s.to_km_A),
+            "eventB": s.eventB,
+            "from_km_B": float(s.from_km_B),
+            "to_km_B": float(s.to_km_B),
+            "length_km": max(lengthA, lengthB),
+        })
+    return out
+
 # -----------------------------
 # Maths & utilities
 # -----------------------------

@@ -1,9 +1,10 @@
 # app/main.py
 from __future__ import annotations
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
-import io, csv
+from starlette.responses import JSONResponse, PlainTextResponse
 from app.density import DensityPayload, run_density
+import io, csv
 
 # Optional: only import when debug=true to avoid import cycles if you prefer.
 try:
@@ -48,6 +49,41 @@ def api_density(
                 # Don’t fail the request if CSV export has a filesystem/permission hiccup
                 pass
         return result
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/api/segments")
+def api_segments(payload: DensityPayload):
+    try:
+        from app.density import preview_segments
+        return {"segments": preview_segments(payload)}
+    except HTTPException as he:
+        # propagate 422s from validators
+        raise he
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/api/segments.csv")
+def api_segments_csv(payload: DensityPayload):
+    try:
+        from app.density import preview_segments
+        rows = preview_segments(payload)
+        # build CSV
+        import csv, io
+        buf = io.StringIO()
+        fieldnames = [
+            "seg_id","segment_label","direction","width_m",
+            "eventA","from_km_A","to_km_A",
+            "eventB","from_km_B","to_km_B",
+            "length_km",
+        ]
+        writer = csv.DictWriter(buf, fieldnames=fieldnames)
+        writer.writeheader()
+        for r in rows:
+            writer.writerow(r)
+        return PlainTextResponse(buf.getvalue(), media_type="text/csv")
+    except HTTPException as he:
+        raise he
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
