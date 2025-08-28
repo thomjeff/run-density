@@ -28,7 +28,15 @@ class StartTimes(BaseModel):
         if event == "10K" and self.TenK is not None:
             return self.TenK
         return 0  # default so we don't crash
-
+    def has(self, event: str) -> bool:
+        # Check raw fields without applying the 0 default
+        if event == "Full":
+            return self.Full is not None
+        if event == "Half":
+            return self.Half is not None
+        if event == "10K":
+            return self.TenK is not None
+        return False
 
 class DensityPayload(BaseModel):
     # External CSVs (raw GitHub URLs etc.)
@@ -305,6 +313,69 @@ def _trace_segment(
 # Public entry
 # -----------------------------
 
+# ---- validation helpers ------------------------------------------------------
+
+from fastapi import HTTPException
+
+
+def _fail_422(msg: str):
+    raise HTTPException(status_code=422, detail=msg)
+
+
+def _validate_params(step_km: float, time_window: int, depth_m: float):
+    if step_km is None or step_km <= 0 or step_km > 1:
+        _fail_422(f"stepKm must be in (0, 1], got {step_km}")
+    if time_window is None or time_window < 5 or time_window > 600:
+        _fail_422(f"timeWindow must be between 5 and 600 seconds, got {time_window}")
+    if depth_m is None or depth_m <= 0:
+        _fail_422(f"depth_m must be > 0, got {depth_m}")
+
+
+def _validate_overlaps(overlaps: list, start_times) -> None:
+    """
+    Ensures each segment has sane geometry and referenced events exist in startTimes.
+    Expects items shaped like Segment dataclass you've already got (seg_id, eventA, eventB, ...).
+    """
+    if overlaps is None:
+        _fail_422("No overlaps were supplied (overlapsCsv empty or segments list missing).")
+    if not isinstance(overlaps, list) or len(overlaps) == 0:
+        _fail_422("No segments found in overlaps input.")
+
+    valid_dirs = {"uni", "bi"}
+    for idx, seg in enumerate(overlaps, start=1):
+        where = f"seg_id={getattr(seg, 'seg_id', f'#{idx}')}"
+        try:
+            dir_norm = seg.direction.strip().lower()
+        except Exception:
+            dir_norm = ""
+
+        # geometry
+        if seg.from_km_A is None or seg.to_km_A is None:
+            _fail_422(f"{where}: from_km_A/to_km_A must be provided.")
+        if seg.from_km_B is None or seg.to_km_B is None:
+            _fail_422(f"{where}: from_km_B/to_km_B must be provided.")
+        if seg.from_km_A > seg.to_km_A:
+            _fail_422(f"{where}: from_km_A ({seg.from_km_A}) > to_km_A ({seg.to_km_A}).")
+        if seg.from_km_B > seg.to_km_B:
+            _fail_422(f"{where}: from_km_B ({seg.from_km_B}) > to_km_B ({seg.to_km_B}).")
+        if seg.width_m is None or seg.width_m <= 0:
+            _fail_422(f"{where}: width_m must be > 0, got {seg.width_m}.")
+
+        # direction
+        if dir_norm not in valid_dirs:
+            _fail_422(f"{where}: direction must be 'uni' or 'bi', got '{seg.direction}'.")
+
+        # start times present for referenced events (use has() to avoid masking with 0)
+        needed = (seg.eventA, seg.eventB)
+        for ev in needed:
+            if ev not in {"Full", "Half", "10K"}:
+                _fail_422(f"{where}: unknown event '{ev}' (expected one of Full/Half/10K).")
+            if not start_times.has(ev):
+                _fail_422(
+                    f"{where}: start time for '{ev}' is missing in startTimes. "
+                    f"Provide e.g. startTimes={{\"Full\":420,\"Half\":460,\"10K\":440}}"
+                )
+
 def run_density(payload: DensityPayload, seg_id_filter: Optional[str] = None, debug: bool = False):
     overlaps = _load_overlaps(payload.overlapsCsv, payload.segments)
     if seg_id_filter:
@@ -312,6 +383,10 @@ def run_density(payload: DensityPayload, seg_id_filter: Optional[str] = None, de
 
     pace_df = _load_pace_df(payload.paceCsv)
 
+    # NEW: validate inputs early
+    _validate_params(step_km=payload.stepKm, time_window=payload.timeWindow, depth_m=payload.depth_m)
+    _validate_overlaps(overlaps, payload.startTimes)
+    
     results: List[Dict] = []
     for seg in overlaps:
         trace, first_overlap_obj = _trace_segment(
