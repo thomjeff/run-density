@@ -372,7 +372,9 @@ def run_density(payload: DensityPayload, seg_id_filter: Optional[str] = None, de
                 "crowd_density": crowd_density,
                 "zone": zone,
             },
-            "trace": trace if debug else None,
+            # Bound the debug payload to avoid huge responses
+            "trace": (trace[:50] if debug and trace else None),
+            "trace": (trace[:50] if debug and trace else None),
         })
 
     return {"engine": "density", "segments": results}
