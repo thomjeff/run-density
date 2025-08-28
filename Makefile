@@ -81,6 +81,14 @@ smoke-areal:
 	| curl -sS -X POST "$$BASE/api/density" -H 'Content-Type: application/json' --data @- \
 	| jq -r '.segments | map(select(.peak.zone!="green")) | .[:8][] | "\(.seg_id)\tareal=\(.peak.areal_density)\tcrowd=\(.peak.crowd_density)\tzone=\(.peak.zone)"'
 
+smoke-short:
+	@echo ">> tiny inline segment (optionally single_event)"
+	@BASE=$${BASE:-http://127.0.0.1:8081}; \
+	PACE=$${PACE:-https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv}; \
+	printf '{\n  "paceCsv": "%s",\n  "segments": [\n    {\n      "seg_id":"ZZ-short",\n      "segment_label":"Tiny 2cm test",\n      "eventA":"10K", "eventB":"10K",\n      "from_km_A":1.000, "to_km_A":1.001,\n      "from_km_B":1.000, "to_km_B":1.001,\n      "direction":"uni", "width_m":3.0,\n      "single_event": %s\n    }\n  ],\n  "startTimes":{"Full":420,"Half":460,"10K":440},\n  "stepKm":0.03, "timeWindow":60, "depth_m":3.0\n}\n' "$$PACE" "$${SINGLE_EVENT:-false}" \
+	| curl -sS -X POST "$$BASE/api/density" -H 'Content-Type: application/json' --data @- \
+	| jq '{seg: .segments[0].seg_id, A: .segments[0].peak.A, B: .segments[0].peak.B, combined: .segments[0].peak.combined, areal: .segments[0].peak.areal_density, crowd: .segments[0].peak.crowd_density, zone: .segments[0].peak.zone}'
+		
 clean-venv:
 	@rm -rf .venv
 	@echo "Removed .venv"

@@ -305,8 +305,23 @@ def _count_in_window_at_km(
     t_max = t_ref + float(time_window_s) - 1e-9
     return int(((arrivals >= t_ref) & (arrivals <= t_max)).sum())
 
+# --- helper: km positions with at least one sample, even if (to - from) < step ---
+def _km_positions(from_km: float, to_km: float, step_km: float) -> List[float]:
+    if to_km < from_km:
+        from_km, to_km = to_km, from_km  # safety
+    if step_km <= 0:
+        step_km = 0.03  # fallback
+    n_steps = max(0, int((to_km - from_km) / max(step_km, 1e-9)))
+    pos = [from_km + i * step_km for i in range(n_steps + 1)]
+    # ensure we include end if close and not already there
+    if pos and pos[-1] + 1e-9 < to_km:
+        pos.append(to_km)
+    if not pos:
+        # extremely short segment: still return at least the start
+        pos = [from_km]
+    return pos
 
-def _trace_segment(
+def trace_segment(
     seg: OverlapSegment,
     df: pd.DataFrame,
     start_times: StartTimes,
@@ -464,7 +479,7 @@ def run_density(payload: DensityPayload, seg_id_filter: Optional[str] = None, de
     
     results: List[Dict] = []
     for seg in overlaps:
-        trace, first_overlap_obj = _trace_segment(
+        trace, first_overlap_obj = trace_segment(
             seg=seg,
             df=pace_df,
             start_times=payload.startTimes,
