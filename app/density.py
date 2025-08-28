@@ -378,3 +378,29 @@ def run_density(payload: DensityPayload, seg_id_filter: Optional[str] = None, de
         })
 
     return {"engine": "density", "segments": results}
+def export_peaks_csv(segments: List[Dict], filepath: str = "peaks.csv") -> None:
+    """
+    Export peak values from segments to a CSV file.
+    Includes seg_id, segment_label, peak km, A, B, combined, areal_density, crowd_density, zone.
+    """
+    import csv
+    fields = [
+        "seg_id", "segment_label", "km", "A", "B", "combined",
+        "areal_density", "crowd_density", "zone"
+    ]
+    with open(filepath, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+        for seg in segments:
+            peak = seg["peak"]
+            writer.writerow({
+                "seg_id": seg["seg_id"],
+                "segment_label": seg["segment_label"],
+                "km": peak["km"],
+                "A": peak["A"],
+                "B": peak["B"],
+                "combined": peak["combined"],
+                "areal_density": peak["areal_density"],
+                "crowd_density": peak["crowd_density"],
+                "zone": peak["zone"],
+            })
