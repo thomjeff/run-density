@@ -39,8 +39,9 @@ class StartTimes(BaseModel):
         return False
 
 class ZoneConfig(BaseModel):
-    # Ordered ascending: [green→yellow, yellow→orange, orange→red, red→dark-red]
-    areal: List[float] = Field(default_factory=lambda: [7.5, 15.0, 30.0, 50.0])
+    # five bands => 4 cuts, in strictly increasing order
+    areal: Optional[List[float]] = None    # e.g. [7.5, 15, 30, 50]
+    crowd: Optional[List[float]] = None    # e.g. [1.0, 2.0, 4.0, 8.0]
 
 class DensityPayload(BaseModel):
     # External CSVs (raw GitHub URLs etc.)
@@ -51,14 +52,18 @@ class DensityPayload(BaseModel):
     segments: Optional[List[Dict]] = None
 
     startTimes: StartTimes
-    stepKm: float = 0.03
-    timeWindow: int = 60  # seconds
 
-    # Depth (metres along the course) for pax/m^2 crowd density
-    depth_m: float = 3.0
+    # Validation tightened (must be >0 and ≤1; timeWindow >0; depth >0)
+    stepKm: float = Field(0.03, gt=0.0, le=1.0)
+    timeWindow: int = Field(60, gt=0)
+    depth_m: float = Field(3.0, gt=0.0)
 
-    # NEW: Optional zone configuration
+    # Existing optional zone configuration (we kept the name ZoneConfig per your preference)
     zones: Optional[ZoneConfig] = None
+
+    # NEW: choose which metric to color zones by ("areal" or "crowd")
+    zoneMetric: Optional[str] = Field("areal", pattern="^(areal|crowd)$")
+
 
 @dataclass
 class OverlapSegment:
@@ -112,7 +117,6 @@ def _load_pace_df(paceCsv: Optional[str]) -> pd.DataFrame:
     df["start_offset"] = df["start_offset"].fillna(0).astype(int)
 
     return df
-
 
 def _load_overlaps(overlapsCsv: Optional[str], inline_segments: Optional[List[Dict]]) -> List[OverlapSegment]:
     rows: List[Dict] = []
@@ -216,32 +220,56 @@ def preview_segments(payload: "DensityPayload") -> List[Dict]:
 # Maths & utilities
 # -----------------------------
 
-def _zone_for_areal(areal_density: float, cuts: Optional[List[float]] = None) -> str:
+def _zone_from_cuts(value: float, cuts: List[float]) -> str:
     """
-    cuts: 4 ascending thresholds [g→y, y→o, o→r, r→dr].
-    Falls back to [7.5, 15, 30, 50] if missing/invalid.
+    cuts: 4 ascending thresholds [g→y, y→o, o→r, r→dr]
     """
-    default_cuts = [7.5, 15.0, 30.0, 50.0]
-    if not cuts or len(cuts) != 4 or sorted(cuts) != cuts:
-        cuts = default_cuts
-
     g_y, y_o, o_r, r_dr = cuts
-    if areal_density >= r_dr:
+    if value >= r_dr:
         return "dark-red"
-    if areal_density >= o_r:
+    if value >= o_r:
         return "red"
-    if areal_density >= y_o:
+    if value >= y_o:
         return "orange"
-    if areal_density >= g_y:
+    if value >= g_y:
         return "yellow"
     return "green"
 
-    # Customizable thresholds from payload, if provided
-    cuts = None
-    if payload.zones and payload.zones.areal:
-        cuts = payload.zones.areal
+# Alias for generic metric zoning (areal or crowd) using provided cuts.
+def _zone_from_metric(value: float, cuts: Optional[List[float]] = None) -> str:
+    # If cuts is None or invalid, use standard areal thresholds.
+    if not cuts or len(cuts) != 4 or cuts != sorted(cuts):
+        cuts = [7.5, 15.0, 30.0, 50.0]
+    return _zone_from_cuts(value, cuts)
 
-        zone = _zone_for_areal(areal_density, cuts)
+def _zone_for_density(
+    areal_density: float,
+    crowd_density: float,
+    payload,  # DensityPayload
+) -> str:
+    """
+    Decide the zone using either 'areal' (default) or 'crowd' metric.
+    Thresholds come from payload.zones if provided; otherwise defaults are used.
+    """
+    # defaults match your historical behaviour
+    default_areal = [7.5, 15.0, 30.0, 50.0]
+    default_crowd = [1.0, 2.0, 4.0, 8.0]
+
+    # pick metric
+    metric = (payload.zoneMetric or "areal").lower()
+
+    # choose thresholds (validate increasing, else fall back)
+    if metric == "crowd":
+        cuts = getattr(getattr(payload, "zones", None), "crowd", None)
+        if not (isinstance(cuts, list) and len(cuts) == 4 and cuts == sorted(cuts)):
+            cuts = default_crowd
+        return _zone_from_cuts(crowd_density, cuts)
+
+    # default: areal
+    cuts = getattr(getattr(payload, "zones", None), "areal", None)
+    if not (isinstance(cuts, list) and len(cuts) == 4 and cuts == sorted(cuts)):
+        cuts = default_areal
+    return _zone_from_cuts(areal_density, cuts)
 
 
 def _arrival_clock_seconds(event: str, start_times: StartTimes) -> int:
@@ -466,18 +494,16 @@ def run_density(payload: DensityPayload, seg_id_filter: Optional[str] = None, de
 
         # Crowd density (pax per m^2), using depth_m
         crowd_density = peak_combined / max(effective_width * payload.depth_m, 1e-9)
+        zone = _zone_for_density(areal_density=areal_density, crowd_density=crowd_density, payload=payload)
 
-        # Zone by areal density (keep your existing thresholds)
-        if areal_density >= 50:
-            zone = "dark-red"
-        elif areal_density >= 30:
-            zone = "red"
-        elif areal_density >= 15:
-            zone = "orange"
-        elif areal_density >= 7.5:
-            zone = "yellow"
+        # Zone selection based on requested metric + cuts
+        metric_name = (payload.zoneMetric or "areal").strip().lower()
+        if metric_name == "crowd":
+            cuts = payload.zones.crowd if (payload.zones and payload.zones.crowd) else None
+            zone = _zone_from_metric(crowd_density, cuts)
         else:
-            zone = "green"
+            cuts = payload.zones.areal if (payload.zones and payload.zones.areal) else None
+            zone = _zone_from_metric(areal_density, cuts)
 
         results.append({
             "seg_id": seg.seg_id,
