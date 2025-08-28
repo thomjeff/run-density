@@ -38,6 +38,10 @@ class StartTimes(BaseModel):
             return self.TenK is not None
         return False
 
+class ZoneConfig(BaseModel):
+    # Ordered ascending: [green→yellow, yellow→orange, orange→red, red→dark-red]
+    areal: List[float] = Field(default_factory=lambda: [7.5, 15.0, 30.0, 50.0])
+
 class DensityPayload(BaseModel):
     # External CSVs (raw GitHub URLs etc.)
     paceCsv: Optional[str] = None
@@ -53,6 +57,8 @@ class DensityPayload(BaseModel):
     # Depth (metres along the course) for pax/m^2 crowd density
     depth_m: float = 3.0
 
+    # NEW: Optional zone configuration
+    zones: Optional[ZoneConfig] = None
 
 @dataclass
 class OverlapSegment:
@@ -185,16 +191,32 @@ def _load_overlaps(overlapsCsv: Optional[str], inline_segments: Optional[List[Di
 # Maths & utilities
 # -----------------------------
 
-def _zone_for_areal(areal_density: float) -> str:
-    if areal_density >= 50:
+def _zone_for_areal(areal_density: float, cuts: Optional[List[float]] = None) -> str:
+    """
+    cuts: 4 ascending thresholds [g→y, y→o, o→r, r→dr].
+    Falls back to [7.5, 15, 30, 50] if missing/invalid.
+    """
+    default_cuts = [7.5, 15.0, 30.0, 50.0]
+    if not cuts or len(cuts) != 4 or sorted(cuts) != cuts:
+        cuts = default_cuts
+
+    g_y, y_o, o_r, r_dr = cuts
+    if areal_density >= r_dr:
         return "dark-red"
-    if areal_density >= 30:
+    if areal_density >= o_r:
         return "red"
-    if areal_density >= 15:
+    if areal_density >= y_o:
         return "orange"
-    if areal_density >= 7.5:
+    if areal_density >= g_y:
         return "yellow"
     return "green"
+
+    # Customizable thresholds from payload, if provided
+    cuts = None
+    if payload.zones and payload.zones.areal:
+        cuts = payload.zones.areal
+
+        zone = _zone_for_areal(areal_density, cuts)
 
 
 def _arrival_clock_seconds(event: str, start_times: StartTimes) -> int:
