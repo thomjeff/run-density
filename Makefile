@@ -72,6 +72,15 @@ smoke-crowd:
 	echo "$$BODY" | curl -sS -X POST "$$BASE/api/density" -H 'Content-Type: application/json' --data @- \
 	| jq -r '.segments | map(select(.peak.zone!="green")) | .[:8][] | "\(.seg_id)\tareal=\(.peak.areal_density)\tcrowd=\(.peak.crowd_density)\tzone=\(.peak.zone)"'
 
+smoke-areal:
+	@echo ">> zoneMetric=areal with custom cuts"
+	@BASE=$${BASE:-http://127.0.0.1:8081}; \
+	PACE=$${PACE:-https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv}; \
+	OVLS=$${OVLS:-https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv}; \
+	printf '{\n  "paceCsv": "%s",\n  "overlapsCsv": "%s",\n  "startTimes": {"Full":420,"Half":460,"10K":440},\n  "stepKm": 0.03,\n  "timeWindow": 60,\n  "depth_m": 3.0,\n  "zoneMetric": "areal",\n  "zones": {"areal":[7.5,15,30,50]}\n}\n' "$$PACE" "$$OVLS" \
+	| curl -sS -X POST "$$BASE/api/density" -H 'Content-Type: application/json' --data @- \
+	| jq -r '.segments | map(select(.peak.zone!="green")) | .[:8][] | "\(.seg_id)\tareal=\(.peak.areal_density)\tcrowd=\(.peak.crowd_density)\tzone=\(.peak.zone)"'
+
 clean-venv:
 	@rm -rf .venv
 	@echo "Removed .venv"
