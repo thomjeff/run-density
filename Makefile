@@ -7,7 +7,7 @@ BASE ?= http://127.0.0.1:$(PORT)
 # make smoke-prod BASE=https://run-density-131075166528.us-central1.run.app
 
 # -------- Phony targets --------
-.PHONY: venv install run-local stop-local smoke-local smoke-prod clean-venv
+.PHONY: venv install run-local stop-local smoke-local smoke-prod clean-venv smoke-areal smoke-crowd
 
 venv:
 	$(PY) -m venv .venv
