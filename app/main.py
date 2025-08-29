@@ -163,4 +163,16 @@ def api_peaks_csv(payload: DensityPayload, request: Request):
     except HTTPException as he:
         raise he
     except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        return JSONResponse(status_code=500, content={"error": str(e)})@app.post("/api/segments.csv")
+def api_segments_csv(payload: DensityPayload):
+    from app.density import _load_overlaps
+    import io, csv
+    overlaps = _load_overlaps(payload.overlapsCsv, payload.segments)
+    csv_io = io.StringIO()
+    w = csv.writer(csv_io)
+    w.writerow(["seg_id","segment_label","eventA","eventB","from_km_A","to_km_A","from_km_B","to_km_B","direction","width_m"])
+    for s in overlaps:
+        w.writerow([s.seg_id, s.segment_label, s.eventA, s.eventB,
+                    s.from_km_A, s.to_km_A, s.from_km_B, s.to_km_B,
+                    s.direction, s.width_m])
+    return Response(content=csv_io.getvalue(), media_type="text/csv")
