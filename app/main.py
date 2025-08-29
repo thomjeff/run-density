@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import csv
 import io
+import os, datetime
 from fastapi import FastAPI, Query, HTTPException, Request
 from starlette.responses import JSONResponse, StreamingResponse
-
 from app.density import DensityPayload, run_density, preview_segments
 
 try:
@@ -13,17 +13,26 @@ except Exception:  # pragma: no cover
     export_peaks_csv = None
 
 app = FastAPI(title="run-density", version="v1.3.4-dev")
-
+APP_VERSION = os.getenv("APP_VERSION", app.version)
+GIT_SHA = os.getenv("GIT_SHA", "local")
+BUILD_AT = os.getenv("BUILD_AT", datetime.datetime.utcnow().isoformat() + "Z")
 
 @app.get("/health")
 def health():
     return {"ok": True}
 
+@app.get("/version")
+def version():
+    return {
+        "app": "run-density",
+        "version": APP_VERSION or app.version,
+        "git_sha": GIT_SHA,
+        "built_at": BUILD_AT,
+    }
 
 @app.get("/ready")
 def ready():
     return {"ok": True, "density_loaded": True, "overlap_loaded": True}
-
 
 @app.post("/api/density")
 def api_density(
@@ -203,4 +212,11 @@ def api_peaks_csv(payload: DensityPayload, request: Request):
     except HTTPException as he:
         raise he
     except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        return JSONResponse(status_code=500, content={"error": str(e)})@app.get("/version")
+def version():
+    return {
+        "app": "run-density",
+        "version": APP_VERSION,
+        "git_sha": GIT_SHA,
+        "built_at": BUILD_AT,
+    }
