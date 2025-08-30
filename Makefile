@@ -7,7 +7,7 @@ BASE ?= http://127.0.0.1:$(PORT)
 # make smoke-prod BASE=https://run-density-131075166528.us-central1.run.app
 
 # -------- Phony targets --------
-.PHONY: venv install run-local stop-local smoke-local smoke-prod clean-venv
+.PHONY: venv install run-local stop-local smoke-local smoke-prod clean-venv smoke-areal smoke-crowd
 
 venv:
 	$(PY) -m venv .venv
@@ -92,3 +92,44 @@ smoke-short:
 clean-venv:
 	@rm -rf .venv
 	@echo "Removed .venv"
+
+# Pretty print summary (areal)
+smoke-summary-areal:
+	@echo "== areal zones =="
+	@BASE=$${BASE:-http://127.0.0.1:8081}; \
+	PACE=$${PACE:-https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv}; \
+	OVLS=$${OVLS:-https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv}; \
+	curl -s -X POST "$$BASE/api/density?zoneMetric=areal" -H 'Content-Type: application/json' \
+	  -d "$$(printf '{"paceCsv":"%s","overlapsCsv":"%s","startTimes":{"Full":420,"Half":460,"10K":440},"stepKm":0.03,"timeWindow":60,"depth_m":3.0}' "$$PACE" "$$OVLS")" \
+	| jq -r '.segments | map(select(.peak.zone!="green")) | .[:8][] | "\(.seg_id)\tareal=\(.peak.areal_density)\tzone=\(.peak.zone)"'
+
+# Pretty print summary (crowd)
+smoke-summary-crowd:
+	@echo "== crowd zones =="
+	@BASE=$${BASE:-http://127.0.0.1:8081}; \
+	PACE=$${PACE:-https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv}; \
+	OVLS=$${OVLS:-https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv}; \
+	curl -s -X POST "$$BASE/api/density?zoneMetric=crowd" -H 'Content-Type: application/json' \
+	  -d "$$(printf '{"paceCsv":"%s","overlapsCsv":"%s","startTimes":{"Full":420,"Half":460,"10K":440},"stepKm":0.03,"timeWindow":60,"depth_m":3.0,"zones":{"crowd":[1,2,4,8]}}' "$$PACE" "$$OVLS")" \
+	| jq -r '.segments | map(select(.peak.zone!="green")) | .[:8][] | "\(.seg_id)\tcrowd=\(.peak.crowd_density)\tzone=\(.peak.zone)"'
+
+
+smoke-peaks-areal:
+	@echo ">> peaks.csv (areal default cuts)"
+	@BASE=$${BASE:-http://127.0.0.1:8081}; \
+	PACE=$${PACE:-https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv}; \
+	OVLS=$${OVLS:-https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv}; \
+	printf '{\n  "paceCsv": "%s",\n  "overlapsCsv": "%s",\n  "startTimes": {"Full":420,"Half":460,"10K":440},\n  "stepKm": 0.03,\n  "timeWindow": 60,\n  "depth_m": 3.0\n}\n' "$$PACE" "$$OVLS" \
+	| curl -sS -X POST "$$BASE/api/peaks.csv" -H 'Content-Type: application/json' --data @- \
+	| head -n 10
+
+smoke-peaks-crowd:
+	@echo ">> peaks.csv (crowd with custom cuts)"
+	@BASE=$${BASE:-http://127.0.0.1:8081}; \
+	PACE=$${PACE:-https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv}; \
+	OVLS=$${OVLS:-https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv}; \
+	printf '{\n  "paceCsv": "%s",\n  "overlapsCsv": "%s",\n  "startTimes": {"Full":420,"Half":460,"10K":440},\n  "stepKm": 0.03,\n  "timeWindow": 60,\n  "depth_m": 3.0,\n  "zones": {"crowd":[1,2,4,8]}\n}\n' "$$PACE" "$$OVLS" \
+	| curl -sS -X POST "$$BASE/api/peaks.csv?zoneMetric=crowd" -H 'Content-Type: application/json' --data @- \
+	| head -n 10
+
+	

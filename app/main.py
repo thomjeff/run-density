@@ -2,31 +2,41 @@ from __future__ import annotations
 
 import csv
 import io
+import os
+import datetime
 from fastapi import FastAPI, Query, HTTPException, Request
 from starlette.responses import JSONResponse, StreamingResponse
-
 from app.density import DensityPayload, run_density, preview_segments
 
 try:
-    from app.density import export_peaks_csv  # type: ignore[attr-defined]
-except Exception:  # pragma: no cover
+    from app.density import export_peaks_csv
+except ImportError:  # pragma: no cover
     export_peaks_csv = None
 
 app = FastAPI(title="run-density", version="v1.3.4-dev")
-
+APP_VERSION = os.getenv("APP_VERSION", app.version)
+GIT_SHA = os.getenv("GIT_SHA", "local")
+BUILD_AT = os.getenv("BUILD_AT", datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z")
 
 @app.get("/health")
 def health():
     return {"ok": True}
 
+@app.get("/version")
+def version():
+    return {
+        "app": "run-density",
+        "version": APP_VERSION or app.version,
+        "git_sha": GIT_SHA,
+        "built_at": BUILD_AT,
+    }
 
 @app.get("/ready")
 def ready():
     return {"ok": True, "density_loaded": True, "overlap_loaded": True}
 
-
 @app.post("/api/density")
-def api_density(
+async def api_density(
     request: Request,  # <-- required Request (no Optional/None)
     payload: DensityPayload,
     seg_id: str | None = Query(default=None, description="Filter to a single seg_id"),
@@ -49,16 +59,56 @@ def api_density(
     try:
         result = run_density(payload, seg_id_filter=seg_id, debug=debug)
 
-        if debug and export_peaks_csv and result.get("segments"):
+        if debug and export_peaks_csv is not None and result.get("segments"):
             try:
-                export_peaks_csv(result["segments"])  # type: ignore[arg-type]
+                export_peaks_csv(result["segments"])
             except Exception:
                 pass
 
         return result
-    except HTTPException as he:
-        raise he
+    except HTTPException:
+        raise
     except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post("/api/density.summary")
+async def api_density_summary(payload: DensityPayload, request: Request):
+    """
+    Returns a compact summary per segment for the selected metric
+    (areal by default, or crowd if requested).
+    """
+    try:
+        # Allow query to override payload.zoneMetric, just like /api/density
+        qm = request.query_params.get("zoneMetric")
+        metric_name = (qm or getattr(payload, "zoneMetric", "areal")).strip().lower()
+        if metric_name not in {"areal", "crowd"}:
+            metric_name = "areal"
+
+        seg_id = request.query_params.get("seg_id")
+        result = run_density(payload, seg_id_filter=seg_id, debug=False)
+
+        # Build compact summary: {seg_id, value, zone}, value matches chosen metric
+        compact = []
+        for s in result.get("segments", []):
+            peak = s.get("peak", {})
+            value = peak.get("areal_density") if metric_name == "areal" else peak.get("crowd_density")
+            compact.append({
+                "seg_id": s.get("seg_id"),
+                "value": value,
+                "zone": peak.get("zone"),
+            })
+
+        return {
+            "engine": "density",
+            "zone_by": metric_name,   # "areal" | "crowd"
+            "segments": compact
+        }
+    except HTTPException:
+        # Propagate 4xx (e.g., 422 validation) untouched
+        raise
+    except Exception as e:
+        # Match /api/density behavior on unexpected errors
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
@@ -66,8 +116,8 @@ def api_density(
 def api_segments(payload: DensityPayload):
     try:
         return {"segments": preview_segments(payload)}
-    except HTTPException as he:
-        raise he
+    except HTTPException:
+        raise
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
@@ -97,70 +147,94 @@ def api_segments_csv(payload: DensityPayload):
             writer.writerow(r)
 
         return StreamingResponse(io.StringIO(buf.getvalue()), media_type="text/csv")
-    except HTTPException as he:
-        raise he
+    except HTTPException:
+        raise
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 @app.post("/api/peaks.csv")
-def api_peaks_csv(payload: DensityPayload, request: Request):
+async def peaks_csv(request: Request):
     """
-    Stream per-segment peaks as CSV.
-    Columns: seg_id,segment_label,direction,width_m,first_clock,first_km,
-             peak_km,A,B,combined,areal_density,crowd_density,zone
+    Returns a CSV of segment peaks. Adds two comment lines at the top:
+    # zone_by: areal|crowd
+    # zone_cuts: [7.5, 15.0, 30.0, 50.0]  (or custom crowd cuts if zoneMetric=crowd)
     """
-    seg_id = request.query_params.get("seg_id")
-    zm = request.query_params.get("zoneMetric")
-    if zm:
-        payload.zoneMetric = zm
-
     try:
-        result = run_density(payload, seg_id_filter=seg_id, debug=False)
-        segments = result.get("segments", []) or []
+        payload = DensityPayload(**(await request.json()))
+    except Exception:
+        # Fallback: read body manually (Starlette Request in sync route)
+        import json
+        body = request.body()
+        try:
+            payload = DensityPayload(**json.loads(body.decode('utf-8')))
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=f"Invalid JSON body: {e}")
 
-        buf = io.StringIO()
-        fieldnames = [
-            "seg_id",
-            "segment_label",
-            "direction",
-            "width_m",
-            "first_clock",
-            "first_km",
-            "peak_km",
-            "A",
-            "B",
-            "combined",
-            "areal_density",
-            "crowd_density",
-            "zone",
-        ]
-        writer = csv.DictWriter(buf, fieldnames=fieldnames)
-        writer.writeheader()
+    # Allow query override for zoneMetric (matches how /api/density works)
+    q = request.query_params
+    zone_override = q.get("zoneMetric")
+    if zone_override:
+        payload.zoneMetric = zone_override
 
-        for seg in segments:
-            peak = seg.get("peak", {}) or {}
-            first = seg.get("first_overlap") or {"clock": None, "km": None}
-            writer.writerow(
-                {
-                    "seg_id": seg.get("seg_id"),
-                    "segment_label": seg.get("segment_label"),
-                    "direction": seg.get("direction"),
-                    "width_m": seg.get("width_m"),
-                    "first_clock": first.get("clock"),
-                    "first_km": first.get("km"),
-                    "peak_km": peak.get("km"),
-                    "A": peak.get("A"),
-                    "B": peak.get("B"),
-                    "combined": peak.get("combined"),
-                    "areal_density": peak.get("areal_density"),
-                    "crowd_density": peak.get("crowd_density"),
-                    "zone": peak.get("zone"),
-                }
-            )
+    result = run_density(payload, seg_id_filter=q.get("seg_id"), debug=False)
+    segs = result.get("segments", [])
 
-        return StreamingResponse(io.StringIO(buf.getvalue()), media_type="text/csv")
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
+    # Figure out which metric is active and which cuts to print
+    metric_name = (payload.zoneMetric or "areal").strip().lower()
+    if metric_name == "crowd":
+        cuts = (payload.zones.crowd if (payload.zones and payload.zones.crowd) else None) or [1.0, 2.0, 4.0, 8.0]
+    else:
+        cuts = (payload.zones.areal if (payload.zones and payload.zones.areal) else None) or [7.5, 15.0, 30.0, 50.0]
+
+    # Build CSV in-memory
+    buf = io.StringIO()
+    buf.write(f"# zone_by: {metric_name}\n")
+    buf.write(f"# zone_cuts: {cuts}\n")
+
+    # Columns: keep your existing export shape (audit-safe)
+    fieldnames = [
+        "seg_id", "segment_label", "direction", "width_m",
+        "eventA", "from_km_A", "to_km_A",
+        "eventB", "from_km_B", "to_km_B",
+        "length_km",
+        "peak_km", "peak_A", "peak_B", "peak_combined",
+        "areal_density", "crowd_density", "zone"
+    ]
+    writer = csv.DictWriter(buf, fieldnames=fieldnames)
+    writer.writeheader()
+
+    for s in segs:
+        peak = s.get("peak", {}) or {}
+        row = {
+            "seg_id": s.get("seg_id"),
+            "segment_label": s.get("segment_label"),
+            "direction": s.get("direction"),
+            "width_m": s.get("width_m"),
+            "eventA": s.get("eventA") or "",                 # if present in your object
+            "from_km_A": s.get("from_km_A") or "",
+            "to_km_A": s.get("to_km_A") or "",
+            "eventB": s.get("eventB") or "",
+            "from_km_B": s.get("from_km_B") or "",
+            "to_km_B": s.get("to_km_B") or "",
+            "length_km": ( (s.get("to_km_A") or 0) - (s.get("from_km_A") or 0) ),
+            "peak_km": peak.get("km"),
+            "peak_A": peak.get("A"),
+            "peak_B": peak.get("B"),
+            "peak_combined": peak.get("combined"),
+            "areal_density": peak.get("areal_density"),
+            "crowd_density": peak.get("crowd_density"),
+            "zone": peak.get("zone"),
+        }
+        writer.writerow(row)
+
+    buf.seek(0)
+    try:
+        csv_content = buf.getvalue().encode("utf-8")
+        return StreamingResponse(
+            iter([csv_content]),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": 'attachment; filename="peaks.csv"'},
+        )
+    except UnicodeEncodeError as e:
+        raise HTTPException(status_code=500, detail=f"CSV encoding error: {e}")

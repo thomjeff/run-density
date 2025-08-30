@@ -13,21 +13,6 @@ from pydantic import BaseModel, Field
 print("run_density: single-loop v1.3.4 marker", flush=True)
 
 # -----------------------------
-# Constants
-# -----------------------------
-
-# Default zone thresholds
-DEFAULT_AREAL_CUTS = [7.5, 15.0, 30.0, 50.0]
-DEFAULT_CROWD_CUTS = [1.0, 2.0, 4.0, 8.0]
-
-# Validation limits
-MIN_TIME_WINDOW = 5
-MAX_TIME_WINDOW = 600
-MIN_STEP_KM = 0.0
-MAX_STEP_KM = 1.0
-EPSILON = 1e-9
-
-# -----------------------------
 # Models
 # -----------------------------
 
@@ -71,8 +56,8 @@ class DensityPayload(BaseModel):
     startTimes: StartTimes
 
     # Validation tightened (must be >0 and ≤1; timeWindow >0; depth >0)
-    stepKm: float = Field(0.03, gt=MIN_STEP_KM, le=MAX_STEP_KM)
-    timeWindow: int = Field(60, gt=MIN_TIME_WINDOW, le=MAX_TIME_WINDOW)
+    stepKm: float = Field(0.03, gt=0.0, le=1.0)
+    timeWindow: int = Field(60, gt=0)
     depth_m: float = Field(3.0, gt=0.0)
 
     # Existing optional zone configuration (we kept the name ZoneConfig per your preference)
@@ -256,21 +241,21 @@ def _zone_from_cuts(value: float, cuts: List[float]) -> str:
 def _zone_from_metric(value: float, cuts: Optional[List[float]] = None) -> str:
     # If cuts is None or invalid, use standard areal thresholds.
     if not cuts or len(cuts) != 4 or cuts != sorted(cuts):
-        cuts = DEFAULT_AREAL_CUTS
+        cuts = [7.5, 15.0, 30.0, 50.0]
     return _zone_from_cuts(value, cuts)
 
 def _zone_for_density(
     areal_density: float,
     crowd_density: float,
-    payload: DensityPayload,
+    payload,  # DensityPayload
 ) -> str:
     """
     Decide the zone using either 'areal' (default) or 'crowd' metric.
     Thresholds come from payload.zones if provided; otherwise defaults are used.
     """
     # defaults match your historical behaviour
-    default_areal = DEFAULT_AREAL_CUTS
-    default_crowd = DEFAULT_CROWD_CUTS
+    default_areal = [7.5, 15.0, 30.0, 50.0]
+    default_crowd = [1.0, 2.0, 4.0, 8.0]
 
     # pick metric
     metric = (payload.zoneMetric or "areal").lower()
@@ -297,7 +282,7 @@ def _first_arrival_time_at_km(df_event: pd.DataFrame, event: str, km_val: float,
     """Earliest race-clock time a runner from `event` reaches `km_val`."""
     if df_event.empty:
         return None
-    elig = df_event[df_event["distance"] >= (km_val - EPSILON)]
+    elig = df_event[df_event["distance"] >= (km_val - 1e-9)]
     if elig.empty:
         return None
     t0 = _arrival_clock_seconds(event, start_times)
@@ -314,12 +299,12 @@ def _count_in_window_at_km(
     time_window_s: int,
 ) -> int:
     """Count runners at km within [t_ref, t_ref + window)."""
-    elig = df_event[df_event["distance"] >= (km_val - EPSILON)]
+    elig = df_event[df_event["distance"] >= (km_val - 1e-9)]
     if elig.empty:
         return 0
     t0 = _arrival_clock_seconds(event, start_times)
     arrivals = t0 + elig["start_offset"].values + km_val * elig["pace"].values * 60.0
-    t_max = t_ref + float(time_window_s) - EPSILON
+    t_max = t_ref + float(time_window_s) - 1e-9
     return int(((arrivals >= t_ref) & (arrivals <= t_max)).sum())
 
 # --- helper: km positions with at least one sample, even if (to - from) < step ---
@@ -328,10 +313,10 @@ def _km_positions(from_km: float, to_km: float, step_km: float) -> List[float]:
         from_km, to_km = to_km, from_km  # safety
     if step_km <= 0:
         step_km = 0.03  # fallback
-    n_steps = max(0, int((to_km - from_km) / max(step_km, EPSILON)))
+    n_steps = max(0, int((to_km - from_km) / max(step_km, 1e-9)))
     pos = [from_km + i * step_km for i in range(n_steps + 1)]
     # ensure we include end if close and not already there
-    if pos and pos[-1] + EPSILON < to_km:
+    if pos and pos[-1] + 1e-9 < to_km:
         pos.append(to_km)
     if not pos:
         # extremely short segment: still return at least the start
@@ -355,9 +340,9 @@ def trace_segment(
 
     k = rng_start
     trace: List[Dict] = []
-    while k <= rng_end + EPSILON:
+    while k <= rng_end + 1e-9:
         # Map A’s km to B’s km (proportional)
-        if abs(seg.to_km_A - seg.from_km_A) < EPSILON:
+        if abs(seg.to_km_A - seg.from_km_A) < 1e-9:
             kmB = seg.from_km_B
         else:
             ratio = (k - seg.from_km_A) / (seg.to_km_A - seg.from_km_A)
@@ -390,7 +375,7 @@ def trace_segment(
 
     # First-overlap clock at A-start (min of A/B earliest there)
     startA = seg.from_km_A
-    if abs(seg.to_km_A - seg.from_km_A) < EPSILON:
+    if abs(seg.to_km_A - seg.from_km_A) < 1e-9:
         kmB_at_Astart = seg.from_km_B
     else:
         kmB_at_Astart = seg.from_km_B  # ratio 0 at A start
@@ -422,21 +407,23 @@ def trace_segment(
 
 # ---- validation helpers ------------------------------------------------------
 
+from fastapi import HTTPException
+
 
 def _fail_422(msg: str):
     raise HTTPException(status_code=422, detail=msg)
 
 
 def _validate_params(step_km: float, time_window: int, depth_m: float):
-    if step_km is None or step_km <= MIN_STEP_KM or step_km > MAX_STEP_KM:
-        _fail_422(f"stepKm must be in ({MIN_STEP_KM}, {MAX_STEP_KM}], got {step_km}")
-    if time_window is None or time_window < MIN_TIME_WINDOW or time_window > MAX_TIME_WINDOW:
-        _fail_422(f"timeWindow must be between {MIN_TIME_WINDOW} and {MAX_TIME_WINDOW} seconds, got {time_window}")
+    if step_km is None or step_km <= 0 or step_km > 1:
+        _fail_422(f"stepKm must be in (0, 1], got {step_km}")
+    if time_window is None or time_window < 5 or time_window > 600:
+        _fail_422(f"timeWindow must be between 5 and 600 seconds, got {time_window}")
     if depth_m is None or depth_m <= 0:
         _fail_422(f"depth_m must be > 0, got {depth_m}")
 
 
-def _validate_overlaps(overlaps: List[OverlapSegment], start_times: StartTimes) -> None:
+def _validate_overlaps(overlaps: List["OverlapSeg"], start_times: "StartTimes") -> None:
     """
     Validate segments + ensure startTimes has the events each segment references.
     Raises HTTP 422 with a clear message if anything is off.
@@ -469,7 +456,7 @@ def _validate_overlaps(overlaps: List[OverlapSegment], start_times: StartTimes) 
                     f"Provide e.g. startTimes={{\"Full\":420,\"Half\":460,\"10K\":440}}"
                 )
 
-def run_density(payload: DensityPayload, seg_id_filter: Optional[str] = None, debug: bool = False) -> Dict:
+def run_density(payload: DensityPayload, seg_id_filter: Optional[str] = None, debug: bool = False):
     overlaps = _load_overlaps(payload.overlapsCsv, payload.segments)
 
     # Filter by seg_id as early as possible
@@ -496,10 +483,11 @@ def run_density(payload: DensityPayload, seg_id_filter: Optional[str] = None, de
         spanA = s.to_km_A - s.from_km_A
         spanB = s.to_km_B - s.from_km_B
         seg_step = payload.stepKm
-        if spanA + EPSILON < seg_step or spanB + EPSILON < seg_step:
+        eps = 1e-9
+        if spanA + eps < seg_step or spanB + eps < seg_step:
             seg_step = max(spanA, spanB)
-            if seg_step <= EPSILON:
-                seg_step = EPSILON  # still guarantee at least one bin
+            if seg_step <= eps:
+                seg_step = eps  # still guarantee at least one bin
 
         # Build the trace at this per-segment step
         trace, first_overlap_obj = trace_segment(
@@ -525,13 +513,13 @@ def run_density(payload: DensityPayload, seg_id_filter: Optional[str] = None, de
         # Effective width (halve for bi-direction segments)
         effective_width = s.width_m
         if s.direction.strip().lower() == "bi":
-            effective_width = max(effective_width / 2.0, EPSILON)
+            effective_width = max(effective_width / 2.0, 1e-9)
 
         # Areal density (pax per metre of width)
-        areal_density = peak_combined / max(effective_width, EPSILON)
+        areal_density = peak_combined / max(effective_width, 1e-9)
 
         # Crowd density (pax per m^2), using depth_m
-        crowd_density = peak_combined / max(effective_width * payload.depth_m, EPSILON)
+        crowd_density = peak_combined / max(effective_width * payload.depth_m, 1e-9)
 
         # Zone selection (supports areal or crowd with optional custom cuts)
         zone = _zone_for_density(
@@ -566,34 +554,23 @@ def export_peaks_csv(segments: List[Dict], filepath: str = "peaks.csv") -> None:
     Includes seg_id, segment_label, peak km, A, B, combined, areal_density, crowd_density, zone.
     """
     import csv
-    import os
-    
-    if not segments:
-        return
-        
     fields = [
         "seg_id", "segment_label", "km", "A", "B", "combined",
         "areal_density", "crowd_density", "zone"
     ]
-    
-    try:
-        with open(filepath, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fields)
-            writer.writeheader()
-            for seg in segments:
-                if "peak" not in seg:
-                    continue
-                peak = seg["peak"]
-                writer.writerow({
-                    "seg_id": seg.get("seg_id", ""),
-                    "segment_label": seg.get("segment_label", ""),
-                    "km": peak.get("km", ""),
-                    "A": peak.get("A", 0),
-                    "B": peak.get("B", 0),
-                    "combined": peak.get("combined", 0),
-                    "areal_density": peak.get("areal_density", 0.0),
-                    "crowd_density": peak.get("crowd_density", 0.0),
-                    "zone": peak.get("zone", ""),
-                })
-    except (IOError, OSError) as e:
-        raise HTTPException(status_code=500, detail=f"Failed to write CSV file: {e}")
+    with open(filepath, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+        for seg in segments:
+            peak = seg["peak"]
+            writer.writerow({
+                "seg_id": seg["seg_id"],
+                "segment_label": seg["segment_label"],
+                "km": peak["km"],
+                "A": peak["A"],
+                "B": peak["B"],
+                "combined": peak["combined"],
+                "areal_density": peak["areal_density"],
+                "crowd_density": peak["crowd_density"],
+                "zone": peak["zone"],
+            })
