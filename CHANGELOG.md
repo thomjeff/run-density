@@ -1,5 +1,27 @@
 # Changelog
 
+## [v1.3.5] - 2025-08-30
+
+### Added
+- `/version` endpoint now exposes app version, git SHA, and build timestamp.
+- New `/api/density.summary` endpoint for compact zone reporting (paired with new `smoke-summary-*` Make targets).
+- Extended `/api/peaks.csv` to include `zone_by` and `zone_cuts` headers, with support for both areal and crowd metrics.
+- New Makefile smoke tests:
+  - `smoke-areal` and `smoke-crowd` for density checks.
+  - `smoke-peaks`, `smoke-peaks-areal`, and `smoke-peaks-crowd` for CSV validation.
+  - `smoke-summary-areal` and `smoke-summary-crowd` for compact summaries.
+
+### Changed
+- Improved error messages: `_fail_422` and `_validate_overlaps` now surface `seg_id` context where available.
+- Cleaned up code quality in `density.py`:
+  - Removed duplicate imports.
+  - Added proper type hints and standardized constants.
+  - Replaced “magic numbers” with named constants (e.g., `EPSILON`).
+
+### Fixed
+- Corrected async handling in endpoints using `Request.json()` (notably `/api/peaks.csv`).
+- Standardized error handling across endpoints for consistent 422 vs 500 responses.
+
 ## [1.3.4] – 2025-08-27
 
 ### Added
