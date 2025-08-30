@@ -88,7 +88,7 @@ async def api_density_summary(payload: DensityPayload, request: Request):
         seg_id = request.query_params.get("seg_id")
         result = run_density(payload, seg_id_filter=seg_id, debug=False)
 
-        # Build compact summary: {seg_id, value, zone}, value matches chosen metric
+        # Build compact summary: {seg_id, value, zone, areal_density, crowd_density}
         compact = []
         for s in result.get("segments", []):
             peak = s.get("peak", {})
@@ -97,6 +97,8 @@ async def api_density_summary(payload: DensityPayload, request: Request):
                 "seg_id": s.get("seg_id"),
                 "value": value,
                 "zone": peak.get("zone"),
+                "areal_density": peak.get("areal_density"),
+                "crowd_density": peak.get("crowd_density"),
             })
 
         return {
