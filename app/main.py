@@ -233,21 +233,38 @@ async def peaks_csv(request: Request):
     # Save to reports folder with timestamp prefix
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
     filename = f"{timestamp}_peaks.csv"
-    reports_dir = "reports"  # Use relative path
     
-    try:
-        os.makedirs(reports_dir, exist_ok=True)
-        filepath = os.path.join(reports_dir, filename)
-        
-        with open(filepath, 'w', newline='', encoding='utf-8') as f:
-            f.write(buf.getvalue())
+    # Try multiple possible locations for the reports folder
+    possible_paths = [
+        "reports",  # Relative to current working directory
+        "./reports",  # Explicit relative path
+        os.path.join(os.path.dirname(__file__), "..", "reports"),  # Relative to app folder
+        "/reports",  # Absolute path (for cloud environments)
+    ]
+    
+    filepath = None
+    for reports_dir in possible_paths:
+        try:
+            os.makedirs(reports_dir, exist_ok=True)
+            test_filepath = os.path.join(reports_dir, filename)
             
-        print(f"CSV saved to: {filepath}")
-        
-    except Exception as e:
-        print(f"Warning: Could not save to reports folder: {e}")
+            # Test if we can write to this location
+            with open(test_filepath, 'w', newline='', encoding='utf-8') as f:
+                f.write(buf.getvalue())
+            
+            filepath = test_filepath
+            print(f"CSV saved to: {filepath}")
+            break
+            
+        except Exception as e:
+            print(f"Tried {reports_dir}: {e}")
+            continue
+    
+    if not filepath:
+        print(f"Warning: Could not save to any reports folder")
         print(f"Current working directory: {os.getcwd()}")
-        print(f"Attempted to save to: {os.path.abspath(filepath)}")
+        print(f"Current file location: {__file__}")
+        print(f"Attempted paths: {possible_paths}")
 
     buf.seek(0)
     try:
