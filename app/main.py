@@ -230,13 +230,30 @@ async def peaks_csv(request: Request):
         }
         writer.writerow(row)
 
+    # Save to reports folder with timestamp prefix
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
+    filename = f"{timestamp}_peaks.csv"
+    reports_dir = "/reports"
+    
+    try:
+        os.makedirs(reports_dir, exist_ok=True)
+        filepath = os.path.join(reports_dir, filename)
+        
+        with open(filepath, 'w', newline='', encoding='utf-8') as f:
+            f.write(buf.getvalue())
+            
+        print(f"CSV saved to: {filepath}")
+        
+    except Exception as e:
+        print(f"Warning: Could not save to reports folder: {e}")
+
     buf.seek(0)
     try:
         csv_content = buf.getvalue().encode("utf-8")
         return StreamingResponse(
             iter([csv_content]),
             media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": 'attachment; filename="peaks.csv"'},
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
     except UnicodeEncodeError as e:
         raise HTTPException(status_code=500, detail=f"CSV encoding error: {e}")
