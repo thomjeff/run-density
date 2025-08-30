@@ -233,7 +233,7 @@ async def peaks_csv(request: Request):
     # Save to reports folder with timestamp prefix
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
     filename = f"{timestamp}_peaks.csv"
-    reports_dir = "/reports"
+    reports_dir = "reports"  # Use relative path
     
     try:
         os.makedirs(reports_dir, exist_ok=True)
@@ -246,6 +246,8 @@ async def peaks_csv(request: Request):
         
     except Exception as e:
         print(f"Warning: Could not save to reports folder: {e}")
+        print(f"Current working directory: {os.getcwd()}")
+        print(f"Attempted to save to: {os.path.abspath(filepath)}")
 
     buf.seek(0)
     try:
