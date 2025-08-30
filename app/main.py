@@ -95,10 +95,10 @@ async def api_density_summary(payload: DensityPayload, request: Request):
             value = peak.get("areal_density") if metric_name == "areal" else peak.get("crowd_density")
             compact.append({
                 "seg_id": s.get("seg_id"),
-                "value": value,
+                "value": round(value, 2) if value is not None else None,
                 "zone": peak.get("zone"),
-                "areal_density": peak.get("areal_density"),
-                "crowd_density": peak.get("crowd_density"),
+                "areal_density": round(peak.get("areal_density"), 2) if peak.get("areal_density") is not None else None,
+                "crowd_density": round(peak.get("crowd_density"), 2) if peak.get("crowd_density") is not None else None,
             })
 
         return {
@@ -224,8 +224,8 @@ async def peaks_csv(request: Request):
             "peak_A": peak.get("A"),
             "peak_B": peak.get("B"),
             "peak_combined": peak.get("combined"),
-            "areal_density": peak.get("areal_density"),
-            "crowd_density": peak.get("crowd_density"),
+            "areal_density": round(peak.get("areal_density"), 2) if peak.get("areal_density") is not None else None,
+            "crowd_density": round(peak.get("crowd_density"), 2) if peak.get("crowd_density") is not None else None,
             "zone": peak.get("zone"),
         }
         writer.writerow(row)

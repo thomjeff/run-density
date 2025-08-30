@@ -551,8 +551,8 @@ def run_density(payload: DensityPayload, seg_id_filter: Optional[str] = None, de
                 "A": int(peak_A),
                 "B": int(peak_B),
                 "combined": int(peak_combined),
-                "areal_density": areal_density,
-                "crowd_density": crowd_density,
+                "areal_density": round(areal_density, 2),
+                "crowd_density": round(crowd_density, 2),
                 "zone": zone,
             },
             "trace": (trace[:50] if debug and trace else None),
@@ -591,8 +591,8 @@ def export_peaks_csv(segments: List[Dict], filepath: str = "peaks.csv") -> None:
                     "A": peak.get("A", 0),
                     "B": peak.get("B", 0),
                     "combined": peak.get("combined", 0),
-                    "areal_density": peak.get("areal_density", 0.0),
-                    "crowd_density": peak.get("crowd_density", 0.0),
+                    "areal_density": round(peak.get("areal_density", 0.0), 2),
+                    "crowd_density": round(peak.get("crowd_density", 0.0), 2),
                     "zone": peak.get("zone", ""),
                 })
     except (IOError, OSError) as e:
