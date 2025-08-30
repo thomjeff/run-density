@@ -73,42 +73,44 @@ async def api_density(
 
 
 @app.post("/api/density.summary")
-async def api_density_summary(request: Request):
+async def api_density_summary(payload: DensityPayload, request: Request):
+    """
+    Returns a compact summary per segment for the selected metric
+    (areal by default, or crowd if requested).
+    """
     try:
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        payload = DensityPayload(**body)
+        # Allow query to override payload.zoneMetric, just like /api/density
+        qm = request.query_params.get("zoneMetric")
+        metric_name = (qm or getattr(payload, "zoneMetric", "areal")).strip().lower()
+        if metric_name not in {"areal", "crowd"}:
+            metric_name = "areal"
 
-        # Allow ?zoneMetric=... and ?seg_id=... to override
-        zm = request.query_params.get("zoneMetric")
-        if zm:
-            payload.zoneMetric = zm
         seg_id = request.query_params.get("seg_id")
-
         result = run_density(payload, seg_id_filter=seg_id, debug=False)
 
-        # Build compact rows with numeric densities from peak
+        # Build compact summary: {seg_id, value, zone, areal_density, crowd_density}
         compact = []
         for s in result.get("segments", []):
-            pk = s.get("peak", {})
+            peak = s.get("peak", {})
+            value = peak.get("areal_density") if metric_name == "areal" else peak.get("crowd_density")
             compact.append({
                 "seg_id": s.get("seg_id"),
-                "zone": pk.get("zone"),
-                "areal_density": pk.get("areal_density"),
-                "crowd_density": pk.get("crowd_density"),
+                "value": value,
+                "zone": peak.get("zone"),
+                "areal_density": peak.get("areal_density"),
+                "crowd_density": peak.get("crowd_density"),
             })
 
-        metric_name = (payload.zoneMetric or "areal")
         return {
             "engine": "density",
-            "zone_by": metric_name,          # "areal" | "crowd"
+            "zone_by": metric_name,   # "areal" | "crowd"
             "segments": compact
         }
     except HTTPException:
+        # Propagate 4xx (e.g., 422 validation) untouched
         raise
     except Exception as e:
+        # Match /api/density behavior on unexpected errors
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
