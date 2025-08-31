@@ -150,3 +150,18 @@ peaks-crowd:
 	@curl -fsS -X POST "$(BASE)/api/peaks.csv?zoneMetric=crowd" -H 'Content-Type: application/json' \
 	  -d '{"paceCsv":"$(PACE)","overlapsCsv":"$(OVLS)","startTimes":{"Full":420,"Half":460,"10K":440},"stepKm":0.03,"timeWindow":60,"depth_m":3.0,"zones":{"crowd":[1,2,4,8]}}' \
 	  -o "reports/$(DTM)_peaks_crowd.csv" && echo "wrote reports/$(DTM)_peaks_crowd.csv"
+
+# -------- Map testing --------
+.PHONY: test-map test-segments-geojson
+
+test-map:
+	@echo ">> Testing map endpoint"
+	@curl -fsS "$(BASE)/map" | head -n 5 && echo "✅ Map endpoint accessible"
+
+test-segments-geojson:
+	@echo ">> Testing segments GeoJSON endpoint"
+	@curl -fsS "$(BASE)/api/segments.geojson" | jq -r '.type' && echo "✅ Segments GeoJSON accessible"
+
+open-map:
+	@echo ">> Opening map in browser"
+	@open "$(BASE)/map" 2>/dev/null || xdg-open "$(BASE)/map" 2>/dev/null || echo "Please open $(BASE)/map in your browser"
