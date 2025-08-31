@@ -1,5 +1,42 @@
 # Changelog
 
+## [v1.3.9] - 2025-08-31
+
+### Added
+- **Overlap Narrative Text API** (`/api/overlap.narrative.text`) - Human-readable overlap analysis with summary statistics
+- **Overlap CSV Export API** (`/api/overlap.narrative.csv`) - Export overlap analysis to CSV with timestamped filenames
+- **Dynamic Segment Loading** - All endpoints now load segments from `overlaps.csv` instead of hardcoded lists
+- **Makefile Commands** - `make overlaps` for narrative text and `make overlaps-csv` for CSV export
+- **Start Offset Support** - Accurate runner timing with individual start delays from `your_pace_data.csv`
+- **Summary Statistics** - Total segments, overlap count, overlap rate, and top 3 segments by peak runner count
+- **Enhanced Narrative Format** - Emojis, clear formatting, fastest/slowest runner labels, and direction indicators
+- **Segment Filtering** - Support for `?seg_id=` parameter to analyze individual segments
+- **Tolerance Parameters** - Configurable time tolerance for overlap detection
+
+### Changed
+- **Architecture Separation** - Moved overlap logic from `density.py` to dedicated `overlap.py` module
+- **Single Source of Truth** - All endpoints now use `overlaps.csv` for segment definitions
+- **Map Endpoint Updates** - `/api/segments.geojson` now dynamically loads from `overlaps.csv`
+- **Fallback Safety** - Graceful fallback to hardcoded segments if CSV loading fails
+
+### Fixed
+- **Segment Consistency** - All endpoints now use identical segment definitions
+- **Runner Timing Accuracy** - Proper handling of staggered start times with `start_offset`
+- **Overlap Detection Logic** - Improved detection of actual overtaking vs. co-location
+- **CSV Export Format** - Correct filename format (`YYYY-MM-DD_HHMM_overlaps.csv`)
+
+### Technical Details
+- **New Dependencies**: Enhanced pandas usage for CSV processing
+- **API Version**: Updated to v1.3.9-dev
+- **File Structure**: Clean separation between density and overlap functionality
+- **Error Handling**: Robust fallback mechanisms for CSV loading failures
+
+## [v1.3.8] - 2025-08-31
+
+## [v1.3.7] - 2025-08-31
+
+## [v1.3.6] - 2025-08-30
+
 ## [v1.3.5] - 2025-08-30
 
 ### Added
