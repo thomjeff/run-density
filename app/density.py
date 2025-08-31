@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import numpy as np
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -10,7 +11,7 @@ import requests
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-print("run_density: single-loop v1.3.7 marker", flush=True)
+print("run_density: single-loop v1.3.9 marker", flush=True)
 
 # -----------------------------
 # Constants
@@ -22,7 +23,7 @@ DEFAULT_CROWD_CUTS = [1.0, 2.0, 4.0, 8.0]
 
 # Validation limits
 MIN_TIME_WINDOW = 5
-MAX_TIME_WINDOW = 600
+MAX_TIME_WINDOW = 1800  # Allow up to 30 minutes for realistic cross-event overlaps
 MIN_STEP_KM = 0.0
 MAX_STEP_KM = 1.0
 EPSILON = 1e-9
@@ -72,7 +73,7 @@ class DensityPayload(BaseModel):
 
     # Validation tightened (must be >0 and ≤1; timeWindow >0; depth >0)
     stepKm: float = Field(0.03, gt=MIN_STEP_KM, le=MAX_STEP_KM)
-    timeWindow: int = Field(60, gt=MIN_TIME_WINDOW, le=MAX_TIME_WINDOW)
+    timeWindow: int = Field(300, gt=MIN_TIME_WINDOW, le=MAX_TIME_WINDOW)
     depth_m: float = Field(3.0, gt=0.0)
 
     # Existing optional zone configuration (we kept the name ZoneConfig per your preference)
@@ -312,15 +313,58 @@ def _count_in_window_at_km(
     start_times: StartTimes,
     t_ref: float,
     time_window_s: int,
-) -> int:
-    """Count runners at km within [t_ref, t_ref + window)."""
+) -> Tuple[int, List[str]]:
+    """Count runners at km within [t_ref, t_ref + window). Returns (count, runner_ids)."""
     elig = df_event[df_event["distance"] >= (km_val - EPSILON)]
     if elig.empty:
-        return 0
+        return 0, []
     t0 = _arrival_clock_seconds(event, start_times)
     arrivals = t0 + elig["start_offset"].values + km_val * elig["pace"].values * 60.0
     t_max = t_ref + float(time_window_s) - EPSILON
-    return int(((arrivals >= t_ref) & (arrivals <= t_max)).sum())
+    
+    # Find runners within the time window
+    in_window = (arrivals >= t_ref) & (arrivals <= t_max)
+    count = int(in_window.sum())
+    
+    # Get runner IDs for those in the window
+    runner_ids = elig[in_window]["runner_id"].astype(str).tolist()
+    
+    return count, runner_ids
+
+
+
+def _count_in_window_at_km_with_tolerance(
+    df_event: pd.DataFrame,
+    event: str,
+    km_val: float,
+    start_times: StartTimes,
+    t_ref: float,
+    time_window_s: int,
+    tolerance_sec: int = 0,
+) -> Tuple[int, List[str]]:
+    """Count runners at km within [t_ref - tolerance, t_ref + window + tolerance). Returns (count, runner_ids)."""
+    elig = df_event[df_event["distance"] >= (km_val - EPSILON)]
+    if elig.empty:
+        return 0, []
+    t0 = _arrival_clock_seconds(event, start_times)
+    arrivals = t0 + elig["start_offset"].values + km_val * elig["pace"].values * 60.0
+    
+    # Apply tolerance to both start and end of window
+    t_start = t_ref - float(tolerance_sec)
+    t_max = t_ref + float(time_window_s) + float(tolerance_sec) - EPSILON
+    
+    # Find runners within the tolerance window
+    in_window = (arrivals >= t_start) & (arrivals <= t_max)
+    count = int(in_window.sum())
+    
+    # Get runner IDs for those in the window
+    runner_ids = elig[in_window]["runner_id"].astype(str).tolist()
+    
+    return count, runner_ids
+
+
+
+
 
 # --- helper: km positions with at least one sample, even if (to - from) < step ---
 def _km_positions(from_km: float, to_km: float, step_km: float) -> List[float]:
@@ -380,12 +424,21 @@ def trace_segment(
 
         if t_ref is None:
             a = b = 0
+            a_ids = []
+            b_ids = []
         else:
-            a = _count_in_window_at_km(dfA, seg.eventA, k,   start_times, t_ref, time_window_s)
-            b = _count_in_window_at_km(dfB, seg.eventB, kmB, start_times, t_ref, time_window_s)
+            # Use true overlap detection for cross-event segments
+            if seg.eventA != seg.eventB:
+                # For cross-event overlaps, detect when faster runners catch up to slower runners
+                tolerance_sec = 300  # 5 minutes tolerance for overlap detection
+                a, b, a_ids, b_ids = _detect_overlaps_at_km(dfA, dfB, seg.eventA, seg.eventB, k, kmB, start_times, tolerance_sec)
+            else:
+                # Same event - use standard time window logic for density
+                a, a_ids = _count_in_window_at_km(dfA, seg.eventA, k,   start_times, t_ref, time_window_s)
+                b, b_ids = _count_in_window_at_km(dfB, seg.eventB, kmB, start_times, t_ref, time_window_s)
 
         combined = a + b
-        trace.append({"km": round(k, 2), "A": int(a), "B": int(b), "combined": int(combined)})
+        trace.append({"km": round(k, 2), "A": int(a), "B": int(b), "combined": int(combined), "A_ids": a_ids, "B_ids": b_ids})
         k += step_km
 
     # First-overlap clock at A-start (min of A/B earliest there)
@@ -613,3 +666,14 @@ def export_peaks_csv(segments: List[Dict], filepath: str = "peaks.csv") -> None:
                 })
     except (IOError, OSError) as e:
         raise HTTPException(status_code=500, detail=f"Failed to write CSV file: {e}")
+
+
+
+
+
+
+
+
+
+
+
