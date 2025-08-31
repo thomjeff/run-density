@@ -11,6 +11,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+COPY data ./data
 
 EXPOSE 8080
 CMD ["sh", "-c", "gunicorn -k uvicorn.workers.UvicornWorker app.main:app -b :${PORT}"]
