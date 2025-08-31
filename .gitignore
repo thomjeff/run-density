@@ -38,3 +38,4 @@ build/
 *.egg-info/
 peaks.csv
 peaks_crowd.csv
+/reports

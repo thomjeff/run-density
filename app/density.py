@@ -10,7 +10,7 @@ import requests
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-print("run_density: single-loop v1.3.4 marker", flush=True)
+print("run_density: single-loop v1.3.7 marker", flush=True)
 
 # -----------------------------
 # Constants
@@ -545,6 +545,22 @@ def run_density(payload: DensityPayload, seg_id_filter: Optional[str] = None, de
             "segment_label": s.segment_label,
             "direction": s.direction,
             "width_m": s.width_m,
+
+            # NEW: pass overlap metadata through to result rows
+            "eventA": s.eventA,
+            "from_km_A": s.from_km_A,
+            "to_km_A": s.to_km_A,
+            "eventB": s.eventB,
+            "from_km_B": s.from_km_B,
+            "to_km_B": s.to_km_B,
+
+            # NEW: length_km (prefer A's span; fall back to B if A is 0)
+            "length_km": round(
+                (s.to_km_A - s.from_km_A) if (s.to_km_A - s.from_km_A) > 0
+                else (s.to_km_B - s.from_km_B),
+                3
+            ),
+
             "first_overlap": first_overlap_obj,
             "peak": {
                 "km": peak_km,

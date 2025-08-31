@@ -132,4 +132,21 @@ smoke-peaks-crowd:
 	| curl -sS -X POST "$$BASE/api/peaks.csv?zoneMetric=crowd" -H 'Content-Type: application/json' --data @- \
 	| head -n 10
 
-	
+# -------- Timestamped CSV exports --------
+.PHONY: peaks-areal peaks-crowd
+BASE ?= https://run-density-ln4r3sfkha-uc.a.run.app
+PACE ?= https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv
+OVLS ?= https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv
+DTM  ?= $(shell date +%Y-%m-%d_%H%M)
+
+peaks-areal:
+	@mkdir -p reports
+	@curl -fsS -X POST "$(BASE)/api/peaks.csv" -H 'Content-Type: application/json' \
+	  -d '{"paceCsv":"$(PACE)","overlapsCsv":"$(OVLS)","startTimes":{"Full":420,"Half":460,"10K":440},"stepKm":0.03,"timeWindow":60,"depth_m":3.0}' \
+	  -o "reports/$(DTM)_peaks_areal.csv" && echo "wrote reports/$(DTM)_peaks_areal.csv"
+
+peaks-crowd:
+	@mkdir -p reports
+	@curl -fsS -X POST "$(BASE)/api/peaks.csv?zoneMetric=crowd" -H 'Content-Type: application/json' \
+	  -d '{"paceCsv":"$(PACE)","overlapsCsv":"$(OVLS)","startTimes":{"Full":420,"Half":460,"10K":440},"stepKm":0.03,"timeWindow":60,"depth_m":3.0,"zones":{"crowd":[1,2,4,8]}}' \
+	  -o "reports/$(DTM)_peaks_crowd.csv" && echo "wrote reports/$(DTM)_peaks_crowd.csv"

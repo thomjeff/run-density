@@ -13,7 +13,7 @@ try:
 except ImportError:  # pragma: no cover
     export_peaks_csv = None
 
-app = FastAPI(title="run-density", version="v1.3.4-dev")
+app = FastAPI(title="run-density", version="v1.3.7-dev")
 APP_VERSION = os.getenv("APP_VERSION", app.version)
 GIT_SHA = os.getenv("GIT_SHA", "local")
 BUILD_AT = os.getenv("BUILD_AT", datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z")
@@ -88,13 +88,14 @@ async def api_density_summary(payload: DensityPayload, request: Request):
         seg_id = request.query_params.get("seg_id")
         result = run_density(payload, seg_id_filter=seg_id, debug=False)
 
-        # Build compact summary: {seg_id, value, zone, areal_density, crowd_density}
+        # Build compact summary: {seg_id, segment_label, value, zone, areal_density, crowd_density}
         compact = []
         for s in result.get("segments", []):
             peak = s.get("peak", {})
             value = peak.get("areal_density") if metric_name == "areal" else peak.get("crowd_density")
             compact.append({
                 "seg_id": s.get("seg_id"),
+                "segment_label": s.get("segment_label"),   # NEW
                 "value": round(value, 2) if value is not None else None,
                 "zone": peak.get("zone"),
                 "areal_density": round(peak.get("areal_density"), 2) if peak.get("areal_density") is not None else None,
@@ -213,13 +214,13 @@ async def peaks_csv(request: Request):
             "segment_label": s.get("segment_label"),
             "direction": s.get("direction"),
             "width_m": s.get("width_m"),
-            "eventA": s.get("eventA") or "",                 # if present in your object
-            "from_km_A": s.get("from_km_A") or "",
-            "to_km_A": s.get("to_km_A") or "",
+            "eventA": s.get("eventA") or "",
+            "from_km_A": s.get("from_km_A") if s.get("from_km_A") is not None else "",
+            "to_km_A": s.get("to_km_A") if s.get("to_km_A") is not None else "",
             "eventB": s.get("eventB") or "",
-            "from_km_B": s.get("from_km_B") or "",
-            "to_km_B": s.get("to_km_B") or "",
-            "length_km": ( (s.get("to_km_A") or 0) - (s.get("from_km_A") or 0) ),
+            "from_km_B": s.get("from_km_B") if s.get("from_km_B") is not None else "",
+            "to_km_B": s.get("to_km_B") if s.get("to_km_B") is not None else "",
+            "length_km": s.get("length_km") if s.get("length_km") is not None else "",
             "peak_km": peak.get("km"),
             "peak_A": peak.get("A"),
             "peak_B": peak.get("B"),
