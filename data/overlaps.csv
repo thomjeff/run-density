@@ -13,7 +13,7 @@ B2,Friel to 10K Turn (out vs return),10K,10K,2.7,4.25,4.25,5.81,bi,1.5,10K outbo
 C1,10K Turn to Friel (return) vs Full (early),10K,Full,4.25,5.81,14.8,16.33,bi,1.5,Opposite directions on same segment (early Full window)
 C2,10K Turn to Friel (return) vs Full (late),10K,Full,4.25,5.81,2.7,4.25,bi,1.5,Opposite directions on same segment (late Full window)
 D1,Friel to 10K Turn (Full only),Full,Full,2.7,4.25,2.7,4.25,uni,3,Full outbound to 10K Turn
-D2,10K Turn to 14.8km (Full only),Full,Full,4.25,14.8,4.25,14.8,uni,3,Full exclusive middle segment
+D2,10K Turn to 14.8km (Full only),Full,Full,4.25,14.8,4.25,14.8,bi,3,Full exclusive middle segment
 E1,Friel to 10K Turn (late overlaps),10K,Full,2.7,4.25,14.8,16.33,bi,1.5,Faster Full may meet slowest 10K
 F1,Friel to 10K Return (continuing),10K,10K,5.81,8.1,5.81,8.1,uni,3,Continuity row to verify no distance gaps.
 F2,Friel to Station/Barker (shared path),10K,Half,5.81,8.1,2.7,4.95,uni,3,10K after turnaround overlaps Half outbound

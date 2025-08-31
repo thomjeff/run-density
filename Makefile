@@ -7,7 +7,7 @@ BASE ?= http://127.0.0.1:$(PORT)
 # make smoke-prod BASE=https://run-density-131075166528.us-central1.run.app
 
 # -------- Phony targets --------
-.PHONY: venv install run-local stop-local smoke-local smoke-prod clean-venv smoke-areal smoke-crowd
+.PHONY: venv install run-local stop-local smoke-local smoke-prod clean-venv smoke-areal smoke-crowd overlaps
 
 venv:
 	$(PY) -m venv .venv
@@ -93,6 +93,11 @@ clean-venv:
 	@rm -rf .venv
 	@echo "Removed .venv"
 
+overlaps:
+	@echo ">> Running overlap narrative text analysis"
+	@curl -sS -X POST "$(BASE)/api/overlap.narrative.text" -H 'Content-Type: application/json' \
+	  -d '{"paceCsv":"$(PACE)","overlapsCsv":"$(OVLS)","startTimes":{"Full":420,"Half":460,"10K":440},"stepKm":0.03,"timeWindow":300,"depth_m":3.0}'
+
 # Pretty print summary (areal)
 smoke-summary-areal:
 	@echo "== areal zones =="
@@ -133,7 +138,7 @@ smoke-peaks-crowd:
 	| head -n 10
 
 # -------- Timestamped CSV exports --------
-.PHONY: peaks-areal peaks-crowd
+.PHONY: peaks-areal peaks-crowd overlaps-csv
 BASE ?= https://run-density-ln4r3sfkha-uc.a.run.app
 PACE ?= https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv
 OVLS ?= https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv
@@ -151,6 +156,12 @@ peaks-crowd:
 	  -d '{"paceCsv":"$(PACE)","overlapsCsv":"$(OVLS)","startTimes":{"Full":420,"Half":460,"10K":440},"stepKm":0.03,"timeWindow":60,"depth_m":3.0,"zones":{"crowd":[1,2,4,8]}}' \
 	  -o "reports/$(DTM)_peaks_crowd.csv" && echo "wrote reports/$(DTM)_peaks_crowd.csv"
 
+overlaps-csv:
+	@mkdir -p reports
+	@curl -fsS -X POST "$(BASE)/api/overlap.narrative.csv" -H 'Content-Type: application/json' \
+	  -d '{"paceCsv":"$(PACE)","overlapsCsv":"$(OVLS)","startTimes":{"Full":420,"Half":460,"10K":440},"stepKm":0.03,"timeWindow":300,"depth_m":3.0}' \
+	  | jq -r '.filepath' | xargs -I {} cp {} "reports/$(DTM)_overlaps.csv" 2>/dev/null || true && echo "wrote reports/$(DTM)_overlaps.csv"
+
 # -------- Map testing --------
 .PHONY: test-map test-segments-geojson
 
@@ -165,3 +176,19 @@ test-segments-geojson:
 open-map:
 	@echo ">> Opening map in browser"
 	@open "$(BASE)/map" 2>/dev/null || xdg-open "$(BASE)/map" 2>/dev/null || echo "Please open $(BASE)/map in your browser"
+
+# -------- Overlap Narrative Testing --------
+.PHONY: smoke-overlap smoke-overlap-tsv
+
+smoke-overlap:
+	@echo ">> overlap narrative (json)"
+	@curl -sS -X POST "http://127.0.0.1:8081/api/overlap.narrative?sample_bibs=5" \
+	  -H 'Content-Type: application/json' \
+	  -d '{"paceCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv","overlapsCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv","startTimes":{"Full":420,"Half":460,"10K":440},"stepKm":0.03,"timeWindow":300,"depth_m":3.0}' \
+	| jq -r '.segments[] | "\(.seg_id)\tfirst=\(.first_overlap.clock // "—")@\(.first_overlap.km // "—")\tA=\(.first_overlap.A_count // 0)\tB=\(.first_overlap.B_count // 0)\tareal=\(.first_overlap.areal_density // "—")\tcrowd=\(.first_overlap.crowd_density // "—")"'
+
+smoke-overlap-tsv:
+	@echo ">> overlap narrative (tsv)"
+	@curl -sS -X POST "http://127.0.0.1:8081/api/overlap.narrative?as=tsv&sample_bibs=3" \
+	  -H 'Content-Type: application/json' \
+	  -d '{"paceCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv","overlapsCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv","startTimes":{"Full":420,"Half":460,"10K":440},"stepKm":0.03,"timeWindow":300,"depth_m":3.0}'
