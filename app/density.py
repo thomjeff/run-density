@@ -102,13 +102,19 @@ class OverlapSegment:
 # Helpers: I/O
 # -----------------------------
 
-def _fetch_csv(url: str) -> pd.DataFrame:
+def _fetch_csv(url_or_path: str) -> pd.DataFrame:
+    """Load CSV from either a local file path or a URL."""
     try:
-        r = requests.get(url, timeout=15)
-        r.raise_for_status()
-        return pd.read_csv(io.StringIO(r.text))
+        # Check if it's a URL (starts with http:// or https://)
+        if url_or_path.startswith(('http://', 'https://')):
+            r = requests.get(url_or_path, timeout=15)
+            r.raise_for_status()
+            return pd.read_csv(io.StringIO(r.text))
+        else:
+            # Local file path
+            return pd.read_csv(url_or_path)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to fetch CSV: {url} ({e})")
+        raise HTTPException(status_code=400, detail=f"Failed to load CSV: {url_or_path} ({e})")
 
 
 def _load_pace_df(paceCsv: Optional[str]) -> pd.DataFrame:
@@ -427,15 +433,9 @@ def trace_segment(
             a_ids = []
             b_ids = []
         else:
-            # Use true overlap detection for cross-event segments
-            if seg.eventA != seg.eventB:
-                # For cross-event overlaps, detect when faster runners catch up to slower runners
-                tolerance_sec = 300  # 5 minutes tolerance for overlap detection
-                a, b, a_ids, b_ids = _detect_overlaps_at_km(dfA, dfB, seg.eventA, seg.eventB, k, kmB, start_times, tolerance_sec)
-            else:
-                # Same event - use standard time window logic for density
-                a, a_ids = _count_in_window_at_km(dfA, seg.eventA, k,   start_times, t_ref, time_window_s)
-                b, b_ids = _count_in_window_at_km(dfB, seg.eventB, kmB, start_times, t_ref, time_window_s)
+            # Use standard time window logic for density calculation (not overlap detection)
+            a, a_ids = _count_in_window_at_km(dfA, seg.eventA, k,   start_times, t_ref, time_window_s)
+            b, b_ids = _count_in_window_at_km(dfB, seg.eventB, kmB, start_times, t_ref, time_window_s)
 
         combined = a + b
         trace.append({"km": round(k, 2), "A": int(a), "B": int(b), "combined": int(combined), "A_ids": a_ids, "B_ids": b_ids})

@@ -120,8 +120,8 @@ jobs:
       - name: Sanity data URLs resolve (200)
         run: |
           set -euo pipefail
-          curl -fsSI "https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv" | head -n1 | grep "200"
-          curl -fsSI "https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv"    | head -n1 | grep "200"
+          # Note: CSV files are now included in Docker build, so we don't need to check external URLs
+          echo "✅ CSV files are included in Docker build - no external dependencies"
           
       - name: "Smoke: /health, /ready, /api/density (retry, v1.3 payload)"
         shell: bash
@@ -139,12 +139,12 @@ jobs:
             # engine readiness (both loaders)
             curl -fsS "${BASE_URL}/ready"  | jq -e '.ok == true and .density_loaded and .overlap_loaded' >/dev/null
 
-            # density with new overlapsCsv payload (no legacy `segments`)
+            # density with local CSV files (included in Docker build)
             curl -fsS -X POST "${BASE_URL}/api/density" \
               -H "Content-Type: application/json" -H "Accept: application/json" \
               -d '{
-                    "paceCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv",
-                    "overlapsCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps_smoke.csv",
+                    "paceCsv":"data/your_pace_data.csv",
+                    "overlapsCsv":"data/overlaps_smoke.csv",
                     "startTimes":{"Full":420,"10K":440,"Half":460},
                     "stepKm":0.03,
                     "timeWindow":60

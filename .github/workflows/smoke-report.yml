@@ -48,7 +48,7 @@ jobs:
         run: |
           set -euo pipefail
           payload='{
-            "paceCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv",
+            "paceCsv":"data/your_pace_data.csv",
             "startTimes":{"10K":440,"Half":460},
             "segments":[
               {"seg_id":"SMOKE","segment_label":"Start→Friel",

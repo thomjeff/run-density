@@ -26,13 +26,28 @@ BUILD_AT = os.getenv("BUILD_AT", datetime.datetime.now(datetime.timezone.utc).is
 # Templates setup
 templates = Jinja2Templates(directory="app/templates")
 
+def _load_csv_smart(path_or_url: str) -> pd.DataFrame:
+    """Load CSV from either a local file path or a URL."""
+    try:
+        # Check if it's a URL (starts with http:// or https://)
+        if path_or_url.startswith(('http://', 'https://')):
+            import requests
+            r = requests.get(path_or_url, timeout=15)
+            r.raise_for_status()
+            return pd.read_csv(io.StringIO(r.text))
+        else:
+            # Local file path
+            return pd.read_csv(path_or_url)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to load CSV: {path_or_url} ({e})")
+
 def load_segments_from_overlaps_csv(overlaps_csv_path: str) -> list:
     """
     Load segments from overlaps.csv file.
     Returns a list of segment dictionaries compatible with the map endpoint.
     """
     try:
-        df = pd.read_csv(overlaps_csv_path)
+        df = _load_csv_smart(overlaps_csv_path)
         segments = []
         
         for _, row in df.iterrows():
@@ -572,13 +587,13 @@ async def api_overlap_narrative_text(
     try:
         # Load pace CSV
         import pandas as pd
-        df = pd.read_csv(payload.paceCsv)
+        df = _load_csv_smart(payload.paceCsv)
         if "start_offset" not in df.columns:
             df["start_offset"] = 0
         df["start_offset"] = df["start_offset"].fillna(0).astype(int)
         
         # Load overlaps CSV
-        overlaps_df = pd.read_csv(payload.overlapsCsv)
+        overlaps_df = _load_csv_smart(payload.overlapsCsv)
         
         # Filter by segment if specified
         if seg_id:
@@ -802,13 +817,13 @@ async def api_overlap_trace(
     try:
         # Load pace CSV
         import pandas as pd
-        df = pd.read_csv(payload.paceCsv)
+        df = _load_csv_smart(payload.paceCsv)
         if "start_offset" not in df.columns:
             df["start_offset"] = 0
         df["start_offset"] = df["start_offset"].fillna(0).astype(int)
         
         # Load overlaps CSV
-        overlaps_df = pd.read_csv(payload.overlapsCsv)
+        overlaps_df = _load_csv_smart(payload.overlapsCsv)
         
         # Filter by segment if specified
         if seg_id:
@@ -909,13 +924,13 @@ async def api_overlap_narrative_csv(
         
         # Load pace CSV
         import pandas as pd
-        df = pd.read_csv(payload.paceCsv)
+        df = _load_csv_smart(payload.paceCsv)
         if "start_offset" not in df.columns:
             df["start_offset"] = 0
         df["start_offset"] = df["start_offset"].fillna(0).astype(int)
         
         # Load overlaps CSV
-        overlaps_df = pd.read_csv(payload.overlapsCsv)
+        overlaps_df = _load_csv_smart(payload.overlapsCsv)
         
         # Filter by segment if specified
         if seg_id:

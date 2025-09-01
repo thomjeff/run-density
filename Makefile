@@ -140,8 +140,8 @@ smoke-peaks-crowd:
 # -------- Timestamped CSV exports --------
 .PHONY: peaks-areal peaks-crowd overlaps-csv
 BASE ?= https://run-density-ln4r3sfkha-uc.a.run.app
-PACE ?= https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv
-OVLS ?= https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv
+PACE ?= data/your_pace_data.csv
+OVLS ?= data/overlaps.csv
 DTM  ?= $(shell date +%Y-%m-%d_%H%M)
 
 peaks-areal:
