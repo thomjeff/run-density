@@ -27,8 +27,12 @@ BUILD_AT = os.getenv("BUILD_AT", datetime.datetime.now(datetime.timezone.utc).is
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-# Mount static files from frontend directory
-app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
+# Mount static files from frontend directory (with error handling)
+try:
+    app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
+except Exception as e:
+    print(f"Warning: Could not mount frontend directory: {e}")
+    print("Frontend static files will not be available")
 
 def _load_csv_smart(path_or_url: str) -> pd.DataFrame:
     """Load CSV from either a local file path or a URL."""
@@ -365,7 +369,10 @@ async def map_page():
     """
     Serves the interactive map page from the new frontend structure.
     """
-    return FileResponse("frontend/pages/map.html")
+    try:
+        return FileResponse("frontend/pages/map.html")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Map page not found. Frontend files may not be available.")
 
 
 @app.get("/")
@@ -373,7 +380,10 @@ async def index_page():
     """
     Serves the main landing page from the new frontend structure.
     """
-    return FileResponse("frontend/pages/index.html")
+    try:
+        return FileResponse("frontend/pages/index.html")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Index page not found. Frontend files may not be available.")
 
 
 @app.get("/density")
@@ -381,7 +391,10 @@ async def density_page():
     """
     Serves the density analysis form page from the new frontend structure.
     """
-    return FileResponse("frontend/pages/density-form.html")
+    try:
+        return FileResponse("frontend/pages/density-form.html")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Density form page not found. Frontend files may not be available.")
 
 
 @app.get("/overlap")
@@ -389,7 +402,10 @@ async def overlap_page():
     """
     Serves the overlap analysis form page from the new frontend structure.
     """
-    return FileResponse("frontend/pages/overlap-form.html")
+    try:
+        return FileResponse("frontend/pages/overlap-form.html")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Overlap form page not found. Frontend files may not be available.")
 
 
 @app.get("/api/segments.geojson")
