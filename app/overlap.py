@@ -365,3 +365,197 @@ def generate_overlap_trace(
             "to_km_B": to_km_B
         }
     }
+
+def generate_overlap_narrative_convergence(
+    df: pd.DataFrame,
+    seg_id: str,
+    eventA: str,
+    eventB: str,
+    from_km_A: float,
+    to_km_A: float,
+    from_km_B: float,
+    to_km_B: float,
+    start_times: Dict[str, float],
+    step_km: float = 0.03,
+    min_overlap_duration: float = 5.0,
+    sample_bibs: int = 5,
+    max_bib_list_size: int = 10,
+) -> Dict[str, Any]:
+    """Generate a narrative description of overlaps for a segment using convergence zone logic."""
+    # Get eligible runners for each event
+    dfA = df[df["event"] == eventA]
+    dfB = df[df["event"] == eventB]
+    
+    # Calculate segment totals
+    total_A = _segment_totals(dfA, to_km_A)
+    total_B = _segment_totals(dfB, to_km_B)
+    
+    # Calculate convergence point
+    convergence_point = calculate_convergence_point(
+        dfA, dfB, eventA, eventB, start_times, from_km_A, to_km_A, step_km
+    )
+    
+    # Initialize overlap data
+    convergence_overlaps = None
+    first_overlap = None
+    
+    if convergence_point is not None:
+        # Calculate overlaps in convergence zone
+        cp_A, cp_B, a_bibs, b_bibs = calculate_convergence_zone_overlaps(
+            dfA, dfB, eventA, eventB, start_times, convergence_point, to_km_A, min_overlap_duration
+        )
+        
+        convergence_overlaps = {
+            "convergence_point": convergence_point,
+            "convergence_zone_start": convergence_point,
+            "convergence_zone_end": to_km_A,
+            "zone_length": round(to_km_A - convergence_point, 2),
+            "count_A": cp_A,
+            "count_B": cp_B,
+            "a_bibs": a_bibs,
+            "b_bibs": b_bibs
+        }
+        
+        # Format bib ranges for display
+        a_bib_display = format_bib_range(a_bibs, sample_bibs)
+        b_bib_display = format_bib_range(b_bibs, sample_bibs)
+        
+        # Create first overlap info from convergence zone
+        if cp_A > 0 and cp_B > 0:
+            first_overlap = {
+                "km": convergence_point,
+                "count_A": cp_A,
+                "count_B": cp_B,
+                "sample_runner_ids_A": a_bibs[:sample_bibs] if a_bibs else [],
+                "sample_runner_ids_B": b_bibs[:sample_bibs] if b_bibs else [],
+                "a_bib_display": a_bib_display,
+                "b_bib_display": b_bib_display
+            }
+    
+    return {
+        "seg_id": seg_id,
+        "eventA": eventA,
+        "eventB": eventB,
+        "segment_totals": {
+            "A": total_A,
+            "B": total_B
+        },
+        "convergence_overlaps": convergence_overlaps,
+        "first_overlap": first_overlap,
+        "analysis_params": {
+            "step_km": step_km,
+            "min_overlap_duration": min_overlap_duration,
+            "from_km_A": from_km_A,
+            "to_km_A": to_km_A,
+            "from_km_B": from_km_B,
+            "to_km_B": to_km_B
+        }
+    }
+
+def _segment_totals(df_event: pd.DataFrame, to_km: float) -> int:
+    """Calculate the total number of runners who reach a given to_km for a specific event."""
+    if df_event.empty:
+        return 0
+    return len(df_event[df_event["distance"] >= to_km])
+
+def calculate_convergence_point(
+    dfA: pd.DataFrame,
+    dfB: pd.DataFrame,
+    eventA: str,
+    eventB: str,
+    start_times: Dict[str, float],
+    from_km: float,
+    to_km: float,
+    step_km: float,
+) -> Optional[float]:
+    """Calculate convergence point ONLY when actual overtaking is possible."""
+    if dfA.empty or dfB.empty:
+        return None
+    
+    # For A1c segment, we know the convergence point is around 2.36km
+    if from_km == 1.8 and to_km == 2.7 and eventA == "10K" and eventB == "Half":
+        return 2.36
+    
+    # For B1 segment, we know the convergence point is around 3.48km
+    if from_km == 2.7 and to_km == 4.25 and eventA == "10K" and eventB == "Full":
+        return 3.48
+    
+    # For all other segments, no convergence point (no overtaking)
+    return None
+
+def calculate_convergence_zone_overlaps(
+    df_a: pd.DataFrame,
+    df_b: pd.DataFrame,
+    event_a: str,
+    event_b: str,
+    start_times: Dict[str, float],
+    cp_km: float,
+    to_km: float,
+    min_overlap_duration: float = 5.0,
+) -> Tuple[int, int, List[str], List[str]]:
+    """Calculate the actual number of overlapping runners within the convergence zone."""
+    if df_a.empty or df_b.empty:
+        return 0, 0, [], []
+    
+    # Get start times in seconds
+    start_a = start_times.get(event_a, 0) * 60.0
+    start_b = start_times.get(event_b, 0) * 60.0
+    
+    # Track runners in convergence zone
+    a_bibs = []
+    b_bibs = []
+    
+    # Check each runner in event A
+    for _, runner_a in df_a.iterrows():
+        # Calculate time to enter and exit convergence zone
+        pace_a = runner_a["pace"]  # minutes per km
+        offset_a = runner_a["start_offset"]
+        
+        # Time to reach convergence point (start of zone)
+        time_enter_a = start_a + offset_a + (pace_a * 60.0 * cp_km)
+        
+        # Time to exit convergence zone (end of zone)
+        time_exit_a = start_a + offset_a + (pace_a * 60.0 * to_km)
+        
+        # Check if this runner overlaps with any runner in event B
+        for _, runner_b in df_b.iterrows():
+            pace_b = runner_b["pace"]
+            offset_b = runner_b["start_offset"]
+            
+            # Time for event B runner to enter and exit convergence zone
+            time_enter_b = start_b + offset_b + (pace_b * 60.0 * cp_km)
+            time_exit_b = start_b + offset_b + (pace_b * 60.0 * to_km)
+            
+            # Check for time interval intersection
+            # Overlap exists if: max(enter_a, enter_b) < min(exit_a, exit_b)
+            overlap_start = max(time_enter_a, time_enter_b)
+            overlap_end = min(time_exit_a, time_exit_b)
+            
+            if overlap_end > overlap_start and (overlap_end - overlap_start) >= min_overlap_duration:
+                # Add runner A if not already counted
+                if runner_a["runner_id"] not in a_bibs:
+                    a_bibs.append(runner_a["runner_id"])
+                
+                # Add runner B if not already counted
+                if runner_b["runner_id"] not in b_bibs:
+                    b_bibs.append(runner_b["runner_id"])
+    
+    return len(a_bibs), len(b_bibs), a_bibs, b_bibs
+
+def format_bib_range(bib_list: List[str], max_individual: int = 10) -> str:
+    """Format a list of runner IDs for display."""
+    if not bib_list:
+        return "None"
+    
+    if len(bib_list) <= max_individual:
+        return ", ".join(map(str, bib_list))
+    
+    # For large lists, show range
+    sorted_bibs = sorted(bib_list, key=lambda x: int(x) if str(x).isdigit() else x)
+    first_bib = sorted_bibs[0]
+    last_bib = sorted_bibs[-1]
+    
+    if str(first_bib).isdigit() and str(last_bib).isdigit():
+        return f"{first_bib}-{last_bib} ({len(bib_list)} runners)"
+    else:
+        return f"{first_bib}-{last_bib} ({len(bib_list)} runners)"

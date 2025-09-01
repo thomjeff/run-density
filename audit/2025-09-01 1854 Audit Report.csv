@@ -1,0 +1,32 @@
+﻿,,,,,,,,,,,,,,,,
+segment,distance,10K,Half,Full,Start Time,fast_pace,fast_time,slow_pace,slow_time,Ovetake?,,Summary,,,,
+A1a, 0.45 ,Y,-,-,7:20:00 AM, 3.37 ,7:21:31 AM,12.08,7:25:26 AM,,,seg_id,distance,Half_fast,10K_slow,Overtake
+A1a, 0.45 ,-,Y,-,7:40:00 AM, 3.58 ,7:41:37 AM,12.68,7:45:42 AM,FALSE,,A1a, 0.45 ,7:41:37 AM,7:25:26 AM,FALSE
+A1b, 1.35 ,Y,-,-,7:20:00 AM, 3.37 ,7:24:33 AM,12.08,7:36:19 AM,,,A1b, 1.35 ,7:44:50 AM,7:36:19 AM,FALSE
+A1b, 1.35 ,-,Y,-,7:40:00 AM, 3.58 ,7:44:50 AM,12.68,7:57:07 AM,FALSE,,A1c, 2.36 ,7:48:27 AM,7:48:31 AM,TRUE
+A1c, 2.36 ,Y,-,-,7:20:00 AM, 3.37 ,7:27:57 AM,12.08,7:48:31 AM,,,,,,,
+A1c, 2.36 ,-,Y,-,7:40:00 AM, 3.58 ,7:48:27 AM,12.68,8:09:56 AM,TRUE,,,,,,
+,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,
+Point,distance,10K,Half,Full,Start Time,fast_pace,fast_time,slow_pace,slow_time,Congestion?,,Summary,,,,
+A2a, 0.45 ,-,-,Y,7:00:00 AM, 3.93 ,7:01:46 AM,8.52,7:03:50 AM,,,seg_id,distance,10K_fast,Full_slow,Overtake
+A2a, 0.45 ,Y,-,-,7:20:00 AM, 3.37 ,7:21:31 AM,12.08,7:25:26 AM,FALSE,,A2a, 0.45 ,7:21:31 AM,7:03:50 AM,FALSE
+A2b, 1.35 ,-,-,Y,7:00:00 AM, 3.93 ,7:05:19 AM,8.52,7:11:30 AM,,,A2b, 1.35 ,7:24:33 AM,7:11:30 AM,FALSE
+A2b, 1.35 ,Y,-,-,7:20:00 AM, 3.37 ,7:24:33 AM,12.08,7:36:19 AM,FALSE,,A2c, 2.36 ,7:27:57 AM,7:20:06 AM,FALSE
+A2c, 2.36 ,-,-,Y,7:00:00 AM, 3.93 ,7:09:17 AM,8.52,7:20:06 AM,,,,,,,
+A2c, 2.36 ,Y,-,-,7:20:00 AM, 3.37 ,7:27:57 AM,12.08,7:48:31 AM,FALSE,,,,,,
+,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,
+Point,distance,10K,Half,Full,Start Time,fast_pace,fast_time,slow_pace,slow_time,Congestion?,,Summary,,,,
+A3a, 0.45 ,-,-,Y,7:00:00 AM, 3.93 ,7:01:46 AM,8.52,7:03:50 AM,,,seg_id,distance,Half_fast,Full_slow,Overtake
+A3a, 0.45 ,-,Y,-,7:40:00 AM, 3.58 ,7:41:37 AM,12.68,7:45:42 AM,FALSE,,A3a, 0.45 ,7:41:37 AM,7:03:50 AM,FALSE
+A3b, 1.35 ,-,-,Y,7:00:00 AM, 3.93 ,7:05:19 AM,8.52,7:11:30 AM,,,A3b, 1.35 ,7:44:50 AM,7:11:30 AM,FALSE
+A3b, 1.35 ,-,Y,-,7:40:00 AM, 3.58 ,7:44:50 AM,12.68,7:57:07 AM,FALSE,,A3c, 2.36 ,7:48:27 AM,7:20:06 AM,FALSE
+A3c, 2.36 ,-,-,Y,7:00:00 AM, 3.93 ,7:09:17 AM,8.52,7:20:06 AM,,,,,,,
+A3c, 2.36 ,-,Y,-,7:40:00 AM, 3.58 ,7:48:27 AM,12.68,8:09:56 AM,FALSE,,,,,,
+,,,,,,,,,,,,,,,,
+Point,distance,10K,Half,Full,Start Time,fast_pace,fast_time,slow_pace,slow_time,Congestion?,,Summary,,,,
+B1, 3.48 ,-,-,Y,7:00:00 AM, 3.93 ,7:13:41 AM,8.52,7:29:38 AM,,,seg_id,distance,10K_fast,Full_slow,Overtake
+B1, 3.48 ,Y,-,-,7:20:00 AM, 3.37 ,7:31:43 AM,12.08,8:02:03 AM,FALSE,,B1, 3.48 ,7:31:43 AM,7:29:38 AM,FALSE
+,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,
