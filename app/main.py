@@ -6,7 +6,7 @@ import os
 import datetime
 from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.responses import Response
-from fastapi.templating import Jinja2Templates
+
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse, StreamingResponse, HTMLResponse
 from app.density import DensityPayload, run_density, preview_segments
@@ -23,8 +23,12 @@ APP_VERSION = os.getenv("APP_VERSION", app.version)
 GIT_SHA = os.getenv("GIT_SHA", "local")
 BUILD_AT = os.getenv("BUILD_AT", datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z")
 
-# Templates setup
-templates = Jinja2Templates(directory="app/templates")
+# Static files setup for frontend
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+# Mount static files from frontend directory
+app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
 
 def _load_csv_smart(path_or_url: str) -> pd.DataFrame:
     """Load CSV from either a local file path or a URL."""
@@ -349,20 +353,43 @@ async def peaks_csv(request: Request):
 
 
 @app.get("/api/map")
-async def api_map(request: Request):
+async def api_map():
     """
-    Serves an interactive map showing segment density zones.
-    Users can toggle between areal and crowd metrics.
+    API endpoint for map data (deprecated - use /frontend/pages/map.html directly)
     """
-    return templates.TemplateResponse("map.html", {"request": request})
+    return {"message": "Use /frontend/pages/map.html for the interactive map"}
 
 
 @app.get("/map")
-async def map_page(request: Request):
+async def map_page():
     """
-    Convenience route for the map page.
+    Serves the interactive map page from the new frontend structure.
     """
-    return templates.TemplateResponse("map.html", {"request": request})
+    return FileResponse("frontend/pages/map.html")
+
+
+@app.get("/")
+async def index_page():
+    """
+    Serves the main landing page from the new frontend structure.
+    """
+    return FileResponse("frontend/pages/index.html")
+
+
+@app.get("/density")
+async def density_page():
+    """
+    Serves the density analysis form page from the new frontend structure.
+    """
+    return FileResponse("frontend/pages/density-form.html")
+
+
+@app.get("/overlap")
+async def overlap_page():
+    """
+    Serves the overlap analysis form page from the new frontend structure.
+    """
+    return FileResponse("frontend/pages/overlap-form.html")
 
 
 @app.get("/api/segments.geojson")

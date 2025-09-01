@@ -158,8 +158,8 @@ Stability release
   - Outputs overlap segments in plain English with segment labels, start times, runner counts, overlap timing, and peak density.  
   - Includes density expressed in ppl/m² with color-coded zone labels (green → dark-red).  
 - CI/CD improvements:  
-  - GitHub Actions workflow for deployment (`deploy-cloud-run.yml`).  
-  - Smoke tests (`smoke-report.yml`) with badges in README.md.  
+  - GitHub Actions workflow for deployment (`deploy-and-test.yml`).  
+  - Smoke tests (consolidated into `deploy-and-test.yml`) with badges in README.md.  
   - Added `VERIFY.md` for manual endpoint verification.  
   - Added `smoke-report.sh` for local/GCP smoke checks.  
 - Repo hygiene:  

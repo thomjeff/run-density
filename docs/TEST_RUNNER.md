@@ -1,24 +1,19 @@
-# Test Runner (human-readable reports)
+# Test Runner (LEGACY - No longer used)
+
+> **⚠️ DEPRECATED**: This test runner has been replaced by the consolidated GitHub Actions workflow `.github/workflows/deploy-and-test.yml` which automatically runs smoke tests after deployment.
 
 This runner posts prepared JSON cases to your Cloud Run service, validates `/health` and `/ready`, and prints a CLI-style human-readable segment report via `/api/report`.
 
 ## Files
 
-- `ci/test_runner.sh` — main runner
-- `ci/cases/A.json` — Segment A (Start → Friel), pre-filled
-- `ci/cases/TEMPLATE.json` — copy/edit for B, C, …
+> **⚠️ DEPRECATED**: All test runner files have been removed. Testing is now handled automatically by the GitHub Actions workflow.
 
 ## Usage
 
 ```bash
-# Make it executable once
-chmod +x ci/test_runner.sh
-
-# Run against production (replace with your URL)
-BASE="https://run-density-XXXXXXXX.a.run.app" ./ci/test_runner.sh
-
-# Or pass URL as arg
-./ci/test_runner.sh https://run-density-XXXXXXXX.a.run.app
+# ⚠️ DEPRECATED: This test runner has been removed
+# Testing is now handled automatically by the GitHub Actions workflow
+# which runs smoke tests after every deployment
 ```
 
 ## Case format
@@ -56,5 +51,6 @@ If you need to hit `/api/density` for raw engine output, set `"report": false` i
 
 ## Notes
 
-- This bundle supersedes older single-case files like `density_case.json` and `overlap_case.json` — use `ci/cases/*.json` instead.
-- For engine-level testing (not human-readable), see earlier payload shapes you used for `/api/density` and `/api/overlap`.
+- **⚠️ DEPRECATED**: This test runner has been completely removed.
+- Testing is now handled automatically by the consolidated GitHub Actions workflow.
+- For manual testing, use the endpoints directly: `/api/density`, `/api/overlap.narrative.text`, etc.

@@ -1,4 +1,4 @@
-name: deploy-cloud-run
+name: Deploy and Test
 
 on:
   workflow_dispatch:
@@ -81,8 +81,8 @@ jobs:
             --min-instances=0 --max-instances=3 \
             --timeout=300 --quiet
 
-  smoke-prod:
-    name: Smoke Test (prod, with retry)
+  smoke-test:
+    name: Smoke Test (Production)
     runs-on: ubuntu-latest
     needs: build-deploy
     permissions:
@@ -99,7 +99,7 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: "Resolve URL"
+      - name: "Resolve service URL"
         id: url
         env:
           REGION:     ${{ secrets.GCP_REGION }}
@@ -117,30 +117,34 @@ jobs:
           echo "BASE_URL=${URL}" >> "$GITHUB_OUTPUT"
           echo "Resolved service URL: ${URL}"
 
-      - name: Sanity data URLs resolve (200)
-        run: |
-          set -euo pipefail
-          # Note: CSV files are now included in Docker build, so we don't need to check external URLs
-          echo "✅ CSV files are included in Docker build - no external dependencies"
-          
-      - name: "Smoke: /health, /ready, /api/density (retry, v1.3 payload)"
-        shell: bash
+      - name: "Health and readiness check"
         env:
           BASE_URL: ${{ steps.url.outputs.BASE_URL }}
         run: |
           set -euo pipefail
           echo "Testing against ${BASE_URL}"
+          
+          # Basic liveness
+          curl -fsS "${BASE_URL}/health" | jq -e '.ok == true' >/dev/null
+          echo "✅ Health check passed"
+          
+          # Engine readiness (both loaders)
+          curl -fsS "${BASE_URL}/ready"  | jq -e '.ok == true and .density_loaded and .overlap_loaded' >/dev/null
+          echo "✅ Ready check passed"
+
+      - name: "Density endpoint test (retry with backoff)"
+        env:
+          BASE_URL: ${{ steps.url.outputs.BASE_URL }}
+        run: |
+          set -euo pipefail
+          echo "Testing density endpoint with local CSV files..."
 
           attempt() {
             echo "Attempt $1:"
             set -e
-            # basic liveness
-            curl -fsS "${BASE_URL}/health" | jq -e '.ok == true' >/dev/null
-            # engine readiness (both loaders)
-            curl -fsS "${BASE_URL}/ready"  | jq -e '.ok == true and .density_loaded and .overlap_loaded' >/dev/null
-
-            # density with local CSV files (included in Docker build)
-            curl -fsS -X POST "${BASE_URL}/api/density" \
+            
+            # Test density endpoint with local CSV files (included in Docker build)
+            response=$(curl -fsS -X POST "${BASE_URL}/api/density" \
               -H "Content-Type: application/json" -H "Accept: application/json" \
               -d '{
                     "paceCsv":"data/your_pace_data.csv",
@@ -148,15 +152,26 @@ jobs:
                     "startTimes":{"Full":420,"10K":440,"Half":460},
                     "stepKm":0.03,
                     "timeWindow":60
-                  }' \
-            | jq -e '.engine == "density" and (.segments|length) > 0' >/dev/null
+                  }')
+            
+            # Validate response
+            echo "$response" | jq -e '.engine == "density" and (.segments|length) > 0' >/dev/null
+            echo "✅ Density endpoint test passed"
           }
 
+          # Retry logic with exponential backoff
           n=0
           until [ $n -ge 5 ]; do
-            if attempt $((n+1)); then
-              echo "✅ Smoke passed for ${BASE_URL}"; exit 0
+            if attempt $((n+1)); then 
+              echo "✅ All smoke tests passed for ${BASE_URL}"
+              exit 0
             fi
-            n=$((n+1)); echo "retrying in 8s..."; sleep 8
+            n=$((n+1))
+            if [ $n -lt 5 ]; then
+              echo "Retrying in 8s... (attempt $n/5)"
+              sleep 8
+            fi
           done
-          echo "❌ Smoke failed after retries"; exit 1
+          
+          echo "❌ Smoke tests failed after 5 attempts"
+          exit 1
