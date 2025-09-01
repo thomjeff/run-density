@@ -1,5 +1,39 @@
 # Changelog
 
+## [v1.4.1] - 2025-09-01
+
+### Added
+- **Overtake Detection Logic**: Implemented convergence zone-based overtaking detection for A1c and B1 segments
+- **Segment Validation Utility**: New `segment_validator.py` for bottom-up verification of algorithm results
+- **Comprehensive CSV Reporting**: Enhanced exports with human-readable summaries and validation results
+- **Start Offset Integration**: Proper handling of staggered start times in timing calculations
+
+### Changed
+- **Terminology**: Shifted from "overlap" to "overtake" for operational precision
+- **Algorithm Logic**: Replaced time-window presence with precise overtaking event detection
+- **Performance**: Optimized overlap calculations from O(n²) to vectorized operations
+
+### Fixed
+- **Timing Accuracy**: Corrected arrival time calculations with start_offset integration
+- **Count Precision**: Eliminated overcounting issues in B1 segment validation
+- **Data Extraction**: Fixed runner ID range extraction in validation utility
+
+### Technical Details
+- **A1c Validation**: Confirmed 22 vs 288 runners (algorithm accurate)
+- **B1 Validation**: Confirmed 71 vs 29 runners (algorithm accurate)
+- **Convergence Points**: A1c at 2.36km, B1 at 3.48km
+- **Validation Method**: Runner-by-runner time-interval intersection analysis
+
+### Files
+- `test_utilities/segment_validator.py` - New validation utility
+- `app/overlap.py` - Enhanced overtake detection
+- `app/main.py` - Updated API endpoints
+- Various audit reports and test data files
+
+## [v1.4.0] - 2025-08-31
+- Branch only with broken back-end code. 
+- Elephant graveyard at some point. 
+
 ## [v1.3.9] - 2025-08-31
 
 ### Added
