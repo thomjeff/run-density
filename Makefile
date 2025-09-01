@@ -94,8 +94,8 @@ clean-venv:
 	@echo "Removed .venv"
 
 overlaps:
-	@echo ">> Running overlap narrative text analysis"
-	@curl -sS -X POST "$(BASE)/api/overlap.narrative.text" -H 'Content-Type: application/json' \
+	@echo ">> Running overlap analysis (text output)"
+	@curl -sS -X POST "$(BASE)/api/overlap" -H 'Content-Type: application/json' \
 	  -d '{"paceCsv":"$(PACE)","overlapsCsv":"$(OVLS)","startTimes":{"Full":420,"Half":460,"10K":440},"stepKm":0.03,"timeWindow":300,"depth_m":3.0}'
 
 # Pretty print summary (areal)
@@ -158,7 +158,7 @@ peaks-crowd:
 
 overlaps-csv:
 	@mkdir -p reports
-	@curl -fsS -X POST "$(BASE)/api/overlap.narrative.csv" -H 'Content-Type: application/json' \
+	@curl -fsS -X POST "$(BASE)/api/overlap?export_csv=true" -H 'Content-Type: application/json' \
 	  -d '{"paceCsv":"$(PACE)","overlapsCsv":"$(OVLS)","startTimes":{"Full":420,"Half":460,"10K":440},"stepKm":0.03,"timeWindow":300,"depth_m":3.0}' \
 	  | jq -r '.filepath' | xargs -I {} cp {} "reports/$(DTM)_overlaps.csv" 2>/dev/null || true && echo "wrote reports/$(DTM)_overlaps.csv"
 

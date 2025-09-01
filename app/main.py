@@ -611,21 +611,25 @@ def generate_tsv_response(response: dict) -> str:
     
     return output.getvalue()
 
-@app.post("/api/overlap.narrative.text")
-async def api_overlap_narrative_text(
+@app.post("/api/overlap")
+async def api_overlap(
     request: Request,
     payload: DensityPayload,
     seg_id: str | None = Query(default=None, description="Filter to a single segment"),
     tolerance_sec: float = Query(default=0.0, ge=0.0, le=300.0, description="Time tolerance for overlap detection in seconds"),
-    as_format: str = Query(default="text", alias="as", description="Response format: text or json")
+    export_csv: bool = Query(default=False, description="Export results as CSV to /reports directory")
 ):
     """
-    Overlap Narrative Text API (v1.3.9)
-    Returns human-readable narrative text describing overlaps:
+    Overlap Analysis API (v1.4.0)
+    Returns overlap analysis in text format by default, or exports CSV when requested.
+    Features:
     - First catch location and time
-    - Runner counts from each event
+    - Runner counts from each event  
     - Peak overlap details
-    - Clear, readable format
+    - Event totals summary
+    - Execution timestamp
+    - Event start times
+    - Top segments by peak count
     """
     try:
         # Load pace CSV
@@ -642,12 +646,24 @@ async def api_overlap_narrative_text(
         if seg_id:
             overlaps_df = overlaps_df[overlaps_df["seg_id"] == seg_id]
         
-        # Generate narrative data for each segment
-        narrative_data = []
+        # Generate overlap data for each segment
+        overlap_data = []
         summary_stats = {
             "total_segments": len(overlaps_df),
             "segments_with_overlaps": 0,
-            "top_segments": []
+            "top_segments": [],
+            "event_totals": {}  # Track total runners per event
+        }
+        
+        # Get current timestamp for execution time
+        import datetime
+        execution_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        
+        # Prepare start times for summary
+        start_times_summary = {
+            "Full": payload.startTimes.Full,
+            "Half": payload.startTimes.Half,
+            "10K": payload.startTimes.TenK
         }
         
         for _, row in overlaps_df.iterrows():
@@ -659,8 +675,8 @@ async def api_overlap_narrative_text(
             from_km_B = row["from_km_B"]
             to_km_B = row["to_km_B"]
             
-            # Generate narrative using overlap module
-            narrative = generate_overlap_narrative(
+            # Generate overlap analysis using overlap module
+            overlap = generate_overlap_narrative(
                 df=df,
                 seg_id=seg_id,
                 eventA=eventA,
@@ -680,12 +696,21 @@ async def api_overlap_narrative_text(
             )
             
             # Add direction and segment_label from the CSV row
-            narrative["direction"] = row.get("direction", "unknown")
-            narrative["segment_label"] = row.get("segment_label", "")
+            overlap["direction"] = row.get("direction", "unknown")
+            overlap["segment_label"] = row.get("segment_label", "")
             
             # Track summary statistics
-            first = narrative["first_overlap"]
-            peak = narrative["peak_overlap"]
+            first = overlap["first_overlap"]
+            peak = overlap["peak_overlap"]
+            
+            # Track event totals for summary
+            totals = overlap["segment_totals"]
+            if eventA not in summary_stats["event_totals"]:
+                summary_stats["event_totals"][eventA] = 0
+            if eventB not in summary_stats["event_totals"]:
+                summary_stats["event_totals"][eventB] = 0
+            summary_stats["event_totals"][eventA] += totals["A"]
+            summary_stats["event_totals"][eventB] += totals["B"]
             
             if first and first["km"] is not None:
                 summary_stats["segments_with_overlaps"] += 1
@@ -695,16 +720,16 @@ async def api_overlap_narrative_text(
                     peak_combined = peak.get("combined", 0)
                     summary_stats["top_segments"].append({
                         "seg_id": seg_id,
-                        "segment_label": narrative["segment_label"],
+                        "segment_label": overlap["segment_label"],
                         "from_km": from_km_A,
                         "to_km": to_km_A,
                         "peak_count": peak_combined
                     })
             
             # Convert to human-readable text
-            text = _generate_narrative_text(narrative)
-            narrative_data.append({
-                "narrative": narrative,
+            text = _generate_overlap_text(overlap)
+            overlap_data.append({
+                "overlap": overlap,
                 "text": text
             })
         
@@ -713,49 +738,45 @@ async def api_overlap_narrative_text(
         summary_stats["top_segments"] = summary_stats["top_segments"][:3]
         
         # Generate summary text
-        summary_text = _generate_summary_text(summary_stats)
+        summary_text = _generate_summary_text(summary_stats, start_times_summary, execution_time)
         
-        # Combine summary and narrative texts
-        narrative_texts = [summary_text] + [data["text"] for data in narrative_data]
+        # Combine summary and overlap texts
+        overlap_texts = [summary_text] + [data["text"] for data in overlap_data]
         
-        if as_format.lower() == "json":
-            return {
-                "engine": "overlap",
-                "version": "v1.3.9",
-                "type": "narrative_text",
-                "segments": narrative_texts
-            }
-        else:
-            # Return as plain text
-            full_text = "\n\n".join(narrative_texts)
-            return Response(content=full_text, media_type="text/plain")
+        # Export CSV if requested
+        if export_csv:
+            return await _export_overlap_csv(overlap_data, summary_stats, payload, start_times_summary, execution_time)
+        
+        # Return as text by default
+        full_text = "\n\n".join(overlap_texts)
+        return Response(content=full_text, media_type="text/plain")
             
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating narrative text: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating overlap analysis: {str(e)}")
 
-def _generate_narrative_text(narrative: dict) -> str:
-    """Generate human-readable narrative text from overlap data."""
-    seg_id = narrative["seg_id"]
-    eventA = narrative["eventA"]
-    eventB = narrative["eventB"]
-    totals = narrative["segment_totals"]
-    first = narrative["first_overlap"]
-    peak = narrative["peak_overlap"]
+def _generate_overlap_text(overlap: dict) -> str:
+    """Generate human-readable text from overlap data."""
+    seg_id = overlap["seg_id"]
+    eventA = overlap["eventA"]
+    eventB = overlap["eventB"]
+    totals = overlap["segment_totals"]
+    first = overlap["first_overlap"]
+    peak = overlap["peak_overlap"]
     
-    # Build the narrative text
+    # Build the overlap text
     lines = []
     
     # Segment info
     lines.append(f"🏷️ Segment: {seg_id}")
-    if "segment_label" in narrative and narrative["segment_label"]:
-        lines.append(f"📝 Label: {narrative['segment_label']}")
+    if "segment_label" in overlap and overlap["segment_label"]:
+        lines.append(f"📝 Label: {overlap['segment_label']}")
     
     # Header with km range on separate line
     lines.append(f"🔍 Checking {eventA} vs {eventB}")
-    lines.append(f"📍 Range: {narrative['analysis_params']['from_km_A']:.1f}km to {narrative['analysis_params']['to_km_A']:.1f}km")
+    lines.append(f"📍 Range: {overlap['analysis_params']['from_km_A']:.1f}km to {overlap['analysis_params']['to_km_A']:.1f}km")
     
     # Direction
-    direction = narrative.get("direction", "unknown")
+    direction = overlap.get("direction", "unknown")
     if direction == "uni":
         lines.append("➡️ Direction: Unidirectional")
     elif direction == "bi":
@@ -766,9 +787,6 @@ def _generate_narrative_text(narrative: dict) -> str:
     # Check for same event segments
     if eventA == eventB:
         # Special handling for same event segments
-        lines.append(f"👥 Total in '{eventA}': {totals['A']} runners")
-        
-        # For unidirectional same-event segments, no overlaps are possible
         if direction == "uni":
             lines.append("✅ No overlap possible")
             lines.append("📈 No peak overlap data")
@@ -790,9 +808,6 @@ def _generate_narrative_text(narrative: dict) -> str:
                 lines.append("📈 No peak overlap data")
     else:
         # Different events - normal handling
-        lines.append(f"👥 Total in '{eventA}': {totals['A']} runners")
-        lines.append(f"👥 Total in '{eventB}': {totals['B']} runners")
-        
         # First overlap
         if first and first["km"] is not None:
             lines.append(f"⚠️ First overlap: {first['km']:.2f}km {eventA}: {first['count_A']} {eventB}: {first['count_B']}")
@@ -811,21 +826,45 @@ def _generate_narrative_text(narrative: dict) -> str:
             lines.append("📈 No peak overlap data")
     
     # Analysis parameters
-    params = narrative["analysis_params"]
+    params = overlap["analysis_params"]
     lines.append(f"⚙️ Analysis: {params['step_km']:.3f}km steps, {params['tolerance_sec']:.1f}s tolerance")
     
     return "\n".join(lines)
 
-def _generate_summary_text(summary_stats: dict) -> str:
+def _generate_summary_text(summary_stats: dict, start_times: dict = None, execution_time: str = None) -> str:
     """Generate summary text from overlap statistics."""
     lines = []
     
     lines.append("📊 OVERLAP ANALYSIS SUMMARY")
     lines.append("=" * 50)
+    
+    # Execution timestamp
+    if execution_time:
+        lines.append(f"🕐 Executed: {execution_time}")
+        lines.append("")
+    
+    # Event start times
+    if start_times:
+        lines.append("🚀 EVENT START TIMES:")
+        for event, minutes in start_times.items():
+            hours = minutes // 60
+            mins = minutes % 60
+            lines.append(f"   {event}: {hours:02d}:{mins:02d}:00")
+        lines.append("")
+    
+    # Summary statistics
     lines.append(f"📈 Total segments evaluated: {summary_stats['total_segments']}")
     lines.append(f"⚠️ Segments with overlaps: {summary_stats['segments_with_overlaps']}")
     lines.append(f"📊 Overlap rate: {(summary_stats['segments_with_overlaps'] / summary_stats['total_segments'] * 100):.1f}%")
     
+    # Event totals (moved from individual segments)
+    if "event_totals" in summary_stats:
+        lines.append("")
+        lines.append("👥 TOTAL RUNNERS BY EVENT:")
+        for event, count in summary_stats["event_totals"].items():
+            lines.append(f"   {event}: {count} runners")
+    
+    # Top segments
     if summary_stats["top_segments"]:
         lines.append("")
         lines.append("🏆 TOP 3 SEGMENTS BY PEAK RUNNER COUNT:")
@@ -949,101 +988,129 @@ def generate_trace_tsv_response(response: dict) -> str:
     
     return output.getvalue()
 
-@app.post("/api/overlap.narrative.csv")
-async def api_overlap_narrative_csv(
-    request: Request,
-    payload: DensityPayload,
-    seg_id: str | None = Query(default=None, description="Filter to a single segment"),
-    tolerance_sec: float = Query(default=0.0, ge=0.0, le=300.0, description="Time tolerance for overlap detection in seconds")
-):
-    """
-    Overlap Narrative CSV Export API (v1.3.9)
-    Exports overlap narrative data as CSV to /reports directory with DTM prefix.
-    """
-    try:
-        import os
-        import datetime
-        import csv
+async def _export_overlap_csv(overlap_data: list, summary_stats: dict, payload: DensityPayload, start_times: dict, execution_time: str):
+    """Export overlap data to CSV file."""
+    import os
+    import datetime
+    import csv
+    
+    # Create reports directory if it doesn't exist
+    reports_dir = "reports"
+    os.makedirs(reports_dir, exist_ok=True)
+    
+    # Generate filename with DTM prefix
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
+    filename = f"{timestamp}_overlaps.csv"
+    filepath = os.path.join(reports_dir, filename)
+    
+    # Write CSV file
+    with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
+        fieldnames = [
+            "seg_id", "segment_label", "eventA", "eventB", 
+            "from_km_A", "to_km_A", "from_km_B", "to_km_B", "direction",
+            "total_A", "total_B", "overlap_status",
+            "first_km", "first_A_count", "first_B_count", 
+            "first_A_runners", "first_B_runners",
+            "peak_km", "peak_A", "peak_B", "peak_combined",
+            "step_km", "tolerance_sec"
+        ]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
         
-        # Load pace CSV
-        import pandas as pd
-        df = _load_csv_smart(payload.paceCsv)
-        if "start_offset" not in df.columns:
-            df["start_offset"] = 0
-        df["start_offset"] = df["start_offset"].fillna(0).astype(int)
+        # Write summary rows
+        writer.writerow({
+            "seg_id": "SUMMARY",
+            "segment_label": f"Total segments: {summary_stats['total_segments']}",
+            "eventA": f"With overlaps: {summary_stats['segments_with_overlaps']}",
+            "eventB": f"Overlap rate: {(summary_stats['segments_with_overlaps'] / summary_stats['total_segments'] * 100):.1f}%",
+            "from_km_A": "", "to_km_A": "", "from_km_B": "", "to_km_B": "",
+            "direction": "", "total_A": "", "total_B": "", "overlap_status": "",
+            "first_km": "", "first_A_count": "", "first_B_count": "",
+            "first_A_runners": "", "first_B_runners": "",
+            "peak_km": "", "peak_A": "", "peak_B": "", "peak_combined": "",
+            "step_km": "", "tolerance_sec": ""
+        })
         
-        # Load overlaps CSV
-        overlaps_df = _load_csv_smart(payload.overlapsCsv)
+        # Write execution time
+        writer.writerow({
+            "seg_id": "EXEC_TIME",
+            "segment_label": f"Executed: {execution_time}",
+            "eventA": "", "eventB": "",
+            "from_km_A": "", "to_km_A": "", "from_km_B": "", "to_km_B": "",
+            "direction": "", "total_A": "", "total_B": "", "overlap_status": "",
+            "first_km": "", "first_A_count": "", "first_B_count": "",
+            "first_A_runners": "", "first_B_runners": "",
+            "peak_km": "", "peak_A": "", "peak_B": "", "peak_combined": "",
+            "step_km": "", "tolerance_sec": ""
+        })
         
-        # Filter by segment if specified
-        if seg_id:
-            overlaps_df = overlaps_df[overlaps_df["seg_id"] == seg_id]
+        # Write event start times
+        for event, minutes in start_times.items():
+            hours = minutes // 60
+            mins = minutes % 60
+            writer.writerow({
+                "seg_id": f"START_{event}",
+                "segment_label": f"{event}: {hours:02d}:{mins:02d}:00",
+                "eventA": "", "eventB": "",
+                "from_km_A": "", "to_km_A": "", "from_km_B": "", "to_km_B": "",
+                "direction": "", "total_A": "", "total_B": "", "overlap_status": "",
+                "first_km": "", "first_A_count": "", "first_B_count": "",
+                "first_A_runners": "", "first_B_runners": "",
+                "peak_km": "", "peak_A": "", "peak_B": "", "peak_combined": "",
+                "step_km": "", "tolerance_sec": ""
+            })
         
-        # Generate narrative data for each segment
-        narrative_data = []
-        summary_stats = {
-            "total_segments": len(overlaps_df),
-            "segments_with_overlaps": 0,
-            "top_segments": []
-        }
+        # Write event totals
+        if "event_totals" in summary_stats:
+            for event, count in summary_stats["event_totals"].items():
+                writer.writerow({
+                    "seg_id": f"TOTAL_{event}",
+                    "segment_label": f"{event}: {count} runners",
+                    "eventA": "", "eventB": "",
+                    "from_km_A": "", "to_km_A": "", "from_km_B": "", "to_km_B": "",
+                    "direction": "", "total_A": "", "total_B": "", "overlap_status": "",
+                    "first_km": "", "first_A_count": "", "first_B_count": "",
+                    "first_A_runners": "", "first_B_runners": "",
+                    "peak_km": "", "peak_A": "", "peak_B": "", "peak_combined": "",
+                    "step_km": "", "tolerance_sec": ""
+                })
         
-        for _, row in overlaps_df.iterrows():
-            seg_id = row["seg_id"]
-            eventA = row["eventA"]
-            eventB = row["eventB"]
-            from_km_A = row["from_km_A"]
-            to_km_A = row["to_km_A"]
-            from_km_B = row["from_km_B"]
-            to_km_B = row["to_km_B"]
-            direction = row.get("direction", "unknown")
-            segment_label = row.get("segment_label", "")
-            
-            # Generate narrative using overlap module
-            narrative = generate_overlap_narrative(
-                df=df,
-                seg_id=seg_id,
-                eventA=eventA,
-                eventB=eventB,
-                from_km_A=from_km_A,
-                to_km_A=to_km_A,
-                from_km_B=from_km_B,
-                to_km_B=to_km_B,
-                start_times={
-                    "Full": payload.startTimes.Full,
-                    "Half": payload.startTimes.Half,
-                    "10K": payload.startTimes.TenK
-                },
-                step_km=payload.stepKm,
-                tolerance_sec=tolerance_sec,
-                sample_bibs=5
-            )
-            
-            # Add direction and segment_label from the CSV row
-            narrative["direction"] = direction
-            narrative["segment_label"] = segment_label
-            
-            # Extract data for CSV
-            totals = narrative["segment_totals"]
-            first = narrative["first_overlap"]
-            peak = narrative["peak_overlap"]
-            
-            # Track summary statistics
-            if first and first["km"] is not None:
-                summary_stats["segments_with_overlaps"] += 1
-                
-                # Track peak counts for top segments
-                if peak and peak["km"] is not None:
-                    peak_combined = peak.get("combined", 0)
-                    summary_stats["top_segments"].append({
-                        "seg_id": seg_id,
-                        "segment_label": segment_label,
-                        "from_km": from_km_A,
-                        "to_km": to_km_A,
-                        "peak_count": peak_combined
-                    })
+        # Write top segments
+        for i, segment in enumerate(summary_stats["top_segments"], 1):
+            writer.writerow({
+                "seg_id": f"TOP_{i}",
+                "segment_label": f"{segment['seg_id']} - {segment['segment_label']}",
+                "eventA": f"Range: {segment['from_km']:.1f}km to {segment['to_km']:.1f}km",
+                "eventB": f"Peak count: {segment['peak_count']} runners",
+                "from_km_A": "", "to_km_A": "", "from_km_B": "", "to_km_B": "",
+                "direction": "", "total_A": "", "total_B": "", "overlap_status": "",
+                "first_km": "", "first_A_count": "", "first_B_count": "",
+                "first_A_runners": "", "first_B_runners": "",
+                "peak_km": "", "peak_A": "", "peak_B": "", "peak_combined": "",
+                "step_km": "", "tolerance_sec": ""
+            })
+        
+        # Write empty row as separator
+        writer.writerow({
+            "seg_id": "", "segment_label": "", "eventA": "", "eventB": "",
+            "from_km_A": "", "to_km_A": "", "from_km_B": "", "to_km_B": "",
+            "direction": "", "total_A": "", "total_B": "", "overlap_status": "",
+            "first_km": "", "first_A_count": "", "first_B_count": "",
+            "first_A_runners": "", "first_B_runners": "",
+            "peak_km": "", "peak_A": "", "peak_B": "", "peak_combined": "",
+            "step_km": "", "tolerance_sec": ""
+        })
+        
+        # Write segment data
+        for data in overlap_data:
+            overlap = data["overlap"]
+            totals = overlap["segment_totals"]
+            first = overlap["first_overlap"]
+            peak = overlap["peak_overlap"]
+            direction = overlap.get("direction", "unknown")
             
             # Determine overlap status
-            if eventA == eventB and direction == "uni":
+            if overlap["eventA"] == overlap["eventB"] and direction == "uni":
                 overlap_status = "No overlap possible"
                 first_km = None
                 first_A_count = None
@@ -1077,15 +1144,15 @@ async def api_overlap_narrative_csv(
                 peak_B = None
                 peak_combined = None
             
-            narrative_data.append({
-                "seg_id": seg_id,
-                "segment_label": segment_label,
-                "eventA": eventA,
-                "eventB": eventB,
-                "from_km_A": from_km_A,
-                "to_km_A": to_km_A,
-                "from_km_B": from_km_B,
-                "to_km_B": to_km_B,
+            writer.writerow({
+                "seg_id": overlap["seg_id"],
+                "segment_label": overlap.get("segment_label", ""),
+                "eventA": overlap["eventA"],
+                "eventB": overlap["eventB"],
+                "from_km_A": overlap["analysis_params"]["from_km_A"],
+                "to_km_A": overlap["analysis_params"]["to_km_A"],
+                "from_km_B": overlap["analysis_params"]["from_km_B"],
+                "to_km_B": overlap["analysis_params"]["to_km_B"],
                 "direction": direction,
                 "total_A": totals["A"],
                 "total_B": totals["B"],
@@ -1100,88 +1167,15 @@ async def api_overlap_narrative_csv(
                 "peak_B": peak_B,
                 "peak_combined": peak_combined,
                 "step_km": payload.stepKm,
-                "tolerance_sec": tolerance_sec
+                "tolerance_sec": payload.tolerance_sec if hasattr(payload, 'tolerance_sec') else 0.0
             })
-        
-        # Sort top segments by peak count and take top 3
-        summary_stats["top_segments"].sort(key=lambda x: x["peak_count"], reverse=True)
-        summary_stats["top_segments"] = summary_stats["top_segments"][:3]
-        
-        # Create reports directory if it doesn't exist
-        reports_dir = "reports"
-        os.makedirs(reports_dir, exist_ok=True)
-        
-        # Generate filename with DTM prefix
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
-        filename = f"{timestamp}_overlaps.csv"
-        filepath = os.path.join(reports_dir, filename)
-        
-        # Write CSV file
-        with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
-            fieldnames = [
-                "seg_id", "segment_label", "eventA", "eventB", 
-                "from_km_A", "to_km_A", "from_km_B", "to_km_B", "direction",
-                "total_A", "total_B", "overlap_status",
-                "first_km", "first_A_count", "first_B_count", 
-                "first_A_runners", "first_B_runners",
-                "peak_km", "peak_A", "peak_B", "peak_combined",
-                "step_km", "tolerance_sec"
-            ]
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
-            
-            # Write summary rows
-            writer.writerow({
-                "seg_id": "SUMMARY",
-                "segment_label": f"Total segments: {summary_stats['total_segments']}",
-                "eventA": f"With overlaps: {summary_stats['segments_with_overlaps']}",
-                "eventB": f"Overlap rate: {(summary_stats['segments_with_overlaps'] / summary_stats['total_segments'] * 100):.1f}%",
-                "from_km_A": "", "to_km_A": "", "from_km_B": "", "to_km_B": "",
-                "direction": "", "total_A": "", "total_B": "", "overlap_status": "",
-                "first_km": "", "first_A_count": "", "first_B_count": "",
-                "first_A_runners": "", "first_B_runners": "",
-                "peak_km": "", "peak_A": "", "peak_B": "", "peak_combined": "",
-                "step_km": "", "tolerance_sec": ""
-            })
-            
-            # Write top segments
-            for i, segment in enumerate(summary_stats["top_segments"], 1):
-                writer.writerow({
-                    "seg_id": f"TOP_{i}",
-                    "segment_label": f"{segment['seg_id']} - {segment['segment_label']}",
-                    "eventA": f"Range: {segment['from_km']:.1f}km to {segment['to_km']:.1f}km",
-                    "eventB": f"Peak count: {segment['peak_count']} runners",
-                    "from_km_A": "", "to_km_A": "", "from_km_B": "", "to_km_B": "",
-                    "direction": "", "total_A": "", "total_B": "", "overlap_status": "",
-                    "first_km": "", "first_A_count": "", "first_B_count": "",
-                    "first_A_runners": "", "first_B_runners": "",
-                    "peak_km": "", "peak_A": "", "peak_B": "", "peak_combined": "",
-                    "step_km": "", "tolerance_sec": ""
-                })
-            
-            # Write empty row as separator
-            writer.writerow({
-                "seg_id": "", "segment_label": "", "eventA": "", "eventB": "",
-                "from_km_A": "", "to_km_A": "", "from_km_B": "", "to_km_B": "",
-                "direction": "", "total_A": "", "total_B": "", "overlap_status": "",
-                "first_km": "", "first_A_count": "", "first_B_count": "",
-                "first_A_runners": "", "first_B_runners": "",
-                "peak_km": "", "peak_A": "", "peak_B": "", "peak_combined": "",
-                "step_km": "", "tolerance_sec": ""
-            })
-            
-            # Write segment data
-            writer.writerows(narrative_data)
-        
-        return {
-            "engine": "overlap",
-            "version": "v1.3.9",
-            "type": "narrative_csv",
-            "filename": filename,
-            "filepath": filepath,
-            "segments_processed": len(narrative_data),
-            "message": f"CSV exported to {filepath}"
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating narrative CSV: {str(e)}")
+    
+    return {
+        "engine": "overlap",
+        "version": "v1.4.0",
+        "type": "overlap_csv",
+        "filename": filename,
+        "filepath": filepath,
+        "segments_processed": len(overlap_data),
+        "message": f"CSV exported to {filepath}"
+    }
