@@ -10,7 +10,7 @@ from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse, StreamingResponse, HTMLResponse
 from app.density import DensityPayload, run_density, preview_segments
-from app.overlap import generate_overlap_narrative, generate_overlap_trace
+from app.overlap import generate_overlap_narrative_convergence, generate_overlap_trace
 import pandas as pd
 
 try:
@@ -620,10 +620,10 @@ async def api_overlap(
     export_csv: bool = Query(default=False, description="Export results as CSV to /reports directory")
 ):
     """
-    Overlap Analysis API (v1.4.0)
+    Overlap Analysis API (v1.4.1)
     Returns overlap analysis in text format by default, or exports CSV when requested.
     Features:
-    - First catch location and time
+    - Convergence zone overtake detection
     - Runner counts from each event  
     - Peak overlap details
     - Event totals summary
@@ -675,8 +675,8 @@ async def api_overlap(
             from_km_B = row["from_km_B"]
             to_km_B = row["to_km_B"]
             
-            # Generate overlap analysis using overlap module
-            overlap = generate_overlap_narrative(
+            # Generate overlap analysis using convergence zone logic
+            overlap = generate_overlap_narrative_convergence(
                 df=df,
                 seg_id=seg_id,
                 eventA=eventA,
@@ -691,7 +691,7 @@ async def api_overlap(
                     "10K": payload.startTimes.TenK
                 },
                 step_km=payload.stepKm,
-                tolerance_sec=tolerance_sec,
+                min_overlap_duration=5.0,  # Use min_overlap_duration instead of tolerance_sec
                 sample_bibs=5
             )
             
@@ -700,8 +700,7 @@ async def api_overlap(
             overlap["segment_label"] = row.get("segment_label", "")
             
             # Track summary statistics
-            first = overlap["first_overlap"]
-            peak = overlap["peak_overlap"]
+            convergence = overlap["convergence_overlaps"]
             
             # Track event totals for summary
             totals = overlap["segment_totals"]
@@ -712,22 +711,21 @@ async def api_overlap(
             summary_stats["event_totals"][eventA] += totals["A"]
             summary_stats["event_totals"][eventB] += totals["B"]
             
-            if first and first["km"] is not None:
+            if convergence and convergence["count_A"] > 0 and convergence["count_B"] > 0:
                 summary_stats["segments_with_overlaps"] += 1
                 
                 # Track peak counts for top segments
-                if peak and peak["km"] is not None:
-                    peak_combined = peak.get("combined", 0)
-                    summary_stats["top_segments"].append({
-                        "seg_id": seg_id,
-                        "segment_label": overlap["segment_label"],
-                        "from_km": from_km_A,
-                        "to_km": to_km_A,
-                        "peak_count": peak_combined
-                    })
+                peak_combined = convergence["count_A"] + convergence["count_B"]
+                summary_stats["top_segments"].append({
+                    "seg_id": seg_id,
+                    "segment_label": overlap["segment_label"],
+                    "from_km": from_km_A,
+                    "to_km": to_km_A,
+                    "peak_count": peak_combined
+                })
             
             # Convert to human-readable text
-            text = _generate_overlap_text(overlap)
+            text = _generate_overlap_text_convergence(overlap)
             overlap_data.append({
                 "overlap": overlap,
                 "text": text
@@ -745,7 +743,7 @@ async def api_overlap(
         
         # Export CSV if requested
         if export_csv:
-            return await _export_overlap_csv(overlap_data, summary_stats, payload, start_times_summary, execution_time)
+            return await _export_overlap_csv_convergence(overlap_data, summary_stats, payload, start_times_summary, execution_time)
         
         # Return as text by default
         full_text = "\n\n".join(overlap_texts)
@@ -1174,6 +1172,187 @@ async def _export_overlap_csv(overlap_data: list, summary_stats: dict, payload: 
         "engine": "overlap",
         "version": "v1.4.0",
         "type": "overlap_csv",
+        "filename": filename,
+        "filepath": filepath,
+        "segments_processed": len(overlap_data),
+        "message": f"CSV exported to {filepath}"
+    }
+
+async def _export_overlap_csv_convergence(overlap_data: list, summary_stats: dict, payload: DensityPayload, start_times: dict, execution_time: str):
+    """Export convergence-based overlap data to CSV file."""
+    import os
+    import datetime
+    import csv
+    
+    # Create reports directory if it doesn't exist
+    reports_dir = "reports"
+    os.makedirs(reports_dir, exist_ok=True)
+    
+    # Generate filename with DTM prefix
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
+    filename = f"{timestamp}_overlaps.csv"
+    filepath = os.path.join(reports_dir, filename)
+    
+    # Write CSV file
+    with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
+        fieldnames = [
+            "seg_id", "segment_label", "eventA", "eventB", 
+            "from_km_A", "to_km_A", "from_km_B", "to_km_B", "direction",
+            "total_A", "total_B", "overlap_status",
+            "convergence_point", "convergence_zone_start", "convergence_zone_end", "zone_length",
+            "count_A", "count_B", 
+            "a_bibs", "b_bibs",
+            "step_km", "min_overlap_duration"
+        ]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        
+        # Write summary rows
+        writer.writerow({
+            "seg_id": "SUMMARY",
+            "segment_label": f"Total segments: {summary_stats['total_segments']}",
+            "eventA": f"With overlaps: {summary_stats['segments_with_overlaps']}",
+            "eventB": f"Overlap rate: {(summary_stats['segments_with_overlaps'] / summary_stats['total_segments'] * 100):.1f}%",
+            "from_km_A": "", "to_km_A": "", "from_km_B": "", "to_km_B": "",
+            "direction": "", "total_A": "", "total_B": "", "overlap_status": "",
+            "convergence_point": "", "convergence_zone_start": "", "convergence_zone_end": "", "zone_length": "",
+            "count_A": "", "count_B": "", "a_bibs": "", "b_bibs": "",
+            "step_km": "", "min_overlap_duration": ""
+        })
+        
+        # Write execution time
+        writer.writerow({
+            "seg_id": "EXEC_TIME",
+            "segment_label": f"Executed: {execution_time}",
+            "eventA": "", "eventB": "",
+            "from_km_A": "", "to_km_A": "", "from_km_B": "", "to_km_B": "",
+            "direction": "", "total_A": "", "total_B": "", "overlap_status": "",
+            "convergence_point": "", "convergence_zone_start": "", "convergence_zone_end": "", "zone_length": "",
+            "count_A": "", "count_B": "", "a_bibs": "", "b_bibs": "",
+            "step_km": "", "min_overlap_duration": ""
+        })
+        
+        # Write event start times
+        for event, minutes in start_times.items():
+            hours = minutes // 60
+            mins = minutes % 60
+            writer.writerow({
+                "seg_id": f"START_{event}",
+                "segment_label": f"{event}: {hours:02d}:{mins:02d}:00",
+                "eventA": "", "eventB": "",
+                "from_km_A": "", "to_km_A": "", "from_km_B": "", "to_km_B": "",
+                "direction": "", "total_A": "", "total_B": "", "overlap_status": "",
+                "convergence_point": "", "convergence_zone_start": "", "convergence_zone_end": "", "zone_length": "",
+                "count_A": "", "count_B": "", "a_bibs": "", "b_bibs": "",
+                "step_km": "", "min_overlap_duration": ""
+            })
+        
+        # Write event totals
+        if "event_totals" in summary_stats:
+            for event, count in summary_stats["event_totals"].items():
+                writer.writerow({
+                    "seg_id": f"TOTAL_{event}",
+                    "segment_label": f"{event}: {count} runners",
+                    "eventA": "", "eventB": "",
+                    "from_km_A": "", "to_km_A": "", "from_km_B": "", "to_km_B": "",
+                    "direction": "", "total_A": "", "total_B": "", "overlap_status": "",
+                    "convergence_point": "", "convergence_zone_start": "", "convergence_zone_end": "", "zone_length": "",
+                    "count_A": "", "count_B": "", "a_bibs": "", "b_bibs": "",
+                    "step_km": "", "min_overlap_duration": ""
+                })
+        
+        # Write top segments
+        for i, segment in enumerate(summary_stats["top_segments"], 1):
+            writer.writerow({
+                "seg_id": f"TOP_{i}",
+                "segment_label": f"{segment['seg_id']} - {segment['segment_label']}",
+                "eventA": f"Range: {segment['from_km']:.1f}km to {segment['to_km']:.1f}km",
+                "eventB": f"Peak count: {segment['peak_count']} runners",
+                "from_km_A": "", "to_km_A": "", "from_km_B": "", "to_km_B": "",
+                "direction": "", "total_A": "", "total_B": "", "overlap_status": "",
+                "convergence_point": "", "convergence_zone_start": "", "convergence_zone_end": "", "zone_length": "",
+                "count_A": "", "count_B": "", "a_bibs": "", "b_bibs": "",
+                "step_km": "", "min_overlap_duration": ""
+            })
+        
+        # Write empty row as separator
+        writer.writerow({
+            "seg_id": "", "segment_label": "", "eventA": "", "eventB": "",
+            "from_km_A": "", "to_km_A": "", "from_km_B": "", "to_km_B": "",
+            "direction": "", "total_A": "", "total_B": "", "overlap_status": "",
+            "convergence_point": "", "convergence_zone_start": "", "convergence_zone_end": "", "zone_length": "",
+            "count_A": "", "count_B": "", "a_bibs": "", "b_bibs": "",
+            "step_km": "", "min_overlap_duration": ""
+        })
+        
+        # Write segment data
+        for data in overlap_data:
+            overlap = data["overlap"]
+            totals = overlap["segment_totals"]
+            convergence = overlap["convergence_overlaps"]
+            direction = overlap.get("direction", "unknown")
+            
+            # Determine overlap status
+            if overlap["eventA"] == overlap["eventB"] and direction == "uni":
+                overlap_status = "No overlap possible"
+                convergence_point = None
+                convergence_zone_start = None
+                convergence_zone_end = None
+                zone_length = None
+                count_A = None
+                count_B = None
+                a_bibs = None
+                b_bibs = None
+            elif convergence and convergence["count_A"] > 0 and convergence["count_B"] > 0:
+                overlap_status = "Convergence zone overlaps detected"
+                convergence_point = convergence["convergence_point"]
+                convergence_zone_start = convergence["convergence_zone_start"]
+                convergence_zone_end = convergence["convergence_zone_end"]
+                zone_length = convergence["zone_length"]
+                count_A = convergence["count_A"]
+                count_B = convergence["count_B"]
+                a_bibs = ", ".join(map(str, convergence["a_bibs"][:3])) if convergence["a_bibs"] else ""
+                b_bibs = ", ".join(map(str, convergence["b_bibs"][:3])) if convergence["b_bibs"] else ""
+            else:
+                overlap_status = "No convergence zone overlaps detected"
+                convergence_point = None
+                convergence_zone_start = None
+                convergence_zone_end = None
+                zone_length = None
+                count_A = None
+                count_B = None
+                a_bibs = None
+                b_bibs = None
+            
+            writer.writerow({
+                "seg_id": overlap["seg_id"],
+                "segment_label": overlap.get("segment_label", ""),
+                "eventA": overlap["eventA"],
+                "eventB": overlap["eventB"],
+                "from_km_A": overlap["analysis_params"]["from_km_A"],
+                "to_km_A": overlap["analysis_params"]["to_km_A"],
+                "from_km_B": overlap["analysis_params"]["from_km_B"],
+                "to_km_B": overlap["analysis_params"]["to_km_B"],
+                "direction": direction,
+                "total_A": totals["A"],
+                "total_B": totals["B"],
+                "overlap_status": overlap_status,
+                "convergence_point": convergence_point,
+                "convergence_zone_start": convergence_zone_start,
+                "convergence_zone_end": convergence_zone_end,
+                "zone_length": zone_length,
+                "count_A": count_A,
+                "count_B": count_B,
+                "a_bibs": a_bibs,
+                "b_bibs": b_bibs,
+                "step_km": payload.stepKm,
+                "min_overlap_duration": 5.0
+            })
+    
+    return {
+        "engine": "overlap",
+        "version": "v1.4.1",
+        "type": "convergence_overlap_csv",
         "filename": filename,
         "filepath": filepath,
         "segments_processed": len(overlap_data),
