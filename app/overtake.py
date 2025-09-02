@@ -113,44 +113,63 @@ def calculate_convergence_point(
     # Generally: later starting events overtake earlier starting events
     # (later start + any pace can catch up to earlier start + slower pace)
     
+    # Determine which event starts later (can overtake)
     if start_a > start_b:
         # Event A starts later - Event A can overtake Event B
-        # Use fastest runners from later event, slowest runners from earlier event
-        faster_pace = dfA["pace"].quantile(0.1)  # Fastest 10% of later starting event
-        slower_pace = dfB["pace"].quantile(0.9)  # Slowest 10% of earlier starting event
-        start_faster = start_a
-        start_slower = start_b
+        df_later, df_earlier = dfA, dfB
+        start_later, start_earlier = start_a, start_b
     elif start_b > start_a:
         # Event B starts later - Event B can overtake Event A
-        # Use fastest runners from later event, slowest runners from earlier event
-        faster_pace = dfB["pace"].quantile(0.1)  # Fastest 10% of later starting event
-        slower_pace = dfA["pace"].quantile(0.9)  # Slowest 10% of earlier starting event
-        start_faster = start_b
-        start_slower = start_a
+        df_later, df_earlier = dfB, dfA
+        start_later, start_earlier = start_b, start_a
     else:
         # Same start time, no overtaking possible
         return None
     
-    # Calculate theoretical convergence point
-    # Later starting event (start_faster) catches up to earlier starting event (start_slower)
-    # Time for later runner: start_faster + faster_pace * km
-    # Time for earlier runner: start_slower + slower_pace * km
-    # Convergence: start_faster + faster_pace * km = start_slower + slower_pace * km
-    # Solving: km = (start_slower - start_faster) / (faster_pace - slower_pace)
+    # Calculate convergence point by finding where later starting runners
+    # can actually catch up to earlier starting runners
+    # This uses the combination of start_time + pace + start_offset as requested
     
-    # Note: faster_pace is the pace of the later starting event (which can overtake)
-    # slower_pace is the pace of the earlier starting event (which gets overtaken)
-    pace_diff_sec = (slower_pace - faster_pace) * 60.0  # Convert to seconds per km
+    convergence_points = []
     
-    # If the later starting event is actually faster (lower pace), overtaking is definitely possible
-    # If the later starting event is slower (higher pace), overtaking may still be possible
-    # due to the time advantage from starting later
-    if pace_diff_sec <= 0:
-        # Later starting event is faster or same pace - overtaking definitely possible
-        # Use a small positive pace difference for calculation
-        pace_diff_sec = 1.0  # 1 second per km difference
+    # Sample actual runners from each event to find realistic convergence scenarios
+    # Use a representative sample of runners from each event
+    later_sample = df_later.sample(min(50, len(df_later)), random_state=42)  # Sample up to 50 runners
+    earlier_sample = df_earlier.sample(min(50, len(df_earlier)), random_state=42)
     
-    theoretical_convergence = (start_slower - start_faster) / pace_diff_sec
+    for _, later_runner in later_sample.iterrows():
+        for _, earlier_runner in earlier_sample.iterrows():
+            # Calculate actual arrival times including start_offset
+            # Time for later runner: start_later + start_offset + pace * km
+            # Time for earlier runner: start_earlier + start_offset + pace * km
+            # Convergence: start_later + later_offset + later_pace * km = start_earlier + earlier_offset + earlier_pace * km
+            # Solving: km = (start_earlier + earlier_offset - start_later - later_offset) / (later_pace - earlier_pace)
+            
+            later_pace = later_runner["pace"]
+            earlier_pace = earlier_runner["pace"]
+            later_offset = later_runner["start_offset"]
+            earlier_offset = earlier_runner["start_offset"]
+            
+            pace_diff_sec = (later_pace - earlier_pace) * 60.0  # Convert to seconds per km
+            
+            if pace_diff_sec <= 0:
+                # Later runner is not faster, skip this combination
+                continue
+            
+            # Calculate convergence point including start_offset
+            time_diff = (start_earlier + earlier_offset) - (start_later + later_offset)
+            theoretical_convergence = time_diff / pace_diff_sec
+            
+            # Check if convergence point is within the overlapping segment
+            if segment_start <= theoretical_convergence <= segment_end:
+                convergence_points.append(theoretical_convergence)
+    
+    if not convergence_points:
+        # No convergence points found within segment, use segment start
+        return round(segment_start, 2)
+    
+    # Return the median convergence point (most representative)
+    theoretical_convergence = np.median(convergence_points)
     
     # If theoretical convergence is within the segment, use it
     if segment_start <= theoretical_convergence <= segment_end:
