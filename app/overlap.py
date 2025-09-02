@@ -493,7 +493,7 @@ def calculate_convergence_zone_overlaps(
     to_km: float,
     min_overlap_duration: float = 5.0,
 ) -> Tuple[int, int, List[str], List[str]]:
-    """Calculate the actual number of overlapping runners within the convergence zone."""
+    """Calculate the actual number of overlapping runners within the convergence zone using vectorized operations."""
     if df_a.empty or df_b.empty:
         return 0, 0, [], []
     
@@ -501,46 +501,43 @@ def calculate_convergence_zone_overlaps(
     start_a = start_times.get(event_a, 0) * 60.0
     start_b = start_times.get(event_b, 0) * 60.0
     
-    # Track runners in convergence zone
-    a_bibs = []
-    b_bibs = []
+    # Vectorized calculations for all runners at once
+    # Event A runners
+    pace_a = df_a["pace"].values  # minutes per km
+    offset_a = df_a["start_offset"].values
+    time_enter_a = start_a + offset_a + (pace_a * 60.0 * cp_km)
+    time_exit_a = start_a + offset_a + (pace_a * 60.0 * to_km)
     
-    # Check each runner in event A
-    for _, runner_a in df_a.iterrows():
-        # Calculate time to enter and exit convergence zone
-        pace_a = runner_a["pace"]  # minutes per km
-        offset_a = runner_a["start_offset"]
-        
-        # Time to reach convergence point (start of zone)
-        time_enter_a = start_a + offset_a + (pace_a * 60.0 * cp_km)
-        
-        # Time to exit convergence zone (end of zone)
-        time_exit_a = start_a + offset_a + (pace_a * 60.0 * to_km)
-        
-        # Check if this runner overlaps with any runner in event B
-        for _, runner_b in df_b.iterrows():
-            pace_b = runner_b["pace"]
-            offset_b = runner_b["start_offset"]
-            
-            # Time for event B runner to enter and exit convergence zone
-            time_enter_b = start_b + offset_b + (pace_b * 60.0 * cp_km)
-            time_exit_b = start_b + offset_b + (pace_b * 60.0 * to_km)
-            
-            # Check for time interval intersection
-            # Overlap exists if: max(enter_a, enter_b) < min(exit_a, exit_b)
-            overlap_start = max(time_enter_a, time_enter_b)
-            overlap_end = min(time_exit_a, time_exit_b)
-            
-            if overlap_end > overlap_start and (overlap_end - overlap_start) >= min_overlap_duration:
-                # Add runner A if not already counted
-                if runner_a["runner_id"] not in a_bibs:
-                    a_bibs.append(runner_a["runner_id"])
-                
-                # Add runner B if not already counted
-                if runner_b["runner_id"] not in b_bibs:
-                    b_bibs.append(runner_b["runner_id"])
+    # Event B runners
+    pace_b = df_b["pace"].values  # minutes per km
+    offset_b = df_b["start_offset"].values
+    time_enter_b = start_b + offset_b + (pace_b * 60.0 * cp_km)
+    time_exit_b = start_b + offset_b + (pace_b * 60.0 * to_km)
     
-    return len(a_bibs), len(b_bibs), a_bibs, b_bibs
+    # Track overlapping runners
+    a_bibs = set()
+    b_bibs = set()
+    
+    # Use broadcasting to check all pairs efficiently
+    # This avoids the O(n²) nested loops
+    for i, (enter_a, exit_a) in enumerate(zip(time_enter_a, time_exit_a)):
+        # Check overlap with all event B runners
+        overlap_start = np.maximum(enter_a, time_enter_b)
+        overlap_end = np.minimum(exit_a, time_exit_b)
+        
+        # Find valid overlaps (duration >= min_overlap_duration)
+        valid_overlaps = (overlap_end > overlap_start) & ((overlap_end - overlap_start) >= min_overlap_duration)
+        
+        if np.any(valid_overlaps):
+            # Add runner A
+            a_bibs.add(df_a.iloc[i]["runner_id"])
+            
+            # Add all overlapping runners B
+            overlapping_b_indices = np.where(valid_overlaps)[0]
+            for b_idx in overlapping_b_indices:
+                b_bibs.add(df_b.iloc[b_idx]["runner_id"])
+    
+    return len(a_bibs), len(b_bibs), list(a_bibs), list(b_bibs)
 
 def format_bib_range(bib_list: List[str], max_individual: int = 10) -> str:
     """Format a list of runner IDs for display."""
