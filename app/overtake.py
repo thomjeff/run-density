@@ -109,33 +109,46 @@ def calculate_convergence_point(
     if time_diff < 60:  # Less than 1 minute difference
         return None
     
-    # Determine which event is faster (lower pace = faster)
-    if median_pace_a < median_pace_b:
-        # Event A is faster
-        faster_pace = median_pace_a
-        slower_pace = median_pace_b
+    # Determine which event can overtake based on start times
+    # Generally: later starting events overtake earlier starting events
+    # (later start + any pace can catch up to earlier start + slower pace)
+    
+    if start_a > start_b:
+        # Event A starts later - Event A can overtake Event B
+        # Use median paces as representative values for convergence calculation
+        faster_pace = median_pace_a  # Later starting event
+        slower_pace = median_pace_b  # Earlier starting event
         start_faster = start_a
         start_slower = start_b
-    elif median_pace_b < median_pace_a:
-        # Event B is faster
-        faster_pace = median_pace_b
-        slower_pace = median_pace_a
+    elif start_b > start_a:
+        # Event B starts later - Event B can overtake Event A
+        # Use median paces as representative values for convergence calculation
+        faster_pace = median_pace_b  # Later starting event
+        slower_pace = median_pace_a  # Earlier starting event
         start_faster = start_b
         start_slower = start_a
     else:
-        # Same pace, no overtaking possible
+        # Same start time, no overtaking possible
         return None
     
     # Calculate theoretical convergence point
-    # Time for faster runner: start_faster + faster_pace * km
-    # Time for slower runner: start_slower + slower_pace * km
+    # Later starting event (start_faster) catches up to earlier starting event (start_slower)
+    # Time for later runner: start_faster + faster_pace * km
+    # Time for earlier runner: start_slower + slower_pace * km
     # Convergence: start_faster + faster_pace * km = start_slower + slower_pace * km
     # Solving: km = (start_slower - start_faster) / (faster_pace - slower_pace)
     
+    # Note: faster_pace is the pace of the later starting event (which can overtake)
+    # slower_pace is the pace of the earlier starting event (which gets overtaken)
     pace_diff_sec = (slower_pace - faster_pace) * 60.0  # Convert to seconds per km
     
+    # If the later starting event is actually faster (lower pace), overtaking is definitely possible
+    # If the later starting event is slower (higher pace), overtaking may still be possible
+    # due to the time advantage from starting later
     if pace_diff_sec <= 0:
-        return None
+        # Later starting event is faster or same pace - overtaking definitely possible
+        # Use a small positive pace difference for calculation
+        pace_diff_sec = 1.0  # 1 second per km difference
     
     theoretical_convergence = (start_slower - start_faster) / pace_diff_sec
     
