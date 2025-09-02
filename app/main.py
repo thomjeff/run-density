@@ -725,7 +725,7 @@ async def api_overlap(
                 })
             
             # Convert to human-readable text
-            text = _generate_overlap_text_convergence(overlap)
+            text = _generate_overlap_text(overlap)
             overlap_data.append({
                 "overlap": overlap,
                 "text": text
@@ -753,13 +753,12 @@ async def api_overlap(
         raise HTTPException(status_code=500, detail=f"Error generating overlap analysis: {str(e)}")
 
 def _generate_overlap_text(overlap: dict) -> str:
-    """Generate human-readable text from overlap data."""
+    """Generate human-readable text from convergence-based overlap data."""
     seg_id = overlap["seg_id"]
     eventA = overlap["eventA"]
     eventB = overlap["eventB"]
     totals = overlap["segment_totals"]
-    first = overlap["first_overlap"]
-    peak = overlap["peak_overlap"]
+    convergence = overlap.get("convergence_overlaps")
     
     # Build the overlap text
     lines = []
@@ -787,45 +786,40 @@ def _generate_overlap_text(overlap: dict) -> str:
         # Special handling for same event segments
         if direction == "uni":
             lines.append("✅ No overlap possible")
-            lines.append("📈 No peak overlap data")
         else:
             # Bidirectional same-event segments can have overlaps (like B2)
-            if first and first["km"] is not None:
-                lines.append(f"⚠️ First overlap: {first['km']:.2f}km {eventA}: {first['count_A']} {eventB}: {first['count_B']}")
+            if convergence and convergence["count_A"] > 0 and convergence["count_B"] > 0:
+                lines.append(f"🎯 Convergence Point: {convergence['convergence_point']:.2f}km")
+                lines.append(f"📊 Convergence Zone: {convergence['convergence_zone_start']:.2f}km to {convergence['convergence_zone_end']:.2f}km")
+                lines.append(f"👥 Count A ({eventA}): {convergence['count_A']}")
+                lines.append(f"👥 Count B ({eventB}): {convergence['count_B']}")
                 
-                if first["sample_runner_ids_A"] and first["sample_runner_ids_B"]:
-                    sample_A = ", ".join(first["sample_runner_ids_A"][:3])
-                    sample_B = ", ".join(first["sample_runner_ids_B"][:3])
-                    lines.append(f"🏃‍♂️ Runners - {eventA}: {sample_A} (Fastest), {eventB}: {sample_B} (Slowest)")
+                if convergence["a_bibs"] and convergence["b_bibs"]:
+                    sample_A = ", ".join(map(str, convergence["a_bibs"][:3]))
+                    sample_B = ", ".join(map(str, convergence["b_bibs"][:3]))
+                    lines.append(f"🏃‍♂️ Sample A: [{sample_A}]")
+                    lines.append(f"🏃‍♂️ Sample B: [{sample_B}]")
             else:
                 lines.append("❌ No overlaps detected in this segment")
-            
-            if peak and peak["km"] is not None:
-                lines.append(f"📈 Peak: {peak['km']:.2f}km {eventA}: {peak['A']} {eventB}: {peak['B']} (Combined: {peak['combined']})")
-            else:
-                lines.append("📈 No peak overlap data")
     else:
-        # Different events - normal handling
-        # First overlap
-        if first and first["km"] is not None:
-            lines.append(f"⚠️ First overlap: {first['km']:.2f}km {eventA}: {first['count_A']} {eventB}: {first['count_B']}")
+        # Different events - use convergence zone logic
+        if convergence and convergence["count_A"] > 0 and convergence["count_B"] > 0:
+            lines.append(f"🎯 Convergence Point: {convergence['convergence_point']:.2f}km")
+            lines.append(f"📊 Convergence Zone: {convergence['convergence_zone_start']:.2f}km to {convergence['convergence_zone_end']:.2f}km")
+            lines.append(f"👥 Count A ({eventA}): {convergence['count_A']}")
+            lines.append(f"👥 Count B ({eventB}): {convergence['count_B']}")
             
-            if first["sample_runner_ids_A"] and first["sample_runner_ids_B"]:
-                sample_A = ", ".join(first["sample_runner_ids_A"][:3])
-                sample_B = ", ".join(first["sample_runner_ids_B"][:3])
-                lines.append(f"🏃‍♂️ Runners - {eventA}: {sample_A} (Fastest), {eventB}: {sample_B} (Slowest)")
+            if convergence["a_bibs"] and convergence["b_bibs"]:
+                sample_A = ", ".join(map(str, convergence["a_bibs"][:3]))
+                sample_B = ", ".join(map(str, convergence["b_bibs"][:3]))
+                lines.append(f"🏃‍♂️ Sample A: [{sample_A}]")
+                lines.append(f"🏃‍♂️ Sample B: [{sample_B}]")
         else:
-            lines.append("❌ No overlaps detected in this segment")
-        
-        # Peak overlap
-        if peak and peak["km"] is not None:
-            lines.append(f"📈 Peak: {peak['km']:.2f}km {eventA}: {peak['A']} {eventB}: {peak['B']} (Combined: {peak['combined']})")
-        else:
-            lines.append("📈 No peak overlap data")
+            lines.append("❌ No convergence zone overlaps detected")
     
     # Analysis parameters
     params = overlap["analysis_params"]
-    lines.append(f"⚙️ Analysis: {params['step_km']:.3f}km steps, {params['tolerance_sec']:.1f}s tolerance")
+    lines.append(f"⚙️ Analysis: {params['step_km']:.3f}km steps, {params.get('min_overlap_duration', 5.0):.1f}s min overlap duration")
     
     return "\n".join(lines)
 
