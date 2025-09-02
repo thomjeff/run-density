@@ -1,0 +1,47 @@
+﻿seg_id,segment_label,eventA,eventB,from_km_A,to_km_A,from_km_B,to_km_B,direction,width_m,notes,Analysis,gpt_analysis
+A1a,Start to Queen/Regent,10K,Half,0,0.9,0,0.9,uni,10,Shared start to Queen/Regent at PSAB,Overtake,confirm
+A1b,Queen/Regent to WSB mid-point,10K,Half,0.9,1.8,0.9,1.8,uni,10,PSAB to WSB mid-point,Overtake,confirm
+A1c,WSB mid-point to Friel,10K,Half,1.8,2.7,1.8,2.7,uni,10,WSB mid-point to Friel,Overtake,confirm
+A2a,Start to Queen/Regent,10K,Full,0,0.9,0,0.9,uni,10,Shared start to Queen/Regent at PSAB,Overtake,confirm
+A2b,Queen/Regent to WSB mid-point,10K,Full,0.9,1.8,0.9,1.8,uni,10,PSAB to WSB mid-point,Overtake,confirm
+A2c,WSB mid-point to Friel,10K,Full,1.8,2.7,1.8,2.7,uni,10,WSB mid-point to Friel,Overtake,confirm
+A3a,Start to Queen/Regent,Half,Full,0,0.9,0,0.9,uni,10,Shared start to Queen/Regent at PSAB,Overtake,confirm
+A3b,Queen/Regent to WSB mid-point,Half,Full,0.9,1.8,0.9,1.8,uni,10,PSAB to WSB mid-point,Overtake,confirm
+A3c,WSB mid-point to Friel,Half,Full,1.8,2.7,1.8,2.7,uni,10,WSB mid-point to Friel,Overtake,confirm
+B1,Friel to 10K Turn (outbound),10K,Full,2.7,4.25,2.7,4.25,uni,3,"Same-direction 10K & Full outbound, but this route becomes 1.5m width when the faster 10K are coming back from the turn + fast Full from Blake Crt. Is this truly uni?",Overtake,analyze
+B2,Friel to 10K Turn (out vs return),10K,10K,2.7,4.25,4.25,5.81,bi,1.5,"10K outbound meets 10K return. Each eventA and eventB runner will have own 1.5m lane, so no overtake.",Density,confirm
+C1,10K Turn to Friel (slow return) vs Full (fast return),10K,Full,4.25,5.81,14.8,16.33,bi,1.5,"In same lane, same direction on this segment, so overtake is possible by faster Full meeting slow 10K. This is a bi-drectional segment as there will still be runners heading from Friel to 10K Turn (B1/B2)",Overtake,confirm
+C2,10K Turn to Friel (return) vs Full (late),10K,Full,4.25,5.81,2.7,4.25,bi,1.5,Opposite directions on same segment (late Full window),Density,confirm
+D1,Friel to 10K Turn (Full only),Full,Full,2.7,4.25,2.7,4.25,uni,3,Full outbound to 10K Turn -- this appears duplicative with B1 and ChatGPT should confirm still needed,TBD,analyze
+D2,10K Turn to 14.8km (Full only),Full,Full,4.25,9.52,9.52,14.8,bi,3,Full only - out (eventA) and back (eventB); changed from/to_km; no overtake as faster Full will have own 1.5m (width_m/2) for the return.,Density,analyze
+E1,Friel to 10K Turn (late overlaps),10K,Full,2.7,4.25,14.8,16.33,bi,1.5,Faster Full may meet slowest 10K; each eventA and eventB runner will have own 1.5m lane.,Density,confirm
+F1,Friel to 10K Return (continuing),10K,10K,5.81,8.1,5.81,8.1,uni,3,Continuity row to verify no distance gaps. Not sure why needed and this isn't accurate distance for this segment.,TBD,analyze
+F2,Friel to Station/Barker (shared path),10K,Half,5.81,8.1,2.7,4.95,uni,3,10K after turnaround overlaps Half outbound. This is an overtake segment - likely faster 10K meeting slow Half,Overtake,confirm
+F3,Friel to Station/Barker (shared path),10K,Full,5.81,8.1,16.33,18.59,uni,3,10K outbound toward turnaround overlaps Full outbound. This is overtake with really fast Full meeting really slow 10K. So the earlier start as the determining factor for overtake doesn't hold true here. Do we need to thing about eventA and eventB classification on overtakes?,Overtake,analyze
+F4,Friel to Station/Barker,Half,Full,2.7,4.95,16.33,18.59,uni,3,"Half and Full outbound together on same stretch. This wold be really fast Full meeting really slow Half -- not expecting much, if any.",Overtake,confirm
+G1,Station/Barker to Queen Square (10K to Finish),10K,10K,8.1,10,8.1,10,uni,3,10K finish approach. This segment is bi as there will be Full returining (part of H1 and H2 segments and maybe they need to be split?). This is a shared segment by all events that is likely an overtake -- not as currently mapped with event_A == event_B,TBD,analyze
+G2,Station/Barker to Queen Square (Half to Finish),Half,Half,19.35,21.1,19.35,21.1,uni,3,Half finish approach. See G1 -- I think the same question for G1 applies here. This is a shared segment by all events that is likely an overtake -- not as currently mapped with event_A == event_B,TBD,analyze
+G3,Station/Barker to Queen Square (Full loop inbound),Full,Full,18.59,20.54,18.59,20.54,uni,3,Full inbound to Queen Square. See G1 question. This is a shared segment by all events that is likely an overtake -- not as currently mapped with event_A == event_B,TBD,analyze
+G4,Station/Barker to Queen Square (Full final finish),Full,Full,40.5,42.2,40.5,42.2,uni,3,Full finish approach. Check for Full with 10K and Half in other Gs as this is a shared segment. Could be an overtake like G1,TBD,analyze
+G5,Station/Barker to Queen Square (10K & Half finishes),10K,Half,8.1,10,19.35,21.1,uni,3,Shared finish segment,TBD,analyze
+G6,Station/Barker to Queen Square (10K & Full final finish),10K,Full,8.1,10,40.5,42.2,uni,3,Shared finish segment,TBD,analyze
+G7,Station/Barker to Queen Square (Half & Full final finish),Half,Full,19.35,21.1,40.5,42.2,uni,3,Shared finish segment,TBD,analyze
+G8,Station/Barker to Queen Square (Half finish & Full loop inbound),Half,Full,19.35,21.1,18.59,20.54,uni,3,Overlap at QS inbound,TBD,analyze
+G9,Station/Barker to Queen Square (10K finish & Full loop inbound),10K,Full,8.1,10,18.59,20.54,uni,3,Overlap at QS inbound,TBD,analyze
+H1,Queen Square Loop (Full only),Full,Full,20.54,21.65,20.54,21.65,uni,3,Full-only loop inside Queen Square,Density,confirm
+H2,Queen Square to Station/Barker (Full outbound to Station/Barker vs 10K finish),Full,10K,21.65,23.26,8.1,10,bi,1.5,Full outbound from Queen Sq. faces 10K finishers into Queen Sq.,Density,confirm
+H3,Queen Square to Station/Barker (Full outbound to Station/Barker vs Half finish),Full,Half,21.65,23.26,19.35,21.1,bi,1.5,Full outbound from Queen Sq. faces Half finishers into Queen Sq.,Density,confirm
+I1,Station/Barker to Bridge/Mill (Half outbound),Half,Half,4.95,10.84,4.95,10.84,uni,3,Half outbound toward Bridge/Mill. There will also be Full runners on this segment - captured in I2. Should this be combined event_A = Full and event_B = Full for density (or does the logic pick up same runner time-stamps in the overtake/overlap?),Density,analyze
+I2,Station/Barker to Bridge/Mill (Full outbound),Full,Full,23.26,29.06,23.26,29.06,uni,3,Full outbound toward Bridge/Mill. There will also be Half runners on this segment - captured in I1. Should this be combined event_A = Full and event_B = Full for density (or does the logic pick up same runner time-stamps in the overtake/overlap?),Density,confirm
+I3,Station/Barker to Bridge/Mill (Half + Full co-direction),Half,Full,4.95,10.84,23.26,29.06,uni,3,"Half + Full share same direction. Maybe I3 addresses my question in I1 and I2. This is likely picking up the overtake, while I1+I2 is density? TBD",TBD,confirm
+J1,Bridge/Mill to Half Turn (Half outbound),Half,Half,10.84,13.43,10.84,13.43,uni,3,Half outbound toward Half Turn (co-direction). This is likely a 1.5m and not truly uni as there will be Half + Full returning in K1.,TBD,analyze
+J2,Bridge/Mill to Half Turn (Full outbound),Full,Full,29.06,31.64,29.06,31.64,uni,3,Full outbound toward Half Turn (co-direction). Same question as in J1,TBD,analyze
+J3,Bridge/Mill to Half Turn (Half + Full co-direction),Half,Full,10.84,13.43,29.06,31.64,uni,3,"Half + Full share the same path outbound. This might be picking up the overtake/density? Needs to be analyzed in broader context with J1, J2",TBD,analyze
+K1,Half Turn to Full Turn (Full outbound spur),Full,Full,31.64,33.11,31.64,33.11,uni,3,Full continues past Half Turn to Full Turn. This is Full only. Not likely a uni as it is a turn-around and is picked up in K2. So it remain uni and 3.0m width_m for only so long as there is no opposing runners.,Density,analyze
+K2,Full Turn to Half Turn (Full returning spur),Full,Full,33.11,34.34,33.11,34.34,uni,3,Full returns from Full Turn back to Half Turn. Same question posed in K1,Density,analyze
+L1,Half Turn to Bridge/Mill (Half returning),Half,Half,13.43,16.02,13.43,16.02,uni,3,Half returning to Bridge/Mill. This is bi/1.5m as this segment is shared with Full runners and will have out/returning runners in both events. ,Density,analyze
+L2,Half Turn to Bridge/Mill (Full returning),Full,Full,34.34,35.47,34.34,36.92,uni,3,Full returning to Bridge/Mill (same path as Half return). Same question in L1 here.,Density,analyze
+L3,Half Turn to Bridge/Mill (Half + Full co-direction return),Half,Full,13.43,16.02,34.34,36.92,uni,3,Half + Full co-direction on return leg. This could be an overtake (faster Half meeting slower Full) + density.,TBD,analyze
+L4,Bridge/Mill sector counter-flow (optional),Full,Half,34.34,36.92,10.84,13.43,bi,1.5,"Full returning may face late Half outbound (counter-flow on this sector). Not sure what ChatGPT was thinking here, or where this is on the map.",TBD,analyze
+M1,Bridge/Mill to Station/Barker (Full returning vs Half outbound),Full,Half,36.92,40.5,16.02,19.35,uni,3,Full returning faces Half outbound (counter-flow). The segment from Bridge/Mill to Station/Barker is one-way and can't be a returning/outbound. ChatGPT recommended and not sure what this is now.,TBD,analyze
+M2,Bridge/Mill to Station/Barker (Full returning vs Full outbound),Full,Full,36.92,40.5,36.92,40.5,uni,3,"Faster Fulls returning vs slower Fulls still outbound (counter-flow), See M1 question -- applies here.",TBD,analyze
