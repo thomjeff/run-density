@@ -115,16 +115,16 @@ def calculate_convergence_point(
     
     if start_a > start_b:
         # Event A starts later - Event A can overtake Event B
-        # Use median paces as representative values for convergence calculation
-        faster_pace = median_pace_a  # Later starting event
-        slower_pace = median_pace_b  # Earlier starting event
+        # Use fastest runners from later event, slowest runners from earlier event
+        faster_pace = dfA["pace"].quantile(0.1)  # Fastest 10% of later starting event
+        slower_pace = dfB["pace"].quantile(0.9)  # Slowest 10% of earlier starting event
         start_faster = start_a
         start_slower = start_b
     elif start_b > start_a:
         # Event B starts later - Event B can overtake Event A
-        # Use median paces as representative values for convergence calculation
-        faster_pace = median_pace_b  # Later starting event
-        slower_pace = median_pace_a  # Earlier starting event
+        # Use fastest runners from later event, slowest runners from earlier event
+        faster_pace = dfB["pace"].quantile(0.1)  # Fastest 10% of later starting event
+        slower_pace = dfA["pace"].quantile(0.9)  # Slowest 10% of earlier starting event
         start_faster = start_b
         start_slower = start_a
     else:
