@@ -73,29 +73,84 @@ def calculate_convergence_point(
     step_km: float = 0.01,
 ) -> Optional[float]:
     """
-    Calculate convergence point using hardcoded values for known segments.
+    Calculate convergence point dynamically based on runner timing and pace data.
     
-    This function uses hardcoded convergence points that were validated
-    through bottom-up analysis to ensure accuracy.
+    A convergence point is where overtaking becomes most likely to occur within a segment.
+    This is determined by:
+    1. Checking if overtaking is physically possible (faster event can catch slower event)
+    2. Finding the optimal point within the segment where overtaking is most likely
+    
+    Returns the kilometer mark where overtaking becomes possible, or None if no convergence.
     """
     if dfA.empty or dfB.empty:
         return None
     
-    # Use hardcoded convergence points for known segments (from working overlap.py)
-    # A1c segment: 10K vs Half, 1.8km to 2.7km
-    if (from_km_a == 1.8 and to_km_a == 2.7 and 
-        from_km_b == 1.8 and to_km_b == 2.7 and 
-        eventA == "10K" and eventB == "Half"):
-        return 2.36
+    # Get start times in seconds
+    start_a = start_times.get(eventA, 0) * 60.0  # Convert minutes to seconds
+    start_b = start_times.get(eventB, 0) * 60.0
     
-    # B1 segment: 10K vs Full, 2.7km to 4.25km  
-    if (from_km_a == 2.7 and to_km_a == 4.25 and 
-        from_km_b == 2.7 and to_km_b == 4.25 and 
-        eventA == "10K" and eventB == "Full"):
-        return 3.48
+    # Calculate median paces to determine which event is generally faster
+    median_pace_a = dfA["pace"].median()
+    median_pace_b = dfB["pace"].median()
     
-    # For all other segments, no convergence point (no overtaking)
-    return None
+    # Find the overlap segment where both events run
+    segment_start = max(from_km_a, from_km_b)
+    segment_end = min(to_km_a, to_km_b)
+    
+    if segment_start >= segment_end:
+        # No overlapping segment
+        return None
+    
+    # Check if overtaking is possible by looking at the pace relationship
+    # and start time differences
+    time_diff = abs(start_a - start_b)
+    
+    # If events start at the same time, no overtaking possible
+    if time_diff < 60:  # Less than 1 minute difference
+        return None
+    
+    # Determine which event is faster (lower pace = faster)
+    if median_pace_a < median_pace_b:
+        # Event A is faster
+        faster_pace = median_pace_a
+        slower_pace = median_pace_b
+        start_faster = start_a
+        start_slower = start_b
+    elif median_pace_b < median_pace_a:
+        # Event B is faster
+        faster_pace = median_pace_b
+        slower_pace = median_pace_a
+        start_faster = start_b
+        start_slower = start_a
+    else:
+        # Same pace, no overtaking possible
+        return None
+    
+    # Calculate theoretical convergence point
+    # Time for faster runner: start_faster + faster_pace * km
+    # Time for slower runner: start_slower + slower_pace * km
+    # Convergence: start_faster + faster_pace * km = start_slower + slower_pace * km
+    # Solving: km = (start_slower - start_faster) / (faster_pace - slower_pace)
+    
+    pace_diff_sec = (slower_pace - faster_pace) * 60.0  # Convert to seconds per km
+    
+    if pace_diff_sec <= 0:
+        return None
+    
+    theoretical_convergence = (start_slower - start_faster) / pace_diff_sec
+    
+    # If theoretical convergence is within the segment, use it
+    if segment_start <= theoretical_convergence <= segment_end:
+        return round(theoretical_convergence, 2)
+    
+    # If theoretical convergence is before the segment, use segment start
+    elif theoretical_convergence < segment_start:
+        return round(segment_start, 2)
+    
+    # If theoretical convergence is after the segment, use segment midpoint
+    # (as overtaking is most likely to occur in the middle of the segment)
+    else:
+        return round((segment_start + segment_end) / 2, 2)
 
 
 def calculate_convergence_zone_overlaps(
