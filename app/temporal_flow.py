@@ -157,10 +157,10 @@ def calculate_entry_exit_times(
     to_km_a: float,
     from_km_b: float,
     to_km_b: float,
-) -> Tuple[str, str, str, str]:
-    """Calculate first entry and last exit times for both events in the segment."""
+) -> Tuple[str, str, str, str, str]:
+    """Calculate first entry and last exit times for both events in the segment, plus overlap window duration."""
     if df_a.empty or df_b.empty:
-        return "N/A", "N/A", "N/A", "N/A"
+        return "N/A", "N/A", "N/A", "N/A", "N/A"
     
     # Get start times in seconds
     start_a = start_times.get(event_a, 0) * 60.0
@@ -184,6 +184,11 @@ def calculate_entry_exit_times(
     first_entry_b = min(entry_times_b)
     last_exit_b = max(exit_times_b)
     
+    # Calculate overlap window duration (time when both events have runners in segment)
+    overlap_start = max(first_entry_a, first_entry_b)
+    overlap_end = min(last_exit_a, last_exit_b)
+    overlap_duration_seconds = max(0, overlap_end - overlap_start)
+    
     # Format as HH:MM:SS
     def format_time(seconds):
         hours = int(seconds // 3600)
@@ -191,11 +196,24 @@ def calculate_entry_exit_times(
         secs = int(seconds % 60)
         return f"{hours:02d}:{minutes:02d}:{secs:02d}"
     
+    # Format duration as MM:SS or HH:MM:SS
+    def format_duration(seconds):
+        if seconds < 3600:  # Less than 1 hour
+            minutes = int(seconds // 60)
+            secs = int(seconds % 60)
+            return f"{minutes:02d}:{secs:02d}"
+        else:  # 1 hour or more
+            hours = int(seconds // 3600)
+            minutes = int((seconds % 3600) // 60)
+            secs = int(seconds % 60)
+            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    
     return (
         format_time(first_entry_a),
         format_time(last_exit_a),
         format_time(first_entry_b),
-        format_time(last_exit_b)
+        format_time(last_exit_b),
+        format_duration(overlap_duration_seconds)
     )
 
 
@@ -354,7 +372,7 @@ def analyze_temporal_flow_segments(
         )
         
         # Calculate entry/exit times for this segment
-        first_entry_a, last_exit_a, first_entry_b, last_exit_b = calculate_entry_exit_times(
+        first_entry_a, last_exit_a, first_entry_b, last_exit_b, overlap_window_duration = calculate_entry_exit_times(
             df_a, df_b, event_a, event_b, start_times,
             from_km_a, to_km_a, from_km_b, to_km_b
         )
@@ -380,7 +398,8 @@ def analyze_temporal_flow_segments(
             "first_entry_a": first_entry_a,
             "last_exit_a": last_exit_a,
             "first_entry_b": first_entry_b,
-            "last_exit_b": last_exit_b
+            "last_exit_b": last_exit_b,
+            "overlap_window_duration": overlap_window_duration
         }
         
         if cp_km is not None:
@@ -454,6 +473,7 @@ def generate_temporal_flow_narrative(results: Dict[str, Any]) -> str:
         # Add entry/exit times in combined format
         narrative.append(f"⏰ {event_a} Entry/Exit: {segment.get('first_entry_a', 'N/A')} {segment.get('last_exit_a', 'N/A')}")
         narrative.append(f"⏰ {event_b} Entry/Exit: {segment.get('first_entry_b', 'N/A')} {segment.get('last_exit_b', 'N/A')}")
+        narrative.append(f"🔄 Overlap Window Duration: {segment.get('overlap_window_duration', 'N/A')}")
         
         if segment["has_convergence"]:
             flow_type = segment.get("flow_type", "overtake")
