@@ -375,10 +375,8 @@ def generate_temporal_flow_narrative(results: Dict[str, Any]) -> str:
         narrative.append(f"🔍 Checking {segment['event_a']} vs {segment['event_b']}")
         event_a = segment.get('event_a', 'A')
         event_b = segment.get('event_b', 'B')
-        narrative.append(f"📍 Range {event_a}: {segment['from_km_a']}km to {segment['to_km_a']}km")
-        narrative.append(f"📍 Range {event_b}: {segment['from_km_b']}km to {segment['to_km_b']}km")
-        narrative.append(f"👥 Total {event_a}: {segment['total_a']} runners")
-        narrative.append(f"👥 Total {event_b}: {segment['total_b']} runners")
+        narrative.append(f"📍 {event_a}: {segment['total_a']} runners ({segment['from_km_a']}km to {segment['to_km_a']}km)")
+        narrative.append(f"📍 {event_b}: {segment['total_b']} runners ({segment['from_km_b']}km to {segment['to_km_b']}km)")
         
         if segment["has_convergence"]:
             flow_type = segment.get("flow_type", "overtake")
@@ -529,8 +527,8 @@ def generate_distance_progression_chart(progression_data: Dict[str, Any]) -> str
     chart.append(f"🔍 {progression_data['event_a']} vs {progression_data['event_b']}")
     event_a = progression_data.get('event_a', 'A')
     event_b = progression_data.get('event_b', 'B')
-    chart.append(f"📍 Range {event_a}: {progression_data['from_km_a']}km to {progression_data['to_km_a']}km")
-    chart.append(f"📍 Range {event_b}: {progression_data['from_km_b']}km to {progression_data['to_km_b']}km")
+    chart.append(f"📍 {event_a}: {progression_data['total_a']} runners ({progression_data['from_km_a']}km to {progression_data['to_km_a']}km)")
+    chart.append(f"📍 {event_b}: {progression_data['total_b']} runners ({progression_data['from_km_b']}km to {progression_data['to_km_b']}km)")
     chart.append(f"📏 Step size: {progression_data['step_km']}km")
     chart.append("")
     
