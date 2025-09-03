@@ -373,10 +373,12 @@ def generate_temporal_flow_narrative(results: Dict[str, Any]) -> str:
         if segment.get("flow_type"):
             narrative.append(f"🔄 Flow Type: {segment['flow_type']}")
         narrative.append(f"🔍 Checking {segment['event_a']} vs {segment['event_b']}")
-        narrative.append(f"📍 Range A: {segment['from_km_a']}km to {segment['to_km_a']}km")
-        narrative.append(f"📍 Range B: {segment['from_km_b']}km to {segment['to_km_b']}km")
-        narrative.append(f"👥 Total in '{segment['event_a']}': {segment['total_a']} runners")
-        narrative.append(f"👥 Total in '{segment['event_b']}': {segment['total_b']} runners")
+        event_a = segment.get('event_a', 'A')
+        event_b = segment.get('event_b', 'B')
+        narrative.append(f"📍 Range {event_a}: {segment['from_km_a']}km to {segment['to_km_a']}km")
+        narrative.append(f"📍 Range {event_b}: {segment['from_km_b']}km to {segment['to_km_b']}km")
+        narrative.append(f"👥 Total {event_a}: {segment['total_a']} runners")
+        narrative.append(f"👥 Total {event_b}: {segment['total_b']} runners")
         
         if segment["has_convergence"]:
             flow_type = segment.get("flow_type", "overtake")
@@ -527,8 +529,10 @@ def generate_distance_progression_chart(progression_data: Dict[str, Any]) -> str
     chart.append("📊 DISTANCE PROGRESSION CHART")
     chart.append("=" * 60)
     chart.append(f"🔍 {progression_data['event_a']} vs {progression_data['event_b']}")
-    chart.append(f"📍 Range A: {progression_data['from_km_a']}km to {progression_data['to_km_a']}km")
-    chart.append(f"📍 Range B: {progression_data['from_km_b']}km to {progression_data['to_km_b']}km")
+    event_a = progression_data.get('event_a', 'A')
+    event_b = progression_data.get('event_b', 'B')
+    chart.append(f"📍 Range {event_a}: {progression_data['from_km_a']}km to {progression_data['to_km_a']}km")
+    chart.append(f"📍 Range {event_b}: {progression_data['from_km_b']}km to {progression_data['to_km_b']}km")
     chart.append(f"📏 Step size: {progression_data['step_km']}km")
     chart.append("")
     
