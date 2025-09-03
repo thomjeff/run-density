@@ -380,7 +380,26 @@ def generate_temporal_flow_narrative(results: Dict[str, Any]) -> str:
         
         if segment["has_convergence"]:
             flow_type = segment.get("flow_type", "overtake")
-            narrative.append(f"🎯 Convergence Point (event A km): {segment['convergence_point']}km")
+            # Calculate event-specific distances for the convergence point
+            cp_km = segment['convergence_point']
+            from_km_a = segment.get('from_km_a', 0)
+            to_km_a = segment.get('to_km_a', 0)
+            from_km_b = segment.get('from_km_b', 0)
+            to_km_b = segment.get('to_km_b', 0)
+            
+            # Calculate position within segment (0.0 to 1.0)
+            len_a = to_km_a - from_km_a
+            len_b = to_km_b - from_km_b
+            s_cp = (cp_km - from_km_a) / max(len_a, 1e-9) if len_a > 0 else 0.0
+            s_cp = max(0.0, min(1.0, s_cp))
+            
+            # Calculate event B distance at convergence point
+            cp_km_b = from_km_b + s_cp * len_b
+            
+            # Format: Segment Converge Point: [position within segment] ([total distance Event A], [total distance Event B])
+            event_a = segment.get('event_a', 'A')
+            event_b = segment.get('event_b', 'B')
+            narrative.append(f"🎯 Segment Converge Point: {s_cp:.2f}km ({cp_km:.1f}km {event_a}, {cp_km_b:.1f}km {event_b})")
             narrative.append(f"📊 Conflict Zone: {segment.get('convergence_zone_start','')}km to {segment.get('convergence_zone_end','')}km (event A ruler)")
             narrative.append(f"📏 Conflict Length: {segment.get('conflict_length_m', 100)}m")
             
