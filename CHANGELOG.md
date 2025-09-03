@@ -1,5 +1,61 @@
 # Changelog
 
+## [v1.5.0] - 2025-09-03
+
+### Added
+- **Temporal Flow Analysis Engine**: Complete rewrite of overtake detection with comprehensive temporal flow analysis
+- **12 Major Reporting Enhancements**: 
+  - Enhanced labeling with event-specific names (10K, Half, Full) instead of generic A/B
+  - Configurable conflict length (default 100m) for convergence zone analysis
+  - Flow type classification (overtake, merge, diverge) in segments.csv
+  - Entry window information with overlap duration calculations
+  - Overtake percentage classification (Significant >20%, Meaningful >15%, Notable >5%, Minimal <5%)
+  - Unique encounters counting (distinct cross-event pairs)
+  - Participants involved counting (union of all runners in encounters)
+  - Deep dive analysis for all overtake segments with comprehensive metrics
+  - Prior segment analysis for segments with logical predecessors
+  - Distance progression charts and Time-Over-Threshold (TOT) metrics
+  - Enhanced narrative generation with contextual summaries
+  - L1 Deep Dive Analysis format integration
+- **Comprehensive Test Framework**: Full validation system for all 36 segments with expected vs actual comparison
+- **Prior Segment Tracking**: Added `prior_segment_id` column to segments.csv for enhanced analysis
+- **JSON API Serialization**: Fixed NaN value handling for proper API responses
+
+### Changed
+- **Architecture**: Complete separation of temporal flow analysis from density analysis
+- **Algorithm Logic**: Replaced time-window presence with precise temporal overlap detection
+- **Segment Processing**: Now processes ALL 36 segments (not just overtake_flag = 'y') for comprehensive reporting
+- **Convergence Detection**: Only reports convergence points when actual temporal overlaps occur
+- **Performance**: Vectorized operations for overlap calculations with pandas optimization
+- **Terminology**: Consistent use of "overtake" vs "overlap" for operational precision
+
+### Fixed
+- **Critical Data Issue**: Resolved missing runner counts and entry/exit times for 18 non-overtake segments
+- **JSON Serialization**: Fixed NaN values in prior_segment_id causing 500 errors in API responses
+- **Precision Issues**: Minor floating-point precision differences in range values (functionally equivalent)
+- **Segment Filtering**: Modified logic to process all segments while only calculating convergence for overtake segments
+- **Main.py Validation**: All endpoints now working correctly with proper JSON responses
+
+### Technical Details
+- **Total Segments**: 36 (18 overtake + 18 non-overtake)
+- **Segments with Convergence**: 11 (only when actual temporal overlaps occur)
+- **Validation Results**: 100% pass rate (36/36 segments) in comprehensive testing
+- **API Endpoints**: Temporal flow, density, and combined report endpoints fully functional
+- **Deep Dive Analysis**: Comprehensive metrics for all overtake segments including timing, runner characteristics, and contextual analysis
+
+### Files
+- `app/temporal_flow.py` - Complete temporal flow analysis engine with all enhancements
+- `data/segments.csv` - Enhanced with flow_type and prior_segment_id columns
+- `comprehensive_test_comparison_report.csv` - Full validation framework for GitHub workflow
+- `app/main.py` - Updated API endpoints with proper JSON serialization
+- Various audit reports and validation documents
+
+### Validation Framework
+- **Comprehensive Test Report**: 39-column comparison CSV with expected vs actual values
+- **Pass/Fail Status**: Automated validation with detailed difference tracking
+- **Critical Failure Detection**: Identifies missing data and calculation errors
+- **GitHub Workflow Ready**: Complete framework for automated testing and validation
+
 ## [v1.4.1] - 2025-09-01
 
 ### Added

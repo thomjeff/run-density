@@ -1,0 +1,417 @@
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0 22 13231   21  2747  100   179   6319    411  0:00:02 --:--:--  0:00:02  6726📊 OVERLAP ANALYSIS SUMMARY
+==================================================
+🕐 Executed: 2025-09-02 11:48
+
+🚀 EVENT START TIMES:
+   Full: 07:00:00
+   Half: 07:40:00
+   10K: 07:20:00
+
+📈 Total segments evaluated: 46
+⚠️ Segments with overlaps: 3
+📊 Overlap rate: 6.5%
+
+👥 TOTAL RUNNERS BY EVENT:
+   10K: 13596 runners
+   Half: 22800 runners
+   Full: 16560 runners
+
+🏆 TOP 3 SEGMENTS BY PEAK RUNNER COUNT:
+1. A1c - WSB mid-point to Friel
+   📍 Range: 1.8km to 2.7km
+   👥 Peak count: 310 runners
+2. B1 - Friel to 10K Turn (outbound)
+   📍 Range: 2.7km to 4.2km
+   👥 Peak count: 103 runners
+3. E1 - Friel to 10K Turn (late overlaps)
+   📍 Range: 2.7km to 4.2km
+   👥 Peak count: 103 runners
+
+==================================================
+
+
+🏷️ Segment: A1a
+📝 Label: Start to Queen/Regent
+🔍 Checking 10K vs Half
+📍 Range: 0.0km to 0.9km
+➡️ Direction: Unidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: A1b
+📝 Label: Queen/Regent to WSB mid-point
+🔍 Checking 10K vs Half
+📍 Range: 0.9km to 1.8km
+➡️ Direction: Unidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: A1c
+📝 Label: WSB mid-point to Friel
+🔍 Checking 10K vs Half
+📍 Range: 1.8km to 2.7km
+➡️ Direction: Unidirectional
+🎯 Convergence Point: 2.36km
+📊 Convergence Zone: 2.36km to 2.70km
+👥 Count A (10K): 22
+👥 Count B (Half): 288
+🏃‍♂️ Sample A: [1597, 1598, 1599]
+🏃‍♂️ Sample B: [1618, 1619, 1620]
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: A2a
+📝 Label: Start to Queen/Regent
+🔍 Checking 10K vs Full
+📍 Range: 0.0km to 0.9km
+➡️ Direction: Unidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: A2b
+📝 Label: Queen/Regent to WSB mid-point
+🔍 Checking 10K vs Full
+📍 Range: 0.9km to 1.8km
+➡️ Direction: Unidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: A2c
+📝 Label: WSB mid-point to Friel
+🔍 Checking 10K vs Full
+📍 Range: 1.8km to 2.7km
+➡️ Direction: Unidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: A3a
+📝 Label: Start to Queen/Regent
+🔍 Checking Half vs Full
+📍 Range: 0.0km to 0.9km
+➡️ Direction: Unidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: A3b
+📝 Label: Queen/Regent to WSB mid-point
+🔍 Checking Half vs Full
+📍 Range: 0.9km to 1.8km
+➡️ Direction: Unidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: A3c
+📝 Label: WSB mid-point to Friel
+🔍 Checking Half vs Full
+📍 Range: 1.8km to 2.7km
+➡️ Direction: Unidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: B1
+📝 Label: Friel to 10K Turn (outbound)
+🔍 Checking 10K vs Full
+📍 Range: 2.7km to 4.2km
+➡️ Direction: Unidirectional
+🎯 Convergence Point: 3.48km
+📊 Convergence Zone: 3.48km to 4.25km
+👥 Count A (10K): 72
+👥 Count B (Full): 31
+🏃‍♂️ Sample A: [1024, 1025, 1026]
+🏃‍♂️ Sample B: [2863, 2865, 2867]
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: B2
+📝 Label: Friel to 10K Turn (out vs return)
+🔍 Checking 10K vs 10K
+📍 Range: 2.7km to 4.2km
+➡️ Direction: Bidirectional
+❌ No overlaps detected in this segment
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: C1
+📝 Label: 10K Turn to Friel (return) vs Full (early)
+🔍 Checking 10K vs Full
+📍 Range: 4.2km to 5.8km
+➡️ Direction: Bidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: C2
+📝 Label: 10K Turn to Friel (return) vs Full (late)
+🔍 Checking 10K vs Full
+📍 Range: 4.2km to 5.8km
+➡️ Direction: Bidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: D1
+📝 Label: Friel to 10K Turn (Full only)
+🔍 Checking Full vs Full
+📍 Range: 2.7km to 4.2km
+➡️ Direction: Unidirectional
+✅ No overlap possible
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: D2
+📝 Label: 10K Turn to 14.8km (Full only)
+🔍 Checking Full vs Full
+📍 Range: 4.2km to 14.8km
+➡️ Direction: Bidirectional
+❌ No overlaps detected in this segment
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: E1
+📝 Label: Friel to 10K Turn (late overlaps)
+🔍 Checking 10K vs Full
+📍 Range: 2.7km to 4.2km
+➡️ Direction: Bidirectional
+🎯 Convergence Point: 3.48km
+📊 Convergence Zone: 3.48km to 4.25km
+👥 Count A (10K): 72
+👥 Count B (Full): 31
+🏃‍♂️ Sample A: [1024, 1025, 1026]
+🏃‍♂️ Sample B: [2863, 2865, 2867]
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: F1
+📝 Label: Friel to 10K Return (continuing)
+🔍 Checking 10K vs 10K
+📍 Range: 5.8km to 8.1km
+➡️ Direction: Unidirectional
+✅ No overlap possible
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: F2
+📝 Label: Friel to Station/Barker (shared path)
+🔍 Checking 10K vs Half
+📍 Range: 5.8km to 8.1km
+➡️ Direction: Unidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: F3
+📝 Label: Friel to Station/Barker (shared path)
+🔍 Checking 10K vs Full
+📍 Range: 5.8km to 8.1km
+➡️ Direction: Unidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: F4
+📝 Label: Friel to Station/Barker
+🔍 Checking Half vs Full
+📍 Range: 2.7km to 5.0km
+➡️ Direction: Unidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: G1
+📝 Label: Station/Barker to Queen Square (10K to Finish)
+🔍 Checking 10K vs 10K
+📍 Range: 8.1km to 10.0km
+➡️ Direction: Unidirectional
+✅ No overlap possible
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: G2
+📝 Label: Station/Barker to Queen Square (Half to Finish)
+🔍 Checking Half vs Half
+📍 Range: 19.4km to 21.1km
+➡️ Direction: Unidirectional
+✅ No overlap possible
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: G3
+📝 Label: Station/Barker to Queen Square (Full loop inbound)
+🔍 Checking Full vs Full
+📍 Range: 18.6km to 20.5km
+➡️ Direction: Unidirectional
+✅ No overlap possible
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: G4
+📝 Label: Station/Barker to Queen Square (Full final finish)
+🔍 Checking Full vs Full
+📍 Range: 40.5km to 42.2km
+➡️ Direction: Unidirectional
+✅ No overlap possible
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: G5
+📝 Label: Station/Barker to Queen Square (10K & Half finishes)
+🔍 Checking 10K vs Half
+📍 Range: 8.1km to 10.0km
+➡️ Direction: Unidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: G6
+📝 Label: Station/Barker to Queen Square (10K & Full final finish)
+🔍 Checking 10K vs Full
+📍 Range: 8.1km to 10.0km
+➡️ Direction: Unidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: G7
+📝 Label: Station/Barker to Queen Square (Half & Full final finish)
+🔍 Checking Half vs Full
+📍 Range: 19.4km to 21.1km
+➡️ Direction: Unidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: G8
+📝 Label: Station/Barker to Queen Square (Half finish & Full loop inbound)
+🔍 Checking Half vs Full
+📍 Range: 19.4km to 21.1km
+➡️ Direction: Unidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: G9
+📝 Label: Station/Barker to Queen Square (10K finish & Full loop inbound)
+🔍 Checking 10K vs Full
+📍 Range: 8.1km to 10.0km
+➡️ Direction: Unidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: H1
+📝 Label: Queen Square Loop (Full only)
+🔍 Checking Full vs Full
+📍 Range: 20.5km to 21.6km
+➡️ Direction: Unidirectional
+✅ No overlap possible
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: H2
+📝 Label: Queen Square to Station/Barker (Full returning vs 10K finish)
+🔍 Checking Full vs 10K
+📍 Range: 21.6km to 23.3km
+➡️ Direction: Bidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: H3
+📝 Label: Queen Square to Station/Barker (Full returning vs Half finish)
+🔍 Checking Full vs Half
+📍 Range: 21.6km to 23.3km
+➡️ Direction: Bidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: I1
+📝 Label: Station/Barker to Bridge/Mill (Half outbound)
+🔍 Checking Half vs Half
+📍 Range: 5.0km to 10.8km
+➡️ Direction: Unidirectional
+✅ No overlap possible
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: I2
+📝 Label: Station/Barker to Bridge/Mill (Full outbound)
+🔍 Checking Full vs Full
+📍 Range: 23.3km to 29.1km
+➡️ Direction: Unidirectional
+✅ No overlap possible
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: I3
+📝 Label: Station/Barker to Bridge/Mill (Half + Full co-direction)
+🔍 Checking Half vs Full
+📍 Range: 5.0km to 10.8km
+➡️ Direction: Unidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: J1
+📝 Label: Bridge/Mill to Half Turn (Half outbound)
+🔍 Checking Half vs Half
+📍 Range: 10.8km to 13.4km
+➡️ Direction: Unidirectional
+✅ No overlap possible
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: J2
+📝 Label: Bridge/Mill to Half Turn (Full outbound)
+🔍 Checking Full vs Full
+📍 Range: 29.1km to 31.6km
+➡️ Direction: Unidirectional
+✅ No overlap possible
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: J3
+📝 Label: Bridge/Mill to Half Turn (Half + Full co-direction)
+🔍 Checking Half vs Full
+📍 Range: 10.8km to 13.4km
+➡️ Direction: Unidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: K1
+📝 Label: Half Turn to Full Turn (Full outbound spur)
+🔍 Checking Full vs Full
+📍 Range: 31.6km to 33.1km
+➡️ Direction: Unidirectional
+✅ No overlap possible
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: K2
+📝 Label: Full Turn to Half Turn (Full returning spur)
+🔍 Checking Full vs Full
+📍 Range: 33.1km to 34.3km
+➡️ Direction: Unidirectional
+✅ No overlap possible
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: L1
+📝 Label: Half Turn to Bridge/Mill (Half returning)
+🔍 Checking Half vs Half
+📍 Range: 13.4km to 16.0km
+➡️ Direction: Unidirectional
+✅ No overlap possible
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: L2
+📝 Label: Half Turn to Bridge/Mill (Full returning)
+🔍 Checking Full vs Full
+📍 Range: 34.3km to 35.5km
+➡️ Direction: Unidirectional
+✅ No overlap possible
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: L3
+📝 Label: Half Turn to Bridge/Mill (Half + Full co-direction return)
+🔍 Checking Half vs Full
+📍 Range: 13.4km to 16.0km
+➡️ Direction: Unidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: L4
+📝 Label: Bridge/Mill sector c100 13231  100 13052  100   179  29639    406 --:--:-- --:--:-- --:--:-- 30002
+ounter-flow (optional)
+🔍 Checking Full vs Half
+📍 Range: 34.3km to 36.9km
+➡️ Direction: Bidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: M1
+📝 Label: Bridge/Mill to Station/Barker (Full returning vs Half outbound)
+🔍 Checking Full vs Half
+📍 Range: 36.9km to 40.5km
+➡️ Direction: Unidirectional
+❌ No convergence zone overlaps detected
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration
+
+🏷️ Segment: M2
+📝 Label: Bridge/Mill to Station/Barker (Full returning vs Full outbound)
+🔍 Checking Full vs Full
+📍 Range: 36.9km to 40.5km
+➡️ Direction: Unidirectional
+✅ No overlap possible
+⚙️ Analysis: 0.030km steps, 5.0s min overlap duration

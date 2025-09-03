@@ -1,0 +1,37 @@
+seg_id,segment_label,overlap_flag,flow_type,range_a,range_b,total_a,total_b,convergence_point,overtake_a,overtake_aPct,overtake_b,overtake_bPct,event_a_firstEntry,event_b_firstEntry,event_a_lastExit,event_b_lastExit
+A1a,Start to Queen/Regent (10K/Half),y,overtake,0.0km to 0.9km,0.0km to 0.9km,618,912,,0,0.0,0,0.0,07:20:00,07:40:00,07:42:02,07:53:12
+A1b,Queen/Regent to WSB mid-point (10K/Half),y,overtake,0.9km to 1.8km,0.9km to 1.8km,618,912,1.31,1,0.2,4,0.4,07:23:01,07:43:13,07:47:41,08:04:37
+A1c,WSB mid-point to Friel (10K/Half),y,overtake,1.8km to 2.7km,1.8km to 2.7km,618,912,1.80,1,0.2,16,1.8,07:26:03,07:46:26,07:53:20,08:16:02
+A2a,Start to Queen/Regent (10K/Full),y,overtake,0.0km to 0.9km,0.0km to 0.9km,618,368,,0,0.0,0,0.0,07:20:00,07:00:00,07:42:02,07:09:26
+A2b,Queen/Regent to WSB mid-point (10K/Full),y,overtake,0.9km to 1.8km,0.9km to 1.8km,618,368,,0,0.0,0,0.0,07:23:01,07:03:33,07:47:41,07:17:06
+A2c,WSB mid-point to Friel  (10KFull),y,overtake,1.8km to 2.7km,1.8km to 2.7km,618,368,,0,0.0,0,0.0,07:26:03,07:07:05,07:53:20,07:24:46
+A3a,Start to Queen/Regent (Half/Full),y,overtake,0.0km to 0.9km,0.0km to 0.9km,912,368,,0,0.0,0,0.0,07:40:00,07:00:00,07:53:12,07:09:26
+A3b,Queen/Regent to WSB mid-point (Half/Full),y,overtake,0.9km to 1.8km,0.9km to 1.8km,912,368,,0,0.0,0,0.0,07:43:13,07:03:33,08:04:37,07:17:06
+A3c,WSB mid-point to Friel (Half/Full),y,overtake,1.8km to 2.7km,1.8km to 2.7km,912,368,,0,0.0,0,0.0,07:46:26,07:07:05,08:16:02,07:24:46
+B1,Friel to 10K Turn (outbound),y,overtake,2.7km to 4.2km,2.7km to 4.2km,618,368,3.53,2,0.3,1,0.3,07:29:05,07:10:38,08:11:43,07:37:58
+B2,Friel to 10K Turn (10K out/return),n,,2.7km to 4.2km,4.2km to 5.8km,618,618,,0,0.0,0,0.0,07:29:05,07:34:18,08:11:43,08:30:26
+C1,10K Turn to Friel (10K slow vs Full fast),y,overtake,4.2km to 5.8km,14.8km to 16.4km,618,368,4.25,54,8.7,77,20.9,07:34:18,07:58:13,08:30:26,09:21:01
+C2,10K Turn to Friel (10K fast vs. Full slow),n,,4.2km to 5.8km,2.7km to 4.2km,618,368,,0,0.0,0,0.0,07:34:18,07:10:38,08:30:26,07:37:58
+D1,10K Turn to Full Turn Blake Crt (out/return),n,,4.2km to 9.5km,9.5km to 14.8km,368,368,,0,0.0,0,0.0,07:16:43,07:37:27,08:22:51,09:07:44
+E1,Friel to 10K Turn (late overlaps),n,,2.7km to 4.2km,14.8km to 16.4km,618,368,,0,0.0,0,0.0,07:29:05,07:58:13,08:11:43,09:21:01
+F1,Friel to Station Rd.,y,merge,5.8km to 8.1km,2.7km to 5.0km,618,912,5.80,487,78.8,911,99.9,07:39:31,07:49:40,08:58:14,08:45:12
+F2,Friel to Station Rd.,y,merge,5.8km to 8.1km,16.4km to 18.6km,618,368,5.80,110,17.8,126,34.2,07:39:31,08:04:19,08:58:14,09:40:37
+F3,Friel to Station Rd.,y,merge,2.7km to 5.0km,16.4km to 18.6km,912,368,2.70,42,4.6,31,8.4,07:49:40,08:04:19,08:45:12,09:40:37
+G1,Full Loop QS to Trail/Aberdeen (Full Only),n,,20.6km to 21.6km,20.6km to 21.6km,368,368,,0,0.0,0,0.0,08:20:50,08:20:50,10:06:10,10:06:10
+G2,Trail/Aberdeen to Station Rd (Full outbound to Station vs 10K finish),n,,21.6km to 23.6km,8.1km to 10.0km,368,618,,0,0.0,0,0.0,08:25:10,07:47:16,10:22:21,09:21:11
+G3,Trail/Aberdeen to Station Rd. (Full outbound to Station vs Half finish),n,,21.6km to 23.6km,19.4km to 20.9km,368,912,,0,0.0,0,0.0,08:25:10,08:49:20,10:22:21,12:06:14
+H1,Station Rd. to Bridge/Mill (Half + Full co-direction),n,,5.0km to 10.8km,23.3km to 29.0km,912,368,,0,0.0,0,0.0,07:57:54,08:31:30,09:58:08,11:08:51
+I1,Bridge/Mill to Half Turn (Half + Full co-direction),n,,10.8km to 13.4km,29.0km to 31.6km,912,368,,0,0.0,0,0.0,08:18:31,08:54:07,10:32:08,11:31:15
+J1,Half Turn to Full Turn (Full outbound spur),n,,31.6km to 33.1km,31.6km to 33.1km,368,368,,0,0.0,0,0.0,09:04:28,09:04:28,11:43:46,11:43:46
+J2,Full Turn to Half Turn (Full returning spur),n,,33.1km to 34.3km,33.1km to 34.3km,368,368,,0,0.0,0,0.0,09:10:14,09:10:14,11:54:14,11:54:14
+K1,Half Turn to Bridge/Mill (Half + Full co-direction return),n,,13.4km to 16.0km,34.3km to 36.9km,912,368,,0,0.0,0,0.0,08:28:07,09:15:05,11:04:59,12:16:18
+K2,Half Turn to Bridge/Mill (Slow Half / Fast Full),n,,34.3km to 37.1km,10.8km to 13.4km,368,912,,0,0.0,0,0.0,09:15:05,08:18:31,12:17:55,10:32:08
+L1,Bridge/Mill to Station Rd. (Full and Half),y,overtake,37.1km to 40.6km,16.0km to 19.5km,368,912,37.12,111,30.2,146,16.0,09:26:01,08:37:24,12:47:18,11:48:44
+M1a,Station Rd. to Trail/Aberdeen,y,merge,8.1km to 9.8km,19.2km to 20.9km,618,912,8.10,10,1.6,9,1.0,07:47:16,08:48:47,09:18:10,12:06:14
+M1b,Station Rd. to Trail/Aberdeen,y,merge,8.1km to 9.8km,18.6km to 20.3km,618,368,8.10,187,30.3,201,54.6,07:47:16,08:13:22,09:18:10,09:54:40
+M1c,Station Rd. to Trail/Aberdeen,y,overtake,19.2km to 20.9km,18.6km to 20.3km,912,368,19.20,265,29.1,88,23.9,08:48:47,08:13:22,12:06:14,09:54:40
+M1d,Station Rd. to Trail/Aberdeen,n,,40.6km to 42.0km,40.6km to 42.0km,368,368,,0,0.0,0,0.0,09:39:35,09:39:35,12:59:03,12:59:03
+M2a,Trail/Aberdeen to Finish,n,,9.8km to 10.0km,20.9km to 21.1km,618,912,,0,0.0,0,0.0,07:52:49,08:54:42,09:21:11,12:09:25
+M2b,Trail/Aberdeen to Finish (Full QS Loop),n,,9.8km to 10.0km,20.3km to 20.6km,618,368,,0,0.0,0,0.0,07:52:49,08:19:51,09:21:11,09:56:48
+M2c,Trail/Aberdeen to Finish (Full QS Loop),n,,20.9km to 21.1km,20.3km to 20.6km,912,368,,0,0.0,0,0.0,08:54:42,08:19:51,12:09:25,09:56:48
+M2d,Trail/Aberdeen to Finish,n,,42.0km to 42.2km,42.0km to 42.2km,368,368,,0,0.0,0,0.0,09:45:01,09:45:01,13:01:11,13:01:11
