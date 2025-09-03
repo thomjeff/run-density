@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 # Import new modules
 from app.density import analyze_density_segments, generate_density_narrative
-from app.overtake import analyze_overtake_segments, generate_overtake_narrative
+from app.temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
 from app.report import generate_combined_report, generate_combined_narrative
 
 # Pydantic models for request bodies
@@ -26,11 +26,12 @@ class AnalysisRequest(BaseModel):
     timeWindow: int = 300
     format: str = "json"
 
-class OvertakeRequest(BaseModel):
+class TemporalFlowRequest(BaseModel):
     paceCsv: str
     segmentsCsv: str
     startTimes: Dict[str, int]
     minOverlapDuration: float = 5.0
+    conflictLengthM: float = 100.0
     format: str = "json"
 
 class ReportRequest(BaseModel):
@@ -61,7 +62,7 @@ async def root():
         "message": "run-density API v1.5.0",
         "version": APP_VERSION,
         "architecture": "split",
-        "endpoints": ["/api/density", "/api/overtake", "/api/report", "/health"]
+        "endpoints": ["/api/density", "/api/temporal-flow", "/api/report", "/health"]
     }
 
 @app.get("/health")
@@ -85,21 +86,22 @@ async def analyze_density(request: AnalysisRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Density analysis failed: {str(e)}")
 
-@app.post("/api/overtake")
-async def analyze_overtake(request: OvertakeRequest):
+@app.post("/api/temporal-flow")
+async def analyze_temporal_flow(request: TemporalFlowRequest):
     try:
-        results = analyze_overtake_segments(
+        results = analyze_temporal_flow_segments(
             pace_csv=request.paceCsv, 
             segments_csv=request.segmentsCsv, 
             start_times=request.startTimes, 
-            min_overlap_duration=request.minOverlapDuration
+            min_overlap_duration=request.minOverlapDuration,
+            conflict_length_m=request.conflictLengthM
         )
         if request.format == "text":
-            narrative = generate_overtake_narrative(results)
+            narrative = generate_temporal_flow_narrative(results)
             return Response(content=narrative, media_type="text/plain")
         return JSONResponse(content=results)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Overtake analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Temporal flow analysis failed: {str(e)}")
 
 @app.post("/api/report")
 async def generate_report(request: ReportRequest):
@@ -120,6 +122,11 @@ async def generate_report(request: ReportRequest):
         return JSONResponse(content=results)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Combined report generation failed: {str(e)}")
+
+@app.post("/api/overtake")
+async def legacy_overtake_endpoint(request: TemporalFlowRequest):
+    """Legacy endpoint for backward compatibility - redirects to temporal-flow"""
+    return await analyze_temporal_flow(request)
 
 @app.post("/api/overlap")
 async def legacy_overlap_endpoint(request: ReportRequest):

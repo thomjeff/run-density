@@ -12,7 +12,7 @@ import pandas as pd
 from datetime import datetime
 
 from .density import analyze_density_segments, generate_density_narrative
-from .overtake import analyze_overtake_segments, generate_overtake_narrative
+from .temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
 
 
 def generate_combined_report(
@@ -76,8 +76,8 @@ def generate_combined_report(
     # Run overtake analysis if requested
     if include_overtake:
         try:
-            overtake_results = analyze_overtake_segments(
-                pace_csv, segments_csv, start_times, min_overlap_duration
+            overtake_results = analyze_temporal_flow_segments(
+                pace_csv, segments_csv, start_times, min_overlap_duration, 100.0
             )
             results["overtake_analysis"] = overtake_results
             results["summary"]["overtake_segments"] = overtake_results["total_segments"]
@@ -132,7 +132,7 @@ def generate_combined_narrative(results: Dict[str, Any]) -> str:
     if results.get("overtake_analysis") and results["overtake_analysis"].get("ok"):
         narrative.append("🎯 OVERTAKE ANALYSIS")
         narrative.append("-" * 30)
-        overtake_narrative = generate_overtake_narrative(results["overtake_analysis"])
+        overtake_narrative = generate_temporal_flow_narrative(results["overtake_analysis"])
         # Skip the header since we already have one
         overtake_lines = overtake_narrative.split('\n')[1:]
         narrative.extend(overtake_lines)
