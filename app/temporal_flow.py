@@ -212,18 +212,18 @@ def calculate_convergence_zone_overlaps(
     to_km_b: float,
     min_overlap_duration: float = 5.0,
     conflict_length_m: float = 100.0,
-) -> Tuple[int, int, List[str], List[str]]:
+) -> Tuple[int, int, List[str], List[str], int, int]:
     """
     Calculate the number of overlapping runners within the convergence zone,
     projecting both events onto a common segment-local axis.
     """
     if df_a.empty or df_b.empty:
-        return 0, 0, [], []
+        return 0, 0, [], [], 0, 0
     
     len_a = to_km_a - from_km_a
     len_b = to_km_b - from_km_b
     if len_a <= 0 or len_b <= 0:
-        return 0, 0, [], []
+        return 0, 0, [], [], 0, 0
 
     # Map cp (in event A's ruler) to local fraction
     s_cp = (cp_km - from_km_a) / max(len_a, 1e-9)
@@ -267,6 +267,7 @@ def calculate_convergence_zone_overlaps(
 
     a_bibs = set()
     b_bibs = set()
+    unique_pairs = set()
 
     # Pairwise overlap detection
     for i, (enter_a, exit_a) in enumerate(zip(time_enter_a, time_exit_a)):
@@ -275,10 +276,18 @@ def calculate_convergence_zone_overlaps(
             overlap_end = min(exit_a, exit_b)
             overlap_duration = overlap_end - overlap_start
             if overlap_duration >= min_overlap_duration:
-                a_bibs.add(df_a.iloc[i]["runner_id"])
-                b_bibs.add(df_b.iloc[j]["runner_id"])
+                a_bib = df_a.iloc[i]["runner_id"]
+                b_bib = df_b.iloc[j]["runner_id"]
+                a_bibs.add(a_bib)
+                b_bibs.add(b_bib)
+                # Track unique pairs (ordered to avoid duplicates)
+                unique_pairs.add((a_bib, b_bib))
 
-    return len(a_bibs), len(b_bibs), list(a_bibs), list(b_bibs)
+    # Calculate participants involved (union of all runners who had encounters)
+    participants_involved = len(a_bibs.union(b_bibs))
+    unique_encounters = len(unique_pairs)
+
+    return len(a_bibs), len(b_bibs), list(a_bibs), list(b_bibs), unique_encounters, participants_involved
 
 
 def format_bib_range(bib_list: List[str], max_individual: int = 3) -> str:
@@ -376,7 +385,7 @@ def analyze_temporal_flow_segments(
         
         if cp_km is not None:
             # Calculate overtaking runners in convergence zone using local-axis mapping
-            count_a, count_b, bibs_a, bibs_b = calculate_convergence_zone_overlaps(
+            count_a, count_b, bibs_a, bibs_b, unique_encounters, participants_involved = calculate_convergence_zone_overlaps(
                 df_a, df_b, event_a, event_b, start_times,
                 cp_km, from_km_a, to_km_a, from_km_b, to_km_b, min_overlap_duration, conflict_length_m
             )
@@ -394,7 +403,9 @@ def analyze_temporal_flow_segments(
                 "sample_b": bibs_b[:10],
                 "convergence_zone_start": conflict_start,
                 "convergence_zone_end": conflict_end,
-                "conflict_length_m": conflict_length_m
+                "conflict_length_m": conflict_length_m,
+                "unique_encounters": unique_encounters,
+                "participants_involved": participants_involved
             })
             
             results["segments_with_convergence"] += 1
@@ -472,17 +483,20 @@ def generate_temporal_flow_narrative(results: Dict[str, Any]) -> str:
                 narrative.append(f"🔄 MERGE ANALYSIS:")
                 narrative.append(f"   • {segment['event_a']} runners in merge zone: {segment['overtaking_a']}/{segment['total_a']} ({segment['overtaking_a']/segment['total_a']*100:.1f}%)")
                 narrative.append(f"   • {segment['event_b']} runners in merge zone: {segment['overtaking_b']}/{segment['total_b']} ({segment['overtaking_b']/segment['total_b']*100:.1f}%)")
-                narrative.append(f"   • Total runners merging: {segment['overtaking_a'] + segment['overtaking_b']}")
+                narrative.append(f"   • Unique Encounters (pairs): {segment.get('unique_encounters', 0)}")
+                narrative.append(f"   • Participants Involved (union): {segment.get('participants_involved', 0)}")
             elif flow_type == "diverge":
                 narrative.append(f"↗️ DIVERGE ANALYSIS:")
                 narrative.append(f"   • {segment['event_a']} runners in diverge zone: {segment['overtaking_a']}/{segment['total_a']} ({segment['overtaking_a']/segment['total_a']*100:.1f}%)")
                 narrative.append(f"   • {segment['event_b']} runners in diverge zone: {segment['overtaking_b']}/{segment['total_b']} ({segment['overtaking_b']/segment['total_b']*100:.1f}%)")
-                narrative.append(f"   • Total runners diverging: {segment['overtaking_a'] + segment['overtaking_b']}")
+                narrative.append(f"   • Unique Encounters (pairs): {segment.get('unique_encounters', 0)}")
+                narrative.append(f"   • Participants Involved (union): {segment.get('participants_involved', 0)}")
             else:  # overtake (default)
                 narrative.append(f"👥 OVERTAKE ANALYSIS:")
                 narrative.append(f"   • {segment['event_a']} runners overtaking: {segment['overtaking_a']}/{segment['total_a']} ({segment['overtaking_a']/segment['total_a']*100:.1f}%)")
                 narrative.append(f"   • {segment['event_b']} runners overtaking: {segment['overtaking_b']}/{segment['total_b']} ({segment['overtaking_b']/segment['total_b']*100:.1f}%)")
-                narrative.append(f"   • Total overtaking interactions: {segment['overtaking_a'] + segment['overtaking_b']}")
+                narrative.append(f"   • Unique Encounters (pairs): {segment.get('unique_encounters', 0)}")
+                narrative.append(f"   • Participants Involved (union): {segment.get('participants_involved', 0)}")
             
             narrative.append(f"🏃‍♂️ Sample {segment['event_a']}: {format_bib_range(segment['sample_a'])}")
             narrative.append(f"🏃‍♂️ Sample {segment['event_b']}: {format_bib_range(segment['sample_b'])}")
