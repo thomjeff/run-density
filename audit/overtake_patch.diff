@@ -1,0 +1,42 @@
+*** PATCH: overtake.py (key hunks) ***
+
+@@ calculate_convergence_point(...):
+-    # Find the overlap segment where both events run
+-    segment_start = max(from_km_a, from_km_b)
+-    segment_end = min(to_km_a, to_km_b)
+-    
+-    if segment_start >= segment_end:
+-        # No overlapping segment
+-        return None
++    # Use a segment-local axis so different event km can align on same geometry
++    len_a = to_km_a - from_km_a
++    len_b = to_km_b - from_km_b
++    if len_a <= 0 or len_b <= 0:
++        return None
++
++    # Solve for local fraction s ∈ [0,1] where times equal:
++    # start_a + off_a + pace_a*60*(from_km_a + s*len_a) == start_b + off_b + pace_b*60*(from_km_b + s*len_b)
++    # (details in code). Return cp in event A's km ruler.
+
+-    # If events start at the same time, no overtaking possible
+-    if time_diff < 60:  # Less than 1 minute difference
+-        return None
++    # Removed early-exit: equal start times can still overtake if paces differ.
+
+@@ calculate_convergence_zone_overlaps(...):
+-    # Use the end of the overlapping segment
+-    zone_end = min(to_km_a, to_km_b)
++    # Project cp and zone end via local axis; do not assume same km ruler
++    # cp_km is in event A's ruler; convert to local fraction and map to both events.
++    # Zone end uses local s=1.0 (segment end).
+
+-    time_enter_a = start_a + offset_a + (pace_a * 60.0 * cp_km)
+-    time_exit_a = start_a + offset_a + (pace_a * 60.0 * zone_end)
+-    time_enter_b = start_b + offset_b + (pace_b * 60.0 * cp_km)
+-    time_exit_b = start_b + offset_b + (pace_b * 60.0 * zone_end)
++    time_enter_a = start_a + offset_a + pace_a * cp_km_a
++    time_exit_a  = start_a + offset_a + pace_a * end_km_a
++    time_enter_b = start_b + offset_b + pace_b * cp_km_b
++    time_exit_b  = start_b + offset_b + pace_b * end_km_b
+
+*** END PATCH ***

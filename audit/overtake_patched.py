@@ -96,25 +96,6 @@ def calculate_convergence_point(
     def solve_s(a_pace_min_per_km: float, b_pace_min_per_km: float, off_a: float = 0.0, off_b: float = 0.0) -> Optional[float]:
         a_sec = a_pace_min_per_km * 60.0
         b_sec = b_pace_min_per_km * 60.0
-        
-        # Special case: identical km ranges (len_a == len_b)
-        if abs(len_a - len_b) < 1e-9:
-            # For identical ranges, convergence happens when the faster runner catches the slower
-            # at the same position. We need to find where in the segment this occurs.
-            if abs(a_sec - b_sec) < 1e-9:
-                return None  # Same pace, no convergence
-            
-            # Time difference at segment start
-            time_diff_start = (start_a + off_a + a_sec * from_km_a) - (start_b + off_b + b_sec * from_km_b)
-            
-            # If faster runner is behind at start, they can catch up
-            if (a_sec < b_sec and time_diff_start > 0) or (a_sec > b_sec and time_diff_start < 0):
-                # Return midpoint as convergence point for identical ranges
-                return 0.5
-            
-            return None
-        
-        # General case: different km ranges
         # start_a + off_a + a_sec*(from_km_a + s*len_a) = start_b + off_b + b_sec*(from_km_b + s*len_b)
         denom = (a_sec * len_a) - (b_sec * len_b)
         if abs(denom) < 1e-9:
@@ -184,11 +165,9 @@ def calculate_convergence_zone_overlaps(
     if len_a <= 0 or len_b <= 0:
         return 0, 0, [], []
 
-    # Map cp (in event A's ruler) to local fraction and set zone end
+    # Map cp (in event A's ruler) to local fraction and set zone end at s=1.0
     s_cp = (cp_km - from_km_a) / max(len_a, 1e-9)
     s_cp = max(0.0, min(1.0, s_cp))
-    
-    # Use convergence point to segment end for all cases
     s_end = 1.0
 
     # Convert to each event's km
@@ -216,14 +195,15 @@ def calculate_convergence_zone_overlaps(
     a_bibs = set()
     b_bibs = set()
 
-    # Pairwise overlap detection
+    # Broadcasted overlap
     for i, (enter_a, exit_a) in enumerate(zip(time_enter_a, time_exit_a)):
-        for j, (enter_b, exit_b) in enumerate(zip(time_enter_b, time_exit_b)):
-            overlap_start = max(enter_a, enter_b)
-            overlap_end = min(exit_a, exit_b)
-            overlap_duration = overlap_end - overlap_start
-            if overlap_duration >= min_overlap_duration:
-                a_bibs.add(df_a.iloc[i]["runner_id"])
+        overlap_start = np.maximum(enter_a, time_enter_b)
+        overlap_end   = np.minimum(exit_a,  time_exit_b)
+        valid = (overlap_end > overlap_start) & ((overlap_end - overlap_start) >= min_overlap_duration)
+        if np.any(valid):
+            a_bibs.add(df_a.iloc[i]["runner_id"])
+            idxs = np.where(valid)[0]
+            for j in idxs:
                 b_bibs.add(df_b.iloc[j]["runner_id"])
 
     return len(a_bibs), len(b_bibs), list(a_bibs), list(b_bibs)
