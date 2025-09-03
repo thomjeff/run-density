@@ -147,6 +147,58 @@ def calculate_convergence_point(
     return None
 
 
+def calculate_entry_exit_times(
+    df_a: pd.DataFrame,
+    df_b: pd.DataFrame,
+    event_a: str,
+    event_b: str,
+    start_times: Dict[str, float],
+    from_km_a: float,
+    to_km_a: float,
+    from_km_b: float,
+    to_km_b: float,
+) -> Tuple[str, str, str, str]:
+    """Calculate first entry and last exit times for both events in the segment."""
+    if df_a.empty or df_b.empty:
+        return "N/A", "N/A", "N/A", "N/A"
+    
+    # Get start times in seconds
+    start_a = start_times.get(event_a, 0) * 60.0
+    start_b = start_times.get(event_b, 0) * 60.0
+    
+    # Calculate entry/exit times for event A
+    pace_a = df_a["pace"].values * 60.0  # sec per km
+    offset_a = df_a.get("start_offset", pd.Series([0]*len(df_a))).fillna(0).values.astype(float)
+    entry_times_a = start_a + offset_a + pace_a * from_km_a
+    exit_times_a = start_a + offset_a + pace_a * to_km_a
+    
+    # Calculate entry/exit times for event B
+    pace_b = df_b["pace"].values * 60.0  # sec per km
+    offset_b = df_b.get("start_offset", pd.Series([0]*len(df_b))).fillna(0).values.astype(float)
+    entry_times_b = start_b + offset_b + pace_b * from_km_b
+    exit_times_b = start_b + offset_b + pace_b * to_km_b
+    
+    # Find first entry and last exit for each event
+    first_entry_a = min(entry_times_a)
+    last_exit_a = max(exit_times_a)
+    first_entry_b = min(entry_times_b)
+    last_exit_b = max(exit_times_b)
+    
+    # Format as HH:MM:SS
+    def format_time(seconds):
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    
+    return (
+        format_time(first_entry_a),
+        format_time(last_exit_a),
+        format_time(first_entry_b),
+        format_time(last_exit_b)
+    )
+
+
 def calculate_convergence_zone_overlaps(
     df_a: pd.DataFrame,
     df_b: pd.DataFrame,
@@ -292,6 +344,12 @@ def analyze_temporal_flow_segments(
             from_km_a, to_km_a, from_km_b, to_km_b
         )
         
+        # Calculate entry/exit times for this segment
+        first_entry_a, last_exit_a, first_entry_b, last_exit_b = calculate_entry_exit_times(
+            df_a, df_b, event_a, event_b, start_times,
+            from_km_a, to_km_a, from_km_b, to_km_b
+        )
+        
         segment_result = {
             "seg_id": seg_id,
             "segment_label": segment.get("segment_label", ""),
@@ -309,7 +367,11 @@ def analyze_temporal_flow_segments(
             "overtaking_a": 0,
             "overtaking_b": 0,
             "sample_a": [],
-            "sample_b": []
+            "sample_b": [],
+            "first_entry_a": first_entry_a,
+            "last_exit_a": last_exit_a,
+            "first_entry_b": first_entry_b,
+            "last_exit_b": last_exit_b
         }
         
         if cp_km is not None:
@@ -377,6 +439,10 @@ def generate_temporal_flow_narrative(results: Dict[str, Any]) -> str:
         event_b = segment.get('event_b', 'B')
         narrative.append(f"📍 {event_a}: {segment['total_a']} runners ({segment['from_km_a']}km to {segment['to_km_a']}km)")
         narrative.append(f"📍 {event_b}: {segment['total_b']} runners ({segment['from_km_b']}km to {segment['to_km_b']}km)")
+        
+        # Add entry/exit times in combined format
+        narrative.append(f"⏰ {event_a} Entry/Exit: {segment.get('first_entry_a', 'N/A')} {segment.get('last_exit_a', 'N/A')}")
+        narrative.append(f"⏰ {event_b} Entry/Exit: {segment.get('first_entry_b', 'N/A')} {segment.get('last_exit_b', 'N/A')}")
         
         if segment["has_convergence"]:
             flow_type = segment.get("flow_type", "overtake")
