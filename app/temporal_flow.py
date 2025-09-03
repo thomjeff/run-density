@@ -74,11 +74,14 @@ def calculate_convergence_point(
     step_km: float = 0.01,
 ) -> Optional[float]:
     """
-    Calculate convergence point using a segment-local axis so events with
-    different course km still align on the same physical geometry.
-
-    Returns the kilometer mark (in event A's km ruler) where overtaking becomes
-    possible, or None if no convergence within this segment.
+    Calculate convergence point ONLY when actual temporal overlaps occur.
+    
+    This function finds the first location where runners from different events
+    actually overlap in time within the segment. Returns None if no actual
+    temporal overlaps exist.
+    
+    Returns the kilometer mark (in event A's km ruler) where the first
+    actual temporal overlap occurs, or None if no overlaps exist.
     """
     if dfA.empty or dfB.empty:
         return None
@@ -93,71 +96,55 @@ def calculate_convergence_point(
     start_a = start_times.get(eventA, 0) * 60.0
     start_b = start_times.get(eventB, 0) * 60.0
 
-    # Helper to solve for s (local fraction 0..1) for a given pace pair and optional offsets
-    def solve_s(a_pace_min_per_km: float, b_pace_min_per_km: float, off_a: float = 0.0, off_b: float = 0.0) -> Optional[float]:
-        a_sec = a_pace_min_per_km * 60.0
-        b_sec = b_pace_min_per_km * 60.0
+    # Find the first location where actual temporal overlaps occur
+    # We'll check multiple points along the segment to find where overlaps begin
+    
+    # Create distance check points along the segment
+    check_points = []
+    current_km = from_km_a
+    while current_km <= to_km_a:
+        check_points.append(current_km)
+        current_km += step_km
+    
+    # For each check point, see if there are actual temporal overlaps
+    for km_point in check_points:
+        # Map this km point to both events' coordinate systems
+        # For event A: direct mapping
+        km_a = km_point
         
-        # Special case: identical km ranges (len_a == len_b)
-        if abs(len_a - len_b) < 1e-9:
-            # For identical ranges, convergence happens when the faster runner catches the slower
-            # at the same position. We need to find where in the segment this occurs.
-            if abs(a_sec - b_sec) < 1e-9:
-                return None  # Same pace, no convergence
-            
-            # Time difference at segment start
-            time_diff_start = (start_a + off_a + a_sec * from_km_a) - (start_b + off_b + b_sec * from_km_b)
-            
-            # If faster runner is behind at start, they can catch up
-            if (a_sec < b_sec and time_diff_start > 0) or (a_sec > b_sec and time_diff_start < 0):
-                # Return midpoint as convergence point for identical ranges
-                return 0.5
-            
-            return None
+        # For event B: map using segment-local axis
+        s_local = (km_point - from_km_a) / len_a if len_a > 0 else 0.0
+        s_local = max(0.0, min(1.0, s_local))  # Clamp to [0,1]
+        km_b = from_km_b + s_local * len_b
         
-        # General case: different km ranges
-        # start_a + off_a + a_sec*(from_km_a + s*len_a) = start_b + off_b + b_sec*(from_km_b + s*len_b)
-        denom = (a_sec * len_a) - (b_sec * len_b)
-        if abs(denom) < 1e-9:
-            return None
-        numer = (start_b + off_b) - (start_a + off_a) + (b_sec * from_km_b) - (a_sec * from_km_a)
-        s = numer / denom
-        if 0.0 <= s <= 1.0:
-            return float(s)
-        return None
-
-    convergence_s: List[float] = []
-
-    # Representative pace sampling (quantiles) for both events
-    q = [0.05, 0.25, 0.5, 0.75, 0.95]
-    paces_a = dfA["pace"].quantile(q).values if len(dfA) else np.array([])
-    paces_b = dfB["pace"].quantile(q).values if len(dfB) else np.array([])
-
-    for pa in paces_a:
-        for pb in paces_b:
-            s = solve_s(pa, pb, 0.0, 0.0)
-            if s is not None:
-                convergence_s.append(s)
-
-    # Precise sampling using actual runners incl. offsets
-    if len(dfA) and len(dfB):
-        sample_a = dfA.sample(min(20, len(dfA)), random_state=42)
-        sample_b = dfB.sample(min(20, len(dfB)), random_state=42)
-        for _, ra in sample_a.iterrows():
-            for _, rb in sample_b.iterrows():
-                s = solve_s(float(ra["pace"]), float(rb["pace"]), float(ra.get("start_offset", 0.0)), float(rb.get("start_offset", 0.0)))
-                if s is not None:
-                    convergence_s.append(s)
-
-    if not convergence_s:
-        return None
-
-    # Choose the s* closest to midpoint for stability
-    s_star = min(convergence_s, key=lambda s: abs(s - 0.5))
-
-    # Return convergence point in event A's km ruler for compatibility
-    cp_km_a = from_km_a + s_star * len_a
-    return round(cp_km_a, 2)
+        # Check if this point is within both segments
+        if not (from_km_a <= km_a <= to_km_a and from_km_b <= km_b <= to_km_b):
+            continue
+        
+        # Calculate arrival times for all runners at this point
+        # Event A runners
+        pace_a = dfA["pace"].values * 60.0  # sec per km
+        offset_a = dfA.get("start_offset", pd.Series([0]*len(dfA))).fillna(0).values.astype(float)
+        arrival_times_a = start_a + offset_a + pace_a * km_a
+        
+        # Event B runners  
+        pace_b = dfB["pace"].values * 60.0  # sec per km
+        offset_b = dfB.get("start_offset", pd.Series([0]*len(dfB))).fillna(0).values.astype(float)
+        arrival_times_b = start_b + offset_b + pace_b * km_b
+        
+        # Check for temporal overlaps at this point
+        # A temporal overlap occurs when a runner from one event arrives
+        # at the same time (within a small tolerance) as a runner from another event
+        tolerance_seconds = 5.0  # 5 second tolerance for "same time"
+        
+        for time_a in arrival_times_a:
+            for time_b in arrival_times_b:
+                if abs(time_a - time_b) <= tolerance_seconds:
+                    # Found actual temporal overlap! Return this as convergence point
+                    return round(km_point, 2)
+    
+    # No temporal overlaps found anywhere in the segment
+    return None
 
 
 def calculate_convergence_zone_overlaps(
