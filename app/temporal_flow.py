@@ -402,8 +402,6 @@ def generate_temporal_flow_narrative(results: Dict[str, Any]) -> str:
             event_a = segment.get('event_a', 'A')
             event_b = segment.get('event_b', 'B')
             narrative.append(f"🎯 Segment Converge Point: {s_cp:.2f}km ({cp_km:.1f}km {event_a}, {cp_km_b:.1f}km {event_b})")
-            narrative.append(f"📊 Conflict Zone: {segment.get('convergence_zone_start','')}km to {segment.get('convergence_zone_end','')}km (event A ruler)")
-            narrative.append(f"📏 Conflict Length: {segment.get('conflict_length_m', 100)}m")
             
             # Flow type specific reporting
             if flow_type == "merge":
@@ -741,7 +739,6 @@ def generate_tot_report(tot_data: Dict[str, Any]) -> str:
     report.append("⏱️ TIME-OVER-THRESHOLD (TOT) METRICS")
     report.append("=" * 60)
     report.append(f"🔍 {tot_data['event_a']} vs {tot_data['event_b']}")
-    report.append(f"📍 Conflict Zone: {tot_data['conflict_zone_start']:.2f}km to {tot_data['conflict_zone_end']:.2f}km")
     report.append(f"📏 Conflict Length: {tot_data['conflict_length_m']}m")
     report.append(f"⏰ Time Range: {tot_data['time_range_minutes']:.1f} minutes")
     report.append(f"📊 Time Bin Size: {tot_data['time_bin_seconds']} seconds")
