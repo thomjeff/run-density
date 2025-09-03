@@ -475,15 +475,16 @@ def analyze_temporal_flow_segments(
     conflict_length_m: float = 100.0,
 ) -> Dict[str, Any]:
     """
-    Analyze all segments with overtake_flag = 'y' for temporal flow patterns.
+    Analyze all segments for temporal flow patterns.
     Supports overtake, merge, and diverge flow types.
+    Processes ALL segments but only calculates convergence for overtake_flag = 'y' segments.
     """
     # Load data
     pace_df = _load_pace_csv(pace_csv)
     segments_df = _load_segments_csv(segments_csv)
     
-    # Filter to overtake segments only
-    overtake_segments = segments_df[segments_df["overtake_flag"] == "y"].copy()
+    # Process ALL segments (not just overtake_flag = 'y')
+    all_segments = segments_df.copy()
     
     results = {
         "ok": True,
@@ -492,12 +493,12 @@ def analyze_temporal_flow_segments(
         "start_times": start_times,
         "min_overlap_duration": min_overlap_duration,
         "conflict_length_m": conflict_length_m,
-        "total_segments": len(overtake_segments),
+        "total_segments": len(all_segments),
         "segments_with_convergence": 0,
         "segments": []
     }
     
-    for _, segment in overtake_segments.iterrows():
+    for _, segment in all_segments.iterrows():
         seg_id = segment["seg_id"]
         event_a = segment["eventa"]
         event_b = segment["eventb"]
@@ -510,11 +511,13 @@ def analyze_temporal_flow_segments(
         df_a = pace_df[pace_df["event"] == event_a].copy()
         df_b = pace_df[pace_df["event"] == event_b].copy()
         
-        # Calculate convergence point (in event A km ruler)
-        cp_km = calculate_convergence_point(
-            df_a, df_b, event_a, event_b, start_times,
-            from_km_a, to_km_a, from_km_b, to_km_b
-        )
+        # Calculate convergence point (in event A km ruler) - only for overtake segments
+        cp_km = None
+        if segment.get("overtake_flag") == "y":
+            cp_km = calculate_convergence_point(
+                df_a, df_b, event_a, event_b, start_times,
+                from_km_a, to_km_a, from_km_b, to_km_b
+            )
         
         # Calculate entry/exit times for this segment
         first_entry_a, last_exit_a, first_entry_b, last_exit_b, overlap_window_duration = calculate_entry_exit_times(
@@ -549,7 +552,7 @@ def analyze_temporal_flow_segments(
             "overtake_flag": segment.get("overtake_flag", "")
         }
         
-        if cp_km is not None:
+        if cp_km is not None and segment.get("overtake_flag") == "y":
             # Calculate overtaking runners in convergence zone using local-axis mapping
             count_a, count_b, bibs_a, bibs_b, unique_encounters, participants_involved = calculate_convergence_zone_overlaps(
                 df_a, df_b, event_a, event_b, start_times,
