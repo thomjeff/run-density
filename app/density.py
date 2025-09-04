@@ -139,15 +139,20 @@ class DensityAnalyzer:
         """Initialize the density analyzer with configuration."""
         self.config = config or DensityConfig()
         self.width_provider = width_provider
+        # Updated LOS thresholds based on active-window density analysis
+        # These thresholds are calibrated to the actual density ranges observed
+        # in the race data with active window filtering applied
         self.los_areal_thresholds = {
-            "Comfortable": (0.0, 1.0),
-            "Busy": (1.0, 1.8),
-            "Constrained": (1.8, float('inf'))
+            "A": (0.0, 0.11),      # Comfortable
+            "C": (0.11, 0.17),     # Moderate  
+            "E": (0.17, 0.20),     # Busy
+            "F": (0.20, float('inf'))  # Critical
         }
         self.los_crowd_thresholds = {
-            "Low": (0.0, 1.5),
-            "Medium": (1.5, 3.0),
-            "High": (3.0, float('inf'))
+            "A": (0.0, 0.22),      # Comfortable
+            "C": (0.22, 0.35),     # Moderate
+            "E": (0.35, 0.60),     # Busy  
+            "F": (0.60, float('inf'))  # Critical
         }
     
     def validate_segment(self, segment: SegmentMeta) -> Tuple[bool, List[str]]:
@@ -282,14 +287,14 @@ class DensityAnalyzer:
             Tuple of (los_areal, los_crowd)
         """
         # Classify areal density
-        los_areal = "Comfortable"
+        los_areal = "A"  # Default to A (Comfortable)
         for level, (min_val, max_val) in self.los_areal_thresholds.items():
             if min_val <= areal_density < max_val:
                 los_areal = level
                 break
         
         # Classify crowd density
-        los_crowd = "Low"
+        los_crowd = "A"  # Default to A (Comfortable)
         for level, (min_val, max_val) in self.los_crowd_thresholds.items():
             if min_val <= crowd_density < max_val:
                 los_crowd = level
