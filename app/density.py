@@ -72,6 +72,8 @@ class SegmentMeta:
     to_km: float
     width_m: float
     direction: str  # "uni" | "bi"
+    event_a: str = ""  # First event for this segment
+    event_b: str = ""  # Second event for this segment
     
     @property
     def segment_length_m(self) -> float:
@@ -111,7 +113,7 @@ class DensitySummary:
     los_areal_distribution: Dict[str, float]
     los_crowd_distribution: Dict[str, float]
     flags: List[str]
-    
+
     # Active-window statistics (new)
     active_start: Optional[str] = None
     active_end: Optional[str] = None
@@ -125,6 +127,14 @@ class DensitySummary:
     active_p95_crowd: float = 0.0
     active_mean_areal: float = 0.0
     active_mean_crowd: float = 0.0
+    
+    # TOT metrics for active window
+    active_tot_areal_sec: int = 0
+    active_tot_crowd_sec: int = 0
+    
+    # Peak timestamps for operational planning
+    active_peak_areal_time: Optional[str] = None
+    active_peak_crowd_time: Optional[str] = None
 
 
 class DensityAnalyzer:
@@ -207,10 +217,17 @@ class DensityAnalyzer:
         """
         time_bin_end = time_bin_start + timedelta(seconds=self.config.bin_seconds)
         
+        # Filter pace data to only include runners from the segment's events
+        segment_events = {segment.event_a, segment.event_b}
+        filtered_pace_data = pace_data[pace_data['event'].isin(segment_events)]
+        
+        if filtered_pace_data.empty:
+            return 0
+        
         # Convert to NumPy arrays for vectorized operations
-        event_ids = pace_data['event'].values
-        start_offsets = pace_data['start_offset'].values
-        paces = pace_data['pace'].values
+        event_ids = filtered_pace_data['event'].values
+        start_offsets = filtered_pace_data['start_offset'].values
+        paces = filtered_pace_data['pace'].values
         
         # Calculate actual start times for all runners
         actual_starts = np.array([
@@ -534,9 +551,18 @@ class DensityAnalyzer:
                 # Fallback if time format is different
                 active_duration = len(active_results) * self.config.bin_seconds
             
-            # Calculate occupancy rate
+            # Calculate occupancy rate using datetime comparison
             # Occupancy rate = active bins / total bins in the active time window
-            window_results = [r for r in results if r.t_start >= active_start and r.t_end <= active_end]
+            active_start_dt = datetime.strptime(active_start, "%H:%M:%S")
+            active_end_dt = datetime.strptime(active_end, "%H:%M:%S")
+            
+            window_results = []
+            for r in results:
+                r_start_dt = datetime.strptime(r.t_start, "%H:%M:%S")
+                r_end_dt = datetime.strptime(r.t_end, "%H:%M:%S")
+                if r_start_dt >= active_start_dt and r_end_dt <= active_end_dt:
+                    window_results.append(r)
+            
             occupancy_rate = len(active_results) / len(window_results) if window_results else 0.0
             
             # Guardrails
@@ -551,6 +577,16 @@ class DensityAnalyzer:
             active_peak_areal = max(active_areal_densities) if active_areal_densities else 0.0
             active_peak_crowd = max(active_crowd_densities) if active_crowd_densities else 0.0
             active_peak_concurrency = max(active_concurrent_runners) if active_concurrent_runners else 0
+            
+            # Find peak timestamps
+            active_peak_areal_time = None
+            active_peak_crowd_time = None
+            if active_areal_densities:
+                peak_areal_idx = active_areal_densities.index(active_peak_areal)
+                active_peak_areal_time = active_results[peak_areal_idx].t_start
+            if active_crowd_densities:
+                peak_crowd_idx = active_crowd_densities.index(active_peak_crowd)
+                active_peak_crowd_time = active_results[peak_crowd_idx].t_start
             
             # Calculate percentiles
             active_p95_areal = np.percentile(active_areal_densities, 95) if active_areal_densities else 0.0
@@ -571,6 +607,17 @@ class DensityAnalyzer:
                     self.config.bin_seconds for result in active_results
                     if result.crowd_density >= self.config.threshold_crowd
                 )
+            
+            # Always calculate active TOT metrics for reporting
+            active_tot_areal_sec = sum(
+                self.config.bin_seconds for result in active_results
+                if result.areal_density >= self.config.threshold_areal
+            )
+            
+            active_tot_crowd_sec = sum(
+                self.config.bin_seconds for result in active_results
+                if result.crowd_density >= self.config.threshold_crowd
+            )
             
             # Add active-window flags
             active_flags = ["active_window_available"]
@@ -593,6 +640,10 @@ class DensityAnalyzer:
             active_p95_crowd = 0.0
             active_mean_areal = 0.0
             active_mean_crowd = 0.0
+            active_tot_areal_sec = 0
+            active_tot_crowd_sec = 0
+            active_peak_areal_time = None
+            active_peak_crowd_time = None
             active_flags = ["no_active_bins"]
         
         # Collect all flags
@@ -625,7 +676,13 @@ class DensityAnalyzer:
             active_p95_areal=active_p95_areal,
             active_p95_crowd=active_p95_crowd,
             active_mean_areal=active_mean_areal,
-            active_mean_crowd=active_mean_crowd
+            active_mean_crowd=active_mean_crowd,
+            # TOT metrics for active window
+            active_tot_areal_sec=active_tot_areal_sec,
+            active_tot_crowd_sec=active_tot_crowd_sec,
+            # Peak timestamps
+            active_peak_areal_time=active_peak_areal_time,
+            active_peak_crowd_time=active_peak_crowd_time
         )
 
 
@@ -690,7 +747,9 @@ def analyze_density_segments(segments_df: pd.DataFrame,
             from_km=segment_row['from_km_A'],
             to_km=segment_row['to_km_A'],
             width_m=width_m,
-            direction=segment_row['direction']
+            direction=segment_row['direction'],
+            event_a=segment_row['eventA'],
+            event_b=segment_row['eventB']
         )
         
         # Compute density time series
