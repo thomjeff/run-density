@@ -1,0 +1,20 @@
+{
+  "summary": {
+    "total_tests": 1,
+    "passed": 1,
+    "failed": 0,
+    "errors": 0,
+    "success_rate": 100.0,
+    "timestamp": "2025-09-04T13:38:04.906460"
+  },
+  "results": [
+    {
+      "test_id": "temporal_flow_convergence",
+      "status": "PASS",
+      "message": "Test completed",
+      "details": {},
+      "execution_time": 25.350674867630005,
+      "timestamp": "2025-09-04T13:38:04.906431"
+    }
+  ]
+}
