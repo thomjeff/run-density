@@ -15,13 +15,42 @@ Version: 1.6.0
 import pandas as pd
 import numpy as np
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, Protocol
 import logging
 from datetime import datetime, timedelta
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+class WidthProvider(Protocol):
+    """Protocol for pluggable width calculation providers."""
+    
+    def get_width(self, segment_id: str, from_km: float, to_km: float) -> float:
+        """Get width for a segment."""
+        ...
+
+
+class StaticWidthProvider:
+    """Static width provider using segments.csv data."""
+    
+    def __init__(self, segments_df: pd.DataFrame):
+        self.widths = dict(zip(segments_df['segment_id'], segments_df['width_m']))
+    
+    def get_width(self, segment_id: str, from_km: float, to_km: float) -> float:
+        """Get width from segments.csv data."""
+        return self.widths.get(segment_id, 0.0)
+
+
+class DynamicWidthProvider:
+    """Future: Dynamic width provider using GPX data."""
+    
+    def get_width(self, segment_id: str, from_km: float, to_km: float) -> float:
+        """Get width from GPX data (placeholder for future implementation)."""
+        # This would integrate with GPX data for dynamic width calculation
+        # For now, return a default width
+        return 3.0  # Default 3m width
 
 
 @dataclass(frozen=True)
@@ -92,9 +121,10 @@ class DensityAnalyzer:
     and is completely independent of temporal flow calculations.
     """
     
-    def __init__(self, config: DensityConfig = None):
+    def __init__(self, config: DensityConfig = None, width_provider: WidthProvider = None):
         """Initialize the density analyzer with configuration."""
         self.config = config or DensityConfig()
+        self.width_provider = width_provider
         self.los_areal_thresholds = {
             "Comfortable": (0.0, 1.0),
             "Busy": (1.0, 1.8),
@@ -145,6 +175,8 @@ class DensityAnalyzer:
         CRITICAL: This calculates ALL runners present in the segment,
         not just those involved in interactions (different from temporal flow).
         
+        PERFORMANCE: Uses NumPy vectorized operations for better performance.
+        
         Args:
             segment: Segment metadata
             pace_data: Runner pace data with start_offset
@@ -154,35 +186,41 @@ class DensityAnalyzer:
         Returns:
             Number of concurrent runners in the segment
         """
-        concurrent_count = 0
         time_bin_end = time_bin_start + timedelta(seconds=self.config.bin_seconds)
         
-        for _, runner in pace_data.iterrows():
-            event_id = runner['event_id']
-            start_offset = runner['start_offset']
-            
-            # Calculate actual start time for this runner
-            actual_start = start_times[event_id] + timedelta(seconds=start_offset)
-            
-            # Calculate runner's position at time_bin_start
-            time_elapsed = (time_bin_start - actual_start).total_seconds()
-            if time_elapsed < 0:
-                continue  # Runner hasn't started yet
-            
-            # Calculate runner's position at time_bin_end
-            time_elapsed_end = (time_bin_end - actual_start).total_seconds()
-            if time_elapsed_end < 0:
-                continue  # Runner hasn't started yet
-            
-            # Calculate runner's position in km
-            position_start_km = runner['pace'] * time_elapsed / 3600  # Convert to km
-            position_end_km = runner['pace'] * time_elapsed_end / 3600
-            
-            # Check if runner is in segment during this time bin
-            if self._runner_in_segment(position_start_km, position_end_km, segment):
-                concurrent_count += 1
+        # Convert to NumPy arrays for vectorized operations
+        event_ids = pace_data['event_id'].values
+        start_offsets = pace_data['start_offset'].values
+        paces = pace_data['pace'].values
         
-        return concurrent_count
+        # Calculate actual start times for all runners
+        actual_starts = np.array([
+            start_times[event_id] + timedelta(seconds=start_offset)
+            for event_id, start_offset in zip(event_ids, start_offsets)
+        ])
+        
+        # Convert to seconds since epoch for vectorized operations
+        time_bin_start_sec = time_bin_start.timestamp()
+        time_bin_end_sec = time_bin_end.timestamp()
+        actual_starts_sec = np.array([start.timestamp() for start in actual_starts])
+        
+        # Calculate time elapsed for each runner
+        time_elapsed_start = time_bin_start_sec - actual_starts_sec
+        time_elapsed_end = time_bin_end_sec - actual_starts_sec
+        
+        # Filter runners who have started
+        started_mask = time_elapsed_start >= 0
+        if not np.any(started_mask):
+            return 0
+        
+        # Calculate positions for started runners
+        positions_start_km = paces[started_mask] * time_elapsed_start[started_mask] / 3600
+        positions_end_km = paces[started_mask] * time_elapsed_end[started_mask] / 3600
+        
+        # Vectorized check for runners in segment
+        in_segment_mask = (positions_start_km < segment.to_km) & (positions_end_km > segment.from_km)
+        
+        return np.sum(in_segment_mask)
     
     def _runner_in_segment(self, pos_start_km: float, pos_end_km: float, segment: SegmentMeta) -> bool:
         """
@@ -244,6 +282,83 @@ class DensityAnalyzer:
                 break
         
         return los_areal, los_crowd
+    
+    def smooth_narrative_transitions(self, results: List[DensityResult]) -> List[Dict[str, Any]]:
+        """
+        Smooth narrative transitions to avoid per-bin noise.
+        
+        CRITICAL: Reports sustained periods rather than per-bin fluctuations.
+        
+        Args:
+            results: List of DensityResult objects
+            
+        Returns:
+            List of sustained period summaries
+        """
+        if not results:
+            return []
+        
+        sustained_periods = []
+        min_sustained_bins = (self.config.min_sustained_period_minutes * 60) // self.config.bin_seconds
+        
+        # Group consecutive bins with same LOS
+        current_areal_los = None
+        current_crowd_los = None
+        current_start_idx = 0
+        
+        for i, result in enumerate(results):
+            # Check for LOS changes
+            if (result.los_areal != current_areal_los or 
+                result.los_crowd != current_crowd_los):
+                
+                # If we have a sustained period, add it
+                if (current_areal_los is not None and 
+                    i - current_start_idx >= min_sustained_bins):
+                    
+                    sustained_periods.append({
+                        "start_time": results[current_start_idx].t_start,
+                        "end_time": results[i-1].t_end,
+                        "duration_minutes": (i - current_start_idx) * self.config.bin_seconds / 60,
+                        "los_areal": current_areal_los,
+                        "los_crowd": current_crowd_los,
+                        "avg_areal_density": np.mean([
+                            r.areal_density for r in results[current_start_idx:i]
+                        ]),
+                        "avg_crowd_density": np.mean([
+                            r.crowd_density for r in results[current_start_idx:i]
+                        ]),
+                        "peak_concurrent_runners": max([
+                            r.concurrent_runners for r in results[current_start_idx:i]
+                        ])
+                    })
+                
+                # Start new period
+                current_areal_los = result.los_areal
+                current_crowd_los = result.los_crowd
+                current_start_idx = i
+        
+        # Handle final period
+        if (current_areal_los is not None and 
+            len(results) - current_start_idx >= min_sustained_bins):
+            
+            sustained_periods.append({
+                "start_time": results[current_start_idx].t_start,
+                "end_time": results[-1].t_end,
+                "duration_minutes": (len(results) - current_start_idx) * self.config.bin_seconds / 60,
+                "los_areal": current_areal_los,
+                "los_crowd": current_crowd_los,
+                "avg_areal_density": np.mean([
+                    r.areal_density for r in results[current_start_idx:]
+                ]),
+                "avg_crowd_density": np.mean([
+                    r.crowd_density for r in results[current_start_idx:]
+                ]),
+                "peak_concurrent_runners": max([
+                    r.concurrent_runners for r in results[current_start_idx:]
+                ])
+            })
+        
+        return sustained_periods
     
     def compute_density_timeseries(self,
                                  segment: SegmentMeta,
@@ -391,7 +506,8 @@ class DensityAnalyzer:
 def analyze_density_segments(segments_df: pd.DataFrame,
                            pace_data: pd.DataFrame,
                            start_times: Dict[str, datetime],
-                           config: DensityConfig = None) -> Dict[str, Any]:
+                           config: DensityConfig = None,
+                           width_provider: WidthProvider = None) -> Dict[str, Any]:
     """
     Analyze density for all segments.
     
@@ -400,12 +516,14 @@ def analyze_density_segments(segments_df: pd.DataFrame,
         pace_data: DataFrame with runner pace data
         start_times: Dictionary of event start times
         config: Density analysis configuration
+        width_provider: Pluggable width provider (defaults to StaticWidthProvider)
         
     Returns:
         Dictionary with density analysis results
     """
     config = config or DensityConfig()
-    analyzer = DensityAnalyzer(config)
+    width_provider = width_provider or StaticWidthProvider(segments_df)
+    analyzer = DensityAnalyzer(config, width_provider)
     
     # Generate time bins (same as temporal flow for alignment)
     earliest_start = min(start_times.values())
@@ -434,11 +552,18 @@ def analyze_density_segments(segments_df: pd.DataFrame,
     }
     
     for _, segment_row in segments_df.iterrows():
+        # Use width provider for pluggable width calculation
+        width_m = width_provider.get_width(
+            segment_row['segment_id'],
+            segment_row['from_km'],
+            segment_row['to_km']
+        )
+        
         segment = SegmentMeta(
             segment_id=segment_row['segment_id'],
             from_km=segment_row['from_km'],
             to_km=segment_row['to_km'],
-            width_m=segment_row['width_m'],
+            width_m=width_m,
             direction=segment_row['direction']
         )
         
@@ -451,9 +576,13 @@ def analyze_density_segments(segments_df: pd.DataFrame,
             # Summarize results
             summary = analyzer.summarize_density(density_results)
             
+            # Generate narrative smoothing
+            sustained_periods = analyzer.smooth_narrative_transitions(density_results)
+            
             results["segments"][segment.segment_id] = {
                 "summary": summary,
-                "time_series": density_results
+                "time_series": density_results,
+                "sustained_periods": sustained_periods
             }
             results["summary"]["processed_segments"] += 1
         else:
