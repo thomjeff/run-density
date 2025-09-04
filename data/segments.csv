@@ -1,13 +1,13 @@
 seg_id,segment_label,eventA,eventB,from_km_A,to_km_A,from_km_B,to_km_B,direction,width_m,overtake_flag,flow-type,prior_segment_id,notes
-A1a,Start to Queen/Regent (10K/Half),10K,Half,0,0.9,0,0.9,uni,7,y,overtake,,Start along St John Street; Overtake unlikely.
-A1b,Queen/Regent to WSB mid-point (10K/Half),10K,Half,0.9,1.8,0.9,1.8,uni,7,y,overtake,A1a,Pointe St. Anne Blvd to half-way on WSB; Overtake unlikely.
-A1c,WSB mid-point to Friel (10K/Half),10K,Half,1.8,2.7,1.8,2.7,uni,7,y,overtake,A1b,Half-way on WSB; Overtake likely.
-A2a,Start to Queen/Regent (10K/Full),10K,Full,0,0.9,0,0.9,uni,7,y,overtake,,Start along St John Street; No Overtake expected
-A2b,Queen/Regent to WSB mid-point (10K/Full),10K,Full,0.9,1.8,0.9,1.8,uni,7,y,overtake,A2a,Pointe St. Anne Blvd to half-way on WSB; Overtake unlikely.
-A2c,WSB mid-point to Friel  (10KFull),10K,Full,1.8,2.7,1.8,2.7,uni,7,y,overtake,A2b,Half-way on WSB; Overtake possible (Fast 10K / Slow Full).
-A3a,Start to Queen/Regent (Half/Full),Half,Full,0,0.9,0,0.9,uni,7,y,overtake,,Start along St John Street; Overtake unlikely.
-A3b,Queen/Regent to WSB mid-point (Half/Full),Half,Full,0.9,1.8,0.9,1.8,uni,7,y,overtake,A3a,Pointe St. Anne Blvd to half-way on WSB; Overtake unlikely.
-A3c,WSB mid-point to Friel (Half/Full),Half,Full,1.8,2.7,1.8,2.7,uni,7,y,overtake,A3b,Half-way on WSB; Overtake possible (Fast Half / Slow Full).
+A1a,Start to Queen/Regent (10K/Half),10K,Half,0,0.9,0,0.9,uni,5,y,overtake,,Start along St John Street; Overtake unlikely.
+A1b,Queen/Regent to WSB mid-point (10K/Half),10K,Half,0.9,1.8,0.9,1.8,uni,5,y,overtake,A1a,Pointe St. Anne Blvd to half-way on WSB; Overtake unlikely.
+A1c,WSB mid-point to Friel (10K/Half),10K,Half,1.8,2.7,1.8,2.7,uni,5,y,overtake,A1b,Half-way on WSB; Overtake likely.
+A2a,Start to Queen/Regent (10K/Full),10K,Full,0,0.9,0,0.9,uni,5,y,overtake,,Start along St John Street; No Overtake expected
+A2b,Queen/Regent to WSB mid-point (10K/Full),10K,Full,0.9,1.8,0.9,1.8,uni,5,y,overtake,A2a,Pointe St. Anne Blvd to half-way on WSB; Overtake unlikely.
+A2c,WSB mid-point to Friel  (10KFull),10K,Full,1.8,2.7,1.8,2.7,uni,5,y,overtake,A2b,Half-way on WSB; Overtake possible (Fast 10K / Slow Full).
+A3a,Start to Queen/Regent (Half/Full),Half,Full,0,0.9,0,0.9,uni,5,y,overtake,,Start along St John Street; Overtake unlikely.
+A3b,Queen/Regent to WSB mid-point (Half/Full),Half,Full,0.9,1.8,0.9,1.8,uni,5,y,overtake,A3a,Pointe St. Anne Blvd to half-way on WSB; Overtake unlikely.
+A3c,WSB mid-point to Friel (Half/Full),Half,Full,1.8,2.7,1.8,2.7,uni,5,y,overtake,A3b,Half-way on WSB; Overtake possible (Fast Half / Slow Full).
 B1,Friel to 10K Turn (outbound),10K,Full,2.7,4.25,2.7,4.25,bi,1.5,y,overtake,,On Trail (1.5m lane); Overtake expected (Fast 10K / Slow Full).
 B2,Friel to 10K Turn (10K out/return),10K,10K,2.7,4.25,4.25,5.8,bi,1.5,n,,,On Trail (1.5m lane); 10K outbound and return from 10K Turn. No Overtake - simply Density.
 C1,10K Turn to Friel (10K slow vs Full fast),10K,Full,4.25,5.8,14.8,16.35,bi,1.5,y,overtake,,On Trail (1.5m lane); Expect Overtake by Fast Full / Slow 10K)
