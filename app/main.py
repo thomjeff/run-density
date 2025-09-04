@@ -13,7 +13,8 @@ from starlette.responses import JSONResponse
 from pydantic import BaseModel
 
 # Import new modules
-from app.density import analyze_density_segments, generate_density_narrative
+from app.density import analyze_density_segments
+from app.density_api import router as density_router
 from app.temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
 from app.report import generate_combined_report, generate_combined_narrative
 
@@ -45,10 +46,13 @@ class ReportRequest(BaseModel):
     includeOvertake: bool = True
     format: str = "json"
 
-app = FastAPI(title="run-density", version="v1.5.0")
+app = FastAPI(title="run-density", version="v1.6.0")
 APP_VERSION = os.getenv("APP_VERSION", app.version)
 GIT_SHA = os.getenv("GIT_SHA", "local")
 BUILD_AT = os.getenv("BUILD_AT", datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z")
+
+# Include density API router
+app.include_router(density_router)
 
 # Mount static files
 try:
@@ -59,7 +63,7 @@ except Exception as e:
 @app.get("/")
 async def root():
     return {
-        "message": "run-density API v1.5.0",
+        "message": "run-density API v1.6.0",
         "version": APP_VERSION,
         "architecture": "split",
         "endpoints": ["/api/density", "/api/temporal-flow", "/api/report", "/health"]
