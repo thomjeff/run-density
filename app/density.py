@@ -24,6 +24,44 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def load_density_cfg(path: str) -> Dict[str, dict]:
+    """
+    Load density configuration from density.csv.
+    
+    Args:
+        path: Path to density.csv file
+        
+    Returns:
+        Dictionary mapping segment_id to configuration dict
+    """
+    df = pd.read_csv(path)
+    
+    def y(row, col): 
+        return str(row.get(col, "")).strip().lower() == "y"
+    
+    cfg = {}
+    for _, r in df.iterrows():
+        events = tuple(e for e, col in [
+            ("Full", "full"), ("Half", "half"), ("10K", "10k")
+        ] if y(r, col))
+        
+        cfg[r["seg_id"]] = dict(
+            physical_name=str(r.get("physical_name", "")),
+            width_m=float(r["width_m"]),
+            direction=str(r.get("direction", "uni")),
+            events=events,
+            full_from_km=float(r.get("full_from_km", 0)) if r.get("full_from_km") != "" else None,
+            full_to_km=float(r.get("full_to_km", 0)) if r.get("full_to_km") != "" else None,
+            half_from_km=float(r.get("half_from_km", 0)) if r.get("half_from_km") != "" else None,
+            half_to_km=float(r.get("half_to_km", 0)) if r.get("half_to_km") != "" else None,
+            tenk_from_km=float(r.get("10k_from_km", 0)) if r.get("10k_from_km") != "" else None,
+            tenk_to_km=float(r.get("10k_to_km", 0)) if r.get("10k_to_km") != "" else None,
+            notes=str(r.get("notes", ""))
+        )
+    
+    return cfg
+
+
 class WidthProvider(Protocol):
     """Protocol for pluggable width calculation providers."""
     
@@ -72,6 +110,8 @@ class SegmentMeta:
     to_km: float
     width_m: float
     direction: str  # "uni" | "bi"
+    events: Tuple[str, ...] = ()  # DENSITY scope (e.g., ("Full","10K","Half"))
+    # Flow fields retained for completeness (used by temporal_flow.py, not by density):
     event_a: str = ""  # First event for this segment
     event_b: str = ""  # Second event for this segment
     
@@ -197,7 +237,8 @@ class DensityAnalyzer:
                                    segment: SegmentMeta,
                                    pace_data: pd.DataFrame,
                                    start_times: Dict[str, datetime],
-                                   time_bin_start: datetime) -> int:
+                                   time_bin_start: datetime,
+                                   density_cfg: dict = None) -> int:
         """
         Calculate concurrent runners in segment at a specific time.
         
@@ -217,9 +258,10 @@ class DensityAnalyzer:
         """
         time_bin_end = time_bin_start + timedelta(seconds=self.config.bin_seconds)
         
-        # Filter pace data to only include runners from the segment's events
-        segment_events = {segment.event_a, segment.event_b}
-        filtered_pace_data = pace_data[pace_data['event'].isin(segment_events)]
+        # Filter runners to the density scope
+        if not segment.events:
+            return 0
+        filtered_pace_data = pace_data[pace_data["event"].isin(segment.events)]
         
         if filtered_pace_data.empty:
             return 0
@@ -253,10 +295,41 @@ class DensityAnalyzer:
         positions_start_km = paces[started_mask] * time_elapsed_start[started_mask] / 3600
         positions_end_km = paces[started_mask] * time_elapsed_end[started_mask] / 3600
         
-        # Vectorized check for runners in segment
-        in_segment_mask = (positions_start_km < segment.to_km) & (positions_end_km > segment.from_km)
-        
-        return int(np.sum(in_segment_mask))
+        # Get event-specific km ranges from density configuration
+        if density_cfg:
+            total_concurrent = 0
+            
+            # Check each event's specific cumulative distance range
+            for event in segment.events:
+                if event == "Full" and density_cfg.get("full_from_km") is not None:
+                    from_km = density_cfg["full_from_km"]
+                    to_km = density_cfg["full_to_km"]
+                elif event == "Half" and density_cfg.get("half_from_km") is not None:
+                    from_km = density_cfg["half_from_km"]
+                    to_km = density_cfg["half_to_km"]
+                elif event == "10K" and density_cfg.get("tenk_from_km") is not None:
+                    from_km = density_cfg["tenk_from_km"]
+                    to_km = density_cfg["tenk_to_km"]
+                else:
+                    continue  # Skip events without km ranges
+                
+                # Filter to this event's runners
+                event_mask = event_ids[started_mask] == event
+                if not np.any(event_mask):
+                    continue
+                
+                # Check if runners are in this event's segment range
+                event_positions_start = positions_start_km[event_mask]
+                event_positions_end = positions_end_km[event_mask]
+                
+                in_segment_mask = (event_positions_start < to_km) & (event_positions_end > from_km)
+                total_concurrent += int(np.sum(in_segment_mask))
+            
+            return total_concurrent
+        else:
+            # Fallback to original logic if no density config
+            in_segment_mask = (positions_start_km < segment.to_km) & (positions_end_km > segment.from_km)
+            return int(np.sum(in_segment_mask))
     
     def _runner_in_segment(self, pos_start_km: float, pos_end_km: float, segment: SegmentMeta) -> bool:
         """
@@ -273,22 +346,50 @@ class DensityAnalyzer:
         # Runner is in segment if any part of their movement overlaps with segment
         return (pos_start_km < segment.to_km and pos_end_km > segment.from_km)
     
-    def calculate_density_metrics(self, concurrent_runners: int, segment: SegmentMeta) -> Tuple[float, float]:
+    def calculate_density_metrics(self, concurrent_runners: int, segment: SegmentMeta, density_cfg: dict = None) -> Tuple[float, float]:
         """
         Calculate areal and crowd density metrics.
         
         Args:
             concurrent_runners: Number of concurrent runners
             segment: Segment metadata
+            density_cfg: Density configuration with physical segment dimensions
             
         Returns:
             Tuple of (areal_density, crowd_density)
         """
+        if density_cfg:
+            # Use physical segment dimensions from density.csv
+            # Calculate physical segment length as the maximum span of all events
+            max_km = 0.0
+            min_km = float('inf')
+            
+            for event in segment.events:
+                if event == "Full" and density_cfg.get("full_from_km") is not None:
+                    min_km = min(min_km, density_cfg["full_from_km"])
+                    max_km = max(max_km, density_cfg["full_to_km"])
+                elif event == "Half" and density_cfg.get("half_from_km") is not None:
+                    min_km = min(min_km, density_cfg["half_from_km"])
+                    max_km = max(max_km, density_cfg["half_to_km"])
+                elif event == "10K" and density_cfg.get("tenk_from_km") is not None:
+                    min_km = min(min_km, density_cfg["tenk_from_km"])
+                    max_km = max(max_km, density_cfg["tenk_to_km"])
+            
+            if min_km == float('inf'):
+                min_km = 0.0
+            
+            physical_length_m = (max_km - min_km) * 1000
+            physical_area_m2 = physical_length_m * segment.width_m
+        else:
+            # Fallback to segment metadata
+            physical_length_m = segment.segment_length_m
+            physical_area_m2 = segment.area_m2
+        
         # Areal density: runners per square meter
-        areal_density = concurrent_runners / segment.area_m2 if segment.area_m2 > 0 else 0.0
+        areal_density = concurrent_runners / physical_area_m2 if physical_area_m2 > 0 else 0.0
         
         # Crowd density: runners per meter of course length
-        crowd_density = concurrent_runners / segment.segment_length_m if segment.segment_length_m > 0 else 0.0
+        crowd_density = concurrent_runners / physical_length_m if physical_length_m > 0 else 0.0
         
         return areal_density, crowd_density
     
@@ -400,7 +501,8 @@ class DensityAnalyzer:
                                  segment: SegmentMeta,
                                  pace_data: pd.DataFrame,
                                  start_times: Dict[str, datetime],
-                                 time_bins: List[datetime]) -> List[DensityResult]:
+                                 time_bins: List[datetime],
+                                 density_cfg: dict = None) -> List[DensityResult]:
         """
         Compute density time series for a segment.
         
@@ -426,11 +528,11 @@ class DensityAnalyzer:
             
             # Calculate concurrent runners (CRITICAL: density context, not flow context)
             concurrent_runners = self.calculate_concurrent_runners(
-                segment, pace_data, start_times, time_bin_start
+                segment, pace_data, start_times, time_bin_start, density_cfg
             )
             
             # Calculate density metrics
-            areal_density, crowd_density = self.calculate_density_metrics(concurrent_runners, segment)
+            areal_density, crowd_density = self.calculate_density_metrics(concurrent_runners, segment, density_cfg)
             
             # Classify LOS
             los_areal, los_crowd = self.classify_los(areal_density, crowd_density)
@@ -686,27 +788,27 @@ class DensityAnalyzer:
         )
 
 
-def analyze_density_segments(segments_df: pd.DataFrame,
-                           pace_data: pd.DataFrame,
-                           start_times: Dict[str, datetime],
-                           config: DensityConfig = None,
-                           width_provider: WidthProvider = None) -> Dict[str, Any]:
+def analyze_density_segments(pace_data: pd.DataFrame,
+                             start_times: Dict[str, datetime],
+                             config: DensityConfig = None,
+                             density_csv_path: str = "data/density.csv") -> Dict[str, Any]:
     """
-    Analyze density for all segments.
+    Analyze density for all segments using density.csv configuration.
     
     Args:
-        segments_df: DataFrame with segment information
         pace_data: DataFrame with runner pace data
         start_times: Dictionary of event start times
         config: Density analysis configuration
-        width_provider: Pluggable width provider (defaults to StaticWidthProvider)
+        density_csv_path: Path to density.csv file
         
     Returns:
         Dictionary with density analysis results
     """
     config = config or DensityConfig()
-    width_provider = width_provider or StaticWidthProvider(segments_df)
-    analyzer = DensityAnalyzer(config, width_provider)
+    analyzer = DensityAnalyzer(config, None)  # No width provider needed - using density.csv
+    
+    # Load density configuration
+    density_cfg = load_density_cfg(density_csv_path)
     
     # Generate time bins (same as temporal flow for alignment)
     earliest_start = min(start_times.values())
@@ -724,7 +826,7 @@ def analyze_density_segments(segments_df: pd.DataFrame,
     
     results = {
         "summary": {
-            "total_segments": len(segments_df),
+            "total_segments": len(density_cfg),
             "processed_segments": 0,
             "skipped_segments": 0,
             "analysis_start": analysis_start.isoformat(),
@@ -734,27 +836,40 @@ def analyze_density_segments(segments_df: pd.DataFrame,
         "segments": {}
     }
     
-    for _, segment_row in segments_df.iterrows():
-        # Use width provider for pluggable width calculation
-        width_m = width_provider.get_width(
-            segment_row['seg_id'],
-            segment_row['from_km_A'],
-            segment_row['to_km_A']
-        )
+    for seg_id, d in density_cfg.items():
+        # Calculate physical segment dimensions from all events
+        max_km = 0.0
+        min_km = float('inf')
         
+        for event in d["events"]:
+            if event == "Full" and d.get("full_from_km") is not None:
+                min_km = min(min_km, d["full_from_km"])
+                max_km = max(max_km, d["full_to_km"])
+            elif event == "Half" and d.get("half_from_km") is not None:
+                min_km = min(min_km, d["half_from_km"])
+                max_km = max(max_km, d["half_to_km"])
+            elif event == "10K" and d.get("tenk_from_km") is not None:
+                min_km = min(min_km, d["tenk_from_km"])
+                max_km = max(max_km, d["tenk_to_km"])
+        
+        if min_km == float('inf'):
+            min_km = 0.0
+        
+        # Create segment metadata from density.csv
         segment = SegmentMeta(
-            segment_id=segment_row['seg_id'],
-            from_km=segment_row['from_km_A'],
-            to_km=segment_row['to_km_A'],
-            width_m=width_m,
-            direction=segment_row['direction'],
-            event_a=segment_row['eventA'],
-            event_b=segment_row['eventB']
+            segment_id=seg_id,
+            from_km=min_km,  # Physical segment start
+            to_km=max_km,    # Physical segment end
+            width_m=d["width_m"],
+            direction=d["direction"],
+            events=d["events"],
+            event_a="",  # Not used in density analysis
+            event_b=""   # Not used in density analysis
         )
         
         # Compute density time series
         density_results = analyzer.compute_density_timeseries(
-            segment, pace_data, start_times, time_bins
+            segment, pace_data, start_times, time_bins, density_cfg[seg_id]
         )
         
         if density_results:
@@ -767,7 +882,9 @@ def analyze_density_segments(segments_df: pd.DataFrame,
             results["segments"][segment.segment_id] = {
                 "summary": summary,
                 "time_series": density_results,
-                "sustained_periods": sustained_periods
+                "sustained_periods": sustained_periods,
+                "events_included": list(d["events"]),
+                "physical_name": d["physical_name"]
             }
             results["summary"]["processed_segments"] += 1
         else:
