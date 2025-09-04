@@ -36,7 +36,7 @@ class StaticWidthProvider:
     """Static width provider using segments.csv data."""
     
     def __init__(self, segments_df: pd.DataFrame):
-        self.widths = dict(zip(segments_df['segment_id'], segments_df['width_m']))
+        self.widths = dict(zip(segments_df['seg_id'], segments_df['width_m']))
     
     def get_width(self, segment_id: str, from_km: float, to_km: float) -> float:
         """Get width from segments.csv data."""
@@ -189,13 +189,13 @@ class DensityAnalyzer:
         time_bin_end = time_bin_start + timedelta(seconds=self.config.bin_seconds)
         
         # Convert to NumPy arrays for vectorized operations
-        event_ids = pace_data['event_id'].values
+        event_ids = pace_data['event'].values
         start_offsets = pace_data['start_offset'].values
         paces = pace_data['pace'].values
         
         # Calculate actual start times for all runners
         actual_starts = np.array([
-            start_times[event_id] + timedelta(seconds=start_offset)
+            start_times[event_id] + timedelta(seconds=int(start_offset))
             for event_id, start_offset in zip(event_ids, start_offsets)
         ])
         
@@ -220,7 +220,7 @@ class DensityAnalyzer:
         # Vectorized check for runners in segment
         in_segment_mask = (positions_start_km < segment.to_km) & (positions_end_km > segment.from_km)
         
-        return np.sum(in_segment_mask)
+        return int(np.sum(in_segment_mask))
     
     def _runner_in_segment(self, pos_start_km: float, pos_end_km: float, segment: SegmentMeta) -> bool:
         """
@@ -554,15 +554,15 @@ def analyze_density_segments(segments_df: pd.DataFrame,
     for _, segment_row in segments_df.iterrows():
         # Use width provider for pluggable width calculation
         width_m = width_provider.get_width(
-            segment_row['segment_id'],
-            segment_row['from_km'],
-            segment_row['to_km']
+            segment_row['seg_id'],
+            segment_row['from_km_A'],
+            segment_row['to_km_A']
         )
         
         segment = SegmentMeta(
-            segment_id=segment_row['segment_id'],
-            from_km=segment_row['from_km'],
-            to_km=segment_row['to_km'],
+            segment_id=segment_row['seg_id'],
+            from_km=segment_row['from_km_A'],
+            to_km=segment_row['to_km_A'],
             width_m=width_m,
             direction=segment_row['direction']
         )
