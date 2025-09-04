@@ -117,7 +117,7 @@ async def get_test_status(test_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get test status: {str(e)}")
 
-def save_test_report(result_or_report):
+def save_test_report(result_or_report: Any) -> None:
     """Background task to save test report"""
     try:
         if isinstance(result_or_report, TestResult):

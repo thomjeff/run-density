@@ -18,30 +18,31 @@ from density_api import router as density_router
 from temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
 from report import generate_combined_report, generate_combined_narrative
 from test_api import test_router
+from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
 # Pydantic models for request bodies
 class AnalysisRequest(BaseModel):
     paceCsv: str
     segmentsCsv: str
     startTimes: Dict[str, int]
-    stepKm: float = 0.03
-    timeWindow: int = 300
+    stepKm: float = DEFAULT_STEP_KM
+    timeWindow: int = DEFAULT_TIME_WINDOW_SECONDS
     format: str = "json"
 
 class TemporalFlowRequest(BaseModel):
     paceCsv: str
     segmentsCsv: str
     startTimes: Dict[str, int]
-    minOverlapDuration: float = 5.0
-    conflictLengthM: float = 100.0
+    minOverlapDuration: float = DEFAULT_MIN_OVERLAP_DURATION
+    conflictLengthM: float = DEFAULT_CONFLICT_LENGTH_METERS
     format: str = "json"
 
 class ReportRequest(BaseModel):
     paceCsv: str
     segmentsCsv: str
     startTimes: Dict[str, int]
-    stepKm: float = 0.03
-    timeWindow: int = 300
+    stepKm: float = DEFAULT_STEP_KM
+    timeWindow: int = DEFAULT_TIME_WINDOW_SECONDS
     minOverlapDuration: float = 5.0
     includeDensity: bool = True
     includeOvertake: bool = True

@@ -11,54 +11,22 @@ import time
 from typing import Dict, Optional, Any, List, Tuple
 import pandas as pd
 import numpy as np
+from .constants import (
+    SECONDS_PER_MINUTE, SECONDS_PER_HOUR,
+    DEFAULT_CONVERGENCE_STEP_KM, DEFAULT_MIN_OVERLAP_DURATION, 
+    DEFAULT_CONFLICT_LENGTH_METERS, TEMPORAL_OVERLAP_TOLERANCE_SECONDS,
+    METERS_PER_KM, PACE_SIMILAR_THRESHOLD, PACE_MODERATE_DIFFERENCE_THRESHOLD
+)
+from .utils import load_pace_csv, arrival_time_sec, load_segments_csv
 
 
-def _load_pace_csv(url_or_path: str) -> pd.DataFrame:
-    """Load and validate pace CSV with proper column handling."""
-    df = pd.read_csv(url_or_path)
-    df.columns = [c.lower() for c in df.columns]
-    
-    # Ensure required columns exist
-    expected = {"event", "runner_id", "pace", "distance"}
-    if not expected.issubset(df.columns):
-        raise ValueError(f"your_pace_data.csv must have columns {sorted(expected)}; got {df.columns.tolist()}")
-    
-    # Handle optional start_offset column
-    if "start_offset" not in df.columns:
-        df["start_offset"] = 0
-    
-    # Convert to proper types
-    df["event"] = df["event"].astype(str)
-    df["runner_id"] = df["runner_id"].astype(str)
-    df["pace"] = df["pace"].astype(float)      # minutes per km
-    df["distance"] = df["distance"].astype(float)
-    df["start_offset"] = df["start_offset"].fillna(0).astype(int)
-    
-    return df
+# Use shared utility function from utils module
 
 
-def _load_segments_csv(url_or_path: str) -> pd.DataFrame:
-    """Load and validate segments CSV."""
-    df = pd.read_csv(url_or_path)
-    df.columns = [c.lower() for c in df.columns]
-    
-    # Ensure required columns exist
-    expected = {"seg_id", "eventa", "eventb", "from_km_a", "to_km_a", "from_km_b", "to_km_b", "overtake_flag"}
-    if not expected.issubset(df.columns):
-        raise ValueError(f"segments.csv must have columns {sorted(expected)}; got {df.columns.tolist()}")
-    
-    # Convert to proper types
-    df["from_km_a"] = df["from_km_a"].astype(float)
-    df["to_km_a"] = df["to_km_a"].astype(float)
-    df["from_km_b"] = df["from_km_b"].astype(float)
-    df["to_km_b"] = df["to_km_b"].astype(float)
-    
-    return df
+# Use shared utility function from utils module
 
 
-def _arrival_time_sec(start_min: float, start_offset_sec: int, km: float, pace_min_per_km: float) -> float:
-    """Calculate arrival time at km mark including start offset."""
-    return start_min * 60.0 + start_offset_sec + pace_min_per_km * 60.0 * km
+# Use shared utility function from utils module
 
 
 def calculate_convergence_point(
@@ -71,7 +39,7 @@ def calculate_convergence_point(
     to_km_a: float,
     from_km_b: float,
     to_km_b: float,
-    step_km: float = 0.01,
+    step_km: float = DEFAULT_CONVERGENCE_STEP_KM,
 ) -> Optional[float]:
     """
     Calculate convergence point ONLY when actual temporal overlaps occur.
@@ -93,8 +61,8 @@ def calculate_convergence_point(
         return None
 
     # Get absolute start times in seconds
-    start_a = start_times.get(eventA, 0) * 60.0
-    start_b = start_times.get(eventB, 0) * 60.0
+    start_a = start_times.get(eventA, 0) * SECONDS_PER_MINUTE
+    start_b = start_times.get(eventB, 0) * SECONDS_PER_MINUTE
 
     # Find the first location where actual temporal overlaps occur
     # We'll check multiple points along the segment to find where overlaps begin
@@ -135,7 +103,7 @@ def calculate_convergence_point(
         # Check for temporal overlaps at this point
         # A temporal overlap occurs when a runner from one event arrives
         # at the same time (within a small tolerance) as a runner from another event
-        tolerance_seconds = 5.0  # 5 second tolerance for "same time"
+        tolerance_seconds = TEMPORAL_OVERLAP_TOLERANCE_SECONDS  # tolerance for "same time"
         
         for time_a in arrival_times_a:
             for time_b in arrival_times_b:
@@ -480,8 +448,8 @@ def analyze_temporal_flow_segments(
     Processes ALL segments but only calculates convergence for overtake_flag = 'y' segments.
     """
     # Load data
-    pace_df = _load_pace_csv(pace_csv)
-    segments_df = _load_segments_csv(segments_csv)
+    pace_df = load_pace_csv(pace_csv)
+    segments_df = load_segments_csv(segments_csv)
     
     # Process ALL segments (not just overtake_flag = 'y')
     all_segments = segments_df.copy()
