@@ -111,6 +111,20 @@ class DensitySummary:
     los_areal_distribution: Dict[str, float]
     los_crowd_distribution: Dict[str, float]
     flags: List[str]
+    
+    # Active-window statistics (new)
+    active_start: Optional[str] = None
+    active_end: Optional[str] = None
+    active_duration_s: int = 0
+    occupancy_rate: float = 0.0
+    low_occupancy_flag: bool = False
+    active_peak_areal: float = 0.0
+    active_peak_crowd: float = 0.0
+    active_peak_concurrency: int = 0
+    active_p95_areal: float = 0.0
+    active_p95_crowd: float = 0.0
+    active_mean_areal: float = 0.0
+    active_mean_crowd: float = 0.0
 
 
 class DensityAnalyzer:
@@ -416,15 +430,23 @@ class DensityAnalyzer:
         
         return results
     
-    def summarize_density(self, results: List[DensityResult]) -> DensitySummary:
+    def summarize_density(self, results: List[DensityResult], 
+                         smooth_window: str = "120s",
+                         min_active_bins: int = 3,
+                         min_active_duration_s: int = 120,
+                         tot_from: str = "active") -> DensitySummary:
         """
         Summarize density analysis results for a segment.
         
         Args:
             results: List of DensityResult objects
+            smooth_window: Time window for smoothing (e.g., "120s")
+            min_active_bins: Minimum number of active bins required
+            min_active_duration_s: Minimum active duration in seconds
+            tot_from: TOT calculation source ("active" or "full")
             
         Returns:
-            DensitySummary object
+            DensitySummary object with both full-window and active-window statistics
         """
         if not results:
             return DensitySummary(
@@ -440,7 +462,10 @@ class DensityAnalyzer:
                 flags=["no_data"]
             )
         
-        # Find peak densities
+        # -------------------------
+        # FULL-WINDOW (existing)
+        # -------------------------
+        # Find peak densities from all results
         peak_areal_idx = max(range(len(results)), key=lambda i: results[i].areal_density)
         peak_crowd_idx = max(range(len(results)), key=lambda i: results[i].crowd_density)
         
@@ -456,7 +481,7 @@ class DensityAnalyzer:
             results[peak_crowd_idx].t_end
         ]
         
-        # Calculate TOT (Time Over Threshold)
+        # Calculate TOT (Time Over Threshold) from full window
         tot_areal_sec = sum(
             self.config.bin_seconds for result in results
             if result.areal_density >= self.config.threshold_areal
@@ -467,7 +492,7 @@ class DensityAnalyzer:
             if result.crowd_density >= self.config.threshold_crowd
         )
         
-        # Calculate LOS distributions
+        # Calculate LOS distributions from full window
         los_areal_counts = {}
         los_crowd_counts = {}
         
@@ -484,11 +509,94 @@ class DensityAnalyzer:
             level: count / total_bins for level, count in los_crowd_counts.items()
         }
         
+        # -------------------------
+        # ACTIVE-WINDOW (new)
+        # -------------------------
+        # Filter to active bins (concurrent_runners > 0)
+        active_results = [r for r in results if r.concurrent_runners > 0]
+        
+        if active_results:
+            # Calculate active window bounds
+            active_start = min(r.t_start for r in active_results)
+            active_end = max(r.t_end for r in active_results)
+            
+            # Convert to datetime objects for duration calculation
+            try:
+                active_start_dt = datetime.strptime(active_start, "%H:%M:%S")
+                active_end_dt = datetime.strptime(active_end, "%H:%M:%S")
+                active_duration = (active_end_dt - active_start_dt).total_seconds()
+            except ValueError:
+                # Fallback if time format is different
+                active_duration = len(active_results) * self.config.bin_seconds
+            
+            # Calculate occupancy rate
+            # Occupancy rate = active bins / total bins in the active time window
+            window_results = [r for r in results if r.t_start >= active_start and r.t_end <= active_end]
+            occupancy_rate = len(active_results) / len(window_results) if window_results else 0.0
+            
+            # Guardrails
+            low_occupancy = (len(active_results) < min_active_bins) or (active_duration < min_active_duration_s)
+            
+            # Calculate active-window statistics
+            active_areal_densities = [r.areal_density for r in active_results]
+            active_crowd_densities = [r.crowd_density for r in active_results]
+            active_concurrent_runners = [r.concurrent_runners for r in active_results]
+            
+            # Active-window peaks and statistics
+            active_peak_areal = max(active_areal_densities) if active_areal_densities else 0.0
+            active_peak_crowd = max(active_crowd_densities) if active_crowd_densities else 0.0
+            active_peak_concurrency = max(active_concurrent_runners) if active_concurrent_runners else 0
+            
+            # Calculate percentiles
+            active_p95_areal = np.percentile(active_areal_densities, 95) if active_areal_densities else 0.0
+            active_p95_crowd = np.percentile(active_crowd_densities, 95) if active_crowd_densities else 0.0
+            
+            # Calculate active means
+            active_mean_areal = np.mean(active_areal_densities) if active_areal_densities else 0.0
+            active_mean_crowd = np.mean(active_crowd_densities) if active_crowd_densities else 0.0
+            
+            # Calculate TOT from active window if requested
+            if tot_from == "active":
+                tot_areal_sec = sum(
+                    self.config.bin_seconds for result in active_results
+                    if result.areal_density >= self.config.threshold_areal
+                )
+                
+                tot_crowd_sec = sum(
+                    self.config.bin_seconds for result in active_results
+                    if result.crowd_density >= self.config.threshold_crowd
+                )
+            
+            # Add active-window flags
+            active_flags = ["active_window_available"]
+            if low_occupancy:
+                active_flags.append("low_occupancy")
+            if occupancy_rate < 0.5:
+                active_flags.append("low_occupancy_rate")
+                
+        else:
+            # No active results
+            active_start = None
+            active_end = None
+            active_duration = 0
+            occupancy_rate = 0.0
+            low_occupancy = True
+            active_peak_areal = 0.0
+            active_peak_crowd = 0.0
+            active_peak_concurrency = 0
+            active_p95_areal = 0.0
+            active_p95_crowd = 0.0
+            active_mean_areal = 0.0
+            active_mean_crowd = 0.0
+            active_flags = ["no_active_bins"]
+        
         # Collect all flags
         all_flags = set()
         for result in results:
             all_flags.update(result.flags)
+        all_flags.update(active_flags)
         
+        # Create enhanced DensitySummary with active-window data
         return DensitySummary(
             segment_id=results[0].segment_id,
             peak_areal_density=peak_areal_density,
@@ -499,7 +607,20 @@ class DensityAnalyzer:
             tot_crowd_sec=tot_crowd_sec,
             los_areal_distribution=los_areal_distribution,
             los_crowd_distribution=los_crowd_distribution,
-            flags=list(all_flags)
+            flags=list(all_flags),
+            # Active-window data
+            active_start=active_start,
+            active_end=active_end,
+            active_duration_s=int(active_duration),
+            occupancy_rate=occupancy_rate,
+            low_occupancy_flag=low_occupancy,
+            active_peak_areal=active_peak_areal,
+            active_peak_crowd=active_peak_crowd,
+            active_peak_concurrency=active_peak_concurrency,
+            active_p95_areal=active_p95_areal,
+            active_p95_crowd=active_p95_crowd,
+            active_mean_areal=active_mean_areal,
+            active_mean_crowd=active_mean_crowd
         )
 
 
