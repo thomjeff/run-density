@@ -447,8 +447,8 @@ class TemporalFlowTests:
             comparison_df = pd.DataFrame(comparison_data)
             
             # Save comparison CSV
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            csv_filename = f"temporal_flow_comparison_report_{timestamp}.csv"
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+            csv_filename = f"{timestamp} Temporal Flow Compare.csv"
             comparison_df.to_csv(csv_filename, index=False)
             
             # Calculate summary statistics
