@@ -11,8 +11,8 @@ from typing import Dict, Optional, Any, List
 import pandas as pd
 from datetime import datetime
 
-from .density import analyze_density_segments, generate_density_narrative
-from .temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
+from density import analyze_density_segments
+from temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
 
 
 def generate_combined_report(
