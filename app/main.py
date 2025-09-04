@@ -13,10 +13,11 @@ from starlette.responses import JSONResponse
 from pydantic import BaseModel
 
 # Import new modules
-from app.density import analyze_density_segments
-from app.density_api import router as density_router
-from app.temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
-from app.report import generate_combined_report, generate_combined_narrative
+from density import analyze_density_segments
+from density_api import router as density_router
+from temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
+from report import generate_combined_report, generate_combined_narrative
+from test_api import test_router
 
 # Pydantic models for request bodies
 class AnalysisRequest(BaseModel):
@@ -53,6 +54,7 @@ BUILD_AT = os.getenv("BUILD_AT", datetime.datetime.now(datetime.timezone.utc).is
 
 # Include density API router
 app.include_router(density_router)
+app.include_router(test_router)
 
 # Mount static files
 try:
@@ -73,22 +75,8 @@ async def root():
 async def health_check():
     return {"status": "healthy", "version": APP_VERSION}
 
-@app.post("/api/density")
-async def analyze_density(request: AnalysisRequest):
-    try:
-        results = analyze_density_segments(
-            pace_csv=request.paceCsv, 
-            segments_csv=request.segmentsCsv, 
-            start_times=request.startTimes, 
-            step_km=request.stepKm, 
-            time_window_s=request.timeWindow
-        )
-        if request.format == "text":
-            narrative = generate_density_narrative(results)
-            return Response(content=narrative, media_type="text/plain")
-        return JSONResponse(content=results)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Density analysis failed: {str(e)}")
+# Density analysis is now handled by the density API router
+# @app.post("/api/density") - moved to density_api.py
 
 @app.post("/api/temporal-flow")
 async def analyze_temporal_flow(request: TemporalFlowRequest):

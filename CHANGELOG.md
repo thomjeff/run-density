@@ -1,5 +1,56 @@
 # Changelog
 
+## [v1.6.0] - 2025-09-03
+
+### Added
+- **Density Analysis Engine**: Complete spatial concentration analysis module with areal and crowd density calculations
+- **Density API Endpoints**: Full FastAPI integration with RESTful endpoints for density analysis
+- **Comprehensive Test Suite**: 279 test cases with 100% pass rate for density analysis validation
+- **Performance Optimizations**: NumPy vectorized operations for concurrent runner calculations
+- **Narrative Smoothing**: Sustained period analysis to avoid per-bin noise in reporting
+- **Pluggable Width Providers**: Architecture for future GPX-based dynamic width calculation
+- **Critical Validation System**: Edge case handling for short segments, invalid width_m, and data quality issues
+
+### Density Analysis Features
+- **Areal Density**: Runners per square meter (runners/m²) for spatial concentration analysis
+- **Crowd Density**: Runners per meter of course length (runners/m) for linear concentration
+- **Level of Service (LOS) Classification**: 
+  - Areal: Comfortable (<1.0), Busy (1.0-1.8), Constrained (≥1.8)
+  - Crowd: Low (<1.5), Medium (1.5-3.0), High (≥3.0)
+- **Time-Over-Threshold (TOT) Metrics**: Operational planning for high-density periods
+- **Sustained Period Analysis**: Minimum 2-minute sustained LOS periods for meaningful insights
+- **Independent Runner Counts**: Density calculates ALL runners in segment (different from temporal flow context)
+
+### API Integration
+- **POST /api/density/analyze**: Full density analysis for all segments
+- **GET /api/density/segment/{segment_id}**: Single segment analysis with detailed results
+- **GET /api/density/summary**: Summary data for all segments
+- **GET /api/density/health**: Health check endpoint
+- **Configurable Parameters**: JSON configuration overrides for all density parameters
+- **Width Provider Selection**: Static (segments.csv) or dynamic (future GPX) width calculation
+
+### Technical Implementation
+- **Data Structures**: Dataclass-based design with DensityConfig, SegmentMeta, DensityResult, DensitySummary
+- **Validation System**: Comprehensive segment validation with flagging (width_missing, short_segment, edge_case)
+- **Performance**: Vectorized NumPy operations for 36 segments × thousands of time bins
+- **Error Handling**: Robust error handling with proper logging and graceful degradation
+- **Integration**: Seamless integration with existing FastAPI architecture (v1.6.0)
+
+### Testing & Validation
+- **Comprehensive Test Suite**: 279 test cases covering all functionality
+- **100% Pass Rate**: All tests passing with proper tolerances (epsilon 1e-6, ±1 bin tolerance)
+- **Performance Validation**: <5s single segment, <120s all segments analysis
+- **Edge Case Testing**: Short segments, invalid width_m, boundary values, narrative smoothing
+- **Real Data Validation**: All 36 segments processed successfully with real pace data
+
+### Files
+- `app/density.py` - Core density analysis engine with all calculations and validation
+- `app/density_api.py` - FastAPI endpoints for density analysis
+- `test_density_comprehensive.py` - Comprehensive test suite with 279 test cases
+- `density_test_results.json` - Test results with 100% pass rate
+- `docs/v1.6.0-density-analysis-requirements.md` - Complete requirements and workplan
+- `app/main.py` - Updated to v1.6.0 with density API integration
+
 ## [v1.5.0] - 2025-09-03
 
 ### Added
