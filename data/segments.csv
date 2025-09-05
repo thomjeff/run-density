@@ -25,7 +25,7 @@ I1,Bridge/Mill to Half Turn (Half + Full co-direction),Half,Full,10.75,13.43,29.
 J1,Half Turn to Full Turn (Full outbound spur),Full,Full,31.64,33.11,31.64,33.11,uni,1.5,n,,,On Trail (1.5m lane) Full outbound to Full Turn.
 J2,Full Turn to Half Turn (Full returning spur),Full,Full,33.11,34.34,33.11,34.34,uni,1.5,n,,,On Trail (1.5m lane) Full returning from Full Turn to Half Turn.
 K1,Half Turn to Bridge/Mill (Half + Full co-direction return),Half,Full,13.43,16.02,34.34,36.93,uni,1.5,n,,,On Trail (1.5m lane) from Half Turn to Bridge/Mill. Full & Half
-K2,Half Turn to Bridge/Mill (Slow Half / Fast Full),Full,Half,34.34,37.12,10.75,13.43,bi,1.5,n,,,On Trail (1.5m lane) with Slow Half meeting Fast Full on Bridge/Mill to Half Turn.
+K2,Half Turn to Bridge/Mill (Slow Half / Fast Full),Full,Half,34.34,36.93,10.75,13.43,bi,1.5,n,,,On Trail (1.5m lane) with Slow Half meeting Fast Full on Bridge/Mill to Half Turn.
 L1,Bridge/Mill to Station Rd. (Full and Half),Full,Half,37.12,40.57,16.02,19.47,bi,3,y,overtake,,"On Trail (3.0m, two lanes), with Full/Half returning from Marysville to Station Rd."
 M1a,Station Rd. to Trail/Aberdeen,10K,Half,8.1,9.75,19.2,20.85,bi,1.5,y,merge,,On Trail (1.5m lane) with this segment having runners from all events.
 M1b,Station Rd. to Trail/Aberdeen,10K,Full,8.1,9.75,18.65,20.3,uni,1.5,y,merge,M1a,On Trail (1.5m lane) with this segment having runners from all events.
