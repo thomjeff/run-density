@@ -764,10 +764,16 @@ class DensityAnalyzer:
         
         # Filter runners to the density scope
         if not segment.events:
+            logging.debug(f"Segment {segment.seg_id}: No events configured, returning 0 runners")
             return 0
         filtered_pace_data = pace_data[pace_data["event"].isin(segment.events)]
         
+        # Log physical dimensions and runner counts for debugging
+        logging.debug(f"Segment {segment.seg_id}: Physical length={segment.length_m:.1f}m, width={segment.width_m:.1f}m, area={segment.length_m * segment.width_m:.1f}m²")
+        logging.debug(f"Segment {segment.seg_id}: Events={segment.events}, filtered runners={len(filtered_pace_data)}")
+        
         if filtered_pace_data.empty:
+            logging.debug(f"Segment {segment.seg_id}: No runners in filtered data, returning 0")
             return 0
         
         # Convert to NumPy arrays for vectorized operations
@@ -862,6 +868,8 @@ class DensityAnalyzer:
         Returns:
             Tuple of (areal_density, crowd_density)
         """
+        # Log density calculation inputs for debugging
+        logging.debug(f"Segment {segment.seg_id}: Calculating density for {concurrent_runners} concurrent runners")
         if density_cfg:
             # Use physical segment dimensions from density.csv
             # Calculate physical segment length as the maximum span of all events
@@ -894,6 +902,9 @@ class DensityAnalyzer:
         
         # Crowd density: runners per meter of course length
         crowd_density = concurrent_runners / physical_length_m if physical_length_m > 0 else 0.0
+        
+        # Log density calculation results for debugging
+        logging.debug(f"Segment {segment.seg_id}: Calculated densities - areal={areal_density:.3f} runners/m², crowd={crowd_density:.3f} runners/m")
         
         return areal_density, crowd_density
     
