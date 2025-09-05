@@ -21,7 +21,7 @@ try:
     from .temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
     from .temporal_flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
     from .report import generate_combined_report, generate_combined_narrative
-    from .test_api import test_router
+    # from .test_api import test_router  # Disabled for Cloud Run deployment
     from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 except ImportError:
     # Fall back to absolute imports (for Cloud Run)
@@ -31,7 +31,7 @@ except ImportError:
     from temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
     from temporal_flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
     from report import generate_combined_report, generate_combined_narrative
-    from test_api import test_router
+    # from test_api import test_router  # Disabled for Cloud Run deployment
     from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
 # Pydantic models for request bodies
@@ -86,7 +86,7 @@ BUILD_AT = os.getenv("BUILD_AT", datetime.datetime.now(datetime.timezone.utc).is
 
 # Include density API router
 app.include_router(density_router)
-app.include_router(test_router)
+# app.include_router(test_router)  # Disabled for Cloud Run deployment
 
 # Mount static files
 try:
