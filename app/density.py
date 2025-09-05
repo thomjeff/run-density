@@ -100,6 +100,7 @@ class DensityConfig:
     min_segment_length_m: float = 50.0  # Skip segments shorter than this
     epsilon: float = 1e-6  # For float comparisons
     min_sustained_period_minutes: int = 2  # For narrative smoothing
+    step_km: float = 0.3  # Step size for sub-segment binning (300m bins)
 
 
 @dataclass(frozen=True)
@@ -232,6 +233,127 @@ class DensityAnalyzer:
             logger.info(f"Segment {segment.segment_id} is edge case: {segment.segment_length_m}m")
         
         return True, flags
+    
+    def calculate_concurrent_runners_union(self, 
+                                          segment: SegmentMeta,
+                                          pace_data: pd.DataFrame,
+                                          start_times: Dict[str, datetime],
+                                          time_bin_start: datetime,
+                                          density_cfg: dict = None) -> int:
+        """
+        Calculate concurrent runners using union-of-intervals approach to avoid overcounting.
+        
+        This method correctly counts unique runner_ids present in the segment at time t,
+        rather than summing per-distance-bin counts which can double-count runners.
+        
+        Args:
+            segment: Segment metadata
+            pace_data: Runner pace data with start_offset
+            start_times: Event start times
+            time_bin_start: Start of the time bin
+            density_cfg: Density configuration with event-specific km ranges
+            
+        Returns:
+            Number of unique concurrent runners in the segment
+        """
+        time_bin_end = time_bin_start + timedelta(seconds=self.config.bin_seconds)
+        
+        # Filter runners to the density scope
+        if not segment.events:
+            return 0
+        filtered_pace_data = pace_data[pace_data["event"].isin(segment.events)]
+        
+        if filtered_pace_data.empty:
+            return 0
+        
+        # Convert to NumPy arrays for vectorized operations
+        event_ids = filtered_pace_data['event'].values
+        start_offsets = filtered_pace_data['start_offset'].values
+        paces = filtered_pace_data['pace'].values
+        
+        # Calculate actual start times for all runners
+        actual_starts = np.array([
+            start_times[event_id] + timedelta(seconds=int(start_offset))
+            for event_id, start_offset in zip(event_ids, start_offsets)
+        ])
+        
+        # Convert to seconds since epoch for vectorized operations
+        time_bin_start_sec = time_bin_start.timestamp()
+        time_bin_end_sec = time_bin_end.timestamp()
+        actual_starts_sec = np.array([start.timestamp() for start in actual_starts])
+        
+        # Calculate time elapsed for each runner
+        time_elapsed_start = time_bin_start_sec - actual_starts_sec
+        time_elapsed_end = time_bin_end_sec - actual_starts_sec
+        
+        # Filter runners who have started
+        started_mask = time_elapsed_start >= 0
+        if not np.any(started_mask):
+            return 0
+        
+        # Calculate positions for started runners
+        positions_start_km = paces[started_mask] * time_elapsed_start[started_mask] / 3600
+        positions_end_km = paces[started_mask] * time_elapsed_end[started_mask] / 3600
+        
+        # Build union of intervals for all events in this segment
+        intervals = []
+        if density_cfg:
+            for event in segment.events:
+                if event == "Full" and density_cfg.get("full_from_km") is not None:
+                    intervals.append((density_cfg["full_from_km"], density_cfg["full_to_km"]))
+                elif event == "Half" and density_cfg.get("half_from_km") is not None:
+                    intervals.append((density_cfg["half_from_km"], density_cfg["half_to_km"]))
+                elif event == "10K" and density_cfg.get("tenk_from_km") is not None:
+                    intervals.append((density_cfg["tenk_from_km"], density_cfg["tenk_to_km"]))
+        
+        if not intervals:
+            return 0
+        
+        # Merge overlapping intervals
+        intervals.sort()
+        merged_intervals = []
+        for start, end in intervals:
+            if not merged_intervals or merged_intervals[-1][1] < start:
+                merged_intervals.append((start, end))
+            else:
+                # Merge with previous interval
+                merged_intervals[-1] = (merged_intervals[-1][0], max(merged_intervals[-1][1], end))
+        
+        # Check runner presence in any of the merged intervals
+        in_any_interval = np.zeros(len(positions_start_km), dtype=bool)
+        for interval_start, interval_end in merged_intervals:
+            in_interval = (positions_start_km < interval_end) & (positions_end_km > interval_start)
+            in_any_interval |= in_interval
+        
+        return int(np.sum(in_any_interval))
+    
+    def validate_population_bounds(self, 
+                                 segment_id: str, 
+                                 concurrent_runners: int, 
+                                 included_events: List[str], 
+                                 pace_data: pd.DataFrame) -> List[str]:
+        """
+        Validate that segment concurrency doesn't exceed total registered runners.
+        
+        Args:
+            segment_id: Segment identifier
+            concurrent_runners: Calculated concurrent runners
+            included_events: List of events included in this segment
+            pace_data: Full pace data to count total runners
+            
+        Returns:
+            List of validation flags
+        """
+        flags = []
+        
+        # Count total registered runners for included events
+        total_registered = len(pace_data[pace_data["event"].isin(included_events)])
+        
+        if concurrent_runners > total_registered:
+            flags.append(f"overcount_suspected: {concurrent_runners} > {total_registered}")
+            logger.warning(f"Segment {segment_id}: concurrent_runners ({concurrent_runners}) > total_registered ({total_registered})")
+        
+        return flags
     
     def calculate_concurrent_runners(self, 
                                    segment: SegmentMeta,
@@ -393,6 +515,130 @@ class DensityAnalyzer:
         
         return areal_density, crowd_density
     
+    def calculate_density_with_binning(self, 
+                                     segment: SegmentMeta,
+                                     pace_data: pd.DataFrame,
+                                     start_times: Dict[str, datetime],
+                                     time_bin_start: datetime,
+                                     density_cfg: dict = None) -> Tuple[float, float, Dict]:
+        """
+        Calculate density using step-based binning for more accurate local density.
+        
+        This method subdivides the segment into bins of step_km size and calculates
+        density for each bin, then returns the peak bin density and aggregated metrics.
+        
+        Args:
+            segment: Segment metadata
+            pace_data: Runner pace data
+            start_times: Event start times
+            time_bin_start: Start of the time bin
+            density_cfg: Density configuration with event-specific km ranges
+            
+        Returns:
+            Tuple of (peak_areal_density, peak_crowd_density, bin_details)
+        """
+        if not segment.events or not density_cfg:
+            return 0.0, 0.0, {}
+        
+        # Calculate physical segment boundaries
+        max_km = 0.0
+        min_km = float('inf')
+        
+        for event in segment.events:
+            if event == "Full" and density_cfg.get("full_from_km") is not None:
+                min_km = min(min_km, density_cfg["full_from_km"])
+                max_km = max(max_km, density_cfg["full_to_km"])
+            elif event == "Half" and density_cfg.get("half_from_km") is not None:
+                min_km = min(min_km, density_cfg["half_from_km"])
+                max_km = max(max_km, density_cfg["half_to_km"])
+            elif event == "10K" and density_cfg.get("tenk_from_km") is not None:
+                min_km = min(min_km, density_cfg["tenk_from_km"])
+                max_km = max(max_km, density_cfg["tenk_to_km"])
+        
+        if min_km == float('inf'):
+            return 0.0, 0.0, {}
+        
+        # Create bins within the physical segment
+        step_km = self.config.step_km
+        bin_starts = []
+        bin_ends = []
+        
+        current_km = min_km
+        while current_km < max_km:
+            bin_start = current_km
+            bin_end = min(current_km + step_km, max_km)
+            
+            # Only add bins with meaningful length (avoid floating-point precision issues)
+            if bin_end - bin_start > self.config.epsilon:
+                bin_starts.append(bin_start)
+                bin_ends.append(bin_end)
+            
+            current_km = bin_end
+        
+        if not bin_starts:
+            return 0.0, 0.0, {}
+        
+        # Calculate density for each bin
+        bin_densities = []
+        bin_details = {
+            "bins": [],
+            "peak_bin_index": 0,
+            "total_concurrent": 0
+        }
+        
+        peak_areal_density = 0.0
+        peak_crowd_density = 0.0
+        total_concurrent = 0
+        
+        for i, (bin_start, bin_end) in enumerate(zip(bin_starts, bin_ends)):
+            # Create a temporary segment for this bin
+            bin_segment = SegmentMeta(
+                segment_id=f"{segment.segment_id}_bin_{i}",
+                from_km=bin_start,
+                to_km=bin_end,
+                width_m=segment.width_m,
+                direction=segment.direction,
+                events=segment.events
+            )
+            
+            # Calculate concurrent runners in this bin
+            bin_concurrent = self.calculate_concurrent_runners(
+                bin_segment, pace_data, start_times, time_bin_start, density_cfg
+            )
+            
+            # Calculate bin dimensions
+            bin_length_m = (bin_end - bin_start) * 1000
+            bin_area_m2 = bin_length_m * segment.width_m
+            
+            # Calculate densities for this bin
+            bin_areal_density = bin_concurrent / bin_area_m2 if bin_area_m2 > 0 else 0.0
+            bin_crowd_density = bin_concurrent / bin_length_m if bin_length_m > 0 else 0.0
+            
+            bin_densities.append({
+                "bin_index": i,
+                "from_km": bin_start,
+                "to_km": bin_end,
+                "length_m": bin_length_m,
+                "area_m2": bin_area_m2,
+                "concurrent_runners": bin_concurrent,
+                "areal_density": bin_areal_density,
+                "crowd_density": bin_crowd_density
+            })
+            
+            total_concurrent += bin_concurrent
+            
+            # Track peak densities
+            if bin_areal_density > peak_areal_density:
+                peak_areal_density = bin_areal_density
+                bin_details["peak_bin_index"] = i
+            if bin_crowd_density > peak_crowd_density:
+                peak_crowd_density = bin_crowd_density
+        
+        bin_details["bins"] = bin_densities
+        bin_details["total_concurrent"] = total_concurrent
+        
+        return peak_areal_density, peak_crowd_density, bin_details
+    
     def classify_los(self, areal_density: float, crowd_density: float) -> Tuple[str, str]:
         """
         Classify Level of Service for areal and crowd density.
@@ -425,6 +671,7 @@ class DensityAnalyzer:
         Smooth narrative transitions to avoid per-bin noise.
         
         CRITICAL: Reports sustained periods rather than per-bin fluctuations.
+        Only processes active bins (where concurrent_runners > 0) to avoid spurious tails.
         
         Args:
             results: List of DensityResult objects
@@ -435,6 +682,12 @@ class DensityAnalyzer:
         if not results:
             return []
         
+        # Filter to active bins only (avoids spurious 13:40:30 tails)
+        active_results = [r for r in results if r.concurrent_runners > 0]
+        
+        if not active_results:
+            return []
+        
         sustained_periods = []
         min_sustained_bins = (self.config.min_sustained_period_minutes * 60) // self.config.bin_seconds
         
@@ -443,7 +696,7 @@ class DensityAnalyzer:
         current_crowd_los = None
         current_start_idx = 0
         
-        for i, result in enumerate(results):
+        for i, result in enumerate(active_results):
             # Check for LOS changes
             if (result.los_areal != current_areal_los or 
                 result.los_crowd != current_crowd_los):
@@ -453,19 +706,19 @@ class DensityAnalyzer:
                     i - current_start_idx >= min_sustained_bins):
                     
                     sustained_periods.append({
-                        "start_time": results[current_start_idx].t_start,
-                        "end_time": results[i-1].t_end,
+                        "start_time": active_results[current_start_idx].t_start,
+                        "end_time": active_results[i-1].t_end,
                         "duration_minutes": (i - current_start_idx) * self.config.bin_seconds / 60,
                         "los_areal": current_areal_los,
                         "los_crowd": current_crowd_los,
                         "avg_areal_density": np.mean([
-                            r.areal_density for r in results[current_start_idx:i]
+                            r.areal_density for r in active_results[current_start_idx:i]
                         ]),
                         "avg_crowd_density": np.mean([
-                            r.crowd_density for r in results[current_start_idx:i]
+                            r.crowd_density for r in active_results[current_start_idx:i]
                         ]),
                         "peak_concurrent_runners": max([
-                            r.concurrent_runners for r in results[current_start_idx:i]
+                            r.concurrent_runners for r in active_results[current_start_idx:i]
                         ])
                     })
                 
@@ -476,22 +729,22 @@ class DensityAnalyzer:
         
         # Handle final period
         if (current_areal_los is not None and 
-            len(results) - current_start_idx >= min_sustained_bins):
+            len(active_results) - current_start_idx >= min_sustained_bins):
             
             sustained_periods.append({
-                "start_time": results[current_start_idx].t_start,
-                "end_time": results[-1].t_end,
-                "duration_minutes": (len(results) - current_start_idx) * self.config.bin_seconds / 60,
+                "start_time": active_results[current_start_idx].t_start,
+                "end_time": active_results[-1].t_end,
+                "duration_minutes": (len(active_results) - current_start_idx) * self.config.bin_seconds / 60,
                 "los_areal": current_areal_los,
                 "los_crowd": current_crowd_los,
                 "avg_areal_density": np.mean([
-                    r.areal_density for r in results[current_start_idx:]
+                    r.areal_density for r in active_results[current_start_idx:]
                 ]),
                 "avg_crowd_density": np.mean([
-                    r.crowd_density for r in results[current_start_idx:]
+                    r.crowd_density for r in active_results[current_start_idx:]
                 ]),
                 "peak_concurrent_runners": max([
-                    r.concurrent_runners for r in results[current_start_idx:]
+                    r.concurrent_runners for r in active_results[current_start_idx:]
                 ])
             })
         
@@ -526,13 +779,20 @@ class DensityAnalyzer:
         for time_bin_start in time_bins:
             time_bin_end = time_bin_start + timedelta(seconds=self.config.bin_seconds)
             
-            # Calculate concurrent runners (CRITICAL: density context, not flow context)
-            concurrent_runners = self.calculate_concurrent_runners(
+            # Calculate segment concurrency using union-of-intervals (avoids overcounting)
+            concurrent_runners = self.calculate_concurrent_runners_union(
                 segment, pace_data, start_times, time_bin_start, density_cfg
             )
             
-            # Calculate density metrics
-            areal_density, crowd_density = self.calculate_density_metrics(concurrent_runners, segment, density_cfg)
+            # Validate population bounds
+            validation_flags = self.validate_population_bounds(
+                segment.segment_id, concurrent_runners, list(segment.events), pace_data
+            )
+            
+            # Calculate density metrics using segment-level concurrency
+            areal_density, crowd_density = self.calculate_density_metrics(
+                concurrent_runners, segment, density_cfg
+            )
             
             # Classify LOS
             los_areal, los_crowd = self.classify_los(areal_density, crowd_density)
@@ -547,7 +807,7 @@ class DensityAnalyzer:
                 crowd_density=crowd_density,
                 los_areal=los_areal,
                 los_crowd=los_crowd,
-                flags=flags.copy()
+                flags=flags.copy() + validation_flags
             )
             
             results.append(result)
