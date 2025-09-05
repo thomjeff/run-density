@@ -13,10 +13,10 @@ from datetime import datetime
 import os
 
 try:
-    from .temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
+    from .flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
     from .constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 except ImportError:
-    from temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
+    from flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
     from constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
 
