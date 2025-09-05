@@ -3,33 +3,9 @@ import time
 from typing import Dict, Optional, Any, List, Tuple
 import pandas as pd
 import numpy as np
+from .utils import load_pace_csv, arrival_time_sec
 
-def _load_pace_csv(url_or_path: str) -> pd.DataFrame:
-    """Load and validate pace CSV with proper column handling."""
-    df = pd.read_csv(url_or_path)
-    df.columns = [c.lower() for c in df.columns]
-    
-    # Ensure required columns exist
-    expected = {"event", "runner_id", "pace", "distance"}
-    if not expected.issubset(df.columns):
-        raise ValueError(f"your_pace_data.csv must have columns {sorted(expected)}; got {df.columns.tolist()}")
-    
-    # Handle optional start_offset column
-    if "start_offset" not in df.columns:
-        df["start_offset"] = 0
-    
-    # Convert to proper types
-    df["event"] = df["event"].astype(str)
-    df["runner_id"] = df["runner_id"].astype(str)
-    df["pace"] = df["pace"].astype(float)      # minutes per km
-    df["distance"] = df["distance"].astype(float)
-    df["start_offset"] = df["start_offset"].fillna(0).astype(int)
-    
-    return df
-
-def _arrival_time_sec(start_min: float, start_offset_sec: int, km: float, pace_min_per_km: float) -> float:
-    """Calculate arrival time at km mark including start offset."""
-    return start_min * 60.0 + start_offset_sec + pace_min_per_km * 60.0 * km
+# Use shared utility functions from utils module
 
 def analyze_overlaps(
     pace_csv: str,
@@ -53,7 +29,7 @@ def analyze_overlaps(
       }
     """
     t0 = time.perf_counter()
-    df = _load_pace_csv(pace_csv).copy()
+    df = load_pace_csv(pace_csv).copy()
     
     # Convert start times to seconds and add to dataframe
     df["start_sec"] = df["event"].map({k: float(v)*60.0 for k,v in start_times.items()}).astype(float)

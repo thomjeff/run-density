@@ -1,0 +1,20 @@
+{
+  "summary": {
+    "total_tests": 1,
+    "passed": 1,
+    "failed": 0,
+    "errors": 0,
+    "success_rate": 100.0,
+    "timestamp": "2025-09-04T13:36:16.229754"
+  },
+  "results": [
+    {
+      "test_id": "temporal_flow_comprehensive",
+      "status": "PASS",
+      "message": "Test completed",
+      "details": {},
+      "execution_time": 25.15569806098938,
+      "timestamp": "2025-09-04T13:36:16.229710"
+    }
+  ]
+}

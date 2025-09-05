@@ -11,17 +11,18 @@ from typing import Dict, Optional, Any, List
 import pandas as pd
 from datetime import datetime
 
-from .density import analyze_density_segments, generate_density_narrative
+from .density import analyze_density_segments
 from .temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
+from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
 
 def generate_combined_report(
     pace_csv: str,
     segments_csv: str,
     start_times: Dict[str, float],
-    step_km: float = 0.03,
-    time_window_s: float = 300.0,
-    min_overlap_duration: float = 5.0,
+    step_km: float = DEFAULT_STEP_KM,
+    time_window_s: float = DEFAULT_TIME_WINDOW_SECONDS,
+    min_overlap_duration: float = DEFAULT_MIN_OVERLAP_DURATION,
     include_density: bool = True,
     include_overtake: bool = True,
 ) -> Dict[str, Any]:
@@ -77,7 +78,7 @@ def generate_combined_report(
     if include_overtake:
         try:
             overtake_results = analyze_temporal_flow_segments(
-                pace_csv, segments_csv, start_times, min_overlap_duration, 100.0
+                pace_csv, segments_csv, start_times, min_overlap_duration, DEFAULT_CONFLICT_LENGTH_METERS
             )
             results["overtake_analysis"] = overtake_results
             results["summary"]["overtake_segments"] = overtake_results["total_segments"]

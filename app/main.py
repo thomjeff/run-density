@@ -13,42 +13,68 @@ from starlette.responses import JSONResponse
 from pydantic import BaseModel
 
 # Import new modules
-from app.density import analyze_density_segments, generate_density_narrative
-from app.temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
-from app.report import generate_combined_report, generate_combined_narrative
+from .density import analyze_density_segments
+from .density_api import router as density_router
+from .density_report import generate_density_report, generate_simple_density_report
+from .temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
+from .temporal_flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
+from .report import generate_combined_report, generate_combined_narrative
+from .test_api import test_router
+from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
 # Pydantic models for request bodies
 class AnalysisRequest(BaseModel):
     paceCsv: str
     segmentsCsv: str
     startTimes: Dict[str, int]
-    stepKm: float = 0.03
-    timeWindow: int = 300
+    stepKm: float = DEFAULT_STEP_KM
+    timeWindow: int = DEFAULT_TIME_WINDOW_SECONDS
     format: str = "json"
 
 class TemporalFlowRequest(BaseModel):
     paceCsv: str
     segmentsCsv: str
     startTimes: Dict[str, int]
-    minOverlapDuration: float = 5.0
-    conflictLengthM: float = 100.0
+    minOverlapDuration: float = DEFAULT_MIN_OVERLAP_DURATION
+    conflictLengthM: float = DEFAULT_CONFLICT_LENGTH_METERS
     format: str = "json"
 
 class ReportRequest(BaseModel):
     paceCsv: str
     segmentsCsv: str
     startTimes: Dict[str, int]
-    stepKm: float = 0.03
-    timeWindow: int = 300
+    stepKm: float = DEFAULT_STEP_KM
+    timeWindow: int = DEFAULT_TIME_WINDOW_SECONDS
     minOverlapDuration: float = 5.0
     includeDensity: bool = True
     includeOvertake: bool = True
     format: str = "json"
 
-app = FastAPI(title="run-density", version="v1.5.0")
+class DensityReportRequest(BaseModel):
+    paceCsv: str
+    densityCsv: str
+    startTimes: Dict[str, int]
+    stepKm: float = DEFAULT_STEP_KM
+    timeWindow: int = DEFAULT_TIME_WINDOW_SECONDS
+    includePerEvent: bool = True
+    outputDir: str = "reports/analysis"
+
+class TemporalFlowReportRequest(BaseModel):
+    paceCsv: str
+    segmentsCsv: str
+    startTimes: Dict[str, int]
+    minOverlapDuration: float = DEFAULT_MIN_OVERLAP_DURATION
+    conflictLengthM: float = DEFAULT_CONFLICT_LENGTH_METERS
+    outputDir: str = "reports/analysis"
+
+app = FastAPI(title="run-density", version="v1.6.0")
 APP_VERSION = os.getenv("APP_VERSION", app.version)
 GIT_SHA = os.getenv("GIT_SHA", "local")
 BUILD_AT = os.getenv("BUILD_AT", datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z")
+
+# Include density API router
+app.include_router(density_router)
+app.include_router(test_router)
 
 # Mount static files
 try:
@@ -59,32 +85,18 @@ except Exception as e:
 @app.get("/")
 async def root():
     return {
-        "message": "run-density API v1.5.0",
+        "message": "run-density API v1.6.0",
         "version": APP_VERSION,
         "architecture": "split",
-        "endpoints": ["/api/density", "/api/temporal-flow", "/api/report", "/health"]
+        "endpoints": ["/api/density", "/api/temporal-flow", "/api/report", "/api/density-report", "/api/temporal-flow-report", "/health"]
     }
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "version": APP_VERSION}
 
-@app.post("/api/density")
-async def analyze_density(request: AnalysisRequest):
-    try:
-        results = analyze_density_segments(
-            pace_csv=request.paceCsv, 
-            segments_csv=request.segmentsCsv, 
-            start_times=request.startTimes, 
-            step_km=request.stepKm, 
-            time_window_s=request.timeWindow
-        )
-        if request.format == "text":
-            narrative = generate_density_narrative(results)
-            return Response(content=narrative, media_type="text/plain")
-        return JSONResponse(content=results)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Density analysis failed: {str(e)}")
+# Density analysis is now handled by the density API router
+# @app.post("/api/density") - moved to density_api.py
 
 @app.post("/api/temporal-flow")
 async def analyze_temporal_flow(request: TemporalFlowRequest):
@@ -127,6 +139,71 @@ async def generate_report(request: ReportRequest):
 async def legacy_overtake_endpoint(request: TemporalFlowRequest):
     """Legacy endpoint for backward compatibility - redirects to temporal-flow"""
     return await analyze_temporal_flow(request)
+
+@app.post("/api/density-report")
+async def generate_density_report_endpoint(request: DensityReportRequest):
+    """Generate comprehensive density analysis report with per-event views."""
+    try:
+        results = generate_density_report(
+            pace_csv=request.paceCsv,
+            density_csv=request.densityCsv,
+            start_times=request.startTimes,
+            step_km=request.stepKm,
+            time_window_s=request.timeWindow,
+            include_per_event=request.includePerEvent,
+            output_dir=request.outputDir
+        )
+        # Handle NaN values and dataclass objects for JSON serialization
+        import json
+        import math
+        
+        def convert_for_json(obj):
+            if isinstance(obj, dict):
+                return {k: convert_for_json(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_for_json(item) for item in obj]
+            elif isinstance(obj, float) and math.isnan(obj):
+                return None
+            elif hasattr(obj, '__dict__'):
+                return convert_for_json(obj.__dict__)
+            else:
+                return obj
+        
+        cleaned_results = convert_for_json(results)
+        return JSONResponse(content=cleaned_results)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Density report generation failed: {str(e)}")
+
+@app.post("/api/temporal-flow-report")
+async def generate_temporal_flow_report_endpoint(request: TemporalFlowReportRequest):
+    """Generate comprehensive temporal flow analysis report with convergence analysis."""
+    try:
+        results = generate_temporal_flow_report(
+            pace_csv=request.paceCsv,
+            segments_csv=request.segmentsCsv,
+            start_times=request.startTimes,
+            min_overlap_duration=request.minOverlapDuration,
+            conflict_length_m=request.conflictLengthM,
+            output_dir=request.outputDir
+        )
+        # Handle NaN values for JSON serialization
+        import json
+        import math
+        
+        def convert_nan(obj):
+            if isinstance(obj, dict):
+                return {k: convert_nan(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_nan(item) for item in obj]
+            elif isinstance(obj, float) and math.isnan(obj):
+                return None
+            else:
+                return obj
+        
+        cleaned_results = convert_nan(results)
+        return JSONResponse(content=cleaned_results)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Temporal flow report generation failed: {str(e)}")
 
 @app.post("/api/overlap")
 async def legacy_overlap_endpoint(request: ReportRequest):
