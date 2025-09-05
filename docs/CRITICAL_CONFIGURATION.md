@@ -66,7 +66,34 @@ start_times = {'10K': 420, 'Half': 440, 'Full': 460}
 2. **Temporal Flow CSV** - CSV data file (automatically generated)
 3. **Density Analysis Report** - Markdown file using `density_report.py`
 
+**Note:** The combined report functionality in `app/report.py` is deprecated (see GitHub Issue #40). Use the dedicated report modules listed above.
+
+### CRITICAL: API Testing Requirement
+
+**All end-to-end testing must run through main.py APIs, not direct module calls.**
+
+#### Why API Testing is Essential:
+- **Real-world usage**: Users interact through APIs, not direct module calls
+- **Integration testing**: Catches issues like JSON serialization, parameter validation, error handling
+- **End-to-end validation**: Ensures the entire stack works together
+- **Regression detection**: API changes can break functionality even when modules work
+
+#### Example from 2025-09-05:
+- Direct module calls work perfectly ✅
+- API endpoints mostly work ✅
+- **But we found a critical issue**: `/api/temporal-flow` fails with NaN serialization ❌
+- This would have been missed if we only tested modules directly
+
+#### Required API Endpoints to Test:
+1. **`/health`** - Basic health check
+2. **`/ready`** - Readiness check
+3. **`/api/density-report`** - Density report generation
+4. **`/api/temporal-flow-report`** - Temporal flow report generation
+5. **`/api/temporal-flow`** - Temporal flow analysis (currently has NaN issue)
+
 ### Testing Commands:
+
+#### API Testing (REQUIRED):
 ```bash
 # 1. Create virtual environment
 python3 -m venv test_env && source test_env/bin/activate
@@ -74,7 +101,43 @@ python3 -m venv test_env && source test_env/bin/activate
 # 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Generate reports with correct start times
+# 3. Test all API endpoints
+python3 -c "
+from fastapi.testclient import TestClient
+from app.main import app
+
+client = TestClient(app)
+
+# Test health and ready endpoints
+print('Testing /health:', client.get('/health').status_code)
+print('Testing /ready:', client.get('/ready').status_code)
+
+# Test report generation endpoints
+start_times = {'10K': 420, 'Half': 440, 'Full': 460}
+
+print('Testing /api/density-report:', client.post('/api/density-report', json={
+    'paceCsv': 'data/runners.csv',
+    'densityCsv': 'data/density.csv', 
+    'startTimes': start_times
+}).status_code)
+
+print('Testing /api/temporal-flow-report:', client.post('/api/temporal-flow-report', json={
+    'paceCsv': 'data/runners.csv',
+    'segmentsCsv': 'data/flow.csv',
+    'startTimes': start_times
+}).status_code)
+
+print('Testing /api/temporal-flow:', client.post('/api/temporal-flow', json={
+    'paceCsv': 'data/runners.csv',
+    'segmentsCsv': 'data/flow.csv',
+    'startTimes': start_times
+}).status_code)
+"
+```
+
+#### Direct Module Testing (Optional):
+```bash
+# Generate reports with correct start times (for verification)
 python3 -c "
 from app.temporal_flow_report import generate_temporal_flow_report
 from app.density_report import generate_density_report
@@ -116,12 +179,15 @@ density_result = generate_density_report('data/runners.csv', 'data/density.csv',
 3. **Report Generation** - Use actual report modules, not temporary code
 4. **Testing** - Generate real markdown/CSV reports, not JSON data
 5. **Import References** - Update all imports after file renames
+6. **API Testing** - Always test through main.py APIs, not direct module calls
+7. **JSON Serialization** - Watch for NaN values that break API responses
 
 ## Last Updated
-2025-09-05 - Added start times configuration and testing workflow
+2025-09-05 - Added API testing requirements, NaN serialization issue, and comprehensive testing workflow
 
 ## Related Issues
 - #32 - Distance gaps fix
 - #33 - Density diagnostics logging  
 - #34 - File renames
 - #35, #36, #37 - Testing sub-issues
+- #40 - Deprecate combined report functionality

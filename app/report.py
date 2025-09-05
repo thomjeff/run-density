@@ -3,6 +3,14 @@ Report Module
 
 Combines density and overtake analysis results into unified reports.
 Provides both JSON and CSV export capabilities for UI consumption.
+
+⚠️  DEPRECATED: This module is deprecated as of 2025-09-05.
+    The combined report functionality is broken due to interface changes
+    in the density analysis module. Use the dedicated report modules instead:
+    - app/density_report.py for density analysis reports
+    - app/temporal_flow_report.py for temporal flow analysis reports
+    
+    See GitHub Issue #40 for details on this deprecation decision.
 """
 
 from __future__ import annotations
