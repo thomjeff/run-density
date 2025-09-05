@@ -109,6 +109,52 @@ density_result = generate_density_report('data/runners.csv', 'data/density.csv',
 - Always include automated and unit tests
 - Avoid hardcoding configuration values
 
+## Issue Completion Workflow
+
+**CRITICAL: After completing an Issue and all of its sub-issues, ALWAYS follow these 7 steps:**
+
+### 1. Update CHANGELOG.md
+- Add comprehensive entry documenting all changes
+- Include technical implementation details and commit history
+- Follow existing changelog format and structure
+
+### 2. Commit Changes
+- Commit all remaining changes (CHANGELOG.md, documentation updates, etc.)
+- Use descriptive commit messages referencing the issue
+- Ensure all work is properly committed before creating PR
+
+### 3. Create Pull Request
+- Create PR from feature branch to main
+- Include comprehensive description with objectives, changes, and testing results
+- Link to the original issue
+- Use clear, descriptive PR title
+
+### 4. Merge PR to Main
+- Review PR for completeness
+- Merge to main branch (preferably with merge commit for history)
+- Delete feature branch after merge
+
+### 5. Monitor GitHub Workflow
+- Watch GitHub Actions workflow for deployment
+- Monitor build, test, and deployment status
+- Review Cloud Run logs if deployment issues occur
+- Ensure successful deployment before proceeding
+
+### 6. Run End-to-End Tests Using API
+- Test all API endpoints through main.py (NOT direct module calls)
+- Verify all functionality works through the web interface
+- Test report generation endpoints specifically
+- Confirm all endpoints return 200 status codes
+
+### 7. Verify Reports and Human-Readability
+- Generate all 3 report types (temporal_flow.md, temporal_flow.csv, density.md)
+- Verify report content quality and human-readability
+- Confirm proper event names, segment names, and formatting
+- Ensure no generic names, NaN values, or formatting issues
+- Validate actual results match expectations
+
+**This workflow ensures quality, reliability, and proper deployment for every issue completion.**
+
 ## Common Pitfalls to Avoid
 
 1. **Start Times Format** - Always use minutes from midnight (420, 440, 460)
@@ -116,6 +162,9 @@ density_result = generate_density_report('data/runners.csv', 'data/density.csv',
 3. **Report Generation** - Use actual report modules, not temporary code
 4. **Testing** - Generate real markdown/CSV reports, not JSON data
 5. **Import References** - Update all imports after file renames
+6. **API Testing** - Always test through main.py APIs, not direct module calls
+7. **JSON Serialization** - Watch for NaN values that break API responses
+8. **Issue Completion Workflow** - ALWAYS follow the 7-step workflow above
 
 ## Last Updated
 2025-09-05 - Added start times configuration and testing workflow
