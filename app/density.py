@@ -71,13 +71,13 @@ class WidthProvider(Protocol):
 
 
 class StaticWidthProvider:
-    """Static width provider using segments.csv data."""
+    """Static width provider using flow.csv data."""
     
     def __init__(self, segments_df: pd.DataFrame):
         self.widths = dict(zip(segments_df['seg_id'], segments_df['width_m']))
     
     def get_width(self, segment_id: str, from_km: float, to_km: float) -> float:
-        """Get width from segments.csv data."""
+        """Get width from flow.csv data."""
         return self.widths.get(segment_id, 0.0)
 
 
