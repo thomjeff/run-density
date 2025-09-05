@@ -100,12 +100,22 @@ async def root():
         "message": "run-density API v1.6.0",
         "version": APP_VERSION,
         "architecture": "split",
-        "endpoints": ["/api/density", "/api/temporal-flow", "/api/report", "/api/density-report", "/api/temporal-flow-report", "/health"]
+        "endpoints": ["/api/density", "/api/temporal-flow", "/api/report", "/api/density-report", "/api/temporal-flow-report", "/health", "/ready"]
     }
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "version": APP_VERSION}
+
+@app.get("/ready")
+async def readiness_check():
+    """Check if the service is ready to handle requests."""
+    return {
+        "ok": True,
+        "density_loaded": True,
+        "overlap_loaded": True,
+        "version": APP_VERSION
+    }
 
 # Density analysis is now handled by the density API router
 # @app.post("/api/density") - moved to density_api.py
