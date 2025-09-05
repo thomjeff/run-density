@@ -12,8 +12,12 @@ from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 import os
 
-from .density import analyze_density_segments, DensityConfig
-from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS
+try:
+    from .density import analyze_density_segments, DensityConfig
+    from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS
+except ImportError:
+    from density import analyze_density_segments, DensityConfig
+    from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS
 import pandas as pd
 from datetime import datetime
 
