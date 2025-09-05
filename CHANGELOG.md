@@ -1,6 +1,43 @@
 # Changelog
 
-## [v1.6.0] - 2025-09-03
+## [v1.6.0] - 2025-09-04
+
+### Major Architecture Refactoring
+- **Report Generation Architecture**: Complete separation of analysis logic from output generation
+- **CSV Export Refactoring**: Moved CSV export functionality from core modules to report modules
+- **API Integration Improvements**: Enhanced JSON serialization and error handling
+- **Import Consistency**: Standardized relative imports across all modules
+
+### Report Module Enhancements
+- **Temporal Flow Reports**: 
+  - Auto-generates both Markdown and CSV outputs
+  - Enhanced convergence analysis with detailed overtaking statistics
+  - Flow type breakdown (overtake, merge, diverge patterns)
+- **Density Reports**:
+  - Comprehensive per-event analysis with experienced density
+  - LOS scores, sustained periods, and TOT metrics
+  - Active window filtering and occupancy calculations
+- **Permanent Report Modules**: Replaced temporary scripts with reusable, maintainable modules
+
+### API & Integration Improvements
+- **Enhanced JSON Serialization**: Robust handling of NaN values and dataclass objects
+- **Improved Error Handling**: Better error messages and HTTP status codes
+- **Consistent API Patterns**: Standardized request/response formats across all endpoints
+- **CLI Scripts**: Executable command-line tools for both report types
+
+### Developer Experience
+- **Better Separation of Concerns**: Core modules focus on analysis, report modules on output
+- **Single Responsibility Principle**: Each module has a clear, focused purpose
+- **Future-Proof Architecture**: Easy to add PDF, JSON, or other output formats
+- **Maintainable Codebase**: Reduced duplication and improved organization
+
+### Testing & Quality
+- **Comprehensive API Testing**: All endpoints verified and working
+- **Import Consistency**: Fixed all relative import issues
+- **JSON Serialization**: Resolved complex data type serialization problems
+- **End-to-End Validation**: Both CSV and Markdown generation tested
+
+## [v1.5.0] - 2025-09-03
 
 ### Added
 - **Density Analysis Engine**: Complete spatial concentration analysis module with areal and crowd density calculations

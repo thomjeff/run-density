@@ -4,8 +4,15 @@
 [![Deploy](https://github.com/thomjeff/run-density/actions/workflows/deploy-and-test.yml/badge.svg)](https://github.com/thomjeff/run-density/actions/workflows/deploy-and-test.yml)
 
 ## Overview
-This service models runner density on shared course segments using a density engine and overlap analysis.  
-It is containerized and deployed to Google Cloud Run.
+This service models runner density on shared course segments using a density engine and temporal flow analysis.  
+It provides comprehensive reporting capabilities with both Markdown and CSV outputs, and is containerized and deployed to Google Cloud Run.
+
+## Key Features
+- **Density Analysis**: Spatial concentration analysis with areal and crowd density calculations
+- **Temporal Flow Analysis**: Convergence and overtaking analysis between different race events
+- **Comprehensive Reporting**: Auto-generated Markdown and CSV reports with detailed analytics
+- **RESTful API**: Full FastAPI integration with configurable parameters
+- **CLI Tools**: Command-line scripts for report generation and analysis
 
 ## Quick Start (Local Development)
 
@@ -31,6 +38,48 @@ curl -fsS http://localhost:8080/ready | jq .
 Smoke test locally:
 ```bash
 make smoke-local
+```
+
+## Report Generation
+
+### CLI Tools
+Generate comprehensive reports using command-line tools:
+
+**Temporal Flow Report** (Markdown + CSV):
+```bash
+python3 generate_temporal_flow_report.py data/your_pace_data.csv data/segments.csv
+```
+
+**Density Report** (Markdown):
+```bash
+python3 generate_density_report.py data/your_pace_data.csv data/density.csv
+```
+
+### API Endpoints
+Generate reports via REST API:
+
+**Temporal Flow Report**:
+```bash
+curl -X POST "http://localhost:8080/api/temporal-flow-report" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "paceCsv": "data/your_pace_data.csv",
+    "segmentsCsv": "data/segments.csv",
+    "startTimes": {"Full": 420, "10K": 440, "Half": 460},
+    "outputDir": "reports/analysis"
+  }'
+```
+
+**Density Report**:
+```bash
+curl -X POST "http://localhost:8080/api/density-report" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "paceCsv": "data/your_pace_data.csv",
+    "densityCsv": "data/density.csv",
+    "startTimes": {"Full": 420, "10K": 440, "Half": 460},
+    "outputDir": "reports/analysis"
+  }'
 ```
 
 ---
