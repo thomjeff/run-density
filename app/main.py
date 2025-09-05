@@ -15,7 +15,9 @@ from pydantic import BaseModel
 # Import new modules
 from density import analyze_density_segments
 from density_api import router as density_router
+from density_report import generate_density_report, generate_simple_density_report
 from temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
+from temporal_flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
 from report import generate_combined_report, generate_combined_narrative
 from test_api import test_router
 from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
@@ -48,6 +50,23 @@ class ReportRequest(BaseModel):
     includeOvertake: bool = True
     format: str = "json"
 
+class DensityReportRequest(BaseModel):
+    paceCsv: str
+    densityCsv: str
+    startTimes: Dict[str, int]
+    stepKm: float = DEFAULT_STEP_KM
+    timeWindow: int = DEFAULT_TIME_WINDOW_SECONDS
+    includePerEvent: bool = True
+    outputDir: str = "reports/analysis"
+
+class TemporalFlowReportRequest(BaseModel):
+    paceCsv: str
+    segmentsCsv: str
+    startTimes: Dict[str, int]
+    minOverlapDuration: float = DEFAULT_MIN_OVERLAP_DURATION
+    conflictLengthM: float = DEFAULT_CONFLICT_LENGTH_METERS
+    outputDir: str = "reports/analysis"
+
 app = FastAPI(title="run-density", version="v1.6.0")
 APP_VERSION = os.getenv("APP_VERSION", app.version)
 GIT_SHA = os.getenv("GIT_SHA", "local")
@@ -69,7 +88,7 @@ async def root():
         "message": "run-density API v1.6.0",
         "version": APP_VERSION,
         "architecture": "split",
-        "endpoints": ["/api/density", "/api/temporal-flow", "/api/report", "/health"]
+        "endpoints": ["/api/density", "/api/temporal-flow", "/api/report", "/api/density-report", "/api/temporal-flow-report", "/health"]
     }
 
 @app.get("/health")
@@ -120,6 +139,39 @@ async def generate_report(request: ReportRequest):
 async def legacy_overtake_endpoint(request: TemporalFlowRequest):
     """Legacy endpoint for backward compatibility - redirects to temporal-flow"""
     return await analyze_temporal_flow(request)
+
+@app.post("/api/density-report")
+async def generate_density_report_endpoint(request: DensityReportRequest):
+    """Generate comprehensive density analysis report with per-event views."""
+    try:
+        results = generate_density_report(
+            pace_csv=request.paceCsv,
+            density_csv=request.densityCsv,
+            start_times=request.startTimes,
+            step_km=request.stepKm,
+            time_window_s=request.timeWindow,
+            include_per_event=request.includePerEvent,
+            output_dir=request.outputDir
+        )
+        return JSONResponse(content=results)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Density report generation failed: {str(e)}")
+
+@app.post("/api/temporal-flow-report")
+async def generate_temporal_flow_report_endpoint(request: TemporalFlowReportRequest):
+    """Generate comprehensive temporal flow analysis report with convergence analysis."""
+    try:
+        results = generate_temporal_flow_report(
+            pace_csv=request.paceCsv,
+            segments_csv=request.segmentsCsv,
+            start_times=request.startTimes,
+            min_overlap_duration=request.minOverlapDuration,
+            conflict_length_m=request.conflictLengthM,
+            output_dir=request.outputDir
+        )
+        return JSONResponse(content=results)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Temporal flow report generation failed: {str(e)}")
 
 @app.post("/api/overlap")
 async def legacy_overlap_endpoint(request: ReportRequest):
