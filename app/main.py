@@ -18,7 +18,7 @@ try:
     from .density import analyze_density_segments
     from .density_api import router as density_router
     from .density_report import generate_density_report, generate_simple_density_report
-    from .temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
+    from .flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
     from .temporal_flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
     from .report import generate_combined_report, generate_combined_narrative
     # from .test_api import test_router  # Disabled for Cloud Run deployment
@@ -28,7 +28,7 @@ except ImportError:
     from density import analyze_density_segments
     from density_api import router as density_router
     from density_report import generate_density_report, generate_simple_density_report
-    from temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
+    from flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
     from temporal_flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
     from report import generate_combined_report, generate_combined_narrative
     # from test_api import test_router  # Disabled for Cloud Run deployment

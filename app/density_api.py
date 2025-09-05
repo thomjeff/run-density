@@ -77,10 +77,10 @@ async def analyze_density(request: DensityAnalysisRequest):
             segments_df = pd.DataFrame(request.segments)
         else:
             # Load from default location
-            segments_df = pd.read_csv('data/segments.csv')
+            segments_df = pd.read_csv('data/flow.csv')
         
         # Load pace data
-        pace_data = pd.read_csv('data/your_pace_data.csv')
+        pace_data = pd.read_csv('data/runners.csv')
         
         # Load start times
         start_times = {
@@ -152,8 +152,8 @@ async def get_segment_density(
     """
     try:
         # Load data
-        segments_df = pd.read_csv('data/segments.csv')
-        pace_data = pd.read_csv('data/your_pace_data.csv')
+        segments_df = pd.read_csv('data/flow.csv')
+        pace_data = pd.read_csv('data/runners.csv')
         
         start_times = {
             '10K': datetime.strptime('08:00:00', '%H:%M:%S').replace(year=2024, month=1, day=1),
@@ -240,8 +240,8 @@ async def get_density_summary(
     """
     try:
         # Load data
-        segments_df = pd.read_csv('data/segments.csv')
-        pace_data = pd.read_csv('data/your_pace_data.csv')
+        segments_df = pd.read_csv('data/flow.csv')
+        pace_data = pd.read_csv('data/runners.csv')
         
         start_times = {
             '10K': datetime.strptime('08:00:00', '%H:%M:%S').replace(year=2024, month=1, day=1),

@@ -18,7 +18,7 @@ def load_pace_csv(url_or_path: str) -> pd.DataFrame:
     # Ensure required columns exist
     expected = {"event", "runner_id", "pace", "distance"}
     if not expected.issubset(df.columns):
-        raise ValueError(f"your_pace_data.csv must have columns {sorted(expected)}; got {df.columns.tolist()}")
+        raise ValueError(f"runners.csv must have columns {sorted(expected)}; got {df.columns.tolist()}")
     
     # Handle optional start_offset column
     if "start_offset" not in df.columns:
@@ -47,7 +47,7 @@ def load_segments_csv(url_or_path: str) -> pd.DataFrame:
     # Ensure required columns exist
     expected = {"seg_id", "eventa", "eventb", "from_km_a", "to_km_a", "from_km_b", "to_km_b", "overtake_flag"}
     if not expected.issubset(df.columns):
-        raise ValueError(f"segments.csv must have columns {sorted(expected)}; got {df.columns.tolist()}")
+        raise ValueError(f"flow.csv must have columns {sorted(expected)}; got {df.columns.tolist()}")
     
     # Convert to proper types
     df["seg_id"] = df["seg_id"].astype(str)

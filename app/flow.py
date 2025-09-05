@@ -2,7 +2,7 @@
 Temporal Flow Analysis Module
 
 Handles temporal flow analysis for segments where overtaking or merging is possible.
-Only processes segments with overtake_flag = 'y' from segments.csv.
+Only processes segments with overtake_flag = 'y' from flow.csv.
 Supports overtake, merge, and diverge flow types.
 """
 

@@ -18,8 +18,8 @@ F1,Friel to Station Rd.,10K,Half,5.8,8.1,2.7,5,uni,3,y,merge,,"On Trail (3.0m, t
 F2,Friel to Station Rd.,10K,Full,5.8,8.1,16.35,18.65,uni,3,y,merge,F1,"On Trail (3.0m, two lanes); Overtake possible (Slow 10K / Fast Full)."
 F3,Friel to Station Rd.,Half,Full,2.7,5,16.35,18.65,uni,3,y,merge,F1,"On Trail (3.0m, two lanes); Overtake possible (Slow Half / Fast Full)."
 G1,Full Loop QS to Trail/Aberdeen (Full Only),Full,Full,20.55,21.65,20.55,21.65,uni,3,n,,,"Full Only on Aberdeen, St John, McLeod, Lincoln Trail (Queen Sq. Loop)"
-G2,Trail/Aberdeen to Station Rd (Full outbound to Station vs 10K finish),Full,10K,21.65,23.55,8.1,10,bi,1.5,n,,,Trail at Aberdeen (by water pump station) to Station Rd. where Full runners go right to Gibson Trail. 10K heading southbound to Finish. Shared segment with Half.
-G3,Trail/Aberdeen to Station Rd. (Full outbound to Station vs Half finish),Full,Half,21.65,23.55,19.35,20.85,bi,1.5,n,,,Trail at Aberdeen (by water pump station) to Station Rd. where Full and Half runners go right to Gibson Trail. Shared segment with 10K.
+G2,Trail/Aberdeen to Station Rd (Full outbound to Station vs 10K finish),Full,10K,21.65,23.26,8.1,10,bi,1.5,n,,,Trail at Aberdeen (by water pump station) to Station Rd. where Full runners go right to Gibson Trail. 10K heading southbound to Finish. Shared segment with Half.
+G3,Trail/Aberdeen to Station Rd. (Full outbound to Station vs Half finish),Full,Half,21.65,23.26,19.35,20.85,bi,1.5,n,,,Trail at Aberdeen (by water pump station) to Station Rd. where Full and Half runners go right to Gibson Trail. Shared segment with 10K.
 H1,Station Rd. to Bridge/Mill (Half + Full co-direction),Half,Full,5,10.75,23.26,29.01,uni,3,n,,,"On Trail (3.0m, two lanes) Full/Half runners from Station/Rd. on to the Gibson Trail to Marysville. "
 I1,Bridge/Mill to Half Turn (Half + Full co-direction),Half,Full,10.75,13.43,29.01,31.64,bi,1.5,n,,,On Trial (1.5m lane) Half to Half Turn. Will continue to Full Turn. Shared with Half.
 J1,Half Turn to Full Turn (Full outbound spur),Full,Full,31.64,33.11,31.64,33.11,uni,1.5,n,,,On Trail (1.5m lane) Full outbound to Full Turn.

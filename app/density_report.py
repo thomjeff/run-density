@@ -187,9 +187,10 @@ def generate_markdown_report(
     content.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     content.append(f"**Analysis Period:** {results.get('analysis_period', 'N/A')}")
     content.append(f"**Time Bin Size:** {results.get('time_window_s', 30)} seconds")
-    content.append(f"**Total Segments:** {results.get('total_segments', 0)}")
-    content.append(f"**Processed Segments:** {results.get('processed_segments', 0)}")
-    content.append(f"**Skipped Segments:** {results.get('skipped_segments', 0)}")
+    summary = results.get("summary", {})
+    content.append(f"**Total Segments:** {summary.get('total_segments', 0)}")
+    content.append(f"**Processed Segments:** {summary.get('processed_segments', 0)}")
+    content.append(f"**Skipped Segments:** {summary.get('skipped_segments', 0)}")
     content.append("")
     
     # Legend
@@ -215,7 +216,7 @@ def generate_markdown_report(
     
     # Process each segment
     for segment_id, segment in results.get("segments", {}).items():
-        content.extend(generate_segment_section(segment, event_order, include_per_event))
+        content.extend(generate_segment_section(segment_id, segment, event_order, include_per_event))
         content.append("")
         content.append("---")
         content.append("")
@@ -224,7 +225,8 @@ def generate_markdown_report(
 
 
 def generate_segment_section(
-    segment: Dict[str, Any], 
+    segment_id: str,
+    segment_data: Dict[str, Any], 
     event_order: List[Tuple[str, float]], 
     include_per_event: bool
 ) -> List[str]:
@@ -232,27 +234,26 @@ def generate_segment_section(
     content = []
     
     # Segment header
-    seg_id = segment.get("seg_id", "Unknown")
-    physical_name = segment.get("physical_name", "Unknown")
-    events_included = segment.get("events_included", [])
+    physical_name = segment_data.get("physical_name", "Unknown")
+    events_included = segment_data.get("events_included", [])
     
-    content.append(f"## {seg_id}: {physical_name}")
+    content.append(f"## {segment_id}: {physical_name}")
     content.append("")
     content.append(f"**Events Included:** {', '.join(events_included)}")
     content.append(f"**Physical Name:** {physical_name}")
     content.append("")
     
     # Combined view
-    content.extend(generate_combined_view(segment))
+    content.extend(generate_combined_view(segment_data))
     content.append("")
     
     # Per-event analysis if requested
-    if include_per_event and "per_event" in segment:
-        content.extend(generate_per_event_analysis(segment, event_order))
+    if include_per_event and "per_event" in segment_data:
+        content.extend(generate_per_event_analysis(segment_data, event_order))
         content.append("")
     
     # Combined sustained periods
-    content.extend(generate_combined_sustained_periods(segment))
+    content.extend(generate_combined_sustained_periods(segment_data))
     
     return content
 

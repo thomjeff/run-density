@@ -40,8 +40,8 @@ class DensityTests:
             
             # Run density analysis
             density_results = analyze_density_segments(
-                pace_csv='data/your_pace_data.csv',
-                segments_csv='data/segments.csv',
+                pace_csv='data/runners.csv',
+                segments_csv='data/flow.csv',
                 start_times=self.correct_start_times,
                 config=self.density_config,
                 width_provider=StaticWidthProvider()
@@ -135,16 +135,16 @@ class DensityTests:
             
             # Run density analysis
             density_results = analyze_density_segments(
-                pace_csv='data/your_pace_data.csv',
-                segments_csv='data/segments.csv',
+                pace_csv='data/runners.csv',
+                segments_csv='data/flow.csv',
                 start_times=self.correct_start_times,
                 config=self.density_config,
                 width_provider=StaticWidthProvider()
             )
             
             # Load segments data for validation
-            segments_df = pd.read_csv('data/segments.csv')
-            pace_df = pd.read_csv('data/your_pace_data.csv')
+            segments_df = pd.read_csv('data/flow.csv')
+            pace_df = pd.read_csv('data/runners.csv')
             
             validation_issues = []
             validated_segments = 0
@@ -157,7 +157,7 @@ class DensityTests:
                 # Get segment info
                 segment_info = segments_df[segments_df['seg_id'] == seg_id]
                 if segment_info.empty:
-                    validation_issues.append(f"{seg_id}: Segment not found in segments.csv")
+                    validation_issues.append(f"{seg_id}: Segment not found in flow.csv")
                     continue
                 
                 segment_info = segment_info.iloc[0]
@@ -247,8 +247,8 @@ class DensityTests:
             
             # Run basic density analysis
             density_results = analyze_density_segments(
-                pace_csv='data/your_pace_data.csv',
-                segments_csv='data/segments.csv',
+                pace_csv='data/runners.csv',
+                segments_csv='data/flow.csv',
                 start_times=self.correct_start_times,
                 config=self.density_config,
                 width_provider=StaticWidthProvider()

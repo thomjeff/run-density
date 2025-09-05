@@ -11,12 +11,13 @@ import time
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 import os
+import pandas as pd
 
 try:
-    from .temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
+    from .flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
     from .constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 except ImportError:
-    from temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
+    from flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
     from constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
 
@@ -162,6 +163,9 @@ def generate_summary_section(results: Dict[str, Any]) -> List[str]:
     flow_types = {}
     for segment in results.get("segments", []):
         flow_type = segment.get("flow_type", "unknown")
+        # Handle NaN values
+        if pd.isna(flow_type) or flow_type == "nan":
+            flow_type = "No Flow"
         flow_types[flow_type] = flow_types.get(flow_type, 0) + 1
     
     if flow_types:
@@ -234,11 +238,15 @@ def generate_basic_info_table(segment: Dict[str, Any]) -> List[str]:
     total_a = segment.get("total_a", 0)
     total_b = segment.get("total_b", 0)
     
-    content.append(f"| Event A Range | {from_km_a} - {to_km_a} km |")
-    content.append(f"| Event B Range | {from_km_b} - {to_km_b} km |")
+    # Get event names
+    event_a = segment.get("event_a", "A")
+    event_b = segment.get("event_b", "B")
+    
+    content.append(f"| {event_a} Range | {from_km_a} - {to_km_a} km |")
+    content.append(f"| {event_b} Range | {from_km_b} - {to_km_b} km |")
     content.append(f"| Width | {width_m} m |")
-    content.append(f"| Event A Runners | {total_a:,} |")
-    content.append(f"| Event B Runners | {total_b:,} |")
+    content.append(f"| {event_a} Runners | {total_a:,} |")
+    content.append(f"| {event_b} Runners | {total_b:,} |")
     
     return content
 

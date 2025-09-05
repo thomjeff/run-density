@@ -13,11 +13,11 @@ from datetime import datetime
 
 try:
     from .density import analyze_density_segments
-    from .temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
+    from .flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
     from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 except ImportError:
     from density import analyze_density_segments
-    from temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
+    from flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
     from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
 

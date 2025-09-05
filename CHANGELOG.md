@@ -1,5 +1,89 @@
 # Changelog
 
+## [v1.6.1] - 2025-09-05
+
+### Phase 2: Backend Cleanup & Organization
+- **Distance Gap Resolution**: Fixed critical distance inconsistencies in course data
+  - K1/K2 Full to_km: 36.93 vs 37.12km → 36.93km (consistent)
+  - G2/H1 Full to_km: 23.55 vs 23.26km → 23.26km (consistent)  
+  - D2/C1 Full to_km: 14.79 vs 14.8km → 14.8km (consistent)
+  - Ensured continuous course coverage for accurate analysis
+- **File Renaming for Clarity**: Aligned file names with their primary usage
+  - `segments.csv` → `flow.csv` (matches temporal_flow.py usage)
+  - `temporal_flow.py` → `flow.py` (cleaner module name)
+  - `your_pace_data.csv` → `runners.csv` (better reflects content)
+  - Updated all imports and references across the codebase
+- **Enhanced Debugging Capabilities**: Added comprehensive density diagnostics logging
+  - DEBUG level logging for physical dimensions (length_m, width_m, area_m²)
+  - Runner counts per event per time bin for density calculations
+  - Density calculation inputs and results logging
+  - Production-safe logging that doesn't impact performance
+
+### Report Quality Improvements
+- **Temporal Flow Report Fixes**:
+  - Event names now show properly (10K Range, Half Range) instead of generic "Event A Range"
+  - NaN handling fixed (No Flow instead of "nan = 18" in Flow Type Breakdown)
+  - Proper formatting matches quality of working reports from 2025-09-04
+- **Density Analysis Report Fixes**:
+  - Segment names display correctly (A1a: Start to Queen/Regent) instead of "Unknown"
+  - Summary statistics show actual counts (Total: 20, Processed: 20, Skipped: 0)
+  - Proper structure matches quality of working reports from 2025-09-04
+
+### Documentation & Configuration
+- **Critical Configuration Documentation**: Created `docs/CRITICAL_CONFIGURATION.md`
+  - Start times format: Must be minutes from midnight (420, 440, 460)
+  - File naming conventions: runners.csv, flow.csv, density.csv
+  - Report modules: temporal_flow_report.py, density_report.py
+  - Testing workflow: What "reports" means and how to generate them
+  - Common pitfalls and architectural principles
+- **API Testing Workflow**: Established comprehensive testing requirements
+  - All end-to-end testing must run through main.py APIs, not direct module calls
+  - Identified NaN serialization issue in `/api/temporal-flow` endpoint
+  - Updated testing sub-issues with API testing requirements and rationale
+
+### Testing & Quality Assurance
+- **Comprehensive Testing Framework**: All sub-issues completed and tested
+  - Sub-issue #32: Distance gaps fix ✅ PASSED
+  - Sub-issue #33: Density diagnostics logging ✅ PASSED
+  - Sub-issue #34: File renames ✅ PASSED
+  - All API endpoints tested and working correctly
+- **Report Generation Validation**: 3 working reports confirmed
+  - Temporal Flow Markdown report (temporal_flow_report.py)
+  - Temporal Flow CSV report (temporal_flow_report.py)
+  - Density Analysis Markdown report (density_report.py)
+- **Deprecated Functionality**: Combined report functionality in app/report.py deprecated
+  - GitHub Issue #40 created to document deprecation decision
+  - Focus on dedicated report modules for better maintainability
+
+### Technical Implementation
+- **Import Consistency**: Updated all imports after file renames
+- **Error Handling**: Fixed segment_id vs seg_id attribute issues in logging
+- **JSON Serialization**: Improved handling of NaN values in API responses
+- **Module Separation**: Maintained strict functional separation between flow and density modules
+
+### Files Modified
+- `data/segments.csv` → `data/flow.csv`
+- `app/temporal_flow.py` → `app/flow.py`
+- `data/your_pace_data.csv` → `data/runners.csv`
+- `app/main.py` (imports and API endpoints)
+- `app/density_api.py` (CSV references)
+- `app/utils.py` (error messages)
+- `app/density.py` (logging and documentation)
+- `app/flow.py` (documentation)
+- `app/temporal_flow_report.py` (event names and NaN handling)
+- `app/density_report.py` (segment names and summary statistics)
+- `tests/temporal_flow_tests.py` (file references)
+- `tests/density_tests.py` (file references)
+- `docs/CRITICAL_CONFIGURATION.md` (new documentation)
+
+### Commits
+- eea5613 - Fix distance gaps in segments.csv
+- 8333429 - Additional distance gap fixes
+- e8b1b90 - Add density diagnostics logging
+- 1859988 - Rename files for clarity
+- 80f237e - Add critical configuration documentation
+- 953369a - Fix report formatting issues
+
 ## [v1.6.0] - 2025-09-04
 
 ### Major Architecture Refactoring

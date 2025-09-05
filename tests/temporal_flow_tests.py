@@ -36,8 +36,8 @@ class TemporalFlowTests:
             
             # Run temporal flow analysis with correct start times
             flow_results = analyze_temporal_flow_segments(
-                pace_csv='data/your_pace_data.csv',
-                segments_csv='data/segments.csv',
+                pace_csv='data/runners.csv',
+                segments_csv='data/flow.csv',
                 start_times=self.correct_start_times
             )
             
@@ -124,8 +124,8 @@ class TemporalFlowTests:
             
             # Run temporal flow analysis
             flow_results = analyze_temporal_flow_segments(
-                pace_csv='data/your_pace_data.csv',
-                segments_csv='data/segments.csv',
+                pace_csv='data/runners.csv',
+                segments_csv='data/flow.csv',
                 start_times=self.correct_start_times
             )
             
@@ -230,8 +230,8 @@ class TemporalFlowTests:
             
             # Run temporal flow analysis
             flow_results = analyze_temporal_flow_segments(
-                pace_csv='data/your_pace_data.csv',
-                segments_csv='data/segments.csv',
+                pace_csv='data/runners.csv',
+                segments_csv='data/flow.csv',
                 start_times=self.correct_start_times
             )
             
@@ -512,8 +512,8 @@ class TemporalFlowTests:
             
             # Run basic analysis
             flow_results = analyze_temporal_flow_segments(
-                pace_csv='data/your_pace_data.csv',
-                segments_csv='data/segments.csv',
+                pace_csv='data/runners.csv',
+                segments_csv='data/flow.csv',
                 start_times=self.correct_start_times
             )
             
