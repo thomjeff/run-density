@@ -13,14 +13,26 @@ from starlette.responses import JSONResponse
 from pydantic import BaseModel
 
 # Import new modules
-from .density import analyze_density_segments
-from .density_api import router as density_router
-from .density_report import generate_density_report, generate_simple_density_report
-from .temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
-from .temporal_flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
-from .report import generate_combined_report, generate_combined_narrative
-from .test_api import test_router
-from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
+try:
+    # Try relative imports first (for local development)
+    from .density import analyze_density_segments
+    from .density_api import router as density_router
+    from .density_report import generate_density_report, generate_simple_density_report
+    from .temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
+    from .temporal_flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
+    from .report import generate_combined_report, generate_combined_narrative
+    from .test_api import test_router
+    from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
+except ImportError:
+    # Fall back to absolute imports (for Cloud Run)
+    from density import analyze_density_segments
+    from density_api import router as density_router
+    from density_report import generate_density_report, generate_simple_density_report
+    from temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
+    from temporal_flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
+    from report import generate_combined_report, generate_combined_narrative
+    from test_api import test_router
+    from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
 # Pydantic models for request bodies
 class AnalysisRequest(BaseModel):
