@@ -77,7 +77,7 @@ async def analyze_density(request: DensityAnalysisRequest):
             segments_df = pd.DataFrame(request.segments)
         else:
             # Load from default location
-            segments_df = pd.read_csv('data/flow.csv')
+            segments_df = pd.read_csv('data/segments_new.csv')
         
         # Load pace data
         pace_data = pd.read_csv('data/runners.csv')

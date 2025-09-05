@@ -1,8 +1,10 @@
-# Segments Combined Schema Documentation
+# Segments Schema Documentation
 
 ## Overview
 
-The `segments_combined.csv` file consolidates the data from both `flow.csv` and `density.csv` into a single, normalized format. This eliminates duplication and provides a cleaner data structure for both temporal flow and density analysis modules.
+The `segments.csv` file consolidates the data from both `flow.csv` and `density.csv` into a single, normalized format. This eliminates duplication and provides a cleaner data structure for both temporal flow and density analysis modules.
+
+**Note**: The original `flow.csv` has been preserved as `segments_old.csv` for rollback capability.
 
 ## Schema
 

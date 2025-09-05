@@ -69,7 +69,7 @@ def test_api_endpoints(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     # Test density report endpoint
     density_response = client.post('/api/density-report', json={
         'paceCsv': 'data/runners.csv',
-        'densityCsv': 'data/density.csv',
+        'densityCsv': 'data/segments_new.csv',
         'startTimes': start_times
     })
     
@@ -82,7 +82,7 @@ def test_api_endpoints(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     # Test temporal flow report endpoint
     temporal_report_response = client.post('/api/temporal-flow-report', json={
         'paceCsv': 'data/runners.csv',
-        'segmentsCsv': 'data/flow.csv',
+        'segmentsCsv': 'data/segments_new.csv',
         'startTimes': start_times
     })
     
@@ -95,7 +95,7 @@ def test_api_endpoints(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     # Test temporal flow analysis endpoint
     temporal_flow_response = client.post('/api/temporal-flow', json={
         'paceCsv': 'data/runners.csv',
-        'segmentsCsv': 'data/flow.csv',
+        'segmentsCsv': 'data/segments_new.csv',
         'startTimes': start_times
     })
     
@@ -144,7 +144,7 @@ def test_report_generation(start_times: Dict[str, int] = None) -> Dict[str, Any]
         
         temporal_result = generate_temporal_flow_report(
             pace_csv='data/runners.csv',
-            segments_csv='data/flow.csv',
+            segments_csv='data/segments_new.csv',
             start_times=start_times
         )
         
@@ -173,7 +173,7 @@ def test_report_generation(start_times: Dict[str, int] = None) -> Dict[str, Any]
         
         density_result = generate_density_report(
             pace_csv='data/runners.csv',
-            density_csv='data/density.csv',
+            density_csv='data/segments_new.csv',
             start_times=start_times
         )
         

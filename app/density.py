@@ -26,10 +26,10 @@ logger = logging.getLogger(__name__)
 
 def load_density_cfg(path: str) -> Dict[str, dict]:
     """
-    Load density configuration from density.csv.
+    Load density configuration from segments_new.csv.
     
     Args:
-        path: Path to density.csv file
+        path: Path to segments_new.csv file
         
     Returns:
         Dictionary mapping segment_id to configuration dict
@@ -42,11 +42,11 @@ def load_density_cfg(path: str) -> Dict[str, dict]:
     cfg = {}
     for _, r in df.iterrows():
         events = tuple(e for e, col in [
-            ("Full", "full"), ("Half", "half"), ("10K", "10k")
+            ("Full", "full"), ("Half", "half"), ("10K", "10K")
         ] if y(r, col))
         
         cfg[r["seg_id"]] = dict(
-            physical_name=str(r.get("physical_name", "")),
+            seg_label=str(r.get("seg_label", "")),
             width_m=float(r["width_m"]),
             direction=str(r.get("direction", "uni")),
             events=events,
@@ -54,8 +54,8 @@ def load_density_cfg(path: str) -> Dict[str, dict]:
             full_to_km=float(r.get("full_to_km", 0)) if r.get("full_to_km") != "" else None,
             half_from_km=float(r.get("half_from_km", 0)) if r.get("half_from_km") != "" else None,
             half_to_km=float(r.get("half_to_km", 0)) if r.get("half_to_km") != "" else None,
-            tenk_from_km=float(r.get("10k_from_km", 0)) if r.get("10k_from_km") != "" else None,
-            tenk_to_km=float(r.get("10k_to_km", 0)) if r.get("10k_to_km") != "" else None,
+            tenk_from_km=float(r.get("10K_from_km", 0)) if r.get("10K_from_km") != "" else None,
+            tenk_to_km=float(r.get("10K_to_km", 0)) if r.get("10K_to_km") != "" else None,
             notes=str(r.get("notes", ""))
         )
     
@@ -871,7 +871,7 @@ class DensityAnalyzer:
         # Log density calculation inputs for debugging
         logging.debug(f"Segment {segment.segment_id}: Calculating density for {concurrent_runners} concurrent runners")
         if density_cfg:
-            # Use physical segment dimensions from density.csv
+            # Use physical segment dimensions from segments_new.csv
             # Calculate physical segment length as the maximum span of all events
             max_km = 0.0
             min_km = float('inf')
@@ -1444,9 +1444,9 @@ class DensityAnalyzer:
 def analyze_density_segments(pace_data: pd.DataFrame,
                              start_times: Dict[str, datetime],
                              config: DensityConfig = None,
-                             density_csv_path: str = "data/density.csv") -> Dict[str, Any]:
+                             density_csv_path: str = "data/segments_new.csv") -> Dict[str, Any]:
     """
-    Analyze density for all segments using density.csv configuration.
+    Analyze density for all segments using segments_new.csv configuration.
     
     Args:
         pace_data: DataFrame with runner pace data
@@ -1508,7 +1508,7 @@ def analyze_density_segments(pace_data: pd.DataFrame,
         if min_km == float('inf'):
             min_km = 0.0
         
-        # Create segment metadata from density.csv
+        # Create segment metadata from segments_new.csv
         segment = SegmentMeta(
             segment_id=seg_id,
             from_km=min_km,  # Physical segment start
@@ -1542,7 +1542,7 @@ def analyze_density_segments(pace_data: pd.DataFrame,
                 "time_series": density_results,
                 "sustained_periods": sustained_periods,
                 "events_included": list(d["events"]),
-                "physical_name": d["physical_name"],
+                "seg_label": d["seg_label"],
                 "per_event": per_event_summaries
             }
             results["summary"]["processed_segments"] += 1

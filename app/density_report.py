@@ -234,13 +234,13 @@ def generate_segment_section(
     content = []
     
     # Segment header
-    physical_name = segment_data.get("physical_name", "Unknown")
+    seg_label = segment_data.get("seg_label", "Unknown")
     events_included = segment_data.get("events_included", [])
     
-    content.append(f"## {segment_id}: {physical_name}")
+    content.append(f"## {segment_id}: {seg_label}")
     content.append("")
     content.append(f"**Events Included:** {', '.join(events_included)}")
-    content.append(f"**Physical Name:** {physical_name}")
+    content.append(f"**Segment Label:** {seg_label}")
     content.append("")
     
     # Combined view

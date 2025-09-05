@@ -189,13 +189,13 @@ def generate_segment_section(
     
     # Segment header
     seg_id = segment.get("seg_id", "Unknown")
-    segment_label = segment.get("segment_label", "Unknown")
+    seg_label = segment.get("segment_label", "Unknown")
     flow_type = segment.get("flow_type", "Unknown")
     event_a = segment.get("event_a", "Unknown")
     event_b = segment.get("event_b", "Unknown")
     has_convergence = segment.get("has_convergence", False)
     
-    content.append(f"## {seg_id}: {segment_label}")
+    content.append(f"## {seg_id}: {seg_label}")
     content.append("")
     content.append(f"**Flow Type:** {flow_type}")
     content.append(f"**Events:** {event_a} vs {event_b}")

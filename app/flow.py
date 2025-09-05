@@ -20,6 +20,76 @@ from .constants import (
 from .utils import load_pace_csv, arrival_time_sec, load_segments_csv
 
 
+def convert_segments_new_to_flow_format(segments_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Convert segments_new.csv format to the old flow.csv format expected by flow analysis.
+    
+    Args:
+        segments_df: DataFrame from segments_new.csv
+        
+    Returns:
+        DataFrame in the old flow.csv format
+    """
+    flow_segments = []
+    
+    for _, segment in segments_df.iterrows():
+        seg_id = segment["seg_id"]
+        events = []
+        
+        # Determine which events are present
+        if segment.get("full", "").lower() == "y":
+            events.append("Full")
+        if segment.get("half", "").lower() == "y":
+            events.append("Half")
+        if segment.get("10K", "").lower() == "y":
+            events.append("10K")
+        
+        # Generate all possible event pairs
+        for i, event_a in enumerate(events):
+            for event_b in events[i+1:]:
+                # Get distance ranges for each event
+                if event_a == "Full":
+                    from_km_a = segment.get("full_from_km", 0)
+                    to_km_a = segment.get("full_to_km", 0)
+                elif event_a == "Half":
+                    from_km_a = segment.get("half_from_km", 0)
+                    to_km_a = segment.get("half_to_km", 0)
+                elif event_a == "10K":
+                    from_km_a = segment.get("10K_from_km", 0)
+                    to_km_a = segment.get("10K_to_km", 0)
+                
+                if event_b == "Full":
+                    from_km_b = segment.get("full_from_km", 0)
+                    to_km_b = segment.get("full_to_km", 0)
+                elif event_b == "Half":
+                    from_km_b = segment.get("half_from_km", 0)
+                    to_km_b = segment.get("half_to_km", 0)
+                elif event_b == "10K":
+                    from_km_b = segment.get("10K_from_km", 0)
+                    to_km_b = segment.get("10K_to_km", 0)
+                
+                # Skip if any distance is empty
+                if pd.isna(from_km_a) or pd.isna(to_km_a) or pd.isna(from_km_b) or pd.isna(to_km_b):
+                    continue
+                
+                flow_segments.append({
+                    "seg_id": seg_id,
+                    "eventa": event_a,
+                    "eventb": event_b,
+                    "from_km_a": from_km_a,
+                    "to_km_a": to_km_a,
+                    "from_km_b": from_km_b,
+                    "to_km_b": to_km_b,
+                    "overtake_flag": segment.get("overtake_flag", "n"),
+                    "flow_type": segment.get("flow_type", "unknown"),
+                    "seg_label": segment.get("seg_label", ""),
+                    "width_m": segment.get("width_m", 0),
+                    "direction": segment.get("direction", "uni")
+                })
+    
+    return pd.DataFrame(flow_segments)
+
+
 # Use shared utility function from utils module
 
 
@@ -451,8 +521,8 @@ def analyze_temporal_flow_segments(
     pace_df = load_pace_csv(pace_csv)
     segments_df = load_segments_csv(segments_csv)
     
-    # Process ALL segments (not just overtake_flag = 'y')
-    all_segments = segments_df.copy()
+    # Convert segments_new.csv format to flow format
+    all_segments = convert_segments_new_to_flow_format(segments_df)
     
     results = {
         "ok": True,
@@ -495,8 +565,8 @@ def analyze_temporal_flow_segments(
         
         segment_result = {
             "seg_id": seg_id,
-            "segment_label": segment.get("segment_label", ""),
-            "flow_type": segment.get("flow-type", ""),
+            "segment_label": segment.get("seg_label", ""),
+            "flow_type": segment.get("flow_type", ""),
             "event_a": event_a,
             "event_b": event_b,
             "from_km_a": from_km_a,
@@ -562,9 +632,9 @@ def analyze_temporal_flow_segments(
                         prior_segment_data = prev_segment
                         break
             
-            # Get the segment data from segments_df
+            # Get the segment data from all_segments (converted format)
             seg_id = segment_result["seg_id"]
-            segment_row = segments_df[segments_df["seg_id"] == seg_id].iloc[0]
+            segment_row = all_segments[all_segments["seg_id"] == seg_id].iloc[0]
             event_a = segment_row["eventa"]
             event_b = segment_row["eventb"]
             from_km_a = segment_row["from_km_a"]
