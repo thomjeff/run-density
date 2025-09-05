@@ -142,6 +142,40 @@ class DensityResult:
 
 
 @dataclass(frozen=True)
+class EventViewSummary:
+    """Per-event summary of density analysis for a segment."""
+    event: str
+    n_event_runners: int
+    active_start: Optional[str] = None
+    active_end: Optional[str] = None
+    active_duration_s: int = 0
+    occupancy_rate: float = 0.0
+    peak_concurrency_exp: int = 0
+    peak_areal_exp: float = 0.0
+    peak_crowd_exp: float = 0.0
+    p95_areal_exp: float = 0.0
+    p95_crowd_exp: float = 0.0
+    active_mean_areal_exp: float = 0.0
+    active_mean_crowd_exp: float = 0.0
+    active_tot_areal_exp_sec: int = 0
+    active_tot_crowd_exp_sec: int = 0
+    events_at_peak: List[str] = None
+    contrib_breakdown_at_peak: Dict[str, int] = None
+    sustained_periods: List[Dict[str, Any]] = None
+    flags: List[str] = None
+    
+    def __post_init__(self):
+        if self.events_at_peak is None:
+            object.__setattr__(self, 'events_at_peak', [])
+        if self.contrib_breakdown_at_peak is None:
+            object.__setattr__(self, 'contrib_breakdown_at_peak', {})
+        if self.sustained_periods is None:
+            object.__setattr__(self, 'sustained_periods', [])
+        if self.flags is None:
+            object.__setattr__(self, 'flags', [])
+
+
+@dataclass(frozen=True)
 class DensitySummary:
     """Summary of density analysis for a segment."""
     segment_id: str
@@ -354,6 +388,346 @@ class DensityAnalyzer:
             logger.warning(f"Segment {segment_id}: concurrent_runners ({concurrent_runners}) > total_registered ({total_registered})")
         
         return flags
+    
+    def make_distance_bins(self, intervals_km: List[Tuple[float, float]], step_km: float) -> List[Tuple[float, float]]:
+        """
+        Create distance bins from event-specific intervals using step_km.
+        
+        Args:
+            intervals_km: List of (from_km, to_km) tuples for each event
+            step_km: Step size for binning
+            
+        Returns:
+            List of (bin_start_km, bin_end_km) tuples
+        """
+        if not intervals_km:
+            return []
+        
+        # Merge overlapping intervals first
+        ints = sorted((min(a, b), max(a, b)) for a, b in intervals_km)
+        merged = [ints[0]]
+        for a, b in ints[1:]:
+            la, lb = merged[-1]
+            if a <= lb:
+                merged[-1] = (la, max(lb, b))
+            else:
+                merged.append((a, b))
+        
+        # Create bins within each merged interval
+        bins = []
+        for a, b in merged:
+            x = a
+            while x < b - self.config.epsilon:
+                y = min(b, x + step_km)
+                bins.append((x, y))
+                x = y
+        
+        return bins
+    
+    def calculate_per_event_experienced_density(self,
+                                              segment: SegmentMeta,
+                                              pace_data: pd.DataFrame,
+                                              start_times: Dict[str, datetime],
+                                              time_bins: List[datetime],
+                                              density_cfg: dict = None) -> Dict[str, EventViewSummary]:
+        """
+        Calculate per-event experienced density analysis for a segment.
+        
+        This method analyzes what each event's runners actually experience
+        when co-present with other events in the same segment.
+        
+        Args:
+            segment: Segment metadata
+            pace_data: Runner pace data
+            start_times: Event start times
+            time_bins: List of time bin start times
+            density_cfg: Density configuration with event-specific km ranges
+            
+        Returns:
+            Dictionary mapping event names to EventViewSummary objects
+        """
+        if not segment.events or not density_cfg:
+            return {}
+        
+        # Get event-specific intervals for distance binning
+        intervals_km = []
+        for event in segment.events:
+            if event == "Full" and density_cfg.get("full_from_km") is not None:
+                intervals_km.append((density_cfg["full_from_km"], density_cfg["full_to_km"]))
+            elif event == "Half" and density_cfg.get("half_from_km") is not None:
+                intervals_km.append((density_cfg["half_from_km"], density_cfg["half_to_km"]))
+            elif event == "10K" and density_cfg.get("tenk_from_km") is not None:
+                intervals_km.append((density_cfg["tenk_from_km"], density_cfg["tenk_to_km"]))
+        
+        # Create distance bins
+        distance_bins = self.make_distance_bins(intervals_km, self.config.step_km)
+        
+        # Precompute runner positions for all time bins (vectorized)
+        all_events = list(segment.events)
+        event_runner_counts = {}
+        for event in all_events:
+            event_runner_counts[event] = len(pace_data[pace_data["event"] == event])
+        
+        # Calculate per-event experienced metrics
+        per_event_summaries = {}
+        
+        for event in all_events:
+            # Filter to this event's runners
+            event_pace_data = pace_data[pace_data["event"] == event]
+            if event_pace_data.empty:
+                continue
+            
+            # Calculate experienced density time series for this event
+            event_results = []
+            e_active_time_bins = []
+            
+            for time_bin_start in time_bins:
+                time_bin_end = time_bin_start + timedelta(seconds=self.config.bin_seconds)
+                
+                # Calculate experienced concurrency (this event + all others)
+                experienced_concurrency = self._calculate_experienced_concurrency(
+                    event, segment, pace_data, start_times, time_bin_start, 
+                    distance_bins, density_cfg
+                )
+                
+                # Calculate self concurrency (this event only)
+                self_concurrency = self._calculate_self_concurrency(
+                    event, segment, pace_data, start_times, time_bin_start,
+                    distance_bins, density_cfg
+                )
+                
+                # Only process bins where this event has runners present
+                if self_concurrency > 0:
+                    e_active_time_bins.append(time_bin_start)
+                    
+                    # Calculate experienced densities
+                    areal_density, crowd_density = self.calculate_density_metrics(
+                        experienced_concurrency, segment, density_cfg
+                    )
+                    
+                    # Classify LOS
+                    los_areal, los_crowd = self.classify_los(areal_density, crowd_density)
+                    
+                    # Create result
+                    result = DensityResult(
+                        segment_id=segment.segment_id,
+                        t_start=time_bin_start.strftime("%H:%M:%S"),
+                        t_end=time_bin_end.strftime("%H:%M:%S"),
+                        concurrent_runners=experienced_concurrency,
+                        areal_density=areal_density,
+                        crowd_density=crowd_density,
+                        los_areal=los_areal,
+                        los_crowd=los_crowd,
+                        flags=[]
+                    )
+                    
+                    event_results.append(result)
+            
+            if not event_results:
+                continue
+            
+            # Calculate per-event summary
+            event_summary = self._summarize_per_event_experienced(
+                event, event_results, event_runner_counts[event], segment
+            )
+            
+            per_event_summaries[event] = event_summary
+        
+        return per_event_summaries
+    
+    def _calculate_experienced_concurrency(self,
+                                         target_event: str,
+                                         segment: SegmentMeta,
+                                         pace_data: pd.DataFrame,
+                                         start_times: Dict[str, datetime],
+                                         time_bin_start: datetime,
+                                         distance_bins: List[Tuple[float, float]],
+                                         density_cfg: dict) -> int:
+        """
+        Calculate experienced concurrency for a target event (includes all co-present runners).
+        """
+        time_bin_end = time_bin_start + timedelta(seconds=self.config.bin_seconds)
+        
+        # Filter to all events in this segment
+        filtered_pace_data = pace_data[pace_data["event"].isin(segment.events)]
+        if filtered_pace_data.empty:
+            return 0
+        
+        # Convert to NumPy arrays for vectorized operations
+        event_ids = filtered_pace_data['event'].values
+        start_offsets = filtered_pace_data['start_offset'].values
+        paces = filtered_pace_data['pace'].values
+        
+        # Calculate actual start times
+        actual_starts = np.array([
+            start_times[event_id] + timedelta(seconds=int(start_offset))
+            for event_id, start_offset in zip(event_ids, start_offsets)
+        ])
+        
+        # Convert to seconds since epoch
+        time_bin_start_sec = time_bin_start.timestamp()
+        time_bin_end_sec = time_bin_end.timestamp()
+        actual_starts_sec = np.array([start.timestamp() for start in actual_starts])
+        
+        # Calculate time elapsed
+        time_elapsed_start = time_bin_start_sec - actual_starts_sec
+        time_elapsed_end = time_bin_end_sec - actual_starts_sec
+        
+        # Filter to started runners
+        started_mask = time_elapsed_start >= 0
+        if not np.any(started_mask):
+            return 0
+        
+        # Calculate positions
+        positions_start_km = paces[started_mask] * time_elapsed_start[started_mask] / 3600
+        positions_end_km = paces[started_mask] * time_elapsed_end[started_mask] / 3600
+        
+        # Check presence in any distance bin (experienced concurrency)
+        in_any_bin = np.zeros(len(positions_start_km), dtype=bool)
+        for bin_start, bin_end in distance_bins:
+            in_bin = (positions_start_km < bin_end) & (positions_end_km > bin_start)
+            in_any_bin |= in_bin
+        
+        return int(np.sum(in_any_bin))
+    
+    def _calculate_self_concurrency(self,
+                                  target_event: str,
+                                  segment: SegmentMeta,
+                                  pace_data: pd.DataFrame,
+                                  start_times: Dict[str, datetime],
+                                  time_bin_start: datetime,
+                                  distance_bins: List[Tuple[float, float]],
+                                  density_cfg: dict) -> int:
+        """
+        Calculate self concurrency for a target event (only that event's runners).
+        """
+        time_bin_end = time_bin_start + timedelta(seconds=self.config.bin_seconds)
+        
+        # Filter to target event only
+        event_pace_data = pace_data[pace_data["event"] == target_event]
+        if event_pace_data.empty:
+            return 0
+        
+        # Convert to NumPy arrays
+        start_offsets = event_pace_data['start_offset'].values
+        paces = event_pace_data['pace'].values
+        
+        # Calculate actual start times
+        actual_starts = np.array([
+            start_times[target_event] + timedelta(seconds=int(start_offset))
+            for start_offset in start_offsets
+        ])
+        
+        # Convert to seconds since epoch
+        time_bin_start_sec = time_bin_start.timestamp()
+        time_bin_end_sec = time_bin_end.timestamp()
+        actual_starts_sec = np.array([start.timestamp() for start in actual_starts])
+        
+        # Calculate time elapsed
+        time_elapsed_start = time_bin_start_sec - actual_starts_sec
+        time_elapsed_end = time_bin_end_sec - actual_starts_sec
+        
+        # Filter to started runners
+        started_mask = time_elapsed_start >= 0
+        if not np.any(started_mask):
+            return 0
+        
+        # Calculate positions
+        positions_start_km = paces[started_mask] * time_elapsed_start[started_mask] / 3600
+        positions_end_km = paces[started_mask] * time_elapsed_end[started_mask] / 3600
+        
+        # Check presence in any distance bin (self concurrency)
+        in_any_bin = np.zeros(len(positions_start_km), dtype=bool)
+        for bin_start, bin_end in distance_bins:
+            in_bin = (positions_start_km < bin_end) & (positions_end_km > bin_start)
+            in_any_bin |= in_bin
+        
+        return int(np.sum(in_any_bin))
+    
+    def _summarize_per_event_experienced(self,
+                                       event: str,
+                                       event_results: List[DensityResult],
+                                       n_event_runners: int,
+                                       segment: SegmentMeta) -> EventViewSummary:
+        """
+        Summarize per-event experienced density analysis.
+        """
+        if not event_results:
+            return EventViewSummary(
+                event=event,
+                n_event_runners=n_event_runners,
+                flags=["no_data"]
+            )
+        
+        # Calculate active window bounds
+        active_start = min(r.t_start for r in event_results)
+        active_end = max(r.t_end for r in event_results)
+        
+        # Calculate duration
+        try:
+            active_start_dt = datetime.strptime(active_start, "%H:%M:%S")
+            active_end_dt = datetime.strptime(active_end, "%H:%M:%S")
+            active_duration_s = int((active_end_dt - active_start_dt).total_seconds())
+        except ValueError:
+            active_duration_s = len(event_results) * self.config.bin_seconds
+        
+        # Calculate occupancy rate (simplified - all bins are E-active by definition)
+        occupancy_rate = 1.0
+        
+        # Calculate experienced metrics
+        areal_densities = [r.areal_density for r in event_results]
+        crowd_densities = [r.crowd_density for r in event_results]
+        concurrent_runners = [r.concurrent_runners for r in event_results]
+        
+        # Peaks
+        peak_concurrency_exp = max(concurrent_runners) if concurrent_runners else 0
+        peak_areal_exp = max(areal_densities) if areal_densities else 0.0
+        peak_crowd_exp = max(crowd_densities) if crowd_densities else 0.0
+        
+        # Percentiles and means
+        p95_areal_exp = np.percentile(areal_densities, 95) if areal_densities else 0.0
+        p95_crowd_exp = np.percentile(crowd_densities, 95) if crowd_densities else 0.0
+        active_mean_areal_exp = np.mean(areal_densities) if areal_densities else 0.0
+        active_mean_crowd_exp = np.mean(crowd_densities) if crowd_densities else 0.0
+        
+        # TOT calculations
+        active_tot_areal_exp_sec = sum(
+            self.config.bin_seconds for r in event_results
+            if r.areal_density >= self.config.threshold_areal
+        )
+        active_tot_crowd_exp_sec = sum(
+            self.config.bin_seconds for r in event_results
+            if r.crowd_density >= self.config.threshold_crowd
+        )
+        
+        # Find peak contribution breakdown (simplified for now)
+        events_at_peak = list(segment.events)
+        contrib_breakdown_at_peak = {e: 0 for e in segment.events}  # Placeholder
+        
+        # Generate sustained periods for this event
+        sustained_periods = self.smooth_narrative_transitions(event_results)
+        
+        return EventViewSummary(
+            event=event,
+            n_event_runners=n_event_runners,
+            active_start=active_start,
+            active_end=active_end,
+            active_duration_s=active_duration_s,
+            occupancy_rate=occupancy_rate,
+            peak_concurrency_exp=peak_concurrency_exp,
+            peak_areal_exp=peak_areal_exp,
+            peak_crowd_exp=peak_crowd_exp,
+            p95_areal_exp=p95_areal_exp,
+            p95_crowd_exp=p95_crowd_exp,
+            active_mean_areal_exp=active_mean_areal_exp,
+            active_mean_crowd_exp=active_mean_crowd_exp,
+            active_tot_areal_exp_sec=active_tot_areal_exp_sec,
+            active_tot_crowd_exp_sec=active_tot_crowd_exp_sec,
+            events_at_peak=events_at_peak,
+            contrib_breakdown_at_peak=contrib_breakdown_at_peak,
+            sustained_periods=sustained_periods,
+            flags=["per_event_analysis"]
+        )
     
     def calculate_concurrent_runners(self, 
                                    segment: SegmentMeta,
@@ -1139,12 +1513,18 @@ def analyze_density_segments(pace_data: pd.DataFrame,
             # Generate narrative smoothing
             sustained_periods = analyzer.smooth_narrative_transitions(density_results)
             
+            # Calculate per-event experienced density analysis
+            per_event_summaries = analyzer.calculate_per_event_experienced_density(
+                segment, pace_data, start_times, time_bins, density_cfg[seg_id]
+            )
+            
             results["segments"][segment.segment_id] = {
                 "summary": summary,
                 "time_series": density_results,
                 "sustained_periods": sustained_periods,
                 "events_included": list(d["events"]),
-                "physical_name": d["physical_name"]
+                "physical_name": d["physical_name"],
+                "per_event": per_event_summaries
             }
             results["summary"]["processed_segments"] += 1
         else:
