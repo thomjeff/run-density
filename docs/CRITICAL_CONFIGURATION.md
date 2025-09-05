@@ -89,6 +89,45 @@ density_result = generate_density_report('data/runners.csv', 'data/density.csv',
 "
 ```
 
+### Comprehensive End-to-End Testing (RECOMMENDED):
+```bash
+# 1. Create virtual environment
+python3 -m venv test_env && source test_env/bin/activate
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Run comprehensive end-to-end tests
+python3 -c "
+from app.end_to_end_testing import run_comprehensive_tests
+results = run_comprehensive_tests()
+"
+
+# Or run the module directly
+python3 app/end_to_end_testing.py
+```
+
+### Individual Test Components:
+```bash
+# Test only API endpoints
+python3 -c "
+from app.end_to_end_testing import test_api_endpoints
+results = test_api_endpoints()
+"
+
+# Test only report generation
+python3 -c "
+from app.end_to_end_testing import test_report_generation
+results = test_report_generation()
+"
+
+# Test only report content quality
+python3 -c "
+from app.end_to_end_testing import test_report_content_quality
+results = test_report_content_quality()
+"
+```
+
 ## Architecture Principles
 
 ### Module Separation:
