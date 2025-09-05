@@ -113,6 +113,12 @@ density_result = generate_density_report('data/runners.csv', 'data/density.csv',
 
 **CRITICAL: After completing an Issue and all of its sub-issues, ALWAYS follow these 7 steps:**
 
+### 0. Create Development Branch (FIRST STEP)
+- Create new development branch for the issue (e.g., v1.6.2-dev)
+- Branch should be based on latest main
+- All work for the issue should be done on this branch
+- **This is the FIRST step before any development work**
+
 ### 1. Update CHANGELOG.md
 - Add comprehensive entry documenting all changes
 - Include technical implementation details and commit history
@@ -165,6 +171,7 @@ density_result = generate_density_report('data/runners.csv', 'data/density.csv',
 6. **API Testing** - Always test through main.py APIs, not direct module calls
 7. **JSON Serialization** - Watch for NaN values that break API responses
 8. **Issue Completion Workflow** - ALWAYS follow the 7-step workflow above
+9. **Development Branch** - ALWAYS create a new branch for each parent issue before starting work
 
 ## Last Updated
 2025-09-05 - Added start times configuration and testing workflow
