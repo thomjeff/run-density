@@ -105,7 +105,7 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "version": APP_VERSION}
+    return {"ok": True, "status": "healthy", "version": APP_VERSION}
 
 @app.get("/ready")
 async def readiness_check():
