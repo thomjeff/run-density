@@ -12,8 +12,8 @@ from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 import os
 
-from temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
-from constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
+from .temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
+from .constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
 
 def generate_temporal_flow_report(
@@ -65,6 +65,9 @@ def generate_temporal_flow_report(
         f.write(report_content)
     
     print(f"📊 Temporal flow report saved to: {report_path}")
+
+    # Also generate CSV
+    export_temporal_flow_csv(results, output_dir)
     
     return {
         "ok": True,
@@ -162,7 +165,7 @@ def generate_summary_section(results: Dict[str, Any]) -> List[str]:
         content.append("")
         content.append("| Flow Type | Count |")
         content.append("|-----------|-------|")
-        for flow_type, count in sorted(flow_types.items()):
+        for flow_type, count in sorted(flow_types.items(), key=lambda x: str(x[0])):
             content.append(f"| {flow_type} | {count} |")
         content.append("")
     
@@ -201,7 +204,8 @@ def generate_segment_section(
         content.append("")
     
     # Deep dive analysis if present
-    if segment.get("deep_dive_analysis"):
+    deep_dive = segment.get("deep_dive_analysis")
+    if deep_dive and isinstance(deep_dive, dict):
         content.extend(generate_deep_dive_analysis(segment))
         content.append("")
     
@@ -362,3 +366,68 @@ def generate_simple_temporal_flow_report(
         pace_csv, segments_csv, start_times, min_overlap_duration, 
         conflict_length_m, output_dir="reports/analysis"
     )
+
+
+def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
+    """Export temporal flow analysis results to CSV."""
+    import csv
+    from datetime import datetime
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+    filename = f"temporal_flow_analysis_{timestamp}.csv"
+    full_path = f"{output_path}/{filename}"
+    
+    with open(full_path, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        
+        # Header
+        writer.writerow([
+            "seg_id", "segment_label", "flow_type", "event_a", "event_b",
+            "from_km_a", "to_km_a", "from_km_b", "to_km_b",
+            "convergence_point", "has_convergence",
+            "total_a", "total_b", "overtaking_a", "overtaking_b",
+            "convergence_zone_start", "convergence_zone_end", "conflict_length_m",
+            "sample_a", "sample_b", "analysis_timestamp"
+        ])
+        
+        # Data rows
+        for segment in results["segments"]:
+            writer.writerow([
+                segment["seg_id"],
+                segment.get("segment_label", ""),
+                segment.get("flow_type", ""),
+                segment["event_a"],
+                segment["event_b"],
+                segment["from_km_a"],
+                segment["to_km_a"],
+                segment["from_km_b"],
+                segment["to_km_b"],
+                segment.get("convergence_point", ""),
+                segment["has_convergence"],
+                segment["total_a"],
+                segment["total_b"],
+                segment["overtaking_a"],
+                segment["overtaking_b"],
+                segment.get("convergence_zone_start", ""),
+                segment.get("convergence_zone_end", ""),
+                segment.get("conflict_length_m", ""),
+                format_bib_range(segment["sample_a"]),
+                format_bib_range(segment["sample_b"]),
+                results["timestamp"]
+            ])
+    
+    print(f"📊 Temporal flow analysis exported to: {full_path}")
+
+
+def format_bib_range(bib_list: List[str], max_individual: int = 3) -> str:
+    """Format a list of runner IDs for display."""
+    if not bib_list:
+        return "None"
+    
+    if len(bib_list) <= max_individual:
+        return ", ".join(map(str, bib_list))
+    
+    # For large lists, show first few and count
+    sorted_bibs = sorted(bib_list, key=lambda x: int(x) if str(x).isdigit() else x)
+    first_few = sorted_bibs[:max_individual]
+    return f"{', '.join(map(str, first_few))}, ... ({len(bib_list)} total)"

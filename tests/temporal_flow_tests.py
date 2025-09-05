@@ -15,7 +15,8 @@ from datetime import datetime
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
 
-from app.temporal_flow import analyze_temporal_flow_segments, export_temporal_flow_csv
+from app.temporal_flow import analyze_temporal_flow_segments
+from app.temporal_flow_report import export_temporal_flow_csv
 from tests.test_runner import TestResult
 
 class TemporalFlowTests:

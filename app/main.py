@@ -13,14 +13,14 @@ from starlette.responses import JSONResponse
 from pydantic import BaseModel
 
 # Import new modules
-from density import analyze_density_segments
-from density_api import router as density_router
-from density_report import generate_density_report, generate_simple_density_report
-from temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
-from temporal_flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
-from report import generate_combined_report, generate_combined_narrative
-from test_api import test_router
-from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
+from .density import analyze_density_segments
+from .density_api import router as density_router
+from .density_report import generate_density_report, generate_simple_density_report
+from .temporal_flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
+from .temporal_flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
+from .report import generate_combined_report, generate_combined_narrative
+from .test_api import test_router
+from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
 # Pydantic models for request bodies
 class AnalysisRequest(BaseModel):
@@ -153,7 +153,24 @@ async def generate_density_report_endpoint(request: DensityReportRequest):
             include_per_event=request.includePerEvent,
             output_dir=request.outputDir
         )
-        return JSONResponse(content=results)
+        # Handle NaN values and dataclass objects for JSON serialization
+        import json
+        import math
+        
+        def convert_for_json(obj):
+            if isinstance(obj, dict):
+                return {k: convert_for_json(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_for_json(item) for item in obj]
+            elif isinstance(obj, float) and math.isnan(obj):
+                return None
+            elif hasattr(obj, '__dict__'):
+                return convert_for_json(obj.__dict__)
+            else:
+                return obj
+        
+        cleaned_results = convert_for_json(results)
+        return JSONResponse(content=cleaned_results)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Density report generation failed: {str(e)}")
 
@@ -169,7 +186,22 @@ async def generate_temporal_flow_report_endpoint(request: TemporalFlowReportRequ
             conflict_length_m=request.conflictLengthM,
             output_dir=request.outputDir
         )
-        return JSONResponse(content=results)
+        # Handle NaN values for JSON serialization
+        import json
+        import math
+        
+        def convert_nan(obj):
+            if isinstance(obj, dict):
+                return {k: convert_nan(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_nan(item) for item in obj]
+            elif isinstance(obj, float) and math.isnan(obj):
+                return None
+            else:
+                return obj
+        
+        cleaned_results = convert_nan(results)
+        return JSONResponse(content=cleaned_results)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Temporal flow report generation failed: {str(e)}")
 

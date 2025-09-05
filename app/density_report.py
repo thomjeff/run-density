@@ -12,8 +12,8 @@ from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 import os
 
-from density import analyze_density_segments, DensityConfig
-from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS
+from .density import analyze_density_segments, DensityConfig
+from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS
 import pandas as pd
 from datetime import datetime
 
@@ -315,7 +315,7 @@ def generate_per_event_analysis(
             
         event_data = per_event[event]
         start_time = f"{int(start_min//60):02d}:{int(start_min%60):02d}:00"
-        n_runners = event_data.get("n_event_runners", 0)
+        n_runners = getattr(event_data, "n_event_runners", 0)
         
         content.append(f"#### {event} Event — Start {start_time} — N={n_runners:,}")
         content.append("")

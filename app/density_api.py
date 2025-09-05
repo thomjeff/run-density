@@ -17,7 +17,7 @@ import logging
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
 
-from density import (
+from .density import (
     analyze_density_segments,
     DensityConfig,
     StaticWidthProvider,

@@ -14,7 +14,7 @@ from typing import Dict
 # Add the app directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
 
-from temporal_flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
+from app.temporal_flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
 
 
 def main():

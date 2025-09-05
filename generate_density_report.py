@@ -14,7 +14,7 @@ from typing import Dict
 # Add the app directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
 
-from density_report import generate_density_report, generate_simple_density_report
+from app.density_report import generate_density_report, generate_simple_density_report
 
 
 def main():
