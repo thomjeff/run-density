@@ -317,18 +317,21 @@ def generate_convergence_analysis(segment: Dict[str, Any]) -> List[str]:
     # Enhanced convergence point (normalized) - moved outside table
     convergence_point = segment.get("convergence_point")
     if convergence_point is not None and segment.get('has_convergence', False):
-        # Apply same normalization logic as CSV export
+        # Store both absolute and normalized convergence points
         from_km_a = segment.get('from_km_a', 0)
         to_km_a = segment.get('to_km_a', 0)
         
-        # Normalize convergence point to segment (0.0 to 1.0)
+        # Calculate normalized convergence point (0.0 to 1.0)
         segment_len = to_km_a - from_km_a
         if segment_len > 0:
             normalized_cp = (convergence_point - from_km_a) / segment_len
             normalized_cp = round(normalized_cp, 2)
-            content.append(f"**Convergence Point:** {normalized_cp} (normalized)")
+            
+            # Display both absolute and normalized values clearly
+            content.append(f"**Convergence Point (fraction):** {normalized_cp}")
+            content.append(f"**Convergence Point (km):** {convergence_point:.2f}")
         else:
-            content.append(f"**Convergence Point:** {convergence_point:.2f} km")
+            content.append(f"**Convergence Point (km):** {convergence_point:.2f}")
     else:
         content.append("**Convergence Point:** Not found")
     content.append("")
@@ -460,11 +463,11 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
     with open(full_path, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         
-        # Enhanced header with percentages and width
+        # Enhanced header with percentages, width, and both convergence point formats
         writer.writerow([
             "seg_id", "segment_label", "flow_type", "event_a", "event_b",
             "from_km_a", "to_km_a", "from_km_b", "to_km_b",
-            "convergence_point", "has_convergence",
+            "convergence_point_km", "convergence_point_fraction", "has_convergence",
             "total_a", "total_b", "overtaking_a", "overtaking_b",
             "pct_a", "pct_b", "convergence_zone_start", "convergence_zone_end", 
             "conflict_length_m", "width_m", "sample_a", "sample_b", "analysis_timestamp"
@@ -530,6 +533,7 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
                 round(segment.get('to_km_a', 0), 2),
                 round(segment.get('from_km_b', 0), 2),
                 round(segment.get('to_km_b', 0), 2),
+                round(segment.get('convergence_point', 0), 2) if segment.get('has_convergence', False) else "",
                 normalized_cp,
                 segment.get("has_convergence", False),
                 segment.get("total_a", ""),
