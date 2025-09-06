@@ -586,11 +586,20 @@ def calculate_true_pass_detection(
                     end_time_b = arrival_end_b[j]
                     
                     # Check for pass A -> B (A overtakes B)
+                    # A starts behind B but finishes ahead of B
                     if (start_time_a > start_time_b and end_time_a < end_time_b):
                         return float(km_point)
                     
                     # Check for pass B -> A (B overtakes A)  
+                    # B starts behind A but finishes ahead of A
                     if (start_time_b > start_time_a and end_time_b < end_time_a):
+                        return float(km_point)
+                    
+                    # Also check for convergence where runners meet at the same time
+                    # This handles cases where the directional logic might be too strict
+                    # but temporal overlap still indicates meaningful interaction
+                    if abs(start_time_a - start_time_b) <= tolerance_seconds and \
+                       abs(end_time_a - end_time_b) <= tolerance_seconds:
                         return float(km_point)
     
     # No true passes found

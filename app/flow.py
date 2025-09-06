@@ -56,13 +56,24 @@ def calculate_convergence_point(
     Returns the kilometer mark where the first true pass occurs, or None.
     """
     # Import the true pass detection function from overlap module
-    from .overlap import calculate_true_pass_detection
+    from .overlap import calculate_true_pass_detection, calculate_convergence_point as calculate_co_presence
     
     # Use the true pass detection algorithm
-    return calculate_true_pass_detection(
+    true_pass_result = calculate_true_pass_detection(
         dfA, dfB, eventA, eventB, start_times,
         from_km_a, to_km_a, step_km
     )
+    
+    # If true pass detection finds nothing, fall back to co-presence detection
+    # This ensures we don't lose convergence that might be meaningful
+    if true_pass_result is None:
+        co_presence_result = calculate_co_presence(
+            dfA, dfB, eventA, eventB, start_times,
+            from_km_a, to_km_a, step_km
+        )
+        return co_presence_result
+    
+    return true_pass_result
 
 
 def calculate_entry_exit_times(
