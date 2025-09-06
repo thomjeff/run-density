@@ -208,28 +208,33 @@ def calculate_convergence_zone_overlaps(
     if len_a <= 0 or len_b <= 0:
         return 0, 0, [], [], 0, 0
 
-    # Map cp (in event A's ruler) to local fraction
+    # For segments with different ranges (like F1), we need to work in normalized space
+    # Map convergence point to normalized position within the segment
     s_cp = (cp_km - from_km_a) / max(len_a, 1e-9)
     s_cp = max(0.0, min(1.0, s_cp))
     
-    # Calculate conflict zone around convergence point
+    # Calculate conflict zone in normalized space
     conflict_length_km = conflict_length_m / 1000.0  # Convert meters to km
     conflict_half_km = conflict_length_km / 2.0
     
-    # Define conflict zone boundaries
-    cp_km_a_start = max(from_km_a, cp_km - conflict_half_km)
-    cp_km_a_end = min(to_km_a, cp_km + conflict_half_km)
+    # Convert conflict zone to normalized fractions
+    # Use the smaller of the two segment lengths to ensure conflict zone fits in both
+    min_segment_len = min(len_a, len_b)
+    s_conflict_half = conflict_half_km / max(min_segment_len, 1e-9)
     
-    # Map back to local fractions
-    s_start = (cp_km_a_start - from_km_a) / max(len_a, 1e-9)
-    s_end = (cp_km_a_end - from_km_a) / max(len_a, 1e-9)
-    s_start = max(0.0, min(1.0, s_start))
-    s_end = max(0.0, min(1.0, s_end))
-
-    # Convert to each event's km for conflict zone
+    # Define normalized conflict zone boundaries
+    s_start = max(0.0, s_cp - s_conflict_half)
+    s_end = min(1.0, s_cp + s_conflict_half)
+    
+    # Ensure conflict zone has some width
+    if s_end <= s_start:
+        s_start = max(0.0, s_cp - 0.05)  # 5% of segment
+        s_end = min(1.0, s_cp + 0.05)    # 5% of segment
+    
+    # Convert normalized conflict zone to each event's absolute coordinates
     cp_km_a_start = from_km_a + s_start * len_a
     cp_km_a_end = from_km_a + s_end * len_a
-
+    
     cp_km_b_start = from_km_b + s_start * len_b
     cp_km_b_end = from_km_b + s_end * len_b
 
