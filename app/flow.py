@@ -58,20 +58,42 @@ def calculate_convergence_point(
     # Import the true pass detection function from overlap module
     from .overlap import calculate_true_pass_detection, calculate_convergence_point as calculate_co_presence
     
-    # Use the true pass detection algorithm
+    # For segments with different event ranges (like F1), we need to work in normalized space
+    # Normalize both event ranges to 0.0-1.0 scale within the segment
+    
+    # Calculate segment lengths
+    len_a = to_km_a - from_km_a
+    len_b = to_km_b - from_km_b
+    
+    # If either segment has zero length, no convergence possible
+    if len_a <= 0 or len_b <= 0:
+        return None
+    
+    # Work in normalized space (0.0 to 1.0) where both events have the same range
+    # This allows proper convergence detection for segments like F1
+    normalized_start = 0.0
+    normalized_end = 1.0
+    
+    # Use the true pass detection algorithm in normalized space
     true_pass_result = calculate_true_pass_detection(
         dfA, dfB, eventA, eventB, start_times,
-        from_km_a, to_km_a, step_km
+        normalized_start, normalized_end, step_km
     )
     
     # If true pass detection finds nothing, fall back to co-presence detection
-    # This ensures we don't lose convergence that might be meaningful
     if true_pass_result is None:
         co_presence_result = calculate_co_presence(
             dfA, dfB, eventA, eventB, start_times,
-            from_km_a, to_km_a, step_km
+            normalized_start, normalized_end, step_km
         )
+        if co_presence_result is not None:
+            # Convert normalized result back to event A's coordinate system
+            co_presence_result = from_km_a + (co_presence_result * len_a)
         return co_presence_result
+    
+    # Convert normalized result back to event A's coordinate system
+    if true_pass_result is not None:
+        true_pass_result = from_km_a + (true_pass_result * len_a)
     
     return true_pass_result
 
