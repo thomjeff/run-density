@@ -58,12 +58,28 @@ def calculate_convergence_point(
     # Import the true pass detection function from overlap module
     from .overlap import calculate_true_pass_detection, calculate_convergence_point as calculate_co_presence
     
-    # The original code had a bug - it was only passing event A's range to the functions
-    # But the functions expect a single range (intersection). Let's fix this properly.
+    # Check if there's an intersection in absolute space first
+    intersection_start = max(from_km_a, from_km_b)
+    intersection_end = min(to_km_a, to_km_b)
     
-    # For segments like F1 where events have different absolute ranges but same relative positions,
-    # we need to work in normalized space. But the overlap detection functions work with absolute coordinates.
+    if intersection_start < intersection_end:
+        # There is an intersection - use normal approach with true pass detection
+        true_pass_result = calculate_true_pass_detection(
+            dfA, dfB, eventA, eventB, start_times,
+            intersection_start, intersection_end, step_km
+        )
+        
+        # Only fall back to co-presence if true pass detection fails
+        if true_pass_result is None:
+            co_presence_result = calculate_co_presence(
+                dfA, dfB, eventA, eventB, start_times,
+                intersection_start, intersection_end, step_km
+            )
+            return co_presence_result
+        
+        return true_pass_result
     
+    # No intersection in absolute space - need normalized approach for segments like F1
     # Calculate segment lengths
     len_a = to_km_a - from_km_a
     len_b = to_km_b - from_km_b
