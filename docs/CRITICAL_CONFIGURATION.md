@@ -146,7 +146,13 @@ results = test_report_content_quality()
 - Use 'flow' to describe temporal_flow output
 - Smaller modules with strict functional separation
 - Always include automated and unit tests
-- Avoid hardcoding configuration values
+- **NO HARDCODED VALUES** - This is a strict rule. Never use hardcoded values unless explicitly directed to do so. Always use proper dynamic calculations and configuration instead.
+
+### Key Development Requirements:
+- **DISTANCE NORMALIZATION** - Events have different distance ranges (cumulative kms run). Convergence points must be normalized to account for this.
+- **MINIMAL CHANGES APPROACH** - When making changes, make only the minimal changes needed and test frequently.
+- **START TIMES ARE OFFSETS FROM MIDNIGHT** - Always remember that start times are minutes from midnight, not absolute times.
+- **TEST FREQUENTLY** - Test as often as possible and where it makes sense during development.
 
 ## Issue Completion Workflow
 
@@ -211,6 +217,7 @@ results = test_report_content_quality()
 7. **JSON Serialization** - Watch for NaN values that break API responses
 8. **Issue Completion Workflow** - ALWAYS follow the 7-step workflow above
 9. **Development Branch** - ALWAYS create a new branch for each parent issue before starting work
+10. **HARDCODED VALUES** - NEVER use hardcoded values unless explicitly directed. This is a critical rule that has been emphasized multiple times.
 
 ## Last Updated
 2025-09-05 - Added start times configuration and testing workflow

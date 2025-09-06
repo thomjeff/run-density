@@ -40,27 +40,35 @@ def arrival_time_sec(start_min: float, start_offset_sec: int, km: float, pace_mi
 
 
 def load_segments_csv(url_or_path: str) -> pd.DataFrame:
-    """Load and validate segments CSV."""
+    """Load and validate segments CSV - supports both old and new formats."""
     df = pd.read_csv(url_or_path)
-    df.columns = [c.lower() for c in df.columns]
     
-    # Ensure required columns exist for segments_new.csv schema
-    expected = {"seg_id", "seg_label", "width_m", "direction", "full", "half", "10k", "overtake_flag"}
-    if not expected.issubset(df.columns):
-        raise ValueError(f"segments_new.csv must have columns {sorted(expected)}; got {df.columns.tolist()}")
+    # Check if this is the new format (segments_new.csv)
+    if '10K' in df.columns and 'full' in df.columns:
+        # New format - keep original column names
+        expected = {"seg_id", "seg_label", "width_m", "direction", "full", "half", "10K",
+                   "full_from_km", "full_to_km", "half_from_km", "half_to_km", 
+                   "10K_from_km", "10K_to_km", "overtake_flag", "flow_type", 
+                   "prior_segment_id", "notes"}
+        if not expected.issubset(df.columns):
+            raise ValueError(f"segments_new.csv must have columns {sorted(expected)}; got {df.columns.tolist()}")
+    else:
+        # Old format - convert to lowercase
+        df.columns = [c.lower() for c in df.columns]
+        expected = {"seg_id", "eventa", "eventb", "from_km_a", "to_km_a", "from_km_b", "to_km_b", "overtake_flag"}
+        if not expected.issubset(df.columns):
+            raise ValueError(f"flow.csv must have columns {sorted(expected)}; got {df.columns.tolist()}")
     
-    # Convert to proper types
+    # Convert to proper types (only for old format)
     df["seg_id"] = df["seg_id"].astype(str)
-    df["seg_label"] = df["seg_label"].astype(str)
-    df["width_m"] = df["width_m"].astype(float)
-    df["direction"] = df["direction"].astype(str)
-    df["full"] = df["full"].astype(str)
-    df["half"] = df["half"].astype(str)
-    df["10k"] = df["10k"].astype(str)
     
-    # Convert event distance columns to float, handling empty values
-    for col in ["full_from_km", "full_to_km", "half_from_km", "half_to_km", "10k_from_km", "10k_to_km"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+    # Only convert old format columns
+    if 'eventa' in df.columns:
+        df["eventa"] = df["eventa"].astype(str)
+        df["eventb"] = df["eventb"].astype(str)
+        df["from_km_a"] = df["from_km_a"].astype(float)
+        df["to_km_a"] = df["to_km_a"].astype(float)
+        df["from_km_b"] = df["from_km_b"].astype(float)
+        df["to_km_b"] = df["to_km_b"].astype(float)
     
     return df

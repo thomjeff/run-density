@@ -74,12 +74,14 @@ def generate_temporal_flow_report(
     # Also generate CSV
     export_temporal_flow_csv(results, output_dir)
     
-    return {
+    # Return results in the format expected by other functions
+    results.update({
         "ok": True,
         "report_path": report_path,
-        "analysis_results": results,
         "timestamp": timestamp
-    }
+    })
+    
+    return results
 
 
 def generate_markdown_report(
@@ -116,14 +118,29 @@ def generate_markdown_report(
     content.append("- **Deep Dive Analysis**: Detailed analysis of convergence patterns")
     content.append("")
     
-    # Event start times
+    # Event start times with runner counts
     content.append("## Event Start Times")
     content.append("")
-    content.append("| Event | Start Time |")
-    content.append("|-------|------------|")
+    content.append("| Event | Runners | Start Time |")
+    content.append("|-------|---------|------------|")
+    
+    # Get runner counts from segments data
+    runner_counts = {}
+    for segment in results.get("segments", []):
+        event_a = segment.get("event_a")
+        event_b = segment.get("event_b")
+        total_a = segment.get("total_a", 0)
+        total_b = segment.get("total_b", 0)
+        
+        if event_a:
+            runner_counts[event_a] = total_a
+        if event_b:
+            runner_counts[event_b] = total_b
+    
     for event, start_min in event_order:
         start_time = f"{int(start_min//60):02d}:{int(start_min%60):02d}:00"
-        content.append(f"| {event} | {start_time} |")
+        runner_count = runner_counts.get(event, 0)
+        content.append(f"| {event} | {runner_count:,} | {start_time} |")
     content.append("")
     
     # Summary statistics
@@ -162,10 +179,10 @@ def generate_summary_section(results: Dict[str, Any]) -> List[str]:
     # Flow type breakdown
     flow_types = {}
     for segment in results.get("segments", []):
-        flow_type = segment.get("flow_type", "unknown")
-        # Handle NaN values
-        if pd.isna(flow_type) or flow_type == "nan":
-            flow_type = "No Flow"
+        flow_type = segment.get("flow_type", "")
+        # Handle NaN, empty, and nan values
+        if pd.isna(flow_type) or flow_type == "nan" or flow_type == "":
+            flow_type = "Not specified"
         flow_types[flow_type] = flow_types.get(flow_type, 0) + 1
     
     if flow_types:
@@ -222,6 +239,8 @@ def generate_segment_section(
 
 def generate_basic_info_table(segment: Dict[str, Any]) -> List[str]:
     """Generate basic segment information table."""
+    import pandas as pd
+    
     content = []
     
     content.append("### Basic Information")
@@ -234,9 +253,25 @@ def generate_basic_info_table(segment: Dict[str, Any]) -> List[str]:
     to_km_a = segment.get("to_km_a", "N/A")
     from_km_b = segment.get("from_km_b", "N/A")
     to_km_b = segment.get("to_km_b", "N/A")
-    width_m = segment.get("width_m", "N/A")
     total_a = segment.get("total_a", 0)
     total_b = segment.get("total_b", 0)
+    
+    # Get width from segments_new.csv - fix NA values
+    seg_id = segment.get("seg_id", "")
+    try:
+        segments_df = pd.read_csv('data/segments_new.csv')
+        seg_row = segments_df[segments_df['seg_id'] == seg_id]
+        if not seg_row.empty:
+            width_val = seg_row['width_m'].iloc[0]
+            # Handle NaN/NA values
+            if pd.isna(width_val) or width_val == '':
+                width_m = 100.0  # Default width
+            else:
+                width_m = float(width_val)
+        else:
+            width_m = 100.0  # Default width
+    except Exception:
+        width_m = 100.0  # Default width
     
     # Get event names
     event_a = segment.get("event_a", "A")
@@ -245,45 +280,71 @@ def generate_basic_info_table(segment: Dict[str, Any]) -> List[str]:
     content.append(f"| {event_a} Range | {from_km_a} - {to_km_a} km |")
     content.append(f"| {event_b} Range | {from_km_b} - {to_km_b} km |")
     content.append(f"| Width | {width_m} m |")
-    content.append(f"| {event_a} Runners | {total_a:,} |")
-    content.append(f"| {event_b} Runners | {total_b:,} |")
     
     return content
 
 
 def generate_convergence_analysis(segment: Dict[str, Any]) -> List[str]:
-    """Generate convergence analysis section."""
+    """Generate enhanced convergence analysis section."""
     content = []
     
     content.append("### Convergence Analysis")
     content.append("")
     
-    # Convergence point
+    # Enhanced overtaking statistics with percentages and individual convergence zones
+    event_a = segment.get('event_a', 'A')
+    event_b = segment.get('event_b', 'B')
+    overtaking_a = segment.get("overtaking_a", 0)
+    overtaking_b = segment.get("overtaking_b", 0)
+    total_a = segment.get('total_a', 0)
+    total_b = segment.get('total_b', 0)
+    from_km_a = segment.get('from_km_a', 0)
+    to_km_a = segment.get('to_km_a', 0)
+    from_km_b = segment.get('from_km_b', 0)
+    to_km_b = segment.get('to_km_b', 0)
+    
+    # Calculate percentages
+    pct_a = round((overtaking_a / total_a * 100), 1) if total_a > 0 else 0.0
+    pct_b = round((overtaking_b / total_b * 100), 1) if total_b > 0 else 0.0
+    
+    content.append("**Overtaking Statistics**")
+    content.append("| Event | Runners | Convergence Zone |")
+    content.append("|-------|---------|------------------|")
+    content.append(f"| {event_a} | {overtaking_a} ({pct_a}%) | {from_km_a:.2f} - {to_km_a:.2f} km |")
+    content.append(f"| {event_b} | {overtaking_b} ({pct_b}%) | {from_km_b:.2f} - {to_km_b:.2f} km |")
+    content.append("")
+    
+    # Enhanced convergence point (normalized) - moved outside table
     convergence_point = segment.get("convergence_point")
-    if convergence_point is not None:
-        content.append(f"**Convergence Point:** {convergence_point:.3f} km")
+    if convergence_point is not None and segment.get('has_convergence', False):
+        # Apply same normalization logic as CSV export
+        from_km_a = segment.get('from_km_a', 0)
+        to_km_a = segment.get('to_km_a', 0)
+        
+        # Normalize convergence point to segment (0.0 to 1.0)
+        segment_len = to_km_a - from_km_a
+        if segment_len > 0:
+            normalized_cp = (convergence_point - from_km_a) / segment_len
+            normalized_cp = round(normalized_cp, 2)
+            content.append(f"**Convergence Point:** {normalized_cp} (normalized)")
+        else:
+            content.append(f"**Convergence Point:** {convergence_point:.2f} km")
     else:
         content.append("**Convergence Point:** Not found")
     content.append("")
     
-    # Overtaking statistics
-    overtaking_a = segment.get("overtaking_a", 0)
-    overtaking_b = segment.get("overtaking_b", 0)
-    
-    content.append("**Overtaking Statistics**")
-    content.append("| Event | Overtaking Count |")
-    content.append("|-------|------------------|")
-    content.append(f"| {segment.get('event_a', 'A')} | {overtaking_a:,} |")
-    content.append(f"| {segment.get('event_b', 'B')} | {overtaking_b:,} |")
-    content.append("")
-    
-    # Convergence zone
+    # Convergence zone with proper decimal formatting
     convergence_zone_start = segment.get("convergence_zone_start")
     convergence_zone_end = segment.get("convergence_zone_end")
     
-    if convergence_zone_start and convergence_zone_end:
-        content.append(f"**Convergence Zone:** {convergence_zone_start} - {convergence_zone_end}")
-        content.append("")
+    if convergence_zone_start is not None and convergence_zone_end is not None:
+        # Fix decimal precision issues (max 3 decimals)
+        start_formatted = f"{convergence_zone_start:.3f}".rstrip('0').rstrip('.')
+        end_formatted = f"{convergence_zone_end:.3f}".rstrip('0').rstrip('.')
+        content.append(f"**Convergence Zone:** {start_formatted} - {end_formatted} km")
+    else:
+        content.append("**Convergence Zone:** Not found")
+    content.append("")
     
     return content
 
@@ -381,51 +442,109 @@ def generate_simple_temporal_flow_report(
 
 
 def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
-    """Export temporal flow analysis results to CSV."""
+    """Export temporal flow analysis results to CSV with enhanced formatting."""
     import csv
+    import pandas as pd
     from datetime import datetime
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M")
     filename = f"temporal_flow_analysis_{timestamp}.csv"
     full_path = f"{output_path}/{filename}"
     
+    # Load segments for width values
+    segments_df = pd.read_csv('data/segments_new.csv')
+    
+    # Get segments from results
+    segments = results.get("segments", [])
+    
     with open(full_path, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         
-        # Header
+        # Enhanced header with percentages and width
         writer.writerow([
             "seg_id", "segment_label", "flow_type", "event_a", "event_b",
             "from_km_a", "to_km_a", "from_km_b", "to_km_b",
             "convergence_point", "has_convergence",
             "total_a", "total_b", "overtaking_a", "overtaking_b",
-            "convergence_zone_start", "convergence_zone_end", "conflict_length_m",
-            "sample_a", "sample_b", "analysis_timestamp"
+            "pct_a", "pct_b", "convergence_zone_start", "convergence_zone_end", 
+            "conflict_length_m", "width_m", "sample_a", "sample_b", "analysis_timestamp"
         ])
         
-        # Data rows
-        for segment in results["segments"]:
+        # Enhanced data rows with proper formatting
+        for segment in segments:
+            seg_id = segment.get("seg_id", "")
+            
+            # Get width from segments_new.csv - fix NA values
+            seg_row = segments_df[segments_df['seg_id'] == seg_id]
+            if not seg_row.empty:
+                width_val = seg_row['width_m'].iloc[0]
+                # Handle NaN/NA values
+                if pd.isna(width_val) or width_val == '':
+                    width_m = 100.0  # Default width
+                else:
+                    width_m = float(width_val)
+            else:
+                width_m = 100.0  # Default width
+            
+            # Fix convergence point normalization
+            if segment.get('has_convergence', False):
+                cp_km = segment.get('convergence_point')
+                from_km_a = segment.get('from_km_a', 0)
+                to_km_a = segment.get('to_km_a', 0)
+                
+                # Normalize convergence point to segment (0.0 to 1.0)
+                segment_len = to_km_a - from_km_a
+                if segment_len > 0:
+                    normalized_cp = (cp_km - from_km_a) / segment_len
+                    normalized_cp = round(normalized_cp, 2)
+                else:
+                    normalized_cp = 0.0
+            else:
+                normalized_cp = None
+            
+            # Fix decimal formatting (max 3 decimals)
+            conv_start = segment.get('convergence_zone_start')
+            conv_end = segment.get('convergence_zone_end')
+            
+            if conv_start is not None:
+                conv_start = round(conv_start, 3)
+            if conv_end is not None:
+                conv_end = round(conv_end, 3)
+            
+            # Calculate percentages
+            total_a = segment.get('total_a', 0)
+            total_b = segment.get('total_b', 0)
+            overtaking_a = segment.get('overtaking_a', 0)
+            overtaking_b = segment.get('overtaking_b', 0)
+            
+            pct_a = round((overtaking_a / total_a * 100), 1) if total_a > 0 else 0.0
+            pct_b = round((overtaking_b / total_b * 100), 1) if total_b > 0 else 0.0
+            
             writer.writerow([
-                segment["seg_id"],
+                seg_id,
                 segment.get("segment_label", ""),
                 segment.get("flow_type", ""),
-                segment["event_a"],
-                segment["event_b"],
-                segment["from_km_a"],
-                segment["to_km_a"],
-                segment["from_km_b"],
-                segment["to_km_b"],
-                segment.get("convergence_point", ""),
-                segment["has_convergence"],
-                segment["total_a"],
-                segment["total_b"],
-                segment["overtaking_a"],
-                segment["overtaking_b"],
-                segment.get("convergence_zone_start", ""),
-                segment.get("convergence_zone_end", ""),
-                segment.get("conflict_length_m", ""),
-                format_bib_range(segment["sample_a"]),
-                format_bib_range(segment["sample_b"]),
-                results["timestamp"]
+                segment.get("event_a", ""),
+                segment.get("event_b", ""),
+                round(segment.get('from_km_a', 0), 2),
+                round(segment.get('to_km_a', 0), 2),
+                round(segment.get('from_km_b', 0), 2),
+                round(segment.get('to_km_b', 0), 2),
+                normalized_cp,
+                segment.get("has_convergence", False),
+                segment.get("total_a", ""),
+                segment.get("total_b", ""),
+                segment.get("overtaking_a", ""),
+                segment.get("overtaking_b", ""),
+                pct_a,
+                pct_b,
+                conv_start,
+                conv_end,
+                100.0,  # conflict_length_m (fixed value)
+                width_m,
+                format_bib_range(segment.get("sample_a", [])),
+                format_bib_range(segment.get("sample_b", [])),
+                timestamp
             ])
     
     print(f"📊 Temporal flow analysis exported to: {full_path}")
