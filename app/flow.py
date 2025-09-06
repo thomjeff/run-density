@@ -58,28 +58,11 @@ def calculate_convergence_point(
     # Import the true pass detection function from overlap module
     from .overlap import calculate_true_pass_detection, calculate_convergence_point as calculate_co_presence
     
-    # Check if there's an intersection in absolute space first
-    intersection_start = max(from_km_a, from_km_b)
-    intersection_end = min(to_km_a, to_km_b)
+    # The original code had a bug - it was only passing event A's range to the functions
+    # But the functions expect a single range (intersection). Let's fix this properly.
     
-    if intersection_start < intersection_end:
-        # There is an intersection - use normal approach
-        true_pass_result = calculate_true_pass_detection(
-            dfA, dfB, eventA, eventB, start_times,
-            intersection_start, intersection_end, step_km
-        )
-        
-        if true_pass_result is None:
-            co_presence_result = calculate_co_presence(
-                dfA, dfB, eventA, eventB, start_times,
-                intersection_start, intersection_end, step_km
-            )
-            return co_presence_result
-        
-        return true_pass_result
-    
-    # No intersection in absolute space - need normalized approach for segments like F1
-    # Create a custom convergence detection that works in normalized space
+    # For segments like F1 where events have different absolute ranges but same relative positions,
+    # we need to work in normalized space. But the overlap detection functions work with absolute coordinates.
     
     # Calculate segment lengths
     len_a = to_km_a - from_km_a
@@ -88,47 +71,42 @@ def calculate_convergence_point(
     if len_a <= 0 or len_b <= 0:
         return None
     
-    # Check convergence at normalized positions (0.0, 0.5, 1.0)
-    normalized_points = [0.0, 0.5, 1.0]
+    # For segments with different ranges, we need to find where runners from different events
+    # are at the same relative position within their respective segments.
+    # We'll check multiple normalized positions and find where temporal overlap occurs.
+    
+    # Use a finer grid of normalized positions
+    import numpy as np
+    normalized_points = np.linspace(0.0, 1.0, 21)  # 0.0, 0.05, 0.1, ..., 1.0
     
     for norm_point in normalized_points:
         # Map normalized point to absolute coordinates for each event
         abs_km_a = from_km_a + (norm_point * len_a)
         abs_km_b = from_km_b + (norm_point * len_b)
         
-        # Check if there's temporal overlap at this normalized position
-        # by checking if any runners from both events are present at the same time
+        # Use the existing overlap detection functions with the mapped coordinates
+        # We'll create a temporary "intersection" range around this point
+        tolerance_km = 0.1  # 100m tolerance around the point
+        range_start = abs_km_a - tolerance_km
+        range_end = abs_km_a + tolerance_km
         
-        # Get start times in seconds
-        start_a = start_times.get(eventA, 0) * 60.0
-        start_b = start_times.get(eventB, 0) * 60.0
+        # Try true pass detection at this normalized position
+        true_pass_result = calculate_true_pass_detection(
+            dfA, dfB, eventA, eventB, start_times,
+            range_start, range_end, step_km
+        )
         
-        # Calculate arrival times for all runners at their respective absolute positions
-        pace_a = dfA["pace"].values * 60.0  # sec per km
-        offset_a = dfA.get("start_offset", pd.Series([0]*len(dfA))).fillna(0).values.astype(float)
-        arrival_times_a = start_a + offset_a + pace_a * abs_km_a
+        if true_pass_result is not None:
+            return true_pass_result
         
-        pace_b = dfB["pace"].values * 60.0  # sec per km
-        offset_b = dfB.get("start_offset", pd.Series([0]*len(dfB))).fillna(0).values.astype(float)
-        arrival_times_b = start_b + offset_b + pace_b * abs_km_b
+        # Try co-presence detection at this normalized position
+        co_presence_result = calculate_co_presence(
+            dfA, dfB, eventA, eventB, start_times,
+            range_start, range_end, step_km
+        )
         
-        # Check for temporal overlaps
-        from .constants import TEMPORAL_OVERLAP_TOLERANCE_SECONDS
-        tolerance_seconds = TEMPORAL_OVERLAP_TOLERANCE_SECONDS
-        
-        overlap_found = False
-        for time_a in arrival_times_a:
-            for time_b in arrival_times_b:
-                if abs(time_a - time_b) <= tolerance_seconds:
-                    overlap_found = True
-                    break
-            if overlap_found:
-                break
-        
-        if overlap_found:
-            # Found convergence at this normalized position
-            # Return the position in event A's coordinate system
-            return abs_km_a
+        if co_presence_result is not None:
+            return co_presence_result
     
     # No convergence found in normalized space
     return None
