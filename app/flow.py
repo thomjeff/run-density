@@ -735,9 +735,19 @@ def analyze_temporal_flow_segments(
             else:
                 dynamic_conflict_length_m = CONFLICT_LENGTH_SHORT_SEGMENT_M
             
+            # For segments with no intersection (like F1), use segment center instead of convergence point
+            # The convergence point might be in a different coordinate system
+            if from_km_a <= cp_km <= to_km_a:
+                # Convergence point is within Event A's range - use it directly
+                effective_cp_km = cp_km
+            else:
+                # Convergence point is outside Event A's range - use segment center
+                # This handles segments with no intersection where convergence was detected in normalized space
+                effective_cp_km = (from_km_a + to_km_a) / 2.0
+            
             count_a, count_b, bibs_a, bibs_b, unique_encounters, participants_involved = calculate_convergence_zone_overlaps(
                 df_a, df_b, event_a, event_b, start_times,
-                cp_km, from_km_a, to_km_a, from_km_b, to_km_b, min_overlap_duration, dynamic_conflict_length_m
+                effective_cp_km, from_km_a, to_km_a, from_km_b, to_km_b, min_overlap_duration, dynamic_conflict_length_m
             )
             
             # Calculate dynamic conflict zone boundaries using the same logic as calculate_convergence_zone_overlaps
