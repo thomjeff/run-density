@@ -364,27 +364,36 @@ def calculate_convergence_zone_overlaps(
                     boundary_start = intersection_start
                     boundary_end = intersection_end
                 else:
-                    # No intersection - use NORMALIZED approach for finish line convergence
+                    # No intersection - use NORMALIZED CONFLICT ZONE for finish line convergence
                     # This handles cases like M1 where runners converge at the same physical location
                     # but have different absolute kilometer ranges
-                    # Map conflict zone to normalized positions within each event's segment
-                    # Full segment: from_km_a to to_km_a
-                    # Half segment: from_km_b to to_km_b
-                    # Use the conflict zone center as the reference point
-                    conflict_center = (cp_km_a_start + cp_km_a_end) / 2.0
                     
-                    # Normalize conflict center to each event's coordinate system
-                    norm_a = (conflict_center - from_km_a) / (to_km_a - from_km_a) if (to_km_a - from_km_a) > 0 else 0.5
-                    norm_b = (conflict_center - from_km_b) / (to_km_b - from_km_b) if (to_km_b - from_km_b) > 0 else 0.5
+                    # CORRECT APPROACH: 
+                    # 1. Normalize each event's segment to 0.0-segment_length first
+                    # 2. Calculate conflict zone in normalized space (e.g., 0.0-0.05 km for M1)
+                    # 3. Compare runners at the same normalized position within their segments
                     
-                    # Clamp to valid range
-                    norm_a = max(0.0, min(1.0, norm_a))
-                    norm_b = max(0.0, min(1.0, norm_b))
+                    # Calculate conflict zone in NORMALIZED space (0.0 to segment_length)
+                    # Use a fixed normalized conflict zone that works for both events
+                    # For M1: segment_length = 0.25 km, so conflict zone should be 0.0-0.05 km
+                    segment_length_a = to_km_a - from_km_a
+                    segment_length_b = to_km_b - from_km_b
                     
-                    # Use normalized positions for directional change detection
-                    # This allows comparison of runners at the same relative position within their segments
-                    boundary_start = norm_a  # Will be used as normalized position
-                    boundary_end = norm_b    # Will be used as normalized position
+                    # Use a small conflict zone (e.g., 20% of the shorter segment length)
+                    conflict_zone_length = min(segment_length_a, segment_length_b) * 0.2
+                    conflict_zone_norm_start = 0.0  # Start of conflict zone
+                    conflict_zone_norm_end = conflict_zone_length  # End of conflict zone
+                    
+                    # Map normalized conflict zone to absolute coordinates for each event
+                    abs_start_a = from_km_a + conflict_zone_norm_start
+                    abs_end_a = from_km_a + conflict_zone_norm_end
+                    abs_start_b = from_km_b + conflict_zone_norm_start
+                    abs_end_b = from_km_b + conflict_zone_norm_end
+                    
+                    # Use the normalized conflict zone boundaries for directional change detection
+                    # This ensures we're comparing runners at the same relative position within their segments
+                    boundary_start = conflict_zone_norm_start  # Normalized start position (0.0)
+                    boundary_end = conflict_zone_norm_end      # Normalized end position (0.05 for M1)
                 
                 pace_a = df_a.iloc[i]["pace"] * 60.0
                 offset_a = df_a.iloc[i].get("start_offset", 0)
@@ -398,13 +407,18 @@ def calculate_convergence_zone_overlaps(
                     start_time_b = start_b + offset_b + pace_b * boundary_start
                     end_time_b = start_b + offset_b + pace_b * boundary_end
                 else:
-                    # Use normalized coordinates for finish line convergence
-                    # Map normalized positions back to absolute coordinates for each event
-                    abs_start_a = from_km_a + boundary_start * (to_km_a - from_km_a)
-                    abs_end_a = from_km_a + boundary_end * (to_km_a - from_km_a)
-                    abs_start_b = from_km_b + boundary_start * (to_km_b - from_km_b)
-                    abs_end_b = from_km_b + boundary_end * (to_km_b - from_km_b)
+                    # Use NORMALIZED CONFLICT ZONE for finish line convergence
+                    # Map normalized conflict zone boundaries to absolute coordinates for each event
+                    # boundary_start = 0.0 (start of conflict zone)
+                    # boundary_end = conflict_zone_length (end of conflict zone)
                     
+                    # Map normalized conflict zone boundaries to absolute coordinates
+                    abs_start_a = from_km_a + boundary_start  # from_km_a + 0.0
+                    abs_end_a = from_km_a + boundary_end      # from_km_a + conflict_zone_length
+                    abs_start_b = from_km_b + boundary_start  # from_km_b + 0.0
+                    abs_end_b = from_km_b + boundary_end      # from_km_b + conflict_zone_length
+                    
+                    # Calculate arrival times at the conflict zone boundaries
                     start_time_a = start_a + offset_a + pace_a * abs_start_a
                     end_time_a = start_a + offset_a + pace_a * abs_end_a
                     start_time_b = start_b + offset_b + pace_b * abs_start_b
