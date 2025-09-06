@@ -83,9 +83,9 @@ results = test_report_content_quality()
 ## Architecture Principles
 
 ### Module Separation:
-- **Flow analysis** (`app/flow.py`) - temporal flow calculations
-- **Density analysis** (`app/density.py`) - density calculations
-- **Report generation** (`app/temporal_flow_report.py`, `app/density_report.py`) - report creation
+- **Flow analysis** (`app/flow.py`) - temporal flow calculations, including distance normalization
+- **Density analysis** (`app/density.py`) - density calculations,  including distance normalization
+- **Report generation** (`app/temporal_flow_report.py`, `app/density_report.py`) - report creation logic consuming results from core modules like Flow and Density.
 - **API endpoints** (`app/main.py`) - web interface
 
 ### Data Sources:
