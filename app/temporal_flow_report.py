@@ -265,13 +265,16 @@ def generate_basic_info_table(segment: Dict[str, Any]) -> List[str]:
             width_val = seg_row['width_m'].iloc[0]
             # Handle NaN/NA values
             if pd.isna(width_val) or width_val == '':
-                width_m = 100.0  # Default width
+                from .constants import DEFAULT_CONFLICT_LENGTH_METERS
+                width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
             else:
                 width_m = float(width_val)
         else:
-            width_m = 100.0  # Default width
+            from .constants import DEFAULT_CONFLICT_LENGTH_METERS
+            width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
     except Exception:
-        width_m = 100.0  # Default width
+        from .constants import DEFAULT_CONFLICT_LENGTH_METERS
+        width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
     
     # Get event names
     event_a = segment.get("event_a", "A")
@@ -483,11 +486,13 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
                 width_val = seg_row['width_m'].iloc[0]
                 # Handle NaN/NA values
                 if pd.isna(width_val) or width_val == '':
-                    width_m = 100.0  # Default width
+                    from .constants import DEFAULT_CONFLICT_LENGTH_METERS
+                    width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
                 else:
                     width_m = float(width_val)
             else:
-                width_m = 100.0  # Default width
+                from .constants import DEFAULT_CONFLICT_LENGTH_METERS
+                width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
             
             # Fix convergence point normalization
             if segment.get('has_convergence', False):
@@ -544,7 +549,7 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
                 pct_b,
                 conv_start,
                 conv_end,
-                100.0,  # conflict_length_m (fixed value)
+                segment.get('conflict_length_m', 100.0),  # conflict_length_m from analysis
                 width_m,
                 format_bib_range(segment.get("sample_a", [])),
                 format_bib_range(segment.get("sample_b", [])),

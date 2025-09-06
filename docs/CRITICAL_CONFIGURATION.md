@@ -1,60 +1,12 @@
-# Critical Configuration - Things We Must Never Forget
+# Critical Configuration - Development and Deployment
 
-This document captures critical configuration details that are essential for the application to function correctly and must never be forgotten or changed without careful consideration.
+This document captures critical configuration details, workflows, and operational requirements that are essential for the application to function correctly and must never be forgotten or changed without careful consideration.
 
-## Start Times Configuration
+## Core Application Knowledge
 
-### CRITICAL: Event Start Times Must Be in Minutes from Midnight
+**IMPORTANT**: For fundamental application concepts (start times, data structures, time calculations), see `docs/Application Fundamentals.md`. This document focuses on configuration and workflow.
 
-**This is a non-negotiable requirement that has caused issues multiple times.**
-
-### Correct Start Times Format:
-```python
-start_times = {
-    '10K': 420,   # 7:00 AM (7 * 60 = 420 minutes from midnight)
-    'Half': 440,  # 7:20 AM (7 * 60 + 20 = 440 minutes from midnight)
-    'Full': 460   # 7:40 AM (7 * 60 + 40 = 460 minutes from midnight)
-}
-```
-
-### What NOT to Use:
-- ❌ Hours as decimals (7.0, 7.33, 7.67)
-- ❌ Seconds from midnight (25200, 26400, 27600)
-- ❌ Any other time format
-
-### Why This Matters:
-1. **density_report.py** expects start times in minutes from midnight
-2. **temporal_flow_report.py** expects start times in minutes from midnight
-3. **All report generation** depends on this format
-4. **Wrong format causes errors** like "hour must be in 0..23"
-
-### Historical Context:
-- Reports were working correctly on 2025-09-04 with these exact values
-- Multiple attempts to use other formats have failed
-- This is a recurring issue that must be documented
-
-### Testing Requirements:
-When testing report generation, ALWAYS use:
-```python
-start_times = {'10K': 420, 'Half': 440, 'Full': 460}
-```
-
-## File Naming Conventions
-
-### Data Files:
-- `data/runners.csv` (formerly `your_pace_data.csv`)
-- `data/flow.csv` (formerly `segments.csv`)
-- `data/density.csv` (unchanged)
-
-### Report Modules:
-- `app/temporal_flow_report.py` (for temporal flow reports)
-- `app/density_report.py` (for density analysis reports)
-- `app/report.py` (for combined reports)
-
-### Report Output Files:
-- `reports/analysis/*_Temporal_Flow_Report.md`
-- `reports/analysis/temporal_flow_analysis_*.csv`
-- `reports/analysis/*_Density_Analysis_Report.md`
+## Testing Configuration
 
 ## Testing Workflow
 
@@ -149,10 +101,9 @@ results = test_report_content_quality()
 - **NO HARDCODED VALUES** - This is a strict rule. Never use hardcoded values unless explicitly directed to do so. Always use proper dynamic calculations and configuration instead.
 
 ### Key Development Requirements:
-- **DISTANCE NORMALIZATION** - Events have different distance ranges (cumulative kms run). Convergence points must be normalized to account for this.
 - **MINIMAL CHANGES APPROACH** - When making changes, make only the minimal changes needed and test frequently.
-- **START TIMES ARE OFFSETS FROM MIDNIGHT** - Always remember that start times are minutes from midnight, not absolute times.
 - **TEST FREQUENTLY** - Test as often as possible and where it makes sense during development.
+- **REFER TO APPLICATION FUNDAMENTALS** - For core concepts, see `docs/Application Fundamentals.md`
 
 ## CRITICAL AI ASSISTANT LEARNINGS (MUST NOT BE FORGOTTEN)
 
@@ -248,16 +199,16 @@ results = test_report_content_quality()
 
 ## Common Pitfalls to Avoid
 
-1. **Start Times Format** - Always use minutes from midnight (420, 440, 460)
-2. **File References** - Use new file names (runners.csv, flow.csv)
-3. **Report Generation** - Use actual report modules, not temporary code
-4. **Testing** - Generate real markdown/CSV reports, not JSON data
-5. **Import References** - Update all imports after file renames
-6. **API Testing** - Always test through main.py APIs, not direct module calls
-7. **JSON Serialization** - Watch for NaN values that break API responses
-8. **Issue Completion Workflow** - ALWAYS follow the 7-step workflow above
-9. **Development Branch** - ALWAYS create a new branch for each parent issue before starting work
-10. **HARDCODED VALUES** - NEVER use hardcoded values unless explicitly directed. This is a critical rule that has been emphasized multiple times.
+1. **File References** - Use correct file names (runners.csv, segments_new.csv)
+2. **Report Generation** - Use actual report modules, not temporary code
+3. **Testing** - Generate real markdown/CSV reports, not JSON data
+4. **Import References** - Update all imports after file renames
+5. **API Testing** - Always test through main.py APIs, not direct module calls
+6. **JSON Serialization** - Watch for NaN values that break API responses
+7. **Issue Completion Workflow** - ALWAYS follow the 7-step workflow above
+8. **Development Branch** - ALWAYS create a new branch for each parent issue before starting work
+9. **HARDCODED VALUES** - NEVER use hardcoded values unless explicitly directed. This is a critical rule that has been emphasized multiple times.
+10. **Application Fundamentals** - Refer to `docs/Application Fundamentals.md` for core concepts
 
 ## Last Updated
 2025-09-05 - Added start times configuration and testing workflow

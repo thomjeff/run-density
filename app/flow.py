@@ -343,9 +343,14 @@ def generate_deep_dive_analysis(
     else:
         analysis.append("   • Low interaction potential: Events start >15 minutes apart")
     
-    if pace_diff < 1.0:
+    from .constants import (
+        PACE_SIMILAR_THRESHOLD,
+        PACE_MODERATE_DIFFERENCE_THRESHOLD
+    )
+    
+    if pace_diff < PACE_SIMILAR_THRESHOLD:
         analysis.append("   • Similar pace groups: Runners likely to stay together")
-    elif pace_diff < 2.0:
+    elif pace_diff < PACE_MODERATE_DIFFERENCE_THRESHOLD:
         analysis.append("   • Moderate pace difference: Some overtaking expected")
     else:
         analysis.append("   • Large pace difference: Significant overtaking expected")
@@ -553,13 +558,30 @@ def analyze_temporal_flow_segments(
         
         if cp_km is not None and segment.get("overtake_flag") == "y":
             # Calculate overtaking runners in convergence zone using local-axis mapping
-            count_a, count_b, bibs_a, bibs_b, unique_encounters, participants_involved = calculate_convergence_zone_overlaps(
-                df_a, df_b, event_a, event_b, start_times,
-                cp_km, from_km_a, to_km_a, from_km_b, to_km_b, min_overlap_duration, conflict_length_m
+            # Calculate dynamic conflict length first
+            from .constants import (
+                CONFLICT_LENGTH_LONG_SEGMENT_M,
+                CONFLICT_LENGTH_MEDIUM_SEGMENT_M, 
+                CONFLICT_LENGTH_SHORT_SEGMENT_M,
+                SEGMENT_LENGTH_LONG_THRESHOLD_KM,
+                SEGMENT_LENGTH_MEDIUM_THRESHOLD_KM
             )
             
-            # Calculate actual conflict zone boundaries for reporting
-            conflict_length_km = conflict_length_m / 1000.0
+            segment_length_km = to_km_a - from_km_a
+            if segment_length_km > SEGMENT_LENGTH_LONG_THRESHOLD_KM:
+                dynamic_conflict_length_m = CONFLICT_LENGTH_LONG_SEGMENT_M
+            elif segment_length_km > SEGMENT_LENGTH_MEDIUM_THRESHOLD_KM:
+                dynamic_conflict_length_m = CONFLICT_LENGTH_MEDIUM_SEGMENT_M
+            else:
+                dynamic_conflict_length_m = CONFLICT_LENGTH_SHORT_SEGMENT_M
+            
+            count_a, count_b, bibs_a, bibs_b, unique_encounters, participants_involved = calculate_convergence_zone_overlaps(
+                df_a, df_b, event_a, event_b, start_times,
+                cp_km, from_km_a, to_km_a, from_km_b, to_km_b, min_overlap_duration, dynamic_conflict_length_m
+            )
+            
+            # Calculate dynamic conflict zone boundaries based on segment characteristics
+            conflict_length_km = dynamic_conflict_length_m / 1000.0
             conflict_half_km = conflict_length_km / 2.0
             conflict_start = max(from_km_a, cp_km - conflict_half_km)
             conflict_end = min(to_km_a, cp_km + conflict_half_km)
@@ -571,7 +593,7 @@ def analyze_temporal_flow_segments(
                 "sample_b": bibs_b[:10],
                 "convergence_zone_start": conflict_start,
                 "convergence_zone_end": conflict_end,
-                "conflict_length_m": conflict_length_m,
+                "conflict_length_m": dynamic_conflict_length_m,
                 "unique_encounters": unique_encounters,
                 "participants_involved": participants_involved
             })

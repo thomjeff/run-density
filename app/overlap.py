@@ -490,8 +490,9 @@ def calculate_convergence_point(
         arrival_times_b = start_b + offset_b + pace_b * km_point
         
         # Check for temporal overlaps (runners present at same time)
-        # Use a tolerance window to account for timing precision
-        tolerance_seconds = 5.0  # 5 second tolerance for temporal overlap
+        # Use configurable tolerance for temporal overlap
+        from .constants import TEMPORAL_OVERLAP_TOLERANCE_SECONDS
+        tolerance_seconds = TEMPORAL_OVERLAP_TOLERANCE_SECONDS
         
         # Find if any runners from A and B are present at the same time
         for time_a in arrival_times_a:
@@ -566,7 +567,9 @@ def calculate_true_pass_detection(
         arrival_end_a = start_a + offset_a + pace_a * to_km
         arrival_end_b = start_b + offset_b + pace_b * to_km
         
-        tolerance_seconds = 5.0  # 5 second tolerance for temporal overlap
+        # Use configurable tolerance for true pass detection
+        from .constants import TRUE_PASS_DETECTION_TOLERANCE_SECONDS
+        tolerance_seconds = TRUE_PASS_DETECTION_TOLERANCE_SECONDS
         
         # Check for true passes: temporal overlap AND directional change
         for i, time_a in enumerate(arrival_times_a):
@@ -595,11 +598,17 @@ def calculate_true_pass_detection(
                     if (start_time_b > start_time_a and end_time_b < end_time_a):
                         return float(km_point)
                     
-                    # Also check for convergence where runners meet at the same time
+                    # IMPROVED: Check for convergence where runners meet at the same time
                     # This handles cases where the directional logic might be too strict
                     # but temporal overlap still indicates meaningful interaction
                     if abs(start_time_a - start_time_b) <= tolerance_seconds and \
                        abs(end_time_a - end_time_b) <= tolerance_seconds:
+                        return float(km_point)
+                    
+                    # ADDITIONAL: Check for runners who are close in time and space
+                    # This catches cases where runners are essentially running together
+                    if abs(start_time_a - start_time_b) <= tolerance_seconds * 2 and \
+                       abs(end_time_a - end_time_b) <= tolerance_seconds * 2:
                         return float(km_point)
     
     # No true passes found
