@@ -354,20 +354,61 @@ def calculate_convergence_zone_overlaps(
             
             if overlap_duration >= min_overlap_duration:
                 # Temporal overlap detected - now check for directional change
-                # Calculate arrival times at INTERSECTION boundaries to detect passing
-                # Use the same segment boundaries for both events to ensure fair comparison
+                # Calculate arrival times at boundaries to detect passing
+                # Use intersection boundaries if available, otherwise use conflict zone boundaries
                 intersection_start = max(from_km_a, from_km_b)
                 intersection_end = min(to_km_a, to_km_b)
                 
+                if intersection_start < intersection_end:
+                    # Use intersection boundaries for fair comparison
+                    boundary_start = intersection_start
+                    boundary_end = intersection_end
+                else:
+                    # No intersection - use NORMALIZED approach for finish line convergence
+                    # This handles cases like M1 where runners converge at the same physical location
+                    # but have different absolute kilometer ranges
+                    # Map conflict zone to normalized positions within each event's segment
+                    # Full segment: from_km_a to to_km_a
+                    # Half segment: from_km_b to to_km_b
+                    # Use the conflict zone center as the reference point
+                    conflict_center = (cp_km_a_start + cp_km_a_end) / 2.0
+                    
+                    # Normalize conflict center to each event's coordinate system
+                    norm_a = (conflict_center - from_km_a) / (to_km_a - from_km_a) if (to_km_a - from_km_a) > 0 else 0.5
+                    norm_b = (conflict_center - from_km_b) / (to_km_b - from_km_b) if (to_km_b - from_km_b) > 0 else 0.5
+                    
+                    # Clamp to valid range
+                    norm_a = max(0.0, min(1.0, norm_a))
+                    norm_b = max(0.0, min(1.0, norm_b))
+                    
+                    # Use normalized positions for directional change detection
+                    # This allows comparison of runners at the same relative position within their segments
+                    boundary_start = norm_a  # Will be used as normalized position
+                    boundary_end = norm_b    # Will be used as normalized position
+                
                 pace_a = df_a.iloc[i]["pace"] * 60.0
                 offset_a = df_a.iloc[i].get("start_offset", 0)
-                start_time_a = start_a + offset_a + pace_a * intersection_start
-                end_time_a = start_a + offset_a + pace_a * intersection_end
-                
                 pace_b = df_b.iloc[j]["pace"] * 60.0
                 offset_b = df_b.iloc[j].get("start_offset", 0)
-                start_time_b = start_b + offset_b + pace_b * intersection_start
-                end_time_b = start_b + offset_b + pace_b * intersection_end
+                
+                if intersection_start < intersection_end:
+                    # Use absolute coordinates for intersection-based segments
+                    start_time_a = start_a + offset_a + pace_a * boundary_start
+                    end_time_a = start_a + offset_a + pace_a * boundary_end
+                    start_time_b = start_b + offset_b + pace_b * boundary_start
+                    end_time_b = start_b + offset_b + pace_b * boundary_end
+                else:
+                    # Use normalized coordinates for finish line convergence
+                    # Map normalized positions back to absolute coordinates for each event
+                    abs_start_a = from_km_a + boundary_start * (to_km_a - from_km_a)
+                    abs_end_a = from_km_a + boundary_end * (to_km_a - from_km_a)
+                    abs_start_b = from_km_b + boundary_start * (to_km_b - from_km_b)
+                    abs_end_b = from_km_b + boundary_end * (to_km_b - from_km_b)
+                    
+                    start_time_a = start_a + offset_a + pace_a * abs_start_a
+                    end_time_a = start_a + offset_a + pace_a * abs_end_a
+                    start_time_b = start_b + offset_b + pace_b * abs_start_b
+                    end_time_b = start_b + offset_b + pace_b * abs_end_b
                 
                 # Check for directional pass (true overtaking)
                 # Runner A passes Runner B if A starts behind B but finishes ahead of B
