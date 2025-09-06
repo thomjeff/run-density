@@ -234,9 +234,11 @@ def calculate_convergence_zone_overlaps(
     conflict_half_km = conflict_length_km / 2.0
     
     # Convert conflict zone to normalized fractions
-    # Use the smaller of the two segment lengths to ensure conflict zone fits in both
+    # Use proportional tolerance: 5% of shorter segment, minimum 50m
+    # This makes tolerance consistent for both absolute and normalized segments
     min_segment_len = min(len_a, len_b)
-    s_conflict_half = conflict_half_km / max(min_segment_len, 1e-9)
+    proportional_tolerance_km = max(0.05, 0.05 * min_segment_len)  # 5% of shorter segment, min 50m
+    s_conflict_half = proportional_tolerance_km / max(min_segment_len, 1e-9)
     
     # Define normalized conflict zone boundaries
     s_start = max(0.0, s_cp - s_conflict_half)
@@ -258,6 +260,10 @@ def calculate_convergence_zone_overlaps(
     start_a = start_times.get(event_a, 0) * 60.0
     start_b = start_times.get(event_b, 0) * 60.0
 
+    # Reset index to prevent iloc[i] mismatch after DataFrame filtering
+    df_a = df_a.reset_index(drop=True)
+    df_b = df_b.reset_index(drop=True)
+    
     # Vectorized times for conflict zone
     pace_a = df_a["pace"].values * 60.0  # sec per km
     offset_a = df_a.get("start_offset", pd.Series([0]*len(df_a))).fillna(0).values.astype(float)
@@ -273,19 +279,45 @@ def calculate_convergence_zone_overlaps(
     b_bibs = set()
     unique_pairs = set()
 
-    # Pairwise overlap detection
+    # TRUE PASS DETECTION: Check for temporal overlap AND directional change
+    # This ensures we only count actual overtaking, not just co-presence
     for i, (enter_a, exit_a) in enumerate(zip(time_enter_a, time_exit_a)):
         for j, (enter_b, exit_b) in enumerate(zip(time_enter_b, time_exit_b)):
             overlap_start = max(enter_a, enter_b)
             overlap_end = min(exit_a, exit_b)
             overlap_duration = overlap_end - overlap_start
+            
             if overlap_duration >= min_overlap_duration:
-                a_bib = df_a.iloc[i]["runner_id"]
-                b_bib = df_b.iloc[j]["runner_id"]
-                a_bibs.add(a_bib)
-                b_bibs.add(b_bib)
-                # Track unique pairs (ordered to avoid duplicates)
-                unique_pairs.add((a_bib, b_bib))
+                # Temporal overlap detected - now check for directional change
+                # Calculate arrival times at INTERSECTION boundaries to detect passing
+                # Use the same segment boundaries for both events to ensure fair comparison
+                intersection_start = max(from_km_a, from_km_b)
+                intersection_end = min(to_km_a, to_km_b)
+                
+                pace_a = df_a.iloc[i]["pace"] * 60.0
+                offset_a = df_a.iloc[i].get("start_offset", 0)
+                start_time_a = start_a + offset_a + pace_a * intersection_start
+                end_time_a = start_a + offset_a + pace_a * intersection_end
+                
+                pace_b = df_b.iloc[j]["pace"] * 60.0
+                offset_b = df_b.iloc[j].get("start_offset", 0)
+                start_time_b = start_b + offset_b + pace_b * intersection_start
+                end_time_b = start_b + offset_b + pace_b * intersection_end
+                
+                # Check for directional pass (true overtaking)
+                # Runner A passes Runner B if A starts behind B but finishes ahead of B
+                a_passes_b = (start_time_a > start_time_b and end_time_a < end_time_b)
+                # Runner B passes Runner A if B starts behind A but finishes ahead of A
+                b_passes_a = (start_time_b > start_time_a and end_time_b < end_time_a)
+                
+                if a_passes_b or b_passes_a:
+                    # True pass detected - count as overtaking
+                    a_bib = df_a.iloc[i]["runner_id"]
+                    b_bib = df_b.iloc[j]["runner_id"]
+                    a_bibs.add(a_bib)
+                    b_bibs.add(b_bib)
+                    # Track unique pairs (ordered to avoid duplicates)
+                    unique_pairs.add((a_bib, b_bib))
 
     # Calculate participants involved (union of all runners who had encounters)
     participants_involved = len(a_bibs.union(b_bibs))
