@@ -154,6 +154,46 @@ results = test_report_content_quality()
 - **START TIMES ARE OFFSETS FROM MIDNIGHT** - Always remember that start times are minutes from midnight, not absolute times.
 - **TEST FREQUENTLY** - Test as often as possible and where it makes sense during development.
 
+## CRITICAL AI ASSISTANT LEARNINGS (MUST NOT BE FORGOTTEN)
+
+### **🚫 ENDLESS LOOPS - ABSOLUTE PROHIBITION**
+- **NEVER** enter endless analysis loops where you repeatedly analyze the same code sections without taking action
+- **NEVER** repeatedly identify the same bug without fixing it
+- **STOP** immediately when user says "You're looping" or "You seem stuck"
+- **TAKE ACTION** instead of endless analysis - if you see a bug, fix it immediately
+- **RECOGNIZE PATTERNS**: If you've analyzed the same issue 3+ times, STOP and act
+
+### **🔧 PERMANENT VS TEMPORARY CODE**
+- **ALWAYS** modify permanent modules (`app/temporal_flow_report.py`, `app/density_report.py`) instead of creating temporary scripts
+- **ASK** if unsure whether code should be permanent or temporary
+- **AVOID** creating standalone scripts for functionality that could be permanent
+- **PRINCIPLE**: If functionality will be used repeatedly, it belongs in permanent modules
+
+### **🐛 CRITICAL BUG PATTERNS**
+- **TYPO BUGS**: Simple typos can cause massive regressions (e.g., `'flow-type'` vs `'flow_type'`)
+- **ALWAYS** check for typos in variable names, especially when debugging data flow issues
+- **VERIFY** that data is flowing correctly through the entire pipeline
+- **TEST** immediately after fixing bugs to ensure the fix works
+
+### **⏱️ PERFORMANCE & TESTING**
+- **ANALYSIS TAKES TIME**: Complex analysis (temporal flow, density) can take several minutes
+- **DON'T INTERRUPT** long-running processes unless there's a clear error
+- **BE PATIENT** with computationally intensive operations
+- **VERIFY SUCCESS**: Check that files are generated and contain expected data
+
+### **📊 REPORT QUALITY STANDARDS**
+- **HUMAN READABILITY**: All reports must be formatted for human consumption
+- **CONSISTENT DECIMALS**: Use max 3 decimal places, remove trailing zeros
+- **NO "N/A" VALUES**: Replace with actual values or meaningful defaults
+- **NORMALIZED VALUES**: Use 0.0-1.0 ranges for normalized metrics
+- **PERCENTAGES**: Always include percentage calculations where relevant
+
+### **🔄 WORKFLOW DISCIPLINE**
+- **COMMIT FREQUENTLY**: Make commits after testing and verification
+- **USE DEV BRANCHES**: Work on version branches (e.g., v1.6.2-dev)
+- **DOCUMENT CHANGES**: Always update CRITICAL_CONFIGURATION.md with new learnings
+- **TEST COMPREHENSIVELY**: Run end-to-end tests before considering work complete
+
 ## Issue Completion Workflow
 
 **CRITICAL: After completing an Issue and all of its sub-issues, ALWAYS follow these 7 steps:**
