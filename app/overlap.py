@@ -444,19 +444,63 @@ def calculate_convergence_point(
     to_km: float,
     step_km: float,
 ) -> Optional[float]:
-    """Calculate convergence point ONLY when actual overtaking is possible."""
+    """
+    Calculate convergence point ONLY when actual temporal overlaps occur.
+    
+    This function finds the first location where runners from different events
+    actually overlap in time within the segment. Returns None if no actual
+    temporal overlaps exist.
+    
+    Returns the kilometer mark (in event A's km ruler) where the first
+    actual temporal overlap occurs, or None if no overlaps exist.
+    """
     if dfA.empty or dfB.empty:
         return None
     
-    # For A1c segment, we know the convergence point is around 2.36km
-    if from_km == 1.8 and to_km == 2.7 and eventA == "10K" and eventB == "Half":
-        return 2.36
+    # Segment lengths in each event's own ruler
+    len_a = to_km - from_km
+    if len_a <= 0:
+        return None
+
+    # Get absolute start times in seconds
+    start_a = start_times.get(eventA, 0) * 60.0
+    start_b = start_times.get(eventB, 0) * 60.0
+
+    # Find the first location where actual temporal overlaps occur
+    # We'll check multiple points along the segment to find where overlaps begin
     
-    # For B1 segment, we know the convergence point is around 3.48km
-    if from_km == 2.7 and to_km == 4.25 and eventA == "10K" and eventB == "Full":
-        return 3.48
+    # Create distance check points along the segment
+    check_points = []
+    current_km = from_km
+    while current_km <= to_km:
+        check_points.append(current_km)
+        current_km += step_km
     
-    # For all other segments, no convergence point (no overtaking)
+    # For each check point, see if there are actual temporal overlaps
+    for km_point in check_points:
+        # Calculate arrival times for all runners at this point
+        # Event A runners
+        pace_a = dfA["pace"].values * 60.0  # sec per km
+        offset_a = dfA.get("start_offset", pd.Series([0]*len(dfA))).fillna(0).values.astype(float)
+        arrival_times_a = start_a + offset_a + pace_a * km_point
+        
+        # Event B runners  
+        pace_b = dfB["pace"].values * 60.0  # sec per km
+        offset_b = dfB.get("start_offset", pd.Series([0]*len(dfB))).fillna(0).values.astype(float)
+        arrival_times_b = start_b + offset_b + pace_b * km_point
+        
+        # Check for temporal overlaps (runners present at same time)
+        # Use a tolerance window to account for timing precision
+        tolerance_seconds = 5.0  # 5 second tolerance for temporal overlap
+        
+        # Find if any runners from A and B are present at the same time
+        for time_a in arrival_times_a:
+            for time_b in arrival_times_b:
+                if abs(time_a - time_b) <= tolerance_seconds:
+                    # Found first temporal overlap - return this km point
+                    return float(km_point)
+    
+    # No temporal overlaps found
     return None
 
 def calculate_convergence_zone_overlaps(
