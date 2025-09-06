@@ -132,6 +132,8 @@ def calculate_convergence_point(
         )
         
         if true_pass_result is not None:
+            # For normalized approach, return the convergence point in Event A's coordinate system
+            # This ensures consistency with the conflict zone calculation
             return true_pass_result
         
         # Try co-presence detection at this normalized position
@@ -141,6 +143,8 @@ def calculate_convergence_point(
         )
         
         if co_presence_result is not None:
+            # For normalized approach, return the convergence point in Event A's coordinate system
+            # This ensures consistency with the conflict zone calculation
             return co_presence_result
     
     # No convergence found in normalized space
@@ -252,37 +256,70 @@ def calculate_convergence_zone_overlaps(
     if len_a <= 0 or len_b <= 0:
         return 0, 0, [], [], 0, 0
 
-    # For segments with different ranges (like F1), we need to work in normalized space
-    # Map convergence point to normalized position within the segment
-    s_cp = (cp_km - from_km_a) / max(len_a, 1e-9)
-    s_cp = max(0.0, min(1.0, s_cp))
-    
-    # Calculate conflict zone in normalized space
-    conflict_length_km = conflict_length_m / 1000.0  # Convert meters to km
-    conflict_half_km = conflict_length_km / 2.0
-    
-    # Convert conflict zone to normalized fractions
-    # Use proportional tolerance: 5% of shorter segment, minimum 50m
-    # This makes tolerance consistent for both absolute and normalized segments
-    min_segment_len = min(len_a, len_b)
-    proportional_tolerance_km = max(0.05, 0.05 * min_segment_len)  # 5% of shorter segment, min 50m
-    s_conflict_half = proportional_tolerance_km / max(min_segment_len, 1e-9)
-    
-    # Define normalized conflict zone boundaries
-    s_start = max(0.0, s_cp - s_conflict_half)
-    s_end = min(1.0, s_cp + s_conflict_half)
-    
-    # Ensure conflict zone has some width
-    if s_end <= s_start:
-        s_start = max(0.0, s_cp - 0.05)  # 5% of segment
-        s_end = min(1.0, s_cp + 0.05)    # 5% of segment
-    
-    # Convert normalized conflict zone to each event's absolute coordinates
-    cp_km_a_start = from_km_a + s_start * len_a
-    cp_km_a_end = from_km_a + s_end * len_a
-    
-    cp_km_b_start = from_km_b + s_start * len_b
-    cp_km_b_end = from_km_b + s_end * len_b
+    # Check if convergence point is within Event A's range (absolute approach)
+    # or if we need to use normalized approach (for segments like F1)
+    if from_km_a <= cp_km <= to_km_a:
+        # Convergence point is within Event A's range - use absolute approach
+        s_cp = (cp_km - from_km_a) / max(len_a, 1e-9)
+        s_cp = max(0.0, min(1.0, s_cp))
+        
+        # Calculate conflict zone in normalized space
+        conflict_length_km = conflict_length_m / 1000.0  # Convert meters to km
+        conflict_half_km = conflict_length_km / 2.0
+        
+        # Convert conflict zone to normalized fractions
+        # Use proportional tolerance: 5% of shorter segment, minimum 50m
+        min_segment_len = min(len_a, len_b)
+        proportional_tolerance_km = max(0.05, 0.05 * min_segment_len)  # 5% of shorter segment, min 50m
+        s_conflict_half = proportional_tolerance_km / max(min_segment_len, 1e-9)
+        
+        # Define normalized conflict zone boundaries
+        s_start = max(0.0, s_cp - s_conflict_half)
+        s_end = min(1.0, s_cp + s_conflict_half)
+        
+        # Ensure conflict zone has some width
+        if s_end <= s_start:
+            s_start = max(0.0, s_cp - 0.05)  # 5% of segment
+            s_end = min(1.0, s_cp + 0.05)    # 5% of segment
+        
+        # Convert normalized conflict zone to each event's absolute coordinates
+        cp_km_a_start = from_km_a + s_start * len_a
+        cp_km_a_end = from_km_a + s_end * len_a
+        
+        cp_km_b_start = from_km_b + s_start * len_b
+        cp_km_b_end = from_km_b + s_end * len_b
+    else:
+        # Convergence point is outside Event A's range - use normalized approach
+        # This handles cases where convergence was detected in normalized space
+        # but the point doesn't map to Event A's absolute coordinates
+        
+        # Use the intersection boundaries if they exist, otherwise use proportional zones
+        intersection_start = max(from_km_a, from_km_b)
+        intersection_end = min(to_km_a, to_km_b)
+        
+        if intersection_start < intersection_end:
+            # There is an intersection - use it for conflict zone
+            conflict_length_km = conflict_length_m / 1000.0
+            conflict_half_km = conflict_length_km / 2.0
+            
+            cp_km_a_start = max(from_km_a, intersection_start - conflict_half_km)
+            cp_km_a_end = min(to_km_a, intersection_end + conflict_half_km)
+            
+            cp_km_b_start = max(from_km_b, intersection_start - conflict_half_km)
+            cp_km_b_end = min(to_km_b, intersection_end + conflict_half_km)
+        else:
+            # No intersection - use proportional zones around segment centers
+            center_a = (from_km_a + to_km_a) / 2.0
+            center_b = (from_km_b + to_km_b) / 2.0
+            
+            conflict_length_km = conflict_length_m / 1000.0
+            conflict_half_km = conflict_length_km / 2.0
+            
+            cp_km_a_start = max(from_km_a, center_a - conflict_half_km)
+            cp_km_a_end = min(to_km_a, center_a + conflict_half_km)
+            
+            cp_km_b_start = max(from_km_b, center_b - conflict_half_km)
+            cp_km_b_end = min(to_km_b, center_b + conflict_half_km)
 
     # Get start times
     start_a = start_times.get(event_a, 0) * 60.0
@@ -703,11 +740,51 @@ def analyze_temporal_flow_segments(
                 cp_km, from_km_a, to_km_a, from_km_b, to_km_b, min_overlap_duration, dynamic_conflict_length_m
             )
             
-            # Calculate dynamic conflict zone boundaries based on segment characteristics
-            conflict_length_km = dynamic_conflict_length_m / 1000.0
-            conflict_half_km = conflict_length_km / 2.0
-            conflict_start = max(from_km_a, cp_km - conflict_half_km)
-            conflict_end = min(to_km_a, cp_km + conflict_half_km)
+            # Calculate dynamic conflict zone boundaries using the same logic as calculate_convergence_zone_overlaps
+            # This ensures consistency between overtaking count calculation and reporting
+            len_a = to_km_a - from_km_a
+            len_b = to_km_b - from_km_b
+            
+            if from_km_a <= cp_km <= to_km_a:
+                # Convergence point is within Event A's range - use absolute approach
+                s_cp = (cp_km - from_km_a) / max(len_a, 1e-9)
+                s_cp = max(0.0, min(1.0, s_cp))
+                
+                # Use proportional tolerance: 5% of shorter segment, minimum 50m
+                min_segment_len = min(len_a, len_b)
+                proportional_tolerance_km = max(0.05, 0.05 * min_segment_len)
+                s_conflict_half = proportional_tolerance_km / max(min_segment_len, 1e-9)
+                
+                # Define normalized conflict zone boundaries
+                s_start = max(0.0, s_cp - s_conflict_half)
+                s_end = min(1.0, s_cp + s_conflict_half)
+                
+                # Ensure conflict zone has some width
+                if s_end <= s_start:
+                    s_start = max(0.0, s_cp - 0.05)
+                    s_end = min(1.0, s_cp + 0.05)
+                
+                # Convert to absolute coordinates for reporting
+                conflict_start = from_km_a + s_start * len_a
+                conflict_end = from_km_a + s_end * len_a
+            else:
+                # Convergence point is outside Event A's range - use normalized approach
+                intersection_start = max(from_km_a, from_km_b)
+                intersection_end = min(to_km_a, to_km_b)
+                
+                if intersection_start < intersection_end:
+                    # Use intersection boundaries
+                    conflict_length_km = dynamic_conflict_length_m / 1000.0
+                    conflict_half_km = conflict_length_km / 2.0
+                    conflict_start = max(from_km_a, intersection_start - conflict_half_km)
+                    conflict_end = min(to_km_a, intersection_end + conflict_half_km)
+                else:
+                    # Use segment center
+                    center_a = (from_km_a + to_km_a) / 2.0
+                    conflict_length_km = dynamic_conflict_length_m / 1000.0
+                    conflict_half_km = conflict_length_km / 2.0
+                    conflict_start = max(from_km_a, center_a - conflict_half_km)
+                    conflict_end = min(to_km_a, center_a + conflict_half_km)
             
             segment_result.update({
                 "overtaking_a": count_a,
