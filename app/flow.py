@@ -42,77 +42,27 @@ def calculate_convergence_point(
     step_km: float = DEFAULT_CONVERGENCE_STEP_KM,
 ) -> Optional[float]:
     """
-    Calculate convergence point ONLY when actual temporal overlaps occur.
+    Calculate convergence point using TRUE PASS DETECTION.
     
-    This function finds the first location where runners from different events
-    actually overlap in time within the segment. Returns None if no actual
-    temporal overlaps exist.
+    This function detects when runners from one event actually pass runners
+    from another event (directional overtaking), not just co-presence.
     
-    Returns the kilometer mark (in event A's km ruler) where the first
-    actual temporal overlap occurs, or None if no overlaps exist.
+    A true pass occurs when:
+    1. Runner A arrives at km_point at time T_A
+    2. Runner B arrives at km_point at time T_B  
+    3. |T_A - T_B| <= tolerance
+    4. AND one runner was behind the other at from_km but ahead at to_km
+    
+    Returns the kilometer mark where the first true pass occurs, or None.
     """
-    if dfA.empty or dfB.empty:
-        return None
+    # Import the true pass detection function from overlap module
+    from .overlap import calculate_true_pass_detection
     
-    # Segment lengths in each event's own ruler
-    len_a = to_km_a - from_km_a
-    len_b = to_km_b - from_km_b
-    if len_a <= 0 or len_b <= 0:
-        return None
-
-    # Get absolute start times in seconds
-    start_a = start_times.get(eventA, 0) * SECONDS_PER_MINUTE
-    start_b = start_times.get(eventB, 0) * SECONDS_PER_MINUTE
-
-    # Find the first location where actual temporal overlaps occur
-    # We'll check multiple points along the segment to find where overlaps begin
-    
-    # Create distance check points along the segment
-    check_points = []
-    current_km = from_km_a
-    while current_km <= to_km_a:
-        check_points.append(current_km)
-        current_km += step_km
-    
-    # For each check point, see if there are actual temporal overlaps
-    for km_point in check_points:
-        # Map this km point to both events' coordinate systems
-        # For event A: direct mapping
-        km_a = km_point
-        
-        # For event B: map using segment-local axis
-        s_local = (km_point - from_km_a) / len_a if len_a > 0 else 0.0
-        s_local = max(0.0, min(1.0, s_local))  # Clamp to [0,1]
-        km_b = from_km_b + s_local * len_b
-        
-        # Check if this point is within both segments
-        if not (from_km_a <= km_a <= to_km_a and from_km_b <= km_b <= to_km_b):
-            continue
-        
-        # Calculate arrival times for all runners at this point
-        # Event A runners
-        pace_a = dfA["pace"].values * 60.0  # sec per km
-        offset_a = dfA.get("start_offset", pd.Series([0]*len(dfA))).fillna(0).values.astype(float)
-        arrival_times_a = start_a + offset_a + pace_a * km_a
-        
-        # Event B runners  
-        pace_b = dfB["pace"].values * 60.0  # sec per km
-        offset_b = dfB.get("start_offset", pd.Series([0]*len(dfB))).fillna(0).values.astype(float)
-        arrival_times_b = start_b + offset_b + pace_b * km_b
-        
-        # Check for temporal overlaps at this point
-        # A temporal overlap occurs when a runner from one event arrives
-        # at the same time (within a small tolerance) as a runner from another event
-        tolerance_seconds = TEMPORAL_OVERLAP_TOLERANCE_SECONDS  # tolerance for "same time"
-        
-        for time_a in arrival_times_a:
-            for time_b in arrival_times_b:
-                if abs(time_a - time_b) <= tolerance_seconds:
-                    # Found actual temporal overlap! Return this as convergence point
-                    return round(km_point, 2)
-    
-    # No temporal overlaps found anywhere in the segment
-    return None
+    # Use the true pass detection algorithm
+    return calculate_true_pass_detection(
+        dfA, dfB, eventA, eventB, start_times,
+        from_km_a, to_km_a, step_km
+    )
 
 
 def calculate_entry_exit_times(

@@ -503,6 +503,99 @@ def calculate_convergence_point(
     # No temporal overlaps found
     return None
 
+
+def calculate_true_pass_detection(
+    dfA: pd.DataFrame,
+    dfB: pd.DataFrame,
+    eventA: str,
+    eventB: str,
+    start_times: Dict[str, float],
+    from_km: float,
+    to_km: float,
+    step_km: float,
+) -> Optional[float]:
+    """
+    Calculate convergence point based on TRUE PASS DETECTION.
+    
+    This function detects when runners from one event actually pass runners
+    from another event (directional overtaking), not just co-presence.
+    
+    A true pass occurs when:
+    1. Runner A arrives at km_point at time T_A
+    2. Runner B arrives at km_point at time T_B  
+    3. |T_A - T_B| <= tolerance
+    4. AND one runner was behind the other at from_km but ahead at to_km
+    
+    Returns the kilometer mark where the first true pass occurs, or None.
+    """
+    if dfA.empty or dfB.empty:
+        return None
+    
+    # Segment lengths in each event's own ruler
+    len_a = to_km - from_km
+    if len_a <= 0:
+        return None
+
+    # Get absolute start times in seconds
+    start_a = start_times.get(eventA, 0) * 60.0
+    start_b = start_times.get(eventB, 0) * 60.0
+
+    # Create distance check points along the segment
+    check_points = []
+    current_km = from_km
+    while current_km <= to_km:
+        check_points.append(current_km)
+        current_km += step_km
+    
+    # For each check point, detect true passes
+    for km_point in check_points:
+        # Calculate arrival times for all runners at this point
+        pace_a = dfA["pace"].values * 60.0  # sec per km
+        offset_a = dfA.get("start_offset", pd.Series([0]*len(dfA))).fillna(0).values.astype(float)
+        arrival_times_a = start_a + offset_a + pace_a * km_point
+        
+        pace_b = dfB["pace"].values * 60.0  # sec per km
+        offset_b = dfB.get("start_offset", pd.Series([0]*len(dfB))).fillna(0).values.astype(float)
+        arrival_times_b = start_b + offset_b + pace_b * km_point
+        
+        # Calculate arrival times at segment start (from_km)
+        arrival_start_a = start_a + offset_a + pace_a * from_km
+        arrival_start_b = start_b + offset_b + pace_b * from_km
+        
+        # Calculate arrival times at segment end (to_km)  
+        arrival_end_a = start_a + offset_a + pace_a * to_km
+        arrival_end_b = start_b + offset_b + pace_b * to_km
+        
+        tolerance_seconds = 5.0  # 5 second tolerance for temporal overlap
+        
+        # Check for true passes: temporal overlap AND directional change
+        for i, time_a in enumerate(arrival_times_a):
+            for j, time_b in enumerate(arrival_times_b):
+                if abs(time_a - time_b) <= tolerance_seconds:
+                    # Temporal overlap detected - now check for directional pass
+                    
+                    # Check if this represents a true pass
+                    # Runner A passes Runner B if:
+                    # - At from_km: A arrives after B (A is behind B)
+                    # - At to_km: A arrives before B (A is ahead of B)
+                    # OR vice versa
+                    
+                    start_time_a = arrival_start_a[i]
+                    start_time_b = arrival_start_b[j]
+                    end_time_a = arrival_end_a[i]
+                    end_time_b = arrival_end_b[j]
+                    
+                    # Check for pass A -> B (A overtakes B)
+                    if (start_time_a > start_time_b and end_time_a < end_time_b):
+                        return float(km_point)
+                    
+                    # Check for pass B -> A (B overtakes A)  
+                    if (start_time_b > start_time_a and end_time_b < end_time_a):
+                        return float(km_point)
+    
+    # No true passes found
+    return None
+
 def calculate_convergence_zone_overlaps(
     df_a: pd.DataFrame,
     df_b: pd.DataFrame,
