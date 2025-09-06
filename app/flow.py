@@ -4,6 +4,16 @@ Temporal Flow Analysis Module
 Handles temporal flow analysis for segments where overtaking or merging is possible.
 Only processes segments with overtake_flag = 'y' from flow.csv.
 Supports overtake, merge, and diverge flow types.
+
+KEY CONCEPTS:
+1. START TIMES: Must be offsets from midnight in minutes (e.g., 420 = 7:00 AM)
+2. NORMALIZED DISTANCES: For segments with different absolute ranges (like F1), 
+   we work in normalized space (0.0-1.0) to compare relative positions
+3. CONVERGENCE vs OVERTAKE_FLAG: Segments with overtake_flag='y' don't necessarily 
+   need to show convergence if there are no temporal overlaps due to timing differences
+4. TRUE PASS DETECTION: Only counts actual directional overtaking, not just co-presence
+5. INTERSECTION BOUNDARIES: For directional change detection, use intersection 
+   boundaries (same segment) rather than individual event boundaries (different segments)
 """
 
 from __future__ import annotations
@@ -53,6 +63,12 @@ def calculate_convergence_point(
     3. |T_A - T_B| <= tolerance
     4. AND one runner was behind the other at from_km but ahead at to_km
     
+    ALGORITHM APPROACH:
+    - If events have absolute intersection (like L1): Use intersection-based approach
+    - If events have no intersection (like F1): Use normalized approach with fine grid
+    - Normalized approach maps relative positions (0.0-1.0) to absolute coordinates
+      for pace calculations, then checks for temporal overlap
+    
     Returns the kilometer mark where the first true pass occurs, or None.
     """
     # Import the true pass detection function from overlap module
@@ -80,6 +96,9 @@ def calculate_convergence_point(
         return true_pass_result
     
     # No intersection in absolute space - need normalized approach for segments like F1
+    # NORMALIZED DISTANCE APPROACH: For segments with different absolute ranges but same
+    # relative positions (e.g., F1: Full 16.35-18.65km, Half 2.7-5.0km, 10K 5.8-8.1km),
+    # we work in normalized space (0.0-1.0) to compare relative positions within each segment.
     # Calculate segment lengths
     len_a = to_km_a - from_km_a
     len_b = to_km_b - from_km_b
@@ -215,6 +234,15 @@ def calculate_convergence_zone_overlaps(
     """
     Calculate the number of overlapping runners within the convergence zone,
     projecting both events onto a common segment-local axis.
+    
+    CRITICAL: Uses TRUE PASS DETECTION, not co-presence detection.
+    - Only counts runners who actually overtake each other directionally
+    - Checks BOTH temporal overlap AND directional change
+    - Uses intersection boundaries for fair directional comparison
+    - Prevents inflated counts from simple temporal overlap
+    
+    PROPORTIONAL TOLERANCE: Uses 5% of shorter segment length, minimum 50m
+    to ensure consistent behavior across different segment sizes.
     """
     if df_a.empty or df_b.empty:
         return 0, 0, [], [], 0, 0
@@ -566,6 +594,10 @@ def analyze_temporal_flow_segments(
     Analyze all segments for temporal flow patterns.
     Supports overtake, merge, and diverge flow types.
     Processes ALL segments but only calculates convergence for overtake_flag = 'y' segments.
+    
+    START TIMES REQUIREMENT: start_times must be offsets from midnight in minutes.
+    Example: {'10K': 420, 'Half': 440, 'Full': 460} means 10K starts at 7:00 AM,
+    Half at 7:20 AM, Full at 7:40 AM.
     """
     # Load data
     pace_df = load_pace_csv(pace_csv)
@@ -605,6 +637,8 @@ def analyze_temporal_flow_segments(
         df_b = pace_df[pace_df["event"] == event_b].copy()
         
         # Calculate convergence point (in event A km ruler) - only for overtake segments
+        # NOTE: Segments with overtake_flag='y' don't necessarily need to show convergence
+        # if there are no temporal overlaps due to timing differences (e.g., A1, B1)
         cp_km = None
         if segment.get("overtake_flag") == "y":
             cp_km = calculate_convergence_point(
