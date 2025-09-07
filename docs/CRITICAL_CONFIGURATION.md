@@ -157,6 +157,14 @@ results = test_report_content_quality()
 - **DOCUMENT CHANGES**: Always update CRITICAL_CONFIGURATION.md with new learnings
 - **TEST COMPREHENSIVELY**: Run end-to-end tests before considering work complete
 
+### **🔧 DEBUG SCRIPT CONSISTENCY**
+- **CRITICAL RULE**: Any debug script MUST use the same variables and values as the actual algorithm
+- **NEVER** use different tolerance values, step sizes, or constants in debug scripts
+- **ALWAYS** import and use the same constants from `app/constants.py` in debug scripts
+- **EXAMPLE**: If algorithm uses `TEMPORAL_OVERLAP_TOLERANCE_SECONDS = 5.0`, debug script must use the same value
+- **CONSEQUENCE**: Using different values wastes debugging time and creates false comparisons with historical reports
+- **VERIFICATION**: Before debugging, check that debug script imports the same constants as the algorithm
+
 ## Issue Completion Workflow
 
 **CRITICAL: After completing an Issue and all of its sub-issues, ALWAYS follow these 7 steps:**
@@ -220,10 +228,11 @@ results = test_report_content_quality()
 7. **Issue Completion Workflow** - ALWAYS follow the 7-step workflow above
 8. **Development Branch** - ALWAYS create a new branch for each parent issue before starting work
 9. **HARDCODED VALUES** - NEVER use hardcoded values unless explicitly directed. This is a critical rule that has been emphasized multiple times.
-10. **Application Fundamentals** - Refer to `docs/Application Fundamentals.md` for core concepts
+10. **DEBUG SCRIPT CONSISTENCY** - ALWAYS use the same constants and values in debug scripts as the actual algorithm. Using different values wastes time and creates false comparisons.
+11. **Application Fundamentals** - Refer to `docs/Application Fundamentals.md` for core concepts
 
 ## Last Updated
-2025-09-05 - Added start times configuration and testing workflow
+2025-09-06 - Added debug script consistency rule to prevent wasted debugging time and false comparisons
 
 ## Related Issues
 - #32 - Distance gaps fix
