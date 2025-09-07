@@ -945,7 +945,7 @@ def calculate_convergence_zone_overlaps_original(
         # Convergence point is within Event A's range - use absolute approach
         s_cp = (cp_km - from_km_a) / max(len_a, 1e-9)
         s_cp, clamp_reason = clamp_normalized_fraction(s_cp, "convergence_point_")
-        
+    
         # Calculate conflict zone in normalized space
         conflict_length_km = conflict_length_m / 1000.0  # Convert meters to km
         conflict_half_km = conflict_length_km / 2.0
