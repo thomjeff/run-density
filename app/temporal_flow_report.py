@@ -8,6 +8,7 @@ generating temporal flow reports that can be called by the API or other modules.
 
 from __future__ import annotations
 import time
+import logging
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 import os
@@ -332,7 +333,18 @@ def generate_convergence_analysis(segment: Dict[str, Any]) -> List[str]:
         # Calculate normalized convergence point (0.0 to 1.0)
         segment_len = to_km_a - from_km_a
         if segment_len > 0:
-            normalized_cp = (convergence_point - from_km_a) / segment_len
+            # Calculate raw fraction
+            raw_fraction = (convergence_point - from_km_a) / segment_len
+            # Apply fraction clamping to ensure [0.0, 1.0] range
+            from app.constants import MIN_NORMALIZED_FRACTION, MAX_NORMALIZED_FRACTION
+            if raw_fraction < MIN_NORMALIZED_FRACTION:
+                normalized_cp = MIN_NORMALIZED_FRACTION
+                logging.warning(f"Clamped negative convergence fraction {raw_fraction:.3f} to {MIN_NORMALIZED_FRACTION} for {segment.get('seg_id', 'unknown')} {event_a} vs {event_b}")
+            elif raw_fraction > MAX_NORMALIZED_FRACTION:
+                normalized_cp = MAX_NORMALIZED_FRACTION
+                logging.warning(f"Clamped convergence fraction {raw_fraction:.3f} > 1.0 to {MAX_NORMALIZED_FRACTION} for {segment.get('seg_id', 'unknown')} {event_a} vs {event_b}")
+            else:
+                normalized_cp = raw_fraction
             normalized_cp = round(normalized_cp, 2)
             
             # Display both absolute and normalized values clearly
@@ -511,7 +523,18 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
                 # Normalize convergence point to segment (0.0 to 1.0)
                 segment_len = to_km_a - from_km_a
                 if segment_len > 0 and cp_km is not None:
-                    normalized_cp = (cp_km - from_km_a) / segment_len
+                    # Calculate raw fraction
+                    raw_fraction = (cp_km - from_km_a) / segment_len
+                    # Apply fraction clamping to ensure [0.0, 1.0] range
+                    from app.constants import MIN_NORMALIZED_FRACTION, MAX_NORMALIZED_FRACTION
+                    if raw_fraction < MIN_NORMALIZED_FRACTION:
+                        normalized_cp = MIN_NORMALIZED_FRACTION
+                        logging.warning(f"Clamped negative convergence fraction {raw_fraction:.3f} to {MIN_NORMALIZED_FRACTION} for {seg_id} {segment.get('event_a', 'A')} vs {segment.get('event_b', 'B')}")
+                    elif raw_fraction > MAX_NORMALIZED_FRACTION:
+                        normalized_cp = MAX_NORMALIZED_FRACTION
+                        logging.warning(f"Clamped convergence fraction {raw_fraction:.3f} > 1.0 to {MAX_NORMALIZED_FRACTION} for {seg_id} {segment.get('event_a', 'A')} vs {segment.get('event_b', 'B')}")
+                    else:
+                        normalized_cp = raw_fraction
                     normalized_cp = format_decimal_places(normalized_cp, 2)  # Max 2 decimal places
                 else:
                     normalized_cp = 0.0
