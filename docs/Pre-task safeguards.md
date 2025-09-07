@@ -27,11 +27,19 @@ You **MUST** explicitly confirm understanding of these CRITICAL RULES before pro
 ## **🧪 MANDATORY TESTING SEQUENCE**
 
 After ANY code changes, you **MUST**:
-1. Run end-to-end tests: `python3 -m app.end_to_end_testing`
-2. Generate actual reports (MD + CSV), not just JSON data
-3. Verify no hardcoded values were introduced
-4. Test through API endpoints, not direct module calls
-5. Validate report content quality and human readability
+1. **USE AUTOMATED TEST SCRIPTS ONLY**: `python3 -m app.end_to_end_testing`
+2. **NEVER manually construct curl commands** - this wastes time and leads to errors
+3. **NEVER guess API parameters** - use the automated scripts that know the correct endpoints
+4. Generate actual reports (MD + CSV), not just JSON data
+5. Verify no hardcoded values were introduced
+6. Test through API endpoints, not direct module calls
+7. Validate report content quality and human readability
+
+### **🚫 PROHIBITED TESTING ACTIONS**
+- **NEVER** manually construct curl commands for API testing
+- **NEVER** guess API endpoint parameters or request formats
+- **NEVER** waste time looking up correct API calls when automated scripts exist
+- **NEVER** modify code to "fix" API calls instead of using proper automated testing
 
 ## **📁 CRITICAL FILE REFERENCES**
 
