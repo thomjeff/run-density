@@ -18,6 +18,7 @@ KEY CONCEPTS:
 
 from __future__ import annotations
 import time
+import logging
 from typing import Dict, Optional, Any, List, Tuple
 import pandas as pd
 import numpy as np
@@ -277,6 +278,10 @@ def calculate_convergence_zone_overlaps_with_binning(
     use_distance_bins = conflict_length_m > SPATIAL_BINNING_THRESHOLD_METERS
     
     if use_time_bins or use_distance_bins:
+        # Log binning decision for transparency
+        logging.info(f"BINNING APPLIED: time_bins={use_time_bins}, distance_bins={use_distance_bins} "
+                    f"(window={overlap_duration_minutes:.1f}min, zone={conflict_length_m:.0f}m)")
+        
         return calculate_convergence_zone_overlaps_binned(
             df_a, df_b, event_a, event_b, start_times,
             cp_km, from_km_a, to_km_a, from_km_b, to_km_b,
@@ -285,6 +290,9 @@ def calculate_convergence_zone_overlaps_with_binning(
         )
     else:
         # Use original method for short segments
+        logging.debug(f"BINNING NOT APPLIED: time_bins={use_time_bins}, distance_bins={use_distance_bins} "
+                     f"(window={overlap_duration_minutes:.1f}min, zone={conflict_length_m:.0f}m)")
+        
         return calculate_convergence_zone_overlaps_original(
             df_a, df_b, event_a, event_b, start_times,
             cp_km, from_km_a, to_km_a, from_km_b, to_km_b,
@@ -880,6 +888,8 @@ def analyze_temporal_flow_segments(
         "start_times": start_times,
         "min_overlap_duration": min_overlap_duration,
         "conflict_length_m": conflict_length_m,
+        "temporal_binning_threshold_minutes": TEMPORAL_BINNING_THRESHOLD_MINUTES,
+        "spatial_binning_threshold_meters": SPATIAL_BINNING_THRESHOLD_METERS,
         "total_segments": len(all_segments),
         "segments_with_convergence": 0,
         "segments": []

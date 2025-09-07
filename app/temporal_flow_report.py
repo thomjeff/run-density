@@ -103,6 +103,7 @@ def generate_markdown_report(
     content.append(f"**Analysis Period:** {results.get('timestamp', 'N/A')}")
     content.append(f"**Min Overlap Duration:** {results.get('min_overlap_duration', 5.0)} seconds")
     content.append(f"**Conflict Length:** {results.get('conflict_length_m', 100.0)} meters")
+    content.append(f"**Binning Thresholds:** Time > {results.get('temporal_binning_threshold_minutes', 10.0)} min, Distance > {results.get('spatial_binning_threshold_meters', 100.0)} m")
     content.append(f"**Total Segments:** {results.get('total_segments', 0)}")
     content.append(f"**Segments with Convergence:** {results.get('segments_with_convergence', 0)}")
     content.append("")
