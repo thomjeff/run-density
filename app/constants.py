@@ -60,3 +60,10 @@ MIN_SUSTAINED_PERIOD_MINUTES = 2.0
 TEMPORAL_BINNING_THRESHOLD_MINUTES = 10.0  # Use time bins if overlap > 10 minutes
 SPATIAL_BINNING_THRESHOLD_METERS = 100.0   # Use distance bins if conflict zone > 100m
 SUSPICIOUS_OVERTAKING_RATE_THRESHOLD = 0.5  # Flag overtaking rates > 50% as suspicious
+
+# Fraction validation and clamping
+MIN_NORMALIZED_FRACTION = 0.0
+MAX_NORMALIZED_FRACTION = 1.0
+FRACTION_CLAMP_REASON_OUTSIDE_RANGE = "outside_A_range_normalized"
+FRACTION_CLAMP_REASON_NEGATIVE = "negative_fraction_clamped"
+FRACTION_CLAMP_REASON_EXCEEDS_ONE = "fraction_exceeds_one_clamped"

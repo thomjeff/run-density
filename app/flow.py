@@ -25,9 +25,39 @@ from .constants import (
     SECONDS_PER_MINUTE, SECONDS_PER_HOUR,
     DEFAULT_CONVERGENCE_STEP_KM, DEFAULT_MIN_OVERLAP_DURATION, 
     DEFAULT_CONFLICT_LENGTH_METERS, TEMPORAL_OVERLAP_TOLERANCE_SECONDS,
-    METERS_PER_KM, PACE_SIMILAR_THRESHOLD, PACE_MODERATE_DIFFERENCE_THRESHOLD
+    METERS_PER_KM, PACE_SIMILAR_THRESHOLD, PACE_MODERATE_DIFFERENCE_THRESHOLD,
+    TEMPORAL_BINNING_THRESHOLD_MINUTES, SPATIAL_BINNING_THRESHOLD_METERS,
+    SUSPICIOUS_OVERTAKING_RATE_THRESHOLD,
+    MIN_NORMALIZED_FRACTION, MAX_NORMALIZED_FRACTION,
+    FRACTION_CLAMP_REASON_OUTSIDE_RANGE, FRACTION_CLAMP_REASON_NEGATIVE,
+    FRACTION_CLAMP_REASON_EXCEEDS_ONE
 )
 from .utils import load_pace_csv, arrival_time_sec, load_segments_csv
+
+
+def clamp_normalized_fraction(fraction: float, reason_prefix: str = "") -> Tuple[float, Optional[str]]:
+    """
+    Clamp a normalized fraction to [0, 1] range and return reason code if clamped.
+    
+    Args:
+        fraction: The fraction to clamp
+        reason_prefix: Optional prefix for reason code
+        
+    Returns:
+        Tuple of (clamped_fraction, reason_code)
+        - reason_code is None if no clamping was needed
+        - reason_code indicates why clamping occurred
+    """
+    if fraction < MIN_NORMALIZED_FRACTION:
+        clamped = MIN_NORMALIZED_FRACTION
+        reason = f"{reason_prefix}{FRACTION_CLAMP_REASON_NEGATIVE}" if reason_prefix else FRACTION_CLAMP_REASON_NEGATIVE
+        return clamped, reason
+    elif fraction > MAX_NORMALIZED_FRACTION:
+        clamped = MAX_NORMALIZED_FRACTION
+        reason = f"{reason_prefix}{FRACTION_CLAMP_REASON_EXCEEDS_ONE}" if reason_prefix else FRACTION_CLAMP_REASON_EXCEEDS_ONE
+        return clamped, reason
+    else:
+        return fraction, None
 
 
 # Use shared utility function from utils module
@@ -302,7 +332,7 @@ def calculate_convergence_zone_overlaps_original(
     if from_km_a <= cp_km <= to_km_a:
         # Convergence point is within Event A's range - use absolute approach
         s_cp = (cp_km - from_km_a) / max(len_a, 1e-9)
-        s_cp = max(0.0, min(1.0, s_cp))
+        s_cp, clamp_reason = clamp_normalized_fraction(s_cp, "convergence_point_")
         
         # Calculate conflict zone in normalized space
         conflict_length_km = conflict_length_m / 1000.0  # Convert meters to km
@@ -996,7 +1026,7 @@ def analyze_temporal_flow_segments(
             if from_km_a <= cp_km <= to_km_a:
                 # Convergence point is within Event A's range - use absolute approach
                 s_cp = (cp_km - from_km_a) / max(len_a, 1e-9)
-                s_cp = max(0.0, min(1.0, s_cp))
+                s_cp, clamp_reason = clamp_normalized_fraction(s_cp, "convergence_point_")
                 
                 # Use proportional tolerance: 5% of shorter segment, minimum 50m
                 min_segment_len = min(len_a, len_b)
@@ -1157,7 +1187,7 @@ def generate_temporal_flow_narrative(results: Dict[str, Any]) -> str:
             len_a = to_km_a - from_km_a
             len_b = to_km_b - from_km_b
             s_cp = (cp_km - from_km_a) / max(len_a, 1e-9) if len_a > 0 else 0.0
-            s_cp = max(0.0, min(1.0, s_cp))
+            s_cp, clamp_reason = clamp_normalized_fraction(s_cp, "convergence_point_")
             
             # Calculate event B distance at convergence point
             cp_km_b = from_km_b + s_cp * len_b
@@ -1380,8 +1410,8 @@ def calculate_tot_metrics(
     # Map to local fractions
     s_start = (cp_km_a_start - from_km_a) / max(len_a, 1e-9)
     s_end = (cp_km_a_end - from_km_a) / max(len_a, 1e-9)
-    s_start = max(0.0, min(1.0, s_start))
-    s_end = max(0.0, min(1.0, s_end))
+    s_start, _ = clamp_normalized_fraction(s_start, "conflict_zone_start_")
+    s_end, _ = clamp_normalized_fraction(s_end, "conflict_zone_end_")
     
     # Convert to each event's km
     cp_km_a_start = from_km_a + s_start * len_a
