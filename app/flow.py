@@ -1303,16 +1303,40 @@ def analyze_temporal_flow_segments(
                     conflict_start = max(0.0, center_a_norm - conflict_half_km)
                     conflict_end = min(1.0, center_a_norm + conflict_half_km)
             
-            # CRITICAL: Set has_convergence=True if convergence zones are calculated
-            # Convergence zones indicate potential for interaction, even if no overtakes occur
-            # This fixes the inconsistency where convergence_zone_start/end exist but has_convergence=False
-            if conflict_start is not None and conflict_end is not None:
-                # Convergence zones calculated - set has_convergence=True
-                segment_result["has_convergence"] = True
-                # Keep convergence_point and fraction as calculated
-            else:
-                # No convergence zones calculated - set has_convergence=False
-                segment_result["has_convergence"] = False
+            # IMPLEMENT THREE-BOOLEAN SCHEMA FOR CONVERGENCE POLICY
+            # Based on convergence policy framework: has_convergence := spatial_zone_exists AND temporal_overlap_exists
+            
+            # 1. spatial_zone_exists: convergence zones are calculated and non-empty
+            spatial_zone_exists = conflict_start is not None and conflict_end is not None
+            
+            # 2. temporal_overlap_exists: any copresence detected (runners with temporal overlap)
+            temporal_overlap_exists = copresence_a > 0 or copresence_b > 0
+            
+            # 3. true_pass_exists: any overtaking counts (directional changes)
+            true_pass_exists = overtakes_a > 0 or overtakes_b > 0
+            
+            # POLICY: has_convergence := spatial_zone_exists AND temporal_overlap_exists
+            has_convergence_policy = spatial_zone_exists and temporal_overlap_exists
+            
+            # Determine reason code when has_convergence=True but no true passes
+            no_pass_reason_code = None
+            if has_convergence_policy and not true_pass_exists:
+                no_pass_reason_code = "NO_DIRECTIONAL_CHANGE_OR_WINDOW_TOO_SHORT"
+            elif spatial_zone_exists and not temporal_overlap_exists:
+                no_pass_reason_code = "SPATIAL_ONLY_NO_TEMPORAL"
+            
+            # Set has_convergence based on policy
+            segment_result["has_convergence"] = has_convergence_policy
+            
+            # Store the three boolean flags for transparency and debugging
+            segment_result["spatial_zone_exists"] = spatial_zone_exists
+            segment_result["temporal_overlap_exists"] = temporal_overlap_exists
+            segment_result["true_pass_exists"] = true_pass_exists
+            segment_result["has_convergence_policy"] = has_convergence_policy
+            segment_result["no_pass_reason_code"] = no_pass_reason_code
+            
+            # Clear convergence_point and fraction if no convergence
+            if not has_convergence_policy:
                 segment_result["convergence_point"] = None
                 segment_result["convergence_point_fraction"] = None
             

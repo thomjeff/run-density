@@ -489,6 +489,7 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
             "convergence_point_km", "convergence_point_fraction", "has_convergence",
             "total_a", "total_b", "overtaking_a", "overtaking_b", "copresence_a", "copresence_b",
             "pct_a", "pct_b", "convergence_zone_start", "convergence_zone_end", 
+            "spatial_zone_exists", "temporal_overlap_exists", "true_pass_exists", "has_convergence_policy", "no_pass_reason_code",
             "conflict_length_m", "width_m", "sample_a", "sample_b", "analysis_timestamp",
             "notes_2154", "agreed_2154", "analysis_2154", "noted_tbd", "agreed_tbd", "analysis_tbd"
         ])
@@ -578,6 +579,11 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
                 pct_b,
                 conv_start,
                 conv_end,
+                segment.get("spatial_zone_exists", False),
+                segment.get("temporal_overlap_exists", False),
+                segment.get("true_pass_exists", False),
+                segment.get("has_convergence_policy", False),
+                segment.get("no_pass_reason_code", ""),
                 segment.get('conflict_length_m', 100.0),  # conflict_length_m from analysis
                 width_m,
                 format_sample_data(segment.get("sample_a", [])),
