@@ -79,6 +79,17 @@ class TemporalFlowReportRequest(BaseModel):
     conflictLengthM: float = DEFAULT_CONFLICT_LENGTH_METERS
     outputDir: str = "reports/analysis"
 
+class FlowAuditRequest(BaseModel):
+    paceCsv: str
+    segmentsCsv: str
+    startTimes: Dict[str, int]
+    segId: str
+    eventA: str
+    eventB: str
+    minOverlapDuration: float = DEFAULT_MIN_OVERLAP_DURATION
+    conflictLengthM: float = DEFAULT_CONFLICT_LENGTH_METERS
+    outputDir: str = "reports/analysis"
+
 app = FastAPI(title="run-density", version="v1.6.0")
 APP_VERSION = os.getenv("APP_VERSION", app.version)
 GIT_SHA = os.getenv("GIT_SHA", "local")
@@ -100,7 +111,7 @@ async def root():
         "message": "run-density API v1.6.0",
         "version": APP_VERSION,
         "architecture": "split",
-        "endpoints": ["/api/density", "/api/temporal-flow", "/api/report", "/api/density-report", "/api/temporal-flow-report", "/health", "/ready"]
+        "endpoints": ["/api/density", "/api/temporal-flow", "/api/report", "/api/density-report", "/api/temporal-flow-report", "/api/flow-audit", "/health", "/ready"]
     }
 
 @app.get("/health")
@@ -226,6 +237,44 @@ async def generate_temporal_flow_report_endpoint(request: TemporalFlowReportRequ
         return JSONResponse(content=cleaned_results)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Temporal flow report generation failed: {str(e)}")
+
+@app.post("/api/flow-audit")
+async def generate_flow_audit_endpoint(request: FlowAuditRequest):
+    """Generate Flow Audit for a specific segment and event pair."""
+    try:
+        # Import the flow audit function (we'll create this)
+        from .flow import generate_flow_audit_for_segment
+        
+        results = generate_flow_audit_for_segment(
+            pace_csv=request.paceCsv,
+            segments_csv=request.segmentsCsv,
+            start_times=request.startTimes,
+            seg_id=request.segId,
+            event_a=request.eventA,
+            event_b=request.eventB,
+            min_overlap_duration=request.minOverlapDuration,
+            conflict_length_m=request.conflictLengthM,
+            output_dir=request.outputDir
+        )
+        
+        # Handle NaN values for JSON serialization
+        import json
+        import math
+        
+        def convert_nan(obj):
+            if isinstance(obj, dict):
+                return {k: convert_nan(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_nan(item) for item in obj]
+            elif isinstance(obj, float) and math.isnan(obj):
+                return None
+            else:
+                return obj
+        
+        cleaned_results = convert_nan(results)
+        return JSONResponse(content=cleaned_results)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Flow audit generation failed: {str(e)}")
 
 @app.post("/api/overlap")
 async def legacy_overlap_endpoint(request: ReportRequest):
