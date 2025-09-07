@@ -1303,10 +1303,15 @@ def analyze_temporal_flow_segments(
                     conflict_start = max(0.0, center_a_norm - conflict_half_km)
                     conflict_end = min(1.0, center_a_norm + conflict_half_km)
             
-            # CRITICAL: Only set has_convergence=True if there are actual overtakes
-            # If convergence is detected but no overtaking occurs, set has_convergence=False
-            if overtakes_a == 0 and overtakes_b == 0:
-                # No overtaking detected despite convergence - set has_convergence=False
+            # CRITICAL: Set has_convergence=True if convergence zones are calculated
+            # Convergence zones indicate potential for interaction, even if no overtakes occur
+            # This fixes the inconsistency where convergence_zone_start/end exist but has_convergence=False
+            if conflict_start is not None and conflict_end is not None:
+                # Convergence zones calculated - set has_convergence=True
+                segment_result["has_convergence"] = True
+                # Keep convergence_point and fraction as calculated
+            else:
+                # No convergence zones calculated - set has_convergence=False
                 segment_result["has_convergence"] = False
                 segment_result["convergence_point"] = None
                 segment_result["convergence_point_fraction"] = None
