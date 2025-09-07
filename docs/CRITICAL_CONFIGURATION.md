@@ -175,6 +175,39 @@ results = test_report_content_quality()
 - All work for the issue should be done on this branch
 - **This is the FIRST step before any development work**
 
+## Git Workflow and Branch Management
+
+### **🚨 CRITICAL BRANCH CREATION RULES**
+
+**BEFORE creating any new branch, you MUST:**
+
+1. **Test the source branch first** - If creating from `main`, test `main` to ensure it's working
+2. **Verify expected results** - Run flow analysis and confirm results match expected values
+3. **Get user approval** - Never create branches without explicit user approval
+4. **Document the decision** - Explain why this branch is needed and what it will accomplish
+
+### **🚫 PROHIBITED ACTIONS**
+- **NEVER** create branches without testing the source branch first
+- **NEVER** merge PRs to main without user approval
+- **NEVER** assume a branch is working without verification
+- **NEVER** create branches from potentially broken foundations
+
+### **✅ REQUIRED WORKFLOW**
+```
+1. Test source branch (e.g., main) → Verify it works correctly
+2. Get user approval → "Should I create v1.6.5 from main?"
+3. Create branch → Only after approval and verification
+4. Test new branch → Verify it works as expected
+5. Document results → Update todos and commit changes
+```
+
+### **Branch Creation Checklist**
+- [ ] Source branch tested and working
+- [ ] Expected results verified
+- [ ] User approval obtained
+- [ ] Branch purpose clearly defined
+- [ ] Testing plan established
+
 ### 1. Update CHANGELOG.md
 - Add comprehensive entry documenting all changes
 - Include technical implementation details and commit history
@@ -230,9 +263,11 @@ results = test_report_content_quality()
 9. **HARDCODED VALUES** - NEVER use hardcoded values unless explicitly directed. This is a critical rule that has been emphasized multiple times.
 10. **DEBUG SCRIPT CONSISTENCY** - ALWAYS use the same constants and values in debug scripts as the actual algorithm. Using different values wastes time and creates false comparisons.
 11. **Application Fundamentals** - Refer to `docs/Application Fundamentals.md` for core concepts
+12. **🚨 BRANCH CREATION WITHOUT TESTING** - NEVER create branches without first testing the source branch. This leads to broken branches built on broken foundations.
+13. **🚨 MERGING WITHOUT APPROVAL** - NEVER merge PRs to main without explicit user approval. Always get permission before merging.
 
 ## Last Updated
-2025-09-06 - Added debug script consistency rule to prevent wasted debugging time and false comparisons
+2025-09-07 - Added critical git workflow rules: branch creation requires testing source branch first and user approval for all merges to main
 
 ## Related Issues
 - #32 - Distance gaps fix
