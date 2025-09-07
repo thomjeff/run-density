@@ -552,15 +552,187 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
                 format_sample_data(segment.get("sample_a", [])),
                 format_sample_data(segment.get("sample_b", [])),
                 datetime.now().strftime("%Y%m%d_%H%M"),
-                "",  # notes_2154 - to be filled by user
-                "",  # agreed_2154 - to be filled by user
-                "",  # analysis_2154 - to be filled by user
+                get_audit_value(seg_id, segment.get("event_a", ""), segment.get("event_b", ""), "notes_2154"),
+                get_audit_value(seg_id, segment.get("event_a", ""), segment.get("event_b", ""), "agreed_2154"),
+                get_audit_value(seg_id, segment.get("event_a", ""), segment.get("event_b", ""), "analysis_2154"),
                 "",  # noted_tbd - to be filled by user
                 "",  # agreed_tbd - to be filled by user
                 ""   # analysis_tbd - to be filled by user
             ])
     
     print(f"📊 Temporal flow analysis exported to: {full_path}")
+
+
+def get_audit_value(seg_id: str, event_a: str, event_b: str, column: str) -> str:
+    """Get audit values from the 2154 report for specific segments."""
+    # User-provided audit values from 2025-09-06-2154-Flow.csv
+    audit_data = {
+        # A1 segments
+        ("A1", "Full", "Half"): {
+            "notes_2154": "Not realistic to see overalps given start of race and start_times between events",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        ("A1", "Full", "10K"): {
+            "notes_2154": "Not realistic to see overalps given start of race and start_times between events",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        ("A1", "Half", "10K"): {
+            "notes_2154": "Not realistic to see overalps given start of race and start_times between events",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        # A2 segments
+        ("A2", "Full", "Half"): {
+            "notes_2154": "Not realistic to see overalps given start of race and start_times between events",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        ("A2", "Full", "10K"): {
+            "notes_2154": "Not realistic to see overalps given start of race and start_times between events",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        ("A2", "Half", "10K"): {
+            "notes_2154": "Minimal because of start_offsets of 10K and distance covered",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        # A3 segments
+        ("A3", "Full", "Half"): {
+            "notes_2154": "Minimal because start_offsets of Full and distance covered",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        ("A3", "Full", "10K"): {
+            "notes_2154": "Minimal because start_offsets of Full and distance covered",
+            "agreed_2154": "n",
+            "analysis_2154": "Provide entry and exit times for top-10 runners in each  event to fully validate has_convergence = FALSE for A3 event_a = Full and event_b = 10K."
+        },
+        ("A3", "Half", "10K"): {
+            "notes_2154": "Minimal given start_offsets of 10K and fast 10K meeting slow Half",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        # B1 segments
+        ("B1", "Full", "10K"): {
+            "notes_2154": "Minimal given start_offsets of Full",
+            "agreed_2154": "n",
+            "analysis_2154": "Provide entry and exit times for top-10 runners in each event to fully validate has_convergence = FALSE for B1 event_a = Full and event_b = 10K."
+        },
+        # B2 segments
+        ("B2", "Full", "10K"): {
+            "notes_2154": "Minimal and should be Fast Full meet slow 10K",
+            "agreed_2154": "n",
+            "analysis_2154": "n - has_convergence = true but counts are 0"
+        },
+        # B3 segments
+        ("B3", "Full", "10K"): {
+            "notes_2154": "No overtake as this is bi-directional flow",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        # F1 segments
+        ("F1", "Full", "Half"): {
+            "notes_2154": "Not expected given distances of each event in the pair (Full/Half)",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        ("F1", "Full", "10K"): {
+            "notes_2154": "Minimal given start_offsets of 10K",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        ("F1", "Half", "10K"): {
+            "notes_2154": "Moderate given start_offsets of 10K and the low cummulative distance for Half (event_a)",
+            "agreed_2154": "n",
+            "analysis_2154": "n - Percentages are really high. Calculate entry and exit times for ALL runners in each  event to fully validate overtaking_a overtaking_b pct_a and pct_b for F1 segment where event_a = Half and event_b = 10K."
+        },
+        # H1 segments
+        ("H1", "Full", "Half"): {
+            "notes_2154": "No overtake as this is bi-directional flow",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        ("H1", "Full", "10K"): {
+            "notes_2154": "No overtake as this is bi-directional flow",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        ("H1", "Half", "10K"): {
+            "notes_2154": "No overtake as this is bi-directional flow",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        # I1 segments
+        ("I1", "Full", "Half"): {
+            "notes_2154": "Minimal and should be Fast Full meet slow Half.",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        # J1 segments
+        ("J1", "Full", "Half"): {
+            "notes_2154": "No overtake as this is bi-directional flow",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        # J4 segments
+        ("J4", "Full", "Half"): {
+            "notes_2154": "No overtake as this is bi-directional flow",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        # J5 segments
+        ("J5", "Full", "Half"): {
+            "notes_2154": "No overtake as this is bi-directional flow",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        # K1 segments
+        ("K1", "Full", "Half"): {
+            "notes_2154": "Moderate with Fast Full meet mid-pack Half.",
+            "agreed_2154": "n",
+            "analysis_2154": "n - Indicate a convergence but no counts in overtaking_a overtaking_b for K1 sgement where event_a = Full (fastest) and event_b = Half (really slow)"
+        },
+        # L1 segments
+        ("L1", "Full", "Half"): {
+            "notes_2154": "Moderate convergence is expected with mid-pack of Half and Full",
+            "agreed_2154": "n",
+            "analysis_2154": "n - Indicate a convergence but no counts in overtaking_a overtaking_b for L1 sgement where event_a = Full (fastest) and event_b = Half (really slow)"
+        },
+        ("L1", "Full", "10K"): {
+            "notes_2154": "Minimal convergence and limited to Fast Full and slow 10K",
+            "agreed_2154": "n",
+            "analysis_2154": "n - Indicate a convergence but no counts in overtaking_a overtaking_b for L1 sgement where event_a = Full (fastest) and event_b = 10K (really slow)"
+        },
+        ("L1", "Half", "10K"): {
+            "notes_2154": "Moderate convergence with mid-pack Half and slow 10K",
+            "agreed_2154": "n",
+            "analysis_2154": "n - Indicate a convergence but no counts in overtaking_a overtaking_b for L1 sgement where event_a = Half (fastest) and event_b = 10K (really slow)"
+        },
+        # M1 segments
+        ("M1", "Full", "Half"): {
+            "notes_2154": "Minimal convergence and limited to Fast Full and slow 10K",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        ("M1", "Full", "10K"): {
+            "notes_2154": "Minimal convergence and limited to Fast Full and slow 10K",
+            "agreed_2154": "n",
+            "analysis_2154": "n - Indicate a convergence but no counts in overtaking_a overtaking_b for M1 sgement where event_a = Full (fastest) and event_b = 10K (really slow)"
+        },
+        ("M1", "Half", "10K"): {
+            "notes_2154": "Moderate convergence with mid-pack Half and slow 10K",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        }
+    }
+    
+    key = (seg_id, event_a, event_b)
+    if key in audit_data:
+        return audit_data[key].get(column, "")
+    return ""
 
 
 def format_sample_data(sample_list: List[str], max_individual: int = 3) -> str:
