@@ -598,6 +598,19 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
             ])
     
     print(f"📊 Temporal flow analysis exported to: {full_path}")
+    
+    # Generate Flow Audit CSV if any segments have audit data
+    audit_segments = [seg for seg in segments if "flow_audit_data" in seg]
+    if audit_segments:
+        # Extract output directory from the CSV path
+        import os
+        output_dir = os.path.dirname(full_path)
+        audit_path = generate_flow_audit_csv(segments, output_dir)
+        print(f"🔍 Flow Audit data exported to: {audit_path}")
+    else:
+        print("ℹ️  No Flow Audit data to export")
+
+    return full_path
 
 
 def get_audit_value(seg_id: str, event_a: str, event_b: str, column: str) -> str:
@@ -798,3 +811,94 @@ def format_bib_range(bib_list: List[str], max_individual: int = 3) -> str:
     sorted_bibs = sorted(bib_list, key=lambda x: int(x) if str(x).isdigit() else x)
     first_few = sorted_bibs[:max_individual]
     return f"{', '.join(map(str, first_few))}, ... ({len(bib_list)} total)"
+
+
+def generate_flow_audit_csv(
+    segments: List[Dict[str, Any]],
+    output_dir: str = "reports/analysis"
+) -> str:
+    """
+    Generate Flow_Audit.csv with comprehensive diagnostic data.
+    
+    This function creates a sidecar diagnostic file to complement Flow.csv,
+    providing fine-grained instrumentation for segments with suspicious
+    overtaking percentages.
+    """
+    import os
+    from datetime import datetime
+    
+    # Create audit subdirectory within the output directory
+    audit_dir = os.path.join(output_dir, "audit")
+    os.makedirs(audit_dir, exist_ok=True)
+    
+    # Generate timestamp for filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+    filename = f"{timestamp}-Flow_Audit.csv"
+    full_path = os.path.join(audit_dir, filename)
+    
+    # Flow Audit CSV header (33 columns as per specification)
+    audit_header = [
+        "seg_id", "segment_label", "event_a", "event_b",
+        "spatial_zone_exists", "temporal_overlap_exists", "true_pass_exists", 
+        "has_convergence_policy", "no_pass_reason_code",
+        "convergence_zone_start", "convergence_zone_end", "conflict_length_m",
+        "copresence_a", "copresence_b", "density_ratio",
+        "median_entry_diff_sec", "median_exit_diff_sec",
+        "avg_overlap_dwell_sec", "max_overlap_dwell_sec", "overlap_window_sec",
+        "passes_a", "passes_b", "multipass_bibs_a", "multipass_bibs_b",
+        "pct_overtake_raw_a", "pct_overtake_raw_b", 
+        "pct_overtake_strict_a", "pct_overtake_strict_b",
+        "time_bins_used", "distance_bins_used", "dedup_passes_applied",
+        "reason_codes", "audit_trigger"
+    ]
+    
+    import csv
+    with open(full_path, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(audit_header)
+        
+        # Write audit data for segments that have flow_audit_data
+        for segment in segments:
+            if "flow_audit_data" in segment:
+                audit_data = segment["flow_audit_data"]
+                audit_data["seg_id"] = segment.get("seg_id", "")
+                audit_data["segment_label"] = segment.get("segment_label", "")
+                
+                # Write row with all 33 columns
+                writer.writerow([
+                    audit_data.get("seg_id", ""),
+                    audit_data.get("segment_label", ""),
+                    audit_data.get("event_a", ""),
+                    audit_data.get("event_b", ""),
+                    audit_data.get("spatial_zone_exists", False),
+                    audit_data.get("temporal_overlap_exists", False),
+                    audit_data.get("true_pass_exists", False),
+                    audit_data.get("has_convergence_policy", False),
+                    audit_data.get("no_pass_reason_code", ""),
+                    audit_data.get("convergence_zone_start", ""),
+                    audit_data.get("convergence_zone_end", ""),
+                    audit_data.get("conflict_length_m", 0.0),
+                    audit_data.get("copresence_a", 0),
+                    audit_data.get("copresence_b", 0),
+                    audit_data.get("density_ratio", 0.0),
+                    audit_data.get("median_entry_diff_sec", 0.0),
+                    audit_data.get("median_exit_diff_sec", 0.0),
+                    audit_data.get("avg_overlap_dwell_sec", 0.0),
+                    audit_data.get("max_overlap_dwell_sec", 0.0),
+                    audit_data.get("overlap_window_sec", 0.0),
+                    audit_data.get("passes_a", 0),
+                    audit_data.get("passes_b", 0),
+                    audit_data.get("multipass_bibs_a", ""),
+                    audit_data.get("multipass_bibs_b", ""),
+                    audit_data.get("pct_overtake_raw_a", 0.0),
+                    audit_data.get("pct_overtake_raw_b", 0.0),
+                    audit_data.get("pct_overtake_strict_a", 0.0),
+                    audit_data.get("pct_overtake_strict_b", 0.0),
+                    audit_data.get("time_bins_used", False),
+                    audit_data.get("distance_bins_used", False),
+                    audit_data.get("dedup_passes_applied", False),
+                    audit_data.get("reason_codes", ""),
+                    audit_data.get("audit_trigger", "")
+                ])
+    
+    return full_path
