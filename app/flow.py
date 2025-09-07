@@ -267,11 +267,6 @@ def calculate_convergence_zone_overlaps_with_binning(
     Calculate overtaking with binning for long segments.
     Uses time bins if overlap > 10 minutes, distance bins if conflict zone > 100m.
     """
-    from .constants import (
-        TEMPORAL_BINNING_THRESHOLD_MINUTES,
-        SPATIAL_BINNING_THRESHOLD_METERS,
-        SUSPICIOUS_OVERTAKING_RATE_THRESHOLD
-    )
     
     # Check if binning is needed
     use_time_bins = overlap_duration_minutes > TEMPORAL_BINNING_THRESHOLD_MINUTES
@@ -568,8 +563,6 @@ def calculate_convergence_zone_overlaps_binned(
     """
     Calculate overtaking using binning for long segments.
     """
-    from .constants import TEMPORAL_BINNING_THRESHOLD_MINUTES
-    
     if df_a.empty or df_b.empty:
         return 0, 0, 0, 0, [], [], 0, 0
     
@@ -1042,11 +1035,6 @@ def analyze_temporal_flow_segments(
             )
             
             # Log binning decisions and warnings
-            from .constants import (
-                TEMPORAL_BINNING_THRESHOLD_MINUTES,
-                SPATIAL_BINNING_THRESHOLD_METERS,
-                SUSPICIOUS_OVERTAKING_RATE_THRESHOLD
-            )
             
             use_time_bins = overlap_duration_minutes > TEMPORAL_BINNING_THRESHOLD_MINUTES
             use_distance_bins = dynamic_conflict_length_m > SPATIAL_BINNING_THRESHOLD_METERS
