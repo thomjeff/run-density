@@ -28,13 +28,13 @@ def test_api_endpoints(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     
     Args:
         start_times: Event start times in minutes from midnight
-                    Default: {'10K': 420, 'Half': 440, 'Full': 460}
+                    Default: {'Full': 420, '10K': 440, 'Half': 460}
     
     Returns:
         Dictionary with test results for each endpoint
     """
     if start_times is None:
-        start_times = {'10K': 420, 'Half': 440, 'Full': 460}
+        start_times = {'Full': 420, '10K': 440, 'Half': 460}
     
     print("=== API ENDPOINT TESTING ===")
     print()
@@ -124,13 +124,13 @@ def test_report_generation(start_times: Dict[str, int] = None) -> Dict[str, Any]
     
     Args:
         start_times: Event start times in minutes from midnight
-                    Default: {'10K': 420, 'Half': 440, 'Full': 460}
+                    Default: {'Full': 420, '10K': 440, 'Half': 460}
     
     Returns:
         Dictionary with test results for report generation
     """
     if start_times is None:
-        start_times = {'10K': 420, 'Half': 440, 'Full': 460}
+        start_times = {'Full': 420, '10K': 440, 'Half': 460}
     
     print("=== REPORT GENERATION TESTING ===")
     print()
@@ -340,13 +340,13 @@ def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any
     
     Args:
         start_times: Event start times in minutes from midnight
-                    Default: {'10K': 420, 'Half': 440, 'Full': 460}
+                    Default: {'Full': 420, '10K': 440, 'Half': 460}
     
     Returns:
         Dictionary with all test results
     """
     if start_times is None:
-        start_times = {'10K': 420, 'Half': 440, 'Full': 460}
+        start_times = {'Full': 420, '10K': 440, 'Half': 460}
     
     print("=== COMPREHENSIVE END-TO-END TESTING ===")
     print("Testing all API endpoints and report generation")
