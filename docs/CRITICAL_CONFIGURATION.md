@@ -6,6 +6,18 @@ This document captures critical configuration details, workflows, and operationa
 
 **IMPORTANT**: For fundamental application concepts (start times, data structures, time calculations), see `docs/Application Fundamentals.md`. This document focuses on configuration and workflow.
 
+## Data Formatting Standards
+
+### Decimal Places Rule
+**CRITICAL**: All numeric values in reports must be formatted to a maximum of 2 decimal places for human readability and consistency.
+
+- **Convergence points**: 1.33 (not 1.3300000000000003)
+- **Convergence zones**: 1.28, 2.03 (not 1.2800000000000002, 2.0299999999999985)
+- **Percentages**: 7.6% (not 7.6000000000000005%)
+- **Distances**: 0.25 km (not 0.25000000000000006)
+
+**Implementation**: Use `app/report_utils.py` `format_decimal_places()` function for consistent formatting across all report modules.
+
 ## Testing Configuration
 
 ## Testing Workflow

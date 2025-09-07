@@ -16,9 +16,11 @@ import pandas as pd
 try:
     from .flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
     from .constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
+    from .report_utils import get_report_paths, format_decimal_places
 except ImportError:
     from flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
     from constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
+    from report_utils import get_report_paths, format_decimal_places
 
 
 def generate_temporal_flow_report(
@@ -453,9 +455,8 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
     import pandas as pd
     from datetime import datetime
     
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-    filename = f"temporal_flow_analysis_{timestamp}.csv"
-    full_path = f"{output_path}/{filename}"
+    # Use date-based organization and standardized naming
+    full_path, relative_path = get_report_paths("Flow", "csv", output_path)
     
     # Load segments for width values
     segments_df = pd.read_csv('data/segments_new.csv')
@@ -466,7 +467,7 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
     with open(full_path, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         
-        # Human-readable header (removed deep_dive_analysis and other verbose columns)
+        # Human-readable header with pct_a and pct_b included
         writer.writerow([
             "seg_id", "segment_label", "flow_type", "event_a", "event_b",
             "from_km_a", "to_km_a", "from_km_b", "to_km_b",
@@ -500,28 +501,23 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
                 from_km_a = segment.get('from_km_a', 0)
                 to_km_a = segment.get('to_km_a', 0)
                 
-                # Round convergence point to max 3 decimal places
-                cp_km = round(cp_km, 3) if cp_km is not None else None
+                # Round convergence point to max 2 decimal places for consistency
+                cp_km = format_decimal_places(cp_km, 2)
                 
                 # Normalize convergence point to segment (0.0 to 1.0)
                 segment_len = to_km_a - from_km_a
                 if segment_len > 0 and cp_km is not None:
                     normalized_cp = (cp_km - from_km_a) / segment_len
-                    normalized_cp = round(normalized_cp, 3)  # Max 3 decimal places
+                    normalized_cp = format_decimal_places(normalized_cp, 2)  # Max 2 decimal places
                 else:
                     normalized_cp = 0.0
             else:
                 cp_km = None
                 normalized_cp = None
             
-            # Fix decimal formatting (max 3 decimals)
-            conv_start = segment.get('convergence_zone_start')
-            conv_end = segment.get('convergence_zone_end')
-            
-            if conv_start is not None:
-                conv_start = round(conv_start, 3)
-            if conv_end is not None:
-                conv_end = round(conv_end, 3)
+            # Fix decimal formatting (max 2 decimals for consistency)
+            conv_start = format_decimal_places(segment.get('convergence_zone_start'), 2)
+            conv_end = format_decimal_places(segment.get('convergence_zone_end'), 2)
             
             # Calculate percentages
             total_a = segment.get('total_a', 0)
@@ -557,7 +553,7 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
                 width_m,
                 format_sample_data(segment.get("sample_a", [])),
                 format_sample_data(segment.get("sample_b", [])),
-                timestamp
+                datetime.now().strftime("%Y%m%d_%H%M")
             ])
     
     print(f"📊 Temporal flow analysis exported to: {full_path}")
