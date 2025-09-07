@@ -42,9 +42,10 @@ def get_standard_filename(report_type: str, extension: str = "csv") -> str:
         extension: File extension (csv, md, json, etc.)
     
     Returns:
-        Standardized filename in format: YYYY-MM-DD-hh:mm-[ReportType].[extension]
+        Standardized filename in format: YYYY-MM-DD-hhmm-[ReportType].[extension]
+        Note: Uses hhmm instead of hh:mm to avoid filesystem path separator issues
     """
-    timestamp = datetime.now().strftime("%Y-%m-%d-%H:%M")
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
     return f"{timestamp}-{report_type}.{extension}"
 
 
