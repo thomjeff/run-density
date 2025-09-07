@@ -1121,8 +1121,8 @@ def calculate_convergence_zone_overlaps_original(
                 temporal_overlap = (start_time_a < end_time_b and start_time_b < end_time_a)
                 
                 if temporal_overlap:
-                a_bib = df_a.iloc[i]["runner_id"]
-                b_bib = df_b.iloc[j]["runner_id"]
+                    a_bib = df_a.iloc[i]["runner_id"]
+                    b_bib = df_b.iloc[j]["runner_id"]
                     
                     # Always count co-presence
                     a_bibs_copresence.add(a_bib)
@@ -1515,7 +1515,7 @@ def analyze_temporal_flow_segments(
         all_segments = convert_segments_new_to_flow_format(segments_df)
     else:
         # This is the old format, use as-is
-    all_segments = segments_df.copy()
+        all_segments = segments_df.copy()
     
     results = {
         "ok": True,
