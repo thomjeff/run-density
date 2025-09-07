@@ -829,27 +829,31 @@ def analyze_temporal_flow_segments(
                     s_start = max(0.0, s_cp - 0.05)
                     s_end = min(1.0, s_cp + 0.05)
                 
-                # Convert to absolute coordinates for reporting
-                conflict_start = from_km_a + s_start * len_a
-                conflict_end = from_km_a + s_end * len_a
+                # Store normalized values for convergence zone (0.0 to 1.0)
+                conflict_start = s_start
+                conflict_end = s_end
             else:
                 # Convergence point is outside Event A's range - use normalized approach
                 intersection_start = max(from_km_a, from_km_b)
                 intersection_end = min(to_km_a, to_km_b)
                 
                 if intersection_start < intersection_end:
-                    # Use intersection boundaries
+                    # Use intersection boundaries - normalize to segment
+                    len_a = to_km_a - from_km_a
+                    intersection_start_norm = (intersection_start - from_km_a) / len_a
+                    intersection_end_norm = (intersection_end - from_km_a) / len_a
                     conflict_length_km = dynamic_conflict_length_m / 1000.0
-                    conflict_half_km = conflict_length_km / 2.0
-                    conflict_start = max(from_km_a, intersection_start - conflict_half_km)
-                    conflict_end = min(to_km_a, intersection_end + conflict_half_km)
+                    conflict_half_km = conflict_length_km / 2.0 / len_a  # Normalize to segment length
+                    conflict_start = max(0.0, intersection_start_norm - conflict_half_km)
+                    conflict_end = min(1.0, intersection_end_norm + conflict_half_km)
                 else:
-                    # Use segment center
-                    center_a = (from_km_a + to_km_a) / 2.0
+                    # Use segment center - normalize to segment
+                    len_a = to_km_a - from_km_a
+                    center_a_norm = 0.5  # Center of normalized segment
                     conflict_length_km = dynamic_conflict_length_m / 1000.0
-                    conflict_half_km = conflict_length_km / 2.0
-                    conflict_start = max(from_km_a, center_a - conflict_half_km)
-                    conflict_end = min(to_km_a, center_a + conflict_half_km)
+                    conflict_half_km = conflict_length_km / 2.0 / len_a  # Normalize to segment length
+                    conflict_start = max(0.0, center_a_norm - conflict_half_km)
+                    conflict_end = min(1.0, center_a_norm + conflict_half_km)
             
             segment_result.update({
                 "overtaking_a": count_a,
