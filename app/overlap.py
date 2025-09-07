@@ -470,11 +470,18 @@ def calculate_convergence_point(
     # We'll check multiple points along the segment to find where overlaps begin
     
     # Create distance check points along the segment
+    # Also check for temporal overlap at segment boundaries and slightly beyond
     check_points = []
     current_km = from_km
     while current_km <= to_km:
         check_points.append(current_km)
         current_km += step_km
+    
+    # Add boundary checks for temporal overlap detection
+    # This handles cases where events overlap at segment boundaries
+    if from_km > 0:
+        check_points.append(from_km - 0.1)  # Just before segment start
+    check_points.append(to_km + 0.1)  # Just after segment end
     
     # For each check point, see if there are actual temporal overlaps
     for km_point in check_points:
@@ -500,6 +507,24 @@ def calculate_convergence_point(
                 if abs(time_a - time_b) <= tolerance_seconds:
                     # Found first temporal overlap - return this km point
                     return float(km_point)
+    
+    # If no convergence found at specific points, check for general temporal overlap
+    # This handles cases where events overlap in time but at different positions
+    # Calculate entry/exit times for the entire segment
+    entry_times_a = start_a + dfA.get("start_offset", pd.Series([0]*len(dfA))).fillna(0).values.astype(float) + dfA["pace"].values * 60.0 * from_km
+    exit_times_a = start_a + dfA.get("start_offset", pd.Series([0]*len(dfA))).fillna(0).values.astype(float) + dfA["pace"].values * 60.0 * to_km
+    
+    entry_times_b = start_b + dfB.get("start_offset", pd.Series([0]*len(dfB))).fillna(0).values.astype(float) + dfB["pace"].values * 60.0 * from_km
+    exit_times_b = start_b + dfB.get("start_offset", pd.Series([0]*len(dfB))).fillna(0).values.astype(float) + dfB["pace"].values * 60.0 * to_km
+    
+    # Check for any temporal overlap between events in the segment
+    for i, (entry_a, exit_a) in enumerate(zip(entry_times_a, exit_times_a)):
+        for j, (entry_b, exit_b) in enumerate(zip(entry_times_b, exit_times_b)):
+            # Check if runners are in segment at same time
+            if (entry_a <= exit_b + tolerance_seconds and 
+                entry_b <= exit_a + tolerance_seconds):
+                # Found temporal overlap - return the segment start
+                return float(from_km)
     
     # No temporal overlaps found
     return None
