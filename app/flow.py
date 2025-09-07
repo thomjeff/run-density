@@ -851,6 +851,14 @@ def analyze_temporal_flow_segments(
                     conflict_start = max(0.0, center_a_norm - conflict_half_km)
                     conflict_end = min(1.0, center_a_norm + conflict_half_km)
             
+            # CRITICAL: Only set has_convergence=True if there are actual overtakes
+            # If convergence is detected but no overtaking occurs, set has_convergence=False
+            if count_a == 0 and count_b == 0:
+                # No overtaking detected despite convergence - set has_convergence=False
+                segment_result["has_convergence"] = False
+                segment_result["convergence_point"] = None
+                segment_result["convergence_point_fraction"] = None
+            
             segment_result.update({
                 "overtaking_a": count_a,
                 "overtaking_b": count_b,
