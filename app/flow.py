@@ -85,15 +85,15 @@ def calculate_convergence_point(
             intersection_start, intersection_end, step_km
         )
         
-        # Only fall back to co-presence if true pass detection fails
-        if true_pass_result is None:
-            co_presence_result = calculate_co_presence(
-                dfA, dfB, eventA, eventB, start_times,
-                intersection_start, intersection_end, step_km
-            )
-            return co_presence_result
+        # Also check for co-presence (temporal overlap without directional change)
+        # This handles cases where events overlap in time but don't have directional overtaking
+        co_presence_result = calculate_co_presence(
+            dfA, dfB, eventA, eventB, start_times,
+            intersection_start, intersection_end, step_km
+        )
         
-        return true_pass_result
+        # Return true pass result if available, otherwise co-presence result
+        return true_pass_result if true_pass_result is not None else co_presence_result
     
     # No intersection in absolute space - need normalized approach for segments like F1
     # NORMALIZED DISTANCE APPROACH: For segments with different absolute ranges but same
@@ -131,20 +131,16 @@ def calculate_convergence_point(
             range_start, range_end, step_km
         )
         
-        if true_pass_result is not None:
-            # For normalized approach, return the convergence point in Event A's coordinate system
-            # This ensures consistency with the conflict zone calculation
-            return true_pass_result
-        
         # Try co-presence detection at this normalized position
         co_presence_result = calculate_co_presence(
             dfA, dfB, eventA, eventB, start_times,
             range_start, range_end, step_km
         )
         
-        if co_presence_result is not None:
-            # For normalized approach, return the convergence point in Event A's coordinate system
-            # This ensures consistency with the conflict zone calculation
+        # Return true pass result if available, otherwise co-presence result
+        if true_pass_result is not None:
+            return true_pass_result
+        elif co_presence_result is not None:
             return co_presence_result
     
     # No convergence found in normalized space
