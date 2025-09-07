@@ -423,8 +423,12 @@ def calculate_convergence_zone_overlaps_original(
     time_enter_b = start_b + offset_b + pace_b * cp_km_b_start
     time_exit_b  = start_b + offset_b + pace_b * cp_km_b_end
 
-    a_bibs = set()
-    b_bibs = set()
+    # Track runners who overtake each other (true passes)
+    a_bibs_overtakes = set()
+    b_bibs_overtakes = set()
+    # Track runners who have temporal overlap (co-presence)
+    a_bibs_copresence = set()
+    b_bibs_copresence = set()
     unique_pairs = set()
 
     # TRUE PASS DETECTION: Check for temporal overlap AND directional change
