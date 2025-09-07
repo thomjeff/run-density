@@ -295,6 +295,160 @@ def calculate_convergence_zone_overlaps_with_binning(
         )
 
 
+def validate_per_runner_entry_exit_f1(
+    df_a: pd.DataFrame,
+    df_b: pd.DataFrame,
+    event_a: str,
+    event_b: str,
+    start_times: Dict[str, float],
+    from_km_a: float,
+    to_km_a: float,
+    from_km_b: float,
+    to_km_b: float,
+    conflict_length_m: float = 200.0,
+) -> Dict[str, Any]:
+    """
+    PER-RUNNER ENTRY/EXIT VALIDATION for F1 Half vs 10K segment.
+    
+    This function calculates entry and exit times for ALL runners in each event
+    to validate overtaking counts and percentages for the F1 segment.
+    
+    Returns detailed validation results including:
+    - Entry/exit times for all runners
+    - Actual temporal overlaps
+    - Validated overtaking counts
+    - Reason codes for any discrepancies
+    """
+    import logging
+    
+    if df_a.empty or df_b.empty:
+        return {"error": "Empty dataframes provided"}
+    
+    # Get start times
+    start_a = start_times.get(event_a, 0) * 60.0  # Convert to seconds
+    start_b = start_times.get(event_b, 0) * 60.0
+    
+    # Calculate conflict zone boundaries (using segment centers for F1)
+    center_a = (from_km_a + to_km_a) / 2.0
+    center_b = (from_km_b + to_km_b) / 2.0
+    conflict_half_km = (conflict_length_m / 1000.0) / 2.0
+    
+    cp_km_a_start = max(from_km_a, center_a - conflict_half_km)
+    cp_km_a_end = min(to_km_a, center_a + conflict_half_km)
+    cp_km_b_start = max(from_km_b, center_b - conflict_half_km)
+    cp_km_b_end = min(to_km_b, center_b + conflict_half_km)
+    
+    # Calculate entry/exit times for ALL runners in Event A
+    a_entry_times = []
+    a_exit_times = []
+    a_runner_ids = []
+    
+    for idx, row in df_a.iterrows():
+        pace_a = row["pace"] * 60.0  # sec per km
+        offset_a = row.get("start_offset", 0)
+        runner_id = row["runner_id"]
+        
+        entry_time = start_a + offset_a + pace_a * cp_km_a_start
+        exit_time = start_a + offset_a + pace_a * cp_km_a_end
+        
+        a_entry_times.append(entry_time)
+        a_exit_times.append(exit_time)
+        a_runner_ids.append(runner_id)
+    
+    # Calculate entry/exit times for ALL runners in Event B
+    b_entry_times = []
+    b_exit_times = []
+    b_runner_ids = []
+    
+    for idx, row in df_b.iterrows():
+        pace_b = row["pace"] * 60.0  # sec per km
+        offset_b = row.get("start_offset", 0)
+        runner_id = row["runner_id"]
+        
+        entry_time = start_b + offset_b + pace_b * cp_km_b_start
+        exit_time = start_b + offset_b + pace_b * cp_km_b_end
+        
+        b_entry_times.append(entry_time)
+        b_exit_times.append(exit_time)
+        b_runner_ids.append(runner_id)
+    
+    # Find temporal overlaps and validate overtaking
+    a_overtakes = set()
+    b_overtakes = set()
+    a_copresence = set()
+    b_copresence = set()
+    
+    overlap_pairs = []
+    
+    for i, (a_entry, a_exit, a_id) in enumerate(zip(a_entry_times, a_exit_times, a_runner_ids)):
+        for j, (b_entry, b_exit, b_id) in enumerate(zip(b_entry_times, b_exit_times, b_runner_ids)):
+            # Check for temporal overlap
+            overlap_start = max(a_entry, b_entry)
+            overlap_end = min(a_exit, b_exit)
+            overlap_duration = overlap_end - overlap_start
+            
+            if overlap_duration > 0:  # Any temporal overlap
+                a_copresence.add(a_id)
+                b_copresence.add(b_id)
+                
+                # For F1, we need to check if there's actual directional change
+                # Since segments don't intersect, we need to validate if overtaking makes sense
+                
+                # Check if runner A passes runner B (A starts behind B, finishes ahead of B)
+                a_passes_b = (a_entry > b_entry and a_exit < b_exit)
+                # Check if runner B passes runner A (B starts behind A, finishes ahead of A)
+                b_passes_a = (b_entry > a_entry and b_exit < a_exit)
+                
+                if a_passes_b or b_passes_a:
+                    a_overtakes.add(a_id)
+                    b_overtakes.add(b_id)
+                
+                overlap_pairs.append({
+                    "a_id": a_id,
+                    "b_id": b_id,
+                    "a_entry": a_entry,
+                    "a_exit": a_exit,
+                    "b_entry": b_entry,
+                    "b_exit": b_exit,
+                    "overlap_duration": overlap_duration,
+                    "a_passes_b": a_passes_b,
+                    "b_passes_a": b_passes_a
+                })
+    
+    # Calculate validation results
+    total_a = len(df_a)
+    total_b = len(df_b)
+    overtakes_a = len(a_overtakes)
+    overtakes_b = len(b_overtakes)
+    copresence_a = len(a_copresence)
+    copresence_b = len(b_copresence)
+    
+    pct_a = (overtakes_a / total_a * 100) if total_a > 0 else 0.0
+    pct_b = (overtakes_b / total_b * 100) if total_b > 0 else 0.0
+    
+    # Log validation results
+    logging.info(f"F1 {event_a} vs {event_b} PER-RUNNER VALIDATION:")
+    logging.info(f"  Total {event_a}: {total_a}, Overtaking: {overtakes_a} ({pct_a:.1f}%)")
+    logging.info(f"  Total {event_b}: {total_b}, Overtaking: {overtakes_b} ({pct_b:.1f}%)")
+    logging.info(f"  Co-presence {event_a}: {copresence_a}, {event_b}: {copresence_b}")
+    logging.info(f"  Overlap pairs: {len(overlap_pairs)}")
+    
+    return {
+        "total_a": total_a,
+        "total_b": total_b,
+        "overtakes_a": overtakes_a,
+        "overtakes_b": overtakes_b,
+        "copresence_a": copresence_a,
+        "copresence_b": copresence_b,
+        "pct_a": pct_a,
+        "pct_b": pct_b,
+        "overlap_pairs": overlap_pairs[:10],  # First 10 for debugging
+        "conflict_zone_a": (cp_km_a_start, cp_km_a_end),
+        "conflict_zone_b": (cp_km_b_start, cp_km_b_end),
+        "validation_timestamp": time.time()
+    }
+
+
 def calculate_convergence_zone_overlaps_original(
     df_a: pd.DataFrame,
     df_b: pd.DataFrame,
@@ -1033,6 +1187,33 @@ def analyze_temporal_flow_segments(
                 df_a, df_b, event_a, event_b, start_times,
                 effective_cp_km, from_km_a, to_km_a, from_km_b, to_km_b, min_overlap_duration, dynamic_conflict_length_m, overlap_duration_minutes
             )
+            
+            # F1 Half vs 10K PER-RUNNER VALIDATION
+            if seg_id == "F1" and event_a == "Half" and event_b == "10K":
+                print(f"🔍 F1 Half vs 10K PER-RUNNER VALIDATION:")
+                validation_results = validate_per_runner_entry_exit_f1(
+                    df_a, df_b, event_a, event_b, start_times,
+                    from_km_a, to_km_a, from_km_b, to_km_b, dynamic_conflict_length_m
+                )
+                
+                # Compare validation results with current calculation
+                val_overtakes_a = validation_results.get("overtakes_a", 0)
+                val_overtakes_b = validation_results.get("overtakes_b", 0)
+                val_pct_a = validation_results.get("pct_a", 0.0)
+                val_pct_b = validation_results.get("pct_b", 0.0)
+                
+                print(f"  Current calculation: {overtakes_a} ({overtakes_a/len(df_a)*100:.1f}%), {overtakes_b} ({overtakes_b/len(df_b)*100:.1f}%)")
+                print(f"  Validation results:  {val_overtakes_a} ({val_pct_a:.1f}%), {val_overtakes_b} ({val_pct_b:.1f}%)")
+                
+                # Check for discrepancies
+                if abs(overtakes_a - val_overtakes_a) > 0 or abs(overtakes_b - val_overtakes_b) > 0:
+                    print(f"  ⚠️  DISCREPANCY DETECTED! Using validation results.")
+                    overtakes_a = val_overtakes_a
+                    overtakes_b = val_overtakes_b
+                    copresence_a = validation_results.get("copresence_a", 0)
+                    copresence_b = validation_results.get("copresence_b", 0)
+                else:
+                    print(f"  ✅ Validation matches current calculation.")
             
             # Log binning decisions and warnings
             
