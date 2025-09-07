@@ -466,7 +466,7 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
     with open(full_path, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         
-        # Enhanced header with percentages, width, and both convergence point formats
+        # Human-readable header (removed deep_dive_analysis and other verbose columns)
         writer.writerow([
             "seg_id", "segment_label", "flow_type", "event_a", "event_b",
             "from_km_a", "to_km_a", "from_km_b", "to_km_b",
@@ -494,20 +494,24 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
                 from .constants import DEFAULT_CONFLICT_LENGTH_METERS
                 width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
             
-            # Fix convergence point normalization
+            # Fix convergence point normalization and decimal formatting (max 3 decimals)
             if segment.get('has_convergence', False):
                 cp_km = segment.get('convergence_point')
                 from_km_a = segment.get('from_km_a', 0)
                 to_km_a = segment.get('to_km_a', 0)
                 
+                # Round convergence point to max 3 decimal places
+                cp_km = round(cp_km, 3) if cp_km is not None else None
+                
                 # Normalize convergence point to segment (0.0 to 1.0)
                 segment_len = to_km_a - from_km_a
-                if segment_len > 0:
+                if segment_len > 0 and cp_km is not None:
                     normalized_cp = (cp_km - from_km_a) / segment_len
-                    normalized_cp = round(normalized_cp, 2)
+                    normalized_cp = round(normalized_cp, 3)  # Max 3 decimal places
                 else:
                     normalized_cp = 0.0
             else:
+                cp_km = None
                 normalized_cp = None
             
             # Fix decimal formatting (max 3 decimals)
@@ -538,7 +542,7 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
                 round(segment.get('to_km_a', 0), 2),
                 round(segment.get('from_km_b', 0), 2),
                 round(segment.get('to_km_b', 0), 2),
-                round(segment.get('convergence_point', 0), 2) if segment.get('has_convergence', False) else "",
+                cp_km,  # Use the rounded convergence point
                 normalized_cp,
                 segment.get("has_convergence", False),
                 segment.get("total_a", ""),
@@ -551,12 +555,26 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
                 conv_end,
                 segment.get('conflict_length_m', 100.0),  # conflict_length_m from analysis
                 width_m,
-                format_bib_range(segment.get("sample_a", [])),
-                format_bib_range(segment.get("sample_b", [])),
+                format_sample_data(segment.get("sample_a", [])),
+                format_sample_data(segment.get("sample_b", [])),
                 timestamp
             ])
     
     print(f"📊 Temporal flow analysis exported to: {full_path}")
+
+
+def format_sample_data(sample_list: List[str], max_individual: int = 3) -> str:
+    """Format sample data for human-readable CSV display."""
+    if not sample_list:
+        return ""
+    
+    if len(sample_list) <= max_individual:
+        return ", ".join(map(str, sample_list))
+    
+    # For large lists, show first few and count
+    sorted_samples = sorted(sample_list, key=lambda x: int(x) if str(x).isdigit() else x)
+    first_few = sorted_samples[:max_individual]
+    return f"{', '.join(map(str, first_few))}, ... ({len(sample_list)} total)"
 
 
 def format_bib_range(bib_list: List[str], max_individual: int = 3) -> str:
