@@ -62,16 +62,13 @@ def generate_temporal_flow_report(
     # Generate markdown report
     report_content = generate_markdown_report(results, start_times)
     
-    # Save report
-    os.makedirs(output_dir, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    filename = f"{timestamp}_Temporal_Flow_Report.md"
-    report_path = os.path.join(output_dir, filename)
+    # Save report using standardized naming convention
+    full_path, relative_path = get_report_paths("Flow", "md", output_dir)
     
-    with open(report_path, 'w', encoding='utf-8') as f:
+    with open(full_path, 'w', encoding='utf-8') as f:
         f.write(report_content)
     
-    print(f"📊 Temporal flow report saved to: {report_path}")
+    print(f"📊 Temporal flow report saved to: {full_path}")
 
     # Also generate CSV
     export_temporal_flow_csv(results, output_dir)
@@ -79,8 +76,8 @@ def generate_temporal_flow_report(
     # Return results in the format expected by other functions
     results.update({
         "ok": True,
-        "report_path": report_path,
-        "timestamp": timestamp
+        "report_path": full_path,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     })
     
     return results
