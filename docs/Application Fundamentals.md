@@ -10,9 +10,9 @@ This document contains the core concepts and knowledge that anyone working on th
 
 ```python
 start_times = {
-    '10K': 420,   # 7:00 AM (7 * 60 = 420 minutes from midnight)
-    'Half': 440,  # 7:20 AM (7 * 60 + 20 = 440 minutes from midnight)
-    'Full': 460   # 7:40 AM (7 * 60 + 40 = 460 minutes from midnight)
+    'Full': 420,  # 7:00 AM (7 * 60 = 420 minutes from midnight)
+    '10K': 440,   # 7:20 AM (7 * 60 + 20 = 440 minutes from midnight)
+    'Half': 460   # 7:40 AM (7 * 60 + 40 = 460 minutes from midnight)
 }
 ```
 

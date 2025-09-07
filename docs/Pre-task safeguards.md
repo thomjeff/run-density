@@ -17,7 +17,7 @@ You **MUST** explicitly confirm understanding of these CRITICAL RULES before pro
 ✅ CONFIRMING CRITICAL RULES:
 1. NO HARDCODED VALUES - will use app/constants.py and dynamic calculations
 2. PERMANENT CODE ONLY - will modify existing modules, not create temp scripts
-3. CORRECT START TIMES - will use {'10K': 420, 'Half': 440, 'Full': 460}
+3. CORRECT START TIMES - will use {'Full': 420, '10K': 440, 'Half': 460}
 4. API TESTING - will test through main.py endpoints, not direct module calls
 5. MINIMAL CHANGES - will make only necessary changes and test frequently
 6. NO ENDLESS LOOPS - will take action after 3 analysis attempts, not repeat analysis
