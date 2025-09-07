@@ -767,7 +767,7 @@ def analyze_temporal_flow_segments(
             "overtake_flag": segment.get("overtake_flag", "")
         }
         
-        if cp_km is not None and segment.get("overtake_flag") == "y":
+        if cp_km is not None and segment.get("overtake_flag") == "y" and segment.get("flow_type") != "merge":
             # Calculate overtaking runners in convergence zone using local-axis mapping
             # Calculate dynamic conflict length first
             from .constants import (
