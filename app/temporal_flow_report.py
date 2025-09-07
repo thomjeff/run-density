@@ -8,6 +8,7 @@ generating temporal flow reports that can be called by the API or other modules.
 
 from __future__ import annotations
 import time
+import logging
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 import os
@@ -16,9 +17,11 @@ import pandas as pd
 try:
     from .flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
     from .constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
+    from .report_utils import get_report_paths, format_decimal_places
 except ImportError:
     from flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
     from constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
+    from report_utils import get_report_paths, format_decimal_places
 
 
 def generate_temporal_flow_report(
@@ -60,26 +63,25 @@ def generate_temporal_flow_report(
     # Generate markdown report
     report_content = generate_markdown_report(results, start_times)
     
-    # Save report
-    os.makedirs(output_dir, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    filename = f"{timestamp}_Temporal_Flow_Report.md"
-    report_path = os.path.join(output_dir, filename)
+    # Save report using standardized naming convention
+    full_path, relative_path = get_report_paths("Flow", "md", output_dir)
     
-    with open(report_path, 'w', encoding='utf-8') as f:
+    with open(full_path, 'w', encoding='utf-8') as f:
         f.write(report_content)
     
-    print(f"📊 Temporal flow report saved to: {report_path}")
+    print(f"📊 Temporal flow report saved to: {full_path}")
 
     # Also generate CSV
     export_temporal_flow_csv(results, output_dir)
     
-    return {
+    # Return results in the format expected by other functions
+    results.update({
         "ok": True,
-        "report_path": report_path,
-        "analysis_results": results,
-        "timestamp": timestamp
-    }
+        "report_path": full_path,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
+    
+    return results
 
 
 def generate_markdown_report(
@@ -102,6 +104,7 @@ def generate_markdown_report(
     content.append(f"**Analysis Period:** {results.get('timestamp', 'N/A')}")
     content.append(f"**Min Overlap Duration:** {results.get('min_overlap_duration', 5.0)} seconds")
     content.append(f"**Conflict Length:** {results.get('conflict_length_m', 100.0)} meters")
+    content.append(f"**Binning Thresholds:** Time > {results.get('temporal_binning_threshold_minutes', 10.0)} min, Distance > {results.get('spatial_binning_threshold_meters', 100.0)} m")
     content.append(f"**Total Segments:** {results.get('total_segments', 0)}")
     content.append(f"**Segments with Convergence:** {results.get('segments_with_convergence', 0)}")
     content.append("")
@@ -116,14 +119,29 @@ def generate_markdown_report(
     content.append("- **Deep Dive Analysis**: Detailed analysis of convergence patterns")
     content.append("")
     
-    # Event start times
+    # Event start times with runner counts
     content.append("## Event Start Times")
     content.append("")
-    content.append("| Event | Start Time |")
-    content.append("|-------|------------|")
+    content.append("| Event | Runners | Start Time |")
+    content.append("|-------|---------|------------|")
+    
+    # Get runner counts from segments data
+    runner_counts = {}
+    for segment in results.get("segments", []):
+        event_a = segment.get("event_a")
+        event_b = segment.get("event_b")
+        total_a = segment.get("total_a", 0)
+        total_b = segment.get("total_b", 0)
+        
+        if event_a:
+            runner_counts[event_a] = total_a
+        if event_b:
+            runner_counts[event_b] = total_b
+    
     for event, start_min in event_order:
         start_time = f"{int(start_min//60):02d}:{int(start_min%60):02d}:00"
-        content.append(f"| {event} | {start_time} |")
+        runner_count = runner_counts.get(event, 0)
+        content.append(f"| {event} | {runner_count:,} | {start_time} |")
     content.append("")
     
     # Summary statistics
@@ -162,10 +180,10 @@ def generate_summary_section(results: Dict[str, Any]) -> List[str]:
     # Flow type breakdown
     flow_types = {}
     for segment in results.get("segments", []):
-        flow_type = segment.get("flow_type", "unknown")
-        # Handle NaN values
-        if pd.isna(flow_type) or flow_type == "nan":
-            flow_type = "No Flow"
+        flow_type = segment.get("flow_type", "")
+        # Handle NaN, empty, and nan values
+        if pd.isna(flow_type) or flow_type == "nan" or flow_type == "":
+            flow_type = "Not specified"
         flow_types[flow_type] = flow_types.get(flow_type, 0) + 1
     
     if flow_types:
@@ -189,13 +207,13 @@ def generate_segment_section(
     
     # Segment header
     seg_id = segment.get("seg_id", "Unknown")
-    segment_label = segment.get("segment_label", "Unknown")
+    seg_label = segment.get("segment_label", "Unknown")
     flow_type = segment.get("flow_type", "Unknown")
     event_a = segment.get("event_a", "Unknown")
     event_b = segment.get("event_b", "Unknown")
     has_convergence = segment.get("has_convergence", False)
     
-    content.append(f"## {seg_id}: {segment_label}")
+    content.append(f"## {seg_id}: {seg_label}")
     content.append("")
     content.append(f"**Flow Type:** {flow_type}")
     content.append(f"**Events:** {event_a} vs {event_b}")
@@ -222,6 +240,8 @@ def generate_segment_section(
 
 def generate_basic_info_table(segment: Dict[str, Any]) -> List[str]:
     """Generate basic segment information table."""
+    import pandas as pd
+    
     content = []
     
     content.append("### Basic Information")
@@ -234,9 +254,28 @@ def generate_basic_info_table(segment: Dict[str, Any]) -> List[str]:
     to_km_a = segment.get("to_km_a", "N/A")
     from_km_b = segment.get("from_km_b", "N/A")
     to_km_b = segment.get("to_km_b", "N/A")
-    width_m = segment.get("width_m", "N/A")
     total_a = segment.get("total_a", 0)
     total_b = segment.get("total_b", 0)
+    
+    # Get width from segments_new.csv - fix NA values
+    seg_id = segment.get("seg_id", "")
+    try:
+        segments_df = pd.read_csv('data/segments_new.csv')
+        seg_row = segments_df[segments_df['seg_id'] == seg_id]
+        if not seg_row.empty:
+            width_val = seg_row['width_m'].iloc[0]
+            # Handle NaN/NA values
+            if pd.isna(width_val) or width_val == '':
+                from .constants import DEFAULT_CONFLICT_LENGTH_METERS
+                width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
+            else:
+                width_m = float(width_val)
+        else:
+            from .constants import DEFAULT_CONFLICT_LENGTH_METERS
+            width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
+    except Exception:
+        from .constants import DEFAULT_CONFLICT_LENGTH_METERS
+        width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
     
     # Get event names
     event_a = segment.get("event_a", "A")
@@ -245,45 +284,90 @@ def generate_basic_info_table(segment: Dict[str, Any]) -> List[str]:
     content.append(f"| {event_a} Range | {from_km_a} - {to_km_a} km |")
     content.append(f"| {event_b} Range | {from_km_b} - {to_km_b} km |")
     content.append(f"| Width | {width_m} m |")
-    content.append(f"| {event_a} Runners | {total_a:,} |")
-    content.append(f"| {event_b} Runners | {total_b:,} |")
     
     return content
 
 
 def generate_convergence_analysis(segment: Dict[str, Any]) -> List[str]:
-    """Generate convergence analysis section."""
+    """Generate enhanced convergence analysis section."""
     content = []
     
     content.append("### Convergence Analysis")
     content.append("")
     
-    # Convergence point
+    # Enhanced overtaking statistics with percentages and individual convergence zones
+    event_a = segment.get('event_a', 'A')
+    event_b = segment.get('event_b', 'B')
+    overtaking_a = segment.get("overtaking_a", 0)
+    overtaking_b = segment.get("overtaking_b", 0)
+    total_a = segment.get('total_a', 0)
+    total_b = segment.get('total_b', 0)
+    from_km_a = segment.get('from_km_a', 0)
+    to_km_a = segment.get('to_km_a', 0)
+    from_km_b = segment.get('from_km_b', 0)
+    to_km_b = segment.get('to_km_b', 0)
+    
+    # Calculate percentages
+    pct_a = round((overtaking_a / total_a * 100), 1) if total_a > 0 else 0.0
+    pct_b = round((overtaking_b / total_b * 100), 1) if total_b > 0 else 0.0
+    
+    content.append("**Overtaking Statistics**")
+    content.append("| Event | True Passes | Co-presence | Convergence Zone |")
+    content.append("|-------|-------------|-------------|------------------|")
+    
+    # Get co-presence counts
+    copresence_a = segment.get("copresence_a", 0)
+    copresence_b = segment.get("copresence_b", 0)
+    
+    content.append(f"| {event_a} | {overtaking_a} ({pct_a}%) | {copresence_a} | {from_km_a:.2f} - {to_km_a:.2f} km |")
+    content.append(f"| {event_b} | {overtaking_b} ({pct_b}%) | {copresence_b} | {from_km_b:.2f} - {to_km_b:.2f} km |")
+    content.append("")
+    
+    # Enhanced convergence point (normalized) - moved outside table
     convergence_point = segment.get("convergence_point")
-    if convergence_point is not None:
-        content.append(f"**Convergence Point:** {convergence_point:.3f} km")
+    if convergence_point is not None and segment.get('has_convergence', False):
+        # Store both absolute and normalized convergence points
+        from_km_a = segment.get('from_km_a', 0)
+        to_km_a = segment.get('to_km_a', 0)
+        
+        # Calculate normalized convergence point (0.0 to 1.0)
+        segment_len = to_km_a - from_km_a
+        if segment_len > 0:
+            # Calculate raw fraction
+            raw_fraction = (convergence_point - from_km_a) / segment_len
+            # Apply fraction clamping to ensure [0.0, 1.0] range
+            from app.constants import MIN_NORMALIZED_FRACTION, MAX_NORMALIZED_FRACTION
+            if raw_fraction < MIN_NORMALIZED_FRACTION:
+                normalized_cp = MIN_NORMALIZED_FRACTION
+                logging.warning(f"Clamped negative convergence fraction {raw_fraction:.3f} to {MIN_NORMALIZED_FRACTION} for {segment.get('seg_id', 'unknown')} {event_a} vs {event_b}")
+            elif raw_fraction > MAX_NORMALIZED_FRACTION:
+                normalized_cp = MAX_NORMALIZED_FRACTION
+                logging.warning(f"Clamped convergence fraction {raw_fraction:.3f} > 1.0 to {MAX_NORMALIZED_FRACTION} for {segment.get('seg_id', 'unknown')} {event_a} vs {event_b}")
+            else:
+                normalized_cp = raw_fraction
+            normalized_cp = round(normalized_cp, 2)
+            
+            # Display both absolute and normalized values clearly
+            content.append(f"**Convergence Point (fraction):** {normalized_cp}")
+            content.append(f"**Convergence Point (km):** {convergence_point:.2f}")
+        else:
+            content.append(f"**Convergence Point (km):** {convergence_point:.2f}")
     else:
         content.append("**Convergence Point:** Not found")
     content.append("")
     
-    # Overtaking statistics
-    overtaking_a = segment.get("overtaking_a", 0)
-    overtaking_b = segment.get("overtaking_b", 0)
-    
-    content.append("**Overtaking Statistics**")
-    content.append("| Event | Overtaking Count |")
-    content.append("|-------|------------------|")
-    content.append(f"| {segment.get('event_a', 'A')} | {overtaking_a:,} |")
-    content.append(f"| {segment.get('event_b', 'B')} | {overtaking_b:,} |")
-    content.append("")
-    
-    # Convergence zone
+    # Convergence zone with proper decimal formatting
     convergence_zone_start = segment.get("convergence_zone_start")
     convergence_zone_end = segment.get("convergence_zone_end")
     
-    if convergence_zone_start and convergence_zone_end:
-        content.append(f"**Convergence Zone:** {convergence_zone_start} - {convergence_zone_end}")
-        content.append("")
+    if convergence_zone_start is not None and convergence_zone_end is not None:
+        # Fix decimal precision issues (max 3 decimals)
+        start_formatted = f"{convergence_zone_start:.3f}".rstrip('0').rstrip('.')
+        end_formatted = f"{convergence_zone_end:.3f}".rstrip('0').rstrip('.')
+        content.append(f"**Convergence Zone:** {start_formatted} - {end_formatted} km")
+    else:
+        content.append("**Convergence Zone:** Not found")
+    content.append("")
     
     return content
 
@@ -381,54 +465,338 @@ def generate_simple_temporal_flow_report(
 
 
 def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
-    """Export temporal flow analysis results to CSV."""
+    """Export temporal flow analysis results to CSV with enhanced formatting."""
     import csv
+    import pandas as pd
     from datetime import datetime
     
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-    filename = f"temporal_flow_analysis_{timestamp}.csv"
-    full_path = f"{output_path}/{filename}"
+    # Use date-based organization and standardized naming
+    full_path, relative_path = get_report_paths("Flow", "csv", output_path)
+    
+    # Load segments for width values
+    segments_df = pd.read_csv('data/segments_new.csv')
+    
+    # Get segments from results
+    segments = results.get("segments", [])
     
     with open(full_path, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         
-        # Header
+        # Human-readable header with pct_a, pct_b, and audit columns included
         writer.writerow([
             "seg_id", "segment_label", "flow_type", "event_a", "event_b",
             "from_km_a", "to_km_a", "from_km_b", "to_km_b",
-            "convergence_point", "has_convergence",
-            "total_a", "total_b", "overtaking_a", "overtaking_b",
-            "convergence_zone_start", "convergence_zone_end", "conflict_length_m",
-            "sample_a", "sample_b", "analysis_timestamp"
+            "convergence_point_km", "convergence_point_fraction", "has_convergence",
+            "total_a", "total_b", "overtaking_a", "overtaking_b", "copresence_a", "copresence_b",
+            "pct_a", "pct_b", "convergence_zone_start", "convergence_zone_end", 
+            "spatial_zone_exists", "temporal_overlap_exists", "true_pass_exists", "has_convergence_policy", "no_pass_reason_code",
+            "conflict_length_m", "width_m", "sample_a", "sample_b", "analysis_timestamp",
+            "notes_2154", "agreed_2154", "analysis_2154", "noted_tbd", "agreed_tbd", "analysis_tbd"
         ])
         
-        # Data rows
-        for segment in results["segments"]:
+        # Enhanced data rows with proper formatting
+        for segment in segments:
+            seg_id = segment.get("seg_id", "")
+            
+            # Get width from segments_new.csv - fix NA values
+            seg_row = segments_df[segments_df['seg_id'] == seg_id]
+            if not seg_row.empty:
+                width_val = seg_row['width_m'].iloc[0]
+                # Handle NaN/NA values
+                if pd.isna(width_val) or width_val == '':
+                    from .constants import DEFAULT_CONFLICT_LENGTH_METERS
+                    width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
+                else:
+                    width_m = float(width_val)
+            else:
+                from .constants import DEFAULT_CONFLICT_LENGTH_METERS
+                width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
+            
+            # Fix convergence point normalization and decimal formatting (max 3 decimals)
+            if segment.get('has_convergence', False):
+                cp_km = segment.get('convergence_point')
+                from_km_a = segment.get('from_km_a', 0)
+                to_km_a = segment.get('to_km_a', 0)
+                
+                # Round convergence point to max 2 decimal places for consistency
+                cp_km = format_decimal_places(cp_km, 2)
+                
+                # Normalize convergence point to segment (0.0 to 1.0)
+                segment_len = to_km_a - from_km_a
+                if segment_len > 0 and cp_km is not None:
+                    # Calculate raw fraction
+                    raw_fraction = (cp_km - from_km_a) / segment_len
+                    # Apply fraction clamping to ensure [0.0, 1.0] range
+                    from app.constants import MIN_NORMALIZED_FRACTION, MAX_NORMALIZED_FRACTION
+                    if raw_fraction < MIN_NORMALIZED_FRACTION:
+                        normalized_cp = MIN_NORMALIZED_FRACTION
+                        logging.warning(f"Clamped negative convergence fraction {raw_fraction:.3f} to {MIN_NORMALIZED_FRACTION} for {seg_id} {segment.get('event_a', 'A')} vs {segment.get('event_b', 'B')}")
+                    elif raw_fraction > MAX_NORMALIZED_FRACTION:
+                        normalized_cp = MAX_NORMALIZED_FRACTION
+                        logging.warning(f"Clamped convergence fraction {raw_fraction:.3f} > 1.0 to {MAX_NORMALIZED_FRACTION} for {seg_id} {segment.get('event_a', 'A')} vs {segment.get('event_b', 'B')}")
+                    else:
+                        normalized_cp = raw_fraction
+                    normalized_cp = format_decimal_places(normalized_cp, 2)  # Max 2 decimal places
+                else:
+                    normalized_cp = 0.0
+            else:
+                cp_km = None
+                normalized_cp = None
+            
+            # Fix decimal formatting (max 2 decimals for consistency)
+            conv_start = format_decimal_places(segment.get('convergence_zone_start'), 2)
+            conv_end = format_decimal_places(segment.get('convergence_zone_end'), 2)
+            
+            # Calculate percentages
+            total_a = segment.get('total_a', 0)
+            total_b = segment.get('total_b', 0)
+            overtaking_a = segment.get('overtaking_a', 0)
+            overtaking_b = segment.get('overtaking_b', 0)
+            
+            pct_a = round((overtaking_a / total_a * 100), 1) if total_a > 0 else 0.0
+            pct_b = round((overtaking_b / total_b * 100), 1) if total_b > 0 else 0.0
+            
             writer.writerow([
-                segment["seg_id"],
+                seg_id,
                 segment.get("segment_label", ""),
                 segment.get("flow_type", ""),
-                segment["event_a"],
-                segment["event_b"],
-                segment["from_km_a"],
-                segment["to_km_a"],
-                segment["from_km_b"],
-                segment["to_km_b"],
-                segment.get("convergence_point", ""),
-                segment["has_convergence"],
-                segment["total_a"],
-                segment["total_b"],
-                segment["overtaking_a"],
-                segment["overtaking_b"],
-                segment.get("convergence_zone_start", ""),
-                segment.get("convergence_zone_end", ""),
-                segment.get("conflict_length_m", ""),
-                format_bib_range(segment["sample_a"]),
-                format_bib_range(segment["sample_b"]),
-                results["timestamp"]
+                segment.get("event_a", ""),
+                segment.get("event_b", ""),
+                round(segment.get('from_km_a', 0), 2),
+                round(segment.get('to_km_a', 0), 2),
+                round(segment.get('from_km_b', 0), 2),
+                round(segment.get('to_km_b', 0), 2),
+                cp_km,  # Use the rounded convergence point
+                normalized_cp,
+                segment.get("has_convergence", False),
+                segment.get("total_a", ""),
+                segment.get("total_b", ""),
+                segment.get("overtaking_a", ""),
+                segment.get("overtaking_b", ""),
+                segment.get("copresence_a", ""),
+                segment.get("copresence_b", ""),
+                pct_a,
+                pct_b,
+                conv_start,
+                conv_end,
+                segment.get("spatial_zone_exists", False),
+                segment.get("temporal_overlap_exists", False),
+                segment.get("true_pass_exists", False),
+                segment.get("has_convergence_policy", False),
+                segment.get("no_pass_reason_code", ""),
+                segment.get('conflict_length_m', 100.0),  # conflict_length_m from analysis
+                width_m,
+                format_sample_data(segment.get("sample_a", [])),
+                format_sample_data(segment.get("sample_b", [])),
+                datetime.now().strftime("%Y%m%d_%H%M"),
+                get_audit_value(seg_id, segment.get("event_a", ""), segment.get("event_b", ""), "notes_2154"),
+                get_audit_value(seg_id, segment.get("event_a", ""), segment.get("event_b", ""), "agreed_2154"),
+                get_audit_value(seg_id, segment.get("event_a", ""), segment.get("event_b", ""), "analysis_2154"),
+                "",  # noted_tbd - to be filled by user
+                "",  # agreed_tbd - to be filled by user
+                ""   # analysis_tbd - to be filled by user
             ])
     
     print(f"📊 Temporal flow analysis exported to: {full_path}")
+    
+    # Generate Flow Audit CSV if any segments have audit data
+    audit_segments = [seg for seg in segments if "flow_audit_data" in seg]
+    if audit_segments:
+        # Extract output directory from the CSV path
+        import os
+        output_dir = os.path.dirname(full_path)
+        audit_path = generate_flow_audit_csv(segments, output_dir)
+        print(f"🔍 Flow Audit data exported to: {audit_path}")
+    else:
+        print("ℹ️  No Flow Audit data to export")
+
+    return full_path
+
+
+def get_audit_value(seg_id: str, event_a: str, event_b: str, column: str) -> str:
+    """Get audit values from the 2154 report for specific segments."""
+    # User-provided audit values from 2025-09-06-2154-Flow.csv
+    audit_data = {
+        # A1 segments
+        ("A1", "Full", "Half"): {
+            "notes_2154": "Not realistic to see overalps given start of race and start_times between events",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        ("A1", "Full", "10K"): {
+            "notes_2154": "Not realistic to see overalps given start of race and start_times between events",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        ("A1", "Half", "10K"): {
+            "notes_2154": "Not realistic to see overalps given start of race and start_times between events",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        # A2 segments
+        ("A2", "Full", "Half"): {
+            "notes_2154": "Not realistic to see overalps given start of race and start_times between events",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        ("A2", "Full", "10K"): {
+            "notes_2154": "Not realistic to see overalps given start of race and start_times between events",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        ("A2", "Half", "10K"): {
+            "notes_2154": "Minimal because of start_offsets of 10K and distance covered",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        # A3 segments
+        ("A3", "Full", "Half"): {
+            "notes_2154": "Minimal because start_offsets of Full and distance covered",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        ("A3", "Full", "10K"): {
+            "notes_2154": "Minimal because start_offsets of Full and distance covered",
+            "agreed_2154": "n",
+            "analysis_2154": "Provide entry and exit times for top-10 runners in each  event to fully validate has_convergence = FALSE for A3 event_a = Full and event_b = 10K."
+        },
+        ("A3", "Half", "10K"): {
+            "notes_2154": "Minimal given start_offsets of 10K and fast 10K meeting slow Half",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        # B1 segments
+        ("B1", "Full", "10K"): {
+            "notes_2154": "Minimal given start_offsets of Full",
+            "agreed_2154": "n",
+            "analysis_2154": "Provide entry and exit times for top-10 runners in each event to fully validate has_convergence = FALSE for B1 event_a = Full and event_b = 10K."
+        },
+        # B2 segments
+        ("B2", "Full", "10K"): {
+            "notes_2154": "Minimal and should be Fast Full meet slow 10K",
+            "agreed_2154": "n",
+            "analysis_2154": "n - has_convergence = true but counts are 0"
+        },
+        # B3 segments
+        ("B3", "Full", "10K"): {
+            "notes_2154": "No overtake as this is bi-directional flow",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        # F1 segments
+        ("F1", "Full", "Half"): {
+            "notes_2154": "Not expected given distances of each event in the pair (Full/Half)",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        ("F1", "Full", "10K"): {
+            "notes_2154": "Minimal given start_offsets of 10K",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        ("F1", "Half", "10K"): {
+            "notes_2154": "Moderate given start_offsets of 10K and the low cummulative distance for Half (event_a)",
+            "agreed_2154": "n",
+            "analysis_2154": "n - Percentages are really high. Calculate entry and exit times for ALL runners in each  event to fully validate overtaking_a overtaking_b pct_a and pct_b for F1 segment where event_a = Half and event_b = 10K."
+        },
+        # H1 segments
+        ("H1", "Full", "Half"): {
+            "notes_2154": "No overtake as this is bi-directional flow",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        ("H1", "Full", "10K"): {
+            "notes_2154": "No overtake as this is bi-directional flow",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        ("H1", "Half", "10K"): {
+            "notes_2154": "No overtake as this is bi-directional flow",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        # I1 segments
+        ("I1", "Full", "Half"): {
+            "notes_2154": "Minimal and should be Fast Full meet slow Half.",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        # J1 segments
+        ("J1", "Full", "Half"): {
+            "notes_2154": "No overtake as this is bi-directional flow",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        # J4 segments
+        ("J4", "Full", "Half"): {
+            "notes_2154": "No overtake as this is bi-directional flow",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        # J5 segments
+        ("J5", "Full", "Half"): {
+            "notes_2154": "No overtake as this is bi-directional flow",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        # K1 segments
+        ("K1", "Full", "Half"): {
+            "notes_2154": "Moderate with Fast Full meet mid-pack Half.",
+            "agreed_2154": "n",
+            "analysis_2154": "n - Indicate a convergence but no counts in overtaking_a overtaking_b for K1 sgement where event_a = Full (fastest) and event_b = Half (really slow)"
+        },
+        # L1 segments
+        ("L1", "Full", "Half"): {
+            "notes_2154": "Moderate convergence is expected with mid-pack of Half and Full",
+            "agreed_2154": "n",
+            "analysis_2154": "n - Indicate a convergence but no counts in overtaking_a overtaking_b for L1 sgement where event_a = Full (fastest) and event_b = Half (really slow)"
+        },
+        ("L1", "Full", "10K"): {
+            "notes_2154": "Minimal convergence and limited to Fast Full and slow 10K",
+            "agreed_2154": "n",
+            "analysis_2154": "n - Indicate a convergence but no counts in overtaking_a overtaking_b for L1 sgement where event_a = Full (fastest) and event_b = 10K (really slow)"
+        },
+        ("L1", "Half", "10K"): {
+            "notes_2154": "Moderate convergence with mid-pack Half and slow 10K",
+            "agreed_2154": "n",
+            "analysis_2154": "n - Indicate a convergence but no counts in overtaking_a overtaking_b for L1 sgement where event_a = Half (fastest) and event_b = 10K (really slow)"
+        },
+        # M1 segments
+        ("M1", "Full", "Half"): {
+            "notes_2154": "Minimal convergence and limited to Fast Full and slow 10K",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        },
+        ("M1", "Full", "10K"): {
+            "notes_2154": "Minimal convergence and limited to Fast Full and slow 10K",
+            "agreed_2154": "n",
+            "analysis_2154": "n - Indicate a convergence but no counts in overtaking_a overtaking_b for M1 sgement where event_a = Full (fastest) and event_b = 10K (really slow)"
+        },
+        ("M1", "Half", "10K"): {
+            "notes_2154": "Moderate convergence with mid-pack Half and slow 10K",
+            "agreed_2154": "y",
+            "analysis_2154": "y"
+        }
+    }
+    
+    key = (seg_id, event_a, event_b)
+    if key in audit_data:
+        return audit_data[key].get(column, "")
+    return ""
+
+
+def format_sample_data(sample_list: List[str], max_individual: int = 3) -> str:
+    """Format sample data for human-readable CSV display."""
+    if not sample_list:
+        return ""
+    
+    if len(sample_list) <= max_individual:
+        return ", ".join(map(str, sample_list))
+    
+    # For large lists, show first few and count
+    sorted_samples = sorted(sample_list, key=lambda x: int(x) if str(x).isdigit() else x)
+    first_few = sorted_samples[:max_individual]
+    return f"{', '.join(map(str, first_few))}, ... ({len(sample_list)} total)"
 
 
 def format_bib_range(bib_list: List[str], max_individual: int = 3) -> str:
@@ -443,3 +811,94 @@ def format_bib_range(bib_list: List[str], max_individual: int = 3) -> str:
     sorted_bibs = sorted(bib_list, key=lambda x: int(x) if str(x).isdigit() else x)
     first_few = sorted_bibs[:max_individual]
     return f"{', '.join(map(str, first_few))}, ... ({len(bib_list)} total)"
+
+
+def generate_flow_audit_csv(
+    segments: List[Dict[str, Any]],
+    output_dir: str = "reports/analysis"
+) -> str:
+    """
+    Generate Flow_Audit.csv with comprehensive diagnostic data.
+    
+    This function creates a sidecar diagnostic file to complement Flow.csv,
+    providing fine-grained instrumentation for segments with suspicious
+    overtaking percentages.
+    """
+    import os
+    from datetime import datetime
+    
+    # Create audit subdirectory within the output directory
+    audit_dir = os.path.join(output_dir, "audit")
+    os.makedirs(audit_dir, exist_ok=True)
+    
+    # Generate timestamp for filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+    filename = f"{timestamp}-Flow_Audit.csv"
+    full_path = os.path.join(audit_dir, filename)
+    
+    # Flow Audit CSV header (33 columns as per specification)
+    audit_header = [
+        "seg_id", "segment_label", "event_a", "event_b",
+        "spatial_zone_exists", "temporal_overlap_exists", "true_pass_exists", 
+        "has_convergence_policy", "no_pass_reason_code",
+        "convergence_zone_start", "convergence_zone_end", "conflict_length_m",
+        "copresence_a", "copresence_b", "density_ratio",
+        "median_entry_diff_sec", "median_exit_diff_sec",
+        "avg_overlap_dwell_sec", "max_overlap_dwell_sec", "overlap_window_sec",
+        "passes_a", "passes_b", "multipass_bibs_a", "multipass_bibs_b",
+        "pct_overtake_raw_a", "pct_overtake_raw_b", 
+        "pct_overtake_strict_a", "pct_overtake_strict_b",
+        "time_bins_used", "distance_bins_used", "dedup_passes_applied",
+        "reason_codes", "audit_trigger"
+    ]
+    
+    import csv
+    with open(full_path, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(audit_header)
+        
+        # Write audit data for segments that have flow_audit_data
+        for segment in segments:
+            if "flow_audit_data" in segment:
+                audit_data = segment["flow_audit_data"]
+                audit_data["seg_id"] = segment.get("seg_id", "")
+                audit_data["segment_label"] = segment.get("segment_label", "")
+                
+                # Write row with all 33 columns
+                writer.writerow([
+                    audit_data.get("seg_id", ""),
+                    audit_data.get("segment_label", ""),
+                    audit_data.get("event_a", ""),
+                    audit_data.get("event_b", ""),
+                    audit_data.get("spatial_zone_exists", False),
+                    audit_data.get("temporal_overlap_exists", False),
+                    audit_data.get("true_pass_exists", False),
+                    audit_data.get("has_convergence_policy", False),
+                    audit_data.get("no_pass_reason_code", ""),
+                    audit_data.get("convergence_zone_start", ""),
+                    audit_data.get("convergence_zone_end", ""),
+                    audit_data.get("conflict_length_m", 0.0),
+                    audit_data.get("copresence_a", 0),
+                    audit_data.get("copresence_b", 0),
+                    audit_data.get("density_ratio", 0.0),
+                    audit_data.get("median_entry_diff_sec", 0.0),
+                    audit_data.get("median_exit_diff_sec", 0.0),
+                    audit_data.get("avg_overlap_dwell_sec", 0.0),
+                    audit_data.get("max_overlap_dwell_sec", 0.0),
+                    audit_data.get("overlap_window_sec", 0.0),
+                    audit_data.get("passes_a", 0),
+                    audit_data.get("passes_b", 0),
+                    audit_data.get("multipass_bibs_a", ""),
+                    audit_data.get("multipass_bibs_b", ""),
+                    audit_data.get("pct_overtake_raw_a", 0.0),
+                    audit_data.get("pct_overtake_raw_b", 0.0),
+                    audit_data.get("pct_overtake_strict_a", 0.0),
+                    audit_data.get("pct_overtake_strict_b", 0.0),
+                    audit_data.get("time_bins_used", False),
+                    audit_data.get("distance_bins_used", False),
+                    audit_data.get("dedup_passes_applied", False),
+                    audit_data.get("reason_codes", ""),
+                    audit_data.get("audit_trigger", "")
+                ])
+    
+    return full_path

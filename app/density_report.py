@@ -15,9 +15,11 @@ import os
 try:
     from .density import analyze_density_segments, DensityConfig
     from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS
+    from .report_utils import get_report_paths
 except ImportError:
     from density import analyze_density_segments, DensityConfig
     from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS
+    from report_utils import get_report_paths
 import pandas as pd
 from datetime import datetime
 
@@ -141,22 +143,19 @@ def generate_density_report(
     # Generate markdown report
     report_content = generate_markdown_report(results, start_times, include_per_event)
     
-    # Save report
-    os.makedirs(output_dir, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    filename = f"{timestamp}_Density_Analysis_Report.md"
-    report_path = os.path.join(output_dir, filename)
+    # Save report using standardized naming convention
+    full_path, relative_path = get_report_paths("Density", "md", output_dir)
     
-    with open(report_path, 'w', encoding='utf-8') as f:
+    with open(full_path, 'w', encoding='utf-8') as f:
         f.write(report_content)
     
-    print(f"📊 Density report saved to: {report_path}")
+    print(f"📊 Density report saved to: {full_path}")
     
     return {
         "ok": True,
-        "report_path": report_path,
+        "report_path": full_path,
         "analysis_results": results,
-        "timestamp": timestamp
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 
 
@@ -234,13 +233,13 @@ def generate_segment_section(
     content = []
     
     # Segment header
-    physical_name = segment_data.get("physical_name", "Unknown")
+    seg_label = segment_data.get("seg_label", "Unknown")
     events_included = segment_data.get("events_included", [])
     
-    content.append(f"## {segment_id}: {physical_name}")
+    content.append(f"## {segment_id}: {seg_label}")
     content.append("")
     content.append(f"**Events Included:** {', '.join(events_included)}")
-    content.append(f"**Physical Name:** {physical_name}")
+    content.append(f"**Segment Label:** {seg_label}")
     content.append("")
     
     # Combined view

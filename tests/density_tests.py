@@ -22,7 +22,7 @@ class DensityTests:
     """Test suite for density analysis"""
     
     def __init__(self):
-        self.correct_start_times = {'Full': 420, '10K': 440, 'Half': 460}  # Start times in seconds
+        self.correct_start_times = {'Full': 420, '10K': 440, 'Half': 460}  # Start times in minutes
         self.density_config = DensityConfig(
             bin_seconds=30,
             threshold_areal=1.2,

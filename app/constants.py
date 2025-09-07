@@ -19,7 +19,15 @@ DEFAULT_CONVERGENCE_STEP_KM = 0.01
 
 # Tolerance values
 TEMPORAL_OVERLAP_TOLERANCE_SECONDS = 5.0
+TRUE_PASS_DETECTION_TOLERANCE_SECONDS = 2.0  # Reduced tolerance for true pass detection
 DENSITY_EPSILON = 1e-6
+
+# Dynamic conflict length thresholds
+CONFLICT_LENGTH_SHORT_SEGMENT_M = 100.0  # For segments <= 1.0km
+CONFLICT_LENGTH_MEDIUM_SEGMENT_M = 150.0  # For segments 1.0-2.0km  
+CONFLICT_LENGTH_LONG_SEGMENT_M = 200.0   # For segments > 2.0km
+SEGMENT_LENGTH_MEDIUM_THRESHOLD_KM = 1.0
+SEGMENT_LENGTH_LONG_THRESHOLD_KM = 2.0
 
 # Distance conversion
 METERS_PER_KM = 1000.0
@@ -47,3 +55,15 @@ DEFAULT_TIME_BIN_SECONDS = 30
 
 # Narrative smoothing
 MIN_SUSTAINED_PERIOD_MINUTES = 2.0
+
+# Binning thresholds for flow analysis
+TEMPORAL_BINNING_THRESHOLD_MINUTES = 10.0  # Use time bins if overlap > 10 minutes
+SPATIAL_BINNING_THRESHOLD_METERS = 100.0   # Use distance bins if conflict zone > 100m
+SUSPICIOUS_OVERTAKING_RATE_THRESHOLD = 0.5  # Flag overtaking rates > 50% as suspicious
+
+# Fraction validation and clamping
+MIN_NORMALIZED_FRACTION = 0.0
+MAX_NORMALIZED_FRACTION = 1.0
+FRACTION_CLAMP_REASON_OUTSIDE_RANGE = "outside_A_range_normalized"
+FRACTION_CLAMP_REASON_NEGATIVE = "negative_fraction_clamped"
+FRACTION_CLAMP_REASON_EXCEEDS_ONE = "fraction_exceeds_one_clamped"

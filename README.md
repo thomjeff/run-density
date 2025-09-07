@@ -45,14 +45,24 @@ make smoke-local
 ### CLI Tools
 Generate comprehensive reports using command-line tools:
 
+> **Note**: Legacy CLI scripts have been moved to `archive/` directory. The examples below use the modern module-based approach.
+
 **Temporal Flow Report** (Markdown + CSV):
 ```bash
-python3 generate_temporal_flow_report.py data/your_pace_data.csv data/segments.csv
+python3 -c "
+from app.temporal_flow_report import generate_temporal_flow_report
+result = generate_temporal_flow_report('data/runners.csv', 'data/segments_new.csv', {'10K': 420, 'Half': 440, 'Full': 460})
+print(f'Report generated: {result[\"md_file\"]}')
+"
 ```
 
 **Density Report** (Markdown):
 ```bash
-python3 generate_density_report.py data/your_pace_data.csv data/density.csv
+python3 -c "
+from app.density_report import generate_density_report
+result = generate_density_report('data/runners.csv', 'data/segments_new.csv', {'10K': 420, 'Half': 440, 'Full': 460})
+print(f'Report generated: {result[\"md_file\"]}')
+"
 ```
 
 ### API Endpoints

@@ -23,7 +23,7 @@ class TemporalFlowTests:
     """Test suite for temporal flow analysis"""
     
     def __init__(self):
-        self.correct_start_times = {'Full': 420, '10K': 440, 'Half': 460}  # Start times in seconds
+        self.correct_start_times = {'Full': 420, '10K': 440, 'Half': 460}  # Start times in minutes
         self.expected_results_file = "comprehensive_segments_test_report_fixed.csv"
     
     def test_convergence_segments(self) -> TestResult:
