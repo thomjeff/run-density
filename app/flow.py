@@ -136,7 +136,7 @@ def calculate_convergence_point(
     
     if len_a <= 0 or len_b <= 0:
         return None
-    
+
     # For segments with different ranges, we need to find where runners from different events
     # are at the same relative position within their respective segments.
     # We'll check multiple normalized positions and find where temporal overlap occurs.
@@ -494,11 +494,11 @@ def calculate_convergence_zone_overlaps_original(
         # Convergence point is within Event A's range - use absolute approach
         s_cp = (cp_km - from_km_a) / max(len_a, 1e-9)
         s_cp, clamp_reason = clamp_normalized_fraction(s_cp, "convergence_point_")
-        
+    
         # Calculate conflict zone in normalized space
-        conflict_length_km = conflict_length_m / 1000.0  # Convert meters to km
-        conflict_half_km = conflict_length_km / 2.0
-        
+    conflict_length_km = conflict_length_m / 1000.0  # Convert meters to km
+    conflict_half_km = conflict_length_km / 2.0
+    
         # Convert conflict zone to normalized fractions
         # Use proportional tolerance: 5% of shorter segment, minimum 50m
         min_segment_len = min(len_a, len_b)
@@ -515,11 +515,11 @@ def calculate_convergence_zone_overlaps_original(
             s_end = min(1.0, s_cp + 0.05)    # 5% of segment
         
         # Convert normalized conflict zone to each event's absolute coordinates
-        cp_km_a_start = from_km_a + s_start * len_a
-        cp_km_a_end = from_km_a + s_end * len_a
-        
-        cp_km_b_start = from_km_b + s_start * len_b
-        cp_km_b_end = from_km_b + s_end * len_b
+    cp_km_a_start = from_km_a + s_start * len_a
+    cp_km_a_end = from_km_a + s_end * len_a
+
+    cp_km_b_start = from_km_b + s_start * len_b
+    cp_km_b_end = from_km_b + s_end * len_b
     else:
         # Convergence point is outside Event A's range - use normalized approach
         # This handles cases where convergence was detected in normalized space
@@ -560,7 +560,7 @@ def calculate_convergence_zone_overlaps_original(
     # Reset index to prevent iloc[i] mismatch after DataFrame filtering
     df_a = df_a.reset_index(drop=True)
     df_b = df_b.reset_index(drop=True)
-    
+
     # Vectorized times for conflict zone
     pace_a = df_a["pace"].values * 60.0  # sec per km
     offset_a = df_a.get("start_offset", pd.Series([0]*len(df_a))).fillna(0).values.astype(float)
@@ -670,8 +670,8 @@ def calculate_convergence_zone_overlaps_original(
                 temporal_overlap = (start_time_a < end_time_b and start_time_b < end_time_a)
                 
                 if temporal_overlap:
-                    a_bib = df_a.iloc[i]["runner_id"]
-                    b_bib = df_b.iloc[j]["runner_id"]
+                a_bib = df_a.iloc[i]["runner_id"]
+                b_bib = df_b.iloc[j]["runner_id"]
                     
                     # Always count co-presence
                     a_bibs_copresence.add(a_bib)
@@ -681,8 +681,8 @@ def calculate_convergence_zone_overlaps_original(
                     if a_passes_b or b_passes_a:
                         a_bibs_overtakes.add(a_bib)
                         b_bibs_overtakes.add(b_bib)
-                        # Track unique pairs (ordered to avoid duplicates)
-                        unique_pairs.add((a_bib, b_bib))
+                # Track unique pairs (ordered to avoid duplicates)
+                unique_pairs.add((a_bib, b_bib))
 
     # Calculate participants involved (union of all runners who had encounters)
     all_a_bibs = a_bibs_overtakes.union(a_bibs_copresence)
@@ -1063,7 +1063,7 @@ def analyze_temporal_flow_segments(
         all_segments = convert_segments_new_to_flow_format(segments_df)
     else:
         # This is the old format, use as-is
-        all_segments = segments_df.copy()
+    all_segments = segments_df.copy()
     
     results = {
         "ok": True,
