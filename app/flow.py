@@ -313,27 +313,31 @@ def calculate_convergence_zone_overlaps_original(
     to_km_b: float,
     min_overlap_duration: float = 5.0,
     conflict_length_m: float = 100.0,
-) -> Tuple[int, int, List[str], List[str], int, int]:
+) -> Tuple[int, int, int, int, List[str], List[str], int, int]:
     """
     Calculate the number of overlapping runners within the convergence zone,
     projecting both events onto a common segment-local axis.
     
-    CRITICAL: Uses TRUE PASS DETECTION, not co-presence detection.
-    - Only counts runners who actually overtake each other directionally
+    CRITICAL: Returns SEPARATE counts for true passes vs co-presence.
+    - True passes: runners who actually overtake each other directionally
+    - Co-presence: runners who overlap temporally without directional change
     - Checks BOTH temporal overlap AND directional change
     - Uses intersection boundaries for fair directional comparison
-    - Prevents inflated counts from simple temporal overlap
     
     PROPORTIONAL TOLERANCE: Uses 5% of shorter segment length, minimum 50m
     to ensure consistent behavior across different segment sizes.
+    
+    Returns:
+        Tuple of (overtakes_a, overtakes_b, copresence_a, copresence_b, 
+                 sample_a, sample_b, unique_encounters, participants_involved)
     """
     if df_a.empty or df_b.empty:
-        return 0, 0, [], [], 0, 0
+        return 0, 0, 0, 0, [], [], 0, 0
     
     len_a = to_km_a - from_km_a
     len_b = to_km_b - from_km_b
     if len_a <= 0 or len_b <= 0:
-        return 0, 0, [], [], 0, 0
+        return 0, 0, 0, 0, [], [], 0, 0
 
     # Check if convergence point is within Event A's range (absolute approach)
     # or if we need to use normalized approach (for segments like F1)
@@ -509,20 +513,35 @@ def calculate_convergence_zone_overlaps_original(
                 # Runner B passes Runner A if B starts behind A but finishes ahead of A
                 b_passes_a = (start_time_b > start_time_a and end_time_b < end_time_a)
                 
-                if a_passes_b or b_passes_a:
-                    # True pass detected - count as overtaking
+                # Check for temporal overlap (co-presence)
+                temporal_overlap = (start_time_a < end_time_b and start_time_b < end_time_a)
+                
+                if temporal_overlap:
                     a_bib = df_a.iloc[i]["runner_id"]
                     b_bib = df_b.iloc[j]["runner_id"]
-                    a_bibs.add(a_bib)
-                    b_bibs.add(b_bib)
-                    # Track unique pairs (ordered to avoid duplicates)
-                    unique_pairs.add((a_bib, b_bib))
+                    
+                    # Always count co-presence
+                    a_bibs_copresence.add(a_bib)
+                    b_bibs_copresence.add(b_bib)
+                    
+                    # Count as true pass only if directional change occurs
+                    if a_passes_b or b_passes_a:
+                        a_bibs_overtakes.add(a_bib)
+                        b_bibs_overtakes.add(b_bib)
+                        # Track unique pairs (ordered to avoid duplicates)
+                        unique_pairs.add((a_bib, b_bib))
 
     # Calculate participants involved (union of all runners who had encounters)
-    participants_involved = len(a_bibs.union(b_bibs))
+    all_a_bibs = a_bibs_overtakes.union(a_bibs_copresence)
+    all_b_bibs = b_bibs_overtakes.union(b_bibs_copresence)
+    participants_involved = len(all_a_bibs.union(all_b_bibs))
     unique_encounters = len(unique_pairs)
 
-    return len(a_bibs), len(b_bibs), list(a_bibs), list(b_bibs), unique_encounters, participants_involved
+    # Return separate counts for true passes vs co-presence
+    return (len(a_bibs_overtakes), len(b_bibs_overtakes), 
+            len(a_bibs_copresence), len(b_bibs_copresence),
+            list(a_bibs_overtakes), list(b_bibs_overtakes), 
+            unique_encounters, participants_involved)
 
 
 def calculate_convergence_zone_overlaps_binned(
@@ -541,21 +560,25 @@ def calculate_convergence_zone_overlaps_binned(
     use_time_bins: bool = False,
     use_distance_bins: bool = False,
     overlap_duration_minutes: float = 0.0,
-) -> Tuple[int, int, List[str], List[str], int, int]:
+) -> Tuple[int, int, int, int, List[str], List[str], int, int]:
     """
     Calculate overtaking using binning for long segments.
     """
     from .constants import TEMPORAL_BINNING_THRESHOLD_MINUTES
     
     if df_a.empty or df_b.empty:
-        return 0, 0, [], [], 0, 0
+        return 0, 0, 0, 0, [], [], 0, 0
     
     # Get start times
     start_a = start_times.get(event_a, 0) * 60.0
     start_b = start_times.get(event_b, 0) * 60.0
     
-    a_bibs = set()
-    b_bibs = set()
+    # Track runners who overtake each other (true passes)
+    a_bibs_overtakes = set()
+    b_bibs_overtakes = set()
+    # Track runners who have temporal overlap (co-presence)
+    a_bibs_copresence = set()
+    b_bibs_copresence = set()
     unique_pairs = set()
     
     if use_time_bins:
@@ -581,15 +604,17 @@ def calculate_convergence_zone_overlaps_binned(
             b_in_bin = df_b[(df_b['entry_time'] <= bin_end) & (df_b['exit_time'] >= bin_start)]
             
             # Calculate overtaking for this time bin using original method
-            bin_count_a, bin_count_b, bin_bibs_a, bin_bibs_b, bin_encounters, bin_participants = calculate_convergence_zone_overlaps_original(
+            bin_overtakes_a, bin_overtakes_b, bin_copresence_a, bin_copresence_b, bin_bibs_a, bin_bibs_b, bin_encounters, bin_participants = calculate_convergence_zone_overlaps_original(
                 a_in_bin, b_in_bin, event_a, event_b, start_times,
                 cp_km, from_km_a, to_km_a, from_km_b, to_km_b,
                 min_overlap_duration, conflict_length_m
             )
             
             # Accumulate results
-            a_bibs.update(bin_bibs_a)
-            b_bibs.update(bin_bibs_b)
+            a_bibs_overtakes.update(bin_bibs_a)
+            b_bibs_overtakes.update(bin_bibs_b)
+            a_bibs_copresence.update(bin_bibs_a)  # Co-presence includes all temporal overlaps
+            b_bibs_copresence.update(bin_bibs_b)
             unique_pairs.update([(a, b) for a in bin_bibs_a for b in bin_bibs_b])
     
     elif use_distance_bins:
@@ -606,22 +631,30 @@ def calculate_convergence_zone_overlaps_binned(
             bin_end_b = min(from_km_b + ((bin_idx + 1) * bin_size_km), to_km_b)
             
             # Calculate overtaking for this distance bin
-            bin_count_a, bin_count_b, bin_bibs_a, bin_bibs_b, bin_encounters, bin_participants = calculate_convergence_zone_overlaps_original(
+            bin_overtakes_a, bin_overtakes_b, bin_copresence_a, bin_copresence_b, bin_bibs_a, bin_bibs_b, bin_encounters, bin_participants = calculate_convergence_zone_overlaps_original(
                 df_a, df_b, event_a, event_b, start_times,
                 cp_km, bin_start_a, bin_end_a, bin_start_b, bin_end_b,
                 min_overlap_duration, conflict_length_m
             )
             
             # Accumulate results
-            a_bibs.update(bin_bibs_a)
-            b_bibs.update(bin_bibs_b)
+            a_bibs_overtakes.update(bin_bibs_a)
+            b_bibs_overtakes.update(bin_bibs_b)
+            a_bibs_copresence.update(bin_bibs_a)  # Co-presence includes all temporal overlaps
+            b_bibs_copresence.update(bin_bibs_b)
             unique_pairs.update([(a, b) for a in bin_bibs_a for b in bin_bibs_b])
     
     # Calculate final results
-    participants_involved = len(a_bibs.union(b_bibs))
+    all_a_bibs = a_bibs_overtakes.union(a_bibs_copresence)
+    all_b_bibs = b_bibs_overtakes.union(b_bibs_copresence)
+    participants_involved = len(all_a_bibs.union(all_b_bibs))
     unique_encounters = len(unique_pairs)
     
-    return len(a_bibs), len(b_bibs), list(a_bibs), list(b_bibs), unique_encounters, participants_involved
+    # Return separate counts for true passes vs co-presence
+    return (len(a_bibs_overtakes), len(b_bibs_overtakes), 
+            len(a_bibs_copresence), len(b_bibs_copresence),
+            list(a_bibs_overtakes), list(b_bibs_overtakes), 
+            unique_encounters, participants_involved)
 
 
 def format_bib_range(bib_list: List[str], max_individual: int = 3) -> str:
@@ -999,7 +1032,7 @@ def analyze_temporal_flow_segments(
             else:
                 overlap_duration_minutes = overlap_window_duration / 60.0 if isinstance(overlap_window_duration, (int, float)) else 0.0
             
-            count_a, count_b, bibs_a, bibs_b, unique_encounters, participants_involved = calculate_convergence_zone_overlaps_with_binning(
+            overtakes_a, overtakes_b, copresence_a, copresence_b, bibs_a, bibs_b, unique_encounters, participants_involved = calculate_convergence_zone_overlaps_with_binning(
                 df_a, df_b, event_a, event_b, start_times,
                 effective_cp_km, from_km_a, to_km_a, from_km_b, to_km_b, min_overlap_duration, dynamic_conflict_length_m, overlap_duration_minutes
             )
@@ -1018,9 +1051,9 @@ def analyze_temporal_flow_segments(
                 print(f"🔧 BINNING APPLIED to {seg_id}: time_bins={use_time_bins}, distance_bins={use_distance_bins}")
                 print(f"   Overlap: {overlap_duration_minutes:.1f}min, Conflict: {dynamic_conflict_length_m:.0f}m")
             
-            # Flag suspicious overtaking rates
-            pct_a = count_a / len(df_a) if len(df_a) > 0 else 0
-            pct_b = count_b / len(df_b) if len(df_b) > 0 else 0
+            # Flag suspicious overtaking rates (using true passes, not co-presence)
+            pct_a = overtakes_a / len(df_a) if len(df_a) > 0 else 0
+            pct_b = overtakes_b / len(df_b) if len(df_b) > 0 else 0
             
             if pct_a > SUSPICIOUS_OVERTAKING_RATE_THRESHOLD or pct_b > SUSPICIOUS_OVERTAKING_RATE_THRESHOLD:
                 if not (use_time_bins or use_distance_bins):
@@ -1080,15 +1113,17 @@ def analyze_temporal_flow_segments(
             
             # CRITICAL: Only set has_convergence=True if there are actual overtakes
             # If convergence is detected but no overtaking occurs, set has_convergence=False
-            if count_a == 0 and count_b == 0:
+            if overtakes_a == 0 and overtakes_b == 0:
                 # No overtaking detected despite convergence - set has_convergence=False
                 segment_result["has_convergence"] = False
                 segment_result["convergence_point"] = None
                 segment_result["convergence_point_fraction"] = None
             
             segment_result.update({
-                "overtaking_a": count_a,
-                "overtaking_b": count_b,
+                "overtaking_a": overtakes_a,
+                "overtaking_b": overtakes_b,
+                "copresence_a": copresence_a,
+                "copresence_b": copresence_b,
                 "sample_a": bibs_a[:10],  # First 10 for samples
                 "sample_b": bibs_b[:10],
                 "convergence_zone_start": conflict_start,

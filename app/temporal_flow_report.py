@@ -311,10 +311,15 @@ def generate_convergence_analysis(segment: Dict[str, Any]) -> List[str]:
     pct_b = round((overtaking_b / total_b * 100), 1) if total_b > 0 else 0.0
     
     content.append("**Overtaking Statistics**")
-    content.append("| Event | Runners | Convergence Zone |")
-    content.append("|-------|---------|------------------|")
-    content.append(f"| {event_a} | {overtaking_a} ({pct_a}%) | {from_km_a:.2f} - {to_km_a:.2f} km |")
-    content.append(f"| {event_b} | {overtaking_b} ({pct_b}%) | {from_km_b:.2f} - {to_km_b:.2f} km |")
+    content.append("| Event | True Passes | Co-presence | Convergence Zone |")
+    content.append("|-------|-------------|-------------|------------------|")
+    
+    # Get co-presence counts
+    copresence_a = segment.get("copresence_a", 0)
+    copresence_b = segment.get("copresence_b", 0)
+    
+    content.append(f"| {event_a} | {overtaking_a} ({pct_a}%) | {copresence_a} | {from_km_a:.2f} - {to_km_a:.2f} km |")
+    content.append(f"| {event_b} | {overtaking_b} ({pct_b}%) | {copresence_b} | {from_km_b:.2f} - {to_km_b:.2f} km |")
     content.append("")
     
     # Enhanced convergence point (normalized) - moved outside table
@@ -470,7 +475,7 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
             "seg_id", "segment_label", "flow_type", "event_a", "event_b",
             "from_km_a", "to_km_a", "from_km_b", "to_km_b",
             "convergence_point_km", "convergence_point_fraction", "has_convergence",
-            "total_a", "total_b", "overtaking_a", "overtaking_b",
+            "total_a", "total_b", "overtaking_a", "overtaking_b", "copresence_a", "copresence_b",
             "pct_a", "pct_b", "convergence_zone_start", "convergence_zone_end", 
             "conflict_length_m", "width_m", "sample_a", "sample_b", "analysis_timestamp",
             "notes_2154", "agreed_2154", "analysis_2154", "noted_tbd", "agreed_tbd", "analysis_tbd"
@@ -544,6 +549,8 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
                 segment.get("total_b", ""),
                 segment.get("overtaking_a", ""),
                 segment.get("overtaking_b", ""),
+                segment.get("copresence_a", ""),
+                segment.get("copresence_b", ""),
                 pct_a,
                 pct_b,
                 conv_start,
