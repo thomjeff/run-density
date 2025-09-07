@@ -1192,10 +1192,10 @@ def generate_temporal_flow_narrative(results: Dict[str, Any]) -> str:
             # Calculate event B distance at convergence point
             cp_km_b = from_km_b + s_cp * len_b
             
-            # Format: Segment Converge Point: [position within segment] ([total distance Event A], [total distance Event B])
+            # Format: Convergence Point: fraction=[position within segment] (km=[total distance Event A], [total distance Event B])
             event_a = segment.get('event_a', 'A')
             event_b = segment.get('event_b', 'B')
-            narrative.append(f"🎯 Segment Converge Point: {s_cp:.2f}km ({cp_km:.1f}km {event_a}, {cp_km_b:.1f}km {event_b})")
+            narrative.append(f"🎯 Convergence Point: fraction={s_cp:.2f} (A), km={cp_km:.1f} ({event_a}), {cp_km_b:.1f} ({event_b})")
             
             # Flow type specific reporting
             if flow_type == "merge":
