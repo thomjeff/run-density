@@ -1215,6 +1215,25 @@ def analyze_temporal_flow_segments(
                 else:
                     print(f"  ✅ Validation matches current calculation.")
             
+            # B2, K1, L1 CONVERGENCE ZONE DEBUGGING
+            if seg_id in ["B2", "K1", "L1"] and cp_km is None and segment.get("overtake_flag") == "y":
+                print(f"🔍 {seg_id} {event_a} vs {event_b} CONVERGENCE DEBUG:")
+                print(f"  Segment ranges: {event_a} {from_km_a}-{to_km_a}km, {event_b} {from_km_b}-{to_km_b}km")
+                print(f"  Convergence point: {cp_km}")
+                print(f"  Has convergence: {segment_result.get('has_convergence', False)}")
+                print(f"  Convergence zone: {segment_result.get('convergence_zone_start', 'N/A')}-{segment_result.get('convergence_zone_end', 'N/A')}")
+                print(f"  Overtaking: {overtakes_a}, {overtakes_b}")
+                
+                # Check if segments have intersection
+                intersection_start = max(from_km_a, from_km_b)
+                intersection_end = min(to_km_a, to_km_b)
+                has_intersection = intersection_start < intersection_end
+                print(f"  Intersection: {intersection_start}-{intersection_end}km (has_intersection={has_intersection})")
+                
+                # Check overlap window
+                print(f"  Overlap window: {overlap_window_duration}")
+                print(f"  Total runners: {len(df_a)} {event_a}, {len(df_b)} {event_b}")
+            
             # Log binning decisions and warnings
             
             use_time_bins = overlap_duration_minutes > TEMPORAL_BINNING_THRESHOLD_MINUTES
