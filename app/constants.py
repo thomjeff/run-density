@@ -55,3 +55,8 @@ DEFAULT_TIME_BIN_SECONDS = 30
 
 # Narrative smoothing
 MIN_SUSTAINED_PERIOD_MINUTES = 2.0
+
+# Binning thresholds for flow analysis
+TEMPORAL_BINNING_THRESHOLD_MINUTES = 10.0  # Use time bins if overlap > 10 minutes
+SPATIAL_BINNING_THRESHOLD_METERS = 100.0   # Use distance bins if conflict zone > 100m
+SUSPICIOUS_OVERTAKING_RATE_THRESHOLD = 0.5  # Flag overtaking rates > 50% as suspicious

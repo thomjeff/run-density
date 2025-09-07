@@ -217,7 +217,52 @@ def calculate_entry_exit_times(
     )
 
 
-def calculate_convergence_zone_overlaps(
+def calculate_convergence_zone_overlaps_with_binning(
+    df_a: pd.DataFrame,
+    df_b: pd.DataFrame,
+    event_a: str,
+    event_b: str,
+    start_times: Dict[str, float],
+    cp_km: float,
+    from_km_a: float,
+    to_km_a: float,
+    from_km_b: float,
+    to_km_b: float,
+    min_overlap_duration: float = 5.0,
+    conflict_length_m: float = 100.0,
+    overlap_duration_minutes: float = 0.0,
+) -> Tuple[int, int, List[str], List[str], int, int]:
+    """
+    Calculate overtaking with binning for long segments.
+    Uses time bins if overlap > 10 minutes, distance bins if conflict zone > 100m.
+    """
+    from .constants import (
+        TEMPORAL_BINNING_THRESHOLD_MINUTES,
+        SPATIAL_BINNING_THRESHOLD_METERS,
+        SUSPICIOUS_OVERTAKING_RATE_THRESHOLD
+    )
+    
+    # Check if binning is needed
+    use_time_bins = overlap_duration_minutes > TEMPORAL_BINNING_THRESHOLD_MINUTES
+    use_distance_bins = conflict_length_m > SPATIAL_BINNING_THRESHOLD_METERS
+    
+    if use_time_bins or use_distance_bins:
+        return calculate_convergence_zone_overlaps_binned(
+            df_a, df_b, event_a, event_b, start_times,
+            cp_km, from_km_a, to_km_a, from_km_b, to_km_b,
+            min_overlap_duration, conflict_length_m,
+            use_time_bins, use_distance_bins, overlap_duration_minutes
+        )
+    else:
+        # Use original method for short segments
+        return calculate_convergence_zone_overlaps_original(
+            df_a, df_b, event_a, event_b, start_times,
+            cp_km, from_km_a, to_km_a, from_km_b, to_km_b,
+            min_overlap_duration, conflict_length_m
+        )
+
+
+def calculate_convergence_zone_overlaps_original(
     df_a: pd.DataFrame,
     df_b: pd.DataFrame,
     event_a: str,
@@ -439,6 +484,105 @@ def calculate_convergence_zone_overlaps(
     participants_involved = len(a_bibs.union(b_bibs))
     unique_encounters = len(unique_pairs)
 
+    return len(a_bibs), len(b_bibs), list(a_bibs), list(b_bibs), unique_encounters, participants_involved
+
+
+def calculate_convergence_zone_overlaps_binned(
+    df_a: pd.DataFrame,
+    df_b: pd.DataFrame,
+    event_a: str,
+    event_b: str,
+    start_times: Dict[str, float],
+    cp_km: float,
+    from_km_a: float,
+    to_km_a: float,
+    from_km_b: float,
+    to_km_b: float,
+    min_overlap_duration: float = 5.0,
+    conflict_length_m: float = 100.0,
+    use_time_bins: bool = False,
+    use_distance_bins: bool = False,
+    overlap_duration_minutes: float = 0.0,
+) -> Tuple[int, int, List[str], List[str], int, int]:
+    """
+    Calculate overtaking using binning for long segments.
+    """
+    from .constants import TEMPORAL_BINNING_THRESHOLD_MINUTES
+    
+    if df_a.empty or df_b.empty:
+        return 0, 0, [], [], 0, 0
+    
+    # Get start times
+    start_a = start_times.get(event_a, 0) * 60.0
+    start_b = start_times.get(event_b, 0) * 60.0
+    
+    a_bibs = set()
+    b_bibs = set()
+    unique_pairs = set()
+    
+    if use_time_bins:
+        # Create time bins (10-minute intervals)
+        bin_duration_minutes = 10.0
+        num_bins = max(1, int(overlap_duration_minutes / bin_duration_minutes))
+        
+        # Calculate overlap window
+        df_a['entry_time'] = start_a + df_a['start_offset'] + df_a['pace'] * 60.0 * from_km_a
+        df_a['exit_time'] = start_a + df_a['start_offset'] + df_a['pace'] * 60.0 * to_km_a
+        df_b['entry_time'] = start_b + df_b['start_offset'] + df_b['pace'] * 60.0 * from_km_b
+        df_b['exit_time'] = start_b + df_b['start_offset'] + df_b['pace'] * 60.0 * to_km_b
+        
+        overlap_start = max(df_a['entry_time'].min(), df_b['entry_time'].min())
+        overlap_end = min(df_a['exit_time'].max(), df_b['exit_time'].max())
+        
+        for bin_idx in range(num_bins):
+            bin_start = overlap_start + (bin_idx * bin_duration_minutes * 60)
+            bin_end = min(overlap_start + ((bin_idx + 1) * bin_duration_minutes * 60), overlap_end)
+            
+            # Get runners active in this time bin
+            a_in_bin = df_a[(df_a['entry_time'] <= bin_end) & (df_a['exit_time'] >= bin_start)]
+            b_in_bin = df_b[(df_b['entry_time'] <= bin_end) & (df_b['exit_time'] >= bin_start)]
+            
+            # Calculate overtaking for this time bin using original method
+            bin_count_a, bin_count_b, bin_bibs_a, bin_bibs_b, bin_encounters, bin_participants = calculate_convergence_zone_overlaps_original(
+                a_in_bin, b_in_bin, event_a, event_b, start_times,
+                cp_km, from_km_a, to_km_a, from_km_b, to_km_b,
+                min_overlap_duration, conflict_length_m
+            )
+            
+            # Accumulate results
+            a_bibs.update(bin_bibs_a)
+            b_bibs.update(bin_bibs_b)
+            unique_pairs.update([(a, b) for a in bin_bibs_a for b in bin_bibs_b])
+    
+    elif use_distance_bins:
+        # Create distance bins (100m intervals)
+        bin_size_km = 0.1  # 100m
+        len_a = to_km_a - from_km_a
+        len_b = to_km_b - from_km_b
+        num_bins = max(1, int(min(len_a, len_b) / bin_size_km))
+        
+        for bin_idx in range(num_bins):
+            bin_start_a = from_km_a + (bin_idx * bin_size_km)
+            bin_end_a = min(from_km_a + ((bin_idx + 1) * bin_size_km), to_km_a)
+            bin_start_b = from_km_b + (bin_idx * bin_size_km)
+            bin_end_b = min(from_km_b + ((bin_idx + 1) * bin_size_km), to_km_b)
+            
+            # Calculate overtaking for this distance bin
+            bin_count_a, bin_count_b, bin_bibs_a, bin_bibs_b, bin_encounters, bin_participants = calculate_convergence_zone_overlaps_original(
+                df_a, df_b, event_a, event_b, start_times,
+                cp_km, bin_start_a, bin_end_a, bin_start_b, bin_end_b,
+                min_overlap_duration, conflict_length_m
+            )
+            
+            # Accumulate results
+            a_bibs.update(bin_bibs_a)
+            b_bibs.update(bin_bibs_b)
+            unique_pairs.update([(a, b) for a in bin_bibs_a for b in bin_bibs_b])
+    
+    # Calculate final results
+    participants_involved = len(a_bibs.union(b_bibs))
+    unique_encounters = len(unique_pairs)
+    
     return len(a_bibs), len(b_bibs), list(a_bibs), list(b_bibs), unique_encounters, participants_involved
 
 
@@ -796,10 +940,53 @@ def analyze_temporal_flow_segments(
                 # This handles segments with no intersection where convergence was detected in normalized space
                 effective_cp_km = (from_km_a + to_km_a) / 2.0
             
-            count_a, count_b, bibs_a, bibs_b, unique_encounters, participants_involved = calculate_convergence_zone_overlaps(
+            # Calculate overlap duration in minutes for binning decision
+            # overlap_window_duration is a formatted string like "55:32", need to parse it
+            if isinstance(overlap_window_duration, str) and ':' in overlap_window_duration:
+                # Parse format like "55:32" or "1:23:45"
+                parts = overlap_window_duration.split(':')
+                if len(parts) == 2:  # MM:SS
+                    minutes = int(parts[0])
+                    seconds = int(parts[1])
+                    overlap_duration_minutes = minutes + seconds / 60.0
+                elif len(parts) == 3:  # HH:MM:SS
+                    hours = int(parts[0])
+                    minutes = int(parts[1])
+                    seconds = int(parts[2])
+                    overlap_duration_minutes = hours * 60 + minutes + seconds / 60.0
+                else:
+                    overlap_duration_minutes = 0.0
+            else:
+                overlap_duration_minutes = overlap_window_duration / 60.0 if isinstance(overlap_window_duration, (int, float)) else 0.0
+            
+            count_a, count_b, bibs_a, bibs_b, unique_encounters, participants_involved = calculate_convergence_zone_overlaps_with_binning(
                 df_a, df_b, event_a, event_b, start_times,
-                effective_cp_km, from_km_a, to_km_a, from_km_b, to_km_b, min_overlap_duration, dynamic_conflict_length_m
+                effective_cp_km, from_km_a, to_km_a, from_km_b, to_km_b, min_overlap_duration, dynamic_conflict_length_m, overlap_duration_minutes
             )
+            
+            # Log binning decisions and warnings
+            from .constants import (
+                TEMPORAL_BINNING_THRESHOLD_MINUTES,
+                SPATIAL_BINNING_THRESHOLD_METERS,
+                SUSPICIOUS_OVERTAKING_RATE_THRESHOLD
+            )
+            
+            use_time_bins = overlap_duration_minutes > TEMPORAL_BINNING_THRESHOLD_MINUTES
+            use_distance_bins = dynamic_conflict_length_m > SPATIAL_BINNING_THRESHOLD_METERS
+            
+            if use_time_bins or use_distance_bins:
+                print(f"🔧 BINNING APPLIED to {seg_id}: time_bins={use_time_bins}, distance_bins={use_distance_bins}")
+                print(f"   Overlap: {overlap_duration_minutes:.1f}min, Conflict: {dynamic_conflict_length_m:.0f}m")
+            
+            # Flag suspicious overtaking rates
+            pct_a = count_a / len(df_a) if len(df_a) > 0 else 0
+            pct_b = count_b / len(df_b) if len(df_b) > 0 else 0
+            
+            if pct_a > SUSPICIOUS_OVERTAKING_RATE_THRESHOLD or pct_b > SUSPICIOUS_OVERTAKING_RATE_THRESHOLD:
+                if not (use_time_bins or use_distance_bins):
+                    print(f"⚠️  SUSPICIOUS OVERTAKING RATES in {seg_id}: {pct_a:.1%}, {pct_b:.1%} - NO BINNING APPLIED!")
+                else:
+                    print(f"✅ High overtaking rates in {seg_id}: {pct_a:.1%}, {pct_b:.1%} - BINNING APPLIED")
             
             # Calculate dynamic conflict zone boundaries using the same logic as calculate_convergence_zone_overlaps
             # This ensures consistency between overtaking count calculation and reporting
