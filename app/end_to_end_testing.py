@@ -193,6 +193,16 @@ def format_e2e_report_as_markdown(raw_output: str, test_results: Dict[str, Any],
 
 </details>
 
+## Important Notes
+
+📝 **Flow Runner Analysis**: Flow Runner detailed analysis is not included in automated tests due to computational requirements. Flow Runner reports can be run locally (not currently supported in production) using:
+
+```bash
+curl -X POST 'http://localhost:8000/api/flow-audit' \\
+  -H 'Content-Type: application/json' \\
+  -d '{{"paceCsv": "data/runners.csv", "segmentsCsv": "data/segments_new.csv", "startTimes": {{"Full": 420, "10K": 440, "Half": 460}}}}'
+```
+
 ## Conclusion
 
 {'🎉 All tests passed! The system is ready for production deployment.' if overall_success else '⚠️ Some tests failed. Please review the results before production deployment.'}
