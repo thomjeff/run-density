@@ -501,8 +501,8 @@ def validate_actual_vs_expected_flow_results(actual_csv_path: str) -> Dict[str, 
                 status = "✅ MATCH" if overall_match else "❌ MISMATCH"
                 
                 print(f"   {status} {seg_id}, {segment_label}, {event_pair}, {overtake_flag}, "
-                      f"{actual_overtaking_a}/{expected_overtaking_a}, {actual_overtaking_b}/{expected_overtaking_b}, "
-                      f"{actual_pct_a:.1f}/{expected_pct_a:.1f}, {actual_pct_b:.1f}/{expected_pct_b:.1f}")
+                      f"{actual_overtaking_a}/{actual_overtaking_b}, {expected_overtaking_a}/{expected_overtaking_b}, "
+                      f"{actual_pct_a:.1f}/{actual_pct_b:.1f}, {expected_pct_a:.1f}/{expected_pct_b:.1f}")
                 
                 validation_results[f"{seg_id}_{event_pair}"] = overall_match
                 if not overall_match:
@@ -690,7 +690,12 @@ def run_streamlined_tests(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     content_checks = []
     for category in content_quality_results.values():
         if isinstance(category, dict) and 'error' not in category:
-            content_checks.extend(category.values())
+            if category == content_quality_results.get('actual_vs_expected'):
+                # Special handling for actual vs expected validation
+                if 'all_validations_passed' in category:
+                    content_checks.append(category['all_validations_passed'])
+            else:
+                content_checks.extend(category.values())
     content_quality_success = all(content_checks) if content_checks else False
     
     overall_success = api_success and report_file_success and content_quality_success
@@ -790,7 +795,12 @@ def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any
     content_checks = []
     for category in content_quality_results.values():
         if isinstance(category, dict) and 'error' not in category:
-            content_checks.extend(category.values())
+            if category == content_quality_results.get('actual_vs_expected'):
+                # Special handling for actual vs expected validation
+                if 'all_validations_passed' in category:
+                    content_checks.append(category['all_validations_passed'])
+            else:
+                content_checks.extend(category.values())
     content_quality_success = all(content_checks) if content_checks else False
     
     overall_success = api_success and report_file_success and content_quality_success
