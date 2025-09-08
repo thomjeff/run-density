@@ -16,22 +16,24 @@ try:
     from .density import analyze_density_segments, DensityConfig
     from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS
     from .report_utils import get_report_paths
+    from .density_template_engine import DensityTemplateEngine, create_template_context
 except ImportError:
     from density import analyze_density_segments, DensityConfig
     from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS
     from report_utils import get_report_paths
+    from density_template_engine import DensityTemplateEngine, create_template_context
 import pandas as pd
 from datetime import datetime
 
 
-# LOS Thresholds for density classification
+# LOS Thresholds for density classification (updated to match v2 rulebook)
 LOS_AREAL_THRESHOLDS = {
-    'A': (0.0, 0.05),    # Comfortable
-    'B': (0.05, 0.10),   # Good
-    'C': (0.10, 0.15),   # Moderate
-    'D': (0.15, 0.20),   # Busy
-    'E': (0.20, 0.25),   # Very Busy
-    'F': (0.25, float('inf'))  # Critical
+    'A': (0.0, 0.31),    # Comfortable
+    'B': (0.31, 0.43),   # Good
+    'C': (0.43, 0.72),   # Moderate
+    'D': (0.72, 1.08),   # Busy
+    'E': (1.08, 1.63),   # Very Busy
+    'F': (1.63, float('inf'))  # Critical
 }
 
 LOS_CROWD_THRESHOLDS = {
@@ -184,11 +186,16 @@ def generate_markdown_report(
     content.append("# Improved Per-Event Density Analysis Report")
     content.append("")
     content.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    content.append(f"**Analysis Period:** {results.get('analysis_period', 'N/A')}")
+    content.append("")
+    content.append(f"**Analysis Period:** {datetime.now().strftime('%Y-%m-%d')}")
+    content.append("")
     content.append(f"**Time Bin Size:** {results.get('time_window_s', 30)} seconds")
+    content.append("")
     summary = results.get("summary", {})
     content.append(f"**Total Segments:** {summary.get('total_segments', 0)}")
+    content.append("")
     content.append(f"**Processed Segments:** {summary.get('processed_segments', 0)}")
+    content.append("")
     content.append(f"**Skipped Segments:** {summary.get('skipped_segments', 0)}")
     content.append("")
     
@@ -196,21 +203,46 @@ def generate_markdown_report(
     content.append("## Legend")
     content.append("")
     content.append("- **TOT**: Time Over Threshold (seconds above E/F LOS thresholds)")
-    content.append("- **LOS**: Level of Service (A=Comfortable, C=Moderate, E=Busy, F=Critical)")
+    content.append("- **LOS**: Level of Service (A=Comfortable, B=Good, C=Moderate, D=Busy, E=Very Busy, F=Critical)")
     content.append("- **Experienced Density**: What runners actually experience (includes co-present runners from other events)")
     content.append("- **Self Density**: Only that event's runners (not shown in this report)")
     content.append("- **Active Window**: Time period when the event has runners present in the segment")
     content.append("")
     
-    # Event start times
+    # LOS Thresholds Table
+    content.append("## Level of Service Thresholds")
+    content.append("")
+    content.append("| LOS | Areal Density (runners/m²) | Crowd Density (runners/m) | Description |")
+    content.append("|-----|---------------------------|--------------------------|-------------|")
+    content.append("| A | 0.00 - 0.31 | 0.00 - 0.20 | Comfortable |")
+    content.append("| B | 0.31 - 0.43 | 0.20 - 0.40 | Good |")
+    content.append("| C | 0.43 - 0.72 | 0.40 - 0.60 | Moderate |")
+    content.append("| D | 0.72 - 1.08 | 0.60 - 0.80 | Busy |")
+    content.append("| E | 1.08 - 1.63 | 0.80 - 1.00 | Very Busy |")
+    content.append("| F | 1.63+ | 1.00+ | Critical |")
+    content.append("")
+    
+    # Event start times (showing actual participants in first segment as reference)
     content.append("## Event Start Times")
     content.append("")
-    content.append("| Event | Start Time | Runners |")
-    content.append("|-------|------------|----------|")
+    content.append("| Event | Start Time | Total Participants |")
+    content.append("|-------|------------|-------------------|")
+    
+    # Get actual participant counts from the first segment as reference
+    first_segment = next(iter(results.get("segments", {}).values()), {})
+    per_event = first_segment.get("per_event", {})
+    
+    total_runners = 0
     for event, start_min in event_order:
         start_time = f"{int(start_min//60):02d}:{int(start_min%60):02d}:00"
-        runners = event_totals.get(event, 0)
-        content.append(f"| {event} | {start_time} | {runners:,} |")
+        # Use actual participant count from per_event data
+        event_data = per_event.get(event, {})
+        actual_runners = getattr(event_data, "n_event_runners", 0)
+        total_runners += actual_runners
+        content.append(f"| {event} | {start_time} | {actual_runners:,} |")
+    
+    # Add total row
+    content.append(f"| **Total** | - | **{total_runners:,}** |")
     content.append("")
     
     # Process each segment
@@ -246,6 +278,10 @@ def generate_segment_section(
     content.extend(generate_combined_view(segment_data))
     content.append("")
     
+    # Template-driven narratives
+    content.extend(generate_template_narratives(segment_id, segment_data))
+    content.append("")
+    
     # Per-event analysis if requested
     if include_per_event and "per_event" in segment_data:
         content.extend(generate_per_event_analysis(segment_data, event_order))
@@ -255,6 +291,77 @@ def generate_segment_section(
     content.extend(generate_combined_sustained_periods(segment_data))
     
     return content
+
+
+def generate_template_narratives(segment_id: str, segment_data: Dict[str, Any]) -> List[str]:
+    """Generate template-driven narratives for a segment."""
+    content = []
+    
+    try:
+        # Initialize template engine
+        template_engine = DensityTemplateEngine()
+        
+        # Determine segment type (simplified mapping for now)
+        segment_type = _determine_segment_type(segment_id, segment_data)
+        flow_type = "default"  # Could be enhanced based on flow analysis
+        
+        # Create template context
+        context = create_template_context(segment_id, segment_data, segment_type, flow_type)
+        
+        # Generate narratives
+        drivers = template_engine.generate_drivers(context)
+        mitigations = template_engine.generate_mitigations(context)
+        ops_insights = template_engine.generate_ops_insights(context)
+        
+        # Add to content
+        content.append("### Operational Insights")
+        content.append("")
+        content.append("**Drivers:**")
+        content.append(f"- {drivers}")
+        content.append("")
+        content.append("**Mitigations:**")
+        content.append(f"- {mitigations}")
+        content.append("")
+        
+        if ops_insights:
+            content.append("**Ops Box:**")
+            for key, value in ops_insights.items():
+                content.append(f"- **{key.title()}:** {value}")
+            content.append("")
+        
+    except Exception as e:
+        # Fallback if template engine fails
+        content.append("### Operational Insights")
+        content.append("")
+        content.append("**Drivers:**")
+        content.append(f"- High runner density in {segment_data.get('seg_label', 'Unknown')} segment")
+        content.append("")
+        content.append("**Mitigations:**")
+        content.append("- Consider additional crowd management measures")
+        content.append("")
+    
+    return content
+
+
+def _determine_segment_type(segment_id: str, segment_data: Dict[str, Any]) -> str:
+    """Determine segment type for template matching."""
+    seg_label = segment_data.get("seg_label", "").lower()
+    
+    # Enhanced mapping based on segment labels and IDs
+    if "start" in seg_label or segment_id.startswith("A"):
+        return "start"
+    elif "bridge" in seg_label or "mill" in seg_label or "i1" in segment_id.lower():
+        return "bridge"
+    elif "turn" in seg_label or segment_id.startswith("B") or segment_id.startswith("D"):
+        return "turn"
+    elif "finish" in seg_label or segment_id.startswith("M"):
+        return "finish"
+    elif "trail" in seg_label or "aberdeen" in seg_label or segment_id.startswith("L"):
+        return "trail"
+    elif "station" in seg_label or segment_id.startswith("F") or segment_id.startswith("H"):
+        return "trail"  # Station Rd segments are trail-like
+    else:
+        return "default"
 
 
 def generate_combined_view(segment: Dict[str, Any]) -> List[str]:
@@ -274,13 +381,13 @@ def generate_combined_view(segment: Dict[str, Any]) -> List[str]:
     active_end = getattr(summary, "active_end", "N/A")
     active_duration = getattr(summary, "active_duration_s", 0)
     occupancy_rate = getattr(summary, "occupancy_rate", 0.0)
-    peak_concurrency = getattr(summary, "peak_concurrency", 0)
-    peak_areal = getattr(summary, "peak_areal_density", 0.0)
-    peak_crowd = getattr(summary, "peak_crowd_density", 0.0)
-    p95_areal = getattr(summary, "p95_areal_density", 0.0)
-    p95_crowd = getattr(summary, "p95_crowd_density", 0.0)
-    mean_areal = getattr(summary, "active_mean_areal_density", 0.0)
-    mean_crowd = getattr(summary, "active_mean_crowd_density", 0.0)
+    peak_concurrency = getattr(summary, "active_peak_concurrency", 0)
+    peak_areal = getattr(summary, "active_peak_areal", 0.0)
+    peak_crowd = getattr(summary, "active_peak_crowd", 0.0)
+    p95_areal = getattr(summary, "active_p95_areal", 0.0)
+    p95_crowd = getattr(summary, "active_p95_crowd", 0.0)
+    mean_areal = getattr(summary, "active_mean_areal", 0.0)
+    mean_crowd = getattr(summary, "active_mean_crowd", 0.0)
     tot_areal = getattr(summary, "active_tot_areal_sec", 0)
     tot_crowd = getattr(summary, "active_tot_crowd_sec", 0)
     
@@ -411,8 +518,8 @@ def generate_event_sustained_periods_table(event_data: Dict[str, Any]) -> List[s
         return content
     
     content.append("**Sustained Periods (Experienced)**")
-    content.append("| Start | End | Duration | LOS Areal | LOS Crowd | Avg Areal | Avg Crowd | Peak Conc | Events Present |")
-    content.append("|-------|-----|----------|-----------|-----------|-----------|-----------|----------|---------------|")
+    content.append("| Start | End | Duration | LOS Areal | LOS Crowd | Avg Areal | Avg Crowd | Peak Conc |")
+    content.append("|-------|-----|----------|-----------|-----------|-----------|-----------|----------|")
     
     for period in sustained_periods:
         start = period.get("start_time", "N/A")
@@ -423,11 +530,8 @@ def generate_event_sustained_periods_table(event_data: Dict[str, Any]) -> List[s
         avg_areal = period.get("avg_areal_density", 0.0)
         avg_crowd = period.get("avg_crowd_density", 0.0)
         peak_conc = period.get("peak_concurrent_runners", 0)
-        events_present = period.get("events_present", [])
         
-        events_str = ", ".join(events_present) if events_present else "N/A"
-        
-        content.append(f"| {start} | {end} | {duration:.1f} min | {los_areal} | {los_crowd} | {avg_areal:.3f} | {avg_crowd:.3f} | {peak_conc:,} | {events_str} |")
+        content.append(f"| {start} | {end} | {duration:.1f} min | {los_areal} | {los_crowd} | {avg_areal:.3f} | {avg_crowd:.3f} | {peak_conc:,} |")
     
     return content
 

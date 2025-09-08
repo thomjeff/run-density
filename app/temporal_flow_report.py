@@ -100,12 +100,19 @@ def generate_markdown_report(
     content.append("# Temporal Flow Analysis Report")
     content.append("")
     content.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    content.append("")
     content.append(f"**Analysis Engine:** {results.get('engine', 'temporal_flow')}")
+    content.append("")
     content.append(f"**Analysis Period:** {results.get('timestamp', 'N/A')}")
+    content.append("")
     content.append(f"**Min Overlap Duration:** {results.get('min_overlap_duration', 5.0)} seconds")
+    content.append("")
     content.append(f"**Conflict Length:** {results.get('conflict_length_m', 100.0)} meters")
+    content.append("")
     content.append(f"**Binning Thresholds:** Time > {results.get('temporal_binning_threshold_minutes', 10.0)} min, Distance > {results.get('spatial_binning_threshold_meters', 100.0)} m")
+    content.append("")
     content.append(f"**Total Segments:** {results.get('total_segments', 0)}")
+    content.append("")
     content.append(f"**Segments with Convergence:** {results.get('segments_with_convergence', 0)}")
     content.append("")
     
@@ -348,7 +355,7 @@ def generate_convergence_analysis(segment: Dict[str, Any]) -> List[str]:
             normalized_cp = round(normalized_cp, 2)
             
             # Display both absolute and normalized values clearly
-            content.append(f"**Convergence Point (fraction):** {normalized_cp}")
+            content.append(f"**Convergence Point (pct):** {normalized_cp}%")
             content.append(f"**Convergence Point (km):** {convergence_point:.2f}")
         else:
             content.append(f"**Convergence Point (km):** {convergence_point:.2f}")
