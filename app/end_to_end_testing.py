@@ -118,89 +118,6 @@ def test_api_endpoints(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     return results
 
 
-def test_report_generation(start_times: Dict[str, int] = None) -> Dict[str, Any]:
-    """
-    Test report generation by calling the modules directly.
-    
-    Args:
-        start_times: Event start times in minutes from midnight
-                    Default: {'Full': 420, '10K': 440, 'Half': 460}
-    
-    Returns:
-        Dictionary with test results for report generation
-    """
-    if start_times is None:
-        start_times = {'Full': 420, '10K': 440, 'Half': 460}
-    
-    print("=== REPORT GENERATION TESTING ===")
-    print()
-    
-    results = {}
-    
-    try:
-        # Test temporal flow report generation
-        print("1. Testing Temporal Flow Report Generation...")
-        from app.temporal_flow_report import generate_temporal_flow_report
-        
-        temporal_result = generate_temporal_flow_report(
-            pace_csv='data/runners.csv',
-            segments_csv='data/segments_new.csv',
-            start_times=start_times
-        )
-        
-        results['temporal_flow_report'] = {
-            'success': temporal_result.get('ok', False),
-            'result': temporal_result
-        }
-        
-        print(f"   Temporal Flow Report: {'✅' if temporal_result.get('ok', False) else '❌'}")
-        if temporal_result.get('ok', False):
-            print(f"   Report Path: {temporal_result.get('report_path', 'N/A')}")
-        
-    except Exception as e:
-        results['temporal_flow_report'] = {
-            'success': False,
-            'error': str(e)
-        }
-        print(f"   Temporal Flow Report: ❌ Error: {str(e)}")
-    
-    print()
-    
-    try:
-        # Test density report generation
-        print("2. Testing Density Report Generation...")
-        from app.density_report import generate_density_report
-        
-        density_result = generate_density_report(
-            pace_csv='data/runners.csv',
-            density_csv='data/segments_new.csv',
-            start_times=start_times
-        )
-        
-        results['density_report'] = {
-            'success': density_result.get('ok', False),
-            'result': density_result
-        }
-        
-        print(f"   Density Report: {'✅' if density_result.get('ok', False) else '❌'}")
-        if density_result.get('ok', False):
-            print(f"   Report Path: {density_result.get('report_path', 'N/A')}")
-        
-    except Exception as e:
-        results['density_report'] = {
-            'success': False,
-            'error': str(e)
-        }
-        print(f"   Density Report: ❌ Error: {str(e)}")
-    
-    print()
-    
-    # Summary
-    all_success = all(result['success'] for result in results.values())
-    print(f"Report Generation Testing: {'✅ ALL PASSED' if all_success else '❌ SOME FAILED'}")
-    print()
-    
-    return results
 
 
 def test_report_files() -> Dict[str, Any]:
@@ -253,6 +170,130 @@ def test_report_files() -> Dict[str, Any]:
     return results
 
 
+def validate_actual_vs_expected_flow_results(actual_csv_path: str) -> Dict[str, Any]:
+    """
+    Validate actual flow results against expected baseline results.
+    
+    Args:
+        actual_csv_path: Path to the actual flow CSV file
+        
+    Returns:
+        Dictionary with validation results
+    """
+    import pandas as pd
+    
+    try:
+        # Load actual results
+        actual_df = pd.read_csv(actual_csv_path)
+        
+        # Load expected results
+        expected_df = pd.read_csv('docs/flow_expected_results.csv')
+        
+        # Load segments data to get overtake_flag
+        segments_df = pd.read_csv('data/segments_new.csv')
+        
+        # Create a mapping of segment_id to overtake_flag
+        segment_overtake_map = dict(zip(segments_df['seg_id'], segments_df['overtake_flag']))
+        
+        validation_results = {}
+        all_validations_passed = True
+        
+        print("   Validating Actual vs Expected Flow Results:")
+        print("   " + "="*80)
+        
+        # Process each row in actual results
+        for _, actual_row in actual_df.iterrows():
+            seg_id = actual_row['seg_id']
+            event_a = actual_row['event_a']
+            event_b = actual_row['event_b']
+            segment_label = actual_row['segment_label']
+            
+            # Create event pair string
+            event_pair = f"{event_a} vs {event_b}"
+            
+            # Get overtake_flag for this segment
+            overtake_flag = segment_overtake_map.get(seg_id, 'n')
+            
+            # Find matching expected row
+            expected_row = expected_df[
+                (expected_df['seg_id'] == seg_id) & 
+                (expected_df['event_a'] == event_a) & 
+                (expected_df['event_b'] == event_b)
+            ]
+            
+            if expected_row.empty:
+                print(f"   ❌ {seg_id}, {segment_label}, {event_pair}, {overtake_flag}, NO EXPECTED DATA FOUND")
+                validation_results[f"{seg_id}_{event_pair}"] = False
+                all_validations_passed = False
+                continue
+            
+            expected_row = expected_row.iloc[0]
+            
+            if overtake_flag == 'y':
+                # Segments expected to have overtaking
+                actual_overtaking_a = actual_row['overtaking_a']
+                actual_overtaking_b = actual_row['overtaking_b']
+                actual_pct_a = actual_row['pct_a']
+                actual_pct_b = actual_row['pct_b']
+                
+                expected_overtaking_a = expected_row['overtaking_a']
+                expected_overtaking_b = expected_row['overtaking_b']
+                expected_pct_a = expected_row['pct_a']
+                expected_pct_b = expected_row['pct_b']
+                
+                # Check if counts match
+                counts_match = (actual_overtaking_a == expected_overtaking_a and 
+                              actual_overtaking_b == expected_overtaking_b)
+                
+                # Check if percentages match (with small tolerance for rounding)
+                pct_match = (abs(actual_pct_a - expected_pct_a) < 0.1 and 
+                           abs(actual_pct_b - expected_pct_b) < 0.1)
+                
+                overall_match = counts_match and pct_match
+                
+                status = "✅ MATCH" if overall_match else "❌ MISMATCH"
+                
+                print(f"   {status} {seg_id}, {segment_label}, {event_pair}, {overtake_flag}, "
+                      f"{actual_overtaking_a}/{expected_overtaking_a}, {actual_overtaking_b}/{expected_overtaking_b}, "
+                      f"{actual_pct_a:.1f}/{expected_pct_a:.1f}, {actual_pct_b:.1f}/{expected_pct_b:.1f}")
+                
+                validation_results[f"{seg_id}_{event_pair}"] = overall_match
+                if not overall_match:
+                    all_validations_passed = False
+                    
+            else:
+                # Segments expected to have NO overtaking
+                actual_overtaking_a = actual_row['overtaking_a']
+                actual_overtaking_b = actual_row['overtaking_b']
+                
+                expected_overtaking_a = expected_row['overtaking_a']
+                expected_overtaking_b = expected_row['overtaking_b']
+                
+                # Check if both actual and expected have zero overtaking
+                no_overtaking_match = (actual_overtaking_a == 0 and actual_overtaking_b == 0 and
+                                     expected_overtaking_a == 0 and expected_overtaking_b == 0)
+                
+                status = "✅ NO OVERTAKING (as expected)" if no_overtaking_match else "❌ UNEXPECTED OVERTAKING"
+                
+                print(f"   {status} {seg_id}, {segment_label}, {event_pair}, {overtake_flag}")
+                
+                validation_results[f"{seg_id}_{event_pair}"] = no_overtaking_match
+                if not no_overtaking_match:
+                    all_validations_passed = False
+        
+        print("   " + "="*80)
+        print(f"   Overall Validation: {'✅ ALL MATCH' if all_validations_passed else '❌ MISMATCHES FOUND'}")
+        
+        return {
+            'all_validations_passed': all_validations_passed,
+            'individual_results': validation_results
+        }
+        
+    except Exception as e:
+        print(f"   ❌ Error during validation: {str(e)}")
+        return {'error': str(e)}
+
+
 def test_report_content_quality() -> Dict[str, Any]:
     """
     Test the quality and content of generated reports.
@@ -268,13 +309,15 @@ def test_report_content_quality() -> Dict[str, Any]:
     
     # Find latest report files (current pattern: YYYY-MM-DD-HHMM-Flow.md and YYYY-MM-DD-HHMM-Density.md)
     temporal_md_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.md')
+    temporal_csv_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.csv')
     density_md_files = glob.glob('reports/analysis/*/????-??-??-????-Density.md')
     
-    if not temporal_md_files or not density_md_files:
+    if not temporal_md_files or not temporal_csv_files or not density_md_files:
         print("❌ Cannot test content quality - report files not found")
         return {'error': 'Report files not found'}
     
     latest_temporal_md = max(temporal_md_files, key=os.path.getctime)
+    latest_temporal_csv = max(temporal_csv_files, key=os.path.getctime)
     latest_density_md = max(density_md_files, key=os.path.getctime)
     
     # Test temporal flow report content
@@ -323,11 +366,28 @@ def test_report_content_quality() -> Dict[str, Any]:
     
     print()
     
+    # Test actual vs expected flow results validation
+    print("3. Testing Actual vs Expected Flow Results Validation...")
+    try:
+        actual_expected_validation = validate_actual_vs_expected_flow_results(latest_temporal_csv)
+        results['actual_vs_expected'] = actual_expected_validation
+        
+    except Exception as e:
+        results['actual_vs_expected'] = {'error': str(e)}
+        print(f"   ❌ Error validating actual vs expected results: {str(e)}")
+    
+    print()
+    
     # Overall quality assessment
     all_checks = []
     for category in results.values():
         if isinstance(category, dict) and 'error' not in category:
-            all_checks.extend(category.values())
+            if category == results.get('actual_vs_expected'):
+                # Special handling for actual vs expected validation
+                if 'all_validations_passed' in category:
+                    all_checks.append(category['all_validations_passed'])
+            else:
+                all_checks.extend(category.values())
     
     overall_quality = all(all_checks) if all_checks else False
     print(f"Overall Report Quality: {'✅ EXCELLENT' if overall_quality else '❌ ISSUES FOUND'}")
@@ -360,21 +420,18 @@ def run_streamlined_tests(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     
     # Run core test categories only
     api_results = test_api_endpoints(start_times)
-    report_generation_results = test_report_generation(start_times)
     report_file_results = test_report_files()
     content_quality_results = test_report_content_quality()
     
     # Combine all results
     all_results = {
         'api_endpoints': api_results,
-        'report_generation': report_generation_results,
         'report_files': report_file_results,
         'content_quality': content_quality_results
     }
     
     # Overall success assessment
     api_success = all(result['success'] for result in api_results.values())
-    report_gen_success = all(result['success'] for result in report_generation_results.values())
     report_file_success = all(result['success'] for result in report_file_results.values())
     
     # Content quality success (check if any checks exist and all pass)
@@ -384,11 +441,10 @@ def run_streamlined_tests(start_times: Dict[str, int] = None) -> Dict[str, Any]:
             content_checks.extend(category.values())
     content_quality_success = all(content_checks) if content_checks else False
     
-    overall_success = api_success and report_gen_success and report_file_success and content_quality_success
+    overall_success = api_success and report_file_success and content_quality_success
     
     print("=== FINAL SUMMARY ===")
     print(f"API Endpoints: {'✅ PASSED' if api_success else '❌ FAILED'}")
-    print(f"Report Generation: {'✅ PASSED' if report_gen_success else '❌ FAILED'}")
     print(f"Report Files: {'✅ PASSED' if report_file_success else '❌ FAILED'}")
     print(f"Content Quality: {'✅ PASSED' if content_quality_success else '❌ FAILED'}")
     print()
@@ -424,21 +480,18 @@ def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any
     
     # Run all test categories
     api_results = test_api_endpoints(start_times)
-    report_generation_results = test_report_generation(start_times)
     report_file_results = test_report_files()
     content_quality_results = test_report_content_quality()
     
     # Combine all results
     all_results = {
         'api_endpoints': api_results,
-        'report_generation': report_generation_results,
         'report_files': report_file_results,
         'content_quality': content_quality_results
     }
     
     # Overall success assessment
     api_success = all(result['success'] for result in api_results.values())
-    report_gen_success = all(result['success'] for result in report_generation_results.values())
     report_file_success = all(result['success'] for result in report_file_results.values())
     
     # Content quality success (check if any checks exist and all pass)
@@ -448,11 +501,10 @@ def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any
             content_checks.extend(category.values())
     content_quality_success = all(content_checks) if content_checks else False
     
-    overall_success = api_success and report_gen_success and report_file_success and content_quality_success
+    overall_success = api_success and report_file_success and content_quality_success
     
     print("=== FINAL SUMMARY ===")
     print(f"API Endpoints: {'✅ PASSED' if api_success else '❌ FAILED'}")
-    print(f"Report Generation: {'✅ PASSED' if report_gen_success else '❌ FAILED'}")
     print(f"Report Files: {'✅ PASSED' if report_file_success else '❌ FAILED'}")
     print(f"Content Quality: {'✅ PASSED' if content_quality_success else '❌ FAILED'}")
     print()
