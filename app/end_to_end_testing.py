@@ -341,7 +341,9 @@ def validate_actual_vs_expected_flow_results(actual_csv_path: str) -> Dict[str, 
         
         return {
             'all_validations_passed': all_validations_passed,
-            'individual_results': validation_results
+            'individual_results': validation_results,
+            'actual_segments': len(actual_df),
+            'expected_segments': len(expected_df)
         }
         
     except Exception as e:
@@ -506,10 +508,17 @@ def run_streamlined_tests(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     
     # Check actual vs expected validation
     actual_vs_expected_success = True
+    actual_segments = 0
+    expected_segments = 0
     if 'actual_vs_expected' in all_results:
         actual_vs_expected_data = all_results['actual_vs_expected']
         if isinstance(actual_vs_expected_data, dict) and 'all_validations_passed' in actual_vs_expected_data:
             actual_vs_expected_success = actual_vs_expected_data['all_validations_passed']
+            actual_segments = actual_vs_expected_data.get('actual_segments', 0)
+            expected_segments = actual_vs_expected_data.get('expected_segments', 0)
+        elif isinstance(actual_vs_expected_data, dict) and 'error' not in actual_vs_expected_data:
+            # Handle case where validation didn't run properly
+            actual_vs_expected_success = False
     
     print("=== FINAL SUMMARY ===")
     print(f"Date: {test_timestamp}")
@@ -520,7 +529,13 @@ def run_streamlined_tests(start_times: Dict[str, int] = None) -> Dict[str, Any]:
         print("   Files Created:")
         for file_path in created_files:
             print(f"   - {file_path}")
-    print(f"Actual to Expected: {'✅ PASSED' if actual_vs_expected_success else '❌ FAILED'}")
+    # Calculate percentage for actual vs expected
+    if expected_segments > 0:
+        percentage = (actual_segments / expected_segments) * 100
+        actual_expected_text = f"✅ PASSED (Actual: {actual_segments} Expected: {expected_segments} {percentage:.0f}%)" if actual_vs_expected_success else f"❌ FAILED (Actual: {actual_segments} Expected: {expected_segments} {percentage:.0f}%)"
+    else:
+        actual_expected_text = f"✅ PASSED" if actual_vs_expected_success else f"❌ FAILED"
+    print(f"Actual to Expected: {actual_expected_text}")
     print(f"Content Quality: {'✅ PASSED' if content_quality_success else '❌ FAILED'}")
     print()
     
@@ -586,10 +601,17 @@ def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any
     
     # Check actual vs expected validation
     actual_vs_expected_success = True
+    actual_segments = 0
+    expected_segments = 0
     if 'actual_vs_expected' in all_results:
         actual_vs_expected_data = all_results['actual_vs_expected']
         if isinstance(actual_vs_expected_data, dict) and 'all_validations_passed' in actual_vs_expected_data:
             actual_vs_expected_success = actual_vs_expected_data['all_validations_passed']
+            actual_segments = actual_vs_expected_data.get('actual_segments', 0)
+            expected_segments = actual_vs_expected_data.get('expected_segments', 0)
+        elif isinstance(actual_vs_expected_data, dict) and 'error' not in actual_vs_expected_data:
+            # Handle case where validation didn't run properly
+            actual_vs_expected_success = False
     
     print("=== FINAL SUMMARY ===")
     print(f"Date: {test_timestamp}")
@@ -600,7 +622,13 @@ def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any
         print("   Files Created:")
         for file_path in created_files:
             print(f"   - {file_path}")
-    print(f"Actual to Expected: {'✅ PASSED' if actual_vs_expected_success else '❌ FAILED'}")
+    # Calculate percentage for actual vs expected
+    if expected_segments > 0:
+        percentage = (actual_segments / expected_segments) * 100
+        actual_expected_text = f"✅ PASSED (Actual: {actual_segments} Expected: {expected_segments} {percentage:.0f}%)" if actual_vs_expected_success else f"❌ FAILED (Actual: {actual_segments} Expected: {expected_segments} {percentage:.0f}%)"
+    else:
+        actual_expected_text = f"✅ PASSED" if actual_vs_expected_success else f"❌ FAILED"
+    print(f"Actual to Expected: {actual_expected_text}")
     print(f"Content Quality: {'✅ PASSED' if content_quality_success else '❌ FAILED'}")
     print()
     
