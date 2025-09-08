@@ -1,6 +1,14 @@
 # ✅ Safe Fix Kit Rollout Checklist
 
-This one-pager gives Cursor a step-by-step rollout playbook with flags, actions, and success criteria.
+The Safe Fix Kit is invaluable for development, both as a way of working and as a ready-made code solution. It gives Cursor a framework to fix the algorithm inconsistencies without breaking anything that’s already running.
+
+Why Use It?
+* Keeps Main Analysis and Flow Runner consistent (no more 0/0 vs 9/9 mismatches).
+* Fixes are additive-only (no changes to existing logic).
+* Every fix is wrapped in config flags so they can be turned on/off instantly.
+* Provides a rollback path if anything goes wrong.
+
+Here’s a simple adoption guide with a step-by-step rollout playbook with flags, actions, and success criteria.
 
 ---
 
@@ -48,7 +56,7 @@ This one-pager gives Cursor a step-by-step rollout playbook with flags, actions,
 - F1 parity: Matches validated baseline = **694/451**
 - Control segments (A2, A3, L1) remain exact matches
 - No raw fallback in logs
-- `PUB_DECISION` telemetry identical across systems
+- `PUB_DECISION` telemetry is identical across systems
 - Performance stable, no timeouts
 
 ---
