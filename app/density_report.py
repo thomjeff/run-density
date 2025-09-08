@@ -204,15 +204,22 @@ def generate_markdown_report(
     content.append("- **Active Window**: Time period when the event has runners present in the segment")
     content.append("")
     
-    # Event start times
+    # Event start times (showing actual participants in first segment as reference)
     content.append("## Event Start Times")
     content.append("")
-    content.append("| Event | Start Time | Runners |")
-    content.append("|-------|------------|----------|")
+    content.append("| Event | Start Time | Total Participants |")
+    content.append("|-------|------------|-------------------|")
+    
+    # Get actual participant counts from the first segment as reference
+    first_segment = next(iter(results.get("segments", {}).values()), {})
+    per_event = first_segment.get("per_event", {})
+    
     for event, start_min in event_order:
         start_time = f"{int(start_min//60):02d}:{int(start_min%60):02d}:00"
-        runners = event_totals.get(event, 0)
-        content.append(f"| {event} | {start_time} | {runners:,} |")
+        # Use actual participant count from per_event data
+        event_data = per_event.get(event, {})
+        actual_runners = getattr(event_data, "n_event_runners", 0)
+        content.append(f"| {event} | {start_time} | {actual_runners:,} |")
     content.append("")
     
     # Process each segment
@@ -317,17 +324,19 @@ def _determine_segment_type(segment_id: str, segment_data: Dict[str, Any]) -> st
     """Determine segment type for template matching."""
     seg_label = segment_data.get("seg_label", "").lower()
     
-    # Simple mapping based on segment labels
+    # Enhanced mapping based on segment labels and IDs
     if "start" in seg_label or segment_id.startswith("A"):
         return "start"
-    elif "bridge" in seg_label or "mill" in seg_label:
+    elif "bridge" in seg_label or "mill" in seg_label or "i1" in segment_id.lower():
         return "bridge"
-    elif "turn" in seg_label:
+    elif "turn" in seg_label or segment_id.startswith("B") or segment_id.startswith("D"):
         return "turn"
     elif "finish" in seg_label or segment_id.startswith("M"):
         return "finish"
-    elif "trail" in seg_label or "aberdeen" in seg_label:
+    elif "trail" in seg_label or "aberdeen" in seg_label or segment_id.startswith("L"):
         return "trail"
+    elif "station" in seg_label or segment_id.startswith("F") or segment_id.startswith("H"):
+        return "trail"  # Station Rd segments are trail-like
     else:
         return "default"
 

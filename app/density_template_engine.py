@@ -44,9 +44,15 @@ class DensityTemplateEngine:
         """Load templates from YAML rulebook."""
         try:
             with open(self.rulebook_path, 'r') as f:
-                return yaml.safe_load(f)
+                rulebook = yaml.safe_load(f)
+                # Check if rulebook has the expected template structure
+                if "templates" in rulebook and "drivers" in rulebook.get("templates", {}):
+                    return rulebook
+                else:
+                    logger.warning(f"Rulebook found but missing expected template structure, using enhanced default templates")
+                    return self._get_default_templates()
         except FileNotFoundError:
-            logger.warning(f"Rulebook not found at {self.rulebook_path}, using default templates")
+            logger.warning(f"Rulebook not found at {self.rulebook_path}, using enhanced default templates")
             return self._get_default_templates()
     
     def _get_default_templates(self) -> Dict[str, Any]:
@@ -54,17 +60,57 @@ class DensityTemplateEngine:
         return {
             "templates": {
                 "drivers": {
-                    "default": "High runner density in {segment_label} during peak window {peak_window_clock[0]}–{peak_window_clock[1]}"
+                    "start": "High initial runner density in {segment_label} with {peak_concurrency} concurrent runners at peak",
+                    "bridge": "Bridge segment {segment_label} experiences {peak_concurrency} concurrent runners with LOS {los_score}",
+                    "turn": "Turn segment {segment_label} shows {peak_concurrency} concurrent runners during peak window",
+                    "finish": "Finish approach {segment_label} with {peak_concurrency} concurrent runners and LOS {los_score}",
+                    "trail": "Trail segment {segment_label} maintains {peak_concurrency} concurrent runners",
+                    "default": "Segment {segment_label} shows {peak_concurrency} concurrent runners with peak areal density {peak_areal_density:.3f} runners/m²"
                 },
                 "mitigations": {
-                    "default": "Consider additional marshals and signage for crowd management"
+                    "start": "Deploy additional marshals at start area, implement wave starts if needed",
+                    "bridge": "Ensure bridge capacity monitoring, maintain emergency access lanes",
+                    "turn": "Place directional signage, deploy marshals at turn points",
+                    "finish": "Prepare finish line resources, ensure medical support availability",
+                    "trail": "Monitor trail conditions, ensure adequate marshaling",
+                    "default": "Consider additional crowd management measures based on LOS {los_score} rating"
                 }
             },
             "ops_insights": {
+                "start": {
+                    "access": "Maintain clear start area access for emergency vehicles",
+                    "medical": "Position medical tent near start, ensure AED availability",
+                    "traffic": "Coordinate with traffic management for start area road closures",
+                    "peak": "Peak concurrency: {peak_concurrency} runners at {peak_window_clock[0]}–{peak_window_clock[1]}"
+                },
+                "bridge": {
+                    "access": "Maintain emergency vehicle access across bridge",
+                    "medical": "Ensure medical support at bridge entry/exit points",
+                    "traffic": "Monitor bridge capacity, implement flow control if needed",
+                    "peak": "Peak concurrency: {peak_concurrency} runners with LOS {los_score}"
+                },
+                "turn": {
+                    "access": "Keep turn areas clear for emergency access",
+                    "medical": "Position medical support near turn points",
+                    "traffic": "Deploy marshals for directional guidance",
+                    "peak": "Peak concurrency: {peak_concurrency} runners during turn execution"
+                },
+                "finish": {
+                    "access": "Maintain finish line emergency access routes",
+                    "medical": "Ensure medical tent and AED at finish line",
+                    "traffic": "Coordinate finish area traffic flow",
+                    "peak": "Peak concurrency: {peak_concurrency} runners approaching finish"
+                },
+                "trail": {
+                    "access": "Maintain trail emergency access points",
+                    "medical": "Ensure roving medical support on trail",
+                    "traffic": "Monitor trail conditions and runner flow",
+                    "peak": "Peak concurrency: {peak_concurrency} runners on trail"
+                },
                 "default": {
                     "access": "Maintain emergency access routes",
-                    "medical": "Ensure AED availability",
-                    "traffic": "Monitor traffic flow",
+                    "medical": "Ensure medical support availability",
+                    "traffic": "Monitor traffic flow and runner density",
                     "peak": "Peak concurrency: {peak_concurrency} runners"
                 }
             }
