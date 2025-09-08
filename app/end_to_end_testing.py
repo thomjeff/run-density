@@ -128,7 +128,7 @@ def format_e2e_report_as_markdown(raw_output: str, test_results: Dict[str, Any],
 |---------------|--------|---------|
 | API Endpoints | {'✅ PASSED' if api_success else '❌ FAILED'} | All API endpoints responding correctly |
 | Report Files | {'✅ PASSED' if report_file_success else '❌ FAILED'} | All required report files generated |
-| Actual vs Expected | {'✅ PASSED' if actual_vs_expected_success else '❌ FAILED'} | {f'Actual: {actual_segments} Expected: {expected_segments} {((actual_segments/expected_segments)*100):.0f}%' if expected_segments > 0 else 'Validation completed'} |
+| Actual vs Expected | {'✅ PASSED' if actual_vs_expected_success else '❌ FAILED'} | {f'Validation: {actual_segments}/{expected_segments} segments ({(actual_segments/expected_segments)*100:.1f}% success)' if expected_segments > 0 else 'Validation completed'} |
 | Content Quality | {'✅ PASSED' if content_quality_success else '❌ FAILED'} | Report content validation |
 
 ## Files Created
@@ -740,7 +740,7 @@ def run_streamlined_tests(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     # Calculate percentage for actual vs expected
     if expected_segments > 0:
         percentage = (actual_segments / expected_segments) * 100
-        actual_expected_text = f"✅ PASSED (Actual: {actual_segments} Expected: {expected_segments} {percentage:.0f}%)" if actual_vs_expected_success else f"❌ FAILED (Actual: {actual_segments} Expected: {expected_segments} {percentage:.0f}%)"
+        actual_expected_text = f"✅ PASSED (Validation: {actual_segments}/{expected_segments} segments, {percentage:.1f}% success)" if actual_vs_expected_success else f"❌ FAILED (Validation: {actual_segments}/{expected_segments} segments, {percentage:.1f}% success)"
     else:
         actual_expected_text = f"✅ PASSED" if actual_vs_expected_success else f"❌ FAILED"
     print(f"Actual to Expected: {actual_expected_text}")
@@ -845,7 +845,7 @@ def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any
     # Calculate percentage for actual vs expected
     if expected_segments > 0:
         percentage = (actual_segments / expected_segments) * 100
-        actual_expected_text = f"✅ PASSED (Actual: {actual_segments} Expected: {expected_segments} {percentage:.0f}%)" if actual_vs_expected_success else f"❌ FAILED (Actual: {actual_segments} Expected: {expected_segments} {percentage:.0f}%)"
+        actual_expected_text = f"✅ PASSED (Validation: {actual_segments}/{expected_segments} segments, {percentage:.1f}% success)" if actual_vs_expected_success else f"❌ FAILED (Validation: {actual_segments}/{expected_segments} segments, {percentage:.1f}% success)"
     else:
         actual_expected_text = f"✅ PASSED" if actual_vs_expected_success else f"❌ FAILED"
     print(f"Actual to Expected: {actual_expected_text}")
