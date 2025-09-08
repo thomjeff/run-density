@@ -2301,7 +2301,7 @@ def generate_flow_audit_for_segment(
     event_a: str,
     event_b: str,
     min_overlap_duration: float = 5.0,
-    conflict_length_m: float = 200.0,
+    conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
     output_dir: str = "reports/analysis"
 ) -> Dict[str, Any]:
     """
@@ -2384,26 +2384,38 @@ def generate_flow_audit_for_segment(
         if from_km_a <= cp_km <= to_km_a:
             # Calculate normalized convergence zone around the convergence point
             len_a = to_km_a - from_km_a
+            len_b = to_km_b - from_km_b
             s_cp = (cp_km - from_km_a) / len_a  # Normalized position of convergence point
             
-            # Create convergence zone around the point
-            conflict_length_km = conflict_length_m / 1000.0
-            conflict_half_km = conflict_length_km / 2.0 / len_a  # Normalize to segment length
+            # Use proportional tolerance approach (same as Main Analysis)
+            # Use proportional tolerance: 5% of shorter segment, minimum 50m
+            min_segment_len = min(len_a, len_b)
+            proportional_tolerance_km = max(0.05, 0.05 * min_segment_len)  # 5% of shorter segment, min 50m
+            s_conflict_half = proportional_tolerance_km / max(min_segment_len, 1e-9)
             
-            s_start = max(0.0, s_cp - conflict_half_km)
-            s_end = min(1.0, s_cp + conflict_half_km)
+            s_start = max(0.0, s_cp - s_conflict_half)
+            s_end = min(1.0, s_cp + s_conflict_half)
+            
+            # Ensure conflict zone has some width
+            if s_end <= s_start:
+                s_start = max(0.0, s_cp - 0.05)  # 5% of segment
+                s_end = min(1.0, s_cp + 0.05)    # 5% of segment
             
             conflict_start = s_start
             conflict_end = s_end
         else:
             # Convergence point is outside Event A's range - use segment center
             len_a = to_km_a - from_km_a
+            len_b = to_km_b - from_km_b
             center_a_norm = 0.5  # Center of normalized segment
-            conflict_length_km = conflict_length_m / 1000.0
-            conflict_half_km = conflict_length_km / 2.0 / len_a  # Normalize to segment length
             
-            conflict_start = max(0.0, center_a_norm - conflict_half_km)
-            conflict_end = min(1.0, center_a_norm + conflict_half_km)
+            # Use proportional tolerance approach (same as Main Analysis)
+            min_segment_len = min(len_a, len_b)
+            proportional_tolerance_km = max(0.05, 0.05 * min_segment_len)  # 5% of shorter segment, min 50m
+            s_conflict_half = proportional_tolerance_km / max(min_segment_len, 1e-9)
+            
+            conflict_start = max(0.0, center_a_norm - s_conflict_half)
+            conflict_end = min(1.0, center_a_norm + s_conflict_half)
     
     # Calculate overlaps and overtakes
     effective_cp_km = cp_km
