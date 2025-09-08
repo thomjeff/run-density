@@ -10,6 +10,11 @@ import os
 from datetime import datetime
 from typing import Tuple
 
+try:
+    from .paths import get_analysis_dir
+except ImportError:
+    from paths import get_analysis_dir
+
 
 def get_date_folder_path(base_path: str = "reports/analysis") -> Tuple[str, str]:
     """
@@ -49,20 +54,24 @@ def get_standard_filename(report_type: str, extension: str = "csv") -> str:
     return f"{timestamp}-{report_type}.{extension}"
 
 
-def get_report_paths(report_type: str, extension: str = "csv", base_path: str = "reports/analysis") -> Tuple[str, str]:
+def get_report_paths(report_type: str, extension: str = "csv", base_path: str = None) -> Tuple[str, str]:
     """
     Get both the full file path and relative path for a report.
     
     Args:
         report_type: Type of report (Flow, Density, Combined, etc.)
         extension: File extension (csv, md, json, etc.)
-        base_path: Base directory for reports (default: "reports/analysis")
+        base_path: Base directory for reports (default: uses get_analysis_dir())
     
     Returns:
         Tuple of (full_path, relative_path)
         - full_path: Complete file path including date folder
         - relative_path: Relative path from base_path
     """
+    # Use Cloud Run-friendly path if not specified
+    if base_path is None:
+        base_path = get_analysis_dir()
+    
     # Get date-based folder
     date_folder_path, date_folder_name = get_date_folder_path(base_path)
     
