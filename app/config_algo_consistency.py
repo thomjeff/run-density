@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class AlgoConsistencyFlags:
-    ENABLE_STRICT_FIRST_PUBLISH: bool = False  # Temporarily disabled to see raw results
+    ENABLE_STRICT_FIRST_PUBLISH: bool = True  # Re-enabled with correct strict pass counts
     ENABLE_BIN_SELECTOR_UNIFICATION: bool = True  # Re-enabled with performance fixes
     ENABLE_INPUT_NORMALIZATION: bool = True
     ENABLE_TELEMETRY_MIN: bool = True

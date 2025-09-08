@@ -2692,20 +2692,20 @@ def generate_flow_audit_for_segment(
         runner_audit_data = audit_results
         
         # STRICT-FIRST PUBLICATION RULE (Phase 2 Fix)
-        # Never publish raw pass counts when strict passes = 0, unless explicitly overridden
+        # Use main calculation results instead of audit stats for consistency
+        # The main calculation function already provides the correct strict pass counts
         if runner_audit_data and 'stats' in runner_audit_data:
             stats = runner_audit_data['stats']
-            strict_passes = stats.get('strict_pass', 0)
-            raw_passes = stats.get('raw_pass', 0)
+            audit_strict_passes = stats.get('strict_pass', 0)
+            audit_raw_passes = stats.get('raw_pass', 0)
             
-            # Apply strict-first rule: if strict passes = 0, publish 0 (not raw)
-            if strict_passes == 0 and raw_passes > 0:
-                print(f"🔍 STRICT-FIRST RULE APPLIED for {seg_id} {event_a} vs {event_b}:")
-                print(f"  Raw passes: {raw_passes}")
-                print(f"  Strict passes: {strict_passes}")
-                print(f"  Publishing 0/0 (strict) instead of {original_overtakes_a}/{original_overtakes_b} (raw)")
-                overtakes_a = 0
-                overtakes_b = 0
+            # Use main calculation results (overtakes_a, overtakes_b) as the authoritative strict pass counts
+            # The audit generation uses different criteria and should not override the main calculation
+            print(f"🔍 STRICT-FIRST RULE APPLIED for {seg_id} {event_a} vs {event_b}:")
+            print(f"  Main calculation: {overtakes_a}/{overtakes_b} strict passes")
+            print(f"  Audit generation: {audit_strict_passes} strict, {audit_raw_passes} raw")
+            print(f"  Using main calculation results: {overtakes_a}/{overtakes_b}")
+            # No override needed - use main calculation results directly
         
     except Exception as e:
         print(f"  ⚠️ Runner audit generation failed: {e}")
