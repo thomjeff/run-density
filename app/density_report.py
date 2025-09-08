@@ -24,14 +24,14 @@ import pandas as pd
 from datetime import datetime
 
 
-# LOS Thresholds for density classification
+# LOS Thresholds for density classification (updated to match v2 rulebook)
 LOS_AREAL_THRESHOLDS = {
-    'A': (0.0, 0.05),    # Comfortable
-    'B': (0.05, 0.10),   # Good
-    'C': (0.10, 0.15),   # Moderate
-    'D': (0.15, 0.20),   # Busy
-    'E': (0.20, 0.25),   # Very Busy
-    'F': (0.25, float('inf'))  # Critical
+    'A': (0.0, 0.31),    # Comfortable
+    'B': (0.31, 0.43),   # Good
+    'C': (0.43, 0.72),   # Moderate
+    'D': (0.72, 1.08),   # Busy
+    'E': (1.08, 1.63),   # Very Busy
+    'F': (1.63, float('inf'))  # Critical
 }
 
 LOS_CROWD_THRESHOLDS = {
@@ -274,13 +274,13 @@ def generate_combined_view(segment: Dict[str, Any]) -> List[str]:
     active_end = getattr(summary, "active_end", "N/A")
     active_duration = getattr(summary, "active_duration_s", 0)
     occupancy_rate = getattr(summary, "occupancy_rate", 0.0)
-    peak_concurrency = getattr(summary, "peak_concurrency", 0)
-    peak_areal = getattr(summary, "peak_areal_density", 0.0)
-    peak_crowd = getattr(summary, "peak_crowd_density", 0.0)
-    p95_areal = getattr(summary, "p95_areal_density", 0.0)
-    p95_crowd = getattr(summary, "p95_crowd_density", 0.0)
-    mean_areal = getattr(summary, "active_mean_areal_density", 0.0)
-    mean_crowd = getattr(summary, "active_mean_crowd_density", 0.0)
+    peak_concurrency = getattr(summary, "active_peak_concurrency", 0)
+    peak_areal = getattr(summary, "active_peak_areal", 0.0)
+    peak_crowd = getattr(summary, "active_peak_crowd", 0.0)
+    p95_areal = getattr(summary, "active_p95_areal", 0.0)
+    p95_crowd = getattr(summary, "active_p95_crowd", 0.0)
+    mean_areal = getattr(summary, "active_mean_areal", 0.0)
+    mean_crowd = getattr(summary, "active_mean_crowd", 0.0)
     tot_areal = getattr(summary, "active_tot_areal_sec", 0)
     tot_crowd = getattr(summary, "active_tot_crowd_sec", 0)
     
