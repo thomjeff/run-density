@@ -61,6 +61,11 @@ TEMPORAL_BINNING_THRESHOLD_MINUTES = 10.0  # Use time bins if overlap > 10 minut
 SPATIAL_BINNING_THRESHOLD_METERS = 100.0   # Use distance bins if conflict zone > 100m
 SUSPICIOUS_OVERTAKING_RATE_THRESHOLD = 0.5  # Flag overtaking rates > 50% as suspicious
 
+# E2E Testing URLs
+CLOUD_RUN_URL = "https://run-density-ln4r3sfkha-uc.a.run.app"
+LOCAL_RUN_URL = "http://localhost:8080"
+TEST_SERVER_URL = "http://testserver:8080"
+
 # Fraction validation and clamping
 MIN_NORMALIZED_FRACTION = 0.0
 MAX_NORMALIZED_FRACTION = 1.0
