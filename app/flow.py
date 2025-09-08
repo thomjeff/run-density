@@ -262,31 +262,48 @@ def calculate_convergence_zone_overlaps_with_binning(
     min_overlap_duration: float = 5.0,
     conflict_length_m: float = 100.0,
     overlap_duration_minutes: float = 0.0,
-) -> Tuple[int, int, List[str], List[str], int, int]:
+) -> Tuple[int, int, int, int, List[str], List[str], int, int]:
     """
     Calculate overtaking with binning for long segments.
-    Uses time bins if overlap > 10 minutes, distance bins if conflict zone > 100m.
+    Uses unified selector for consistent path selection across Main Analysis and Flow Runner.
     """
     
-    # Check if binning is needed
+    # Import unified selector modules
+    from .normalization import normalize
+    from .selector import choose_path
+    from .telemetry import pub_decision_log
+    
+    # Create segment key for unified selector
+    segment_key = f"{event_a}_vs_{event_b}"  # Will be enhanced with segment ID later
+    
+    # Normalize inputs to prevent threshold drift
+    norm_inputs = normalize(conflict_length_m, "m", overlap_duration_minutes * 60, "s")
+    
+    # Use unified selector to choose calculation path
+    chosen_path = choose_path(segment_key, norm_inputs)
+    
+    # Map unified path to legacy binning flags
     use_time_bins = overlap_duration_minutes > TEMPORAL_BINNING_THRESHOLD_MINUTES
-    use_distance_bins = conflict_length_m > SPATIAL_BINNING_THRESHOLD_METERS
+    use_distance_bins = chosen_path == "BINNED"
     
     # Debug logging for M1
     if event_a == "Half" and event_b == "10K":
-        print(f"🔍 BINNING DECISION DEBUG:")
-        print(f"  Overlap duration: {overlap_duration_minutes} min (threshold: {TEMPORAL_BINNING_THRESHOLD_MINUTES})")
-        print(f"  Conflict length: {conflict_length_m} m (threshold: {SPATIAL_BINNING_THRESHOLD_METERS})")
-        print(f"  Use time bins: {use_time_bins}")
-        print(f"  Use distance bins: {use_distance_bins}")
-        print(f"  Will use: {'BINNED' if (use_time_bins or use_distance_bins) else 'ORIGINAL'} calculation")
+        print(f"🔍 UNIFIED BINNING DECISION DEBUG:")
+        print(f"  Segment key: {segment_key}")
+        print(f"  Normalized conflict length: {norm_inputs.conflict_len_m:.3f} m")
+        print(f"  Normalized overlap duration: {norm_inputs.overlap_dur_s:.3f} s")
+        print(f"  Chosen path: {chosen_path}")
+        print(f"  Legacy time bins: {use_time_bins}")
+        print(f"  Legacy distance bins: {use_distance_bins}")
+        print(f"  Will use: {chosen_path} calculation")
     
+    # Calculate results using chosen path
     if use_time_bins or use_distance_bins:
         # Log binning decision for transparency
         logging.info(f"BINNING APPLIED: time_bins={use_time_bins}, distance_bins={use_distance_bins} "
                     f"(window={overlap_duration_minutes:.1f}min, zone={conflict_length_m:.0f}m)")
         
-        return calculate_convergence_zone_overlaps_binned(
+        results = calculate_convergence_zone_overlaps_binned(
             df_a, df_b, event_a, event_b, start_times,
             cp_km, from_km_a, to_km_a, from_km_b, to_km_b,
             min_overlap_duration, conflict_length_m,
@@ -297,11 +314,24 @@ def calculate_convergence_zone_overlaps_with_binning(
         logging.debug(f"BINNING NOT APPLIED: time_bins={use_time_bins}, distance_bins={use_distance_bins} "
                      f"(window={overlap_duration_minutes:.1f}min, zone={conflict_length_m:.0f}m)")
         
-        return calculate_convergence_zone_overlaps_original(
+        results = calculate_convergence_zone_overlaps_original(
             df_a, df_b, event_a, event_b, start_times,
             cp_km, from_km_a, to_km_a, from_km_b, to_km_b,
             min_overlap_duration, conflict_length_m
         )
+    
+    # Extract results for telemetry
+    overtakes_a, overtakes_b, copresence_a, copresence_b, bibs_a, bibs_b, unique_encounters, participants_involved = results
+    
+    # Add telemetry logging for algorithm consistency verification
+    if event_a == "Half" and event_b == "10K":  # M1 debug case
+        telemetry_log = pub_decision_log(
+            segment_key, chosen_path, norm_inputs.conflict_len_m, norm_inputs.overlap_dur_s,
+            (overtakes_a, overtakes_b), (overtakes_a, overtakes_b)  # Using same for strict/raw for now
+        )
+        print(f"🔍 {telemetry_log}")
+    
+    return results
 
 
 def generate_flow_audit_data(
