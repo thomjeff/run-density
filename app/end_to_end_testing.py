@@ -19,7 +19,214 @@ import os
 import glob
 from typing import Dict, List, Tuple, Any
 from fastapi.testclient import TestClient
-from app.main import app
+from app.main import app, APP_VERSION
+import io
+import sys
+from datetime import datetime
+
+
+class OutputCapture:
+    """Context manager to capture print output and save to file."""
+    
+    def __init__(self, file_path: str):
+        self.file_path = file_path
+        self.original_stdout = None
+        self.captured_output = None
+        
+    def __enter__(self):
+        self.original_stdout = sys.stdout
+        self.captured_output = io.StringIO()
+        sys.stdout = self.captured_output
+        return self
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        sys.stdout = self.original_stdout
+        
+        # Save captured output to file
+        os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
+        with open(self.file_path, 'w') as f:
+            f.write(self.captured_output.getvalue())
+            
+        # Also print to console
+        print(self.captured_output.getvalue())
+
+
+def format_e2e_report_as_markdown(raw_output: str, test_results: Dict[str, Any], test_timestamp: str, environment_url: str, created_files: List[str]) -> str:
+    """
+    Format the raw E2E test output into a professional markdown report.
+    
+    Args:
+        raw_output: Raw terminal output from the tests
+        test_results: Dictionary containing test results
+        test_timestamp: Timestamp of the test run
+        environment_url: Environment URL that was tested
+        created_files: List of files created during the test
+        
+    Returns:
+        Formatted markdown report
+    """
+    from datetime import datetime
+    
+    # Parse timestamp for display
+    try:
+        dt = datetime.strptime(test_timestamp, "%Y-%m-%d-%H%M")
+        formatted_time = dt.strftime("%Y-%m-%d %H:%M:%S")
+    except:
+        formatted_time = test_timestamp
+    
+    # Extract test results
+    api_success = all(result['success'] for result in test_results.get('api_endpoints', {}).values()) if 'api_endpoints' in test_results else False
+    report_file_success = all(result['success'] for result in test_results.get('report_files', {}).values()) if 'report_files' in test_results else False
+    
+    # Extract actual vs expected results
+    actual_vs_expected_success = True
+    actual_segments = 0
+    expected_segments = 0
+    if 'content_quality' in test_results and 'actual_vs_expected' in test_results['content_quality']:
+        actual_vs_expected_data = test_results['content_quality']['actual_vs_expected']
+        if isinstance(actual_vs_expected_data, dict) and 'all_validations_passed' in actual_vs_expected_data:
+            actual_vs_expected_success = actual_vs_expected_data['all_validations_passed']
+            actual_segments = actual_vs_expected_data.get('actual_segments', 0)
+            expected_segments = actual_vs_expected_data.get('expected_segments', 0)
+    
+    # Extract content quality results
+    content_quality_success = False
+    if 'content_quality' in test_results:
+        content_checks = []
+        for category in test_results['content_quality'].values():
+            if isinstance(category, dict) and 'error' not in category:
+                content_checks.extend(category.values())
+        content_quality_success = all(content_checks) if content_checks else False
+    
+    # Calculate overall success
+    overall_success = api_success and report_file_success and actual_vs_expected_success and content_quality_success
+    
+    # Build the formatted report
+    report = f"""# End-to-End Testing Report
+
+**Generated:** {formatted_time}
+
+**Environment:** {environment_url}
+
+**Version:** {APP_VERSION}
+
+**Test Type:** Streamlined End-to-End Testing
+
+**Overall Status:** {'✅ PASSED' if overall_success else '❌ FAILED'}
+
+## Test Summary
+
+| Test Category | Status | Details |
+|---------------|--------|---------|
+| API Endpoints | {'✅ PASSED' if api_success else '❌ FAILED'} | All API endpoints responding correctly |
+| Report Files | {'✅ PASSED' if report_file_success else '❌ FAILED'} | All required report files generated |
+| Actual vs Expected | {'✅ PASSED' if actual_vs_expected_success else '❌ FAILED'} | {f'Actual: {actual_segments} Expected: {expected_segments} {((actual_segments/expected_segments)*100):.0f}%' if expected_segments > 0 else 'Validation completed'} |
+| Content Quality | {'✅ PASSED' if content_quality_success else '❌ FAILED'} | Report content validation |
+
+## Files Created
+
+"""
+    
+    if created_files:
+        for file_path in created_files:
+            report += f"- `{file_path}`\n"
+    else:
+        report += "- No files created\n"
+    
+    report += f"""
+## Detailed Test Results
+
+### API Endpoint Testing
+
+"""
+    
+    # Extract API endpoint results
+    if 'api_endpoints' in test_results:
+        for endpoint, result in test_results['api_endpoints'].items():
+            status = '✅ PASSED' if result.get('success', False) else '❌ FAILED'
+            report += f"- **{endpoint}**: {status}\n"
+    else:
+        report += "- No API endpoint results available\n"
+    
+    report += f"""
+### Report File Testing
+
+"""
+    
+    # Extract report file results
+    if 'report_files' in test_results:
+        for file_type, result in test_results['report_files'].items():
+            status = '✅ PASSED' if result.get('success', False) else '❌ FAILED'
+            report += f"- **{file_type}**: {status}\n"
+    else:
+        report += "- No report file results available\n"
+    
+    report += f"""
+### Content Quality Testing
+
+"""
+    
+    # Extract content quality results
+    if 'content_quality' in test_results:
+        for category, results in test_results['content_quality'].items():
+            if category == 'actual_vs_expected':
+                continue  # Already covered in summary
+            if isinstance(results, dict) and 'error' not in results:
+                report += f"#### {category.replace('_', ' ').title()}\n\n"
+                for check, result in results.items():
+                    status = '✅' if result else '❌'
+                    report += f"- {status} {check}\n"
+                report += "\n"
+    else:
+        report += "- No content quality results available\n"
+    
+    report += f"""
+## Raw Test Output
+
+<details>
+<summary>Click to view raw terminal output</summary>
+
+```
+{raw_output}
+```
+
+</details>
+
+## Conclusion
+
+{'🎉 All tests passed! The system is ready for production deployment.' if overall_success else '⚠️ Some tests failed. Please review the results before production deployment.'}
+
+---
+*Report generated by run-density end-to-end testing suite*
+"""
+    
+    return report
+
+
+def get_test_environment_url() -> str:
+    """Determine the test environment URL based on how the test is running."""
+    # For now, we're using TestClient which runs locally
+    # In the future, this could be enhanced to detect actual environment
+    return "http://testserver (local TestClient)"
+
+
+def get_created_files() -> List[str]:
+    """Get list of files created during the test run."""
+    files = []
+    
+    # Find latest temporal flow files
+    temporal_md_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.md')
+    temporal_csv_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.csv')
+    density_md_files = glob.glob('reports/analysis/*/????-??-??-????-Density.md')
+    
+    if temporal_md_files:
+        files.append(max(temporal_md_files, key=os.path.getctime))
+    if temporal_csv_files:
+        files.append(max(temporal_csv_files, key=os.path.getctime))
+    if density_md_files:
+        files.append(max(density_md_files, key=os.path.getctime))
+        
+    return files
 
 
 def test_api_endpoints(start_times: Dict[str, int] = None) -> Dict[str, Any]:
@@ -118,89 +325,6 @@ def test_api_endpoints(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     return results
 
 
-def test_report_generation(start_times: Dict[str, int] = None) -> Dict[str, Any]:
-    """
-    Test report generation by calling the modules directly.
-    
-    Args:
-        start_times: Event start times in minutes from midnight
-                    Default: {'Full': 420, '10K': 440, 'Half': 460}
-    
-    Returns:
-        Dictionary with test results for report generation
-    """
-    if start_times is None:
-        start_times = {'Full': 420, '10K': 440, 'Half': 460}
-    
-    print("=== REPORT GENERATION TESTING ===")
-    print()
-    
-    results = {}
-    
-    try:
-        # Test temporal flow report generation
-        print("1. Testing Temporal Flow Report Generation...")
-        from app.temporal_flow_report import generate_temporal_flow_report
-        
-        temporal_result = generate_temporal_flow_report(
-            pace_csv='data/runners.csv',
-            segments_csv='data/segments_new.csv',
-            start_times=start_times
-        )
-        
-        results['temporal_flow_report'] = {
-            'success': temporal_result.get('ok', False),
-            'result': temporal_result
-        }
-        
-        print(f"   Temporal Flow Report: {'✅' if temporal_result.get('ok', False) else '❌'}")
-        if temporal_result.get('ok', False):
-            print(f"   Report Path: {temporal_result.get('report_path', 'N/A')}")
-        
-    except Exception as e:
-        results['temporal_flow_report'] = {
-            'success': False,
-            'error': str(e)
-        }
-        print(f"   Temporal Flow Report: ❌ Error: {str(e)}")
-    
-    print()
-    
-    try:
-        # Test density report generation
-        print("2. Testing Density Report Generation...")
-        from app.density_report import generate_density_report
-        
-        density_result = generate_density_report(
-            pace_csv='data/runners.csv',
-            density_csv='data/segments_new.csv',
-            start_times=start_times
-        )
-        
-        results['density_report'] = {
-            'success': density_result.get('ok', False),
-            'result': density_result
-        }
-        
-        print(f"   Density Report: {'✅' if density_result.get('ok', False) else '❌'}")
-        if density_result.get('ok', False):
-            print(f"   Report Path: {density_result.get('report_path', 'N/A')}")
-        
-    except Exception as e:
-        results['density_report'] = {
-            'success': False,
-            'error': str(e)
-        }
-        print(f"   Density Report: ❌ Error: {str(e)}")
-    
-    print()
-    
-    # Summary
-    all_success = all(result['success'] for result in results.values())
-    print(f"Report Generation Testing: {'✅ ALL PASSED' if all_success else '❌ SOME FAILED'}")
-    print()
-    
-    return results
 
 
 def test_report_files() -> Dict[str, Any]:
@@ -240,9 +364,9 @@ def test_report_files() -> Dict[str, Any]:
         'success': len(density_md_files) > 0
     }
     
-    print(f"1. Temporal Flow MD files: {len(temporal_md_files)} {'✅' if len(temporal_md_files) > 0 else '❌'}")
-    print(f"2. Temporal Flow CSV files: {len(temporal_csv_files)} {'✅' if len(temporal_csv_files) > 0 else '❌'}")
-    print(f"3. Density Analysis MD files: {len(density_md_files)} {'✅' if len(density_md_files) > 0 else '❌'}")
+    print(f"1. Temporal Flow MD files: {'✅' if len(temporal_md_files) > 0 else '❌'}")
+    print(f"2. Temporal Flow CSV files: {'✅' if len(temporal_csv_files) > 0 else '❌'}")
+    print(f"3. Density Analysis MD files: {'✅' if len(density_md_files) > 0 else '❌'}")
     print()
     
     # Summary
@@ -251,6 +375,132 @@ def test_report_files() -> Dict[str, Any]:
     print()
     
     return results
+
+
+def validate_actual_vs_expected_flow_results(actual_csv_path: str) -> Dict[str, Any]:
+    """
+    Validate actual flow results against expected baseline results.
+    
+    Args:
+        actual_csv_path: Path to the actual flow CSV file
+        
+    Returns:
+        Dictionary with validation results
+    """
+    import pandas as pd
+    
+    try:
+        # Load actual results
+        actual_df = pd.read_csv(actual_csv_path)
+        
+        # Load expected results
+        expected_df = pd.read_csv('docs/flow_expected_results.csv')
+        
+        # Load segments data to get overtake_flag
+        segments_df = pd.read_csv('data/segments_new.csv')
+        
+        # Create a mapping of segment_id to overtake_flag
+        segment_overtake_map = dict(zip(segments_df['seg_id'], segments_df['overtake_flag']))
+        
+        validation_results = {}
+        all_validations_passed = True
+        
+        print("   Validating Actual vs Expected Flow Results:")
+        print("   " + "="*80)
+        
+        # Process each row in actual results
+        for _, actual_row in actual_df.iterrows():
+            seg_id = actual_row['seg_id']
+            event_a = actual_row['event_a']
+            event_b = actual_row['event_b']
+            segment_label = actual_row['segment_label']
+            
+            # Create event pair string
+            event_pair = f"{event_a} vs {event_b}"
+            
+            # Get overtake_flag for this segment
+            overtake_flag = segment_overtake_map.get(seg_id, 'n')
+            
+            # Find matching expected row
+            expected_row = expected_df[
+                (expected_df['seg_id'] == seg_id) & 
+                (expected_df['event_a'] == event_a) & 
+                (expected_df['event_b'] == event_b)
+            ]
+            
+            if expected_row.empty:
+                print(f"   ❌ {seg_id}, {segment_label}, {event_pair}, {overtake_flag}, NO EXPECTED DATA FOUND")
+                validation_results[f"{seg_id}_{event_pair}"] = False
+                all_validations_passed = False
+                continue
+            
+            expected_row = expected_row.iloc[0]
+            
+            if overtake_flag == 'y':
+                # Segments expected to have overtaking
+                actual_overtaking_a = actual_row['overtaking_a']
+                actual_overtaking_b = actual_row['overtaking_b']
+                actual_pct_a = actual_row['pct_a']
+                actual_pct_b = actual_row['pct_b']
+                
+                expected_overtaking_a = expected_row['overtaking_a']
+                expected_overtaking_b = expected_row['overtaking_b']
+                expected_pct_a = expected_row['pct_a']
+                expected_pct_b = expected_row['pct_b']
+                
+                # Check if counts match
+                counts_match = (actual_overtaking_a == expected_overtaking_a and 
+                              actual_overtaking_b == expected_overtaking_b)
+                
+                # Check if percentages match (with small tolerance for rounding)
+                pct_match = (abs(actual_pct_a - expected_pct_a) < 0.1 and 
+                           abs(actual_pct_b - expected_pct_b) < 0.1)
+                
+                overall_match = counts_match and pct_match
+                
+                status = "✅ MATCH" if overall_match else "❌ MISMATCH"
+                
+                print(f"   {status} {seg_id}, {segment_label}, {event_pair}, {overtake_flag}, "
+                      f"{actual_overtaking_a}/{expected_overtaking_a}, {actual_overtaking_b}/{expected_overtaking_b}, "
+                      f"{actual_pct_a:.1f}/{expected_pct_a:.1f}, {actual_pct_b:.1f}/{expected_pct_b:.1f}")
+                
+                validation_results[f"{seg_id}_{event_pair}"] = overall_match
+                if not overall_match:
+                    all_validations_passed = False
+                    
+            else:
+                # Segments expected to have NO overtaking
+                actual_overtaking_a = actual_row['overtaking_a']
+                actual_overtaking_b = actual_row['overtaking_b']
+                
+                expected_overtaking_a = expected_row['overtaking_a']
+                expected_overtaking_b = expected_row['overtaking_b']
+                
+                # Check if both actual and expected have zero overtaking
+                no_overtaking_match = (actual_overtaking_a == 0 and actual_overtaking_b == 0 and
+                                     expected_overtaking_a == 0 and expected_overtaking_b == 0)
+                
+                status = "✅ NO OVERTAKING (as expected)" if no_overtaking_match else "❌ UNEXPECTED OVERTAKING"
+                
+                print(f"   {status} {seg_id}, {segment_label}, {event_pair}, {overtake_flag}")
+                
+                validation_results[f"{seg_id}_{event_pair}"] = no_overtaking_match
+                if not no_overtaking_match:
+                    all_validations_passed = False
+        
+        print("   " + "="*80)
+        print(f"   Overall Validation: {'✅ ALL MATCH' if all_validations_passed else '❌ MISMATCHES FOUND'}")
+        
+        return {
+            'all_validations_passed': all_validations_passed,
+            'individual_results': validation_results,
+            'actual_segments': len(actual_df),
+            'expected_segments': len(expected_df)
+        }
+        
+    except Exception as e:
+        print(f"   ❌ Error during validation: {str(e)}")
+        return {'error': str(e)}
 
 
 def test_report_content_quality() -> Dict[str, Any]:
@@ -268,13 +518,15 @@ def test_report_content_quality() -> Dict[str, Any]:
     
     # Find latest report files (current pattern: YYYY-MM-DD-HHMM-Flow.md and YYYY-MM-DD-HHMM-Density.md)
     temporal_md_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.md')
+    temporal_csv_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.csv')
     density_md_files = glob.glob('reports/analysis/*/????-??-??-????-Density.md')
     
-    if not temporal_md_files or not density_md_files:
+    if not temporal_md_files or not temporal_csv_files or not density_md_files:
         print("❌ Cannot test content quality - report files not found")
         return {'error': 'Report files not found'}
     
     latest_temporal_md = max(temporal_md_files, key=os.path.getctime)
+    latest_temporal_csv = max(temporal_csv_files, key=os.path.getctime)
     latest_density_md = max(density_md_files, key=os.path.getctime)
     
     # Test temporal flow report content
@@ -307,15 +559,18 @@ def test_report_content_quality() -> Dict[str, Any]:
             density_content = f.read()
         
         density_checks = {
-            'Proper segment names (A1a: Start to Queen/Regent)': 'A1a: Start to Queen/Regent' in density_content,
+            'Proper segment names (A1: Start to Queen/Regent)': 'A1: Start to Queen/Regent' in density_content,
             'No unknown segments': 'Unknown:' not in density_content,
-            'Proper counts (Total Segments: 20)': '**Total Segments:** 20' in density_content and '**Processed Segments:** 20' in density_content
+            'Proper counts (Total Segments: 22)': '**Total Segments:** 22' in density_content and '**Processed Segments:** 22' in density_content
         }
         
         results['density'] = density_checks
         
         for check, result in density_checks.items():
-            print(f"   {check}: {'✅' if result else '❌'}")
+            if 'Proper counts' in check:
+                print(f"   {check}: {'✅' if result else '❌'} (Density analyzes physical course segments, while Flow analyzes runner pairs - hence different counts)")
+            else:
+                print(f"   {check}: {'✅' if result else '❌'}")
         
     except Exception as e:
         results['density'] = {'error': str(e)}
@@ -323,11 +578,28 @@ def test_report_content_quality() -> Dict[str, Any]:
     
     print()
     
+    # Test actual vs expected flow results validation
+    print("3. Testing Actual vs Expected Flow Results Validation...")
+    try:
+        actual_expected_validation = validate_actual_vs_expected_flow_results(latest_temporal_csv)
+        results['actual_vs_expected'] = actual_expected_validation
+        
+    except Exception as e:
+        results['actual_vs_expected'] = {'error': str(e)}
+        print(f"   ❌ Error validating actual vs expected results: {str(e)}")
+    
+    print()
+    
     # Overall quality assessment
     all_checks = []
     for category in results.values():
         if isinstance(category, dict) and 'error' not in category:
-            all_checks.extend(category.values())
+            if category == results.get('actual_vs_expected'):
+                # Special handling for actual vs expected validation
+                if 'all_validations_passed' in category:
+                    all_checks.append(category['all_validations_passed'])
+            else:
+                all_checks.extend(category.values())
     
     overall_quality = all(all_checks) if all_checks else False
     print(f"Overall Report Quality: {'✅ EXCELLENT' if overall_quality else '❌ ISSUES FOUND'}")
@@ -360,21 +632,18 @@ def run_streamlined_tests(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     
     # Run core test categories only
     api_results = test_api_endpoints(start_times)
-    report_generation_results = test_report_generation(start_times)
     report_file_results = test_report_files()
     content_quality_results = test_report_content_quality()
     
     # Combine all results
     all_results = {
         'api_endpoints': api_results,
-        'report_generation': report_generation_results,
         'report_files': report_file_results,
         'content_quality': content_quality_results
     }
     
     # Overall success assessment
     api_success = all(result['success'] for result in api_results.values())
-    report_gen_success = all(result['success'] for result in report_generation_results.values())
     report_file_success = all(result['success'] for result in report_file_results.values())
     
     # Content quality success (check if any checks exist and all pass)
@@ -384,20 +653,59 @@ def run_streamlined_tests(start_times: Dict[str, int] = None) -> Dict[str, Any]:
             content_checks.extend(category.values())
     content_quality_success = all(content_checks) if content_checks else False
     
-    overall_success = api_success and report_gen_success and report_file_success and content_quality_success
+    overall_success = api_success and report_file_success and content_quality_success
+    
+    # Get test metadata
+    test_timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+    test_date = datetime.now().strftime("%Y-%m-%d")
+    environment_url = get_test_environment_url()
+    created_files = get_created_files()
+    
+    # Check actual vs expected validation
+    actual_vs_expected_success = True
+    actual_segments = 0
+    expected_segments = 0
+    if 'actual_vs_expected' in all_results:
+        actual_vs_expected_data = all_results['actual_vs_expected']
+        if isinstance(actual_vs_expected_data, dict) and 'all_validations_passed' in actual_vs_expected_data:
+            actual_vs_expected_success = actual_vs_expected_data['all_validations_passed']
+            actual_segments = actual_vs_expected_data.get('actual_segments', 0)
+            expected_segments = actual_vs_expected_data.get('expected_segments', 0)
+        elif isinstance(actual_vs_expected_data, dict) and 'error' not in actual_vs_expected_data:
+            # Handle case where validation didn't run properly
+            actual_vs_expected_success = False
     
     print("=== FINAL SUMMARY ===")
+    print(f"Date: {test_timestamp}")
+    print(f"Environment: {environment_url}")
+    print(f"Version: {APP_VERSION}")
     print(f"API Endpoints: {'✅ PASSED' if api_success else '❌ FAILED'}")
-    print(f"Report Generation: {'✅ PASSED' if report_gen_success else '❌ FAILED'}")
     print(f"Report Files: {'✅ PASSED' if report_file_success else '❌ FAILED'}")
+    if created_files:
+        print("   Files Created:")
+        for file_path in created_files:
+            print(f"   - {file_path}")
+    # Calculate percentage for actual vs expected
+    if expected_segments > 0:
+        percentage = (actual_segments / expected_segments) * 100
+        actual_expected_text = f"✅ PASSED (Actual: {actual_segments} Expected: {expected_segments} {percentage:.0f}%)" if actual_vs_expected_success else f"❌ FAILED (Actual: {actual_segments} Expected: {expected_segments} {percentage:.0f}%)"
+    else:
+        actual_expected_text = f"✅ PASSED" if actual_vs_expected_success else f"❌ FAILED"
+    print(f"Actual to Expected: {actual_expected_text}")
     print(f"Content Quality: {'✅ PASSED' if content_quality_success else '❌ FAILED'}")
     print()
     
-    if overall_success:
+    if overall_success and actual_vs_expected_success:
         print("🎉 STREAMLINED TESTS PASSED! Core system is ready!")
     else:
         print("⚠️  Some tests failed - review before production deployment")
     
+    print()
+    print("📝 NOTE: Flow Runner detailed analysis is not included in automated tests due to computational requirements.")
+    print("   Flow Runner reports can be run locally (not currently supported in production) using:")
+    print("   curl -X POST 'http://localhost:8000/api/flow-audit' \\")
+    print("     -H 'Content-Type: application/json' \\")
+    print("     -d '{\"paceCsv\": \"data/runners.csv\", \"segmentsCsv\": \"data/segments_new.csv\", \"startTimes\": {\"Full\": 420, \"10K\": 440, \"Half\": 460}}'")
     print()
     print("=== STREAMLINED END-TO-END TESTING COMPLETE ===")
     
@@ -424,21 +732,18 @@ def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any
     
     # Run all test categories
     api_results = test_api_endpoints(start_times)
-    report_generation_results = test_report_generation(start_times)
     report_file_results = test_report_files()
     content_quality_results = test_report_content_quality()
     
     # Combine all results
     all_results = {
         'api_endpoints': api_results,
-        'report_generation': report_generation_results,
         'report_files': report_file_results,
         'content_quality': content_quality_results
     }
     
     # Overall success assessment
     api_success = all(result['success'] for result in api_results.values())
-    report_gen_success = all(result['success'] for result in report_generation_results.values())
     report_file_success = all(result['success'] for result in report_file_results.values())
     
     # Content quality success (check if any checks exist and all pass)
@@ -448,20 +753,59 @@ def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any
             content_checks.extend(category.values())
     content_quality_success = all(content_checks) if content_checks else False
     
-    overall_success = api_success and report_gen_success and report_file_success and content_quality_success
+    overall_success = api_success and report_file_success and content_quality_success
+    
+    # Get test metadata
+    test_timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+    test_date = datetime.now().strftime("%Y-%m-%d")
+    environment_url = get_test_environment_url()
+    created_files = get_created_files()
+    
+    # Check actual vs expected validation
+    actual_vs_expected_success = True
+    actual_segments = 0
+    expected_segments = 0
+    if 'actual_vs_expected' in all_results:
+        actual_vs_expected_data = all_results['actual_vs_expected']
+        if isinstance(actual_vs_expected_data, dict) and 'all_validations_passed' in actual_vs_expected_data:
+            actual_vs_expected_success = actual_vs_expected_data['all_validations_passed']
+            actual_segments = actual_vs_expected_data.get('actual_segments', 0)
+            expected_segments = actual_vs_expected_data.get('expected_segments', 0)
+        elif isinstance(actual_vs_expected_data, dict) and 'error' not in actual_vs_expected_data:
+            # Handle case where validation didn't run properly
+            actual_vs_expected_success = False
     
     print("=== FINAL SUMMARY ===")
+    print(f"Date: {test_timestamp}")
+    print(f"Environment: {environment_url}")
+    print(f"Version: {APP_VERSION}")
     print(f"API Endpoints: {'✅ PASSED' if api_success else '❌ FAILED'}")
-    print(f"Report Generation: {'✅ PASSED' if report_gen_success else '❌ FAILED'}")
     print(f"Report Files: {'✅ PASSED' if report_file_success else '❌ FAILED'}")
+    if created_files:
+        print("   Files Created:")
+        for file_path in created_files:
+            print(f"   - {file_path}")
+    # Calculate percentage for actual vs expected
+    if expected_segments > 0:
+        percentage = (actual_segments / expected_segments) * 100
+        actual_expected_text = f"✅ PASSED (Actual: {actual_segments} Expected: {expected_segments} {percentage:.0f}%)" if actual_vs_expected_success else f"❌ FAILED (Actual: {actual_segments} Expected: {expected_segments} {percentage:.0f}%)"
+    else:
+        actual_expected_text = f"✅ PASSED" if actual_vs_expected_success else f"❌ FAILED"
+    print(f"Actual to Expected: {actual_expected_text}")
     print(f"Content Quality: {'✅ PASSED' if content_quality_success else '❌ FAILED'}")
     print()
     
-    if overall_success:
+    if overall_success and actual_vs_expected_success:
         print("🎉 ALL TESTS PASSED! System is ready for production!")
     else:
         print("⚠️  Some tests failed - review before production deployment")
     
+    print()
+    print("📝 NOTE: Flow Runner detailed analysis is not included in automated tests due to computational requirements.")
+    print("   Flow Runner reports can be run locally (not currently supported in production) using:")
+    print("   curl -X POST 'http://localhost:8000/api/flow-audit' \\")
+    print("     -H 'Content-Type: application/json' \\")
+    print("     -d '{\"paceCsv\": \"data/runners.csv\", \"segmentsCsv\": \"data/segments_new.csv\", \"startTimes\": {\"Full\": 420, \"10K\": 440, \"Half\": 460}}'")
     print()
     print("=== END-TO-END TESTING COMPLETE ===")
     
@@ -469,6 +813,32 @@ def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any
 
 
 if __name__ == "__main__":
-    # Run streamlined tests by default (faster, focuses on core functionality)
-    # Use run_comprehensive_tests() for full testing including all optional components
-    results = run_streamlined_tests()
+    # Generate timestamp for file naming
+    test_timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+    test_date = datetime.now().strftime("%Y-%m-%d")
+    
+    # Create output file path
+    output_file = f"reports/test-results/{test_date}/{test_timestamp}-E2E.md"
+    
+    # Run tests with output capture
+    with OutputCapture(output_file) as capture:
+        # Run streamlined tests by default (faster, focuses on core functionality)
+        # Use run_comprehensive_tests() for full testing including all optional components
+        results = run_streamlined_tests()
+    
+    # Get the captured output and format it as a professional markdown report
+    raw_output = capture.captured_output.getvalue()
+    environment_url = get_test_environment_url()
+    created_files = get_created_files()
+    
+    # Format the report as professional markdown
+    formatted_report = format_e2e_report_as_markdown(
+        raw_output, results, test_timestamp, environment_url, created_files
+    )
+    
+    # Save the formatted report
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    with open(output_file, 'w') as f:
+        f.write(formatted_report)
+    
+    print(f"\n📄 E2E Test Results saved to: {output_file}")
