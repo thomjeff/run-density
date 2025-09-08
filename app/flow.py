@@ -2421,9 +2421,29 @@ def generate_flow_audit_for_segment(
     effective_cp_km = cp_km
     overlap_duration_minutes = 60.0  # Default overlap duration
     
+    # Use dynamic conflict length (same as Main Analysis)
+    try:
+        from .constants import (
+            CONFLICT_LENGTH_LONG_SEGMENT_M,
+            CONFLICT_LENGTH_MEDIUM_SEGMENT_M, 
+            CONFLICT_LENGTH_SHORT_SEGMENT_M,
+            SEGMENT_LENGTH_LONG_THRESHOLD_KM,
+            SEGMENT_LENGTH_MEDIUM_THRESHOLD_KM
+        )
+        
+        segment_length_km = to_km_a - from_km_a
+        if segment_length_km > SEGMENT_LENGTH_LONG_THRESHOLD_KM:
+            dynamic_conflict_length_m = CONFLICT_LENGTH_LONG_SEGMENT_M
+        elif segment_length_km > SEGMENT_LENGTH_MEDIUM_THRESHOLD_KM:
+            dynamic_conflict_length_m = CONFLICT_LENGTH_MEDIUM_SEGMENT_M
+        else:
+            dynamic_conflict_length_m = CONFLICT_LENGTH_SHORT_SEGMENT_M
+    except ImportError:
+        dynamic_conflict_length_m = conflict_length_m
+    
     overtakes_a, overtakes_b, copresence_a, copresence_b, bibs_a, bibs_b, unique_encounters, participants_involved = calculate_convergence_zone_overlaps_with_binning(
         df_a, df_b, event_a, event_b, start_times,
-        effective_cp_km, from_km_a, to_km_a, from_km_b, to_km_b, min_overlap_duration, conflict_length_m, overlap_duration_minutes
+        effective_cp_km, from_km_a, to_km_a, from_km_b, to_km_b, min_overlap_duration, dynamic_conflict_length_m, overlap_duration_minutes
     )
     
     # Generate Flow Audit data
