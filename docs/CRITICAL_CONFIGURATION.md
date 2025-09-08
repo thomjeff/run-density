@@ -6,6 +6,67 @@ This document captures critical configuration details, workflows, and operationa
 
 **IMPORTANT**: For fundamental application concepts (start times, data structures, time calculations), see `docs/Application Fundamentals.md`. This document focuses on configuration and workflow.
 
+## **🚨 CRITICAL: 7-STEP COMMIT-TO-MAIN WORKFLOW**
+
+**MANDATORY**: This workflow MUST be followed for ALL commits to main. No exceptions.
+
+### **Step 1: Check for Required Commits**
+- Verify all changes are committed to the dev branch
+- Ensure working tree is clean
+- Confirm branch is ready for PR creation
+
+### **Step 2: Create Pull Request**
+- Create PR from dev branch to main
+- Include comprehensive description of changes
+- Wait for user review and approval
+- **NEVER skip this step - no direct pushes to main**
+
+### **Step 3: Wait for User Review (60 seconds)**
+- Allow time for user to review PR
+- Wait for explicit approval before proceeding
+- Do not proceed without user confirmation
+
+### **Step 4: Monitor GitHub Workflow (Automated)**
+- Use `gh run list --json databaseId,status,conclusion,headBranch,event,createdAt --limit 5` for non-interactive monitoring
+- Verify deployment status is "success"
+- **DO NOT use `gh run view --log` (causes interactive prompts)**
+
+### **Step 5: Run E2E Tests Against Cloud Run Production**
+- Set environment variable: `TEST_CLOUD_RUN=true`
+- Run: `python3 -m app.end_to_end_testing`
+- Verify all tests pass against production deployment
+- **URL automatically uses `CLOUD_RUN_URL` from constants.py**
+
+### **Step 6: Run E2E Tests Locally on Main Branch**
+- Switch to main branch: `git checkout main`
+- Kill existing local environment and create fresh environment
+- Run: `python3 -m app.end_to_end_testing` (without TEST_CLOUD_RUN)
+- Verify all tests pass locally
+- **URL automatically uses `TEST_SERVER_URL` from constants.py**
+
+### **Step 7: Report Results and Analysis**
+- Provide comprehensive analysis format every time
+- Include key achievements summary
+- Test results comparison table
+- File analysis for both environments
+- Notable observations and warnings
+- Production readiness confirmation
+- Recommendations for future workflow
+
+### **Environment Variables for E2E Testing**
+- `TEST_CLOUD_RUN=true`: Test against Cloud Run production
+- `TEST_CLOUD_RUN=false` (default): Test against local TestClient
+- URLs automatically configured via `app/constants.py`:
+  - `CLOUD_RUN_URL`: "https://run-density-ln4r3sfkha-uc.a.run.app"
+  - `LOCAL_RUN_URL`: "http://localhost:8080"
+  - `TEST_SERVER_URL`: "http://testserver:8080"
+
+### **Workflow Violations**
+- **CRITICAL**: Never push directly to main without PR
+- **CRITICAL**: Never skip E2E testing steps
+- **CRITICAL**: Always use automated E2E testing scripts
+- **CRITICAL**: Always test both Cloud Run and local environments
+
 ## Production Environment Configuration
 
 ### **🚨 CRITICAL: PRODUCTION URLS AND ENDPOINTS**

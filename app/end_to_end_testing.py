@@ -20,6 +20,7 @@ import glob
 from typing import Dict, List, Tuple, Any
 from fastapi.testclient import TestClient
 from app.main import app, APP_VERSION
+from app.constants import CLOUD_RUN_URL, LOCAL_RUN_URL, TEST_SERVER_URL
 import io
 import sys
 from datetime import datetime
@@ -205,7 +206,7 @@ def format_e2e_report_as_markdown(raw_output: str, test_results: Dict[str, Any],
 📝 **Flow Runner Analysis**: Flow Runner detailed analysis is not included in automated tests due to computational requirements. Flow Runner reports can be run locally (not currently supported in production) using:
 
 ```bash
-curl -X POST 'http://localhost:8000/api/flow-audit' \\
+curl -X POST '{LOCAL_RUN_URL}/api/flow-audit' \\
   -H 'Content-Type: application/json' \\
   -d '{{"paceCsv": "data/runners.csv", "segmentsCsv": "data/segments_new.csv", "startTimes": {{"Full": 420, "10K": 440, "Half": 460}}}}'
 ```
@@ -226,11 +227,10 @@ def get_test_environment_url() -> str:
     # Check if we should test against production Cloud Run
     test_cloud = os.getenv('TEST_CLOUD_RUN', '').lower() == 'true'
     if test_cloud:
-        cloud_url = os.getenv('CLOUD_RUN_URL', 'https://run-density-ln4r3sfkha-uc.a.run.app')
-        return f"{cloud_url} (Cloud Run Production)"
+        return f"{CLOUD_RUN_URL} (Cloud Run Production)"
     
     # Default to local TestClient
-    return "http://testserver (local TestClient)"
+    return f"{TEST_SERVER_URL} (local TestClient)"
 
 
 def get_created_files() -> List[str]:
@@ -271,7 +271,6 @@ def test_api_endpoints(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     
     # Determine if we're testing against Cloud Run or local
     test_cloud = os.getenv('TEST_CLOUD_RUN', '').lower() == 'true'
-    cloud_url = os.getenv('CLOUD_RUN_URL', 'https://run-density-ln4r3sfkha-uc.a.run.app')
     
     results = {}
     
@@ -280,8 +279,8 @@ def test_api_endpoints(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     
     if test_cloud:
         # Test against Cloud Run production
-        health_response = requests.get(f'{cloud_url}/health', timeout=30)
-        ready_response = requests.get(f'{cloud_url}/ready', timeout=30)
+        health_response = requests.get(f'{CLOUD_RUN_URL}/health', timeout=30)
+        ready_response = requests.get(f'{CLOUD_RUN_URL}/ready', timeout=30)
     else:
         # Test against local TestClient
         client = TestClient(app)
@@ -332,9 +331,9 @@ def test_api_endpoints(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     
     if test_cloud:
         # Test against Cloud Run production with longer timeouts
-        density_response = requests.post(f'{cloud_url}/api/density-report', json=density_payload, timeout=300)
-        temporal_report_response = requests.post(f'{cloud_url}/api/temporal-flow-report', json=flow_payload, timeout=300)
-        temporal_flow_response = requests.post(f'{cloud_url}/api/temporal-flow', json=flow_payload, timeout=300)
+        density_response = requests.post(f'{CLOUD_RUN_URL}/api/density-report', json=density_payload, timeout=300)
+        temporal_report_response = requests.post(f'{CLOUD_RUN_URL}/api/temporal-flow-report', json=flow_payload, timeout=300)
+        temporal_flow_response = requests.post(f'{CLOUD_RUN_URL}/api/temporal-flow', json=flow_payload, timeout=300)
     else:
         # Test against local TestClient
         density_response = client.post('/api/density-report', json=density_payload)
@@ -755,7 +754,7 @@ def run_streamlined_tests(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     print()
     print("📝 NOTE: Flow Runner detailed analysis is not included in automated tests due to computational requirements.")
     print("   Flow Runner reports can be run locally (not currently supported in production) using:")
-    print("   curl -X POST 'http://localhost:8000/api/flow-audit' \\")
+    print(f"   curl -X POST '{LOCAL_RUN_URL}/api/flow-audit' \\")
     print("     -H 'Content-Type: application/json' \\")
     print("     -d '{\"paceCsv\": \"data/runners.csv\", \"segmentsCsv\": \"data/segments_new.csv\", \"startTimes\": {\"Full\": 420, \"10K\": 440, \"Half\": 460}}'")
     print()
@@ -860,7 +859,7 @@ def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any
     print()
     print("📝 NOTE: Flow Runner detailed analysis is not included in automated tests due to computational requirements.")
     print("   Flow Runner reports can be run locally (not currently supported in production) using:")
-    print("   curl -X POST 'http://localhost:8000/api/flow-audit' \\")
+    print(f"   curl -X POST '{LOCAL_RUN_URL}/api/flow-audit' \\")
     print("     -H 'Content-Type: application/json' \\")
     print("     -d '{\"paceCsv\": \"data/runners.csv\", \"segmentsCsv\": \"data/segments_new.csv\", \"startTimes\": {\"Full\": 420, \"10K\": 440, \"Half\": 460}}'")
     print()
