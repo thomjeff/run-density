@@ -998,13 +998,13 @@ def calculate_convergence_zone_overlaps_original(
     # or if we need to use normalized approach (for segments like F1)
     if from_km_a <= cp_km <= to_km_a:
         # Convergence point is within Event A's range - use absolute approach
-    s_cp = (cp_km - from_km_a) / max(len_a, 1e-9)
+        s_cp = (cp_km - from_km_a) / max(len_a, 1e-9)
         s_cp, clamp_reason = clamp_normalized_fraction(s_cp, "convergence_point_")
     
         # Calculate conflict zone in normalized space
-    conflict_length_km = conflict_length_m / 1000.0  # Convert meters to km
-    conflict_half_km = conflict_length_km / 2.0
-    
+        conflict_length_km = conflict_length_m / 1000.0  # Convert meters to km
+        conflict_half_km = conflict_length_km / 2.0
+        
         # Convert conflict zone to normalized fractions
         # Use proportional tolerance: 5% of shorter segment, minimum 50m
         min_segment_len = min(len_a, len_b)
@@ -1021,11 +1021,11 @@ def calculate_convergence_zone_overlaps_original(
             s_end = min(1.0, s_cp + 0.05)    # 5% of segment
         
         # Convert normalized conflict zone to each event's absolute coordinates
-    cp_km_a_start = from_km_a + s_start * len_a
-    cp_km_a_end = from_km_a + s_end * len_a
+        cp_km_a_start = from_km_a + s_start * len_a
+        cp_km_a_end = from_km_a + s_end * len_a
 
-    cp_km_b_start = from_km_b + s_start * len_b
-    cp_km_b_end = from_km_b + s_end * len_b
+        cp_km_b_start = from_km_b + s_start * len_b
+        cp_km_b_end = from_km_b + s_end * len_b
     else:
         # Convergence point is outside Event A's range - use normalized approach
         # This handles cases where convergence was detected in normalized space
@@ -1176,8 +1176,8 @@ def calculate_convergence_zone_overlaps_original(
                 temporal_overlap = (start_time_a < end_time_b and start_time_b < end_time_a)
                 
                 if temporal_overlap:
-                a_bib = df_a.iloc[i]["runner_id"]
-                b_bib = df_b.iloc[j]["runner_id"]
+                    a_bib = df_a.iloc[i]["runner_id"]
+                    b_bib = df_b.iloc[j]["runner_id"]
                     
                     # Always count co-presence
                     a_bibs_copresence.add(a_bib)
