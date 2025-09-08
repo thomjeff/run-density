@@ -555,9 +555,9 @@ def test_report_content_quality() -> Dict[str, Any]:
             density_content = f.read()
         
         density_checks = {
-            'Proper segment names (A1a: Start to Queen/Regent)': 'A1a: Start to Queen/Regent' in density_content,
+            'Proper segment names (A1: Start to Queen/Regent)': 'A1: Start to Queen/Regent' in density_content,
             'No unknown segments': 'Unknown:' not in density_content,
-            'Proper counts (Total Segments: 20)': '**Total Segments:** 20' in density_content and '**Processed Segments:** 20' in density_content
+            'Proper counts (Total Segments: 22)': '**Total Segments:** 22' in density_content and '**Processed Segments:** 22' in density_content
         }
         
         results['density'] = density_checks
@@ -693,6 +693,12 @@ def run_streamlined_tests(start_times: Dict[str, int] = None) -> Dict[str, Any]:
         print("⚠️  Some tests failed - review before production deployment")
     
     print()
+    print("📝 NOTE: Flow Runner detailed analysis is not included in automated tests due to computational requirements.")
+    print("   Flow Runner reports can be run locally (not currently supported in production) using:")
+    print("   curl -X POST 'http://localhost:8000/api/flow-audit' \\")
+    print("     -H 'Content-Type: application/json' \\")
+    print("     -d '{\"paceCsv\": \"data/runners.csv\", \"segmentsCsv\": \"data/segments_new.csv\", \"startTimes\": {\"Full\": 420, \"10K\": 440, \"Half\": 460}}'")
+    print()
     print("=== STREAMLINED END-TO-END TESTING COMPLETE ===")
     
     return all_results
@@ -785,6 +791,12 @@ def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any
     else:
         print("⚠️  Some tests failed - review before production deployment")
     
+    print()
+    print("📝 NOTE: Flow Runner detailed analysis is not included in automated tests due to computational requirements.")
+    print("   Flow Runner reports can be run locally (not currently supported in production) using:")
+    print("   curl -X POST 'http://localhost:8000/api/flow-audit' \\")
+    print("     -H 'Content-Type: application/json' \\")
+    print("     -d '{\"paceCsv\": \"data/runners.csv\", \"segmentsCsv\": \"data/segments_new.csv\", \"startTimes\": {\"Full\": 420, \"10K\": 440, \"Half\": 460}}'")
     print()
     print("=== END-TO-END TESTING COMPLETE ===")
     
