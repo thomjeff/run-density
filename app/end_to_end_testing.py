@@ -20,6 +20,61 @@ import glob
 from typing import Dict, List, Tuple, Any
 from fastapi.testclient import TestClient
 from app.main import app
+import io
+import sys
+from datetime import datetime
+
+
+class OutputCapture:
+    """Context manager to capture print output and save to file."""
+    
+    def __init__(self, file_path: str):
+        self.file_path = file_path
+        self.original_stdout = None
+        self.captured_output = None
+        
+    def __enter__(self):
+        self.original_stdout = sys.stdout
+        self.captured_output = io.StringIO()
+        sys.stdout = self.captured_output
+        return self
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        sys.stdout = self.original_stdout
+        
+        # Save captured output to file
+        os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
+        with open(self.file_path, 'w') as f:
+            f.write(self.captured_output.getvalue())
+            
+        # Also print to console
+        print(self.captured_output.getvalue())
+
+
+def get_test_environment_url() -> str:
+    """Determine the test environment URL based on how the test is running."""
+    # For now, we're using TestClient which runs locally
+    # In the future, this could be enhanced to detect actual environment
+    return "http://testserver (local TestClient)"
+
+
+def get_created_files() -> List[str]:
+    """Get list of files created during the test run."""
+    files = []
+    
+    # Find latest temporal flow files
+    temporal_md_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.md')
+    temporal_csv_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.csv')
+    density_md_files = glob.glob('reports/analysis/*/????-??-??-????-Density.md')
+    
+    if temporal_md_files:
+        files.append(max(temporal_md_files, key=os.path.getctime))
+    if temporal_csv_files:
+        files.append(max(temporal_csv_files, key=os.path.getctime))
+    if density_md_files:
+        files.append(max(density_md_files, key=os.path.getctime))
+        
+    return files
 
 
 def test_api_endpoints(start_times: Dict[str, int] = None) -> Dict[str, Any]:
@@ -443,13 +498,33 @@ def run_streamlined_tests(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     
     overall_success = api_success and report_file_success and content_quality_success
     
+    # Get test metadata
+    test_timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+    test_date = datetime.now().strftime("%Y-%m-%d")
+    environment_url = get_test_environment_url()
+    created_files = get_created_files()
+    
+    # Check actual vs expected validation
+    actual_vs_expected_success = True
+    if 'actual_vs_expected' in all_results:
+        actual_vs_expected_data = all_results['actual_vs_expected']
+        if isinstance(actual_vs_expected_data, dict) and 'all_validations_passed' in actual_vs_expected_data:
+            actual_vs_expected_success = actual_vs_expected_data['all_validations_passed']
+    
     print("=== FINAL SUMMARY ===")
+    print(f"Date: {test_timestamp}")
+    print(f"Environment: {environment_url}")
     print(f"API Endpoints: {'✅ PASSED' if api_success else '❌ FAILED'}")
     print(f"Report Files: {'✅ PASSED' if report_file_success else '❌ FAILED'}")
+    if created_files:
+        print("   Files Created:")
+        for file_path in created_files:
+            print(f"   - {file_path}")
+    print(f"Actual to Expected: {'✅ PASSED' if actual_vs_expected_success else '❌ FAILED'}")
     print(f"Content Quality: {'✅ PASSED' if content_quality_success else '❌ FAILED'}")
     print()
     
-    if overall_success:
+    if overall_success and actual_vs_expected_success:
         print("🎉 STREAMLINED TESTS PASSED! Core system is ready!")
     else:
         print("⚠️  Some tests failed - review before production deployment")
@@ -503,13 +578,33 @@ def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any
     
     overall_success = api_success and report_file_success and content_quality_success
     
+    # Get test metadata
+    test_timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+    test_date = datetime.now().strftime("%Y-%m-%d")
+    environment_url = get_test_environment_url()
+    created_files = get_created_files()
+    
+    # Check actual vs expected validation
+    actual_vs_expected_success = True
+    if 'actual_vs_expected' in all_results:
+        actual_vs_expected_data = all_results['actual_vs_expected']
+        if isinstance(actual_vs_expected_data, dict) and 'all_validations_passed' in actual_vs_expected_data:
+            actual_vs_expected_success = actual_vs_expected_data['all_validations_passed']
+    
     print("=== FINAL SUMMARY ===")
+    print(f"Date: {test_timestamp}")
+    print(f"Environment: {environment_url}")
     print(f"API Endpoints: {'✅ PASSED' if api_success else '❌ FAILED'}")
     print(f"Report Files: {'✅ PASSED' if report_file_success else '❌ FAILED'}")
+    if created_files:
+        print("   Files Created:")
+        for file_path in created_files:
+            print(f"   - {file_path}")
+    print(f"Actual to Expected: {'✅ PASSED' if actual_vs_expected_success else '❌ FAILED'}")
     print(f"Content Quality: {'✅ PASSED' if content_quality_success else '❌ FAILED'}")
     print()
     
-    if overall_success:
+    if overall_success and actual_vs_expected_success:
         print("🎉 ALL TESTS PASSED! System is ready for production!")
     else:
         print("⚠️  Some tests failed - review before production deployment")
@@ -521,6 +616,17 @@ def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any
 
 
 if __name__ == "__main__":
-    # Run streamlined tests by default (faster, focuses on core functionality)
-    # Use run_comprehensive_tests() for full testing including all optional components
-    results = run_streamlined_tests()
+    # Generate timestamp for file naming
+    test_timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+    test_date = datetime.now().strftime("%Y-%m-%d")
+    
+    # Create output file path
+    output_file = f"reports/test-results/{test_date}/{test_timestamp}-E2E.md"
+    
+    # Run tests with output capture
+    with OutputCapture(output_file):
+        # Run streamlined tests by default (faster, focuses on core functionality)
+        # Use run_comprehensive_tests() for full testing including all optional components
+        results = run_streamlined_tests()
+    
+    print(f"\n📄 E2E Test Results saved to: {output_file}")
