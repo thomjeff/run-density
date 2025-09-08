@@ -6,6 +6,40 @@ This document captures critical configuration details, workflows, and operationa
 
 **IMPORTANT**: For fundamental application concepts (start times, data structures, time calculations), see `docs/Application Fundamentals.md`. This document focuses on configuration and workflow.
 
+## Production Environment Configuration
+
+### **🚨 CRITICAL: PRODUCTION URLS AND ENDPOINTS**
+
+**NEVER guess production URLs or endpoints.** Always use the documented production environment details.
+
+**Production Cloud Runner Service:**
+- **Base URL**: `https://run-density-ln4r3sfkha-uc.a.run.app`
+- **Health Check**: `GET /health` - Returns `{"ok": true, "status": "healthy", "version": "X.X.X"}`
+- **Ready Check**: `GET /ready` - Returns `{"ok": true, "density_loaded": true, "overlap_loaded": true}`
+- **Temporal Flow API**: `POST /api/temporal-flow`
+- **Temporal Flow Report API**: `POST /api/temporal-flow-report`
+- **Density Report API**: `POST /api/density-report`
+
+**Production Testing Commands:**
+```bash
+# Health check
+BASE="https://run-density-ln4r3sfkha-uc.a.run.app"
+curl -fsS "$BASE/health" | jq -e '.ok == true' >/dev/null && echo "health OK"
+
+# Ready check  
+curl -fsS "$BASE/ready" | jq -e '.ok == true and .density_loaded and .overlap_loaded' >/dev/null && echo "ready OK"
+
+# API test
+curl -X POST "$BASE/api/temporal-flow" -H "Content-Type: application/json" \
+  -d '{"paceCsv": "data/runners.csv", "segmentsCsv": "data/segments_new.csv", 
+       "startTimes": {"Full": 420, "10K": 440, "Half": 460}, 
+       "minOverlapDuration": 10, "conflictLengthM": 100}'
+```
+
+**⚠️ NEVER use these incorrect URLs:**
+- ❌ `https://run-density-7g2q.onrender.com` (old/incorrect)
+- ❌ Any other guessed URLs
+
 ## Data Formatting Standards
 
 ### Decimal Places Rule
@@ -286,9 +320,10 @@ results = test_report_content_quality()
 12. **🚨 BRANCH CREATION WITHOUT TESTING** - NEVER create branches without first testing the source branch. This leads to broken branches built on broken foundations.
 13. **🚨 MERGING WITHOUT APPROVAL** - NEVER merge PRs to main without explicit user approval. Always get permission before merging.
 14. **🚨 MANUAL API TESTING** - NEVER manually construct curl commands or guess API parameters. Always use automated test scripts (`python3 -m app.end_to_end_testing`). Manual API calls waste time and lead to errors.
+15. **🚨 GUESSING PRODUCTION URLS** - NEVER guess production URLs or endpoints. Always use the documented production environment details in this configuration file. URL guessing wastes time and leads to failed tests.
 
 ## Last Updated
-2025-09-07 - Added critical automated testing rules: NEVER manually construct API calls, always use automated test scripts to avoid time waste and errors
+2025-09-07 - Added production environment configuration and URL guessing prevention rules to avoid time waste and failed tests
 
 ## Related Issues
 - #32 - Distance gaps fix
