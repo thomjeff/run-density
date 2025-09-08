@@ -16,10 +16,12 @@ try:
     from .density import analyze_density_segments, DensityConfig
     from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS
     from .report_utils import get_report_paths
+    from .density_template_engine import DensityTemplateEngine, create_template_context
 except ImportError:
     from density import analyze_density_segments, DensityConfig
     from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS
     from report_utils import get_report_paths
+    from density_template_engine import DensityTemplateEngine, create_template_context
 import pandas as pd
 from datetime import datetime
 
@@ -246,6 +248,10 @@ def generate_segment_section(
     content.extend(generate_combined_view(segment_data))
     content.append("")
     
+    # Template-driven narratives
+    content.extend(generate_template_narratives(segment_id, segment_data))
+    content.append("")
+    
     # Per-event analysis if requested
     if include_per_event and "per_event" in segment_data:
         content.extend(generate_per_event_analysis(segment_data, event_order))
@@ -255,6 +261,75 @@ def generate_segment_section(
     content.extend(generate_combined_sustained_periods(segment_data))
     
     return content
+
+
+def generate_template_narratives(segment_id: str, segment_data: Dict[str, Any]) -> List[str]:
+    """Generate template-driven narratives for a segment."""
+    content = []
+    
+    try:
+        # Initialize template engine
+        template_engine = DensityTemplateEngine()
+        
+        # Determine segment type (simplified mapping for now)
+        segment_type = _determine_segment_type(segment_id, segment_data)
+        flow_type = "default"  # Could be enhanced based on flow analysis
+        
+        # Create template context
+        context = create_template_context(segment_id, segment_data, segment_type, flow_type)
+        
+        # Generate narratives
+        drivers = template_engine.generate_drivers(context)
+        mitigations = template_engine.generate_mitigations(context)
+        ops_insights = template_engine.generate_ops_insights(context)
+        
+        # Add to content
+        content.append("### Operational Insights")
+        content.append("")
+        content.append("**Drivers:**")
+        content.append(f"- {drivers}")
+        content.append("")
+        content.append("**Mitigations:**")
+        content.append(f"- {mitigations}")
+        content.append("")
+        
+        if ops_insights:
+            content.append("**Ops Box:**")
+            for key, value in ops_insights.items():
+                content.append(f"- **{key.title()}:** {value}")
+            content.append("")
+        
+    except Exception as e:
+        # Fallback if template engine fails
+        content.append("### Operational Insights")
+        content.append("")
+        content.append("**Drivers:**")
+        content.append(f"- High runner density in {segment_data.get('seg_label', 'Unknown')} segment")
+        content.append("")
+        content.append("**Mitigations:**")
+        content.append("- Consider additional crowd management measures")
+        content.append("")
+    
+    return content
+
+
+def _determine_segment_type(segment_id: str, segment_data: Dict[str, Any]) -> str:
+    """Determine segment type for template matching."""
+    seg_label = segment_data.get("seg_label", "").lower()
+    
+    # Simple mapping based on segment labels
+    if "start" in seg_label or segment_id.startswith("A"):
+        return "start"
+    elif "bridge" in seg_label or "mill" in seg_label:
+        return "bridge"
+    elif "turn" in seg_label:
+        return "turn"
+    elif "finish" in seg_label or segment_id.startswith("M"):
+        return "finish"
+    elif "trail" in seg_label or "aberdeen" in seg_label:
+        return "trail"
+    else:
+        return "default"
 
 
 def generate_combined_view(segment: Dict[str, Any]) -> List[str]:
