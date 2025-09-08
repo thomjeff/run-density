@@ -19,7 +19,7 @@ import os
 import glob
 from typing import Dict, List, Tuple, Any
 from fastapi.testclient import TestClient
-from app.main import app
+from app.main import app, APP_VERSION
 import io
 import sys
 from datetime import datetime
@@ -106,6 +106,7 @@ def format_e2e_report_as_markdown(raw_output: str, test_results: Dict[str, Any],
 
 **Generated:** {formatted_time}
 **Environment:** {environment_url}
+**Version:** {APP_VERSION}
 **Test Type:** Streamlined End-to-End Testing
 **Overall Status:** {'✅ PASSED' if overall_success else '❌ FAILED'}
 
@@ -673,6 +674,7 @@ def run_streamlined_tests(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     print("=== FINAL SUMMARY ===")
     print(f"Date: {test_timestamp}")
     print(f"Environment: {environment_url}")
+    print(f"Version: {APP_VERSION}")
     print(f"API Endpoints: {'✅ PASSED' if api_success else '❌ FAILED'}")
     print(f"Report Files: {'✅ PASSED' if report_file_success else '❌ FAILED'}")
     if created_files:
@@ -772,6 +774,7 @@ def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any
     print("=== FINAL SUMMARY ===")
     print(f"Date: {test_timestamp}")
     print(f"Environment: {environment_url}")
+    print(f"Version: {APP_VERSION}")
     print(f"API Endpoints: {'✅ PASSED' if api_success else '❌ FAILED'}")
     print(f"Report Files: {'✅ PASSED' if report_file_success else '❌ FAILED'}")
     if created_files:
