@@ -278,8 +278,8 @@ def calculate_convergence_zone_overlaps_with_binning(
     segment_key = f"{event_a}_vs_{event_b}"  # Will be enhanced with segment ID later
     
     if FLAGS.ENABLE_BIN_SELECTOR_UNIFICATION:
-        # Use unified selector logic
-        # Normalize inputs to prevent threshold drift
+        # Use unified selector logic (normalization hoisted out of inner loops)
+        # Normalize inputs once per segment to prevent threshold drift
         norm_inputs = normalize(conflict_length_m, "m", overlap_duration_minutes * 60, "s")
         
         # Use unified selector to choose calculation path
@@ -295,8 +295,8 @@ def calculate_convergence_zone_overlaps_with_binning(
         chosen_path = "BINNED" if (use_time_bins or use_distance_bins) else "ORIGINAL"
         norm_inputs = None
     
-    # Debug logging for M1
-    if event_a == "Half" and event_b == "10K":
+    # Debug logging for M1 (sampled to avoid hot-loop overhead)
+    if event_a == "Half" and event_b == "10K" and hash(segment_key) % 100 == 0:  # 1% sampling
         print(f"🔍 BINNING DECISION DEBUG:")
         print(f"  Segment key: {segment_key}")
         if norm_inputs is not None:
@@ -336,8 +336,8 @@ def calculate_convergence_zone_overlaps_with_binning(
     # Extract results for telemetry
     overtakes_a, overtakes_b, copresence_a, copresence_b, bibs_a, bibs_b, unique_encounters, participants_involved = results
     
-    # Add telemetry logging for algorithm consistency verification
-    if event_a == "Half" and event_b == "10K":  # M1 debug case
+    # Add telemetry logging for algorithm consistency verification (sampled)
+    if event_a == "Half" and event_b == "10K" and hash(segment_key) % 100 == 0:  # 1% sampling
         if norm_inputs is not None:
             telemetry_log = pub_decision_log(
                 segment_key, chosen_path, norm_inputs.conflict_len_m, norm_inputs.overlap_dur_s,
@@ -998,12 +998,12 @@ def calculate_convergence_zone_overlaps_original(
     # or if we need to use normalized approach (for segments like F1)
     if from_km_a <= cp_km <= to_km_a:
         # Convergence point is within Event A's range - use absolute approach
-        s_cp = (cp_km - from_km_a) / max(len_a, 1e-9)
+    s_cp = (cp_km - from_km_a) / max(len_a, 1e-9)
         s_cp, clamp_reason = clamp_normalized_fraction(s_cp, "convergence_point_")
     
         # Calculate conflict zone in normalized space
-        conflict_length_km = conflict_length_m / 1000.0  # Convert meters to km
-        conflict_half_km = conflict_length_km / 2.0
+    conflict_length_km = conflict_length_m / 1000.0  # Convert meters to km
+    conflict_half_km = conflict_length_km / 2.0
     
         # Convert conflict zone to normalized fractions
         # Use proportional tolerance: 5% of shorter segment, minimum 50m
@@ -1021,11 +1021,11 @@ def calculate_convergence_zone_overlaps_original(
             s_end = min(1.0, s_cp + 0.05)    # 5% of segment
         
         # Convert normalized conflict zone to each event's absolute coordinates
-        cp_km_a_start = from_km_a + s_start * len_a
-        cp_km_a_end = from_km_a + s_end * len_a
+    cp_km_a_start = from_km_a + s_start * len_a
+    cp_km_a_end = from_km_a + s_end * len_a
 
-        cp_km_b_start = from_km_b + s_start * len_b
-        cp_km_b_end = from_km_b + s_end * len_b
+    cp_km_b_start = from_km_b + s_start * len_b
+    cp_km_b_end = from_km_b + s_end * len_b
     else:
         # Convergence point is outside Event A's range - use normalized approach
         # This handles cases where convergence was detected in normalized space
@@ -1176,8 +1176,8 @@ def calculate_convergence_zone_overlaps_original(
                 temporal_overlap = (start_time_a < end_time_b and start_time_b < end_time_a)
                 
                 if temporal_overlap:
-                    a_bib = df_a.iloc[i]["runner_id"]
-                    b_bib = df_b.iloc[j]["runner_id"]
+                a_bib = df_a.iloc[i]["runner_id"]
+                b_bib = df_b.iloc[j]["runner_id"]
                     
                     # Always count co-presence
                     a_bibs_copresence.add(a_bib)
@@ -1188,8 +1188,8 @@ def calculate_convergence_zone_overlaps_original(
                         a_bibs_overtakes.add(a_bib)
                         b_bibs_overtakes.add(b_bib)
                     
-                    # Track unique pairs (ordered to avoid duplicates)
-                    unique_pairs.add((a_bib, b_bib))
+                # Track unique pairs (ordered to avoid duplicates)
+                unique_pairs.add((a_bib, b_bib))
 
     # Calculate participants involved (union of all runners who had encounters)
     all_a_bibs = a_bibs_overtakes.union(a_bibs_copresence)
@@ -1571,6 +1571,15 @@ def analyze_temporal_flow_segments(
     else:
         # This is the old format, use as-is
         all_segments = segments_df.copy()
+    
+    # Single-segment short-circuit for debugging (Step 5 of triage plan)
+    from .config_algo_consistency import FLAGS
+    if FLAGS.SINGLE_SEGMENT_MODE:
+        print(f"🔧 SINGLE-SEGMENT MODE: Processing only {FLAGS.SINGLE_SEGMENT_MODE}")
+        all_segments = all_segments[all_segments['seg_id'] == FLAGS.SINGLE_SEGMENT_MODE]
+        if all_segments.empty:
+            print(f"⚠️ Segment {FLAGS.SINGLE_SEGMENT_MODE} not found, processing all segments")
+            all_segments = segments_df.copy()
     
     results = {
         "ok": True,
