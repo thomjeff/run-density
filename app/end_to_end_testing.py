@@ -89,6 +89,13 @@ def format_e2e_report_as_markdown(raw_output: str, test_results: Dict[str, Any],
             actual_vs_expected_success = actual_vs_expected_data['all_validations_passed']
             actual_segments = actual_vs_expected_data.get('actual_segments', 0)
             expected_segments = actual_vs_expected_data.get('expected_segments', 0)
+    elif 'actual_vs_expected' in test_results:
+        # Fallback to direct path if content_quality path doesn't exist
+        actual_vs_expected_data = test_results['actual_vs_expected']
+        if isinstance(actual_vs_expected_data, dict) and 'all_validations_passed' in actual_vs_expected_data:
+            actual_vs_expected_success = actual_vs_expected_data['all_validations_passed']
+            actual_segments = actual_vs_expected_data.get('actual_segments', 0)
+            expected_segments = actual_vs_expected_data.get('expected_segments', 0)
     
     # Extract content quality results
     content_quality_success = False
