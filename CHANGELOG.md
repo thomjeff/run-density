@@ -1,5 +1,46 @@
 # Changelog
 
+## [v1.6.11] - 2025-09-08
+
+### Density Report Enhancement & Template Engine Implementation
+- **Critical Data Quality Fixes**: Resolved major data quality issues in Density reports
+  - **Peak Concurrency Fix**: Corrected "Peak Concurrency = 0" to show realistic values (e.g., 368, 618, 912)
+  - **LOS Thresholds Update**: Aligned Level of Service thresholds with v2 rulebook specifications
+  - **Attribute Mapping Fixes**: Corrected combined view summary attribute names (active_peak_concurrency, active_peak_areal, etc.)
+  - **Runner Count Accuracy**: Fixed Event Start Times to show actual participants (368, 618, 912) instead of misleading total registrations
+- **Template Engine Implementation**: Created comprehensive template-driven narrative system
+  - **New Module**: `app/density_template_engine.py` with YAML rulebook loading and fallback templates
+  - **Operational Insights**: Added segment-specific drivers, mitigations, and Ops Box content
+  - **Enhanced Segment Detection**: Improved segment type classification (start, bridge, turn, finish, trail)
+  - **Template Context**: Dynamic context creation with peak concurrency, LOS scores, and timing data
+- **Report Formatting Improvements**: Enhanced readability and professional presentation
+  - **Density Report**: Fixed 6 formatting issues including header spacing, N/A values, and LOS thresholds table
+  - **Flow Report**: Improved header formatting and convergence point percentage display (0.48% vs 0.48)
+  - **Consistent Styling**: Unified formatting between Flow and Density reports
+  - **Complete LOS Information**: Added comprehensive Level of Service thresholds table with all 6 levels (A-F)
+
+### Technical Implementation
+- **Template Engine Features**:
+  - YAML rulebook loading with graceful fallback to enhanced default templates
+  - Segment-specific narrative generation (start, bridge, turn, finish, trail, default)
+  - Complete Ops Box content (Access, Medical, Traffic, Peak guidance)
+  - Variable interpolation with context data (peak_concurrency, los_score, peak_window_clock)
+- **Data Quality Enhancements**:
+  - Corrected attribute access patterns in combined view summaries
+  - Fixed runner count calculations and display formatting
+  - Removed confusing "Events Present" column from Sustained Periods tables
+  - Added total participants row in Event Start Times (1,898 total)
+- **Report Generation**:
+  - Enhanced `app/density_report.py` with template engine integration
+  - Improved `app/temporal_flow_report.py` formatting consistency
+  - Professional markdown formatting with proper spacing and tables
+
+### Validation & Testing
+- **E2E Testing**: All automated tests passing with enhanced operational intelligence
+- **Data Verification**: Confirmed convergence point calculations (0.48% = 48% through segment)
+- **Template Validation**: Verified segment-specific narratives and Ops Box content generation
+- **Formatting Verification**: Confirmed consistent, professional report presentation
+
 ## [v1.6.9] - 2025-09-08
 
 ### Algorithm Consistency & E2E Testing Enhancements
