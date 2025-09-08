@@ -272,26 +272,39 @@ def calculate_convergence_zone_overlaps_with_binning(
     from .normalization import normalize
     from .selector import choose_path
     from .telemetry import pub_decision_log
+    from .config_algo_consistency import FLAGS
     
     # Create segment key for unified selector
     segment_key = f"{event_a}_vs_{event_b}"  # Will be enhanced with segment ID later
     
-    # Normalize inputs to prevent threshold drift
-    norm_inputs = normalize(conflict_length_m, "m", overlap_duration_minutes * 60, "s")
-    
-    # Use unified selector to choose calculation path
-    chosen_path = choose_path(segment_key, norm_inputs)
-    
-    # Map unified path to legacy binning flags
-    use_time_bins = overlap_duration_minutes > TEMPORAL_BINNING_THRESHOLD_MINUTES
-    use_distance_bins = chosen_path == "BINNED"
+    if FLAGS.ENABLE_BIN_SELECTOR_UNIFICATION:
+        # Use unified selector logic
+        # Normalize inputs to prevent threshold drift
+        norm_inputs = normalize(conflict_length_m, "m", overlap_duration_minutes * 60, "s")
+        
+        # Use unified selector to choose calculation path
+        chosen_path = choose_path(segment_key, norm_inputs)
+        
+        # Map unified path to legacy binning flags
+        use_time_bins = overlap_duration_minutes > TEMPORAL_BINNING_THRESHOLD_MINUTES
+        use_distance_bins = chosen_path == "BINNED"
+    else:
+        # Use legacy binning logic
+        use_time_bins = overlap_duration_minutes > TEMPORAL_BINNING_THRESHOLD_MINUTES
+        use_distance_bins = conflict_length_m > SPATIAL_BINNING_THRESHOLD_METERS
+        chosen_path = "BINNED" if (use_time_bins or use_distance_bins) else "ORIGINAL"
+        norm_inputs = None
     
     # Debug logging for M1
     if event_a == "Half" and event_b == "10K":
-        print(f"🔍 UNIFIED BINNING DECISION DEBUG:")
+        print(f"🔍 BINNING DECISION DEBUG:")
         print(f"  Segment key: {segment_key}")
-        print(f"  Normalized conflict length: {norm_inputs.conflict_len_m:.3f} m")
-        print(f"  Normalized overlap duration: {norm_inputs.overlap_dur_s:.3f} s")
+        if norm_inputs is not None:
+            print(f"  Normalized conflict length: {norm_inputs.conflict_len_m:.3f} m")
+            print(f"  Normalized overlap duration: {norm_inputs.overlap_dur_s:.3f} s")
+        else:
+            print(f"  Raw conflict length: {conflict_length_m:.3f} m")
+            print(f"  Raw overlap duration: {overlap_duration_minutes:.3f} min")
         print(f"  Chosen path: {chosen_path}")
         print(f"  Legacy time bins: {use_time_bins}")
         print(f"  Legacy distance bins: {use_distance_bins}")
@@ -325,11 +338,14 @@ def calculate_convergence_zone_overlaps_with_binning(
     
     # Add telemetry logging for algorithm consistency verification
     if event_a == "Half" and event_b == "10K":  # M1 debug case
-        telemetry_log = pub_decision_log(
-            segment_key, chosen_path, norm_inputs.conflict_len_m, norm_inputs.overlap_dur_s,
-            (overtakes_a, overtakes_b), (overtakes_a, overtakes_b)  # Using same for strict/raw for now
-        )
-        print(f"🔍 {telemetry_log}")
+        if norm_inputs is not None:
+            telemetry_log = pub_decision_log(
+                segment_key, chosen_path, norm_inputs.conflict_len_m, norm_inputs.overlap_dur_s,
+                (overtakes_a, overtakes_b), (overtakes_a, overtakes_b)  # Using same for strict/raw for now
+            )
+            print(f"🔍 {telemetry_log}")
+        else:
+            print(f"🔍 LEGACY BINNING: {chosen_path} -> {overtakes_a}/{overtakes_b}")
     
     return results
 
