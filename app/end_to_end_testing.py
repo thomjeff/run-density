@@ -152,8 +152,7 @@ def format_e2e_report_as_markdown(raw_output: str, test_results: Dict[str, Any],
     if 'report_files' in test_results:
         for file_type, result in test_results['report_files'].items():
             status = '✅ PASSED' if result.get('success', False) else '❌ FAILED'
-            count = result.get('count', 0)
-            report += f"- **{file_type}**: {status} ({count} files)\n"
+            report += f"- **{file_type}**: {status}\n"
     else:
         report += "- No report file results available\n"
     
@@ -360,9 +359,9 @@ def test_report_files() -> Dict[str, Any]:
         'success': len(density_md_files) > 0
     }
     
-    print(f"1. Temporal Flow MD files: {len(temporal_md_files)} {'✅' if len(temporal_md_files) > 0 else '❌'}")
-    print(f"2. Temporal Flow CSV files: {len(temporal_csv_files)} {'✅' if len(temporal_csv_files) > 0 else '❌'}")
-    print(f"3. Density Analysis MD files: {len(density_md_files)} {'✅' if len(density_md_files) > 0 else '❌'}")
+    print(f"1. Temporal Flow MD files: {'✅' if len(temporal_md_files) > 0 else '❌'}")
+    print(f"2. Temporal Flow CSV files: {'✅' if len(temporal_csv_files) > 0 else '❌'}")
+    print(f"3. Density Analysis MD files: {'✅' if len(density_md_files) > 0 else '❌'}")
     print()
     
     # Summary
@@ -563,7 +562,10 @@ def test_report_content_quality() -> Dict[str, Any]:
         results['density'] = density_checks
         
         for check, result in density_checks.items():
-            print(f"   {check}: {'✅' if result else '❌'}")
+            if 'Proper counts' in check:
+                print(f"   {check}: {'✅' if result else '❌'} (Density analyzes physical course segments, while Flow analyzes runner pairs - hence different counts)")
+            else:
+                print(f"   {check}: {'✅' if result else '❌'}")
         
     except Exception as e:
         results['density'] = {'error': str(e)}
