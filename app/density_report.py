@@ -186,11 +186,16 @@ def generate_markdown_report(
     content.append("# Improved Per-Event Density Analysis Report")
     content.append("")
     content.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    content.append(f"**Analysis Period:** {results.get('analysis_period', 'N/A')}")
+    content.append("")
+    content.append(f"**Analysis Period:** {datetime.now().strftime('%Y-%m-%d')}")
+    content.append("")
     content.append(f"**Time Bin Size:** {results.get('time_window_s', 30)} seconds")
+    content.append("")
     summary = results.get("summary", {})
     content.append(f"**Total Segments:** {summary.get('total_segments', 0)}")
+    content.append("")
     content.append(f"**Processed Segments:** {summary.get('processed_segments', 0)}")
+    content.append("")
     content.append(f"**Skipped Segments:** {summary.get('skipped_segments', 0)}")
     content.append("")
     
@@ -198,10 +203,23 @@ def generate_markdown_report(
     content.append("## Legend")
     content.append("")
     content.append("- **TOT**: Time Over Threshold (seconds above E/F LOS thresholds)")
-    content.append("- **LOS**: Level of Service (A=Comfortable, C=Moderate, E=Busy, F=Critical)")
+    content.append("- **LOS**: Level of Service (A=Comfortable, B=Good, C=Moderate, D=Busy, E=Very Busy, F=Critical)")
     content.append("- **Experienced Density**: What runners actually experience (includes co-present runners from other events)")
     content.append("- **Self Density**: Only that event's runners (not shown in this report)")
     content.append("- **Active Window**: Time period when the event has runners present in the segment")
+    content.append("")
+    
+    # LOS Thresholds Table
+    content.append("## Level of Service Thresholds")
+    content.append("")
+    content.append("| LOS | Areal Density (runners/m²) | Crowd Density (runners/m) | Description |")
+    content.append("|-----|---------------------------|--------------------------|-------------|")
+    content.append("| A | 0.00 - 0.31 | 0.00 - 0.20 | Comfortable |")
+    content.append("| B | 0.31 - 0.43 | 0.20 - 0.40 | Good |")
+    content.append("| C | 0.43 - 0.72 | 0.40 - 0.60 | Moderate |")
+    content.append("| D | 0.72 - 1.08 | 0.60 - 0.80 | Busy |")
+    content.append("| E | 1.08 - 1.63 | 0.80 - 1.00 | Very Busy |")
+    content.append("| F | 1.63+ | 1.00+ | Critical |")
     content.append("")
     
     # Event start times (showing actual participants in first segment as reference)
@@ -214,12 +232,17 @@ def generate_markdown_report(
     first_segment = next(iter(results.get("segments", {}).values()), {})
     per_event = first_segment.get("per_event", {})
     
+    total_runners = 0
     for event, start_min in event_order:
         start_time = f"{int(start_min//60):02d}:{int(start_min%60):02d}:00"
         # Use actual participant count from per_event data
         event_data = per_event.get(event, {})
         actual_runners = getattr(event_data, "n_event_runners", 0)
+        total_runners += actual_runners
         content.append(f"| {event} | {start_time} | {actual_runners:,} |")
+    
+    # Add total row
+    content.append(f"| **Total** | - | **{total_runners:,}** |")
     content.append("")
     
     # Process each segment
@@ -495,8 +518,8 @@ def generate_event_sustained_periods_table(event_data: Dict[str, Any]) -> List[s
         return content
     
     content.append("**Sustained Periods (Experienced)**")
-    content.append("| Start | End | Duration | LOS Areal | LOS Crowd | Avg Areal | Avg Crowd | Peak Conc | Events Present |")
-    content.append("|-------|-----|----------|-----------|-----------|-----------|-----------|----------|---------------|")
+    content.append("| Start | End | Duration | LOS Areal | LOS Crowd | Avg Areal | Avg Crowd | Peak Conc |")
+    content.append("|-------|-----|----------|-----------|-----------|-----------|-----------|----------|")
     
     for period in sustained_periods:
         start = period.get("start_time", "N/A")
@@ -507,11 +530,8 @@ def generate_event_sustained_periods_table(event_data: Dict[str, Any]) -> List[s
         avg_areal = period.get("avg_areal_density", 0.0)
         avg_crowd = period.get("avg_crowd_density", 0.0)
         peak_conc = period.get("peak_concurrent_runners", 0)
-        events_present = period.get("events_present", [])
         
-        events_str = ", ".join(events_present) if events_present else "N/A"
-        
-        content.append(f"| {start} | {end} | {duration:.1f} min | {los_areal} | {los_crowd} | {avg_areal:.3f} | {avg_crowd:.3f} | {peak_conc:,} | {events_str} |")
+        content.append(f"| {start} | {end} | {duration:.1f} min | {los_areal} | {los_crowd} | {avg_areal:.3f} | {avg_crowd:.3f} | {peak_conc:,} |")
     
     return content
 
