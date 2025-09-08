@@ -2507,6 +2507,10 @@ def generate_flow_audit_for_segment(
         print(f"  Unique encounters: {unique_encounters}")
         print(f"  Participants involved: {participants_involved}")
     
+    # Store original results for comparison
+    original_overtakes_a = overtakes_a
+    original_overtakes_b = overtakes_b
+    
     # Generate Flow Audit data
     print(f"🔍 {seg_id} {event_a} vs {event_b} FLOW AUDIT DATA GENERATION:")
     
@@ -2591,6 +2595,22 @@ def generate_flow_audit_for_segment(
         print(f"    - Stats: {audit_results['stats']['overlapped_pairs']} overlaps, {audit_results['stats']['raw_pass']} raw passes, {audit_results['stats']['strict_pass']} strict passes")
         
         runner_audit_data = audit_results
+        
+        # STRICT-FIRST PUBLICATION RULE (Phase 2 Fix)
+        # Never publish raw pass counts when strict passes = 0, unless explicitly overridden
+        if runner_audit_data and 'stats' in runner_audit_data:
+            stats = runner_audit_data['stats']
+            strict_passes = stats.get('strict_pass', 0)
+            raw_passes = stats.get('raw_pass', 0)
+            
+            # Apply strict-first rule: if strict passes = 0, publish 0 (not raw)
+            if strict_passes == 0 and raw_passes > 0:
+                print(f"🔍 STRICT-FIRST RULE APPLIED for {seg_id} {event_a} vs {event_b}:")
+                print(f"  Raw passes: {raw_passes}")
+                print(f"  Strict passes: {strict_passes}")
+                print(f"  Publishing 0/0 (strict) instead of {original_overtakes_a}/{original_overtakes_b} (raw)")
+                overtakes_a = 0
+                overtakes_b = 0
         
     except Exception as e:
         print(f"  ⚠️ Runner audit generation failed: {e}")
