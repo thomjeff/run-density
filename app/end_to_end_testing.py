@@ -105,9 +105,13 @@ def format_e2e_report_as_markdown(raw_output: str, test_results: Dict[str, Any],
     report = f"""# End-to-End Testing Report
 
 **Generated:** {formatted_time}
+
 **Environment:** {environment_url}
+
 **Version:** {APP_VERSION}
+
 **Test Type:** Streamlined End-to-End Testing
+
 **Overall Status:** {'✅ PASSED' if overall_success else '❌ FAILED'}
 
 ## Test Summary
