@@ -1172,13 +1172,14 @@ def calculate_convergence_zone_overlaps_original(
                 # Runner B passes Runner A if B starts behind A but finishes ahead of A
                 b_passes_a = (start_time_b > start_time_a and end_time_b < end_time_a)
                 
+                # Get runner IDs for tracking
+                a_bib = df_a.iloc[i]["runner_id"]
+                b_bib = df_b.iloc[j]["runner_id"]
+                
                 # Check for temporal overlap (co-presence)
                 temporal_overlap = (start_time_a < end_time_b and start_time_b < end_time_a)
                 
                 if temporal_overlap:
-                    a_bib = df_a.iloc[i]["runner_id"]
-                    b_bib = df_b.iloc[j]["runner_id"]
-                    
                     # Always count co-presence
                     a_bibs_copresence.add(a_bib)
                     b_bibs_copresence.add(b_bib)
