@@ -90,7 +90,7 @@ class FlowAuditRequest(BaseModel):
     conflictLengthM: float = DEFAULT_CONFLICT_LENGTH_METERS
     outputDir: str = "reports/analysis"
 
-app = FastAPI(title="run-density", version="v1.6.0")
+app = FastAPI(title="run-density", version="v1.6.7")
 APP_VERSION = os.getenv("APP_VERSION", app.version)
 GIT_SHA = os.getenv("GIT_SHA", "local")
 BUILD_AT = os.getenv("BUILD_AT", datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z")
@@ -108,7 +108,7 @@ except Exception as e:
 @app.get("/")
 async def root():
     return {
-        "message": "run-density API v1.6.0",
+        "message": "run-density API v1.6.7",
         "version": APP_VERSION,
         "architecture": "split",
         "endpoints": ["/api/density", "/api/temporal-flow", "/api/report", "/api/density-report", "/api/temporal-flow-report", "/api/flow-audit", "/health", "/ready"]
