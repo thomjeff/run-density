@@ -2497,7 +2497,30 @@ def generate_flow_audit_for_segment(
     
     # Calculate overlaps and overtakes
     effective_cp_km = cp_km
-    overlap_duration_minutes = 60.0  # Default overlap duration
+    
+    # Calculate overlap duration dynamically (same as Main Analysis)
+    first_entry_a, last_exit_a, first_entry_b, last_exit_b, overlap_window_duration = calculate_entry_exit_times(
+        df_a, df_b, event_a, event_b, start_times,
+        from_km_a, to_km_a, from_km_b, to_km_b
+    )
+    
+    # Parse overlap duration in minutes for binning decision (same logic as Main Analysis)
+    if isinstance(overlap_window_duration, str) and ':' in overlap_window_duration:
+        # Parse format like "55:32" or "1:23:45"
+        parts = overlap_window_duration.split(':')
+        if len(parts) == 2:  # MM:SS
+            minutes = int(parts[0])
+            seconds = int(parts[1])
+            overlap_duration_minutes = minutes + seconds / 60.0
+        elif len(parts) == 3:  # HH:MM:SS
+            hours = int(parts[0])
+            minutes = int(parts[1])
+            seconds = int(parts[2])
+            overlap_duration_minutes = hours * 60 + minutes + seconds / 60.0
+        else:
+            overlap_duration_minutes = 0.0
+    else:
+        overlap_duration_minutes = overlap_window_duration / 60.0 if isinstance(overlap_window_duration, (int, float)) else 0.0
     
     # Use dynamic conflict length (same as Main Analysis)
     try:
@@ -2519,10 +2542,26 @@ def generate_flow_audit_for_segment(
     except ImportError:
         dynamic_conflict_length_m = conflict_length_m
     
+    # M1 DETERMINISTIC TRACE LOGGING (for debugging discrepancy)
+    if seg_id == "M1" and event_a == "Half" and event_b == "10K":
+        print(f"🔍 M1 Half vs 10K FLOW RUNNER TRACE:")
+        print(f"  Input data: A={len(df_a)} runners, B={len(df_b)} runners")
+        print(f"  Segment boundaries: A=[{from_km_a}, {to_km_a}], B=[{from_km_b}, {to_km_b}]")
+        print(f"  Convergence point: {effective_cp_km} km")
+        print(f"  Dynamic conflict length: {dynamic_conflict_length_m} m")
+        print(f"  Overlap duration: {overlap_duration_minutes} min")
+    
     overtakes_a, overtakes_b, copresence_a, copresence_b, bibs_a, bibs_b, unique_encounters, participants_involved = calculate_convergence_zone_overlaps_with_binning(
         df_a, df_b, event_a, event_b, start_times,
         effective_cp_km, from_km_a, to_km_a, from_km_b, to_km_b, min_overlap_duration, dynamic_conflict_length_m, overlap_duration_minutes
     )
+    
+    # M1 DETERMINISTIC TRACE LOGGING (for debugging discrepancy)
+    if seg_id == "M1" and event_a == "Half" and event_b == "10K":
+        print(f"  Raw calculation results: {overtakes_a}/{overtakes_b}")
+        print(f"  Co-presence: {copresence_a}/{copresence_b}")
+        print(f"  Unique encounters: {unique_encounters}")
+        print(f"  Participants involved: {participants_involved}")
     
     # F1 Half vs 10K PER-RUNNER VALIDATION (same as Main Analysis)
     if seg_id == "F1" and event_a == "Half" and event_b == "10K":
