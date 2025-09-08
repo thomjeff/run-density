@@ -717,8 +717,8 @@ def run_streamlined_tests(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     actual_vs_expected_success = True
     actual_segments = 0
     expected_segments = 0
-    if 'actual_vs_expected' in all_results:
-        actual_vs_expected_data = all_results['actual_vs_expected']
+    if 'content_quality' in all_results and 'actual_vs_expected' in all_results['content_quality']:
+        actual_vs_expected_data = all_results['content_quality']['actual_vs_expected']
         if isinstance(actual_vs_expected_data, dict) and 'all_validations_passed' in actual_vs_expected_data:
             actual_vs_expected_success = actual_vs_expected_data['all_validations_passed']
             actual_segments = actual_vs_expected_data.get('actual_segments', 0)
@@ -822,8 +822,8 @@ def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any
     actual_vs_expected_success = True
     actual_segments = 0
     expected_segments = 0
-    if 'actual_vs_expected' in all_results:
-        actual_vs_expected_data = all_results['actual_vs_expected']
+    if 'content_quality' in all_results and 'actual_vs_expected' in all_results['content_quality']:
+        actual_vs_expected_data = all_results['content_quality']['actual_vs_expected']
         if isinstance(actual_vs_expected_data, dict) and 'all_validations_passed' in actual_vs_expected_data:
             actual_vs_expected_success = actual_vs_expected_data['all_validations_passed']
             actual_segments = actual_vs_expected_data.get('actual_segments', 0)
