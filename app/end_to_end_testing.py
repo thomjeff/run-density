@@ -51,6 +51,154 @@ class OutputCapture:
         print(self.captured_output.getvalue())
 
 
+def format_e2e_report_as_markdown(raw_output: str, test_results: Dict[str, Any], test_timestamp: str, environment_url: str, created_files: List[str]) -> str:
+    """
+    Format the raw E2E test output into a professional markdown report.
+    
+    Args:
+        raw_output: Raw terminal output from the tests
+        test_results: Dictionary containing test results
+        test_timestamp: Timestamp of the test run
+        environment_url: Environment URL that was tested
+        created_files: List of files created during the test
+        
+    Returns:
+        Formatted markdown report
+    """
+    from datetime import datetime
+    
+    # Parse timestamp for display
+    try:
+        dt = datetime.strptime(test_timestamp, "%Y-%m-%d-%H%M")
+        formatted_time = dt.strftime("%Y-%m-%d %H:%M:%S")
+    except:
+        formatted_time = test_timestamp
+    
+    # Extract test results
+    api_success = all(result['success'] for result in test_results.get('api_endpoints', {}).values()) if 'api_endpoints' in test_results else False
+    report_file_success = all(result['success'] for result in test_results.get('report_files', {}).values()) if 'report_files' in test_results else False
+    
+    # Extract actual vs expected results
+    actual_vs_expected_success = True
+    actual_segments = 0
+    expected_segments = 0
+    if 'content_quality' in test_results and 'actual_vs_expected' in test_results['content_quality']:
+        actual_vs_expected_data = test_results['content_quality']['actual_vs_expected']
+        if isinstance(actual_vs_expected_data, dict) and 'all_validations_passed' in actual_vs_expected_data:
+            actual_vs_expected_success = actual_vs_expected_data['all_validations_passed']
+            actual_segments = actual_vs_expected_data.get('actual_segments', 0)
+            expected_segments = actual_vs_expected_data.get('expected_segments', 0)
+    
+    # Extract content quality results
+    content_quality_success = False
+    if 'content_quality' in test_results:
+        content_checks = []
+        for category in test_results['content_quality'].values():
+            if isinstance(category, dict) and 'error' not in category:
+                content_checks.extend(category.values())
+        content_quality_success = all(content_checks) if content_checks else False
+    
+    # Calculate overall success
+    overall_success = api_success and report_file_success and actual_vs_expected_success and content_quality_success
+    
+    # Build the formatted report
+    report = f"""# End-to-End Testing Report
+
+**Generated:** {formatted_time}
+**Environment:** {environment_url}
+**Test Type:** Streamlined End-to-End Testing
+**Overall Status:** {'✅ PASSED' if overall_success else '❌ FAILED'}
+
+## Test Summary
+
+| Test Category | Status | Details |
+|---------------|--------|---------|
+| API Endpoints | {'✅ PASSED' if api_success else '❌ FAILED'} | All API endpoints responding correctly |
+| Report Files | {'✅ PASSED' if report_file_success else '❌ FAILED'} | All required report files generated |
+| Actual vs Expected | {'✅ PASSED' if actual_vs_expected_success else '❌ FAILED'} | {f'Actual: {actual_segments} Expected: {expected_segments} {((actual_segments/expected_segments)*100):.0f}%' if expected_segments > 0 else 'Validation completed'} |
+| Content Quality | {'✅ PASSED' if content_quality_success else '❌ FAILED'} | Report content validation |
+
+## Files Created
+
+"""
+    
+    if created_files:
+        for file_path in created_files:
+            report += f"- `{file_path}`\n"
+    else:
+        report += "- No files created\n"
+    
+    report += f"""
+## Detailed Test Results
+
+### API Endpoint Testing
+
+"""
+    
+    # Extract API endpoint results
+    if 'api_endpoints' in test_results:
+        for endpoint, result in test_results['api_endpoints'].items():
+            status = '✅ PASSED' if result.get('success', False) else '❌ FAILED'
+            report += f"- **{endpoint}**: {status}\n"
+    else:
+        report += "- No API endpoint results available\n"
+    
+    report += f"""
+### Report File Testing
+
+"""
+    
+    # Extract report file results
+    if 'report_files' in test_results:
+        for file_type, result in test_results['report_files'].items():
+            status = '✅ PASSED' if result.get('success', False) else '❌ FAILED'
+            count = result.get('count', 0)
+            report += f"- **{file_type}**: {status} ({count} files)\n"
+    else:
+        report += "- No report file results available\n"
+    
+    report += f"""
+### Content Quality Testing
+
+"""
+    
+    # Extract content quality results
+    if 'content_quality' in test_results:
+        for category, results in test_results['content_quality'].items():
+            if category == 'actual_vs_expected':
+                continue  # Already covered in summary
+            if isinstance(results, dict) and 'error' not in results:
+                report += f"#### {category.replace('_', ' ').title()}\n\n"
+                for check, result in results.items():
+                    status = '✅' if result else '❌'
+                    report += f"- {status} {check}\n"
+                report += "\n"
+    else:
+        report += "- No content quality results available\n"
+    
+    report += f"""
+## Raw Test Output
+
+<details>
+<summary>Click to view raw terminal output</summary>
+
+```
+{raw_output}
+```
+
+</details>
+
+## Conclusion
+
+{'🎉 All tests passed! The system is ready for production deployment.' if overall_success else '⚠️ Some tests failed. Please review the results before production deployment.'}
+
+---
+*Report generated by run-density end-to-end testing suite*
+"""
+    
+    return report
+
+
 def get_test_environment_url() -> str:
     """Determine the test environment URL based on how the test is running."""
     # For now, we're using TestClient which runs locally
@@ -652,9 +800,24 @@ if __name__ == "__main__":
     output_file = f"reports/test-results/{test_date}/{test_timestamp}-E2E.md"
     
     # Run tests with output capture
-    with OutputCapture(output_file):
+    with OutputCapture(output_file) as capture:
         # Run streamlined tests by default (faster, focuses on core functionality)
         # Use run_comprehensive_tests() for full testing including all optional components
         results = run_streamlined_tests()
+    
+    # Get the captured output and format it as a professional markdown report
+    raw_output = capture.captured_output.getvalue()
+    environment_url = get_test_environment_url()
+    created_files = get_created_files()
+    
+    # Format the report as professional markdown
+    formatted_report = format_e2e_report_as_markdown(
+        raw_output, results, test_timestamp, environment_url, created_files
+    )
+    
+    # Save the formatted report
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    with open(output_file, 'w') as f:
+        f.write(formatted_report)
     
     print(f"\n📄 E2E Test Results saved to: {output_file}")
