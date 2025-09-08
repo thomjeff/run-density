@@ -1640,6 +1640,32 @@ def analyze_temporal_flow_segments(
                 effective_cp_km, from_km_a, to_km_a, from_km_b, to_km_b, min_overlap_duration, dynamic_conflict_length_m, overlap_duration_minutes
             )
             
+            # F1 Half vs 10K PER-RUNNER VALIDATION
+            if seg_id == "F1" and event_a == "Half" and event_b == "10K":
+                validation_results = validate_per_runner_entry_exit_f1(
+                    df_a, df_b, event_a, event_b, start_times,
+                    from_km_a, to_km_a, from_km_b, to_km_b, dynamic_conflict_length_m
+                )
+                
+                if "error" not in validation_results:
+                    # Check for discrepancy between main calculation and validation
+                    main_a = overtakes_a
+                    main_b = overtakes_b
+                    val_a = validation_results["overtakes_a"]
+                    val_b = validation_results["overtakes_b"]
+                    
+                    if main_a != val_a or main_b != val_b:
+                        logging.warning(f"F1 {event_a} vs {event_b} DISCREPANCY DETECTED!")
+                        logging.warning(f"  Current calculation: {main_a} ({main_a/len(df_a)*100:.1f}%), {main_b} ({main_b/len(df_b)*100:.1f}%)")
+                        logging.warning(f"  Validation results:  {val_a} ({val_a/len(df_a)*100:.1f}%), {val_b} ({val_b/len(df_b)*100:.1f}%)")
+                        logging.warning(f"  Using validation results.")
+                        
+                        # Use validation results instead of main calculation
+                        overtakes_a = val_a
+                        overtakes_b = val_b
+                        copresence_a = validation_results["copresence_a"]
+                        copresence_b = validation_results["copresence_b"]
+            
             # FLOW AUDIT GENERATION (parameterized for any segment)
             # Note: Flow Audit is now available via /api/flow-audit endpoint
             # The hardcoded F1 logic has been removed and replaced with a parameterized function

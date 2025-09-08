@@ -20,6 +20,23 @@ This document captures critical configuration details, workflows, and operationa
 
 ## Testing Configuration
 
+### **🚨 CRITICAL: AUTOMATED TESTING ONLY**
+
+**NEVER manually construct curl commands or guess API parameters.** This wastes time and leads to errors.
+
+**ALWAYS use the automated test scripts:**
+- **Primary**: `python3 -m app.end_to_end_testing` - Comprehensive testing suite
+- **Secondary**: `python3 -m tests.temporal_flow_tests` - Flow-specific tests
+- **Secondary**: `python3 -m tests.density_tests` - Density-specific tests
+
+**Available Test Scripts:**
+- `app/end_to_end_testing.py` - Main comprehensive testing suite
+- `app/flow_validation.py` - Flow analysis validation framework
+- `tests/temporal_flow_tests.py` - Temporal Flow Integration Tests
+- `tests/test_flow_unit.py` - Flow Unit Tests
+- `tests/density_tests.py` - Density Analysis Tests
+- `tests/test_runner.py` - Runner Data Tests
+
 ## Testing Workflow
 
 ### What "Reports" Means:
@@ -38,7 +55,10 @@ python3 -m venv test_env && source test_env/bin/activate
 # 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Generate reports with correct start times
+# 3. **USE AUTOMATED TEST SCRIPTS ONLY** - NEVER manually construct API calls
+python3 -m app.end_to_end_testing
+
+# 4. **ALTERNATIVE**: Direct report generation (if automated scripts fail)
 python3 -c "
 from app.temporal_flow_report import generate_temporal_flow_report
 from app.density_report import generate_density_report
@@ -265,9 +285,10 @@ results = test_report_content_quality()
 11. **Application Fundamentals** - Refer to `docs/Application Fundamentals.md` for core concepts
 12. **🚨 BRANCH CREATION WITHOUT TESTING** - NEVER create branches without first testing the source branch. This leads to broken branches built on broken foundations.
 13. **🚨 MERGING WITHOUT APPROVAL** - NEVER merge PRs to main without explicit user approval. Always get permission before merging.
+14. **🚨 MANUAL API TESTING** - NEVER manually construct curl commands or guess API parameters. Always use automated test scripts (`python3 -m app.end_to_end_testing`). Manual API calls waste time and lead to errors.
 
 ## Last Updated
-2025-09-07 - Added critical git workflow rules: branch creation requires testing source branch first and user approval for all merges to main
+2025-09-07 - Added critical automated testing rules: NEVER manually construct API calls, always use automated test scripts to avoid time waste and errors
 
 ## Related Issues
 - #32 - Distance gaps fix
