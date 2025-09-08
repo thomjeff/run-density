@@ -2446,6 +2446,32 @@ def generate_flow_audit_for_segment(
         effective_cp_km, from_km_a, to_km_a, from_km_b, to_km_b, min_overlap_duration, dynamic_conflict_length_m, overlap_duration_minutes
     )
     
+    # F1 Half vs 10K PER-RUNNER VALIDATION (same as Main Analysis)
+    if seg_id == "F1" and event_a == "Half" and event_b == "10K":
+        validation_results = validate_per_runner_entry_exit_f1(
+            df_a, df_b, event_a, event_b, start_times,
+            from_km_a, to_km_a, from_km_b, to_km_b, dynamic_conflict_length_m
+        )
+        
+        if "error" not in validation_results:
+            # Check for discrepancy between main calculation and validation
+            main_a = overtakes_a
+            main_b = overtakes_b
+            val_a = validation_results["overtakes_a"]
+            val_b = validation_results["overtakes_b"]
+            
+            if main_a != val_a or main_b != val_b:
+                print(f"🔍 F1 Half vs 10K FLOW RUNNER VALIDATION:")
+                print(f"  Main calculation: {main_a}/{main_b}")
+                print(f"  Validation results: {val_a}/{val_b}")
+                print(f"  Using validation results.")
+                
+                # Use validation results instead of main calculation
+                overtakes_a = val_a
+                overtakes_b = val_b
+                copresence_a = validation_results["copresence_a"]
+                copresence_b = validation_results["copresence_b"]
+    
     # Generate Flow Audit data
     print(f"🔍 {seg_id} {event_a} vs {event_b} FLOW AUDIT DATA GENERATION:")
     
