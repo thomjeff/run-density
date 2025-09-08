@@ -153,8 +153,8 @@ def calculate_convergence_point(
         # Use the existing overlap detection functions with the mapped coordinates
         # We'll create a temporary "intersection" range around this point
         tolerance_km = 0.1  # 100m tolerance around the point
-        range_start = abs_km_a - tolerance_km
-        range_end = abs_km_a + tolerance_km
+        range_start = max(from_km_a, abs_km_a - tolerance_km)  # Ensure within segment bounds
+        range_end = min(to_km_a, abs_km_a + tolerance_km)      # Ensure within segment bounds
         
         # Try true pass detection at this normalized position
         true_pass_result = calculate_true_pass_detection(

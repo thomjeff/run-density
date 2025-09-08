@@ -477,12 +477,6 @@ def calculate_convergence_point(
         check_points.append(current_km)
         current_km += step_km
     
-    # Add boundary checks for temporal overlap detection
-    # This handles cases where events overlap at segment boundaries
-    if from_km > 0:
-        check_points.append(from_km - 0.1)  # Just before segment start
-    check_points.append(to_km + 0.1)  # Just after segment end
-    
     # For each check point, see if there are actual temporal overlaps
     for km_point in check_points:
         # Calculate arrival times for all runners at this point
@@ -506,7 +500,10 @@ def calculate_convergence_point(
             for time_b in arrival_times_b:
                 if abs(time_a - time_b) <= tolerance_seconds:
                     # Found first temporal overlap - return this km point
-                    return float(km_point)
+                    # BUT ONLY if it's within the segment boundaries
+                    if from_km <= km_point <= to_km:
+                        return float(km_point)
+                    # If convergence is outside segment, continue searching for one inside
     
     # If no convergence found at specific points, check for general temporal overlap
     # This handles cases where events overlap in time but at different positions
