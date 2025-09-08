@@ -206,6 +206,7 @@ def test_report_generation(start_times: Dict[str, int] = None) -> Dict[str, Any]
 def test_report_files() -> Dict[str, Any]:
     """
     Test that report files are generated and accessible.
+    Updated to match current file naming patterns: YYYY-MM-DD-HHMM-Flow.csv/md and YYYY-MM-DD-HHMM-Density.md
     
     Returns:
         Dictionary with test results for file generation
@@ -215,24 +216,24 @@ def test_report_files() -> Dict[str, Any]:
     
     results = {}
     
-    # Check for temporal flow markdown files
-    temporal_md_files = glob.glob('reports/analysis/*_Temporal_Flow_Report.md')
+    # Check for temporal flow markdown files (current pattern: YYYY-MM-DD-HHMM-Flow.md)
+    temporal_md_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.md')
     results['temporal_flow_md'] = {
         'count': len(temporal_md_files),
         'files': temporal_md_files,
         'success': len(temporal_md_files) > 0
     }
     
-    # Check for temporal flow CSV files
-    temporal_csv_files = glob.glob('reports/analysis/temporal_flow_analysis_*.csv')
+    # Check for temporal flow CSV files (current pattern: YYYY-MM-DD-HHMM-Flow.csv)
+    temporal_csv_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.csv')
     results['temporal_flow_csv'] = {
         'count': len(temporal_csv_files),
         'files': temporal_csv_files,
         'success': len(temporal_csv_files) > 0
     }
     
-    # Check for density markdown files
-    density_md_files = glob.glob('reports/analysis/*_Density_Analysis_Report.md')
+    # Check for density markdown files (current pattern: YYYY-MM-DD-HHMM-Density.md)
+    density_md_files = glob.glob('reports/analysis/*/????-??-??-????-Density.md')
     results['density_md'] = {
         'count': len(density_md_files),
         'files': density_md_files,
@@ -255,6 +256,7 @@ def test_report_files() -> Dict[str, Any]:
 def test_report_content_quality() -> Dict[str, Any]:
     """
     Test the quality and content of generated reports.
+    Updated to match current file naming patterns: YYYY-MM-DD-HHMM-Flow.md and YYYY-MM-DD-HHMM-Density.md
     
     Returns:
         Dictionary with test results for report content quality
@@ -264,9 +266,9 @@ def test_report_content_quality() -> Dict[str, Any]:
     
     results = {}
     
-    # Find latest report files
-    temporal_md_files = glob.glob('reports/analysis/*_Temporal_Flow_Report.md')
-    density_md_files = glob.glob('reports/analysis/*_Density_Analysis_Report.md')
+    # Find latest report files (current pattern: YYYY-MM-DD-HHMM-Flow.md and YYYY-MM-DD-HHMM-Density.md)
+    temporal_md_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.md')
+    density_md_files = glob.glob('reports/analysis/*/????-??-??-????-Density.md')
     
     if not temporal_md_files or not density_md_files:
         print("❌ Cannot test content quality - report files not found")
@@ -334,6 +336,74 @@ def test_report_content_quality() -> Dict[str, Any]:
     return results
 
 
+def run_streamlined_tests(start_times: Dict[str, int] = None) -> Dict[str, Any]:
+    """
+    Run streamlined end-to-end tests focusing only on core reports:
+    - temporal-flow.csv/md (Flow reports)
+    - density.md (Density reports)
+    
+    This skips flow runner detail reports and other optional components.
+    
+    Args:
+        start_times: Event start times in minutes from midnight
+                    Default: {'Full': 420, '10K': 440, 'Half': 460}
+    
+    Returns:
+        Dictionary with streamlined test results
+    """
+    if start_times is None:
+        start_times = {'Full': 420, '10K': 440, 'Half': 460}
+    
+    print("=== STREAMLINED END-TO-END TESTING ===")
+    print("Testing core API endpoints and report generation (Flow + Density only)")
+    print()
+    
+    # Run core test categories only
+    api_results = test_api_endpoints(start_times)
+    report_generation_results = test_report_generation(start_times)
+    report_file_results = test_report_files()
+    content_quality_results = test_report_content_quality()
+    
+    # Combine all results
+    all_results = {
+        'api_endpoints': api_results,
+        'report_generation': report_generation_results,
+        'report_files': report_file_results,
+        'content_quality': content_quality_results
+    }
+    
+    # Overall success assessment
+    api_success = all(result['success'] for result in api_results.values())
+    report_gen_success = all(result['success'] for result in report_generation_results.values())
+    report_file_success = all(result['success'] for result in report_file_results.values())
+    
+    # Content quality success (check if any checks exist and all pass)
+    content_checks = []
+    for category in content_quality_results.values():
+        if isinstance(category, dict) and 'error' not in category:
+            content_checks.extend(category.values())
+    content_quality_success = all(content_checks) if content_checks else False
+    
+    overall_success = api_success and report_gen_success and report_file_success and content_quality_success
+    
+    print("=== FINAL SUMMARY ===")
+    print(f"API Endpoints: {'✅ PASSED' if api_success else '❌ FAILED'}")
+    print(f"Report Generation: {'✅ PASSED' if report_gen_success else '❌ FAILED'}")
+    print(f"Report Files: {'✅ PASSED' if report_file_success else '❌ FAILED'}")
+    print(f"Content Quality: {'✅ PASSED' if content_quality_success else '❌ FAILED'}")
+    print()
+    
+    if overall_success:
+        print("🎉 STREAMLINED TESTS PASSED! Core system is ready!")
+    else:
+        print("⚠️  Some tests failed - review before production deployment")
+    
+    print()
+    print("=== STREAMLINED END-TO-END TESTING COMPLETE ===")
+    
+    return all_results
+
+
 def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     """
     Run comprehensive end-to-end tests including API endpoints, report generation, and content quality.
@@ -399,5 +469,6 @@ def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any
 
 
 if __name__ == "__main__":
-    # Run comprehensive tests when module is executed directly
-    results = run_comprehensive_tests()
+    # Run streamlined tests by default (faster, focuses on core functionality)
+    # Use run_comprehensive_tests() for full testing including all optional components
+    results = run_streamlined_tests()
