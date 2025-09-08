@@ -23,6 +23,7 @@ from app.main import app, APP_VERSION
 import io
 import sys
 from datetime import datetime
+import requests
 
 
 class OutputCapture:
@@ -192,6 +193,16 @@ def format_e2e_report_as_markdown(raw_output: str, test_results: Dict[str, Any],
 
 </details>
 
+## Important Notes
+
+📝 **Flow Runner Analysis**: Flow Runner detailed analysis is not included in automated tests due to computational requirements. Flow Runner reports can be run locally (not currently supported in production) using:
+
+```bash
+curl -X POST 'http://localhost:8000/api/flow-audit' \\
+  -H 'Content-Type: application/json' \\
+  -d '{{"paceCsv": "data/runners.csv", "segmentsCsv": "data/segments_new.csv", "startTimes": {{"Full": 420, "10K": 440, "Half": 460}}}}'
+```
+
 ## Conclusion
 
 {'🎉 All tests passed! The system is ready for production deployment.' if overall_success else '⚠️ Some tests failed. Please review the results before production deployment.'}
@@ -205,8 +216,13 @@ def format_e2e_report_as_markdown(raw_output: str, test_results: Dict[str, Any],
 
 def get_test_environment_url() -> str:
     """Determine the test environment URL based on how the test is running."""
-    # For now, we're using TestClient which runs locally
-    # In the future, this could be enhanced to detect actual environment
+    # Check if we should test against production Cloud Run
+    test_cloud = os.getenv('TEST_CLOUD_RUN', '').lower() == 'true'
+    if test_cloud:
+        cloud_url = os.getenv('CLOUD_RUN_URL', 'https://run-density-ln4r3sfkha-uc.a.run.app')
+        return f"{cloud_url} (Cloud Run Production)"
+    
+    # Default to local TestClient
     return "http://testserver (local TestClient)"
 
 
@@ -246,24 +262,45 @@ def test_api_endpoints(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     print("=== API ENDPOINT TESTING ===")
     print()
     
-    client = TestClient(app)
+    # Determine if we're testing against Cloud Run or local
+    test_cloud = os.getenv('TEST_CLOUD_RUN', '').lower() == 'true'
+    cloud_url = os.getenv('CLOUD_RUN_URL', 'https://run-density-ln4r3sfkha-uc.a.run.app')
+    
     results = {}
     
     # Test health and ready endpoints
     print("1. Testing Health and Ready Endpoints...")
-    health_response = client.get('/health')
-    ready_response = client.get('/ready')
+    
+    if test_cloud:
+        # Test against Cloud Run production
+        health_response = requests.get(f'{cloud_url}/health', timeout=30)
+        ready_response = requests.get(f'{cloud_url}/ready', timeout=30)
+    else:
+        # Test against local TestClient
+        client = TestClient(app)
+        health_response = client.get('/health')
+        ready_response = client.get('/ready')
+    
+    # Handle response parsing for both requests and TestClient
+    def get_json_response(response):
+        if test_cloud:
+            try:
+                return response.json() if response.status_code == 200 else None
+            except:
+                return None
+        else:
+            return response.json() if response.status_code == 200 else None
     
     results['health'] = {
         'status_code': health_response.status_code,
         'success': health_response.status_code == 200,
-        'response': health_response.json() if health_response.status_code == 200 else None
+        'response': get_json_response(health_response)
     }
     
     results['ready'] = {
         'status_code': ready_response.status_code,
         'success': ready_response.status_code == 200,
-        'response': ready_response.json() if ready_response.status_code == 200 else None
+        'response': get_json_response(ready_response)
     }
     
     print(f"   /health: {health_response.status_code} {'✅' if health_response.status_code == 200 else '❌'}")
@@ -273,43 +310,46 @@ def test_api_endpoints(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     # Test report generation endpoints
     print("2. Testing Report Generation Endpoints...")
     
-    # Test density report endpoint
-    density_response = client.post('/api/density-report', json={
+    # Prepare payload for all endpoints
+    density_payload = {
         'paceCsv': 'data/runners.csv',
         'densityCsv': 'data/segments_new.csv',
         'startTimes': start_times
-    })
+    }
+    
+    flow_payload = {
+        'paceCsv': 'data/runners.csv',
+        'segmentsCsv': 'data/segments_new.csv',
+        'startTimes': start_times
+    }
+    
+    if test_cloud:
+        # Test against Cloud Run production with longer timeouts
+        density_response = requests.post(f'{cloud_url}/api/density-report', json=density_payload, timeout=300)
+        temporal_report_response = requests.post(f'{cloud_url}/api/temporal-flow-report', json=flow_payload, timeout=300)
+        temporal_flow_response = requests.post(f'{cloud_url}/api/temporal-flow', json=flow_payload, timeout=300)
+    else:
+        # Test against local TestClient
+        density_response = client.post('/api/density-report', json=density_payload)
+        temporal_report_response = client.post('/api/temporal-flow-report', json=flow_payload)
+        temporal_flow_response = client.post('/api/temporal-flow', json=flow_payload)
     
     results['density_report'] = {
         'status_code': density_response.status_code,
         'success': density_response.status_code == 200,
-        'response': density_response.json() if density_response.status_code == 200 else None
+        'response': get_json_response(density_response)
     }
-    
-    # Test temporal flow report endpoint
-    temporal_report_response = client.post('/api/temporal-flow-report', json={
-        'paceCsv': 'data/runners.csv',
-        'segmentsCsv': 'data/segments_new.csv',
-        'startTimes': start_times
-    })
     
     results['temporal_flow_report'] = {
         'status_code': temporal_report_response.status_code,
         'success': temporal_report_response.status_code == 200,
-        'response': temporal_report_response.json() if temporal_report_response.status_code == 200 else None
+        'response': get_json_response(temporal_report_response)
     }
-    
-    # Test temporal flow analysis endpoint
-    temporal_flow_response = client.post('/api/temporal-flow', json={
-        'paceCsv': 'data/runners.csv',
-        'segmentsCsv': 'data/segments_new.csv',
-        'startTimes': start_times
-    })
     
     results['temporal_flow'] = {
         'status_code': temporal_flow_response.status_code,
         'success': temporal_flow_response.status_code == 200,
-        'response': temporal_flow_response.json() if temporal_flow_response.status_code == 200 else None
+        'response': get_json_response(temporal_flow_response)
     }
     
     print(f"   /api/density-report: {density_response.status_code} {'✅' if density_response.status_code == 200 else '❌'}")
