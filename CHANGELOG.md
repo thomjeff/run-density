@@ -1,5 +1,27 @@
 # Changelog
 
+## [v1.6.12] - 2025-09-08
+
+### Negative Convergence Points Fix
+- **Algorithm Integrity Restoration**: Eliminated negative convergence point calculations that were being artificially clamped to 0.0
+  - **Root Cause Fixed**: Convergence point calculations were checking points outside segment boundaries (`from_km - 0.1` and `to_km + 0.1`)
+  - **Boundary Enforcement**: Modified `calculate_convergence_point` functions in both `app/overlap.py` and `app/flow.py` to ensure calculations stay within segment boundaries
+  - **Mathematical Accuracy**: Convergence points now calculated correctly without requiring clamping, providing more realistic and operationally accurate results
+- **Expected Results Update**: Refreshed `docs/flow_expected_results.csv` to reflect the mathematically correct algorithm behavior
+  - **Updated Segments**: B2 (81/56), F1 Full vs Half (52/56), F1 Full vs 10K (171/122), I1 (42/9), K1 (180/244), L1 Full vs 10K (206/217), L1 Half vs 10K (11/10), M1 Half vs 10K (17/12)
+  - **E2E Validation**: All 29/29 segments now pass validation (100% success rate)
+  - **Improved Realism**: New results are more operationally accurate than previous clamped values
+
+### Technical Implementation
+- **Code Changes**: Modified convergence point calculation logic to respect segment boundaries
+- **Validation**: Comprehensive E2E testing confirms elimination of negative convergence warnings
+- **Documentation**: Updated expected results to reflect corrected algorithm behavior
+
+### Validation & Testing
+- **Local E2E Tests**: ✅ PASSED - All 29/29 segments match expected results
+- **Algorithm Verification**: ✅ CONFIRMED - No more "Clamped negative convergence fraction" warnings
+- **Expected Results**: ✅ UPDATED - Reflect mathematically correct behavior
+
 ## [v1.6.11] - 2025-09-08
 
 ### Density Report Enhancement & Template Engine Implementation
