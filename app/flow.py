@@ -1536,7 +1536,7 @@ def convert_segments_new_to_flow_format(segments_df: pd.DataFrame) -> pd.DataFra
                     "direction": segment.get("direction", ""),
                     "width_m": segment.get("width_m", 0),
                     "overtake_flag": segment.get("overtake_flag", ""),
-                    "flow_type": segment.get("flow_type", ""),
+                    "flow_type": segment.get("flow_zone", segment.get("flow_type", "")),
                     "prior_segment_id": segment.get("prior_segment_id", ""),
                     "notes": segment.get("notes", "")
                 }

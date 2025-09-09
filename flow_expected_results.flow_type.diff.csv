@@ -1,0 +1,10 @@
+segment_label,event_a,event_b,flow_type
+10K Turn to Friel,Full,10K,overtake
+Friel to Station Rd.,Half,10K,parallel
+Trail/Aberdeen to/from Station Rd,Full,Half,counterflow
+Trail/Aberdeen to/from Station Rd,Full,10K,counterflow
+Trail/Aberdeen to/from Station Rd,Half,10K,counterflow
+Bridge/Mill to Station Rd,Full,Half,counterflow
+Trail/Aberdeen to/from Station Rd,Full,Half,counterflow
+Trail/Aberdeen to/from Station Rd,Full,10K,counterflow
+Trail/Aberdeen to/from Station Rd,Half,10K,counterflow
