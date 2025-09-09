@@ -40,7 +40,7 @@ def audit_segments_overview(segments_df: pd.DataFrame) -> Dict[str, Any]:
     Returns:
         Dictionary with audit summary
     """
-    overtake_segments = segments_df[segments_df['overtake_flag'] == 'y']
+    overtake_segments = segments_df[segments_df['flow_type'] != 'none']
     
     audit_results = {
         'total_segments': len(segments_df),
@@ -53,8 +53,7 @@ def audit_segments_overview(segments_df: pd.DataFrame) -> Dict[str, Any]:
         audit_results['segment_details'].append({
             'seg_id': seg['seg_id'],
             'events': events,
-            'flow_type': seg.get('flow_type', 'N/A'),
-            'overtake_flag': seg.get('overtake_flag', 'N/A')
+            'flow_type': seg.get('flow_type', 'N/A')
         })
     
     return audit_results
@@ -86,8 +85,7 @@ def audit_conversion_pairs(segments_df: pd.DataFrame) -> Dict[str, Any]:
             pairs_info.append({
                 'eventa': pair['eventa'],
                 'eventb': pair['eventb'],
-                'flow_type': pair.get('flow_type', 'N/A'),
-                'overtake_flag': pair.get('overtake_flag', 'N/A')
+                'flow_type': pair.get('flow_type', 'N/A')
             })
         
         audit_results['segments'][seg_id] = {
@@ -195,7 +193,7 @@ def print_audit_results(audit_results: Dict[str, Any]) -> None:
     print(f"Total segments: {audit_results['overview']['total_segments']}")
     print()
     
-    print(f"Segments with overtake_flag='y': {audit_results['overview']['overtake_segments']}")
+    print(f"Segments with flow_type != 'none': {audit_results['overview']['overtake_segments']}")
     for seg_detail in audit_results['overview']['segment_details']:
         print(f"  {seg_detail['seg_id']}: {seg_detail['events']} (flow_type: {seg_detail['flow_type']})")
     
@@ -207,7 +205,7 @@ def print_audit_results(audit_results: Dict[str, Any]) -> None:
     for seg_id, seg_info in audit_results['conversion']['segments'].items():
         print(f"{seg_id} ({seg_info['pair_count']} pairs):")
         for pair in seg_info['pairs']:
-            print(f"  {pair['eventa']} vs {pair['eventb']} - {pair['flow_type']} - overtake_flag: {pair['overtake_flag']}")
+            print(f"  {pair['eventa']} vs {pair['eventb']} - {pair['flow_type']}")
         print()
     
     print("=== VALIDATION RESULTS ===")

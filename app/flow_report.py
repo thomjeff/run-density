@@ -497,7 +497,7 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
             "total_a", "total_b", "overtaking_a", "overtaking_b", "copresence_a", "copresence_b",
             "pct_a", "pct_b", "convergence_zone_start", "convergence_zone_end", 
             "spatial_zone_exists", "temporal_overlap_exists", "true_pass_exists", "has_convergence_policy", "no_pass_reason_code",
-            "conflict_length_m", "width_m", "sample_a", "sample_b"
+            "conflict_length_m", "width_m", "unique_encounters", "participants_involved", "sample_a", "sample_b"
         ])
         
         # Enhanced data rows with proper formatting
@@ -592,6 +592,8 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
                 segment.get("no_pass_reason_code", ""),
                 segment.get('conflict_length_m', 100.0),  # conflict_length_m from analysis
                 width_m,
+                segment.get("unique_encounters", 0),
+                segment.get("participants_involved", 0),
                 format_sample_data(segment.get("sample_a", [])),
                 format_sample_data(segment.get("sample_b", []))
             ])

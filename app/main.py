@@ -19,7 +19,7 @@ try:
     from .density_api import router as density_router
     from .density_report import generate_density_report, generate_simple_density_report
     from .flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
-    from .temporal_flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
+    from .flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
     from .report import generate_combined_report, generate_combined_narrative
     # from .test_api import test_router  # Disabled for Cloud Run deployment
     from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
@@ -29,7 +29,7 @@ except ImportError:
     from density_api import router as density_router
     from density_report import generate_density_report, generate_simple_density_report
     from flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
-    from temporal_flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
+    from flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
     from report import generate_combined_report, generate_combined_narrative
     # from test_api import test_router  # Disabled for Cloud Run deployment
     from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS

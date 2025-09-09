@@ -2,14 +2,14 @@
 Temporal Flow Analysis Module
 
 Handles temporal flow analysis for segments where overtaking or merging is possible.
-Only processes segments with overtake_flag = 'y' from flow.csv.
+Processes all segments and calculates convergence for segments with flow_type != 'none'.
 Supports overtake, merge, and diverge flow types.
 
 KEY CONCEPTS:
 1. START TIMES: Must be offsets from midnight in minutes (e.g., 420 = 7:00 AM)
 2. NORMALIZED DISTANCES: For segments with different absolute ranges (like F1), 
    we work in normalized space (0.0-1.0) to compare relative positions
-3. CONVERGENCE vs OVERTAKE_FLAG: Segments with overtake_flag='y' don't necessarily 
+3. CONVERGENCE vs FLOW_TYPE: Segments with flow_type != 'none' don't necessarily 
    need to show convergence if there are no temporal overlaps due to timing differences
 4. TRUE PASS DETECTION: Only counts actual directional overtaking, not just co-presence
 5. INTERSECTION BOUNDARIES: For directional change detection, use intersection 
@@ -1538,7 +1538,7 @@ def convert_segments_new_to_flow_format(segments_df: pd.DataFrame) -> pd.DataFra
                     "direction": segment.get("direction", ""),
                     "width_m": segment.get("width_m", 0),
                     "overtake_flag": segment.get("overtake_flag", ""),
-                    "flow_type": segment.get("flow_zone", segment.get("flow_type", "")),
+                    "flow_type": segment.get("flow_zone") if pd.notna(segment.get("flow_zone")) else segment.get("flow_type", "none"),
                     "prior_segment_id": segment.get("prior_segment_id", ""),
                     "notes": segment.get("notes", "")
                 }
@@ -1557,7 +1557,7 @@ def analyze_temporal_flow_segments(
     """
     Analyze all segments for temporal flow patterns.
     Supports overtake, merge, and diverge flow types.
-    Processes ALL segments but only calculates convergence for overtake_flag = 'y' segments.
+    Processes ALL segments and calculates convergence for all segments with flow_type != 'none'.
     
     START TIMES REQUIREMENT: start_times must be offsets from midnight in minutes.
     Example: {'10K': 420, 'Half': 440, 'Full': 460} means 10K starts at 7:00 AM,
@@ -1607,19 +1607,22 @@ def analyze_temporal_flow_segments(
         from_km_b = segment["from_km_b"]
         to_km_b = segment["to_km_b"]
         
+        # Skip segments where either event doesn't exist (NaN values)
+        if pd.isna(from_km_a) or pd.isna(to_km_a) or pd.isna(from_km_b) or pd.isna(to_km_b):
+            print(f"⚠️  Skipping {seg_id} {event_a} vs {event_b} - missing event data")
+            continue
+        
         # Filter runners for this segment
         df_a = pace_df[pace_df["event"] == event_a].copy()
         df_b = pace_df[pace_df["event"] == event_b].copy()
         
-        # Calculate convergence point (in event A km ruler) - only for overtake segments
-        # NOTE: Segments with overtake_flag='y' don't necessarily need to show convergence
-        # if there are no temporal overlaps due to timing differences (e.g., A1, B1)
-        cp_km = None
-        if segment.get("overtake_flag") == "y":
-            cp_km = calculate_convergence_point(
-                df_a, df_b, event_a, event_b, start_times,
-                from_km_a, to_km_a, from_km_b, to_km_b
-            )
+        # Calculate convergence point (in event A km ruler) - for all segments
+        # NOTE: Segments may not show convergence if there are no temporal overlaps 
+        # due to timing differences (e.g., A1, B1)
+        cp_km = calculate_convergence_point(
+            df_a, df_b, event_a, event_b, start_times,
+            from_km_a, to_km_a, from_km_b, to_km_b
+        )
         
         # Calculate entry/exit times for this segment
         first_entry_a, last_exit_a, first_entry_b, last_exit_b, overlap_window_duration = calculate_entry_exit_times(
@@ -1654,7 +1657,7 @@ def analyze_temporal_flow_segments(
             "overtake_flag": segment.get("overtake_flag", "")
         }
         
-        if cp_km is not None and segment.get("overtake_flag") == "y":
+        if cp_km is not None:
             # Calculate overtaking runners in convergence zone using local-axis mapping
             # Calculate dynamic conflict length first
             from .constants import (
@@ -1751,7 +1754,7 @@ def analyze_temporal_flow_segments(
             # The hardcoded F1 logic has been removed and replaced with a parameterized function
             
             # B2, K1, L1 CONVERGENCE ZONE DEBUGGING
-            if seg_id in ["B2", "K1", "L1"] and cp_km is None and segment.get("overtake_flag") == "y":
+            if seg_id in ["B2", "K1", "L1"] and cp_km is None:
                 print(f"🔍 {seg_id} {event_a} vs {event_b} CONVERGENCE DEBUG:")
                 print(f"  Segment ranges: {event_a} {from_km_a}-{to_km_a}km, {event_b} {from_km_b}-{to_km_b}km")
                 print(f"  Convergence point: {cp_km}")
@@ -1893,9 +1896,9 @@ def analyze_temporal_flow_segments(
         
         results["segments"].append(segment_result)
     
-    # Generate Deep Dive analysis for segments with overtake_flag = 'y' after all segments are processed
+    # Generate Deep Dive analysis for segments with flow_type != 'none' after all segments are processed
     for segment_result in results["segments"]:
-        if segment_result.get("overtake_flag") == "y":
+        if segment_result.get("flow_type") != "none":
             # Find prior segment data if it exists
             prior_segment_id = segment_result.get("prior_segment_id")
             prior_segment_data = None
@@ -2023,7 +2026,7 @@ def generate_temporal_flow_narrative(results: Dict[str, Any]) -> str:
         else:
             narrative.append("❌ No convergence zone detected")
         
-        # Add Deep Dive analysis for all segments with overtake_flag = 'y'
+        # Add Deep Dive analysis for all segments with flow_type != 'none'
         if segment.get("deep_dive_analysis"):
             narrative.extend(segment["deep_dive_analysis"])
         
