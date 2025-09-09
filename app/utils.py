@@ -48,14 +48,14 @@ def load_segments_csv(url_or_path: str) -> pd.DataFrame:
         # New format - keep original column names
         expected = {"seg_id", "seg_label", "width_m", "direction", "full", "half", "10K",
                    "full_from_km", "full_to_km", "half_from_km", "half_to_km", 
-                   "10K_from_km", "10K_to_km", "overtake_flag", "flow_type", 
+                   "10K_from_km", "10K_to_km", "flow_type", 
                    "prior_segment_id", "notes"}
         if not expected.issubset(df.columns):
             raise ValueError(f"segments_new.csv must have columns {sorted(expected)}; got {df.columns.tolist()}")
     else:
         # Old format - convert to lowercase
         df.columns = [c.lower() for c in df.columns]
-        expected = {"seg_id", "eventa", "eventb", "from_km_a", "to_km_a", "from_km_b", "to_km_b", "overtake_flag"}
+        expected = {"seg_id", "eventa", "eventb", "from_km_a", "to_km_a", "from_km_b", "to_km_b", "flow_type"}
         if not expected.issubset(df.columns):
             raise ValueError(f"flow.csv must have columns {sorted(expected)}; got {df.columns.tolist()}")
     

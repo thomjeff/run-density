@@ -442,11 +442,11 @@ def validate_actual_vs_expected_flow_results(actual_csv_path: str) -> Dict[str, 
         # Load expected results
         expected_df = pd.read_csv('docs/flow_expected_results.csv')
         
-        # Load segments data to get overtake_flag
+        # Load segments data to get flow_type
         segments_df = pd.read_csv('data/segments_new.csv')
         
-        # Create a mapping of segment_id to overtake_flag
-        segment_overtake_map = dict(zip(segments_df['seg_id'], segments_df['overtake_flag']))
+        # Create a mapping of segment_id to flow_type
+        segment_flow_type_map = dict(zip(segments_df['seg_id'], segments_df['flow_type']))
         
         validation_results = {}
         all_validations_passed = True
@@ -464,8 +464,8 @@ def validate_actual_vs_expected_flow_results(actual_csv_path: str) -> Dict[str, 
             # Create event pair string
             event_pair = f"{event_a} vs {event_b}"
             
-            # Get overtake_flag for this segment
-            overtake_flag = segment_overtake_map.get(seg_id, 'n')
+            # Get flow_type for this segment
+            flow_type = segment_flow_type_map.get(seg_id, 'none')
             
             # Find matching expected row
             expected_row = expected_df[
@@ -475,14 +475,14 @@ def validate_actual_vs_expected_flow_results(actual_csv_path: str) -> Dict[str, 
             ]
             
             if expected_row.empty:
-                print(f"   ❌ {seg_id}, {segment_label}, {event_pair}, {overtake_flag}, NO EXPECTED DATA FOUND")
+                print(f"   ❌ {seg_id}, {segment_label}, {event_pair}, {flow_type}, NO EXPECTED DATA FOUND")
                 validation_results[f"{seg_id}_{event_pair}"] = False
                 all_validations_passed = False
                 continue
             
             expected_row = expected_row.iloc[0]
             
-            if overtake_flag == 'y':
+            if flow_type != 'none':
                 # Segments expected to have overtaking
                 actual_overtaking_a = actual_row['overtaking_a']
                 actual_overtaking_b = actual_row['overtaking_b']
@@ -506,7 +506,7 @@ def validate_actual_vs_expected_flow_results(actual_csv_path: str) -> Dict[str, 
                 
                 status = "✅ MATCH" if overall_match else "❌ MISMATCH"
                 
-                print(f"   {status} {seg_id}, {segment_label}, {event_pair}, {overtake_flag}, "
+                print(f"   {status} {seg_id}, {segment_label}, {event_pair}, {flow_type}, "
                       f"{actual_overtaking_a}/{actual_overtaking_b}, {expected_overtaking_a}/{expected_overtaking_b}, "
                       f"{actual_pct_a:.1f}/{actual_pct_b:.1f}, {expected_pct_a:.1f}/{expected_pct_b:.1f}")
                 
@@ -528,7 +528,7 @@ def validate_actual_vs_expected_flow_results(actual_csv_path: str) -> Dict[str, 
                 
                 status = "✅ NO OVERTAKING (as expected)" if no_overtaking_match else "❌ UNEXPECTED OVERTAKING"
                 
-                print(f"   {status} {seg_id}, {segment_label}, {event_pair}, {overtake_flag}")
+                print(f"   {status} {seg_id}, {segment_label}, {event_pair}, {flow_type}")
                 
                 validation_results[f"{seg_id}_{event_pair}"] = no_overtaking_match
                 if not no_overtaking_match:
