@@ -72,3 +72,7 @@ MAX_NORMALIZED_FRACTION = 1.0
 FRACTION_CLAMP_REASON_OUTSIDE_RANGE = "outside_A_range_normalized"
 FRACTION_CLAMP_REASON_NEGATIVE = "negative_fraction_clamped"
 FRACTION_CLAMP_REASON_EXCEEDS_ONE = "fraction_exceeds_one_clamped"
+
+# Convergence point analysis
+CONVERGENCE_POINT_TOLERANCE_KM = 0.1  # 100m tolerance around convergence points
+DISTANCE_BIN_SIZE_KM = 0.1  # 100m distance bins

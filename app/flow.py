@@ -31,7 +31,9 @@ from .constants import (
     SUSPICIOUS_OVERTAKING_RATE_THRESHOLD,
     MIN_NORMALIZED_FRACTION, MAX_NORMALIZED_FRACTION,
     FRACTION_CLAMP_REASON_OUTSIDE_RANGE, FRACTION_CLAMP_REASON_NEGATIVE,
-    FRACTION_CLAMP_REASON_EXCEEDS_ONE
+    FRACTION_CLAMP_REASON_EXCEEDS_ONE, CONVERGENCE_POINT_TOLERANCE_KM,
+    DISTANCE_BIN_SIZE_KM, DEFAULT_STEP_KM, DEFAULT_TOT_THRESHOLDS,
+    DEFAULT_TIME_BIN_SECONDS, CONFLICT_LENGTH_LONG_SEGMENT_M
 )
 from .utils import load_pace_csv, arrival_time_sec, load_segments_csv
 
@@ -152,7 +154,7 @@ def calculate_convergence_point(
         
         # Use the existing overlap detection functions with the mapped coordinates
         # We'll create a temporary "intersection" range around this point
-        tolerance_km = 0.1  # 100m tolerance around the point
+        tolerance_km = CONVERGENCE_POINT_TOLERANCE_KM  # 100m tolerance around the point
         range_start = max(from_km_a, abs_km_a - tolerance_km)  # Ensure within segment bounds
         range_end = min(to_km_a, abs_km_a + tolerance_km)      # Ensure within segment bounds
         
@@ -259,8 +261,8 @@ def calculate_convergence_zone_overlaps_with_binning(
     to_km_a: float,
     from_km_b: float,
     to_km_b: float,
-    min_overlap_duration: float = 5.0,
-    conflict_length_m: float = 100.0,
+    min_overlap_duration: float = DEFAULT_MIN_OVERLAP_DURATION,
+    conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
     overlap_duration_minutes: float = 0.0,
 ) -> Tuple[int, int, int, int, List[str], List[str], int, int]:
     """
@@ -360,7 +362,7 @@ def generate_flow_audit_data(
     to_km_a: float,
     from_km_b: float,
     to_km_b: float,
-    conflict_length_m: float = 200.0,
+    conflict_length_m: float = CONFLICT_LENGTH_LONG_SEGMENT_M,
     convergence_zone_start: float = None,
     convergence_zone_end: float = None,
     spatial_zone_exists: bool = False,
@@ -811,7 +813,7 @@ def validate_per_runner_entry_exit_f1(
     to_km_a: float,
     from_km_b: float,
     to_km_b: float,
-    conflict_length_m: float = 200.0,
+    conflict_length_m: float = CONFLICT_LENGTH_LONG_SEGMENT_M,
 ) -> Dict[str, Any]:
     """
     PER-RUNNER ENTRY/EXIT VALIDATION for F1 Half vs 10K segment.
@@ -966,8 +968,8 @@ def calculate_convergence_zone_overlaps_original(
     to_km_a: float,
     from_km_b: float,
     to_km_b: float,
-    min_overlap_duration: float = 5.0,
-    conflict_length_m: float = 100.0,
+    min_overlap_duration: float = DEFAULT_MIN_OVERLAP_DURATION,
+    conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
 ) -> Tuple[int, int, int, int, List[str], List[str], int, int]:
     """
     Calculate the number of overlapping runners within the convergence zone,
@@ -1216,8 +1218,8 @@ def calculate_convergence_zone_overlaps_binned(
     to_km_a: float,
     from_km_b: float,
     to_km_b: float,
-    min_overlap_duration: float = 5.0,
-    conflict_length_m: float = 100.0,
+    min_overlap_duration: float = DEFAULT_MIN_OVERLAP_DURATION,
+    conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
     use_time_bins: bool = False,
     use_distance_bins: bool = False,
     overlap_duration_minutes: float = 0.0,
@@ -1242,7 +1244,7 @@ def calculate_convergence_zone_overlaps_binned(
     
     if use_time_bins:
         # Create time bins (10-minute intervals)
-        bin_duration_minutes = 10.0
+        bin_duration_minutes = TEMPORAL_BINNING_THRESHOLD_MINUTES
         num_bins = max(1, int(overlap_duration_minutes / bin_duration_minutes))
         
         # Calculate overlap window
@@ -1278,7 +1280,7 @@ def calculate_convergence_zone_overlaps_binned(
     
     elif use_distance_bins:
         # Create distance bins (100m intervals)
-        bin_size_km = 0.1  # 100m
+        bin_size_km = DISTANCE_BIN_SIZE_KM  # 100m
         len_a = to_km_a - from_km_a
         len_b = to_km_b - from_km_b
         num_bins = max(1, int(min(len_a, len_b) / bin_size_km))
@@ -1549,8 +1551,8 @@ def analyze_temporal_flow_segments(
     pace_csv: str,
     segments_csv: str,
     start_times: Dict[str, float],
-    min_overlap_duration: float = 5.0,
-    conflict_length_m: float = 100.0,
+    min_overlap_duration: float = DEFAULT_MIN_OVERLAP_DURATION,
+    conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
 ) -> Dict[str, Any]:
     """
     Analyze all segments for temporal flow patterns.
@@ -2040,7 +2042,7 @@ def analyze_distance_progression(
     to_km_a: float,
     from_km_b: float,
     to_km_b: float,
-    step_km: float = 0.05,
+    step_km: float = DEFAULT_STEP_KM,
 ) -> Dict[str, Any]:
     """
     Analyze runner distribution over distance within a segment.
@@ -2182,9 +2184,9 @@ def calculate_tot_metrics(
     to_km_a: float,
     from_km_b: float,
     to_km_b: float,
-    conflict_length_m: float = 100.0,
-    thresholds: List[int] = [10, 20, 50, 100],
-    time_bin_seconds: int = 30,
+    conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
+    thresholds: List[int] = DEFAULT_TOT_THRESHOLDS,
+    time_bin_seconds: int = DEFAULT_TIME_BIN_SECONDS,
 ) -> Dict[str, Any]:
     """
     Calculate Time-Over-Threshold (TOT) metrics for operational planning.
@@ -2378,7 +2380,7 @@ def generate_flow_audit_for_segment(
     seg_id: str,
     event_a: str,
     event_b: str,
-    min_overlap_duration: float = 5.0,
+    min_overlap_duration: float = DEFAULT_MIN_OVERLAP_DURATION,
     conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
     output_dir: str = "reports/analysis"
 ) -> Dict[str, Any]:
