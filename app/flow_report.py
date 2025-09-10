@@ -267,7 +267,7 @@ def generate_basic_info_table(segment: Dict[str, Any]) -> List[str]:
     # Get width from segments_new.csv - fix NA values
     seg_id = segment.get("seg_id", "")
     try:
-        segments_df = pd.read_csv('data/segments_new.csv')
+        segments_df = pd.read_csv('data/segments.csv')
         seg_row = segments_df[segments_df['seg_id'] == seg_id]
         if not seg_row.empty:
             width_val = seg_row['width_m'].iloc[0]
@@ -481,7 +481,7 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
     full_path, relative_path = get_report_paths("Flow", "csv", output_path)
     
     # Load segments for width values
-    segments_df = pd.read_csv('data/segments_new.csv')
+    segments_df = pd.read_csv('data/segments.csv')
     
     # Get segments from results
     segments = results.get("segments", [])

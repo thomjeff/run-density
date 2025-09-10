@@ -30,16 +30,21 @@ After ANY code changes, you **MUST**:
 1. **USE AUTOMATED TEST SCRIPTS ONLY**: `python3 -m app.end_to_end_testing`
 2. **NEVER manually construct curl commands** - this wastes time and leads to errors
 3. **NEVER guess API parameters** - use the automated scripts that know the correct endpoints
-4. Generate actual reports (MD + CSV), not just JSON data
-5. Verify no hardcoded values were introduced
-6. Test through API endpoints, not direct module calls
-7. Validate report content quality and human readability
+4. **MAINTAIN TESTING CONSISTENCY** - Use the SAME testing methodology for both local and Cloud Run testing
+5. **FOR CLOUD RUN TESTING**: Use `TEST_CLOUD_RUN=true python3 -m app.end_to_end_testing`
+6. **FOR LOCAL TESTING**: Use `python3 -m app.end_to_end_testing` (without TEST_CLOUD_RUN)
+7. Generate actual reports (MD + CSV), not just JSON data
+8. Verify no hardcoded values were introduced
+9. Test through API endpoints, not direct module calls
+10. Validate report content quality and human readability
 
 ### **🚫 PROHIBITED TESTING ACTIONS**
 - **NEVER** manually construct curl commands for API testing
 - **NEVER** guess API endpoint parameters or request formats
 - **NEVER** waste time looking up correct API calls when automated scripts exist
 - **NEVER** modify code to "fix" API calls instead of using proper automated testing
+- **NEVER** use different testing methodologies for local vs Cloud Run testing
+- **NEVER** compare results from different testing approaches
 
 ## **📁 CRITICAL FILE REFERENCES**
 

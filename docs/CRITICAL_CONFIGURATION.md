@@ -34,6 +34,8 @@ This document captures critical configuration details, workflows, and operationa
 ### **Step 5: Run E2E Tests Against Cloud Run Production**
 - Set environment variable: `TEST_CLOUD_RUN=true`
 - Run: `python3 -m app.end_to_end_testing`
+- **CRITICAL**: Use the SAME automated testing module for both local and Cloud Run
+- **NEVER** use manual curl commands for Cloud Run testing
 - Verify all tests pass against production deployment
 - **URL automatically uses `CLOUD_RUN_URL` from constants.py**
 
@@ -41,6 +43,8 @@ This document captures critical configuration details, workflows, and operationa
 - Switch to main branch: `git checkout main`
 - Kill existing local environment and create fresh environment
 - Run: `python3 -m app.end_to_end_testing` (without TEST_CLOUD_RUN)
+- **CRITICAL**: Use the SAME automated testing module for both local and Cloud Run
+- **NEVER** use manual curl commands for local testing
 - Verify all tests pass locally
 - **URL automatically uses `TEST_SERVER_URL` from constants.py**
 
@@ -382,9 +386,10 @@ results = test_report_content_quality()
 13. **🚨 MERGING WITHOUT APPROVAL** - NEVER merge PRs to main without explicit user approval. Always get permission before merging.
 14. **🚨 MANUAL API TESTING** - NEVER manually construct curl commands or guess API parameters. Always use automated test scripts (`python3 -m app.end_to_end_testing`). Manual API calls waste time and lead to errors.
 15. **🚨 GUESSING PRODUCTION URLS** - NEVER guess production URLs or endpoints. Always use the documented production environment details in this configuration file. URL guessing wastes time and leads to failed tests.
+16. **🚨 TESTING METHODOLOGY INCONSISTENCY** - NEVER use different testing approaches for local vs Cloud Run testing. Always use the SAME automated testing module (`python3 -m app.end_to_end_testing`) with appropriate environment variables. Inconsistent testing methodologies make results incomparable and unreliable.
 
 ## Last Updated
-2025-09-07 - Added production environment configuration and URL guessing prevention rules to avoid time waste and failed tests
+2025-09-10 - Added testing methodology consistency rules to prevent incomparable test results and ensure reliable comparisons between local and Cloud Run testing
 
 ## Related Issues
 - #32 - Distance gaps fix

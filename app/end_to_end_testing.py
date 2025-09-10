@@ -208,7 +208,7 @@ def format_e2e_report_as_markdown(raw_output: str, test_results: Dict[str, Any],
 ```bash
 curl -X POST '{LOCAL_RUN_URL}/api/flow-audit' \\
   -H 'Content-Type: application/json' \\
-  -d '{{"paceCsv": "data/runners.csv", "segmentsCsv": "data/segments_new.csv", "startTimes": {{"Full": 420, "10K": 440, "Half": 460}}}}'
+  -d '{{"paceCsv": "data/runners.csv", "segmentsCsv": "data/segments.csv", "startTimes": {{"Full": 420, "10K": 440, "Half": 460}}}}'
 ```
 
 ## Conclusion
@@ -319,13 +319,13 @@ def test_api_endpoints(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     # Prepare payload for all endpoints
     density_payload = {
         'paceCsv': 'data/runners.csv',
-        'densityCsv': 'data/segments_new.csv',
+        'densityCsv': 'data/segments.csv',
         'startTimes': start_times
     }
     
     flow_payload = {
         'paceCsv': 'data/runners.csv',
-        'segmentsCsv': 'data/segments_new.csv',
+        'segmentsCsv': 'data/segments.csv',
         'startTimes': start_times
     }
     
@@ -440,10 +440,10 @@ def validate_actual_vs_expected_flow_results(actual_csv_path: str) -> Dict[str, 
         actual_df = pd.read_csv(actual_csv_path)
         
         # Load expected results
-        expected_df = pd.read_csv('docs/flow_expected_results.csv')
+        expected_df = pd.read_csv('data/flow_expected_results.csv')
         
         # Load segments data to get flow_type
-        segments_df = pd.read_csv('data/segments_new.csv')
+        segments_df = pd.read_csv('data/segments.csv')
         
         # Create a mapping of segment_id to flow_type
         segment_flow_type_map = dict(zip(segments_df['seg_id'], segments_df['flow_type']))
@@ -756,7 +756,7 @@ def run_streamlined_tests(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     print("   Flow Runner reports can be run locally (not currently supported in production) using:")
     print(f"   curl -X POST '{LOCAL_RUN_URL}/api/flow-audit' \\")
     print("     -H 'Content-Type: application/json' \\")
-    print("     -d '{\"paceCsv\": \"data/runners.csv\", \"segmentsCsv\": \"data/segments_new.csv\", \"startTimes\": {\"Full\": 420, \"10K\": 440, \"Half\": 460}}'")
+    print("     -d '{\"paceCsv\": \"data/runners.csv\", \"segmentsCsv\": \"data/segments.csv\", \"startTimes\": {\"Full\": 420, \"10K\": 440, \"Half\": 460}}'")
     print()
     print("=== STREAMLINED END-TO-END TESTING COMPLETE ===")
     
@@ -861,7 +861,7 @@ def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any
     print("   Flow Runner reports can be run locally (not currently supported in production) using:")
     print(f"   curl -X POST '{LOCAL_RUN_URL}/api/flow-audit' \\")
     print("     -H 'Content-Type: application/json' \\")
-    print("     -d '{\"paceCsv\": \"data/runners.csv\", \"segmentsCsv\": \"data/segments_new.csv\", \"startTimes\": {\"Full\": 420, \"10K\": 440, \"Half\": 460}}'")
+    print("     -d '{\"paceCsv\": \"data/runners.csv\", \"segmentsCsv\": \"data/segments.csv\", \"startTimes\": {\"Full\": 420, \"10K\": 440, \"Half\": 460}}'")
     print()
     print("=== END-TO-END TESTING COMPLETE ===")
     

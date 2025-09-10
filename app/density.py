@@ -34,7 +34,8 @@ def load_density_cfg(path: str) -> Dict[str, dict]:
     Returns:
         Dictionary mapping segment_id to configuration dict
     """
-    df = pd.read_csv(path)
+    from .io.loader import load_segments
+    df = load_segments(path)
     
     def y(row, col): 
         return str(row.get(col, "")).strip().lower() == "y"
