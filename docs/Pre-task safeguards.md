@@ -53,6 +53,30 @@ After ANY code changes, you **MUST**:
 - **ALWAYS use**: `app/constants.py` for configuration values
 - **NEVER hardcode**: start times, tolerance values, conflict lengths
 
+## **🚀 9-STEP MERGE/TEST PROCESS**
+
+For ALL releases and merges, you **MUST** follow this complete process:
+
+1. **Verify Dev Branch Health** - Check git status and recent commits
+2. **Run Final E2E Tests on Dev Branch** - Ensure all tests pass before merge
+3. **Create Pull Request** - With comprehensive description and testing results
+4. **Wait for User Review/Approval** - User will review and merge via GitHub Desktop or Web UI
+5. **Verify Merge to Main** - Check git status and recent commits after user merge
+6. **Run Final E2E Tests on Main** - Confirm no regressions after merge
+7. **Create Release with Assets** - Include latest reports as release assets
+8. **Add E2E Files to Release** - Attach Flow.md, Flow.csv, Density.md, E2E.md to release
+9. **Verify Release and Run Final E2E Tests** - Confirm release is complete and working
+
+### **📎 MANDATORY RELEASE ASSETS**
+
+For EVERY release, you **MUST** attach these files:
+- **Flow.md** - Latest temporal flow analysis report
+- **Flow.csv** - Latest temporal flow data
+- **Density.md** - Latest density analysis report  
+- **E2E.md** - Latest end-to-end test results
+
+**Command**: `gh release upload <version> <file1> <file2> <file3> <file4>`
+
 ## **✅ SUCCESS CRITERIA**
 
 Work is complete ONLY when:
@@ -61,6 +85,8 @@ Work is complete ONLY when:
 - All reports generate correctly with proper formatting
 - All changes committed to version branch (e.g., v1.6.3-flow-debug)
 - All validation tests pass
+- **9-step merge/test process completed**
+- **Release assets attached (Flow.md, Flow.csv, Density.md, E2E.md)**
 
 ---
 
