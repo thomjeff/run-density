@@ -1,0 +1,112 @@
+name: Automated Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.6.15)'
+        required: true
+        type: string
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Get version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Validate version consistency
+      run: |
+        echo "=== Validating version consistency ==="
+        python -c "
+        from app.version import validate_version_consistency, get_current_version
+        import sys
+        
+        code_version = get_current_version()
+        expected_version = '${{ steps.version.outputs.version }}'
+        
+        print(f'Code version: {code_version}')
+        print(f'Expected version: {expected_version}')
+        
+        if code_version != expected_version:
+            print(f'❌ Version mismatch! Code has {code_version} but tag is {expected_version}')
+            print('Please update app/main.py to match the tag version.')
+            sys.exit(1)
+        else:
+            print('✅ Version consistency validated!')
+        "
+    
+    - name: Run E2E tests
+      run: |
+        echo "=== Running E2E tests ==="
+        python -m app.end_to_end_testing
+    
+    - name: Create GitHub Release
+      if: github.event_name == 'push'
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.version.outputs.version }}
+        release_name: Release ${{ steps.version.outputs.version }}
+        body: |
+          ## Automated Release ${{ steps.version.outputs.version }}
+          
+          This release was created automatically from tag ${{ steps.version.outputs.version }}.
+          
+          ### Validation
+          - ✅ Version consistency checked
+          - ✅ E2E tests passed
+          - ✅ All validations successful
+          
+          ### Next Steps
+          1. Review the release notes
+          2. Deploy to Cloud Run
+          3. Verify production deployment
+        draft: false
+        prerelease: false
+    
+    - name: Create GitHub Release (Manual)
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.version.outputs.version }}
+        release_name: Release ${{ steps.version.outputs.version }}
+        body: |
+          ## Manual Release ${{ steps.version.outputs.version }}
+          
+          This release was created manually via workflow dispatch.
+          
+          ### Validation
+          - ✅ Version consistency checked
+          - ✅ E2E tests passed
+          - ✅ All validations successful
+        draft: true
+        prerelease: false
