@@ -222,6 +222,39 @@ curl -X POST '{LOCAL_RUN_URL}/api/flow-audit' \\
     return report
 
 
+def run_preflight_validation() -> Dict[str, Any]:
+    """
+    Run preflight validation on segments.csv before E2E tests.
+    
+    Returns:
+        Dictionary with preflight validation results
+    """
+    print("=== PREFLIGHT VALIDATION ===")
+    print()
+    
+    try:
+        from app.validation.preflight import validate_segments_csv
+        results = validate_segments_csv()
+        
+        print(f"✅ Preflight validation passed: {results['checks_passed']} checks passed")
+        print(f"   File: {results['file_path']}")
+        print(f"   Rows: {results['total_rows']}, Columns: {results['total_columns']}")
+        
+        return {
+            'success': True,
+            'results': results,
+            'message': f"Preflight validation passed: {results['checks_passed']} checks"
+        }
+        
+    except Exception as e:
+        print(f"❌ Preflight validation failed: {str(e)}")
+        return {
+            'success': False,
+            'error': str(e),
+            'message': f"Preflight validation failed: {str(e)}"
+        }
+
+
 def get_test_environment_url() -> str:
     """Determine the test environment URL based on how the test is running."""
     # Check if we should test against production Cloud Run
@@ -676,6 +709,9 @@ def run_streamlined_tests(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     print("Testing core API endpoints and report generation (Flow + Density only)")
     print()
     
+    # Run preflight validation first
+    preflight_results = run_preflight_validation()
+    
     # Run core test categories only
     api_results = test_api_endpoints(start_times)
     report_file_results = test_report_files()
@@ -683,12 +719,14 @@ def run_streamlined_tests(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     
     # Combine all results
     all_results = {
+        'preflight_validation': preflight_results,
         'api_endpoints': api_results,
         'report_files': report_file_results,
         'content_quality': content_quality_results
     }
     
     # Overall success assessment
+    preflight_success = preflight_results['success']
     api_success = all(result['success'] for result in api_results.values())
     report_file_success = all(result['success'] for result in report_file_results.values())
     
