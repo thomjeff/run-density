@@ -1,0 +1,126 @@
+# Density Analysis Rulebook v2
+# Version: 1.6.11
+# Purpose: Template definitions for density report narratives
+
+templates:
+  drivers:
+    # High density drivers
+    high_density:
+      title: "High Density Segments"
+      description: "Segments with significant runner concentration requiring attention"
+      narrative_template: |
+        **High Density Alert**: Segment {segment_id} ({segment_label}) shows high density with {density_value} runners per meter.
+        This concentration may impact runner flow and safety. Consider:
+        - Widening the segment if possible
+        - Implementing flow control measures
+        - Monitoring for bottlenecks
+        
+    # Medium density drivers  
+    medium_density:
+      title: "Medium Density Segments"
+      description: "Segments with moderate runner concentration"
+      narrative_template: |
+        **Medium Density**: Segment {segment_id} ({segment_label}) shows moderate density with {density_value} runners per meter.
+        This level is manageable but should be monitored for changes.
+        
+    # Low density drivers
+    low_density:
+      title: "Low Density Segments" 
+      description: "Segments with low runner concentration"
+      narrative_template: |
+        **Low Density**: Segment {segment_id} ({segment_label}) shows low density with {density_value} runners per meter.
+        This segment has good flow capacity.
+        
+    # Flow type specific drivers
+    overtake_zone:
+      title: "Overtake Zone Analysis"
+      description: "Analysis of segments where overtaking occurs"
+      narrative_template: |
+        **Overtake Zone**: Segment {segment_id} ({segment_label}) is an overtake zone with {density_value} runners per meter.
+        Overtaking activity may increase density fluctuations in this area.
+        
+    merge_zone:
+      title: "Merge Zone Analysis"
+      description: "Analysis of segments where runner flows merge"
+      narrative_template: |
+        **Merge Zone**: Segment {segment_id} ({segment_label}) is a merge zone with {density_value} runners per meter.
+        Merging flows may create density spikes in this area.
+        
+    counterflow_zone:
+      title: "Counterflow Zone Analysis"
+      description: "Analysis of segments with bidirectional flow"
+      narrative_template: |
+        **Counterflow Zone**: Segment {segment_id} ({segment_label}) has counterflow with {density_value} runners per meter.
+        Bidirectional flow may create complex density patterns.
+        
+    parallel_zone:
+      title: "Parallel Zone Analysis"
+      description: "Analysis of segments with parallel flow patterns"
+      narrative_template: |
+        **Parallel Zone**: Segment {segment_id} ({segment_label}) has parallel flow with {density_value} runners per meter.
+        Parallel flows may create density variations across the segment width.
+
+  # Density thresholds
+  thresholds:
+    high_density: 0.5  # runners per meter
+    medium_density: 0.2  # runners per meter
+    low_density: 0.1   # runners per meter
+    
+  # Event-specific considerations
+  events:
+    full_marathon:
+      description: "Full marathon specific density considerations"
+      additional_factors:
+        - "Longer duration may increase density variations"
+        - "Pace groups may create density clusters"
+        - "Later start times may affect density patterns"
+        
+    half_marathon:
+      description: "Half marathon specific density considerations"
+      additional_factors:
+        - "Shorter duration may create more consistent density"
+        - "Faster average pace may affect overtaking patterns"
+        - "Different start time may impact density distribution"
+        
+    ten_k:
+      description: "10K specific density considerations"
+      additional_factors:
+        - "Shortest duration with highest intensity"
+        - "Fast pace may create rapid density changes"
+        - "Early start time may affect density patterns"
+
+  # Safety considerations
+  safety:
+    high_density_warning: |
+      **SAFETY ALERT**: High density detected in segment {segment_id}.
+      Consider implementing crowd control measures.
+      
+    flow_control_suggestion: |
+      **FLOW CONTROL**: Consider implementing flow control measures in segment {segment_id}
+      to manage density and prevent bottlenecks.
+      
+    monitoring_recommendation: |
+      **MONITORING**: Segment {segment_id} should be closely monitored for density changes
+      during peak runner flow periods.
+
+  # Reporting templates
+  report_sections:
+    executive_summary: |
+      ## Executive Summary
+      This density analysis covers {total_segments} segments across {event_type} course.
+      Key findings include {high_density_count} high density segments requiring attention.
+      
+    methodology: |
+      ## Methodology
+      Density analysis calculated as runners per meter based on:
+      - Segment width from segments.csv
+      - Runner count from temporal flow analysis
+      - Time window analysis for density variations
+      
+    recommendations: |
+      ## Recommendations
+      Based on density analysis:
+      1. Monitor high density segments for safety
+      2. Consider flow control measures where needed
+      3. Adjust segment widths if possible
+      4. Implement real-time density monitoring
