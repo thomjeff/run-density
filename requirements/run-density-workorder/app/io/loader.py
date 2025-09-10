@@ -6,7 +6,7 @@ def _yn(x):
         return s
     return s  # leave as-is if unexpected; tests will catch
 
-def load_segments(path="data/segments.csv"):
+def load_segments(path="data/segments_new.csv"):
     df = pd.read_csv(path)
     # normalize minimal bits required by current code
     for ev in ["full","half","10K"]:
