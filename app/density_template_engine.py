@@ -30,6 +30,8 @@ class TemplateContext:
     active_duration: str
     peak_window_clock: List[str]
     events_included: List[str]
+    density_value: float  # runners per meter
+    density_level: str    # high, medium, low
 
 
 class DensityTemplateEngine:
@@ -47,13 +49,63 @@ class DensityTemplateEngine:
                 rulebook = yaml.safe_load(f)
                 # Check if rulebook has the expected template structure
                 if "templates" in rulebook and "drivers" in rulebook.get("templates", {}):
-                    return rulebook
+                    # Merge new rulebook structure with existing structure for compatibility
+                    enhanced_rulebook = self._merge_rulebook_structures(rulebook)
+                    return enhanced_rulebook
                 else:
                     logger.warning(f"Rulebook found but missing expected template structure, using enhanced default templates")
                     return self._get_default_templates()
         except FileNotFoundError:
             logger.warning(f"Rulebook not found at {self.rulebook_path}, using enhanced default templates")
             return self._get_default_templates()
+    
+    def _merge_rulebook_structures(self, rulebook: Dict[str, Any]) -> Dict[str, Any]:
+        """Merge new rulebook structure with existing structure for compatibility."""
+        # Start with default templates as base
+        merged = self._get_default_templates()
+        
+        # Add new rulebook data
+        if "templates" in rulebook:
+            templates = rulebook["templates"]
+            
+            # Add new driver templates
+            if "drivers" in templates:
+                new_drivers = templates["drivers"]
+                # Convert new structure to old structure for compatibility
+                for key, driver_data in new_drivers.items():
+                    if isinstance(driver_data, dict) and "narrative_template" in driver_data:
+                        merged["templates"]["drivers"][key] = driver_data["narrative_template"]
+            
+            # Add thresholds
+            if "thresholds" in templates:
+                merged["thresholds"] = templates["thresholds"]
+            
+            # Add safety templates
+            if "safety" in templates:
+                merged["safety"] = templates["safety"]
+            
+            # Add report sections
+            if "report_sections" in templates:
+                merged["report_sections"] = templates["report_sections"]
+            
+            # Add event-specific considerations
+            if "events" in templates:
+                merged["events"] = templates["events"]
+        
+        return merged
+    
+    def _classify_density_level(self, density_value: float) -> str:
+        """Classify density level based on thresholds."""
+        thresholds = self.templates.get("thresholds", {})
+        high_threshold = thresholds.get("high_density", 0.5)
+        medium_threshold = thresholds.get("medium_density", 0.2)
+        
+        if density_value >= high_threshold:
+            return "high"
+        elif density_value >= medium_threshold:
+            return "medium"
+        else:
+            return "low"
     
     def _get_default_templates(self) -> Dict[str, Any]:
         """Get default templates when rulebook is not available."""
@@ -120,17 +172,22 @@ class DensityTemplateEngine:
         """Generate drivers narrative for a segment."""
         templates = self.templates.get("templates", {}).get("drivers", {})
         
-        # Try to match by segment_type and flow_type
-        key = f"{context.segment_type}_{context.flow_type}"
-        if key in templates:
-            template = templates[key]
+        # Try density level specific templates first
+        density_key = f"{context.density_level}_density"
+        if density_key in templates:
+            template = templates[density_key]
+        # Try flow type specific templates
+        elif f"{context.flow_type}_zone" in templates:
+            template = templates[f"{context.flow_type}_zone"]
+        # Try segment_type and flow_type combination
+        elif f"{context.segment_type}_{context.flow_type}" in templates:
+            template = templates[f"{context.segment_type}_{context.flow_type}"]
+        # Fall back to segment_type only
+        elif context.segment_type in templates:
+            template = templates[context.segment_type]
         else:
-            # Fall back to segment_type only
-            if context.segment_type in templates:
-                template = templates[context.segment_type]
-            else:
-                # Use default
-                template = templates.get("default", "High runner density in {segment_label}")
+            # Use default
+            template = templates.get("default", "High runner density in {segment_label}")
         
         return self._interpolate_template(template, context)
     
@@ -170,6 +227,28 @@ class DensityTemplateEngine:
         
         return insights
     
+    def generate_safety_warnings(self, context: TemplateContext) -> List[str]:
+        """Generate safety warnings for a segment."""
+        warnings = []
+        safety_templates = self.templates.get("safety", {})
+        
+        # High density warning
+        if context.density_level == "high" and "high_density_warning" in safety_templates:
+            warning = self._interpolate_template(safety_templates["high_density_warning"], context)
+            warnings.append(warning)
+        
+        # Flow control suggestion for high density
+        if context.density_level == "high" and "flow_control_suggestion" in safety_templates:
+            suggestion = self._interpolate_template(safety_templates["flow_control_suggestion"], context)
+            warnings.append(suggestion)
+        
+        # Monitoring recommendation
+        if context.density_level in ["high", "medium"] and "monitoring_recommendation" in safety_templates:
+            recommendation = self._interpolate_template(safety_templates["monitoring_recommendation"], context)
+            warnings.append(recommendation)
+        
+        return warnings
+    
     def _interpolate_template(self, template: str, context: TemplateContext) -> str:
         """Interpolate template variables with context data."""
         try:
@@ -185,7 +264,9 @@ class DensityTemplateEngine:
                 'peak_crowd_density': context.peak_crowd_density,
                 'active_duration': context.active_duration,
                 'peak_window_clock': context.peak_window_clock,
-                'events_included': context.events_included
+                'events_included': context.events_included,
+                'density_value': context.density_value,
+                'density_level': context.density_level
             }
             
             # Simple string formatting
@@ -227,6 +308,14 @@ def create_template_context(
     active_end = getattr(summary, "active_end", "N/A")
     peak_window_clock = [active_start, active_end]
     
+    # Calculate density value (runners per meter) - use peak crowd density as proxy
+    peak_crowd = getattr(summary, "active_peak_crowd", 0.0)
+    density_value = peak_crowd  # This is already runners per meter
+    
+    # Initialize template engine to get density level classification
+    template_engine = DensityTemplateEngine()
+    density_level = template_engine._classify_density_level(density_value)
+    
     return TemplateContext(
         segment_id=segment_id,
         segment_label=seg_label,
@@ -235,8 +324,10 @@ def create_template_context(
         los_score=los_score,
         peak_concurrency=getattr(summary, "active_peak_concurrency", 0),
         peak_areal_density=peak_areal,
-        peak_crowd_density=getattr(summary, "active_peak_crowd", 0.0),
+        peak_crowd_density=peak_crowd,
         active_duration=getattr(summary, "active_duration_s", 0),
         peak_window_clock=peak_window_clock,
-        events_included=events_included
+        events_included=events_included,
+        density_value=density_value,
+        density_level=density_level
     )
