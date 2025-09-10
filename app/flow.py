@@ -1006,7 +1006,7 @@ def calculate_convergence_zone_overlaps_original(
         # Calculate conflict zone in normalized space
         conflict_length_km = conflict_length_m / 1000.0  # Convert meters to km
         conflict_half_km = conflict_length_km / 2.0
-        
+    
         # Convert conflict zone to normalized fractions
         # Use proportional tolerance: 5% of shorter segment, minimum 50m
         min_segment_len = min(len_a, len_b)
@@ -1582,7 +1582,6 @@ def analyze_temporal_flow_segments(
         all_segments = all_segments[all_segments['seg_id'] == FLAGS.SINGLE_SEGMENT_MODE]
         if all_segments.empty:
             print(f"⚠️ Segment {FLAGS.SINGLE_SEGMENT_MODE} not found, processing all segments")
-            all_segments = segments_df.copy()
     
     results = {
         "ok": True,
