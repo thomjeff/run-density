@@ -440,7 +440,7 @@ def validate_actual_vs_expected_flow_results(actual_csv_path: str) -> Dict[str, 
         actual_df = pd.read_csv(actual_csv_path)
         
         # Load expected results
-        expected_df = pd.read_csv('docs/flow_expected_results.csv')
+        expected_df = pd.read_csv('data/flow_expected_results.csv')
         
         # Load segments data to get flow_type
         segments_df = pd.read_csv('data/segments_new.csv')
