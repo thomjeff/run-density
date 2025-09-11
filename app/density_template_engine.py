@@ -37,7 +37,7 @@ class TemplateContext:
 class DensityTemplateEngine:
     """Basic template engine for density report narratives."""
     
-    def __init__(self, rulebook_path: str = "requirements/density_v1.6.11/Density_Rulebook_v2.yml"):
+    def __init__(self, rulebook_path: str = "data/density_rulebook.yml"):
         """Initialize the template engine with rulebook."""
         self.rulebook_path = rulebook_path
         self.templates = self._load_templates()
