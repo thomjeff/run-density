@@ -309,6 +309,8 @@ jobs:
     
     - name: Upload Release Assets
       if: steps.check-release.outputs.exists == 'false'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         echo "=== Uploading Release Assets ==="
         # Find the latest reports
