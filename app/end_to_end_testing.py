@@ -986,7 +986,7 @@ if __name__ == "__main__":
     test_date = datetime.now().strftime("%Y-%m-%d")
     
     # Create output file path
-    output_file = f"reports/test-results/{test_date}/{test_timestamp}-E2E.md"
+    output_file = f"e2e_tests/{test_date}/{test_timestamp}-E2E.md"
     
     # Run tests with output capture
     with OutputCapture(output_file) as capture:

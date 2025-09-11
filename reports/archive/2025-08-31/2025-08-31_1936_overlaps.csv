@@ -1,5 +1,0 @@
-seg_id,segment_label,eventA,eventB,from_km_A,to_km_A,from_km_B,to_km_B,direction,total_A,total_B,overlap_status,first_km,first_A_count,first_B_count,first_A_runners,first_B_runners,peak_km,peak_A,peak_B,peak_combined,step_km,tolerance_sec
-SUMMARY,Total segments: 1,With overlaps: 1,Overlap rate: 100.0%,,,,,,,,,,,,,,,,,,,
-TOP_1,B2 - Friel to 10K Turn (out vs return),Range: 2.7km to 4.2km,Peak count: 1236 runners,,,,,,,,,,,,,,,,,,,
-,,,,,,,,,,,,,,,,,,,,,,
-B2,Friel to 10K Turn (out vs return),10K,10K,2.7,4.25,4.25,5.81,bi,618,618,Overlap detected,2.7,618,618,"1000, 1001, 1002","1000, 1001, 1002",2.7,618,618,1236,0.03,0.0
