@@ -271,9 +271,9 @@ def get_created_files() -> List[str]:
     files = []
     
     # Find latest temporal flow files
-    temporal_md_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.md')
-    temporal_csv_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.csv')
-    density_md_files = glob.glob('reports/analysis/*/????-??-??-????-Density.md')
+    temporal_md_files = glob.glob('reports/*/????-??-??-????-Flow.md')
+    temporal_csv_files = glob.glob('reports/*/????-??-??-????-Flow.csv')
+    density_md_files = glob.glob('reports/*/????-??-??-????-Density.md')
     
     if temporal_md_files:
         files.append(max(temporal_md_files, key=os.path.getctime))
@@ -420,7 +420,7 @@ def test_report_files() -> Dict[str, Any]:
     results = {}
     
     # Check for temporal flow markdown files (current pattern: YYYY-MM-DD-HHMM-Flow.md)
-    temporal_md_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.md')
+    temporal_md_files = glob.glob('reports/*/????-??-??-????-Flow.md')
     results['temporal_flow_md'] = {
         'count': len(temporal_md_files),
         'files': temporal_md_files,
@@ -428,7 +428,7 @@ def test_report_files() -> Dict[str, Any]:
     }
     
     # Check for temporal flow CSV files (current pattern: YYYY-MM-DD-HHMM-Flow.csv)
-    temporal_csv_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.csv')
+    temporal_csv_files = glob.glob('reports/*/????-??-??-????-Flow.csv')
     results['temporal_flow_csv'] = {
         'count': len(temporal_csv_files),
         'files': temporal_csv_files,
@@ -436,7 +436,7 @@ def test_report_files() -> Dict[str, Any]:
     }
     
     # Check for density markdown files (current pattern: YYYY-MM-DD-HHMM-Density.md)
-    density_md_files = glob.glob('reports/analysis/*/????-??-??-????-Density.md')
+    density_md_files = glob.glob('reports/*/????-??-??-????-Density.md')
     results['density_md'] = {
         'count': len(density_md_files),
         'files': density_md_files,
@@ -596,9 +596,9 @@ def test_report_content_quality() -> Dict[str, Any]:
     results = {}
     
     # Find latest report files (current pattern: YYYY-MM-DD-HHMM-Flow.md and YYYY-MM-DD-HHMM-Density.md)
-    temporal_md_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.md')
-    temporal_csv_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.csv')
-    density_md_files = glob.glob('reports/analysis/*/????-??-??-????-Density.md')
+    temporal_md_files = glob.glob('reports/*/????-??-??-????-Flow.md')
+    temporal_csv_files = glob.glob('reports/*/????-??-??-????-Flow.csv')
+    density_md_files = glob.glob('reports/*/????-??-??-????-Density.md')
     
     if not temporal_md_files or not temporal_csv_files or not density_md_files:
         print("❌ Cannot test content quality - report files not found")

@@ -69,7 +69,7 @@ class DensityReportRequest(BaseModel):
     stepKm: float = DEFAULT_STEP_KM
     timeWindow: int = DEFAULT_TIME_WINDOW_SECONDS
     includePerEvent: bool = True
-    outputDir: str = "reports/analysis"
+    outputDir: str = "reports"
 
 class TemporalFlowReportRequest(BaseModel):
     paceCsv: str
@@ -77,7 +77,7 @@ class TemporalFlowReportRequest(BaseModel):
     startTimes: Dict[str, int]
     minOverlapDuration: float = DEFAULT_MIN_OVERLAP_DURATION
     conflictLengthM: float = DEFAULT_CONFLICT_LENGTH_METERS
-    outputDir: str = "reports/analysis"
+    outputDir: str = "reports"
 
 class FlowAuditRequest(BaseModel):
     paceCsv: str
@@ -88,7 +88,7 @@ class FlowAuditRequest(BaseModel):
     eventB: str
     minOverlapDuration: float = DEFAULT_MIN_OVERLAP_DURATION
     conflictLengthM: float = DEFAULT_CONFLICT_LENGTH_METERS
-    outputDir: str = "reports/analysis"
+    outputDir: str = "reports"
 
 app = FastAPI(title="run-density", version="v1.6.15")
 APP_VERSION = os.getenv("APP_VERSION", app.version)

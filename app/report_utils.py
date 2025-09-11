@@ -16,12 +16,12 @@ except ImportError:
     from paths import get_analysis_dir
 
 
-def get_date_folder_path(base_path: str = "reports/analysis") -> Tuple[str, str]:
+def get_date_folder_path(base_path: str = "reports") -> Tuple[str, str]:
     """
     Get the date-based folder path for organizing reports.
     
     Args:
-        base_path: Base directory for reports (default: "reports/analysis")
+        base_path: Base directory for reports (default: "reports")
     
     Returns:
         Tuple of (full_path, date_folder_name)

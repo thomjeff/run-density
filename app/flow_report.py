@@ -33,7 +33,7 @@ def generate_temporal_flow_report(
     start_times: Dict[str, float],
     min_overlap_duration: float = DEFAULT_MIN_OVERLAP_DURATION,
     conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
-    output_dir: str = "reports/analysis"
+    output_dir: str = "reports"
 ) -> Dict[str, Any]:
     """
     Generate a comprehensive temporal flow analysis report.
@@ -470,7 +470,7 @@ def generate_simple_temporal_flow_report(
     """
     return generate_temporal_flow_report(
         pace_csv, segments_csv, start_times, min_overlap_duration, 
-        conflict_length_m, output_dir="reports/analysis"
+        conflict_length_m, output_dir="reports"
     )
 
 
@@ -704,7 +704,7 @@ def format_bib_range(bib_list: List[str], max_individual: int = 3) -> str:
 
 def generate_flow_audit_csv(
     segments: List[Dict[str, Any]],
-    output_dir: str = "reports/analysis"
+    output_dir: str = "reports"
 ) -> str:
     """
     Generate Flow_Audit.csv with comprehensive diagnostic data.

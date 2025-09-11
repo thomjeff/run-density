@@ -709,7 +709,7 @@ def extract_runner_timing_data_for_audit(
     to_km_a: float,
     from_km_b: float,
     to_km_b: float,
-    output_dir: str = "reports/analysis"
+    output_dir: str = "reports"
 ) -> Dict[str, str]:
     """
     Extract runner timing data from F1 analysis for runner audit emitter.
@@ -2401,7 +2401,7 @@ def generate_flow_audit_for_segment(
     event_b: str,
     min_overlap_duration: float = DEFAULT_MIN_OVERLAP_DURATION,
     conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
-    output_dir: str = "reports/analysis"
+    output_dir: str = "reports"
 ) -> Dict[str, Any]:
     """
     Generate Flow Audit for a specific segment and event pair.
