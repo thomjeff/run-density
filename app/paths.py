@@ -13,13 +13,13 @@ def get_output_dir() -> str:
     Get the output directory for reports and analysis files.
     
     In Cloud Run, only /tmp is writable, so we use OUTPUT_DIR environment variable
-    with /tmp/analysis as the default. For local development, this can be set to
-    reports/analysis to maintain existing behavior.
+    with /tmp/reports as the default. For local development, this can be set to
+    reports to maintain existing behavior.
     
     Returns:
         str: The output directory path (will be created if it doesn't exist)
     """
-    output_dir = os.getenv("OUTPUT_DIR", "/tmp/analysis")
+    output_dir = os.getenv("OUTPUT_DIR", "/tmp/reports")
     
     # Ensure the directory exists
     os.makedirs(output_dir, exist_ok=True)
@@ -41,11 +41,9 @@ def get_reports_dir() -> str:
 
 def get_analysis_dir() -> str:
     """
-    Get the analysis directory within the reports directory.
+    Get the analysis directory (now just the reports directory).
     
     Returns:
-        str: The analysis directory path (will be created if it doesn't exist)
+        str: The reports directory path (will be created if it doesn't exist)
     """
-    analysis_dir = os.path.join(get_reports_dir(), "analysis")
-    os.makedirs(analysis_dir, exist_ok=True)
-    return analysis_dir
+    return get_reports_dir()

@@ -271,9 +271,9 @@ def get_created_files() -> List[str]:
     files = []
     
     # Find latest temporal flow files
-    temporal_md_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.md')
-    temporal_csv_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.csv')
-    density_md_files = glob.glob('reports/analysis/*/????-??-??-????-Density.md')
+    temporal_md_files = glob.glob('reports/*/????-??-??-????-Flow.md')
+    temporal_csv_files = glob.glob('reports/*/????-??-??-????-Flow.csv')
+    density_md_files = glob.glob('reports/*/????-??-??-????-Density.md')
     
     if temporal_md_files:
         files.append(max(temporal_md_files, key=os.path.getctime))
@@ -420,7 +420,7 @@ def test_report_files() -> Dict[str, Any]:
     results = {}
     
     # Check for temporal flow markdown files (current pattern: YYYY-MM-DD-HHMM-Flow.md)
-    temporal_md_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.md')
+    temporal_md_files = glob.glob('reports/*/????-??-??-????-Flow.md')
     results['temporal_flow_md'] = {
         'count': len(temporal_md_files),
         'files': temporal_md_files,
@@ -428,7 +428,7 @@ def test_report_files() -> Dict[str, Any]:
     }
     
     # Check for temporal flow CSV files (current pattern: YYYY-MM-DD-HHMM-Flow.csv)
-    temporal_csv_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.csv')
+    temporal_csv_files = glob.glob('reports/*/????-??-??-????-Flow.csv')
     results['temporal_flow_csv'] = {
         'count': len(temporal_csv_files),
         'files': temporal_csv_files,
@@ -436,7 +436,7 @@ def test_report_files() -> Dict[str, Any]:
     }
     
     # Check for density markdown files (current pattern: YYYY-MM-DD-HHMM-Density.md)
-    density_md_files = glob.glob('reports/analysis/*/????-??-??-????-Density.md')
+    density_md_files = glob.glob('reports/*/????-??-??-????-Density.md')
     results['density_md'] = {
         'count': len(density_md_files),
         'files': density_md_files,
@@ -596,9 +596,9 @@ def test_report_content_quality() -> Dict[str, Any]:
     results = {}
     
     # Find latest report files (current pattern: YYYY-MM-DD-HHMM-Flow.md and YYYY-MM-DD-HHMM-Density.md)
-    temporal_md_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.md')
-    temporal_csv_files = glob.glob('reports/analysis/*/????-??-??-????-Flow.csv')
-    density_md_files = glob.glob('reports/analysis/*/????-??-??-????-Density.md')
+    temporal_md_files = glob.glob('reports/*/????-??-??-????-Flow.md')
+    temporal_csv_files = glob.glob('reports/*/????-??-??-????-Flow.csv')
+    density_md_files = glob.glob('reports/*/????-??-??-????-Density.md')
     
     if not temporal_md_files or not temporal_csv_files or not density_md_files:
         print("❌ Cannot test content quality - report files not found")
@@ -906,13 +906,87 @@ def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any
     return all_results
 
 
+def copy_test_files_to_e2e_folder(test_timestamp: str, test_date: str, created_files: List[str], e2e_report_path: str) -> None:
+    """
+    Copy test files to e2e_tests folder with proper naming conventions.
+    
+    Args:
+        test_timestamp: Timestamp for file naming (YYYY-MM-DD-HHMM)
+        test_date: Date for folder naming (YYYY-MM-DD)
+        created_files: List of files created during testing
+        e2e_report_path: Path to the E2E report file
+    """
+    import shutil
+    from pathlib import Path
+    
+    # Create e2e_tests folder structure
+    e2e_base_dir = Path("e2e_tests")
+    e2e_date_dir = e2e_base_dir / test_date
+    e2e_date_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Determine if this is a local or cloud run test
+    is_cloud_run = os.getenv('TEST_CLOUD_RUN', '').lower() == 'true'
+    test_type = "cloud" if is_cloud_run else "local"
+    
+    print(f"\n📁 Copying test files to e2e_tests/{test_date}/")
+    
+    # Copy E2E report
+    e2e_dest = e2e_date_dir / f"{test_timestamp}-{test_type}-E2E.md"
+    try:
+        shutil.copy2(e2e_report_path, e2e_dest)
+        print(f"   ✅ E2E.md → {e2e_dest.name}")
+    except Exception as e:
+        print(f"   ❌ Failed to copy E2E.md: {e}")
+    
+    # Copy flow_expected_results.csv with datetime stamp
+    expected_results_source = "data/flow_expected_results.csv"
+    if os.path.exists(expected_results_source):
+        expected_results_dest = e2e_date_dir / f"{test_timestamp}-{test_type}-flow_expected_results.csv"
+        try:
+            shutil.copy2(expected_results_source, expected_results_dest)
+            print(f"   ✅ flow_expected_results.csv → {expected_results_dest.name}")
+        except Exception as e:
+            print(f"   ❌ Failed to copy flow_expected_results.csv: {e}")
+    else:
+        print(f"   ⚠️  flow_expected_results.csv not found at {expected_results_source}")
+    
+    # Copy other test files
+    for file_path in created_files:
+        if not os.path.exists(file_path):
+            continue
+            
+        source_path = Path(file_path)
+        file_name = source_path.name
+        
+        # Determine file type and create appropriate destination name
+        if "Flow.md" in file_name:
+            dest_name = f"{test_timestamp}-{test_type}-Flow.md"
+        elif "Flow.csv" in file_name:
+            dest_name = f"{test_timestamp}-{test_type}-Flow.csv"
+        elif "Density.md" in file_name:
+            dest_name = f"{test_timestamp}-{test_type}-Density.md"
+        else:
+            # For other files, keep original name but add timestamp prefix
+            dest_name = f"{test_timestamp}-{test_type}-{file_name}"
+        
+        dest_path = e2e_date_dir / dest_name
+        
+        try:
+            shutil.copy2(file_path, dest_path)
+            print(f"   ✅ {file_name} → {dest_name}")
+        except Exception as e:
+            print(f"   ❌ Failed to copy {file_name}: {e}")
+    
+    print(f"   📂 Files saved to: {e2e_date_dir}")
+
+
 if __name__ == "__main__":
     # Generate timestamp for file naming
     test_timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
     test_date = datetime.now().strftime("%Y-%m-%d")
     
     # Create output file path
-    output_file = f"reports/test-results/{test_date}/{test_timestamp}-E2E.md"
+    output_file = f"e2e_tests/{test_date}/{test_timestamp}-E2E.md"
     
     # Run tests with output capture
     with OutputCapture(output_file) as capture:
@@ -936,3 +1010,6 @@ if __name__ == "__main__":
         f.write(formatted_report)
     
     print(f"\n📄 E2E Test Results saved to: {output_file}")
+    
+    # Auto-copy test files to e2e_tests folder
+    copy_test_files_to_e2e_folder(test_timestamp, test_date, created_files, output_file)

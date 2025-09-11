@@ -69,7 +69,7 @@ def generate_density_report(
     step_km: float = DEFAULT_STEP_KM,
     time_window_s: float = DEFAULT_TIME_WINDOW_SECONDS,
     include_per_event: bool = True,
-    output_dir: str = "reports/analysis"
+    output_dir: str = "reports"
 ) -> Dict[str, Any]:
     """
     Generate a comprehensive density analysis report.
@@ -594,5 +594,5 @@ def generate_simple_density_report(
     """
     return generate_density_report(
         pace_csv, density_csv, start_times, step_km, time_window_s, 
-        include_per_event=False, output_dir="reports/analysis"
+        include_per_event=False, output_dir="reports"
     )

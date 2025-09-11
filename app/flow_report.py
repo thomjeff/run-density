@@ -23,6 +23,9 @@ except ImportError:
     from constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
     from report_utils import get_report_paths, format_decimal_places
 
+# Get app version from constants to avoid circular import
+APP_VERSION = "v1.6.15"  # This should match the version in main.py
+
 
 def generate_temporal_flow_report(
     pace_csv: str,
@@ -30,7 +33,7 @@ def generate_temporal_flow_report(
     start_times: Dict[str, float],
     min_overlap_duration: float = DEFAULT_MIN_OVERLAP_DURATION,
     conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
-    output_dir: str = "reports/analysis"
+    output_dir: str = "reports"
 ) -> Dict[str, Any]:
     """
     Generate a comprehensive temporal flow analysis report.
@@ -72,7 +75,7 @@ def generate_temporal_flow_report(
     print(f"📊 Temporal flow report saved to: {full_path}")
 
     # Also generate CSV
-    export_temporal_flow_csv(results, output_dir)
+    export_temporal_flow_csv(results, output_dir, start_times, min_overlap_duration, conflict_length_m)
     
     # Return results in the format expected by other functions
     results.update({
@@ -467,11 +470,11 @@ def generate_simple_temporal_flow_report(
     """
     return generate_temporal_flow_report(
         pace_csv, segments_csv, start_times, min_overlap_duration, 
-        conflict_length_m, output_dir="reports/analysis"
+        conflict_length_m, output_dir="reports"
     )
 
 
-def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
+def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_times: Dict[str, float] = None, min_overlap_duration: float = 5.0, conflict_length_m: float = 100.0) -> None:
     """Export temporal flow analysis results to CSV with enhanced formatting."""
     import csv
     import pandas as pd
@@ -489,15 +492,24 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
     with open(full_path, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         
-        # Human-readable header with pct_a, pct_b, and audit columns included
+        # Reorganized header with logical column grouping for better readability
         writer.writerow([
-            "seg_id", "segment_label", "flow_type", "event_a", "event_b",
-            "from_km_a", "to_km_a", "from_km_b", "to_km_b",
-            "convergence_point_km", "convergence_point_fraction", "has_convergence",
-            "total_a", "total_b", "overtaking_a", "overtaking_b", "copresence_a", "copresence_b",
-            "pct_a", "pct_b", "convergence_zone_start", "convergence_zone_end", 
-            "spatial_zone_exists", "temporal_overlap_exists", "true_pass_exists", "has_convergence_policy", "no_pass_reason_code",
-            "conflict_length_m", "width_m", "unique_encounters", "participants_involved", "sample_a", "sample_b"
+            # Group 1: Segment Identification & Context
+            "seg_id", "segment_label", "event_a", "event_b", "total_a", "total_b", 
+            "flow_type", "from_km_a", "to_km_a", "from_km_b", "to_km_b", "width_m",
+            
+            # Group 2: Encounter Results & Analysis
+            "overtaking_a", "overtaking_b", "sample_a", "sample_b", "pct_a", "pct_b",
+            "copresence_a", "copresence_b", "unique_encounters", "participants_involved",
+            
+            # Group 3: Technical & Debugging
+            "spatial_zone_exists", "temporal_overlap_exists", "true_pass_exists",
+            "has_convergence_policy", "has_convergence", "convergence_zone_start",
+            "convergence_zone_end", "no_pass_reason_code", "conflict_length_m",
+            
+            # Group 4: Metadata (moved to end as requested)
+            "analysis_timestamp", "app_version", "environment", "data_source",
+            "start_times", "min_overlap_duration", "conflict_length_m"
         ])
         
         # Enhanced data rows with proper formatting
@@ -563,39 +575,51 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
             pct_b = round((overtaking_b / total_b * 100), 1) if total_b > 0 else 0.0
             
             writer.writerow([
+                # Group 1: Segment Identification & Context
                 seg_id,
                 segment.get("segment_label", ""),
-                segment.get("flow_type", ""),
                 segment.get("event_a", ""),
                 segment.get("event_b", ""),
+                segment.get("total_a", ""),
+                segment.get("total_b", ""),
+                segment.get("flow_type", ""),
                 round(segment.get('from_km_a', 0), 2),
                 round(segment.get('to_km_a', 0), 2),
                 round(segment.get('from_km_b', 0), 2),
                 round(segment.get('to_km_b', 0), 2),
-                cp_km,  # Use the rounded convergence point
-                normalized_cp,
-                segment.get("has_convergence", False),
-                segment.get("total_a", ""),
-                segment.get("total_b", ""),
+                width_m,
+                
+                # Group 2: Encounter Results & Analysis
                 segment.get("overtaking_a", ""),
                 segment.get("overtaking_b", ""),
-                segment.get("copresence_a", ""),
-                segment.get("copresence_b", ""),
+                format_sample_data(segment.get("sample_a", [])),
+                format_sample_data(segment.get("sample_b", [])),
                 pct_a,
                 pct_b,
-                conv_start,
-                conv_end,
+                segment.get("copresence_a", ""),
+                segment.get("copresence_b", ""),
+                segment.get("unique_encounters", 0),
+                segment.get("participants_involved", 0),
+                
+                # Group 3: Technical & Debugging
                 segment.get("spatial_zone_exists", False),
                 segment.get("temporal_overlap_exists", False),
                 segment.get("true_pass_exists", False),
                 segment.get("has_convergence_policy", False),
+                segment.get("has_convergence", False),
+                conv_start,
+                conv_end,
                 segment.get("no_pass_reason_code", ""),
                 segment.get('conflict_length_m', 100.0),  # conflict_length_m from analysis
-                width_m,
-                segment.get("unique_encounters", 0),
-                segment.get("participants_involved", 0),
-                format_sample_data(segment.get("sample_a", [])),
-                format_sample_data(segment.get("sample_b", []))
+                
+                # Group 4: Metadata (moved to end as requested)
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                APP_VERSION,
+                "local",  # Environment detection moved to function parameter
+                "runners.csv, segments.csv",
+                f"Full:{start_times.get('Full', 420) if start_times else 420}, 10K:{start_times.get('10K', 440) if start_times else 440}, Half:{start_times.get('Half', 460) if start_times else 460}",
+                min_overlap_duration,
+                conflict_length_m
             ])
     
     print(f"📊 Temporal flow analysis exported to: {full_path}")
@@ -646,7 +670,7 @@ def format_bib_range(bib_list: List[str], max_individual: int = 3) -> str:
 
 def generate_flow_audit_csv(
     segments: List[Dict[str, Any]],
-    output_dir: str = "reports/analysis"
+    output_dir: str = "reports"
 ) -> str:
     """
     Generate Flow_Audit.csv with comprehensive diagnostic data.
