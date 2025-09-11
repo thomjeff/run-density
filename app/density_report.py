@@ -312,6 +312,7 @@ def generate_template_narratives(segment_id: str, segment_data: Dict[str, Any]) 
         drivers = template_engine.generate_drivers(context)
         mitigations = template_engine.generate_mitigations(context)
         ops_insights = template_engine.generate_ops_insights(context)
+        safety_warnings = template_engine.generate_safety_warnings(context)
         
         # Add to content
         content.append("### Operational Insights")
@@ -327,6 +328,13 @@ def generate_template_narratives(segment_id: str, segment_data: Dict[str, Any]) 
             content.append("**Ops Box:**")
             for key, value in ops_insights.items():
                 content.append(f"- **{key.title()}:** {value}")
+            content.append("")
+        
+        # Add safety warnings if any
+        if safety_warnings:
+            content.append("**Safety Alerts:**")
+            for warning in safety_warnings:
+                content.append(f"- {warning}")
             content.append("")
         
     except Exception as e:
