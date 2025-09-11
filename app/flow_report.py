@@ -494,40 +494,22 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
         
         # Reorganized header with logical column grouping for better readability
         writer.writerow([
-            # Group 0: Metadata
+            # Group 1: Segment Identification & Context
+            "seg_id", "segment_label", "event_a", "event_b", "total_a", "total_b", 
+            "flow_type", "from_km_a", "to_km_a", "from_km_b", "to_km_b", "width_m",
+            
+            # Group 2: Encounter Results & Analysis
+            "overtaking_a", "overtaking_b", "sample_a", "sample_b", "pct_a", "pct_b",
+            "copresence_a", "copresence_b", "unique_encounters", "participants_involved",
+            
+            # Group 3: Technical & Debugging
+            "spatial_zone_exists", "temporal_overlap_exists", "true_pass_exists",
+            "has_convergence_policy", "has_convergence", "convergence_zone_start",
+            "convergence_zone_end", "no_pass_reason_code", "conflict_length_m",
+            
+            # Group 4: Metadata (moved to end as requested)
             "analysis_timestamp", "app_version", "environment", "data_source",
-            "start_times", "min_overlap_duration", "conflict_length_m",
-            
-            # Group 1: Segment Identification
-            "seg_id", "segment_label", "flow_type",
-            
-            # Group 2: Event Configuration
-            "event_a", "event_b", "from_km_a", "to_km_a", "from_km_b", "to_km_b",
-            
-            # Group 3: Convergence Analysis
-            "convergence_point_km", "convergence_point_fraction", "has_convergence",
-            "convergence_zone_start", "convergence_zone_end", "spatial_zone_exists",
-            
-            # Group 4: Runner Counts
-            "total_a", "total_b", "participants_involved",
-            
-            # Group 5: Overtaking Analysis
-            "overtaking_a", "overtaking_b", "pct_a", "pct_b",
-            
-            # Group 6: Co-presence Analysis
-            "copresence_a", "copresence_b",
-            
-            # Group 7: Interaction Metrics
-            "unique_encounters", "temporal_overlap_exists", "true_pass_exists",
-            
-            # Group 8: Policy & Configuration
-            "has_convergence_policy", "no_pass_reason_code",
-            
-            # Group 9: Physical Properties
-            "conflict_length_m", "width_m",
-            
-            # Group 10: Sample Data
-            "sample_a", "sample_b"
+            "start_times", "min_overlap_duration", "conflict_length_m"
         ])
         
         # Enhanced data rows with proper formatting
@@ -593,67 +575,51 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
             pct_b = round((overtaking_b / total_b * 100), 1) if total_b > 0 else 0.0
             
             writer.writerow([
-                # Group 0: Metadata
+                # Group 1: Segment Identification & Context
+                seg_id,
+                segment.get("segment_label", ""),
+                segment.get("event_a", ""),
+                segment.get("event_b", ""),
+                segment.get("total_a", ""),
+                segment.get("total_b", ""),
+                segment.get("flow_type", ""),
+                round(segment.get('from_km_a', 0), 2),
+                round(segment.get('to_km_a', 0), 2),
+                round(segment.get('from_km_b', 0), 2),
+                round(segment.get('to_km_b', 0), 2),
+                width_m,
+                
+                # Group 2: Encounter Results & Analysis
+                segment.get("overtaking_a", ""),
+                segment.get("overtaking_b", ""),
+                format_sample_data(segment.get("sample_a", [])),
+                format_sample_data(segment.get("sample_b", [])),
+                pct_a,
+                pct_b,
+                segment.get("copresence_a", ""),
+                segment.get("copresence_b", ""),
+                segment.get("unique_encounters", 0),
+                segment.get("participants_involved", 0),
+                
+                # Group 3: Technical & Debugging
+                segment.get("spatial_zone_exists", False),
+                segment.get("temporal_overlap_exists", False),
+                segment.get("true_pass_exists", False),
+                segment.get("has_convergence_policy", False),
+                segment.get("has_convergence", False),
+                conv_start,
+                conv_end,
+                segment.get("no_pass_reason_code", ""),
+                segment.get('conflict_length_m', 100.0),  # conflict_length_m from analysis
+                
+                # Group 4: Metadata (moved to end as requested)
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 APP_VERSION,
                 "local",  # Environment detection moved to function parameter
                 "runners.csv, segments.csv",
                 f"Full:{start_times.get('Full', 420) if start_times else 420}, 10K:{start_times.get('10K', 440) if start_times else 440}, Half:{start_times.get('Half', 460) if start_times else 460}",
                 min_overlap_duration,
-                conflict_length_m,
-                
-                # Group 1: Segment Identification
-                seg_id,
-                segment.get("segment_label", ""),
-                segment.get("flow_type", ""),
-                
-                # Group 2: Event Configuration
-                segment.get("event_a", ""),
-                segment.get("event_b", ""),
-                round(segment.get('from_km_a', 0), 2),
-                round(segment.get('to_km_a', 0), 2),
-                round(segment.get('from_km_b', 0), 2),
-                round(segment.get('to_km_b', 0), 2),
-                
-                # Group 3: Convergence Analysis
-                cp_km,  # Use the rounded convergence point
-                normalized_cp,
-                segment.get("has_convergence", False),
-                conv_start,
-                conv_end,
-                segment.get("spatial_zone_exists", False),
-                
-                # Group 4: Runner Counts
-                segment.get("total_a", ""),
-                segment.get("total_b", ""),
-                segment.get("participants_involved", 0),
-                
-                # Group 5: Overtaking Analysis
-                segment.get("overtaking_a", ""),
-                segment.get("overtaking_b", ""),
-                pct_a,
-                pct_b,
-                
-                # Group 6: Co-presence Analysis
-                segment.get("copresence_a", ""),
-                segment.get("copresence_b", ""),
-                
-                # Group 7: Interaction Metrics
-                segment.get("unique_encounters", 0),
-                segment.get("temporal_overlap_exists", False),
-                segment.get("true_pass_exists", False),
-                
-                # Group 8: Policy & Configuration
-                segment.get("has_convergence_policy", False),
-                segment.get("no_pass_reason_code", ""),
-                
-                # Group 9: Physical Properties
-                segment.get('conflict_length_m', 100.0),  # conflict_length_m from analysis
-                width_m,
-                
-                # Group 10: Sample Data
-                format_sample_data(segment.get("sample_a", [])),
-                format_sample_data(segment.get("sample_b", []))
+                conflict_length_m
             ])
     
     print(f"📊 Temporal flow analysis exported to: {full_path}")
