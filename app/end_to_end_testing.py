@@ -906,6 +906,68 @@ def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any
     return all_results
 
 
+def copy_test_files_to_e2e_folder(test_timestamp: str, test_date: str, created_files: List[str], e2e_report_path: str) -> None:
+    """
+    Copy test files to e2e_tests folder with proper naming conventions.
+    
+    Args:
+        test_timestamp: Timestamp for file naming (YYYY-MM-DD-HHMM)
+        test_date: Date for folder naming (YYYY-MM-DD)
+        created_files: List of files created during testing
+        e2e_report_path: Path to the E2E report file
+    """
+    import shutil
+    from pathlib import Path
+    
+    # Create e2e_tests folder structure
+    e2e_base_dir = Path("e2e_tests")
+    e2e_date_dir = e2e_base_dir / test_date
+    e2e_date_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Determine if this is a local or cloud run test
+    is_cloud_run = os.getenv('TEST_CLOUD_RUN', '').lower() == 'true'
+    test_type = "cloud" if is_cloud_run else "local"
+    
+    print(f"\n📁 Copying test files to e2e_tests/{test_date}/")
+    
+    # Copy E2E report
+    e2e_dest = e2e_date_dir / f"{test_timestamp}-{test_type}-E2E.md"
+    try:
+        shutil.copy2(e2e_report_path, e2e_dest)
+        print(f"   ✅ E2E.md → {e2e_dest.name}")
+    except Exception as e:
+        print(f"   ❌ Failed to copy E2E.md: {e}")
+    
+    # Copy other test files
+    for file_path in created_files:
+        if not os.path.exists(file_path):
+            continue
+            
+        source_path = Path(file_path)
+        file_name = source_path.name
+        
+        # Determine file type and create appropriate destination name
+        if "Flow.md" in file_name:
+            dest_name = f"{test_timestamp}-{test_type}-Flow.md"
+        elif "Flow.csv" in file_name:
+            dest_name = f"{test_timestamp}-{test_type}-Flow.csv"
+        elif "Density.md" in file_name:
+            dest_name = f"{test_timestamp}-{test_type}-Density.md"
+        else:
+            # For other files, keep original name but add timestamp prefix
+            dest_name = f"{test_timestamp}-{test_type}-{file_name}"
+        
+        dest_path = e2e_date_dir / dest_name
+        
+        try:
+            shutil.copy2(file_path, dest_path)
+            print(f"   ✅ {file_name} → {dest_name}")
+        except Exception as e:
+            print(f"   ❌ Failed to copy {file_name}: {e}")
+    
+    print(f"   📂 Files saved to: {e2e_date_dir}")
+
+
 if __name__ == "__main__":
     # Generate timestamp for file naming
     test_timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
@@ -936,3 +998,6 @@ if __name__ == "__main__":
         f.write(formatted_report)
     
     print(f"\n📄 E2E Test Results saved to: {output_file}")
+    
+    # Auto-copy test files to e2e_tests folder
+    copy_test_files_to_e2e_folder(test_timestamp, test_date, created_files, output_file)
