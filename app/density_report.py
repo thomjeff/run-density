@@ -26,7 +26,10 @@ import pandas as pd
 from datetime import datetime
 
 
-# LOS Thresholds for density classification (updated to match v2 rulebook)
+# LOS Thresholds for density classification (aligned with density_rulebook.yml v2)
+# Note: Rulebook defines thresholds in runners per meter, but we use areal density (runners/m²)
+# for more accurate spatial analysis. Crowd density (runners/m) aligns with rulebook.
+
 LOS_AREAL_THRESHOLDS = {
     'A': (0.0, 0.31),    # Comfortable
     'B': (0.31, 0.43),   # Good
@@ -36,13 +39,14 @@ LOS_AREAL_THRESHOLDS = {
     'F': (1.63, float('inf'))  # Critical
 }
 
+# Crowd density thresholds aligned with rulebook (runners per meter)
 LOS_CROWD_THRESHOLDS = {
-    'A': (0.0, 0.2),     # Comfortable
-    'B': (0.2, 0.4),     # Good
-    'C': (0.4, 0.6),     # Moderate
-    'D': (0.6, 0.8),     # Busy
-    'E': (0.8, 1.0),     # Very Busy
-    'F': (1.0, float('inf'))  # Critical
+    'A': (0.0, 0.1),     # Comfortable (rulebook: low_density)
+    'B': (0.1, 0.2),     # Good (rulebook: medium_density start)
+    'C': (0.2, 0.4),     # Moderate (rulebook: medium_density range)
+    'D': (0.4, 0.5),     # Busy (rulebook: high_density start)
+    'E': (0.5, 0.8),     # Very Busy (rulebook: high_density range)
+    'F': (0.8, float('inf'))  # Critical (rulebook: above high_density)
 }
 
 
@@ -208,6 +212,9 @@ def generate_markdown_report(
     content.append("- **Self Density**: Only that event's runners (not shown in this report)")
     content.append("- **Active Window**: Time period when the event has runners present in the segment")
     content.append("")
+    content.append("### Terminology Note")
+    content.append("**Thresholds**: All density thresholds are applied inclusively (≥). For example, '≥0.5 runners/m' means 0.5 or higher density values trigger the threshold.")
+    content.append("")
     
     # LOS Thresholds Table
     content.append("## Level of Service Thresholds")
@@ -314,37 +321,40 @@ def generate_template_narratives(segment_id: str, segment_data: Dict[str, Any]) 
         ops_insights = template_engine.generate_ops_insights(context)
         safety_warnings = template_engine.generate_safety_warnings(context)
         
-        # Add to content
-        content.append("### Operational Insights")
+        # Add to content with clear separation
+        content.append("### Metrics Summary")
         content.append("")
-        content.append("**Drivers:**")
+        content.append("**Density Analysis:**")
         content.append(f"- {drivers}")
         content.append("")
-        content.append("**Mitigations:**")
+        content.append("**Operational Implications:**")
         content.append(f"- {mitigations}")
         content.append("")
         
+        # Operational guidance box
         if ops_insights:
-            content.append("**Ops Box:**")
+            content.append("### Operational Guidance")
+            content.append("")
             for key, value in ops_insights.items():
                 content.append(f"- **{key.title()}:** {value}")
             content.append("")
         
-        # Add safety warnings if any
+        # Safety warnings box
         if safety_warnings:
-            content.append("**Safety Alerts:**")
+            content.append("### Safety Alerts")
+            content.append("")
             for warning in safety_warnings:
                 content.append(f"- {warning}")
             content.append("")
         
     except Exception as e:
         # Fallback if template engine fails
-        content.append("### Operational Insights")
+        content.append("### Metrics Summary")
         content.append("")
-        content.append("**Drivers:**")
+        content.append("**Density Analysis:**")
         content.append(f"- High runner density in {segment_data.get('seg_label', 'Unknown')} segment")
         content.append("")
-        content.append("**Mitigations:**")
+        content.append("**Operational Implications:**")
         content.append("- Consider additional crowd management measures")
         content.append("")
     
