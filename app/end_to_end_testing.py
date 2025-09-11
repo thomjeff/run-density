@@ -938,6 +938,18 @@ def copy_test_files_to_e2e_folder(test_timestamp: str, test_date: str, created_f
     except Exception as e:
         print(f"   ❌ Failed to copy E2E.md: {e}")
     
+    # Copy flow_expected_results.csv with datetime stamp
+    expected_results_source = "data/flow_expected_results.csv"
+    if os.path.exists(expected_results_source):
+        expected_results_dest = e2e_date_dir / f"{test_timestamp}-{test_type}-flow_expected_results.csv"
+        try:
+            shutil.copy2(expected_results_source, expected_results_dest)
+            print(f"   ✅ flow_expected_results.csv → {expected_results_dest.name}")
+        except Exception as e:
+            print(f"   ❌ Failed to copy flow_expected_results.csv: {e}")
+    else:
+        print(f"   ⚠️  flow_expected_results.csv not found at {expected_results_source}")
+    
     # Copy other test files
     for file_path in created_files:
         if not os.path.exists(file_path):
