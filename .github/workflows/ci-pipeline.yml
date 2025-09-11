@@ -1,0 +1,325 @@
+name: CI Pipeline
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # Part 1: Build & Deploy (Docker → Artifact Registry → Cloud Run)
+  build-deploy:
+    name: "1️⃣ Build & Deploy (Docker → Artifacts)"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # WIF required
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Auth (WIF)
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account:         ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: "Resolve parameters & configure Docker"
+        id: params
+        env:
+          REGION:     ${{ secrets.GCP_REGION }}
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          SERVICE:    ${{ secrets.GCP_SERVICE }}
+          REPO_SEC:   ${{ secrets.GCP_AR_REPO }}   # may be empty
+        run: |
+          set -euo pipefail
+          REPO="${REPO_SEC:-run}"   # default to 'run' if secret is empty
+          echo "REGION=${REGION}"       | tee -a "$GITHUB_OUTPUT"
+          echo "PROJECT_ID=${PROJECT_ID}" | tee -a "$GITHUB_OUTPUT"
+          echo "SERVICE=${SERVICE}"     | tee -a "$GITHUB_OUTPUT"
+          echo "REPO=${REPO}"           | tee -a "$GITHUB_OUTPUT"
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: "Build & Push image (Docker → Artifact Registry)"
+        env:
+          REGION:     ${{ steps.params.outputs.REGION }}
+          PROJECT_ID: ${{ steps.params.outputs.PROJECT_ID }}
+          SERVICE:    ${{ steps.params.outputs.SERVICE }}
+          REPO:       ${{ steps.params.outputs.REPO }}
+          SHA:        ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          DOMAIN="${REGION}-docker.pkg.dev"
+          IMAGE="${DOMAIN}/${PROJECT_ID}/${REPO}/${SERVICE}:${SHA}"
+          echo "Building IMAGE=${IMAGE}"
+          docker build -t "${IMAGE}" .
+          docker push "${IMAGE}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+
+      - name: "Deploy to Cloud Run (latest)"
+        env:
+          REGION:     ${{ steps.params.outputs.REGION }}
+          PROJECT_ID: ${{ steps.params.outputs.PROJECT_ID }}
+          SERVICE:    ${{ steps.params.outputs.SERVICE }}
+          REPO:       ${{ steps.params.outputs.REPO }}
+          SHA:        ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          DOMAIN="${REGION}-docker.pkg.dev"
+          IMAGE="${DOMAIN}/${PROJECT_ID}/${REPO}/${SERVICE}:${SHA}"
+          echo "Deploying IMAGE=${IMAGE}"
+          gcloud run deploy "${SERVICE}" \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --image  "${IMAGE}" \
+            --platform managed \
+            --allow-unauthenticated \
+            --memory=1Gi --cpu=1 \
+            --min-instances=0 --max-instances=3 \
+            --timeout=300 --quiet
+
+  # Part 2: Smoke Test (Production validation)
+  smoke-test:
+    name: "2️⃣ Smoke Test (Production)"
+    runs-on: ubuntu-latest
+    needs: build-deploy
+    permissions:
+      contents: read
+      id-token: write   # we auth again to read the service URL
+
+    steps:
+      - name: Auth (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account:         ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: "Resolve service URL"
+        id: url
+        env:
+          REGION:     ${{ secrets.GCP_REGION }}
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          SERVICE:    ${{ secrets.GCP_SERVICE }}
+        run: |
+          set -euo pipefail
+          URL=$(gcloud run services describe "${SERVICE}" \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --format='value(status.url)')
+          if [ -z "$URL" ]; then
+            echo "ERROR: service URL is empty"; exit 1
+          fi
+          echo "BASE_URL=${URL}" >> "$GITHUB_OUTPUT"
+          echo "Resolved service URL: ${URL}"
+
+      - name: "Health and readiness check"
+        env:
+          BASE_URL: ${{ steps.url.outputs.BASE_URL }}
+        run: |
+          set -euo pipefail
+          echo "Testing against ${BASE_URL}"
+          
+          # Basic liveness
+          curl -fsS "${BASE_URL}/health" | jq -e '.ok == true' >/dev/null
+          echo "✅ Health check passed"
+          
+          # Engine readiness (both loaders)
+          curl -fsS "${BASE_URL}/ready"  | jq -e '.ok == true and .density_loaded and .overlap_loaded' >/dev/null
+          echo "✅ Ready check passed"
+
+      - name: "Density endpoint test (retry with backoff)"
+        env:
+          BASE_URL: ${{ steps.url.outputs.BASE_URL }}
+        run: |
+          set -euo pipefail
+          echo "Testing density endpoint with local CSV files..."
+
+          attempt() {
+            echo "Attempt $1:"
+            set -e
+            
+            # Test density endpoint with local CSV files (included in Docker build)
+            response=$(curl -fsS -X POST "${BASE_URL}/api/density" \
+              -H "Content-Type: application/json" -H "Accept: application/json" \
+              -d '{
+                    "paceCsv":"data/your_pace_data.csv",
+                    "overlapsCsv":"data/overlaps_smoke.csv",
+                    "startTimes":{"Full":420,"10K":440,"Half":460},
+                    "stepKm":0.03,
+                    "timeWindow":60
+                  }')
+            
+            # Validate response
+            echo "$response" | jq -e '.engine == "density" and (.segments|length) > 0' >/dev/null
+            echo "✅ Density endpoint test passed"
+          }
+
+          # Retry logic with exponential backoff
+          n=0
+          until [ $n -ge 5 ]; do
+            if attempt $((n+1)); then 
+              echo "✅ All smoke tests passed for ${BASE_URL}"
+              exit 0
+            fi
+            n=$((n+1))
+            if [ $n -lt 5 ]; then
+              echo "Retrying in 8s... (attempt $n/5)"
+              sleep 8
+            fi
+          done
+          
+          echo "❌ Smoke tests failed after 5 attempts"
+          exit 1
+
+  # Part 3: Version Consistency Check (Code vs tag validation)
+  version-check:
+    name: "3️⃣ Version Consistency Check"
+    runs-on: ubuntu-latest
+    needs: smoke-test
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch all history for tags
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Check version consistency
+      run: |
+        echo "=== Version Consistency Check ==="
+        python -c "
+        from app.version import validate_version_consistency, get_current_version, get_latest_git_tag
+        import sys
+        
+        print('Current version in code:', get_current_version())
+        print('Latest git tag:', get_latest_git_tag())
+        
+        if not validate_version_consistency():
+            print('❌ Version consistency check failed!')
+            print('The version in app/main.py does not match the latest git tag.')
+            print('Please ensure version consistency before merging.')
+            sys.exit(1)
+        else:
+            print('✅ Version consistency check passed!')
+        "
+    
+    - name: Check for version bump commits
+      run: |
+        echo "=== Checking for version bump commits ==="
+        if git log --oneline -1 | grep -i "bump version\|version.*v[0-9]"; then
+          echo "✅ Version bump commit detected"
+        else
+          echo "ℹ️  No version bump commit in latest commit"
+        fi
+
+  # Part 4: Automated Release (GitHub release creation)
+  automated-release:
+    name: "4️⃣ Automated Release"
+    runs-on: ubuntu-latest
+    needs: [build-deploy, smoke-test, version-check]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Get current version
+      id: version
+      run: |
+        python -c "
+        from app.version import get_current_version
+        version = get_current_version()
+        print(f'version={version}')
+        " >> $GITHUB_OUTPUT
+    
+    - name: Check if release already exists
+      id: check-release
+      run: |
+        if gh release view ${{ steps.version.outputs.version }} >/dev/null 2>&1; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+          echo "Release ${{ steps.version.outputs.version }} already exists"
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "Release ${{ steps.version.outputs.version }} does not exist"
+        fi
+    
+    - name: Run E2E tests
+      if: steps.check-release.outputs.exists == 'false'
+      run: |
+        echo "=== Running E2E tests ==="
+        python -m app.end_to_end_testing
+    
+    - name: Create GitHub Release
+      if: steps.check-release.outputs.exists == 'false'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "=== Creating GitHub Release ==="
+        gh release create ${{ steps.version.outputs.version }} \
+          --title "Release ${{ steps.version.outputs.version }}" \
+          --notes "## 🚀 Automated Release ${{ steps.version.outputs.version }}
+        
+        This release was created automatically from the CI pipeline.
+        
+        ### Validation
+        - ✅ Build & Deploy completed successfully
+        - ✅ Smoke tests passed
+        - ✅ Version consistency validated
+        - ✅ E2E tests passed
+        
+        ### Next Steps
+        1. Review the release notes
+        2. Deploy to Cloud Run (if not already deployed)
+        3. Verify production deployment"
+    
+    - name: Upload Release Assets
+      if: steps.check-release.outputs.exists == 'false'
+      run: |
+        echo "=== Uploading Release Assets ==="
+        # Find the latest reports
+        if [ -d "reports" ]; then
+          LATEST_DATE=$(ls -1 reports/ | sort | tail -1)
+          if [ -n "$LATEST_DATE" ] && [ -d "reports/$LATEST_DATE" ]; then
+            echo "Uploading reports from reports/$LATEST_DATE"
+            gh release upload ${{ steps.version.outputs.version }} reports/$LATEST_DATE/*.md reports/$LATEST_DATE/*.csv
+          fi
+        fi
+        
+        # Upload E2E test results if available
+        if [ -d "e2e_tests" ]; then
+          LATEST_E2E_DATE=$(ls -1 e2e_tests/ | sort | tail -1)
+          if [ -n "$LATEST_E2E_DATE" ] && [ -d "e2e_tests/$LATEST_E2E_DATE" ]; then
+            echo "Uploading E2E results from e2e_tests/$LATEST_E2E_DATE"
+            gh release upload ${{ steps.version.outputs.version }} e2e_tests/$LATEST_E2E_DATE/*.md
+          fi
+        fi
