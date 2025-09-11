@@ -23,6 +23,9 @@ except ImportError:
     from constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
     from report_utils import get_report_paths, format_decimal_places
 
+# Get app version from constants to avoid circular import
+APP_VERSION = "v1.6.15"  # This should match the version in main.py
+
 
 def generate_temporal_flow_report(
     pace_csv: str,
@@ -72,7 +75,7 @@ def generate_temporal_flow_report(
     print(f"📊 Temporal flow report saved to: {full_path}")
 
     # Also generate CSV
-    export_temporal_flow_csv(results, output_dir)
+    export_temporal_flow_csv(results, output_dir, start_times, min_overlap_duration, conflict_length_m)
     
     # Return results in the format expected by other functions
     results.update({
@@ -471,7 +474,7 @@ def generate_simple_temporal_flow_report(
     )
 
 
-def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
+def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_times: Dict[str, float] = None, min_overlap_duration: float = 5.0, conflict_length_m: float = 100.0) -> None:
     """Export temporal flow analysis results to CSV with enhanced formatting."""
     import csv
     import pandas as pd
@@ -491,6 +494,10 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
         
         # Reorganized header with logical column grouping for better readability
         writer.writerow([
+            # Group 0: Metadata
+            "analysis_timestamp", "app_version", "environment", "data_source",
+            "start_times", "min_overlap_duration", "conflict_length_m",
+            
             # Group 1: Segment Identification
             "seg_id", "segment_label", "flow_type",
             
@@ -586,6 +593,15 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
             pct_b = round((overtaking_b / total_b * 100), 1) if total_b > 0 else 0.0
             
             writer.writerow([
+                # Group 0: Metadata
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                APP_VERSION,
+                "local",  # Environment detection moved to function parameter
+                "runners.csv, segments.csv",
+                f"Full:{start_times.get('Full', 420) if start_times else 420}, 10K:{start_times.get('10K', 440) if start_times else 440}, Half:{start_times.get('Half', 460) if start_times else 460}",
+                min_overlap_duration,
+                conflict_length_m,
+                
                 # Group 1: Segment Identification
                 seg_id,
                 segment.get("segment_label", ""),
