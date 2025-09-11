@@ -489,15 +489,38 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
     with open(full_path, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         
-        # Human-readable header with pct_a, pct_b, and audit columns included
+        # Reorganized header with logical column grouping for better readability
         writer.writerow([
-            "seg_id", "segment_label", "flow_type", "event_a", "event_b",
-            "from_km_a", "to_km_a", "from_km_b", "to_km_b",
+            # Group 1: Segment Identification
+            "seg_id", "segment_label", "flow_type",
+            
+            # Group 2: Event Configuration
+            "event_a", "event_b", "from_km_a", "to_km_a", "from_km_b", "to_km_b",
+            
+            # Group 3: Convergence Analysis
             "convergence_point_km", "convergence_point_fraction", "has_convergence",
-            "total_a", "total_b", "overtaking_a", "overtaking_b", "copresence_a", "copresence_b",
-            "pct_a", "pct_b", "convergence_zone_start", "convergence_zone_end", 
-            "spatial_zone_exists", "temporal_overlap_exists", "true_pass_exists", "has_convergence_policy", "no_pass_reason_code",
-            "conflict_length_m", "width_m", "unique_encounters", "participants_involved", "sample_a", "sample_b"
+            "convergence_zone_start", "convergence_zone_end", "spatial_zone_exists",
+            
+            # Group 4: Runner Counts
+            "total_a", "total_b", "participants_involved",
+            
+            # Group 5: Overtaking Analysis
+            "overtaking_a", "overtaking_b", "pct_a", "pct_b",
+            
+            # Group 6: Co-presence Analysis
+            "copresence_a", "copresence_b",
+            
+            # Group 7: Interaction Metrics
+            "unique_encounters", "temporal_overlap_exists", "true_pass_exists",
+            
+            # Group 8: Policy & Configuration
+            "has_convergence_policy", "no_pass_reason_code",
+            
+            # Group 9: Physical Properties
+            "conflict_length_m", "width_m",
+            
+            # Group 10: Sample Data
+            "sample_a", "sample_b"
         ])
         
         # Enhanced data rows with proper formatting
@@ -563,37 +586,56 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str) -> None:
             pct_b = round((overtaking_b / total_b * 100), 1) if total_b > 0 else 0.0
             
             writer.writerow([
+                # Group 1: Segment Identification
                 seg_id,
                 segment.get("segment_label", ""),
                 segment.get("flow_type", ""),
+                
+                # Group 2: Event Configuration
                 segment.get("event_a", ""),
                 segment.get("event_b", ""),
                 round(segment.get('from_km_a', 0), 2),
                 round(segment.get('to_km_a', 0), 2),
                 round(segment.get('from_km_b', 0), 2),
                 round(segment.get('to_km_b', 0), 2),
+                
+                # Group 3: Convergence Analysis
                 cp_km,  # Use the rounded convergence point
                 normalized_cp,
                 segment.get("has_convergence", False),
-                segment.get("total_a", ""),
-                segment.get("total_b", ""),
-                segment.get("overtaking_a", ""),
-                segment.get("overtaking_b", ""),
-                segment.get("copresence_a", ""),
-                segment.get("copresence_b", ""),
-                pct_a,
-                pct_b,
                 conv_start,
                 conv_end,
                 segment.get("spatial_zone_exists", False),
+                
+                # Group 4: Runner Counts
+                segment.get("total_a", ""),
+                segment.get("total_b", ""),
+                segment.get("participants_involved", 0),
+                
+                # Group 5: Overtaking Analysis
+                segment.get("overtaking_a", ""),
+                segment.get("overtaking_b", ""),
+                pct_a,
+                pct_b,
+                
+                # Group 6: Co-presence Analysis
+                segment.get("copresence_a", ""),
+                segment.get("copresence_b", ""),
+                
+                # Group 7: Interaction Metrics
+                segment.get("unique_encounters", 0),
                 segment.get("temporal_overlap_exists", False),
                 segment.get("true_pass_exists", False),
+                
+                # Group 8: Policy & Configuration
                 segment.get("has_convergence_policy", False),
                 segment.get("no_pass_reason_code", ""),
+                
+                # Group 9: Physical Properties
                 segment.get('conflict_length_m', 100.0),  # conflict_length_m from analysis
                 width_m,
-                segment.get("unique_encounters", 0),
-                segment.get("participants_involved", 0),
+                
+                # Group 10: Sample Data
                 format_sample_data(segment.get("sample_a", [])),
                 format_sample_data(segment.get("sample_b", []))
             ])
