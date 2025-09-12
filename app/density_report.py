@@ -28,22 +28,251 @@ from datetime import datetime
 
 # LOS Thresholds for density classification (updated to match v2 rulebook)
 LOS_AREAL_THRESHOLDS = {
-    'A': (0.0, 0.31),    # Comfortable
-    'B': (0.31, 0.43),   # Good
-    'C': (0.43, 0.72),   # Moderate
-    'D': (0.72, 1.08),   # Busy
-    'E': (1.08, 1.63),   # Very Busy
-    'F': (1.63, float('inf'))  # Critical
+    'A': (0.0, 0.36),    # Free Flow
+    'B': (0.36, 0.54),   # Comfortable
+    'C': (0.54, 0.72),   # Moderate
+    'D': (0.72, 1.08),   # Dense
+    'E': (1.08, 1.63),   # Very Dense
+    'F': (1.63, float('inf'))  # Extremely Dense
 }
 
 LOS_CROWD_THRESHOLDS = {
-    'A': (0.0, 0.2),     # Comfortable
-    'B': (0.2, 0.4),     # Good
+    'A': (0.0, 0.2),     # Free Flow
+    'B': (0.2, 0.4),     # Comfortable
     'C': (0.4, 0.6),     # Moderate
-    'D': (0.6, 0.8),     # Busy
-    'E': (0.8, 1.0),     # Very Busy
-    'F': (1.0, float('inf'))  # Critical
+    'D': (0.6, 0.8),     # Dense
+    'E': (0.8, 1.0),     # Very Dense
+    'F': (1.0, float('inf'))  # Extremely Dense
 }
+
+
+def render_segment(md, ctx, rulebook):
+    """Render a segment using v2.0 rulebook structure."""
+    # Handle v2.0 rulebook structure
+    if "schemas" in rulebook:
+        # v2.0 rulebook - use schema-based rendering
+        segment_id = ctx.get("segment_id", "")
+        segment_label = ctx.get("segment_label", "")
+        density_value = ctx.get("density_value", 0.0)
+        
+        # Determine schema based on segment_id or segment_type
+        schema_name = _determine_schema_for_segment(segment_id, ctx, rulebook)
+        schema = rulebook.get("schemas", {}).get(schema_name, {})
+        
+        # Generate narrative based on schema
+        if schema:
+            # Check for flow_type zone content first
+            flow_type = ctx.get("flow_type", "")
+            if flow_type:
+                flow_key = f"{flow_type}_zone"
+                flow_drivers = schema.get(flow_key, {})
+                if flow_drivers and "narrative_template" in flow_drivers:
+                    md.write(flow_drivers["narrative_template"].format(**ctx) + "\n\n")
+            
+            # Then add general schema content
+            drivers = schema.get("drivers", [])
+            mitigations = schema.get("mitigations", [])
+            
+            if drivers:
+                md.write("### Density Analysis\n")
+                for driver in drivers:
+                    md.write(f"- {driver}\n")
+                md.write("\n")
+            
+            if mitigations:
+                md.write("### Operational Implications\n")
+                for mitigation in mitigations:
+                    md.write(f"- {mitigation}\n")
+                md.write("\n")
+            
+            # Check for operational guidance
+            ops_box = schema.get("ops_box", {})
+            if ops_box:
+                md.write("### Ops Box\n")
+                for category, items in ops_box.items():
+                    if items:
+                        md.write(f"- **{category.title()}:** {', '.join(items)}\n")
+                md.write("\n")
+        
+        # Check triggers for this segment and show triggered actions
+        triggers = rulebook.get("triggers", [])
+        triggered_actions = []
+        
+        for trigger in triggers:
+            if _trigger_matches(trigger, ctx, schema_name):
+                actions = trigger.get("actions", [])
+                if actions:
+                    # Add trigger context to actions
+                    when = trigger.get("when", {})
+                    trigger_type = "Density" if "density_gte" in when else "Flow" if "flow_gte" in when else "General"
+                    threshold = when.get("density_gte", when.get("flow_gte", "threshold"))
+                    
+                    for action in actions:
+                        triggered_actions.append(f"[{trigger_type} {threshold}] {action}")
+        
+        # Check for high density warnings (adapted from v1.x patches)
+        if ctx.get("is_high_density"):
+            # Look for high density triggers
+            for trigger in triggers:
+                if (trigger.get("when", {}).get("density_gte") in ["E", "F"] and 
+                    _trigger_matches(trigger, ctx, schema_name)):
+                    actions = trigger.get("actions", [])
+                    if actions:
+                        for action in actions:
+                            triggered_actions.append(f"[High Density] {action}")
+        
+        # Display triggered actions if any
+        if triggered_actions:
+            md.write("### Triggered Actions\n")
+            for action in triggered_actions:
+                md.write(f"- {action}\n")
+            md.write("\n")
+        
+        # Check for event-specific factors (adapted from v1.x patches)
+        event_type = ctx.get("event_type", "").lower()
+        if event_type:
+            # Look for event-specific overrides
+            overrides = rulebook.get("overrides", [])
+            for override in overrides:
+                if override.get("match", {}).get("segment_id") == segment_id:
+                    notes = override.get("notes", [])
+                    if notes:
+                        md.write("_Event factors_: " + "; ".join(notes) + "\n\n")
+        
+        # Fallback if no schema found
+        if not schema:
+            md.write(f"**Segment {segment_id} ({segment_label})** — density {density_value:.3f} runners/m²\n\n")
+    
+    else:
+        # Legacy v1.x rulebook structure
+        drivers = rulebook["templates"]["drivers"]
+        safety  = rulebook["templates"]["safety"]
+        events  = rulebook["templates"]["events"]
+
+        flow_key = f"{ctx.get('flow_type','')}_zone"
+        if flow_key in drivers:
+            md.write(drivers[flow_key]["narrative_template"].format(**ctx) + "\n\n")
+
+        dclass = ctx.get("density_class")
+        if dclass and dclass in drivers:
+            md.write(drivers[dclass]["narrative_template"].format(**ctx) + "\n\n")
+        else:
+            # Linear vs Areal density label clarity
+            # Uncomment depending on computation:
+            # md.write(f"**Segment {ctx['segment_id']} ({ctx['segment_label']})** — linear density {ctx['density_value']} runners/m\n\n")
+            # md.write(f"**Segment {ctx['segment_id']} ({ctx['segment_label']})** — density {ctx['density_value']} runners/m²\n\n")
+            md.write(f"**Segment {ctx['segment_id']} ({ctx['segment_label']})** — density {ctx['density_value']}\n\n")
+
+        if ctx.get("is_high_density"):
+            if "high_density_warning" in safety:
+                md.write(safety["high_density_warning"].format(**ctx) + "\n")
+            if "flow_control_suggestion" in safety:
+                md.write(safety["flow_control_suggestion"].format(**ctx) + "\n")
+            md.write("\n")
+
+        et = (ctx.get("event_type") or "").lower()
+        if et in events:
+            factors = events[et].get("additional_factors", [])
+            if factors:
+                md.write("_Event factors_: " + "; ".join(factors) + "\n\n")
+
+
+def render_methodology(md, rulebook):
+    """Render methodology section using v2.0 rulebook structure."""
+    # Handle v2.0 rulebook structure
+    if "schemas" in rulebook:
+        # v2.0 rulebook - use meta information
+        meta = rulebook.get("meta", {})
+        units = meta.get("units", {})
+        density_unit = units.get("density", "runners/m²")
+        flow_unit = units.get("flow", "runners/min/m")
+        
+        md.write("## Methodology\n\n")
+        md.write(f"**Units**: Density thresholds use *{density_unit}* (areal density). ")
+        md.write(f"Flow thresholds use *{flow_unit}* (throughput per meter of width).\n\n")
+        
+        notes = meta.get("notes", [])
+        if notes:
+            md.write("**Notes:**\n")
+            for note in notes:
+                md.write(f"- {note}\n")
+            md.write("\n")
+    else:
+        # Legacy v1.x rulebook structure
+        meth = rulebook["templates"]["report_sections"]["methodology"]
+        md.write(meth + "\n\n> **Units**: thresholds in rulebook currently use *runners per meter (linear)*. "
+                 "If you compute areal density, label as **runners/m²** and adjust thresholds accordingly.\n\n")
+
+
+def _determine_schema_for_segment(segment_id, ctx, rulebook):
+    """Determine which schema to use for a segment based on v2.0 rulebook binding rules."""
+    binding_rules = rulebook.get("binding", [])
+    
+    for rule in binding_rules:
+        when = rule.get("when", {})
+        
+        # Check segment_id match
+        if "segment_id" in when and when["segment_id"] == segment_id:
+            return rule.get("use_schema", "on_course_open")
+        
+        # Check segment_type match
+        if "segment_type" in when:
+            segment_types = when["segment_type"]
+            if isinstance(segment_types, str):
+                segment_types = [segment_types]
+            
+            # Use flow_type from context if available, otherwise map segment_id
+            segment_type = ctx.get("flow_type", _map_segment_id_to_type(segment_id))
+            if segment_type in segment_types:
+                return rule.get("use_schema", "on_course_open")
+    
+    # Default fallback
+    return "on_course_open"
+
+
+def _map_segment_id_to_type(segment_id):
+    """Map segment_id to segment_type for v2.0 rulebook."""
+    segment_id_lower = segment_id.lower()
+    
+    if segment_id.startswith("A"):
+        return "start"
+    elif "merge" in segment_id_lower:
+        return "merge"
+    elif "bridge" in segment_id_lower:
+        return "bridge"
+    elif "finish" in segment_id_lower:
+        return "finish"
+    elif "funnel" in segment_id_lower:
+        return "funnel"
+    elif any(x in segment_id_lower for x in ["road", "trail", "turn"]):
+        return "road"  # or "trail", "turn" as appropriate
+    else:
+        return "road"  # default
+
+
+def _trigger_matches(trigger, ctx, schema_name):
+    """Check if a trigger matches the current context."""
+    when = trigger.get("when", {})
+    
+    # Check schema match
+    if "schema" in when and when["schema"] != schema_name:
+        return False
+    
+    # Check density threshold
+    if "density_gte" in when:
+        density_value = ctx.get("density_value", 0.0)
+        threshold = when["density_gte"]
+        if threshold == "E" and density_value < 1.08:
+            return False
+        elif threshold == "F" and density_value < 1.63:
+            return False
+    
+    # Check flow threshold (placeholder - would need actual flow data)
+    if "flow_gte" in when:
+        # This would need actual flow data integration
+        pass
+    
+    return True
 
 
 def get_los_score(density: float, thresholds: Dict[str, Tuple[float, float]]) -> str:
@@ -199,14 +428,38 @@ def generate_markdown_report(
     content.append(f"**Skipped Segments:** {summary.get('skipped_segments', 0)}")
     content.append("")
     
-    # Legend
-    content.append("## Legend")
+    # Methodology section using v2.0 rulebook
+    try:
+        import yaml
+        with open("data/density_rulebook.yml", "r") as f:
+            rulebook = yaml.safe_load(f)
+        
+        from io import StringIO
+        md_buffer = StringIO()
+        render_methodology(md_buffer, rulebook)
+        methodology_content = md_buffer.getvalue()
+        
+        if methodology_content.strip():
+            content.extend(methodology_content.strip().split('\n'))
+            content.append("")
+    except Exception as e:
+        # Fallback methodology
+        content.append("## Methodology")
+        content.append("")
+        content.append("**Units**: Density thresholds use *runners/m²* (areal density).")
+        content.append("")
+    
+    # Definitions section
+    content.append("## Definitions")
     content.append("")
+    content.append("- **gte**: Greater than or equal to (used in trigger conditions like density_gte, flow_gte)")
     content.append("- **TOT**: Time Over Threshold (seconds above E/F LOS thresholds)")
-    content.append("- **LOS**: Level of Service (A=Comfortable, B=Good, C=Moderate, D=Busy, E=Very Busy, F=Critical)")
+    content.append("- **LOS**: Level of Service (A=Free Flow, B=Comfortable, C=Moderate, D=Dense, E=Very Dense, F=Extremely Dense)")
     content.append("- **Experienced Density**: What runners actually experience (includes co-present runners from other events)")
     content.append("- **Self Density**: Only that event's runners (not shown in this report)")
     content.append("- **Active Window**: Time period when the event has runners present in the segment")
+    content.append("- **Ops Box**: Operational guidance for race marshals and organizers")
+    content.append("- **Triggered Actions**: Safety alerts and operational responses when density/flow thresholds are exceeded")
     content.append("")
     
     # LOS Thresholds Table
@@ -214,12 +467,12 @@ def generate_markdown_report(
     content.append("")
     content.append("| LOS | Areal Density (runners/m²) | Crowd Density (runners/m) | Description |")
     content.append("|-----|---------------------------|--------------------------|-------------|")
-    content.append("| A | 0.00 - 0.31 | 0.00 - 0.20 | Comfortable |")
-    content.append("| B | 0.31 - 0.43 | 0.20 - 0.40 | Good |")
-    content.append("| C | 0.43 - 0.72 | 0.40 - 0.60 | Moderate |")
-    content.append("| D | 0.72 - 1.08 | 0.60 - 0.80 | Busy |")
-    content.append("| E | 1.08 - 1.63 | 0.80 - 1.00 | Very Busy |")
-    content.append("| F | 1.63+ | 1.00+ | Critical |")
+    content.append("| A | 0.00 - 0.36 | 0.00 - 0.20 | Free Flow |")
+    content.append("| B | 0.36 - 0.54 | 0.20 - 0.40 | Comfortable |")
+    content.append("| C | 0.54 - 0.72 | 0.40 - 0.60 | Moderate |")
+    content.append("| D | 0.72 - 1.08 | 0.60 - 0.80 | Dense |")
+    content.append("| E | 1.08 - 1.63 | 0.80 - 1.00 | Very Dense |")
+    content.append("| F | 1.63+ | 1.00+ | Extremely Dense |")
     content.append("")
     
     # Event start times (showing actual participants in first segment as reference)
@@ -298,53 +551,48 @@ def generate_template_narratives(segment_id: str, segment_data: Dict[str, Any]) 
     content = []
     
     try:
-        # Initialize template engine
-        template_engine = DensityTemplateEngine()
+        # Load the rulebook
+        import yaml
+        with open("data/density_rulebook.yml", "r") as f:
+            rulebook = yaml.safe_load(f)
         
-        # Determine segment type (simplified mapping for now)
-        segment_type = _determine_segment_type(segment_id, segment_data)
-        flow_type = "default"  # Could be enhanced based on flow analysis
+        # Get density value from summary object
+        summary = segment_data.get("summary")
+        if hasattr(summary, 'active_peak_areal'):
+            density_value = summary.active_peak_areal
+        else:
+            density_value = 0.0
         
-        # Create template context
-        context = create_template_context(segment_id, segment_data, segment_type, flow_type)
+        # Create context for v2.0 rulebook
+        ctx = {
+            "segment_id": segment_id,
+            "segment_label": segment_data.get("seg_label", "Unknown"),
+            "density_value": density_value,
+            "flow_type": segment_data.get("flow_type", "default"),  # Extract from segment data
+            "event_type": "default"
+        }
         
-        # Generate narratives
-        drivers = template_engine.generate_drivers(context)
-        mitigations = template_engine.generate_mitigations(context)
-        ops_insights = template_engine.generate_ops_insights(context)
-        safety_warnings = template_engine.generate_safety_warnings(context)
+        # Use v2.0 rulebook rendering
+        from io import StringIO
+        md_buffer = StringIO()
+        render_segment(md_buffer, ctx, rulebook)
+        narrative_content = md_buffer.getvalue()
         
-        # Add to content
-        content.append("### Operational Insights")
-        content.append("")
-        content.append("**Drivers:**")
-        content.append(f"- {drivers}")
-        content.append("")
-        content.append("**Mitigations:**")
-        content.append(f"- {mitigations}")
-        content.append("")
-        
-        if ops_insights:
-            content.append("**Ops Box:**")
-            for key, value in ops_insights.items():
-                content.append(f"- **{key.title()}:** {value}")
+        if narrative_content.strip():
+            content.append("### Template-Driven Analysis")
+            content.append("")
+            content.extend(narrative_content.strip().split('\n'))
             content.append("")
         
-        # Add safety warnings if any
-        if safety_warnings:
-            content.append("**Safety Alerts:**")
-            for warning in safety_warnings:
-                content.append(f"- {warning}")
-            content.append("")
         
     except Exception as e:
         # Fallback if template engine fails
-        content.append("### Operational Insights")
+        content.append("### Metrics Summary")
         content.append("")
-        content.append("**Drivers:**")
+        content.append("**Density Analysis:**")
         content.append(f"- High runner density in {segment_data.get('seg_label', 'Unknown')} segment")
         content.append("")
-        content.append("**Mitigations:**")
+        content.append("**Operational Implications:**")
         content.append("- Consider additional crowd management measures")
         content.append("")
     
