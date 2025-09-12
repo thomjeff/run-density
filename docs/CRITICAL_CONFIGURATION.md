@@ -388,8 +388,93 @@ results = test_report_content_quality()
 15. **🚨 GUESSING PRODUCTION URLS** - NEVER guess production URLs or endpoints. Always use the documented production environment details in this configuration file. URL guessing wastes time and leads to failed tests.
 16. **🚨 TESTING METHODOLOGY INCONSISTENCY** - NEVER use different testing approaches for local vs Cloud Run testing. Always use the SAME automated testing module (`python3 -m app.end_to_end_testing`) with appropriate environment variables. Inconsistent testing methodologies make results incomparable and unreliable.
 
+## **🚨 CRITICAL: 9-STEP MERGE/TEST PROCESS (UPDATED)**
+
+**MANDATORY**: This is the updated workflow that MUST be followed for ALL releases and merges. No exceptions.
+
+### **Step 1: Verify Dev Branch Health**
+- Check git status and recent commits
+- Ensure all changes are committed to dev branch
+- Verify branch is ready for merge
+
+### **Step 2: Run Final E2E Tests on Dev Branch**
+- Ensure all tests pass before merge
+- Use `python3 -m app.end_to_end_testing`
+- Verify no regressions detected
+
+### **Step 3: Create Pull Request**
+- Create PR from dev branch to main
+- Include comprehensive description and testing results
+- Wait for user review and approval
+
+### **Step 4: Wait for User Review/Approval**
+- User will review and merge via GitHub Desktop or Web UI
+- **NEVER merge without user approval**
+
+### **Step 5: Verify Merge to Main**
+- Check git status and recent commits after user merge
+- Pull latest changes from origin/main
+
+### **Step 6: Run Final E2E Tests on Main**
+- Confirm no regressions after merge
+- Use `python3 -m app.end_to_end_testing`
+- Verify all tests pass
+
+### **Step 7: Create Release with Assets**
+- Include latest reports as release assets
+- Use `gh release create` with proper description
+
+### **Step 8: Add E2E Files to Release**
+- Attach Flow.md, Flow.csv, Density.md, E2E.md to release
+- Use `gh release upload` command
+
+### **Step 9: Verify Release and Run Final E2E Tests**
+- Confirm release is complete and working
+- Run final E2E tests to verify everything works
+
+**This 9-step process replaces the previous 7-step workflow and must be followed for all releases.**
+
+## **🚨 CRITICAL: CI WORKFLOW CONSOLIDATION**
+
+**Current Status**: Three separate CI workflows have been consolidated into a single `ci-pipeline.yml` with four jobs:
+
+1. **Build and Test** - Compiles code and runs tests
+2. **Deploy to Cloud Run** - Deploys to production environment
+3. **Automated Release** - Creates GitHub releases with assets
+4. **Upload Release Assets** - Attaches reports and E2E files to releases
+
+**Key Features**:
+- Lightweight E2E testing (skips computationally intensive endpoints)
+- Automated release creation with proper asset attachment
+- `GH_TOKEN` environment variable for release operations
+- Consolidated workflow reduces complexity and maintenance
+
+**Files Modified**:
+- `.github/workflows/ci-pipeline.yml` - Single consolidated workflow
+- Removed: `version-check.yml`, `release.yml` (consolidated)
+
+## **🚨 CRITICAL: WORKFLOW VIOLATIONS - LESSONS LEARNED**
+
+**MAJOR VIOLATION**: Direct changes to main branch (Issue #134)
+- **What Happened**: Initial implementation made changes directly to main instead of using dev branch
+- **Impact**: Required reverting to v1.6.18 and losing several hours of work
+- **Prevention**: Always create dev branch for all work, never modify main directly
+
+**Secondary Violations**:
+- Over-engineering beyond scope requirements
+- Not following Pre-task safeguards
+- Making extensive changes without user approval
+
+**Prevention Measures**:
+1. Always reference Pre-task safeguards before starting work
+2. Never make changes directly to main branch
+3. Create dev branch for all work
+4. Stay within scope of requirements
+5. Test frequently and commit incrementally
+6. Wait for user approval before merging
+
 ## Last Updated
-2025-09-10 - Added testing methodology consistency rules to prevent incomparable test results and ensure reliable comparisons between local and Cloud Run testing
+2025-09-11 - Added 9-step merge/test process, CI workflow consolidation details, and critical workflow violation lessons learned from Issue #134
 
 ## Related Issues
 - #32 - Distance gaps fix

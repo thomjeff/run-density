@@ -1,0 +1,132 @@
+# Density_Rulebook_v2.yml
+# Version: 2.0
+# Purpose: YAML-only operational rulebook for Fredericton Marathon.
+# Notes:
+# - All density values are in runners/m² (areal density).
+# - All flow values are in runners/min/m (throughput per meter of width).
+# - Comparator keys like `*_gte` mean **greater than or equal to** (not “gate”).
+
+meta:
+  version: 2.0
+  units:
+    density: "runners/m²"
+    flow: "runners/min/m"
+  notes:
+    - "`gte` means greater-than-or-equal; used in trigger conditions (e.g., density_gte, flow_gte)."
+    - "Start (A1) uses the start_corral schema; other segments use on-course schemas."
+    - "Effective width must reflect any reserved emergency lane at A1."
+
+globals:
+  # Default on-course LOS (Fruin-derived) used by on_course_open unless overridden
+  los_thresholds:
+    A: { max: 0.31 }
+    B: { min: 0.31, max: 0.43 }
+    C: { min: 0.43, max: 0.72 }
+    D: { min: 0.72, max: 1.08 }
+    E: { min: 1.08, max: 1.63 }
+    F: { min: 1.63 }
+
+schemas:
+  start_corral:
+    description: "Pre-race staging & immediate release under control (A1 only)."
+    los_thresholds:
+      A: { max: 0.40 }
+      B: { min: 0.40, max: 0.70 }
+      C: { min: 0.70, max: 0.95 }
+      D: { min: 0.95, max: 1.20 }
+      E: { min: 1.20, max: 1.60 }
+      F: { min: 1.60 }
+    flow_ref:
+      warn: 80
+      critical: 110
+    debounce: { bins_required: 2 }
+    cooldown: { bins_required: 2 }
+    drivers:
+      - "Start corral release; managed pulses and lane discipline."
+    mitigations:
+      - "Hold next wave 30–60s when crowding or high throughput persists."
+      - "Shorten pulse or narrow gate temporarily to reduce instantaneous release."
+    ops_box:
+      access:
+        - "Maintain clear emergency lane as planned (effective width reflects this)."
+      medical:
+        - "SJA roving team staged within 400 m during start window."
+      traffic:
+        - "Marshal at funnel entry to maintain cadence and signage compliance."
+
+  on_course_narrow:
+    description: "Funnels, merges, bridges, finish — constrained width or interactions."
+    los_thresholds:
+      A: { max: 0.31 }
+      B: { min: 0.31, max: 0.43 }
+      C: { min: 0.43, max: 0.72 }
+      D: { min: 0.72, max: 1.08 }
+      E: { min: 1.08, max: 1.63 }
+      F: { min: 1.63 }
+    flow_ref:
+      warn: 60
+      critical: 90
+    debounce: { bins_required: 2 }
+    cooldown: { bins_required: 2 }
+    drivers:
+      - "Capacity reduction or directional conflict (merge/turn/bridge entry)."
+    mitigations:
+      - "Meter upstream feeder for 1–2 minutes if crowding persists."
+      - "Add marshal to enforce lane discipline; establish overtake lane if feasible."
+
+  on_course_open:
+    description: "General on-course running with adequate width; density only."
+    los_thresholds:
+      A: { max: 0.31 }
+      B: { min: 0.31, max: 0.43 }
+      C: { min: 0.43, max: 0.72 }
+      D: { min: 0.72, max: 1.08 }
+      E: { min: 1.08, max: 1.63 }
+      F: { min: 1.63 }
+    drivers:
+      - "Unidirectional running flow."
+    mitigations:
+      - "Monitor; deploy roving marshal if persistent E/F."
+
+binding:
+  # Prefer explicit segment_id if available; otherwise rely on segment_type
+  - when: { segment_id: "A1" }
+    use_schema: start_corral
+    flow_enabled: true
+  - when: { segment_type: [funnel, merge, bridge, finish] }
+    use_schema: on_course_narrow
+    flow_enabled: true
+  - when: { segment_type: [road, trail, turn] }
+    use_schema: on_course_open
+    flow_enabled: false
+
+triggers:
+  # Start corral — density-driven
+  - when: { schema: start_corral, density_gte: "E" }
+    actions:
+      - "Hold next wave 30–60s"
+      - "Shorten pulse / narrow gate for 1–2 minutes"
+
+  # Start corral — flow-driven
+  - when: { schema: start_corral, flow_gte: "critical" }
+    actions:
+      - "Insert extra 15–30s between pulses"
+      - "Reduce wave size by 10–20% temporarily"
+
+  # On-course narrow — density-driven
+  - when: { schema: on_course_narrow, density_gte: "E" }
+    actions:
+      - "Meter upstream merge for 1–2 minutes"
+      - "Add marshal; reinforce lane discipline"
+
+  # On-course narrow — flow-driven
+  - when: { schema: on_course_narrow, flow_gte: "critical" }
+    actions:
+      - "Create short hold at upstream feeder"
+      - "Establish overtake lane if feasible"
+
+overrides:
+  # Example: explicit narrative or parameters for A1
+  - match: { segment_id: "A1" }
+    notes:
+      - "Queen/Regent funnel; ensure emergency lane kept clear per race plan."

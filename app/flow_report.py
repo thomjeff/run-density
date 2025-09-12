@@ -123,8 +123,8 @@ def generate_markdown_report(
     content.append("## Legend")
     content.append("")
     content.append("- **Convergence Point**: Location where runners from different events first overlap in time")
-    content.append("- **Overtaking**: Count of runners from one event overtaking another")
-    content.append("- **Flow Type**: Type of flow pattern (overtake, merge, diverge)")
+    content.append("- **Flow Interactions**: Count of runners from one event interacting with another (overtaking, merging, or counterflow)")
+    content.append("- **Flow Type**: Type of flow pattern (overtake, merge, diverge, counterflow)")
     content.append("- **Convergence Zone**: Time window when convergence occurs")
     content.append("- **Deep Dive Analysis**: Detailed analysis of convergence patterns")
     content.append("")
@@ -305,9 +305,16 @@ def generate_convergence_analysis(segment: Dict[str, Any]) -> List[str]:
     content.append("### Convergence Analysis")
     content.append("")
     
-    # Enhanced overtaking statistics with percentages and individual convergence zones
+    # Enhanced flow interaction statistics with percentages and individual convergence zones
     event_a = segment.get('event_a', 'A')
     event_b = segment.get('event_b', 'B')
+    flow_type = segment.get('flow_type', 'overtake')
+    terminology = segment.get('terminology', {})
+    
+    # Use appropriate terminology based on flow type
+    action_label = terminology.get('count_label', 'Overtaking')
+    action_plural = terminology.get('action', 'overtaking')
+    
     overtaking_a = segment.get("overtaking_a", 0)
     overtaking_b = segment.get("overtaking_b", 0)
     total_a = segment.get('total_a', 0)
@@ -321,7 +328,7 @@ def generate_convergence_analysis(segment: Dict[str, Any]) -> List[str]:
     pct_a = round((overtaking_a / total_a * 100), 1) if total_a > 0 else 0.0
     pct_b = round((overtaking_b / total_b * 100), 1) if total_b > 0 else 0.0
     
-    content.append("**Overtaking Statistics**")
+    content.append(f"**{action_label} Statistics**")
     content.append("| Event | True Passes | Co-presence | Convergence Zone |")
     content.append("|-------|-------------|-------------|------------------|")
     
@@ -498,7 +505,7 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
             "seg_id", "segment_label", "event_a", "event_b", "total_a", "total_b", 
             "flow_type", "from_km_a", "to_km_a", "from_km_b", "to_km_b", "width_m",
             
-            # Group 2: Encounter Results & Analysis
+            # Group 2: Encounter Results & Analysis  
             "overtaking_a", "overtaking_b", "sample_a", "sample_b", "pct_a", "pct_b",
             "copresence_a", "copresence_b", "unique_encounters", "participants_involved",
             
