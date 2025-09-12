@@ -27,16 +27,17 @@ You **MUST** explicitly confirm understanding of these CRITICAL RULES before pro
 ## **🧪 MANDATORY TESTING SEQUENCE**
 
 After ANY code changes, you **MUST**:
-1. **USE AUTOMATED TEST SCRIPTS ONLY**: `python3 -m app.end_to_end_testing`
-2. **NEVER manually construct curl commands** - this wastes time and leads to errors
-3. **NEVER guess API parameters** - use the automated scripts that know the correct endpoints
-4. **MAINTAIN TESTING CONSISTENCY** - Use the SAME testing methodology for both local and Cloud Run testing
-5. **FOR CLOUD RUN TESTING**: Use `TEST_CLOUD_RUN=true python3 -m app.end_to_end_testing`
-6. **FOR LOCAL TESTING**: Use `python3 -m app.end_to_end_testing` (without TEST_CLOUD_RUN)
-7. Generate actual reports (MD + CSV), not just JSON data
-8. Verify no hardcoded values were introduced
-9. Test through API endpoints, not direct module calls
-10. Validate report content quality and human readability
+1. **ACTIVATE VIRTUAL ENVIRONMENT FIRST**: `source .venv/bin/activate` (CRITICAL - prevents ModuleNotFoundError)
+2. **USE AUTOMATED TEST SCRIPTS ONLY**: `python3 -m app.end_to_end_testing`
+3. **NEVER manually construct curl commands** - this wastes time and leads to errors
+4. **NEVER guess API parameters** - use the automated scripts that know the correct endpoints
+5. **MAINTAIN TESTING CONSISTENCY** - Use the SAME testing methodology for both local and Cloud Run testing
+6. **FOR CLOUD RUN TESTING**: Use `TEST_CLOUD_RUN=true python3 -m app.end_to_end_testing`
+7. **FOR LOCAL TESTING**: Use `python3 -m app.end_to_end_testing` (without TEST_CLOUD_RUN)
+8. Generate actual reports (MD + CSV), not just JSON data
+9. Verify no hardcoded values were introduced
+10. Test through API endpoints, not direct module calls
+11. Validate report content quality and human readability
 
 ### **🚫 PROHIBITED TESTING ACTIONS**
 - **NEVER** manually construct curl commands for API testing
@@ -52,6 +53,47 @@ After ANY code changes, you **MUST**:
 - **NEVER use**: `data/your_pace_data.csv`, `data/segments_old.csv`
 - **ALWAYS use**: `app/constants.py` for configuration values
 - **NEVER hardcode**: start times, tolerance values, conflict lengths
+
+## **🐍 MANDATORY ENVIRONMENT SETUP**
+
+**CRITICAL**: Before running ANY commands, you **MUST** activate the virtual environment:
+
+```bash
+# ALWAYS run this first
+source .venv/bin/activate
+
+# THEN run your commands
+python3 -m app.end_to_end_testing
+```
+
+**Why this is critical:**
+- **Prevents ModuleNotFoundError**: System Python doesn't have required dependencies
+- **Ensures correct dependencies**: Virtual environment has all required packages
+- **Maintains consistency**: Same environment as production deployment
+- **Avoids debugging time**: Prevents "missing module" errors that waste time
+
+**Signs you forgot to activate:**
+- `ModuleNotFoundError: No module named 'fastapi'`
+- `ModuleNotFoundError: No module named 'pandas'`
+- Any import errors when running Python commands
+
+**Remember**: Virtual environment activation does NOT persist between terminal sessions!
+
+## **🔧 CURRENT DEVELOPMENT ISSUES**
+
+**Active Issues for Development Branch:**
+- **Issue #143**: CRITICAL - Cloud Run E2E tests using stale/cached reports (HIGH priority)
+- **Issue #144**: Flow zone cleanup - Remove duplicate columns (MEDIUM priority)  
+- **Issue #142**: PR E2E artifacts workflow improvements (MEDIUM priority)
+- **Issue #131**: Density enhancements (MEDIUM priority)
+
+**Recommended Development Order:**
+1. **Issue #144** (Flow zone cleanup) - Safe technical debt, low risk
+2. **Issue #142** (PR E2E artifacts) - Process improvement, low risk
+3. **Issue #131** (Density enhancements) - Feature work, medium risk
+4. **Issue #143** (Cloud Run E2E) - Critical bug, high risk, needs investigation
+
+**Each issue gets its own commit for easy rollback within the branch.**
 
 ## **🚀 9-STEP MERGE/TEST PROCESS**
 
