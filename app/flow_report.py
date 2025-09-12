@@ -239,10 +239,90 @@ def generate_segment_section(
         content.extend(generate_convergence_analysis(segment))
         content.append("")
     
+    # Runner Experience Analysis (Overtaking Loads)
+    content.extend(generate_runner_experience_analysis(segment))
+    content.append("")
+    
     # Deep dive analysis if present
     deep_dive = segment.get("deep_dive_analysis")
     if deep_dive and isinstance(deep_dive, dict):
         content.extend(generate_deep_dive_analysis(segment))
+        content.append("")
+    
+    return content
+
+
+def generate_runner_experience_analysis(segment: Dict[str, Any]) -> List[str]:
+    """Generate runner experience analysis section with overtaking loads."""
+    content = []
+    
+    content.append("### Runner Experience Analysis")
+    content.append("")
+    content.append("This section quantifies the 'passing burden' - how many runners each faster runner needs to navigate around.")
+    content.append("")
+    
+    # Get overtaking load data
+    overtaking_load_a = segment.get("overtaking_load_a", 0.0)
+    overtaking_load_b = segment.get("overtaking_load_b", 0.0)
+    max_load_a = segment.get("max_overtaking_load_a", 0)
+    max_load_b = segment.get("max_overtaking_load_b", 0)
+    distribution_a = segment.get("overtaking_load_distribution_a", [])
+    distribution_b = segment.get("overtaking_load_distribution_b", [])
+    
+    event_a = segment.get("event_a", "Event A")
+    event_b = segment.get("event_b", "Event B")
+    
+    # Overtaking load summary table
+    content.append("| Metric | Value |")
+    content.append("|--------|-------|")
+    content.append(f"| {event_a} Average Overtaking Load | {overtaking_load_a:.1f} runners |")
+    content.append(f"| {event_a} Maximum Overtaking Load | {max_load_a} runners |")
+    content.append(f"| {event_b} Average Overtaking Load | {overtaking_load_b:.1f} runners |")
+    content.append(f"| {event_b} Maximum Overtaking Load | {max_load_b} runners |")
+    content.append("")
+    
+    # High-load runners analysis
+    if distribution_a or distribution_b:
+        content.append("#### High-Load Runners")
+        content.append("")
+        
+        # Find runners with high overtaking loads (>5 runners)
+        high_load_threshold = 5
+        high_load_a = [load for load in distribution_a if load > high_load_threshold]
+        high_load_b = [load for load in distribution_b if load > high_load_threshold]
+        
+        if high_load_a:
+            content.append(f"**{event_a} High-Load Runners:** {len(high_load_a)} runners face >{high_load_threshold} passing situations")
+            content.append(f"- Load range: {min(high_load_a)} - {max(high_load_a)} runners")
+            content.append("")
+        
+        if high_load_b:
+            content.append(f"**{event_b} High-Load Runners:** {len(high_load_b)} runners face >{high_load_threshold} passing situations")
+            content.append(f"- Load range: {min(high_load_b)} - {max(high_load_b)} runners")
+            content.append("")
+        
+        if not high_load_a and not high_load_b:
+            content.append("No high-load runners detected (all runners face ≤5 passing situations)")
+            content.append("")
+    
+    # Crowd management insights
+    content.append("#### Crowd Management Insights")
+    content.append("")
+    
+    if overtaking_load_a > 10 or overtaking_load_b > 10:
+        content.append("⚠️ **High Passing Burden Detected**")
+        content.append("- Consider wider trails or better event separation")
+        content.append("- Monitor for safety concerns during race")
+        content.append("")
+    elif overtaking_load_a > 5 or overtaking_load_b > 5:
+        content.append("⚠️ **Moderate Passing Burden**")
+        content.append("- Monitor runner experience and safety")
+        content.append("- Consider course adjustments if complaints arise")
+        content.append("")
+    else:
+        content.append("✅ **Low Passing Burden**")
+        content.append("- Good runner experience expected")
+        content.append("- Current course design appears adequate")
         content.append("")
     
     return content
@@ -509,12 +589,15 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
             "overtaking_a", "overtaking_b", "sample_a", "sample_b", "pct_a", "pct_b",
             "copresence_a", "copresence_b", "unique_encounters", "participants_involved",
             
-            # Group 3: Technical & Debugging
+            # Group 3: Runner Experience Analysis (Overtaking Loads)
+            "overtaking_load_a", "overtaking_load_b", "max_overtaking_load_a", "max_overtaking_load_b",
+            
+            # Group 4: Technical & Debugging
             "spatial_zone_exists", "temporal_overlap_exists", "true_pass_exists",
             "has_convergence_policy", "has_convergence", "convergence_zone_start",
             "convergence_zone_end", "no_pass_reason_code", "conflict_length_m",
             
-            # Group 4: Metadata (moved to end as requested)
+            # Group 5: Metadata (moved to end as requested)
             "analysis_timestamp", "app_version", "environment", "data_source",
             "start_times", "min_overlap_duration", "conflict_length_m"
         ])
@@ -608,7 +691,13 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
                 segment.get("unique_encounters", 0),
                 segment.get("participants_involved", 0),
                 
-                # Group 3: Technical & Debugging
+                # Group 3: Runner Experience Analysis (Overtaking Loads)
+                segment.get("overtaking_load_a", 0.0),
+                segment.get("overtaking_load_b", 0.0),
+                segment.get("max_overtaking_load_a", 0),
+                segment.get("max_overtaking_load_b", 0),
+                
+                # Group 4: Technical & Debugging
                 segment.get("spatial_zone_exists", False),
                 segment.get("temporal_overlap_exists", False),
                 segment.get("true_pass_exists", False),
@@ -619,7 +708,7 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
                 segment.get("no_pass_reason_code", ""),
                 segment.get('conflict_length_m', 100.0),  # conflict_length_m from analysis
                 
-                # Group 4: Metadata (moved to end as requested)
+                # Group 5: Metadata (moved to end as requested)
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 APP_VERSION,
                 "local",  # Environment detection moved to function parameter

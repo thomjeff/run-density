@@ -1009,6 +1009,118 @@ def validate_per_runner_entry_exit_f1(
     }
 
 
+def calculate_overtaking_loads(
+    df_a: pd.DataFrame,
+    df_b: pd.DataFrame,
+    event_a: str,
+    event_b: str,
+    start_times: Dict[str, float],
+    cp_km: float,
+    from_km_a: float,
+    to_km_a: float,
+    from_km_b: float,
+    to_km_b: float,
+    conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS
+) -> Tuple[Dict[str, int], Dict[str, int], float, float, int, int]:
+    """
+    Calculate overtaking loads for individual runners.
+    
+    Returns:
+        Tuple of (overtaking_loads_a, overtaking_loads_b, avg_load_a, avg_load_b, max_load_a, max_load_b)
+        where overtaking_loads_a/b are dicts mapping runner bib to number of runners they overtake
+    """
+    if df_a.empty or df_b.empty:
+        return {}, {}, 0.0, 0.0, 0, 0
+    
+    # Convert start times to seconds
+    start_a = start_times.get(event_a, 0) * 60.0
+    start_b = start_times.get(event_b, 0) * 60.0
+    
+    # Track individual runner overtaking counts
+    overtaking_loads_a = {}
+    overtaking_loads_b = {}
+    
+    # Calculate convergence point boundaries
+    conflict_start = max(from_km_a, from_km_b)
+    conflict_end = min(to_km_a, to_km_b)
+    
+    # Filter runners to convergence zone based on distance
+    df_a_zone = df_a[(df_a['distance'] >= conflict_start) & (df_a['distance'] <= conflict_end)].copy()
+    df_b_zone = df_b[(df_b['distance'] >= conflict_start) & (df_b['distance'] <= conflict_end)].copy()
+    
+    if df_a_zone.empty or df_b_zone.empty:
+        return {}, {}, 0.0, 0.0, 0, 0
+    
+    # Calculate arrival times for all runners in the zone
+    from .utils import arrival_time_sec
+    
+    # Add time columns to the dataframes
+    df_a_zone['time'] = df_a_zone.apply(lambda row: arrival_time_sec(
+        start_a, row['start_offset'], row['distance'], row['pace']
+    ), axis=1)
+    
+    df_b_zone['time'] = df_b_zone.apply(lambda row: arrival_time_sec(
+        start_b, row['start_offset'], row['distance'], row['pace']
+    ), axis=1)
+    
+    # Calculate entry/exit times for convergence zone
+    first_entry_a = df_a_zone['time'].min()
+    last_exit_a = df_a_zone['time'].max()
+    first_entry_b = df_b_zone['time'].min()
+    last_exit_b = df_b_zone['time'].max()
+    
+    # Find overlap window
+    overlap_start = max(first_entry_a, first_entry_b)
+    overlap_end = min(last_exit_a, last_exit_b)
+    
+    if overlap_start >= overlap_end:
+        return {}, {}, 0.0, 0.0, 0, 0
+    
+    # Filter to overlap window
+    df_a_overlap = df_a_zone[(df_a_zone['time'] >= overlap_start) & (df_a_zone['time'] <= overlap_end)]
+    df_b_overlap = df_b_zone[(df_b_zone['time'] >= overlap_start) & (df_b_zone['time'] <= overlap_end)]
+    
+    # Initialize overtaking counts for all runners in overlap
+    for _, runner in df_a_overlap.iterrows():
+        overtaking_loads_a[runner['runner_id']] = 0
+    for _, runner in df_b_overlap.iterrows():
+        overtaking_loads_b[runner['runner_id']] = 0
+    
+    # Calculate individual overtaking counts
+    for _, runner_a in df_a_overlap.iterrows():
+        a_bib = runner_a['runner_id']
+        a_time = runner_a['time']
+        a_km = runner_a['distance']
+        
+        for _, runner_b in df_b_overlap.iterrows():
+            b_bib = runner_b['runner_id']
+            b_time = runner_b['time']
+            b_km = runner_b['distance']
+            
+            # Check if they overlap temporally and spatially
+            time_overlap = abs(a_time - b_time) < 60  # Within 1 minute
+            spatial_overlap = abs(a_km - b_km) < (conflict_length_m / 1000)  # Within conflict length
+            
+            if time_overlap and spatial_overlap:
+                # Check if A overtakes B (A is faster and behind B initially)
+                if a_km < b_km and runner_a['pace'] < runner_b['pace']:
+                    overtaking_loads_a[a_bib] += 1
+                # Check if B overtakes A (B is faster and behind A initially)
+                elif b_km < a_km and runner_b['pace'] < runner_a['pace']:
+                    overtaking_loads_b[b_bib] += 1
+    
+    # Calculate statistics
+    loads_a = list(overtaking_loads_a.values())
+    loads_b = list(overtaking_loads_b.values())
+    
+    avg_load_a = sum(loads_a) / len(loads_a) if loads_a else 0.0
+    avg_load_b = sum(loads_b) / len(loads_b) if loads_b else 0.0
+    max_load_a = max(loads_a) if loads_a else 0
+    max_load_b = max(loads_b) if loads_b else 0
+    
+    return overtaking_loads_a, overtaking_loads_b, avg_load_a, avg_load_b, max_load_a, max_load_b
+
+
 def calculate_convergence_zone_overlaps_original(
     df_a: pd.DataFrame,
     df_b: pd.DataFrame,
@@ -1951,6 +2063,12 @@ def analyze_temporal_flow_segments(
                 segment_result["convergence_point"] = None
                 segment_result["convergence_point_fraction"] = None
             
+            # Calculate overtaking loads for runner experience analysis
+            overtaking_loads_a, overtaking_loads_b, avg_load_a, avg_load_b, max_load_a, max_load_b = calculate_overtaking_loads(
+                df_a, df_b, event_a, event_b, start_times, cp_km, 
+                from_km_a, to_km_a, from_km_b, to_km_b, dynamic_conflict_length_m
+            )
+            
             segment_result.update({
                 "overtaking_a": overtakes_a,
                 "overtaking_b": overtakes_b,
@@ -1962,7 +2080,14 @@ def analyze_temporal_flow_segments(
                 "convergence_zone_end": conflict_end,
                 "conflict_length_m": dynamic_conflict_length_m,
                 "unique_encounters": unique_encounters,
-                "participants_involved": participants_involved
+                "participants_involved": participants_involved,
+                # Overtaking load analysis for runner experience
+                "overtaking_load_a": round(avg_load_a, 1),
+                "overtaking_load_b": round(avg_load_b, 1),
+                "max_overtaking_load_a": max_load_a,
+                "max_overtaking_load_b": max_load_b,
+                "overtaking_load_distribution_a": list(overtaking_loads_a.values()),
+                "overtaking_load_distribution_b": list(overtaking_loads_b.values())
             })
             
             results["segments_with_convergence"] += 1

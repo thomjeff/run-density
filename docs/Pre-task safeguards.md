@@ -47,6 +47,13 @@ After ANY code changes, you **MUST**:
 - **NEVER** use different testing methodologies for local vs Cloud Run testing
 - **NEVER** compare results from different testing approaches
 
+### **🚫 PROHIBITED GITHUB COMMAND ACTIONS**
+- **NEVER** use complex multi-line strings in `gh issue comment` commands
+- **NEVER** include unescaped quotes, backticks, or special characters in comment bodies
+- **NEVER** use complex JSON or code blocks in single-line shell commands
+- **ALWAYS** use simple, single-line comment bodies or write to files first
+- **IF** complex formatting needed, write to a file first, then use `gh issue comment --body-file`
+
 ## **📁 CRITICAL FILE REFERENCES**
 
 - **ALWAYS use**: `data/runners.csv`, `data/segments_new.csv`
