@@ -1023,7 +1023,10 @@ def calculate_overtaking_loads(
     conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS
 ) -> Tuple[Dict[str, int], Dict[str, int], float, float, int, int]:
     """
-    Calculate overtaking loads for individual runners.
+    Calculate overtaking loads by counting individual overtaking encounters.
+    
+    This function reuses the existing overtaking detection logic to count how many
+    runners each individual runner overtakes, providing the "passing burden" analysis.
     
     Returns:
         Tuple of (overtaking_loads_a, overtaking_loads_b, avg_load_a, avg_load_b, max_load_a, max_load_b)
@@ -1031,6 +1034,9 @@ def calculate_overtaking_loads(
     """
     if df_a.empty or df_b.empty:
         return {}, {}, 0.0, 0.0, 0, 0
+    
+    # Use the existing overtaking detection logic but track individual counts
+    from .utils import arrival_time_sec
     
     # Convert start times to seconds
     start_a = start_times.get(event_a, 0) * 60.0
@@ -1050,9 +1056,6 @@ def calculate_overtaking_loads(
     
     if df_a_zone.empty or df_b_zone.empty:
         return {}, {}, 0.0, 0.0, 0, 0
-    
-    # Calculate arrival times for all runners in the zone
-    from .utils import arrival_time_sec
     
     # Add time columns to the dataframes
     df_a_zone['time'] = df_a_zone.apply(lambda row: arrival_time_sec(
@@ -1086,28 +1089,38 @@ def calculate_overtaking_loads(
     for _, runner in df_b_overlap.iterrows():
         overtaking_loads_b[runner['runner_id']] = 0
     
-    # Calculate individual overtaking counts
+    # Use the same overtaking detection logic as the main flow analysis
     for _, runner_a in df_a_overlap.iterrows():
-        a_bib = runner_a['runner_id']
+        a_id = runner_a['runner_id']
         a_time = runner_a['time']
         a_km = runner_a['distance']
         
         for _, runner_b in df_b_overlap.iterrows():
-            b_bib = runner_b['runner_id']
+            b_id = runner_b['runner_id']
             b_time = runner_b['time']
             b_km = runner_b['distance']
             
-            # Check if they overlap temporally and spatially
+            # Check if they overlap temporally and spatially (same logic as main analysis)
             time_overlap = abs(a_time - b_time) < 60  # Within 1 minute
             spatial_overlap = abs(a_km - b_km) < (conflict_length_m / 1000)  # Within conflict length
             
             if time_overlap and spatial_overlap:
-                # Check if A overtakes B (A is faster and behind B initially)
-                if a_km < b_km and runner_a['pace'] < runner_b['pace']:
-                    overtaking_loads_a[a_bib] += 1
-                # Check if B overtakes A (B is faster and behind A initially)
-                elif b_km < a_km and runner_b['pace'] < runner_a['pace']:
-                    overtaking_loads_b[b_bib] += 1
+                # Calculate entry/exit times for this specific pair (same logic as main analysis)
+                a_entry = a_time
+                a_exit = a_time + (a_km * runner_a['pace'] * 60)  # Convert pace to seconds
+                b_entry = b_time  
+                b_exit = b_time + (b_km * runner_b['pace'] * 60)  # Convert pace to seconds
+                
+                # Check if runner A passes runner B (A starts behind B, finishes ahead of B)
+                a_passes_b = (a_entry > b_entry and a_exit < b_exit)
+                # Check if runner B passes runner A (B starts behind A, finishes ahead of A)
+                b_passes_a = (b_entry > a_entry and b_exit < a_exit)
+                
+                # Count individual overtaking encounters
+                if a_passes_b:
+                    overtaking_loads_a[a_id] += 1
+                if b_passes_a:
+                    overtaking_loads_b[b_id] += 1
     
     # Calculate statistics
     loads_a = list(overtaking_loads_a.values())
