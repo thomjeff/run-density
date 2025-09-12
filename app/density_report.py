@@ -725,7 +725,6 @@ def generate_template_narratives(segment_id: str, segment_data: Dict[str, Any]) 
             content.extend(narrative_content.strip().split('\n'))
             content.append("")
         
-        
     except Exception as e:
         # Fallback if template engine fails
         content.append("### Metrics Summary")
