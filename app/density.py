@@ -24,28 +24,30 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def classify_density(value, rulebook):
+def classify_density(value, rulebook, schema_name="on_course_open"):
     """
-    Returns one of: 'high_density' | 'medium_density' | 'low_density' | None
+    Returns LOS letter (A-F) based on density value and schema.
     Uses the rulebook thresholds verbatim (units must match computed metric).
     """
     # Handle v2.0 rulebook structure
     if "schemas" in rulebook:
-        # v2.0 rulebook - use global LOS thresholds
-        los_thresholds = rulebook.get("globals", {}).get("los_thresholds", {})
-        if not los_thresholds:
-            return None
+        # v2.0 rulebook - use schema-specific or global LOS thresholds
+        schemas = rulebook.get("schemas", {})
+        schema_config = schemas.get(schema_name, {})
+        los_thresholds = schema_config.get("los_thresholds", 
+                                         rulebook.get("globals", {}).get("los_thresholds", {}))
         
-        # Convert v2.0 structure to density classes
-        # F = high_density, E = medium_density, A-D = low_density
-        if "F" in los_thresholds and value >= los_thresholds["F"].get("min", 1.63):
-            return "high_density"
-        elif "E" in los_thresholds and value >= los_thresholds["E"].get("min", 1.08):
-            return "medium_density"
-        elif "D" in los_thresholds and value >= los_thresholds["D"].get("min", 0.72):
-            return "low_density"
-        else:
-            return None
+        if not los_thresholds:
+            return "F"  # Default to worst case
+        
+        # Map density to LOS letter
+        for letter in ["A", "B", "C", "D", "E", "F"]:
+            rng = los_thresholds.get(letter, {})
+            mn = rng.get("min", float("-inf"))
+            mx = rng.get("max", float("inf"))
+            if value >= mn and value < mx:
+                return letter
+        return "F"
     else:
         # Legacy v1.x rulebook structure
         th = rulebook["templates"]["thresholds"]
@@ -101,6 +103,7 @@ def load_density_cfg(path: str) -> Dict[str, dict]:
             width_m=float(r["width_m"]),
             direction=str(r.get("direction", "uni")),
             flow_type=str(r.get("flow_type", "default")),
+            flow_enabled=str(r.get("flow_enabled", "n")),
             events=events,
             full_from_km=float(r.get("full_from_km", 0)) if r.get("full_from_km") != "" else None,
             full_to_km=float(r.get("full_to_km", 0)) if r.get("full_to_km") != "" else None,
@@ -1589,8 +1592,50 @@ def analyze_density_segments(pace_data: pd.DataFrame,
                 segment, pace_data, start_times, time_bins, density_cfg[seg_id]
             )
             
+            # Load rulebook for v2 schema resolution
+            try:
+                from .density_template_engine import resolve_schema, get_schema_config, compute_flow_rate, evaluate_triggers
+                import yaml
+                
+                with open("data/density_rulebook.yml", 'r') as f:
+                    rulebook = yaml.safe_load(f)
+                
+                # Resolve schema for this segment
+                schema_name = resolve_schema(seg_id, d.get("segment_type", "road"), rulebook)
+                schema_config = get_schema_config(schema_name, rulebook)
+                logger.info(f"Segment {seg_id}: schema_name={schema_name}, flow_enabled={d.get('flow_enabled')}")
+                
+                # Compute flow rate if enabled for this segment
+                flow_rate = None
+                flow_enabled = d.get("flow_enabled", "n")
+                if flow_enabled == "y" or flow_enabled is True:
+                    # Calculate flow rate from arrivals
+                    peak_concurrency = getattr(summary, "peak_concurrency", 0)
+                    bin_seconds = config.bin_seconds
+                    flow_rate = compute_flow_rate(peak_concurrency, d["width_m"], bin_seconds)
+                
+                # Evaluate triggers
+                metrics = {
+                    "density": getattr(summary, "peak_areal_density", 0.0),
+                    "flow": flow_rate
+                }
+                fired_actions = evaluate_triggers(seg_id, metrics, schema_name, schema_config, rulebook)
+                
+                # Convert summary to dict and add v2 data
+                summary_dict = summary.__dict__.copy()
+                summary_dict["schema_name"] = schema_name
+                summary_dict["flow_rate"] = flow_rate
+                summary_dict["fired_actions"] = fired_actions
+                
+            except Exception as e:
+                logger.warning(f"Failed to load v2 rulebook for segment {seg_id}: {e}")
+                summary_dict = summary.__dict__.copy()
+                summary_dict["schema_name"] = "on_course_open"
+                summary_dict["flow_rate"] = None
+                summary_dict["fired_actions"] = []
+            
             results["segments"][segment.segment_id] = {
-                "summary": summary,
+                "summary": summary_dict,
                 "time_series": density_results,
                 "sustained_periods": sustained_periods,
                 "events_included": list(d["events"]),

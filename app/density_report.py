@@ -46,6 +46,107 @@ LOS_CROWD_THRESHOLDS = {
 }
 
 
+def render_segment_v2(md, ctx, rulebook):
+    """Render a segment using v2.0 rulebook structure with schema-specific formatting."""
+    # Get schema information
+    schema_name = ctx.get("schema_name", "on_course_open")
+    flow_rate = ctx.get("flow_rate")
+    fired_actions = ctx.get("fired_actions", [])
+    
+    # Get schema configuration
+    schemas = rulebook.get("schemas", {})
+    schema_config = schemas.get(schema_name, {})
+    
+    # Get LOS thresholds for this schema
+    los_thresholds = schema_config.get("los_thresholds", 
+                                     rulebook.get("globals", {}).get("los_thresholds", {}))
+    
+    # Determine LOS from areal density
+    areal_density = ctx.get("peak_areal_density", 0.0)
+    los_letter = "F"  # Default to worst case
+    for letter in ["A", "B", "C", "D", "E", "F"]:
+        rng = los_thresholds.get(letter, {})
+        mn = rng.get("min", float("-inf"))
+        mx = rng.get("max", float("inf"))
+        if areal_density >= mn and areal_density < mx:
+            los_letter = letter
+            break
+    
+    # Render header with schema info
+    md.write(f"## Segment {ctx['segment_id']} — {ctx['seg_label']}\n\n")
+    
+    # Render metrics table
+    md.write("### Metrics\n\n")
+    md.write("| Metric | Value | Units |\n")
+    md.write("|--------|-------|-------|\n")
+    
+    # Areal density (always shown)
+    md.write(f"| Density | {areal_density:.2f} | p/m² |\n")
+    
+    # Flow rate (if enabled)
+    if flow_rate is not None:
+        md.write(f"| Flow Rate | {flow_rate:.0f} | p/min/m |\n")
+    
+    # LOS
+    md.write(f"| LOS | {los_letter} ({schema_name.replace('_', ' ').title()}) | — |\n")
+    
+    # Add note about schema if start_corral
+    if schema_name == "start_corral":
+        md.write("\n| Note: LOS here uses start-corral thresholds, not Fruin. Flow-rate governs safety. |\n")
+    elif schema_name == "on_course_narrow":
+        md.write("\n| Note: LOS uses Fruin thresholds (linear density). |\n")
+    
+    # Render operational implications
+    md.write("\n### Operational Implications\n\n")
+    
+    # Get mitigations from schema
+    mitigations = schema_config.get("mitigations", [])
+    drivers = schema_config.get("drivers", [])
+    
+    # Add driver context
+    if drivers:
+        md.write("• " + drivers[0] + "\n")
+    
+    # Add LOS-specific guidance
+    los_label = los_thresholds.get(los_letter, {}).get("label", "Unknown")
+    md.write(f"• At LOS {los_letter} ({los_label}), density is {'higher than comfortable' if los_letter in ['D', 'E', 'F'] else 'acceptable'}.\n")
+    
+    # Add flow-specific guidance if available
+    if flow_rate is not None:
+        flow_ref = schema_config.get("flow_ref", {})
+        critical_flow = flow_ref.get("critical", 600)
+        if flow_rate >= critical_flow:
+            md.write(f"• Flow of {flow_rate:.0f} p/min/m exceeds critical threshold ({critical_flow} p/min/m).\n")
+        else:
+            md.write(f"• Flow of {flow_rate:.0f} p/min/m is within acceptable range.\n")
+    
+    # Add fired actions if any
+    if fired_actions:
+        md.write("\n### Mitigations Fired\n\n")
+        for action in fired_actions:
+            md.write(f"• {action}\n")
+    
+    # Add operational box if available
+    ops_box = schema_config.get("ops_box", {})
+    if ops_box:
+        md.write("\n### Operational Notes\n\n")
+        for category, notes in ops_box.items():
+            if notes:
+                md.write(f"**{category.title()}:**\n")
+                for note in notes:
+                    md.write(f"• {note}\n")
+                md.write("\n")
+    
+    # Add definitions (only once per report)
+    if not hasattr(render_segment_v2, '_definitions_added'):
+        md.write("\n📖 Definitions:\n\n")
+        md.write("• Density = persons per square meter (p/m²).\n")
+        if flow_rate is not None:
+            md.write("• Flow Rate = persons per minute per meter (p/min/m).\n")
+        md.write("• `gte` = greater-than-or-equal-to (thresholds are inclusive).\n\n")
+        render_segment_v2._definitions_added = True
+
+
 def render_segment(md, ctx, rulebook):
     """Render a segment using v2.0 rulebook structure."""
     # Handle v2.0 rulebook structure
@@ -514,10 +615,50 @@ def generate_segment_section(
     event_order: List[Tuple[str, float]], 
     include_per_event: bool
 ) -> List[str]:
-    """Generate markdown content for a single segment."""
+    """Generate markdown content for a single segment using v2 rulebook."""
     content = []
     
-    # Segment header
+    # Try to load v2 rulebook and use new rendering
+    try:
+        import yaml
+        with open("data/density_rulebook.yml", "r") as f:
+            rulebook = yaml.safe_load(f)
+        
+        # Check if this is v2 rulebook
+        version = rulebook.get("meta", {}).get("version", "1.0")
+        version_str = str(version)
+        if version_str.startswith("2"):
+            # Use v2 rendering
+            from io import StringIO
+            md_buffer = StringIO()
+            
+            # Create context for v2 rendering
+            summary = segment_data.get("summary", {})
+            ctx = {
+                "segment_id": segment_id,
+                "seg_label": segment_data.get("seg_label", "Unknown"),
+                "peak_areal_density": summary.get("peak_areal_density", 0.0),
+                "peak_crowd_density": summary.get("peak_crowd_density", 0.0),
+                "schema_name": summary.get("schema_name", "on_course_open"),
+                "flow_rate": summary.get("flow_rate"),
+                "fired_actions": summary.get("fired_actions", [])
+            }
+            
+            try:
+                render_segment_v2(md_buffer, ctx, rulebook)
+                v2_content = md_buffer.getvalue()
+                
+                if v2_content.strip():
+                    content.extend(v2_content.strip().split('\n'))
+                    return content
+            except Exception as e:
+                # Fall back to v1 rendering if v2 fails
+                pass
+    except Exception as e:
+        # Fall back to v1 rendering if v2 fails
+        pass
+    
+    # Fallback to v1 rendering
     seg_label = segment_data.get("seg_label", "Unknown")
     events_included = segment_data.get("events_included", [])
     
