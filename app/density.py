@@ -24,6 +24,56 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def classify_density(value, rulebook):
+    """
+    Returns one of: 'high_density' | 'medium_density' | 'low_density' | None
+    Uses the rulebook thresholds verbatim (units must match computed metric).
+    """
+    # Handle v2.0 rulebook structure
+    if "schemas" in rulebook:
+        # v2.0 rulebook - use global LOS thresholds
+        los_thresholds = rulebook.get("globals", {}).get("los_thresholds", {})
+        if not los_thresholds:
+            return None
+        
+        # Convert v2.0 structure to density classes
+        # F = high_density, E = medium_density, A-D = low_density
+        if "F" in los_thresholds and value >= los_thresholds["F"].get("min", 1.63):
+            return "high_density"
+        elif "E" in los_thresholds and value >= los_thresholds["E"].get("min", 1.08):
+            return "medium_density"
+        elif "D" in los_thresholds and value >= los_thresholds["D"].get("min", 0.72):
+            return "low_density"
+        else:
+            return None
+    else:
+        # Legacy v1.x rulebook structure
+        th = rulebook["templates"]["thresholds"]
+        high = float(th.get("high_density", 0.5))
+        med  = float(th.get("medium_density", 0.2))
+        low  = float(th.get("low_density", 0.1))
+        if value >= high:
+            return "high_density"
+        if value >= med:
+            return "medium_density"
+        if value >= low:
+            return "low_density"
+        return None
+
+
+def build_segment_context(seg, metrics, rulebook):
+    ctx = {
+        "segment_id": seg["id"],
+        "segment_label": seg["label"],
+        "event_type": metrics.get("event_type"),
+        "density_value": metrics.get("density_value"),
+        "flow_type": seg.get("flow_type"),  # e.g. 'merge', 'overtake'
+    }
+    ctx["density_class"] = classify_density(ctx["density_value"], rulebook)
+    ctx["is_high_density"] = (ctx["density_class"] == "high_density")
+    return ctx
+
+
 def load_density_cfg(path: str) -> Dict[str, dict]:
     """
     Load density configuration from segments_new.csv.
@@ -50,6 +100,7 @@ def load_density_cfg(path: str) -> Dict[str, dict]:
             seg_label=str(r.get("seg_label", "")),
             width_m=float(r["width_m"]),
             direction=str(r.get("direction", "uni")),
+            flow_type=str(r.get("flow_type", "default")),
             events=events,
             full_from_km=float(r.get("full_from_km", 0)) if r.get("full_from_km") != "" else None,
             full_to_km=float(r.get("full_to_km", 0)) if r.get("full_to_km") != "" else None,
@@ -1544,6 +1595,7 @@ def analyze_density_segments(pace_data: pd.DataFrame,
                 "sustained_periods": sustained_periods,
                 "events_included": list(d["events"]),
                 "seg_label": d["seg_label"],
+                "flow_type": d["flow_type"],
                 "per_event": per_event_summaries
             }
             results["summary"]["processed_segments"] += 1
