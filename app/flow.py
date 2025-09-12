@@ -38,6 +38,58 @@ from .constants import (
 from .utils import load_pace_csv, arrival_time_sec, load_segments_csv
 
 
+def get_flow_terminology(flow_type: str) -> Dict[str, str]:
+    """
+    Get appropriate terminology based on flow type.
+    
+    Args:
+        flow_type: The flow type (overtake, counterflow, merge, diverge, none)
+        
+    Returns:
+        Dictionary with terminology for different contexts
+    """
+    if flow_type == "counterflow":
+        return {
+            "action": "interactions",
+            "action_singular": "interaction", 
+            "description": "runners from opposite directions interacting",
+            "verb": "interact",
+            "past_verb": "interacted",
+            "sample_label": "Sample Runners (Interactions)",
+            "count_label": "Interactions"
+        }
+    elif flow_type == "merge":
+        return {
+            "action": "merges",
+            "action_singular": "merge",
+            "description": "runners merging from different directions", 
+            "verb": "merge",
+            "past_verb": "merged",
+            "sample_label": "Sample Runners (Merges)",
+            "count_label": "Merges"
+        }
+    elif flow_type == "diverge":
+        return {
+            "action": "diverges", 
+            "action_singular": "diverge",
+            "description": "runners diverging to different directions",
+            "verb": "diverge", 
+            "past_verb": "diverged",
+            "sample_label": "Sample Runners (Diverges)",
+            "count_label": "Diverges"
+        }
+    else:  # overtake, none, or other
+        return {
+            "action": "overtaking",
+            "action_singular": "overtake",
+            "description": "runners overtaking in same direction",
+            "verb": "overtake", 
+            "past_verb": "overtook",
+            "sample_label": "Sample Runners (Overtaking)",
+            "count_label": "Overtaking"
+        }
+
+
 def clamp_normalized_fraction(fraction: float, reason_prefix: str = "") -> Tuple[float, Optional[str]]:
     """
     Clamp a normalized fraction to [0, 1] range and return reason code if clamped.
@@ -1646,10 +1698,15 @@ def analyze_temporal_flow_segments(
             from_km_a, to_km_a, from_km_b, to_km_b
         )
         
+        # Get appropriate terminology for this flow type
+        flow_type = segment.get("flow_type", "")
+        terminology = get_flow_terminology(flow_type)
+        
         segment_result = {
             "seg_id": seg_id,
             "segment_label": segment.get("segment_label", ""),
-            "flow_type": segment.get("flow_type", ""),
+            "flow_type": flow_type,
+            "terminology": terminology,  # Add terminology dictionary
             "event_a": event_a,
             "event_b": event_b,
             "from_km_a": from_km_a,
