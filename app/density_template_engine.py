@@ -34,6 +34,143 @@ class TemplateContext:
     density_level: str    # high, medium, low
 
 
+@dataclass
+class Schema:
+    """Schema definition for density analysis."""
+    los_thresholds: dict
+    flow_ref: dict | None
+    debounce_bins: int = 2
+    cooldown_bins: int = 3
+
+
+@dataclass
+class DebounceState:
+    """State tracking for trigger debounce/cooldown."""
+    hot_bins: int = 0
+    cool_bins: int = 0
+    active: bool = False
+
+    def update(self, fired: bool, debounce_bins: int, cooldown_bins: int) -> bool:
+        """Update debounce state and return whether trigger should fire."""
+        if not self.active:
+            self.hot_bins = self.hot_bins + 1 if fired else 0
+            if self.hot_bins >= debounce_bins and fired:
+                self.active = True
+                self.cool_bins = 0
+        else:
+            self.cool_bins = self.cool_bins + 1 if not fired else 0
+            if self.cool_bins >= cooldown_bins and not fired:
+                self.active = False
+                self.hot_bins = 0
+        return self.active
+
+
+def evaluate_triggers(segment_id: str, metrics: dict, schema_name: str, schema: Schema, rulebook: dict) -> List[str]:
+    """Evaluate triggers for a segment and return fired actions."""
+    fired_actions = []
+    
+    # Get triggers for this schema
+    triggers = rulebook.get("triggers", [])
+    schema_triggers = [t for t in triggers if t.get("when", {}).get("schema") == schema_name]
+    
+    for trigger in schema_triggers:
+        when = trigger.get("when", {})
+        actions = trigger.get("actions", [])
+        
+        # Check density trigger
+        if "density_gte" in when:
+            density_threshold = when["density_gte"]
+            if isinstance(density_threshold, str):
+                # Letter-based threshold (A-F)
+                density_value = schema.los_thresholds.get(density_threshold, {}).get("min", 0.0)
+            else:
+                # Numeric threshold
+                density_value = density_threshold
+            
+            # Ensure density_value is not None
+            if density_value is None:
+                density_value = 0.0
+            
+            density_metric = metrics.get("density", 0.0)
+            if density_metric is not None and density_metric >= density_value:
+                fired_actions.extend(actions)
+        
+        # Check flow trigger
+        if "flow_gte" in when and schema.flow_ref:
+            flow_threshold = when["flow_gte"]
+            if isinstance(flow_threshold, str):
+                # Named threshold (warn, critical)
+                flow_value = schema.flow_ref.get(flow_threshold, 0.0)
+            else:
+                # Numeric threshold
+                flow_value = flow_threshold
+            
+            # Ensure flow_value is not None
+            if flow_value is None:
+                flow_value = 0.0
+            
+            flow_metric = metrics.get("flow", 0.0)
+            if flow_metric is not None and flow_metric >= flow_value:
+                fired_actions.extend(actions)
+    
+    return fired_actions
+
+
+def compute_flow_rate(runners_crossing: int, width_m: float, bin_seconds: int) -> float:
+    """Compute flow rate in runners/min/m."""
+    minutes = max(bin_seconds / 60.0, 1e-9)
+    return runners_crossing / (width_m * minutes)  # runners/min/m
+
+
+def map_los(density: float, los_thresholds: dict) -> str:
+    """Map density value to LOS letter based on thresholds."""
+    for letter in ["A", "B", "C", "D", "E", "F"]:
+        rng = los_thresholds.get(letter, {})
+        mn = rng.get("min", float("-inf"))
+        mx = rng.get("max", float("inf"))
+        if density >= mn and density < mx:
+            return letter
+    return "F"
+
+
+def resolve_schema(segment_id: str, segment_type: str, rulebook: dict) -> str:
+    """Resolve which schema to use for a segment based on rulebook binding rules."""
+    # Check explicit segment_id matches first
+    for binding in rulebook.get("binding", []):
+        when = binding.get("when", {})
+        if when.get("segment_id") == segment_id:
+            return binding.get("use_schema", "on_course_open")
+    
+    # Check segment_type matches
+    for binding in rulebook.get("binding", []):
+        when = binding.get("when", {})
+        if segment_type in when.get("segment_type", []):
+            return binding.get("use_schema", "on_course_open")
+    
+    # Default to on_course_open
+    return "on_course_open"
+
+
+def get_schema_config(schema_name: str, rulebook: dict) -> Schema:
+    """Get schema configuration from rulebook."""
+    schemas = rulebook.get("schemas", {})
+    schema_config = schemas.get(schema_name, {})
+    
+    # Get LOS thresholds - use schema-specific or fall back to global
+    los_thresholds = schema_config.get("los_thresholds", 
+                                     rulebook.get("globals", {}).get("los_thresholds", {}))
+    
+    # Get flow reference values
+    flow_ref = schema_config.get("flow_ref")
+    
+    return Schema(
+        los_thresholds=los_thresholds,
+        flow_ref=flow_ref,
+        debounce_bins=schema_config.get("debounce_bins", 2),
+        cooldown_bins=schema_config.get("cooldown_bins", 3)
+    )
+
+
 class DensityTemplateEngine:
     """Basic template engine for density report narratives."""
     
@@ -41,7 +178,30 @@ class DensityTemplateEngine:
         """Initialize the template engine with rulebook."""
         self.rulebook_path = rulebook_path
         self.templates = self._load_templates()
+        self.rulebook = self._load_rulebook()
+        self.debounce_states = {}  # Track debounce state per segment
     
+    def _load_rulebook(self) -> Dict[str, Any]:
+        """Load rulebook from YAML file."""
+        try:
+            with open(self.rulebook_path, 'r') as f:
+                rulebook = yaml.safe_load(f)
+                # Version guard for v2 rulebook
+                version = rulebook.get("meta", {}).get("version", "1.0")
+                if not version.startswith("2"):
+                    raise ValueError(f"Expected rulebook version 2.x, got {version}")
+                
+                # Check required keys
+                required_keys = ["schemas", "binding", "triggers"]
+                for key in required_keys:
+                    if key not in rulebook:
+                        raise ValueError(f"Missing required rulebook key: {key}")
+                
+                return rulebook
+        except Exception as e:
+            logger.error(f"Failed to load rulebook: {e}")
+            raise
+
     def _load_templates(self) -> Dict[str, Any]:
         """Load templates from YAML rulebook."""
         try:

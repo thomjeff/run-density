@@ -28,6 +28,17 @@ globals:
 
 schemas:
   start_corral:
+    # Start-corral specific LOS thresholds (more tolerant than Fruin)
+    los_thresholds:
+      A: { min: 0.0, max: 0.5, label: "Free flow" }
+      B: { min: 0.5, max: 0.8, label: "Comfortable" }
+      C: { min: 0.8, max: 1.2, label: "Moderate" }
+      D: { min: 1.2, max: 1.6, label: "Dense" }
+      E: { min: 1.6, max: 2.0, label: "Very dense" }
+      F: { min: 2.0, max: 999.0, label: "Extremely dense" }
+    flow_ref:
+      warn: 500      # runners/min/m
+      critical: 600  # runners/min/m
     drivers:
       - "Start corral release; managed pulses and lane discipline."
     mitigations:
@@ -45,6 +56,9 @@ schemas:
       - "Monitor; deploy roving marshal if persistent E/F."
 
   on_course_narrow:
+    flow_ref:
+      warn: 300      # runners/min/m
+      critical: 400  # runners/min/m
     drivers:
       - "Narrow segment with potential bottlenecks."
     mitigations:
