@@ -203,6 +203,15 @@ async def generate_density_report_endpoint(request: DensityReportRequest):
                 return obj
         
         cleaned_results = convert_for_json(results)
+        
+        # Add markdown content for Cloud Run E2E testing
+        if cleaned_results.get("ok") and cleaned_results.get("report_path"):
+            try:
+                with open(cleaned_results["report_path"], 'r', encoding='utf-8') as f:
+                    cleaned_results["markdown_content"] = f.read()
+            except Exception as e:
+                cleaned_results["markdown_content"] = f"Error reading report: {e}"
+        
         return JSONResponse(content=cleaned_results)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Density report generation failed: {str(e)}")
@@ -234,6 +243,23 @@ async def generate_temporal_flow_report_endpoint(request: TemporalFlowReportRequ
                 return obj
         
         cleaned_results = convert_nan(results)
+        
+        # Add markdown and CSV content for Cloud Run E2E testing
+        if cleaned_results.get("ok") and cleaned_results.get("report_path"):
+            try:
+                with open(cleaned_results["report_path"], 'r', encoding='utf-8') as f:
+                    cleaned_results["markdown_content"] = f.read()
+            except Exception as e:
+                cleaned_results["markdown_content"] = f"Error reading report: {e}"
+        
+        # Also add CSV content if available
+        if cleaned_results.get("ok") and cleaned_results.get("csv_path"):
+            try:
+                with open(cleaned_results["csv_path"], 'r', encoding='utf-8') as f:
+                    cleaned_results["csv_content"] = f.read()
+            except Exception as e:
+                cleaned_results["csv_content"] = f"Error reading CSV: {e}"
+        
         return JSONResponse(content=cleaned_results)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Temporal flow report generation failed: {str(e)}")
