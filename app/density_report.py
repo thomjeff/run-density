@@ -28,21 +28,21 @@ from datetime import datetime
 
 # LOS Thresholds for density classification (updated to match v2 rulebook)
 LOS_AREAL_THRESHOLDS = {
-    'A': (0.0, 0.31),    # Comfortable
-    'B': (0.31, 0.43),   # Good
-    'C': (0.43, 0.72),   # Moderate
-    'D': (0.72, 1.08),   # Busy
-    'E': (1.08, 1.63),   # Very Busy
-    'F': (1.63, float('inf'))  # Critical
+    'A': (0.0, 0.36),    # Free Flow
+    'B': (0.36, 0.54),   # Comfortable
+    'C': (0.54, 0.72),   # Moderate
+    'D': (0.72, 1.08),   # Dense
+    'E': (1.08, 1.63),   # Very Dense
+    'F': (1.63, float('inf'))  # Extremely Dense
 }
 
 LOS_CROWD_THRESHOLDS = {
-    'A': (0.0, 0.2),     # Comfortable
-    'B': (0.2, 0.4),     # Good
+    'A': (0.0, 0.2),     # Free Flow
+    'B': (0.2, 0.4),     # Comfortable
     'C': (0.4, 0.6),     # Moderate
-    'D': (0.6, 0.8),     # Busy
-    'E': (0.8, 1.0),     # Very Busy
-    'F': (1.0, float('inf'))  # Critical
+    'D': (0.6, 0.8),     # Dense
+    'E': (0.8, 1.0),     # Very Dense
+    'F': (1.0, float('inf'))  # Extremely Dense
 }
 
 
@@ -74,13 +74,13 @@ def render_segment(md, ctx, rulebook):
             mitigations = schema.get("mitigations", [])
             
             if drivers:
-                md.write("**Density Analysis:**\n")
+                md.write("### Density Analysis\n")
                 for driver in drivers:
                     md.write(f"- {driver}\n")
                 md.write("\n")
             
             if mitigations:
-                md.write("**Operational Implications:**\n")
+                md.write("### Operational Implications\n")
                 for mitigation in mitigations:
                     md.write(f"- {mitigation}\n")
                 md.write("\n")
@@ -88,22 +88,27 @@ def render_segment(md, ctx, rulebook):
             # Check for operational guidance
             ops_box = schema.get("ops_box", {})
             if ops_box:
-                md.write("**Operational Guidance:**\n")
+                md.write("### Ops Box\n")
                 for category, items in ops_box.items():
                     if items:
                         md.write(f"- **{category.title()}:** {', '.join(items)}\n")
                 md.write("\n")
         
-        # Check triggers for this segment
+        # Check triggers for this segment and show triggered actions
         triggers = rulebook.get("triggers", [])
+        triggered_actions = []
+        
         for trigger in triggers:
             if _trigger_matches(trigger, ctx, schema_name):
                 actions = trigger.get("actions", [])
                 if actions:
-                    md.write("**Safety Alerts:**\n")
+                    # Add trigger context to actions
+                    when = trigger.get("when", {})
+                    trigger_type = "Density" if "density_gte" in when else "Flow" if "flow_gte" in when else "General"
+                    threshold = when.get("density_gte", when.get("flow_gte", "threshold"))
+                    
                     for action in actions:
-                        md.write(f"- {action}\n")
-                    md.write("\n")
+                        triggered_actions.append(f"[{trigger_type} {threshold}] {action}")
         
         # Check for high density warnings (adapted from v1.x patches)
         if ctx.get("is_high_density"):
@@ -113,10 +118,15 @@ def render_segment(md, ctx, rulebook):
                     _trigger_matches(trigger, ctx, schema_name)):
                     actions = trigger.get("actions", [])
                     if actions:
-                        md.write("**High Density Warning:**\n")
                         for action in actions:
-                            md.write(f"- {action}\n")
-                        md.write("\n")
+                            triggered_actions.append(f"[High Density] {action}")
+        
+        # Display triggered actions if any
+        if triggered_actions:
+            md.write("### Triggered Actions\n")
+            for action in triggered_actions:
+                md.write(f"- {action}\n")
+            md.write("\n")
         
         # Check for event-specific factors (adapted from v1.x patches)
         event_type = ctx.get("event_type", "").lower()
@@ -439,14 +449,17 @@ def generate_markdown_report(
         content.append("**Units**: Density thresholds use *runners/m²* (areal density).")
         content.append("")
     
-    # Legend
-    content.append("## Legend")
+    # Definitions section
+    content.append("## Definitions")
     content.append("")
+    content.append("- **gte**: Greater than or equal to (used in trigger conditions like density_gte, flow_gte)")
     content.append("- **TOT**: Time Over Threshold (seconds above E/F LOS thresholds)")
-    content.append("- **LOS**: Level of Service (A=Comfortable, B=Good, C=Moderate, D=Busy, E=Very Busy, F=Critical)")
+    content.append("- **LOS**: Level of Service (A=Free Flow, B=Comfortable, C=Moderate, D=Dense, E=Very Dense, F=Extremely Dense)")
     content.append("- **Experienced Density**: What runners actually experience (includes co-present runners from other events)")
     content.append("- **Self Density**: Only that event's runners (not shown in this report)")
     content.append("- **Active Window**: Time period when the event has runners present in the segment")
+    content.append("- **Ops Box**: Operational guidance for race marshals and organizers")
+    content.append("- **Triggered Actions**: Safety alerts and operational responses when density/flow thresholds are exceeded")
     content.append("")
     
     # LOS Thresholds Table
@@ -454,12 +467,12 @@ def generate_markdown_report(
     content.append("")
     content.append("| LOS | Areal Density (runners/m²) | Crowd Density (runners/m) | Description |")
     content.append("|-----|---------------------------|--------------------------|-------------|")
-    content.append("| A | 0.00 - 0.31 | 0.00 - 0.20 | Comfortable |")
-    content.append("| B | 0.31 - 0.43 | 0.20 - 0.40 | Good |")
-    content.append("| C | 0.43 - 0.72 | 0.40 - 0.60 | Moderate |")
-    content.append("| D | 0.72 - 1.08 | 0.60 - 0.80 | Busy |")
-    content.append("| E | 1.08 - 1.63 | 0.80 - 1.00 | Very Busy |")
-    content.append("| F | 1.63+ | 1.00+ | Critical |")
+    content.append("| A | 0.00 - 0.36 | 0.00 - 0.20 | Free Flow |")
+    content.append("| B | 0.36 - 0.54 | 0.20 - 0.40 | Comfortable |")
+    content.append("| C | 0.54 - 0.72 | 0.40 - 0.60 | Moderate |")
+    content.append("| D | 0.72 - 1.08 | 0.60 - 0.80 | Dense |")
+    content.append("| E | 1.08 - 1.63 | 0.80 - 1.00 | Very Dense |")
+    content.append("| F | 1.63+ | 1.00+ | Extremely Dense |")
     content.append("")
     
     # Event start times (showing actual participants in first segment as reference)
