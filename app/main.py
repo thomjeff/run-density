@@ -51,6 +51,17 @@ class TemporalFlowRequest(BaseModel):
     conflictLengthM: float = DEFAULT_CONFLICT_LENGTH_METERS
     format: str = "json"
 
+class SingleSegmentFlowRequest(BaseModel):
+    paceCsv: str
+    segmentsCsv: str
+    startTimes: Dict[str, int]
+    segId: str
+    eventA: Optional[str] = None
+    eventB: Optional[str] = None
+    minOverlapDuration: float = DEFAULT_MIN_OVERLAP_DURATION
+    conflictLengthM: float = DEFAULT_CONFLICT_LENGTH_METERS
+    format: str = "json"
+
 class ReportRequest(BaseModel):
     paceCsv: str
     segmentsCsv: str
@@ -147,6 +158,60 @@ async def analyze_temporal_flow(request: TemporalFlowRequest):
         return JSONResponse(content=results)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Temporal flow analysis failed: {str(e)}")
+
+@app.post("/api/temporal-flow-single")
+async def analyze_single_segment_flow(request: SingleSegmentFlowRequest):
+    """Analyze temporal flow for a single segment with optional event filtering."""
+    try:
+        # Create a new flags instance with single segment mode
+        from .config_algo_consistency import AlgoConsistencyFlags
+        import app.config_algo_consistency as config_module
+        
+        # Store original flags
+        original_flags = config_module.FLAGS
+        
+        # Create new flags with single segment mode
+        new_flags = AlgoConsistencyFlags(
+            ENABLE_STRICT_FIRST_PUBLISH=original_flags.ENABLE_STRICT_FIRST_PUBLISH,
+            ENABLE_BIN_SELECTOR_UNIFICATION=original_flags.ENABLE_BIN_SELECTOR_UNIFICATION,
+            ENABLE_INPUT_NORMALIZATION=original_flags.ENABLE_INPUT_NORMALIZATION,
+            ENABLE_TELEMETRY_MIN=original_flags.ENABLE_TELEMETRY_MIN,
+            FORCE_BIN_PATH_FOR_SEGMENTS=original_flags.FORCE_BIN_PATH_FOR_SEGMENTS,
+            SINGLE_SEGMENT_MODE=request.segId
+        )
+        
+        # Temporarily replace the global flags
+        config_module.FLAGS = new_flags
+        
+        try:
+            results = analyze_temporal_flow_segments(
+                pace_csv=request.paceCsv, 
+                segments_csv=request.segmentsCsv, 
+                start_times=request.startTimes, 
+                min_overlap_duration=request.minOverlapDuration,
+                conflict_length_m=request.conflictLengthM
+            )
+            
+            # Filter by specific events if provided
+            if request.eventA and request.eventB:
+                filtered_segments = []
+                for segment in results.get("segments", []):
+                    if (segment.get("event_a") == request.eventA and 
+                        segment.get("event_b") == request.eventB):
+                        filtered_segments.append(segment)
+                results["segments"] = filtered_segments
+                results["total_segments"] = len(filtered_segments)
+            
+            if request.format == "text":
+                narrative = generate_temporal_flow_narrative(results)
+                return Response(content=narrative, media_type="text/plain")
+            return JSONResponse(content=results)
+        finally:
+            # Restore original flags
+            config_module.FLAGS = original_flags
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Single segment flow analysis failed: {str(e)}")
 
 @app.post("/api/report")
 async def generate_report(request: ReportRequest):
