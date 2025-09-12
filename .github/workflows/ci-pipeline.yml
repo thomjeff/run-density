@@ -267,13 +267,16 @@ jobs:
     
     - name: Check if release already exists
       id: check-release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
+        echo "Checking if release ${{ steps.version.outputs.version }} already exists..."
         if gh release view ${{ steps.version.outputs.version }} >/dev/null 2>&1; then
           echo "exists=true" >> $GITHUB_OUTPUT
-          echo "Release ${{ steps.version.outputs.version }} already exists"
+          echo "✅ Release ${{ steps.version.outputs.version }} already exists - will skip creation"
         else
           echo "exists=false" >> $GITHUB_OUTPUT
-          echo "Release ${{ steps.version.outputs.version }} does not exist"
+          echo "✅ Release ${{ steps.version.outputs.version }} does not exist - will create"
         fi
     
     - name: Run Cloud Run E2E tests (Lightweight)
@@ -283,24 +286,42 @@ jobs:
         echo "Skipping temporal-flow endpoint due to heavy computation timeout"
         TEST_CLOUD_RUN=true SKIP_TEMPORAL_FLOW=true python -m app.end_to_end_testing
     
+    - name: Skip Release Creation (Already Exists)
+      if: steps.check-release.outputs.exists == 'true'
+      run: |
+        echo "=== Release Already Exists ==="
+        echo "✅ Release ${{ steps.version.outputs.version }} already exists"
+        echo "Skipping release creation to avoid duplicates"
+        echo "This is expected behavior when multiple pushes occur with the same version"
+    
     - name: Create GitHub Release
       if: steps.check-release.outputs.exists == 'false'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         echo "=== Creating GitHub Release ==="
+        echo "Release check result: ${{ steps.check-release.outputs.exists }}"
+        echo "Creating release: ${{ steps.version.outputs.version }}"
+        
+        # Double-check release doesn't exist before creating
+        if gh release view ${{ steps.version.outputs.version }} >/dev/null 2>&1; then
+          echo "❌ ERROR: Release ${{ steps.version.outputs.version }} already exists! This should not happen."
+          echo "Skipping release creation to avoid duplicate."
+          exit 0
+        fi
+        
         gh release create ${{ steps.version.outputs.version }} \
           --title "Release ${{ steps.version.outputs.version }}" \
           --notes "## 🚀 Automated Release ${{ steps.version.outputs.version }}
-        
+
         This release was created automatically from the CI pipeline.
-        
+
         ### Validation
         - ✅ Build & Deploy completed successfully
         - ✅ Smoke tests passed (Production)
         - ✅ Version consistency validated
         - ✅ Cloud Run E2E tests passed (lightweight - temporal-flow skipped)
-        
+
         ### Next Steps
         1. Review the release notes
         2. Deploy to Cloud Run (if not already deployed)
