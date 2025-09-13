@@ -47,6 +47,20 @@ After ANY code changes, you **MUST**:
 - **NEVER** use different testing methodologies for local vs Cloud Run testing
 - **NEVER** compare results from different testing approaches
 
+### **🚫 PROHIBITED GITHUB COMMAND ACTIONS**
+- **NEVER** use complex multi-line strings in `gh issue comment` commands
+- **NEVER** include unescaped quotes, backticks, or special characters in comment bodies
+- **NEVER** use complex JSON or code blocks in single-line shell commands
+- **ALWAYS** use simple, single-line comment bodies or write to files first
+- **IF** complex formatting needed, write to a file first, then use `gh issue comment --body-file`
+
+### **🚫 PROHIBITED TIME CALCULATION ERRORS**
+- **NEVER** mix time units without explicit conversion (minutes vs seconds)
+- **NEVER** convert only one event's start time and leave the other unconverted
+- **ALWAYS** convert ALL start times consistently: `start_a = start_times.get(event_a, 0) * 60.0`
+- **ALWAYS** verify time calculations with unit tests for edge cases
+- **NEVER** assume time values are in the same units without checking the data source
+
 ## **📁 CRITICAL FILE REFERENCES**
 
 - **ALWAYS use**: `data/runners.csv`, `data/segments_new.csv`
@@ -86,6 +100,25 @@ python3 -m app.end_to_end_testing
 - **Issue #144**: Flow zone cleanup - Remove duplicate columns (MEDIUM priority)  
 - **Issue #142**: PR E2E artifacts workflow improvements (MEDIUM priority)
 - **Issue #131**: Density enhancements (MEDIUM priority)
+
+## **🐛 COMMON DEBUGGING PATTERNS**
+
+**When algorithms return 0 values or unexpected results:**
+
+1. **Check time unit consistency** - Ensure ALL time calculations use the same units
+   - Start times: minutes → seconds conversion (`* 60.0`)
+   - Pace calculations: minutes per km → seconds per km (`* 60.0`)
+   - Example bug: `start_a = start_times.get(event_a, 0) * 60.0` but `start_b = start_times.get(event_b, 0)` (missing `* 60.0`)
+
+2. **Verify data filtering logic** - Check if filtered datasets are empty
+   - Absolute intersections: `max(from_km_a, from_km_b)` vs `min(to_km_a, to_km_b)`
+   - Use normalized conflict zones when no absolute intersection exists
+   - Log boundary values to verify filtering is working
+
+3. **Validate algorithm assumptions** - Ensure logic matches working reference implementation
+   - Reuse proven functions instead of recreating logic
+   - Compare with existing working code patterns
+   - Test with known good data first
 
 **Recommended Development Order:**
 1. **Issue #144** (Flow zone cleanup) - Safe technical debt, low risk

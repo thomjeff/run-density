@@ -266,6 +266,49 @@ def get_test_environment_url() -> str:
     return f"{TEST_SERVER_URL} (local TestClient)"
 
 
+def save_cloud_run_reports(api_results: Dict[str, Any], test_timestamp: str) -> List[str]:
+    """Save Cloud Run API responses as local files for E2E testing."""
+    files = []
+    
+    # Create reports directory
+    reports_dir = f"reports/{test_timestamp[:10]}"
+    os.makedirs(reports_dir, exist_ok=True)
+    
+    # Save density report if available
+    if api_results.get('density_report', {}).get('success') and api_results['density_report'].get('response'):
+        density_data = api_results['density_report']['response']
+        if 'markdown_content' in density_data:
+            density_file = f"{reports_dir}/{test_timestamp}-Density.md"
+            with open(density_file, 'w', encoding='utf-8') as f:
+                f.write(density_data['markdown_content'])
+            files.append(density_file)
+            print(f"✅ Saved density report from Cloud Run: {density_file}")
+        else:
+            print(f"❌ No markdown content in density report response")
+    
+    # Save temporal flow report if available
+    if api_results.get('temporal_flow_report', {}).get('success') and api_results['temporal_flow_report'].get('response'):
+        flow_data = api_results['temporal_flow_report']['response']
+        if 'markdown_content' in flow_data:
+            flow_md_file = f"{reports_dir}/{test_timestamp}-Flow.md"
+            with open(flow_md_file, 'w', encoding='utf-8') as f:
+                f.write(flow_data['markdown_content'])
+            files.append(flow_md_file)
+            print(f"✅ Saved flow report from Cloud Run: {flow_md_file}")
+        else:
+            print(f"❌ No markdown content in flow report response")
+        
+        # Also save CSV content if available
+        if 'csv_content' in flow_data:
+            flow_csv_file = f"{reports_dir}/{test_timestamp}-Flow.csv"
+            with open(flow_csv_file, 'w', encoding='utf-8') as f:
+                f.write(flow_data['csv_content'])
+            files.append(flow_csv_file)
+            print(f"✅ Saved flow CSV from Cloud Run: {flow_csv_file}")
+    
+    return files
+
+
 def get_created_files() -> List[str]:
     """Get list of files created during the test run."""
     files = []
@@ -759,7 +802,15 @@ def run_streamlined_tests(start_times: Dict[str, int] = None) -> Dict[str, Any]:
     test_timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
     test_date = datetime.now().strftime("%Y-%m-%d")
     environment_url = get_test_environment_url()
-    created_files = get_created_files()
+    
+    # Handle Cloud Run vs local file creation
+    test_cloud = os.getenv('TEST_CLOUD_RUN', '').lower() == 'true'
+    if test_cloud:
+        # For Cloud Run tests, save API responses as local files
+        created_files = save_cloud_run_reports(api_results, test_timestamp)
+    else:
+        # For local tests, use existing file detection
+        created_files = get_created_files()
     
     # Check actual vs expected validation
     actual_vs_expected_success = True
@@ -864,7 +915,15 @@ def run_comprehensive_tests(start_times: Dict[str, int] = None) -> Dict[str, Any
     test_timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
     test_date = datetime.now().strftime("%Y-%m-%d")
     environment_url = get_test_environment_url()
-    created_files = get_created_files()
+    
+    # Handle Cloud Run vs local file creation
+    test_cloud = os.getenv('TEST_CLOUD_RUN', '').lower() == 'true'
+    if test_cloud:
+        # For Cloud Run tests, save API responses as local files
+        created_files = save_cloud_run_reports(api_results, test_timestamp)
+    else:
+        # For local tests, use existing file detection
+        created_files = get_created_files()
     
     # Check actual vs expected validation
     actual_vs_expected_success = True

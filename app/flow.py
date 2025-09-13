@@ -1009,6 +1009,125 @@ def validate_per_runner_entry_exit_f1(
     }
 
 
+def calculate_overtaking_loads(
+    df_a: pd.DataFrame,
+    df_b: pd.DataFrame,
+    event_a: str,
+    event_b: str,
+    start_times: Dict[str, float],
+    cp_km: float,                 # convergence point (km) used by your working detector
+    from_km_a: float,
+    to_km_a: float,
+    from_km_b: float,
+    to_km_b: float,
+    conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
+    min_overlap_duration: float = DEFAULT_MIN_OVERLAP_DURATION,
+) -> Tuple[Dict[str, int], Dict[str, int], float, float, int, int]:
+    """
+    Count individual overtaking encounters (per-runner 'overtaking loads') by
+    reusing the same conflict-zone + boundary-time logic as the proven detector.
+
+    Returns:
+        (loads_a, loads_b, avg_load_a, avg_load_b, max_load_a, max_load_b)
+    """
+    # Basic guards
+    if df_a.empty or df_b.empty:
+        return {}, {}, 0.0, 0.0, 0, 0
+    len_a = to_km_a - from_km_a
+    len_b = to_km_b - from_km_b
+    if len_a <= 0 or len_b <= 0:
+        return {}, {}, 0.0, 0.0, 0, 0
+
+    # Convert event start times from minutes to seconds (for BOTH events)
+    start_a = float(start_times.get(event_a, 0.0)) * 60.0
+    start_b = float(start_times.get(event_b, 0.0)) * 60.0
+
+    # --- Conflict-zone boundaries (mirror working function) ---
+    # Try absolute intersection first
+    intersection_start = max(from_km_a, from_km_b)
+    intersection_end   = min(to_km_a, to_km_b)
+
+    def _compute_normalized_zone():
+        # If cp_km lies within A, use proportional window around cp mapped to both events
+        if from_km_a <= cp_km <= to_km_a:
+            s_cp = (cp_km - from_km_a) / max(len_a, 1e-9)
+            conflict_length_km = conflict_length_m / 1000.0
+            min_seg = max(min(len_a, len_b), 1e-9)
+            s_half = max(conflict_length_km / min_seg / 2.0, 0.05)
+            s_start = max(0.0, s_cp - s_half)
+            s_end   = min(1.0, s_cp + s_half)
+            if s_end <= s_start:
+                s_start = max(0.0, s_cp - 0.05)
+                s_end   = min(1.0, s_cp + 0.05)
+            return (
+                from_km_a + s_start * len_a,
+                from_km_a + s_end   * len_a,
+                from_km_b + s_start * len_b,
+                from_km_b + s_end   * len_b,
+            )
+        # Otherwise, a center-based fallback
+        center_a = (from_km_a + to_km_a) / 2.0
+        center_b = (from_km_b + to_km_b) / 2.0
+        half_km  = (conflict_length_m / 1000.0) / 2.0
+        return (
+            max(from_km_a, center_a - half_km),
+            min(to_km_a,   center_a + half_km),
+            max(from_km_b, center_b - half_km),
+            min(to_km_b,   center_b + half_km),
+        )
+
+    if intersection_start < intersection_end:
+        boundary_start_a = boundary_start_b = intersection_start
+        boundary_end_a   = boundary_end_b   = intersection_end
+    else:
+        boundary_start_a, boundary_end_a, boundary_start_b, boundary_end_b = _compute_normalized_zone()
+
+    # --- Only keep runners who actually reach the zone end for their event ---
+    def within_event_bounds(df, zone_start_km, zone_end_km):
+        return df[(df["distance"] >= zone_end_km)]
+
+    df_a_pass = within_event_bounds(df_a, boundary_start_a, boundary_end_a).copy()
+    df_b_pass = within_event_bounds(df_b, boundary_start_b, boundary_end_b).copy()
+    if df_a_pass.empty or df_b_pass.empty:
+        return {}, {}, 0.0, 0.0, 0, 0
+
+    # --- Arrival times at the zone boundaries for each runner ---
+    def times_at_bounds(row, start_base_sec, km_start, km_end):
+        sec_per_km = float(row["pace"]) * 60.0
+        t_start = start_base_sec + float(row["start_offset"]) + sec_per_km * km_start
+        t_end   = start_base_sec + float(row["start_offset"]) + sec_per_km * km_end
+        return t_start, t_end
+
+    a_times = [(row["runner_id"], *times_at_bounds(row, start_a, boundary_start_a, boundary_end_a))
+               for _, row in df_a_pass.iterrows()]
+    b_times = [(row["runner_id"], *times_at_bounds(row, start_b, boundary_start_b, boundary_end_b))
+               for _, row in df_b_pass.iterrows()]
+
+    # --- Detect temporal overlap + directional pass ---
+    loads_a, loads_b = {}, {}
+    for a_id, as_, ae_ in a_times:
+        loads_a.setdefault(a_id, 0)
+        for b_id, bs_, be_ in b_times:
+            loads_b.setdefault(b_id, 0)
+            overlap_start = max(as_, bs_)
+            overlap_end   = min(ae_, be_)
+            if (overlap_end - overlap_start) < min_overlap_duration:
+                continue
+            a_passes_b = (as_ > bs_) and (ae_ < be_)
+            b_passes_a = (bs_ > as_) and (be_ < ae_)
+            if a_passes_b:
+                loads_a[a_id] += 1
+            elif b_passes_a:
+                loads_b[b_id] += 1
+
+    vals_a, vals_b = list(loads_a.values()), list(loads_b.values())
+    avg_a = sum(vals_a) / len(vals_a) if vals_a else 0.0
+    avg_b = sum(vals_b) / len(vals_b) if vals_b else 0.0
+    max_a = max(vals_a) if vals_a else 0
+    max_b = max(vals_b) if vals_b else 0
+    return loads_a, loads_b, avg_a, avg_b, max_a, max_b
+
+
 def calculate_convergence_zone_overlaps_original(
     df_a: pd.DataFrame,
     df_b: pd.DataFrame,
@@ -1951,6 +2070,12 @@ def analyze_temporal_flow_segments(
                 segment_result["convergence_point"] = None
                 segment_result["convergence_point_fraction"] = None
             
+            # Calculate overtaking loads for runner experience analysis
+            overtaking_loads_a, overtaking_loads_b, avg_load_a, avg_load_b, max_load_a, max_load_b = calculate_overtaking_loads(
+                df_a, df_b, event_a, event_b, start_times, cp_km, 
+                from_km_a, to_km_a, from_km_b, to_km_b, dynamic_conflict_length_m
+            )
+            
             segment_result.update({
                 "overtaking_a": overtakes_a,
                 "overtaking_b": overtakes_b,
@@ -1962,7 +2087,14 @@ def analyze_temporal_flow_segments(
                 "convergence_zone_end": conflict_end,
                 "conflict_length_m": dynamic_conflict_length_m,
                 "unique_encounters": unique_encounters,
-                "participants_involved": participants_involved
+                "participants_involved": participants_involved,
+                # Overtaking load analysis for runner experience
+                "overtaking_load_a": round(avg_load_a, 1),
+                "overtaking_load_b": round(avg_load_b, 1),
+                "max_overtaking_load_a": max_load_a,
+                "max_overtaking_load_b": max_load_b,
+                "overtaking_load_distribution_a": list(overtaking_loads_a.values()),
+                "overtaking_load_distribution_b": list(overtaking_loads_b.values())
             })
             
             results["segments_with_convergence"] += 1
