@@ -91,11 +91,20 @@ def build_segment_context_v2(segment_id: str, segment_data: dict, summary_dict: 
     Returns:
         dict: Complete v2 segment context ready for rendering
     """
-    from .density_template_engine import resolve_schema, get_schema_config, compute_flow_rate, evaluate_triggers
+    from .density_template_engine import resolve_schema, resolve_schema_with_flow_type, get_schema_config, compute_flow_rate, evaluate_triggers
     
     # Resolve schema for this segment
+    # Try segment_type first, then fall back to flow_type
     segment_type = segment_data.get("segment_type", "road")
-    schema_name = resolve_schema(segment_id, segment_type, rulebook)
+    flow_type = segment_data.get("flow_type", "default")
+    
+    if segment_type != "road" or segment_id == "A1":
+        # Use segment_type for explicit cases
+        schema_name = resolve_schema(segment_id, segment_type, rulebook)
+    else:
+        # Use flow_type for segments without explicit segment_type
+        schema_name = resolve_schema_with_flow_type(segment_id, flow_type, rulebook)
+    
     schema_config = get_schema_config(schema_name, rulebook)
     
     # Get flow rate if enabled for this segment
@@ -103,8 +112,8 @@ def build_segment_context_v2(segment_id: str, segment_data: dict, summary_dict: 
     flow_enabled = segment_data.get("flow_enabled", "n")
     if flow_enabled == "y" or flow_enabled is True:
         # Calculate flow rate from peak concurrency
-        # For merge segments, use peak concurrency as a proxy for flow rate
-        peak_concurrency = summary_dict.get("peak_concurrency", 0)
+        # Use active_peak_concurrency which is the correct field name
+        peak_concurrency = summary_dict.get("active_peak_concurrency", 0)
         width_m = segment_data.get("width_m", 1.0)
         bin_seconds = 60  # Default bin size
         flow_rate = compute_flow_rate(peak_concurrency, width_m, bin_seconds)
