@@ -18,10 +18,12 @@ try:
     from .flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
     from .constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
     from .report_utils import get_report_paths, format_decimal_places
+    from .flow_density_correlation import analyze_flow_density_correlation
 except ImportError:
     from flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
     from constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
     from report_utils import get_report_paths, format_decimal_places
+    from flow_density_correlation import analyze_flow_density_correlation
 
 # Get app version from constants to avoid circular import
 APP_VERSION = "v1.6.15"  # This should match the version in main.py
@@ -33,7 +35,9 @@ def generate_temporal_flow_report(
     start_times: Dict[str, float],
     min_overlap_duration: float = DEFAULT_MIN_OVERLAP_DURATION,
     conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
-    output_dir: str = "reports"
+    output_dir: str = "reports",
+    density_results: Optional[Dict[str, Any]] = None,
+    segments_config: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Generate a comprehensive temporal flow analysis report.
@@ -64,7 +68,7 @@ def generate_temporal_flow_report(
         }
     
     # Generate markdown report
-    report_content = generate_markdown_report(results, start_times)
+    report_content = generate_markdown_report(results, start_times, density_results, segments_config)
     
     # Save report using standardized naming convention
     full_path, relative_path = get_report_paths("Flow", "md", output_dir)
@@ -89,7 +93,9 @@ def generate_temporal_flow_report(
 
 def generate_markdown_report(
     results: Dict[str, Any], 
-    start_times: Dict[str, float]
+    start_times: Dict[str, float],
+    density_results: Optional[Dict[str, Any]] = None,
+    segments_config: Optional[Dict[str, Any]] = None
 ) -> str:
     """Generate markdown content for the temporal flow report."""
     
@@ -164,6 +170,15 @@ def generate_markdown_report(
         content.append("")
         content.append("---")
         content.append("")
+    
+    # Add Flow↔Density correlation insights if available
+    if density_results and segments_config:
+        correlation_insights = generate_flow_density_correlation_insights(
+            results, density_results, segments_config
+        )
+        if correlation_insights:
+            content.append(correlation_insights)
+            content.append("")
     
     return "\n".join(content)
 
@@ -853,3 +868,106 @@ def generate_flow_audit_csv(
                 ])
     
     return full_path
+
+
+def generate_flow_density_correlation_insights(
+    flow_results: Dict[str, Any],
+    density_results: Optional[Dict[str, Any]] = None,
+    segments_config: Optional[Dict[str, Any]] = None
+) -> str:
+    """
+    Generate Flow↔Density correlation insights for inclusion in Flow reports.
+    
+    Args:
+        flow_results: Results from analyze_temporal_flow_segments
+        density_results: Optional results from analyze_density_segments
+        segments_config: Optional configuration from load_density_cfg
+        
+    Returns:
+        Markdown string with correlation insights
+    """
+    if not density_results or not segments_config:
+        return ""
+    
+    try:
+        # Run correlation analysis
+        correlation_results = analyze_flow_density_correlation(
+            flow_results, density_results, segments_config
+        )
+        
+        if not correlation_results.get("ok", False):
+            return ""
+        
+        summary_insights = correlation_results.get("summary_insights", [])
+        correlations = correlation_results.get("correlations", [])
+        
+        # Count critical correlations
+        critical_count = sum(1 for c in correlations if c.get("correlation_type") == "critical_correlation")
+        significant_count = sum(1 for c in correlations if c.get("correlation_type") == "significant_correlation")
+        
+        # Generate insights section
+        insights_md = f"""
+## Flow↔Density Correlation Insights
+
+This section provides insights into the relationship between temporal flow patterns and density concentrations.
+
+### Key Correlations
+
+"""
+        
+        if critical_count > 0:
+            insights_md += f"⚠️ **{critical_count} Critical Correlations**: High density + High flow intensity\n"
+        
+        if significant_count > 0:
+            insights_md += f"📊 **{significant_count} Significant Correlations**: High density + Medium/High flow intensity\n"
+        
+        # Add summary insights
+        for insight in summary_insights[:5]:  # Limit to top 5 insights
+            insights_md += f"- {insight}\n"
+        
+        insights_md += f"""
+### Correlation Analysis Summary
+
+| Correlation Type | Count | Description |
+|------------------|-------|-------------|
+"""
+        
+        # Count correlation types
+        correlation_counts = {}
+        for corr in correlations:
+            corr_type = corr.get("correlation_type", "unknown")
+            correlation_counts[corr_type] = correlation_counts.get(corr_type, 0) + 1
+        
+        # Add correlation type descriptions
+        type_descriptions = {
+            "critical_correlation": "High density + High flow intensity",
+            "significant_correlation": "High density + Medium/High flow intensity", 
+            "moderate_correlation": "Medium density + High flow intensity",
+            "flow_dominant": "Low density + High flow intensity",
+            "density_dominant": "High density + Low flow intensity",
+            "minimal_correlation": "Other combinations",
+            "no_correlation": "No convergence zones"
+        }
+        
+        for corr_type, count in correlation_counts.items():
+            description = type_descriptions.get(corr_type, "Unknown")
+            insights_md += f"| {corr_type.replace('_', ' ').title()} | {count} | {description} |\n"
+        
+        insights_md += """
+### Recommendations
+
+Based on the correlation analysis:
+
+1. **Monitor Critical Correlations**: Segments with critical correlations require immediate attention
+2. **Plan for Significant Correlations**: Segments with significant correlations need careful planning  
+3. **Optimize Flow Dominant Areas**: Consider flow management strategies for flow-dominant segments
+4. **Address Density Dominant Areas**: Implement density reduction strategies for density-dominant segments
+
+*Note: This analysis requires both Flow and Density data. If Density analysis is not available, this section will be omitted.*
+"""
+        
+        return insights_md
+        
+    except Exception as e:
+        logging.warning(f"Failed to generate Flow↔Density correlation insights: {e}")
+        return ""
