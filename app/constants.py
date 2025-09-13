@@ -64,7 +64,7 @@ SUSPICIOUS_OVERTAKING_RATE_THRESHOLD = 0.5  # Flag overtaking rates > 50% as sus
 # E2E Testing URLs
 CLOUD_RUN_URL = "https://run-density-ln4r3sfkha-uc.a.run.app"
 LOCAL_RUN_URL = "http://localhost:8080"
-TEST_SERVER_URL = "http://testserver:8080"
+TEST_SERVER_URL = "http://localhost:8080"
 
 # Fraction validation and clamping
 MIN_NORMALIZED_FRACTION = 0.0
