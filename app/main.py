@@ -371,6 +371,101 @@ async def generate_flow_audit_endpoint(request: FlowAuditRequest):
 async def legacy_overlap_endpoint(request: ReportRequest):
     return await generate_report(request)
 
+@app.post("/api/flow-density-correlation")
+async def generate_flow_density_correlation_endpoint(request: ReportRequest):
+    """Generate Flow↔Density correlation analysis report."""
+    try:
+        from .flow_density_correlation import analyze_flow_density_correlation, export_correlation_report
+        from .density import analyze_density_segments, load_density_cfg
+        from .flow import analyze_temporal_flow_segments
+        
+        # Run both Flow and Density analysis
+        flow_results = analyze_temporal_flow_segments(
+            pace_csv=request.paceCsv,
+            segments_csv=request.segmentsCsv,
+            start_times=request.startTimes,
+            min_overlap_duration=request.minOverlapDuration,
+            conflict_length_m=100.0  # Default conflict length
+        )
+        
+        # Load data for density analysis
+        from .io.loader import load_runners, load_segments
+        from .density import DensityConfig, StaticWidthProvider
+        
+        pace_data = load_runners(request.paceCsv)
+        segments_df = load_segments(request.segmentsCsv)
+        
+        # Convert start times to datetime objects
+        from datetime import datetime, timedelta
+        start_datetimes = {}
+        for event, minutes in request.startTimes.items():
+            start_datetimes[event] = datetime(2025, 1, 1) + timedelta(minutes=minutes)
+        
+        # Create density config
+        density_config = DensityConfig(
+            step_km=request.stepKm,
+            bin_seconds=request.timeWindow
+        )
+        
+        # Create width provider
+        width_provider = StaticWidthProvider(segments_df)
+        
+        # Run density analysis
+        density_results = analyze_density_segments(
+            pace_data=pace_data,
+            start_times=start_datetimes,
+            config=density_config,
+            density_csv_path=request.segmentsCsv
+        )
+        
+        # Load segments configuration
+        segments_config = load_density_cfg(request.segmentsCsv)
+        
+        # Run correlation analysis
+        correlation_results = analyze_flow_density_correlation(
+            flow_results, density_results, segments_config
+        )
+        
+        if not correlation_results.get("ok", False):
+            raise HTTPException(status_code=500, detail="Flow↔Density correlation analysis failed")
+        
+        # Export reports
+        report_paths = export_correlation_report(correlation_results, "reports")
+        
+        # Add report content for Cloud Run E2E testing
+        cleaned_results = {
+            "ok": True,
+            "engine": "flow_density_correlation",
+            "timestamp": correlation_results.get("timestamp"),
+            "flow_summary": correlation_results.get("flow_summary", {}),
+            "density_summary": correlation_results.get("density_summary", {}),
+            "correlations": correlation_results.get("correlations", []),
+            "summary_insights": correlation_results.get("summary_insights", []),
+            "total_correlations": correlation_results.get("total_correlations", 0),
+            "report_paths": report_paths
+        }
+        
+        # Add markdown content for Cloud Run E2E testing
+        if report_paths.get("markdown_path"):
+            try:
+                with open(report_paths["markdown_path"], 'r', encoding='utf-8') as f:
+                    cleaned_results["markdown_content"] = f.read()
+            except Exception as e:
+                cleaned_results["markdown_content"] = f"Error reading report: {e}"
+        
+        # Add CSV content for Cloud Run E2E testing
+        if report_paths.get("csv_path"):
+            try:
+                with open(report_paths["csv_path"], 'r', encoding='utf-8') as f:
+                    cleaned_results["csv_content"] = f.read()
+            except Exception as e:
+                cleaned_results["csv_content"] = f"Error reading CSV: {e}"
+        
+        return JSONResponse(content=cleaned_results)
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Flow↔Density correlation analysis failed: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8081)
