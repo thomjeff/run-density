@@ -76,6 +76,94 @@ def build_segment_context(seg, metrics, rulebook):
     return ctx
 
 
+def build_segment_context_v2(segment_id: str, segment_data: dict, summary_dict: dict, rulebook: dict) -> dict:
+    """
+    Build v2 segment context with schema binding, flow calculations, and trigger evaluation.
+    
+    This is the key integration function that connects v2 functionality to the main analysis pipeline.
+    
+    Args:
+        segment_id: Segment identifier (e.g., "A1", "F1")
+        segment_data: Segment configuration from density_cfg
+        summary_dict: Density analysis summary data
+        rulebook: v2 rulebook configuration
+        
+    Returns:
+        dict: Complete v2 segment context ready for rendering
+    """
+    from .density_template_engine import resolve_schema, get_schema_config, compute_flow_rate, evaluate_triggers
+    
+    # Resolve schema for this segment
+    segment_type = segment_data.get("segment_type", "road")
+    schema_name = resolve_schema(segment_id, segment_type, rulebook)
+    schema_config = get_schema_config(schema_name, rulebook)
+    
+    # Get flow rate if enabled for this segment
+    flow_rate = None
+    flow_enabled = segment_data.get("flow_enabled", "n")
+    if flow_enabled == "y" or flow_enabled is True:
+        # Calculate flow rate from peak concurrency
+        # For merge segments, use peak concurrency as a proxy for flow rate
+        peak_concurrency = summary_dict.get("peak_concurrency", 0)
+        width_m = segment_data.get("width_m", 1.0)
+        bin_seconds = 60  # Default bin size
+        flow_rate = compute_flow_rate(peak_concurrency, width_m, bin_seconds)
+        
+        # For merge segments, add flow-specific analysis
+        if segment_data.get("flow_type") in ["merge", "parallel", "counterflow"]:
+            # Add flow capacity analysis for merge segments
+            flow_capacity = width_m * 60  # Theoretical max flow (runners/min/m)
+            flow_utilization = (flow_rate / flow_capacity) * 100 if flow_capacity > 0 else 0
+            logger.info(f"Merge segment {segment_id}: flow_rate={flow_rate:.1f} p/min/m, capacity={flow_capacity:.1f}, utilization={flow_utilization:.1f}%")
+    
+    # Evaluate triggers
+    metrics = {
+        "density": summary_dict.get("peak_areal_density", 0.0),
+        "flow": flow_rate
+    }
+    fired_actions = evaluate_triggers(segment_id, metrics, schema_name, schema_config, rulebook)
+    
+    # Build complete v2 context
+    v2_context = {
+        # Basic segment info
+        "segment_id": segment_id,
+        "seg_label": segment_data.get("seg_label", "Unknown"),
+        "segment_type": segment_type,
+        "flow_type": segment_data.get("flow_type", "default"),
+        
+        # Schema information
+        "schema_name": schema_name,
+        "schema_config": schema_config,
+        
+        # Density metrics
+        "peak_areal_density": summary_dict.get("peak_areal_density", 0.0),
+        "peak_crowd_density": summary_dict.get("peak_crowd_density", 0.0),
+        "peak_concurrency": summary_dict.get("peak_concurrency", 0),
+        "active_duration_s": summary_dict.get("active_duration_s", 0),
+        "active_start": summary_dict.get("active_start", "N/A"),
+        "active_end": summary_dict.get("active_end", "N/A"),
+        
+        # Flow metrics
+        "flow_rate": flow_rate,
+        "flow_enabled": flow_enabled == "y" or flow_enabled is True,
+        "flow_capacity": flow_capacity if 'flow_capacity' in locals() else None,
+        "flow_utilization": flow_utilization if 'flow_utilization' in locals() else None,
+        
+        # Trigger results
+        "fired_actions": fired_actions,
+        
+        # Events included
+        "events_included": list(segment_data.get("events", [])),
+        
+        # Additional v2 data
+        "width_m": segment_data.get("width_m", 1.0),
+        "direction": segment_data.get("direction", "uni"),
+        "notes": segment_data.get("notes", ""),
+    }
+    
+    return v2_context
+
+
 def load_density_cfg(path: str) -> Dict[str, dict]:
     """
     Load density configuration from segments_new.csv.
@@ -1594,38 +1682,23 @@ def analyze_density_segments(pace_data: pd.DataFrame,
             
             # Load rulebook for v2 schema resolution
             try:
-                from .density_template_engine import resolve_schema, get_schema_config, compute_flow_rate, evaluate_triggers
                 import yaml
                 
                 with open("data/density_rulebook.yml", 'r') as f:
                     rulebook = yaml.safe_load(f)
                 
-                # Resolve schema for this segment
-                schema_name = resolve_schema(seg_id, d.get("segment_type", "road"), rulebook)
-                schema_config = get_schema_config(schema_name, rulebook)
-                logger.info(f"Segment {seg_id}: schema_name={schema_name}, flow_enabled={d.get('flow_enabled')}")
-                
-                # Compute flow rate if enabled for this segment
-                flow_rate = None
-                flow_enabled = d.get("flow_enabled", "n")
-                if flow_enabled == "y" or flow_enabled is True:
-                    # Calculate flow rate from arrivals
-                    peak_concurrency = getattr(summary, "peak_concurrency", 0)
-                    bin_seconds = config.bin_seconds
-                    flow_rate = compute_flow_rate(peak_concurrency, d["width_m"], bin_seconds)
-                
-                # Evaluate triggers
-                metrics = {
-                    "density": getattr(summary, "peak_areal_density", 0.0),
-                    "flow": flow_rate
-                }
-                fired_actions = evaluate_triggers(seg_id, metrics, schema_name, schema_config, rulebook)
-                
-                # Convert summary to dict and add v2 data
+                # Convert summary to dict first
                 summary_dict = summary.__dict__.copy()
-                summary_dict["schema_name"] = schema_name
-                summary_dict["flow_rate"] = flow_rate
-                summary_dict["fired_actions"] = fired_actions
+                
+                # Build v2 context using the new integration function
+                v2_context = build_segment_context_v2(seg_id, d, summary_dict, rulebook)
+                
+                # Add v2 data to summary_dict for backward compatibility
+                summary_dict["schema_name"] = v2_context["schema_name"]
+                summary_dict["flow_rate"] = v2_context["flow_rate"]
+                summary_dict["fired_actions"] = v2_context["fired_actions"]
+                
+                logger.info(f"Segment {seg_id}: schema_name={v2_context['schema_name']}, flow_enabled={v2_context['flow_enabled']}, flow_rate={v2_context['flow_rate']}")
                 
             except Exception as e:
                 logger.warning(f"Failed to load v2 rulebook for segment {seg_id}: {e}")
@@ -1641,7 +1714,8 @@ def analyze_density_segments(pace_data: pd.DataFrame,
                 "events_included": list(d["events"]),
                 "seg_label": d["seg_label"],
                 "flow_type": d["flow_type"],
-                "per_event": per_event_summaries
+                "per_event": per_event_summaries,
+                "v2_context": v2_context if 'v2_context' in locals() else None
             }
             results["summary"]["processed_segments"] += 1
         else:

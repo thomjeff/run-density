@@ -632,7 +632,22 @@ def generate_segment_section(
             from io import StringIO
             md_buffer = StringIO()
             
-            # Create context for v2 rendering
+            # Try to use complete v2_context first
+            v2_context = segment_data.get("v2_context")
+            if v2_context:
+                try:
+                    render_segment_v2(md_buffer, v2_context, rulebook)
+                    v2_content = md_buffer.getvalue()
+                    
+                    if v2_content.strip():
+                        content.extend(v2_content.strip().split('\n'))
+                        return content
+                except Exception as e:
+                    print(f"Warning: v2_context rendering failed for segment {segment_id}: {e}")
+                    # Fall back to summary-based context
+                    pass
+            
+            # Fallback to summary-based context
             summary = segment_data.get("summary", {})
             ctx = {
                 "segment_id": segment_id,
@@ -653,6 +668,7 @@ def generate_segment_section(
                     return content
             except Exception as e:
                 # Fall back to v1 rendering if v2 fails
+                print(f"Warning: v2 rendering failed for segment {segment_id}: {e}")
                 pass
     except Exception as e:
         # Fall back to v1 rendering if v2 fails

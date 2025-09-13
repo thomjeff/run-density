@@ -94,6 +94,37 @@ python3 -m app.end_to_end_testing
 
 **Remember**: Virtual environment activation does NOT persist between terminal sessions!
 
+### **🚫 CRITICAL: DEACTIVATE VIRTUAL ENVIRONMENT FOR NON-PYTHON WORK**
+
+**CRITICAL**: When NOT doing Python development work, you **MUST** deactivate the virtual environment:
+
+```bash
+# For Python/E2E work
+source test_env/bin/activate
+python3 -m app.end_to_end_testing
+
+# For GitHub CLI, system commands, or non-Python work
+deactivate
+gh issue create --title "Example"
+```
+
+**Why this is critical:**
+- **GitHub CLI works properly** outside virtual environments
+- **System commands have full access** to system tools
+- **Prevents command failures** like `gh issue create` not working
+- **Cleaner terminal sessions** for different types of work
+
+**When to deactivate:**
+- Using GitHub CLI (`gh` commands)
+- Running system commands
+- File operations outside Python
+- Any non-Python development work
+
+**Signs you need to deactivate:**
+- GitHub CLI commands fail or don't execute
+- System commands return unexpected errors
+- Terminal shows `(test_env)` prefix when not doing Python work
+
 ## **🔧 CURRENT DEVELOPMENT ISSUES**
 
 **Active Issues for Development Branch:**
