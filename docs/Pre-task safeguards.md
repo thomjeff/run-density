@@ -142,6 +142,32 @@ For ALL releases and merges, you **MUST** follow this complete process:
 8. **Add E2E Files to Release** - Attach Flow.md, Flow.csv, Density.md, E2E.md to release
 9. **Verify Release and Run Final E2E Tests** - Confirm release is complete and working
 
+## **🔄 AUTOMATED CI/CD PIPELINE**
+
+**CRITICAL**: This project has automated CI/CD that runs on EVERY push to main:
+
+### **Pipeline Triggers**
+- **Push to main branch**: Automatically triggers full deployment pipeline
+- **Pull requests to main**: Runs validation tests only
+- **Manual dispatch**: Can be triggered manually via GitHub Actions
+
+### **Pipeline Stages**
+1. **Build & Deploy**: Docker → Artifact Registry → Cloud Run
+2. **Smoke Test**: Production validation (health, ready, density endpoint)
+3. **Version Consistency Check**: Validates app version matches git tags
+4. **Automated Release**: Creates GitHub release with assets (if version is new)
+
+### **⚠️ CRITICAL WARNINGS**
+- **NEVER push directly to main** - Always use pull requests
+- **Version consistency required** - App version must match latest git tag
+- **Cloud Run auto-deploys** - Every main push deploys to production
+- **Pipeline failures block releases** - Fix CI issues before creating releases
+
+### **Pipeline Monitoring**
+- Check status: `gh run list --limit 5`
+- View details: `gh run view <run-id>`
+- View logs: `gh run view <run-id> --log`
+
 ### **📎 MANDATORY RELEASE ASSETS**
 
 For EVERY release, you **MUST** attach these files:
