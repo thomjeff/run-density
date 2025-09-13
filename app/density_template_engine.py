@@ -151,6 +151,23 @@ def resolve_schema(segment_id: str, segment_type: str, rulebook: dict) -> str:
     return "on_course_open"
 
 
+def resolve_schema_with_flow_type(segment_id: str, flow_type: str, rulebook: dict) -> str:
+    """Resolve schema using flow_type for segments that don't have segment_type."""
+    # Check explicit segment_id matches first
+    for binding in rulebook.get("binding", []):
+        when = binding.get("when", {})
+        if when.get("segment_id") == segment_id:
+            return binding.get("use_schema", "on_course_open")
+    
+    # Map flow_type to appropriate schema
+    if flow_type in ["merge", "parallel", "counterflow"]:
+        return "on_course_narrow"
+    elif flow_type in ["overtake"]:
+        return "on_course_open"
+    else:
+        return "on_course_open"
+
+
 def get_schema_config(schema_name: str, rulebook: dict) -> Schema:
     """Get schema configuration from rulebook."""
     schemas = rulebook.get("schemas", {})
