@@ -209,25 +209,24 @@ jobs:
       id: version-check
       run: |
         echo "=== Version Consistency Check ==="
-        python -c "
-        from app.version import get_current_version, get_latest_git_tag
-        import sys
         
-        code_version = get_current_version()
-        git_tag = get_latest_git_tag()
+        # Get versions using Python
+        CODE_VERSION=$(python -c "from app.version import get_current_version; print(get_current_version())")
+        GIT_TAG=$(python -c "from app.version import get_latest_git_tag; print(get_latest_git_tag())")
         
-        print(f'Current version in code: {code_version}')
-        print(f'Latest git tag: {git_tag}')
+        echo "Current version in code: $CODE_VERSION"
+        echo "Latest git tag: $GIT_TAG"
         
-        if code_version == git_tag:
-            print('✅ Version consistency check passed!')
-            print('consistent=true' >> $GITHUB_OUTPUT)
-        else:
-            print('⚠️  Version mismatch detected - will auto-fix')
-            print('consistent=false' >> $GITHUB_OUTPUT)
-            print(f'code_version={code_version}' >> $GITHUB_OUTPUT)
-            print(f'git_tag={git_tag}' >> $GITHUB_OUTPUT)
-        "
+        # Check consistency and set outputs
+        if [ "$CODE_VERSION" = "$GIT_TAG" ]; then
+            echo "✅ Version consistency check passed!"
+            echo "consistent=true" >> $GITHUB_OUTPUT
+        else
+            echo "⚠️  Version mismatch detected - will auto-fix"
+            echo "consistent=false" >> $GITHUB_OUTPUT
+            echo "code_version=$CODE_VERSION" >> $GITHUB_OUTPUT
+            echo "git_tag=$GIT_TAG" >> $GITHUB_OUTPUT
+        fi
     
     - name: Auto-fix version mismatch
       if: steps.version-check.outputs.consistent == 'false'
