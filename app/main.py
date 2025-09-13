@@ -466,6 +466,115 @@ async def generate_flow_density_correlation_endpoint(request: ReportRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Flow↔Density correlation analysis failed: {str(e)}")
 
+
+# PDF Generation Endpoints
+class PDFReportRequest(BaseModel):
+    paceCsv: str
+    segmentsCsv: str
+    startTimes: Dict[str, int]
+    layout: str = "brief"  # "brief" or "detailed"
+    reportType: str = "density"  # "density" or "flow"
+
+
+@app.post("/api/pdf-report")
+async def generate_pdf_report_endpoint(request: PDFReportRequest):
+    """Generate PDF report from analysis data."""
+    try:
+        from .pdf_generator import generate_pdf_report, validate_pandoc_installation
+        
+        # Check if Pandoc is available
+        if not validate_pandoc_installation():
+            raise HTTPException(
+                status_code=503, 
+                detail="PDF generation not available: Pandoc is not installed"
+            )
+        
+        # Generate report data based on type
+        if request.reportType == "density":
+            from .density import analyze_density_segments
+            from datetime import datetime
+            
+            # Convert start times to datetime objects
+            start_datetimes = {}
+            for event, minutes in request.startTimes.items():
+                start_datetimes[event] = datetime(2025, 1, 1) + datetime.timedelta(minutes=minutes)
+            
+            # Run density analysis
+            results = analyze_density_segments(
+                pace_csv=request.paceCsv,
+                segments_csv=request.segmentsCsv,
+                start_times=start_datetimes
+            )
+            
+            # Add start times to results for PDF generation
+            results['start_times'] = request.startTimes
+            
+        elif request.reportType == "flow":
+            from .flow import analyze_temporal_flow_segments
+            
+            # Run flow analysis
+            results = analyze_temporal_flow_segments(
+                pace_csv=request.paceCsv,
+                segments_csv=request.segmentsCsv,
+                start_times=request.startTimes
+            )
+        else:
+            raise HTTPException(status_code=400, detail="Invalid reportType. Must be 'density' or 'flow'")
+        
+        # Generate PDF
+        pdf_path = generate_pdf_report(results, layout=request.layout)
+        
+        if pdf_path and os.path.exists(pdf_path):
+            return JSONResponse(content={
+                "success": True,
+                "pdf_path": pdf_path,
+                "message": f"PDF report generated successfully: {pdf_path}"
+            })
+        else:
+            raise HTTPException(status_code=500, detail="PDF generation failed")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+
+
+@app.get("/api/pdf-templates")
+async def list_pdf_templates():
+    """List available PDF templates."""
+    try:
+        from .pdf_generator import setup_pdf_templates
+        
+        templates = setup_pdf_templates()
+        
+        return JSONResponse(content={
+            "templates": list(templates.keys()),
+            "template_paths": templates
+        })
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list templates: {str(e)}")
+
+
+@app.get("/api/pdf-status")
+async def check_pdf_status():
+    """Check PDF generation system status."""
+    try:
+        from .pdf_generator import validate_pandoc_installation
+        
+        pandoc_available = validate_pandoc_installation()
+        
+        return JSONResponse(content={
+            "pandoc_available": pandoc_available,
+            "pdf_generation_ready": pandoc_available,
+            "message": "PDF generation ready" if pandoc_available else "Pandoc not installed"
+        })
+        
+    except Exception as e:
+        return JSONResponse(content={
+            "pandoc_available": False,
+            "pdf_generation_ready": False,
+            "message": f"Error checking status: {str(e)}"
+        })
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8081)
