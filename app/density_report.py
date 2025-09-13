@@ -46,6 +46,98 @@ LOS_CROWD_THRESHOLDS = {
 }
 
 
+def classify_los_areal(density: float) -> str:
+    """Classify LOS based on areal density using standard thresholds."""
+    for letter, (min_density, max_density) in LOS_AREAL_THRESHOLDS.items():
+        if min_density <= density < max_density:
+            return letter
+    return 'F'  # Default to F for very high densities
+
+
+def format_los_with_color(los_letter: str) -> str:
+    """Format LOS letter with color-coded emoji indicators for better scanability."""
+    color_map = {
+        'A': '🟢 A',  # Green - Free Flow
+        'B': '🟢 B',  # Green - Comfortable  
+        'C': '🟡 C',  # Yellow - Moderate
+        'D': '🟡 D',  # Yellow - Dense
+        'E': '🔴 E',  # Red - Very Dense
+        'F': '🔴 F'   # Red - Extremely Dense
+    }
+    return color_map.get(los_letter, f'❓ {los_letter}')
+
+
+def generate_summary_table(segments_data: Dict[str, Any]) -> List[str]:
+    """Generate TL;DR summary table for quick scanning by race directors."""
+    content = []
+    
+    content.append("## Executive Summary")
+    content.append("")
+    content.append("| Segment | Label | Key Takeaway | LOS |")
+    content.append("|---------|-------|--------------|-----|")
+    
+    for segment_id, segment_data in segments_data.items():
+        # Extract key information
+        seg_label = segment_data.get('seg_label', 'Unknown')
+        v2_context = segment_data.get('v2_context', {})
+        
+        # Get LOS and format with color - fallback to summary if v2_context not available
+        los_letter = v2_context.get('los')
+        if not los_letter:
+            # Fallback to summary-based LOS calculation
+            summary = segment_data.get('summary', {})
+            areal_density = summary.get('peak_areal_density', 0)
+            los_letter = classify_los_areal(areal_density)
+        
+        los_display = format_los_with_color(los_letter)
+        
+        # Generate key takeaway based on segment type and metrics
+        key_takeaway = generate_key_takeaway(segment_id, segment_data, v2_context)
+        
+        content.append(f"| {segment_id} | {seg_label} | {key_takeaway} | {los_display} |")
+    
+    content.append("")
+    content.append("*Full details in per-segment sections below.*")
+    content.append("")
+    
+    return content
+
+
+def generate_key_takeaway(segment_id: str, segment_data: Dict[str, Any], v2_context: Dict[str, Any]) -> str:
+    """Generate a concise key takeaway for each segment."""
+    # Start corral logic
+    if segment_id == 'A1':
+        flow_rate = v2_context.get('flow_rate', 0)
+        if flow_rate > 150:
+            return "High release flow - monitor for surges"
+        elif flow_rate > 100:
+            return "Moderate release flow - stable"
+        else:
+            return "Low release flow - consider wave adjustments"
+    
+    # Merge segment logic
+    elif segment_id == 'F1':
+        flow_utilization = v2_context.get('flow_utilization', 0)
+        if flow_utilization > 200:
+            return "⚠️ Supply > Capacity - risk of congestion"
+        elif flow_utilization > 150:
+            return "High flow utilization - monitor closely"
+        else:
+            return "Flow within capacity - stable"
+    
+    # General segment logic
+    else:
+        los_letter = v2_context.get('los', 'Unknown')
+        density = v2_context.get('areal_density', 0)
+        
+        if los_letter in ['E', 'F']:
+            return f"High density ({density:.2f} p/m²) - extra marshals needed"
+        elif los_letter in ['C', 'D']:
+            return f"Moderate density ({density:.2f} p/m²) - maintain cadence"
+        else:
+            return f"Low density ({density:.2f} p/m²) - comfortable flow"
+
+
 def render_segment_v2(md, ctx, rulebook):
     """Render a segment using v2.0 rulebook structure with schema-specific formatting."""
     # Get schema information
@@ -74,11 +166,11 @@ def render_segment_v2(md, ctx, rulebook):
             los_letter = letter
             break
     
-    # Render header with schema info
-    md.write(f"## Segment {ctx['segment_id']} — {ctx['seg_label']}\n\n")
+    # Render header with schema info (reduced heading size)
+    md.write(f"### Segment {ctx['segment_id']} — {ctx['seg_label']}\n\n")
     
-    # Render metrics table
-    md.write("### Metrics\n\n")
+    # Render metrics table (reduced heading size)
+    md.write("#### Metrics\n\n")
     md.write("| Metric | Value | Units |\n")
     md.write("|--------|-------|-------|\n")
     
@@ -103,8 +195,9 @@ def render_segment_v2(md, ctx, rulebook):
         md.write(f"| Flow (Capacity) | {flow_capacity:.0f} | p/min |\n")
         md.write(f"| Flow Utilization | {flow_utilization:.1f}% | — |\n")
     
-    # LOS
-    md.write(f"| LOS | {los_letter} ({schema_name.replace('_', ' ').title()}) | — |\n")
+    # LOS with color coding
+    los_display = format_los_with_color(los_letter)
+    md.write(f"| LOS | {los_display} ({schema_name.replace('_', ' ').title()}) | — |\n")
     
     # Add note about schema if start_corral
     if schema_name == "start_corral":
@@ -576,6 +669,25 @@ def generate_markdown_report(
     content.append(f"**Skipped Segments:** {summary.get('skipped_segments', 0)}")
     content.append("")
     
+    # Legends & Definitions (for quick reference)
+    content.append("## Quick Reference")
+    content.append("")
+    content.append("**Units:**")
+    content.append("- Areal density = persons per square meter (p/m²)")
+    content.append("- Linear density = persons per meter of course width (p/m)")
+    content.append("- Flow = persons per minute per meter (p/min/m)")
+    content.append("")
+    content.append("**Terminology:**")
+    content.append("- **gte** = greater-than-or-equal-to; thresholds are applied inclusively")
+    content.append("- **LOS** = Level of Service (A=Free Flow, B=Comfortable, C=Moderate, D=Dense, E=Very Dense, F=Extremely Dense)")
+    content.append("")
+    content.append("**Color Coding:** 🟢 Green (A-B), 🟡 Yellow (C-D), 🔴 Red (E-F)")
+    content.append("")
+    
+    # Executive Summary Table (TL;DR for race directors)
+    summary_table = generate_summary_table(results.get("segments", {}))
+    content.extend(summary_table)
+    
     # Methodology section using v2.0 rulebook
     try:
         import yaml
@@ -597,31 +709,7 @@ def generate_markdown_report(
         content.append("**Units**: Density thresholds use *runners/m²* (areal density).")
         content.append("")
     
-    # Definitions section
-    content.append("## Definitions")
-    content.append("")
-    content.append("- **gte**: Greater than or equal to (used in trigger conditions like density_gte, flow_gte)")
-    content.append("- **TOT**: Time Over Threshold (seconds above E/F LOS thresholds)")
-    content.append("- **LOS**: Level of Service (A=Free Flow, B=Comfortable, C=Moderate, D=Dense, E=Very Dense, F=Extremely Dense)")
-    content.append("- **Experienced Density**: What runners actually experience (includes co-present runners from other events)")
-    content.append("- **Self Density**: Only that event's runners (not shown in this report)")
-    content.append("- **Active Window**: Time period when the event has runners present in the segment")
-    content.append("- **Ops Box**: Operational guidance for race marshals and organizers")
-    content.append("- **Triggered Actions**: Safety alerts and operational responses when density/flow thresholds are exceeded")
-    content.append("")
-    
-    # LOS Thresholds Table
-    content.append("## Level of Service Thresholds")
-    content.append("")
-    content.append("| LOS | Areal Density (runners/m²) | Crowd Density (runners/m) | Description |")
-    content.append("|-----|---------------------------|--------------------------|-------------|")
-    content.append("| A | 0.00 - 0.36 | 0.00 - 0.20 | Free Flow |")
-    content.append("| B | 0.36 - 0.54 | 0.20 - 0.40 | Comfortable |")
-    content.append("| C | 0.54 - 0.72 | 0.40 - 0.60 | Moderate |")
-    content.append("| D | 0.72 - 1.08 | 0.60 - 0.80 | Dense |")
-    content.append("| E | 1.08 - 1.63 | 0.80 - 1.00 | Very Dense |")
-    content.append("| F | 1.63+ | 1.00+ | Extremely Dense |")
-    content.append("")
+    # Note: Detailed definitions and LOS tables moved to Appendix
     
     # Event start times (showing actual participants in first segment as reference)
     content.append("## Event Start Times")
@@ -652,6 +740,33 @@ def generate_markdown_report(
         content.append("")
         content.append("---")
         content.append("")
+    
+    # Appendix with detailed methodology and definitions
+    content.append("## Appendix")
+    content.append("")
+    content.append("### Detailed Definitions")
+    content.append("")
+    content.append("- **gte**: Greater than or equal to (used in trigger conditions like density_gte, flow_gte)")
+    content.append("- **TOT**: Time Over Threshold (seconds above E/F LOS thresholds)")
+    content.append("- **LOS**: Level of Service (A=Free Flow, B=Comfortable, C=Moderate, D=Dense, E=Very Dense, F=Extremely Dense)")
+    content.append("- **Experienced Density**: What runners actually experience (includes co-present runners from other events)")
+    content.append("- **Self Density**: Only that event's runners (not shown in this report)")
+    content.append("- **Active Window**: Time period when the event has runners present in the segment")
+    content.append("- **Ops Box**: Operational guidance for race marshals and organizers")
+    content.append("- **Triggered Actions**: Safety alerts and operational responses when density/flow thresholds are exceeded")
+    content.append("")
+    
+    content.append("### Level of Service Thresholds")
+    content.append("")
+    content.append("| LOS | Areal Density (runners/m²) | Crowd Density (runners/m) | Description |")
+    content.append("|-----|---------------------------|--------------------------|-------------|")
+    content.append("| A | 0.00 - 0.36 | 0.00 - 0.20 | Free Flow |")
+    content.append("| B | 0.36 - 0.54 | 0.20 - 0.40 | Comfortable |")
+    content.append("| C | 0.54 - 0.72 | 0.40 - 0.60 | Moderate |")
+    content.append("| D | 0.72 - 1.08 | 0.60 - 0.80 | Dense |")
+    content.append("| E | 1.08 - 1.63 | 0.80 - 1.00 | Very Dense |")
+    content.append("| F | 1.63+ | 1.00+ | Extremely Dense |")
+    content.append("")
     
     return "\n".join(content)
 
