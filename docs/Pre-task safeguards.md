@@ -32,12 +32,13 @@ After ANY code changes, you **MUST**:
 3. **NEVER manually construct curl commands** - this wastes time and leads to errors
 4. **NEVER guess API parameters** - use the automated scripts that know the correct endpoints
 5. **MAINTAIN TESTING CONSISTENCY** - Use the SAME testing methodology for both local and Cloud Run testing
-6. **FOR CLOUD RUN TESTING**: Use `TEST_CLOUD_RUN=true python3 -m app.end_to_end_testing`
-7. **FOR LOCAL TESTING**: Use `python3 -m app.end_to_end_testing` (without TEST_CLOUD_RUN)
-8. Generate actual reports (MD + CSV), not just JSON data
-9. Verify no hardcoded values were introduced
-10. Test through API endpoints, not direct module calls
-11. Validate report content quality and human readability
+6. **FOR CLOUD RUN TESTING**: Use `TEST_CLOUD_RUN=true python3 -m app.end_to_end_testing` (skips heavy computation)
+7. **FOR LOCAL TESTING**: Use `python3 -m app.end_to_end_testing` (full E2E with all endpoints)
+8. **FOR CI PIPELINE**: Automatically uses `SKIP_TEMPORAL_FLOW=true` due to Cloud Run resource limits
+9. Generate actual reports (MD + CSV), not just JSON data
+10. Verify no hardcoded values were introduced
+11. Test through API endpoints, not direct module calls
+12. Validate report content quality and human readability
 
 ### **🚫 PROHIBITED TESTING ACTIONS**
 - **NEVER** manually construct curl commands for API testing
@@ -156,6 +157,29 @@ For ALL releases and merges, you **MUST** follow this complete process:
 2. **Smoke Test**: Production validation (health, ready, density endpoint)
 3. **Version Consistency Check**: Validates app version matches git tags
 4. **Automated Release**: Creates GitHub release with assets (if version is new)
+
+### **🧪 CI E2E Testing Scope**
+
+**IMPORTANT**: The CI pipeline runs **lightweight E2E tests** due to Cloud Run resource constraints (1GB RAM / 1 CPU):
+
+#### **✅ What CI Tests:**
+- **Health endpoints**: `/health`, `/ready`
+- **Density reports**: `/api/density-report` (lightweight)
+- **Temporal flow reports**: `/api/temporal-flow-report` (markdown generation)
+- **Basic API functionality**: Core endpoints without heavy computation
+
+#### **❌ What CI Skips:**
+- **Temporal flow analysis**: `/api/temporal-flow` (SKIPPED - too resource intensive)
+- **Heavy computation**: Large dataset processing, complex pandas operations
+- **Full flow audit**: Resource-intensive analysis that would timeout
+
+#### **🔧 E2E Testing Strategy:**
+- **Local Development**: Full E2E testing with all endpoints (`python3 -m app.end_to_end_testing`)
+- **CI Pipeline**: Resource-constrained testing (`SKIP_TEMPORAL_FLOW=true`)
+- **Production Validation**: Manual full E2E tests when needed
+- **Cloud Run Limits**: 1GB RAM / 1 CPU - designed for basic functionality only
+
+**This is intentional architecture** - CI validates deployment and basic functionality, while comprehensive testing is done locally with full resources.
 
 ### **⚠️ CRITICAL WARNINGS**
 - **NEVER push directly to main** - Always use pull requests
