@@ -51,6 +51,8 @@ def render_segment_v2(md, ctx, rulebook):
     # Get schema information
     schema_name = ctx.get("schema_name", "on_course_open")
     flow_rate = ctx.get("flow_rate")
+    flow_capacity = ctx.get("flow_capacity")
+    flow_utilization = ctx.get("flow_utilization")
     fired_actions = ctx.get("fired_actions", [])
     
     # Get schema configuration
@@ -83,9 +85,23 @@ def render_segment_v2(md, ctx, rulebook):
     # Areal density (always shown)
     md.write(f"| Density | {areal_density:.2f} | p/m² |\n")
     
+    # For narrow/merge segments, show linear density
+    if schema_name in ["on_course_narrow"]:
+        # Calculate linear density from areal density and width
+        width_m = ctx.get("width_m", 3.0)  # Default width
+        linear_density = areal_density * width_m
+        md.write(f"| Linear Density | {linear_density:.2f} | p/m |\n")
+    
     # Flow rate (if enabled)
     if flow_rate is not None:
         md.write(f"| Flow Rate | {flow_rate:.0f} | p/min/m |\n")
+    
+    # For merge segments, show supply vs capacity
+    if schema_name in ["on_course_narrow"] and flow_capacity is not None and flow_utilization is not None:
+        flow_supply = flow_rate * ctx.get("width_m", 3.0) if flow_rate else 0
+        md.write(f"| Flow (Supply) | {flow_supply:.0f} | p/min |\n")
+        md.write(f"| Flow (Capacity) | {flow_capacity:.0f} | p/min |\n")
+        md.write(f"| Flow Utilization | {flow_utilization:.1f}% | — |\n")
     
     # LOS
     md.write(f"| LOS | {los_letter} ({schema_name.replace('_', ' ').title()}) | — |\n")
@@ -96,8 +112,22 @@ def render_segment_v2(md, ctx, rulebook):
     elif schema_name == "on_course_narrow":
         md.write("\n| Note: LOS uses Fruin thresholds (linear density). |\n")
     
+    # Add Key Takeaways line
+    md.write("\n### Key Takeaways\n\n")
+    
+    # Determine status based on LOS and flow
+    if los_letter in ["A", "B"]:
+        if flow_utilization and flow_utilization > 200:
+            md.write("⚠️ **Overload**: Flow utilization exceeds 200% - consider flow management.\n\n")
+        else:
+            md.write("✅ **Stable**: Density and flow within acceptable ranges.\n\n")
+    elif los_letter in ["C", "D"]:
+        md.write("⚠️ **Moderate**: Density approaching comfort limits - monitor closely.\n\n")
+    else:  # E, F
+        md.write("🔴 **Critical**: High density detected - immediate action required.\n\n")
+    
     # Render operational implications
-    md.write("\n### Operational Implications\n\n")
+    md.write("### Operational Implications\n\n")
     
     # Get mitigations from schema
     mitigations = schema_config.get("mitigations", [])
@@ -107,9 +137,17 @@ def render_segment_v2(md, ctx, rulebook):
     if drivers:
         md.write("• " + drivers[0] + "\n")
     
-    # Add LOS-specific guidance
-    los_label = los_thresholds.get(los_letter, {}).get("label", "Unknown")
-    md.write(f"• At LOS {los_letter} ({los_label}), density is {'higher than comfortable' if los_letter in ['D', 'E', 'F'] else 'acceptable'}.\n")
+    # Add LOS-specific guidance with consistent descriptions
+    los_descriptions = {
+        "A": "Free Flow - Excellent conditions, no restrictions needed",
+        "B": "Comfortable - Good conditions, minor monitoring may be helpful", 
+        "C": "Moderate - Acceptable conditions, regular monitoring recommended",
+        "D": "Dense - Crowded conditions, active management may be needed",
+        "E": "Very Dense - Crowded conditions, active management required",
+        "F": "Extremely Dense - Critical conditions, immediate intervention needed"
+    }
+    los_label = los_descriptions.get(los_letter, "Unknown conditions")
+    md.write(f"• At LOS {los_letter} ({los_label}).\n")
     
     # Add flow-specific guidance if available
     if flow_rate is not None:
@@ -119,6 +157,11 @@ def render_segment_v2(md, ctx, rulebook):
             md.write(f"• Flow of {flow_rate:.0f} p/min/m exceeds critical threshold ({critical_flow} p/min/m).\n")
         else:
             md.write(f"• Flow of {flow_rate:.0f} p/min/m is within acceptable range.\n")
+    
+    # Add merge-specific guidance
+    if schema_name in ["on_course_narrow"] and flow_utilization and flow_utilization > 200:
+        md.write(f"• **Flow Overload**: Supply ({flow_rate * ctx.get('width_m', 3.0):.0f} p/min) exceeds capacity ({flow_capacity:.0f} p/min) by {flow_utilization:.0f}%.\n")
+        md.write("• Consider implementing flow metering or temporary holds upstream.\n")
     
     # Add fired actions if any
     if fired_actions:
@@ -141,8 +184,12 @@ def render_segment_v2(md, ctx, rulebook):
     if not hasattr(render_segment_v2, '_definitions_added'):
         md.write("\n📖 Definitions:\n\n")
         md.write("• Density = persons per square meter (p/m²).\n")
+        md.write("• Linear Density = persons per meter (p/m).\n")
         if flow_rate is not None:
             md.write("• Flow Rate = persons per minute per meter (p/min/m).\n")
+            md.write("• Flow Supply = total persons per minute through segment.\n")
+            md.write("• Flow Capacity = maximum theoretical flow rate.\n")
+            md.write("• Flow Utilization = percentage of capacity being used.\n")
         md.write("• `gte` = greater-than-or-equal-to (thresholds are inclusive).\n\n")
         render_segment_v2._definitions_added = True
 
