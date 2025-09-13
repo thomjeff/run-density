@@ -257,7 +257,7 @@ jobs:
         
         git add app/main.py
         git commit -m "Auto-fix version consistency: Update code version to match git tag
-
+        
         - Automated fix for Issue #150: Recurring CI Version Consistency Failures
         - Code version now matches latest git tag
         - This prevents CI failures due to version mismatches"
