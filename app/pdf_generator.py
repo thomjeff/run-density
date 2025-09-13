@@ -33,6 +33,39 @@ def validate_pandoc_installation() -> bool:
         return False
 
 
+def clean_markdown_for_latex(md_content: str) -> str:
+    """Clean markdown content to be LaTeX-compatible."""
+    # Replace Unicode emojis with LaTeX-safe alternatives
+    replacements = {
+        '🟢': '[GREEN]',
+        '🟡': '[YELLOW]', 
+        '🔴': '[RED]',
+        '✅': '[CHECK]',
+        '⚠️': '[WARNING]',
+        '❓': '[UNKNOWN]',
+        '📖': '[BOOK]',
+        '📊': '[CHART]',
+        '🔍': '[SEARCH]',
+        '📝': '[NOTE]',
+        '📄': '[DOCUMENT]',
+        '📂': '[FOLDER]',
+        '🎯': '[TARGET]',
+        '🚀': '[ROCKET]',
+        '⚡': '[LIGHTNING]',
+        '🔧': '[WRENCH]',
+        '📋': '[CLIPBOARD]',
+        '💡': '[BULB]',
+        '🌟': '[STAR]',
+        '🎉': '[PARTY]'
+    }
+    
+    cleaned = md_content
+    for emoji, replacement in replacements.items():
+        cleaned = cleaned.replace(emoji, replacement)
+    
+    return cleaned
+
+
 def convert_markdown_to_pdf(
     md_content: str, 
     output_path: str, 
@@ -56,19 +89,23 @@ def convert_markdown_to_pdf(
         return False
     
     try:
+        # Clean markdown content for LaTeX compatibility
+        cleaned_content = clean_markdown_for_latex(md_content)
+        
         # Create temporary file for markdown content
         with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as temp_md:
-            temp_md.write(md_content)
+            temp_md.write(cleaned_content)
             temp_md_path = temp_md.name
         
-        # Prepare pandoc arguments - use HTML first, then convert
-        html_path = output_path.replace('.pdf', '.html')
+        # Prepare pandoc arguments for PDF generation
         args = [
             'pandoc',
             temp_md_path,
-            '-o', html_path,
+            '-o', output_path,
+            '--pdf-engine=pdflatex',
             '--standalone',
-            '--css=style.css'
+            '--variable', 'geometry:margin=1in',
+            '--variable', 'fontsize=11pt'
         ]
         
         # Add template if provided
@@ -87,12 +124,10 @@ def convert_markdown_to_pdf(
         os.unlink(temp_md_path)
         
         if result.returncode == 0:
-            # For now, just generate HTML (PDF requires LaTeX)
-            print(f"✅ HTML report generated successfully: {html_path}")
-            print(f"Note: PDF generation requires LaTeX installation")
+            print(f"✅ PDF generated successfully: {output_path}")
             return True
         else:
-            print(f"❌ Report generation failed: {result.stderr}")
+            print(f"❌ PDF generation failed: {result.stderr}")
             return False
             
     except Exception as e:
@@ -257,15 +292,14 @@ This is a test of the PDF generation system.
     output_path = "test_output.pdf"
     success = convert_markdown_to_pdf(sample_md, output_path)
     
-    # Check for HTML output (since we're generating HTML for now)
-    html_path = output_path.replace('.pdf', '.html')
-    if success and os.path.exists(html_path):
-        print(f"✅ HTML report test successful: {html_path}")
+    # Check for PDF output
+    if success and os.path.exists(output_path):
+        print(f"✅ PDF report test successful: {output_path}")
         # Clean up test file
-        os.remove(html_path)
+        os.remove(output_path)
         return True
     else:
-        print("❌ Report generation test failed")
+        print("❌ PDF generation test failed")
         return False
 
 
