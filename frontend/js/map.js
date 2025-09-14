@@ -17,9 +17,11 @@
 
   // We'll fetch real segment data from the API
   let segmentsGeoJSON = null;
+  let binsGeoJSON = null;
 
   let currentLayer = null;
   let currentSummary = null;
+  let currentViewMode = 'segments';
 
   function updateStatus(message, type = 'loading') {
     const statusEl = document.getElementById('status');
@@ -83,6 +85,130 @@
         opacity: 0.9
       };
     }
+  }
+
+  function styleForBin(bin) {
+    const densityLevel = bin.density_level || 'A';
+    const density = bin.density || 0;
+    const convergencePoint = bin.convergence_point || false;
+    
+    // Map density levels to colors
+    const densityColors = {
+      "A": "#4CAF50",    // Green
+      "B": "#8BC34A",    // Light Green
+      "C": "#FFC107",    // Yellow
+      "D": "#FF9800",    // Orange
+      "E": "#F44336",    // Red
+      "F": "#B71C1C"     // Dark Red
+    };
+    
+    const baseColor = densityColors[densityLevel] || "#4CAF50";
+    
+    // Check if this density level should be visible
+    const zoneFilter = document.getElementById('zoneFilter');
+    const selectedZones = Array.from(zoneFilter.selectedOptions).map(opt => opt.value);
+    
+    // Map density levels to zone names for filtering
+    const levelToZone = {
+      "A": "green",
+      "B": "green", 
+      "C": "yellow",
+      "D": "orange",
+      "E": "red",
+      "F": "dark-red"
+    };
+    
+    const zone = levelToZone[densityLevel] || "green";
+    
+    if (!selectedZones.includes(zone)) {
+      return {
+        color: baseColor,
+        weight: 2,
+        opacity: 0.1,
+        fillOpacity: 0.1
+      };
+    }
+    
+    // Check display mode
+    const isBWMode = document.getElementById('bwMode').classList.contains('active');
+    
+    if (isBWMode) {
+      // Black and white mode for bins
+      return {
+        color: "#000000",
+        weight: 1,
+        opacity: 0.6,
+        fillOpacity: 0.3,
+        dashArray: convergencePoint ? "3,3" : null
+      };
+    } else {
+      // Color mode for bins
+      return {
+        color: baseColor,
+        weight: 2,
+        opacity: 0.7,
+        fillOpacity: 0.4,
+        dashArray: convergencePoint ? "3,3" : null
+      };
+    }
+  }
+
+  function renderBins(binsData) {
+    // Remove existing layer if any
+    if (currentLayer) {
+      map.removeLayer(currentLayer);
+    }
+
+    // Create new layer for bins
+    currentLayer = L.geoJSON(binsData, {
+      style: f => {
+        const bin = f.properties;
+        return styleForBin(bin);
+      },
+      onEachFeature: function (feature, layer) {
+        const bin = feature.properties;
+        const segmentId = bin.segment_id;
+        const binIndex = bin.bin_index;
+        const density = bin.density || 0;
+        const densityLevel = bin.density_level || 'A';
+        const rsiScore = bin.rsi_score || 0;
+        const convergencePoint = bin.convergence_point || false;
+        
+        // Build tooltip text
+        let tooltipText = `<div class="seg-label">${segmentId} — Bin ${binIndex}</div>`;
+        tooltipText += `<div>Density: <b>${density.toFixed(2)}</b> pax/m² (${densityLevel})</div>`;
+        tooltipText += `<div>RSI Score: <b>${rsiScore.toFixed(3)}</b></div>`;
+        if (convergencePoint) {
+          tooltipText += `<div style="color: #FF5722; font-weight: bold;">⚠️ Convergence Point</div>`;
+        }
+        
+        // Add overtakes and co-presence data if available
+        if (bin.overtakes && Object.keys(bin.overtakes).length > 0) {
+          tooltipText += `<div>Overtakes: ${Object.entries(bin.overtakes).map(([k,v]) => `${k}:${v}`).join(', ')}</div>`;
+        }
+        if (bin.co_presence && Object.keys(bin.co_presence).length > 0) {
+          tooltipText += `<div>Co-presence: ${Object.entries(bin.co_presence).map(([k,v]) => `${k}:${v}`).join(', ')}</div>`;
+        }
+        
+        layer.bindTooltip(tooltipText, { sticky: true });
+        
+        layer.on('mouseover', () => layer.setStyle({ weight: 3, opacity: 0.9 }));
+        layer.on('mouseout', () => layer.setStyle({ weight: 2, opacity: 0.7 }));
+      }
+    }).addTo(map);
+
+    // Fit bounds if we have features
+    try { 
+      if (binsData.features.length > 0) {
+        map.fitBounds(currentLayer.getBounds(), {padding:[30,30]});
+      }
+    } catch(_) {}
+
+    // Update UI
+    const meta = document.getElementById('meta');
+    meta.textContent = `Bin-Level View: ${binsData.features.length} bins`;
+    
+    updateStatus(`Loaded ${binsData.features.length} bins`, 'success');
   }
 
   function renderMap(geojson, summary) {
@@ -173,7 +299,7 @@
 
   async function fetchSegments() {
     try {
-      const response = await fetch('/api/segments.geojson');
+      const response = await fetch('/api/segments.geojson?paceCsv=data/runners.csv&segmentsCsv=data/segments.csv&startTimes={"Full":420,"10K":440,"Half":460}');
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -216,6 +342,93 @@
             }
           }
         ]
+      };
+    }
+  }
+
+  async function fetchBins() {
+    try {
+      updateStatus('Loading bin data...', 'loading');
+      
+      const response = await fetch('/api/flow-bins', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          paceCsv: "data/runners.csv",
+          segmentsCsv: "data/segments.csv",
+          startTimes: {"Full": 420, "10K": 440, "Half": 460}
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const binsData = await response.json();
+      
+      if (!binsData.ok) {
+        throw new Error(`API Error: ${binsData.message || 'Unknown error'}`);
+      }
+
+      // Convert to GeoJSON format for rendering
+      const geojson = {
+        "type": "FeatureCollection",
+        "features": []
+      };
+
+      // Process all segments and their bins
+      Object.entries(binsData.segments || {}).forEach(([segmentId, segmentData]) => {
+        segmentData.bins.forEach(bin => {
+          // Create a simple rectangular polygon for each bin
+          const binCenterLat = 45.9620 + (bin.bin_index * 0.001); // Simple offset
+          const binCenterLon = -66.6500 + (bin.bin_index * 0.001);
+          
+          const binSize = 0.0005; // Approximate bin size in degrees
+          
+          geojson.features.push({
+            "type": "Feature",
+            "properties": {
+              "segment_id": segmentId,
+              "segment_label": segmentData.segment_label,
+              "bin_index": bin.bin_index,
+              "start_km": bin.start_km,
+              "end_km": bin.end_km,
+              "density": bin.density,
+              "density_level": bin.density_level,
+              "overtakes": bin.overtakes,
+              "co_presence": bin.co_presence,
+              "rsi_score": bin.rsi_score,
+              "convergence_point": bin.convergence_point,
+              "centroid_lat": binCenterLat,
+              "centroid_lon": binCenterLon
+            },
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [[
+                [binCenterLon - binSize, binCenterLat - binSize],
+                [binCenterLon + binSize, binCenterLat - binSize],
+                [binCenterLon + binSize, binCenterLat + binSize],
+                [binCenterLon - binSize, binCenterLat + binSize],
+                [binCenterLon - binSize, binCenterLat - binSize]
+              ]]
+            }
+          });
+        });
+      });
+
+      binsGeoJSON = geojson;
+      return geojson;
+      
+    } catch (error) {
+      console.error('Error fetching bins:', error);
+      updateStatus(`Error loading bins: ${error.message}`, 'error');
+      
+      // Return empty GeoJSON on error
+      return {
+        "type": "FeatureCollection",
+        "features": []
       };
     }
   }
@@ -272,20 +485,75 @@
 
   // Event handlers
   document.getElementById('metric').addEventListener('change', function() {
-    fetchDensityData(this.value);
+    if (currentViewMode === 'segments') {
+      fetchDensityData(this.value);
+    }
   });
 
   document.getElementById('refresh').addEventListener('click', function() {
-    const metric = document.getElementById('metric').value;
-    fetchDensityData(this.value);
+    if (currentViewMode === 'segments') {
+      const metric = document.getElementById('metric').value;
+      fetchDensityData(metric);
+    } else {
+      fetchBins().then(binsData => {
+        renderBins(binsData);
+      });
+    }
+  });
+
+  // View mode change handler
+  document.getElementById('viewMode').addEventListener('change', function() {
+    currentViewMode = this.value;
+    const binControls = document.getElementById('binControls');
+    
+    if (currentViewMode === 'bins') {
+      binControls.style.display = 'block';
+      // Load bins if not already loaded
+      if (!binsGeoJSON) {
+        fetchBins().then(binsData => {
+          renderBins(binsData);
+        });
+      } else {
+        renderBins(binsGeoJSON);
+      }
+    } else {
+      binControls.style.display = 'none';
+      // Switch back to segments view
+      if (segmentsGeoJSON && currentSummary) {
+        renderMap(segmentsGeoJSON, currentSummary);
+      } else {
+        fetchDensityData('areal');
+      }
+    }
+  });
+
+  // Bin control handlers
+  document.getElementById('loadBins').addEventListener('click', function() {
+    fetchBins().then(binsData => {
+      renderBins(binsData);
+    });
+  });
+
+  document.getElementById('clearBins').addEventListener('click', function() {
+    binsGeoJSON = null;
+    if (currentViewMode === 'bins') {
+      updateStatus('Bins cleared', 'success');
+      // Clear the map
+      if (currentLayer) {
+        map.removeLayer(currentLayer);
+        currentLayer = null;
+      }
+    }
   });
 
   // Zone filter event handlers
   document.getElementById('zoneFilter').addEventListener('change', function() {
     updateLegendStatus();
     // Re-render the map with current zone filter
-    if (currentLayer && currentSummary) {
+    if (currentViewMode === 'segments' && currentLayer && currentSummary) {
       renderMap(segmentsGeoJSON, currentSummary);
+    } else if (currentViewMode === 'bins' && currentLayer && binsGeoJSON) {
+      renderBins(binsGeoJSON);
     }
   });
 
@@ -296,8 +564,10 @@
     });
     updateLegendStatus();
     // Re-render the map
-    if (currentLayer && currentSummary) {
+    if (currentViewMode === 'segments' && currentLayer && currentSummary) {
       renderMap(segmentsGeoJSON, currentSummary);
+    } else if (currentViewMode === 'bins' && currentLayer && binsGeoJSON) {
+      renderBins(binsGeoJSON);
     }
   });
 
@@ -308,8 +578,10 @@
     });
     updateLegendStatus();
     // Re-render the map
-    if (currentLayer && currentSummary) {
+    if (currentViewMode === 'segments' && currentLayer && currentSummary) {
       renderMap(segmentsGeoJSON, currentSummary);
+    } else if (currentViewMode === 'bins' && currentLayer && binsGeoJSON) {
+      renderBins(binsGeoJSON);
     }
   });
 
@@ -321,8 +593,10 @@
     document.getElementById('colorLegend').style.display = 'block';
     document.getElementById('bwLegend').style.display = 'none';
     // Re-render the map with color mode
-    if (currentLayer && currentSummary) {
+    if (currentViewMode === 'segments' && currentLayer && currentSummary) {
       renderMap(segmentsGeoJSON, currentSummary);
+    } else if (currentViewMode === 'bins' && currentLayer && binsGeoJSON) {
+      renderBins(binsGeoJSON);
     }
   });
 
@@ -333,8 +607,10 @@
     document.getElementById('colorLegend').style.display = 'none';
     document.getElementById('bwLegend').style.display = 'block';
     // Re-render the map with B&W mode
-    if (currentLayer && currentSummary) {
+    if (currentViewMode === 'segments' && currentLayer && currentSummary) {
       renderMap(segmentsGeoJSON, currentSummary);
+    } else if (currentViewMode === 'bins' && currentLayer && binsGeoJSON) {
+      renderBins(binsGeoJSON);
     }
   });
 

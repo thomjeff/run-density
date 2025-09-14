@@ -25,6 +25,18 @@
     <button id="colorMode" class="display-btn active">Color</button>
     <button id="bwMode" class="display-btn">B&W</button>
   </div>
+  <div class="layer-control">
+    <label>View Mode:</label>
+    <select id="viewMode">
+      <option value="segments">Segments</option>
+      <option value="bins">Bin-Level</option>
+    </select>
+  </div>
+  <div class="bin-controls" id="binControls" style="display: none;">
+    <label>Bin Analysis:</label>
+    <button id="loadBins" class="bin-btn">Load Bins</button>
+    <button id="clearBins" class="bin-btn">Clear Bins</button>
+  </div>
   <div class="zone-filter">
     <label>Show zones:</label>
     <select id="zoneFilter" multiple size="3">

@@ -126,6 +126,59 @@ html, body, #map {
   font-weight: bold;
 }
 
+.layer-control {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #eee;
+}
+
+.layer-control label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.layer-control select {
+  width: 100%;
+  margin-bottom: 6px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+.bin-controls {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #eee;
+}
+
+.bin-controls label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.bin-controls .bin-btn {
+  background: #4CAF50;
+  color: white;
+  border: none;
+  padding: 3px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 10px;
+  margin-right: 4px;
+}
+
+.bin-controls .bin-btn:hover {
+  background: #45a049;
+}
+
+.bin-controls .bin-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
 .zone-filter {
   margin-top: 8px;
   padding-top: 8px;
