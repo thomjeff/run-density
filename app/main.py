@@ -21,6 +21,7 @@ try:
     from .flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
     from .flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
     from .report import generate_combined_report, generate_combined_narrative
+    from .map_api import router as map_router
     # from .test_api import test_router  # Disabled for Cloud Run deployment
     from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 except ImportError:
@@ -31,6 +32,7 @@ except ImportError:
     from flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
     from flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
     from report import generate_combined_report, generate_combined_narrative
+    from map_api import router as map_router
     # from test_api import test_router  # Disabled for Cloud Run deployment
     from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
@@ -106,8 +108,9 @@ APP_VERSION = os.getenv("APP_VERSION", app.version)
 GIT_SHA = os.getenv("GIT_SHA", "local")
 BUILD_AT = os.getenv("BUILD_AT", datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z")
 
-# Include density API router
+# Include API routers
 app.include_router(density_router)
+app.include_router(map_router)
 # app.include_router(test_router)  # Disabled for Cloud Run deployment
 
 # Mount static files
@@ -119,10 +122,15 @@ except Exception as e:
 @app.get("/")
 async def root():
     return {
-        "message": "run-density API v1.6.7",
+        "message": "run-density API v1.6.25",
         "version": APP_VERSION,
         "architecture": "split",
-        "endpoints": ["/api/density", "/api/temporal-flow", "/api/report", "/api/density-report", "/api/temporal-flow-report", "/api/flow-audit", "/health", "/ready"]
+        "endpoints": [
+            "/api/density", "/api/temporal-flow", "/api/report", 
+            "/api/density-report", "/api/temporal-flow-report", "/api/flow-audit",
+            "/api/segments.geojson", "/api/flow-bins", "/api/export-bins", "/api/map-status",
+            "/health", "/ready"
+        ]
     }
 
 @app.get("/health")
