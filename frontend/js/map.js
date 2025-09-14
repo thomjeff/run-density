@@ -1003,42 +1003,53 @@
   });
 
 
-  // Segment selector handler
-  document.getElementById('segmentSelector').addEventListener('change', function() {
-    const selectedSegmentId = this.value;
-    console.log('Segment selected:', selectedSegmentId);
-    
-    if (currentViewMode === 'bins' && allBinsData) {
-      // Filter bins by selected segment
-      const filteredBinsData = filterBinsBySegment(selectedSegmentId);
+  // Segment selector handler - Check if element exists before adding listener
+  const segmentSelector = document.getElementById('segmentSelector');
+  if (segmentSelector) {
+    segmentSelector.addEventListener('change', function() {
+      const selectedSegmentId = this.value;
+      console.log('Segment selected:', selectedSegmentId);
       
-      if (filteredBinsData) {
-        binsGeoJSON = filteredBinsData;
-        renderBins(binsGeoJSON);
+      if (currentViewMode === 'bins' && allBinsData) {
+        // Filter bins by selected segment
+        const filteredBinsData = filterBinsBySegment(selectedSegmentId);
         
-        // Update status
-        const segmentText = selectedSegmentId ? ` for segment ${selectedSegmentId}` : '';
-        updateStatus(`Showing ${filteredBinsData.features.length} bins${segmentText}`, 'success');
+        if (filteredBinsData) {
+          binsGeoJSON = filteredBinsData;
+          renderBins(binsGeoJSON);
+          
+          // Update status
+          const segmentText = selectedSegmentId ? ` for segment ${selectedSegmentId}` : '';
+          updateStatus(`Showing ${filteredBinsData.features.length} bins${segmentText}`, 'success');
+        }
       }
-    }
-  });
+    });
+  }
 
-  document.getElementById('loadBins').addEventListener('click', function() {
-    // Load bin data for bin view
-    loadBinData();
-  });
+  // Load bins handler - Check if element exists before adding listener
+  const loadBinsBtn = document.getElementById('loadBins');
+  if (loadBinsBtn) {
+    loadBinsBtn.addEventListener('click', function() {
+      // Load bin data for bin view
+      loadBinData();
+    });
+  }
 
-  document.getElementById('clearBins').addEventListener('click', function() {
-    binsGeoJSON = null;
-    if (currentViewMode === 'bins') {
-      updateStatus('Bins cleared', 'success');
-      // Clear the map
-      if (currentLayer) {
-        map.removeLayer(currentLayer);
-        currentLayer = null;
+  // Clear bins handler - Check if element exists before adding listener
+  const clearBinsBtn = document.getElementById('clearBins');
+  if (clearBinsBtn) {
+    clearBinsBtn.addEventListener('click', function() {
+      binsGeoJSON = null;
+      if (currentViewMode === 'bins') {
+        updateStatus('Bins cleared', 'success');
+        // Clear the map
+        if (currentLayer) {
+          map.removeLayer(currentLayer);
+          currentLayer = null;
+        }
       }
-    }
-  });
+    });
+  }
 
   // Zone filter event handlers
   document.getElementById('zoneFilter').addEventListener('change', function() {

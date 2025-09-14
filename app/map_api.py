@@ -808,6 +808,23 @@ async def get_cached_analysis(
         logger.error(f"Error getting cached analysis: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting cached analysis: {e}")
 
+@router.get("/map-data")
+async def get_map_data():
+    """
+    Get map data for the frontend.
+    
+    This endpoint provides the data needed for map visualization.
+    """
+    try:
+        # Generate map data using the map data generator
+        map_data = generate_map_data()
+        
+        return JSONResponse(content=map_data)
+        
+    except Exception as e:
+        logger.error(f"Error getting map data: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting map data: {e}")
+
 @router.post("/cleanup-cache")
 async def cleanup_cache(
     maxAgeHours: int = Query(24, description="Maximum age of cache entries in hours")
