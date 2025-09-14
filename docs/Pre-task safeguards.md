@@ -22,6 +22,8 @@ You **MUST** explicitly confirm understanding of these CRITICAL RULES before pro
 5. MINIMAL CHANGES - will make only necessary changes and test frequently
 6. NO ENDLESS LOOPS - will take action after 3 analysis attempts, not repeat analysis
 7. TYPO CHECKING - will verify variable names and data flow integrity
+8. TODO PERMISSION - will ask for permission before creating todo lists when user asks for thoughts
+9. COMPLETE GITHUB ISSUE READING - will read ENTIRE GitHub issues including ALL comments, no shortcuts
 ```
 
 ## **🧪 MANDATORY TESTING SEQUENCE**
@@ -68,6 +70,25 @@ After ANY code changes, you **MUST**:
 - **NEVER use**: `data/your_pace_data.csv`, `data/segments_old.csv`
 - **ALWAYS use**: `app/constants.py` for configuration values
 - **NEVER hardcode**: start times, tolerance values, conflict lengths
+
+## **📋 MANDATORY GITHUB ISSUE READING**
+
+**CRITICAL**: When reading GitHub issues, you **MUST**:
+
+1. **Read the ENTIRE issue** - Title, description, acceptance criteria, all sections
+2. **Read ALL comments** - Use `gh issue view <number> --comments` to get complete context
+3. **No shortcuts or skimming** - Every comment contains important technical details
+4. **Persistent data store** - GitHub issues are the source of truth for ALL Cursor work
+5. **Complete context** - Missing details from comments leads to incomplete implementation
+
+**Command**: `gh issue view <issue-number> --comments`
+
+**Why this is critical:**
+- Comments contain technical implementation strategies
+- ChatGPT answers provide specific implementation details
+- User feedback and decisions are documented in comments
+- Incomplete reading leads to missing critical requirements
+- This wastes time and creates rework
 
 ## **🐍 MANDATORY ENVIRONMENT SETUP**
 

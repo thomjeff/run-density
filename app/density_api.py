@@ -36,6 +36,9 @@ class DensityAnalysisRequest(BaseModel):
     segments: Optional[list] = None
     config: Optional[Dict[str, Any]] = None
     width_provider: str = "static"
+    paceCsv: Optional[str] = None
+    segmentsCsv: Optional[str] = None
+    startTimes: Optional[Dict[str, int]] = None
 
 
 class DensityAnalysisResponse(BaseModel):
@@ -77,7 +80,7 @@ async def analyze_density(request: DensityAnalysisRequest):
             segments_df = pd.DataFrame(request.segments)
         else:
             # Load from default location
-            segments_df = pd.read_csv('data/segments_new.csv')
+            segments_df = pd.read_csv('data/segments.csv')
         
         # Load pace data
         pace_data = pd.read_csv('data/runners.csv')
@@ -106,11 +109,10 @@ async def analyze_density(request: DensityAnalysisRequest):
         
         # Perform analysis
         results = analyze_density_segments(
-            segments_df=segments_df,
             pace_data=pace_data,
             start_times=start_times,
             config=config,
-            width_provider=width_provider
+            density_csv_path=request.segmentsCsv
         )
         
         return DensityAnalysisResponse(
@@ -187,11 +189,10 @@ async def get_segment_density(
         
         # Perform analysis
         results = analyze_density_segments(
-            segments_df=segment_df,
             pace_data=pace_data,
             start_times=start_times,
             config=density_config,
-            width_provider=width_provider_instance
+            density_csv_path="data/segments.csv"
         )
         
         if segment_id not in results['segments']:
@@ -267,11 +268,10 @@ async def get_density_summary(
         
         # Perform analysis
         results = analyze_density_segments(
-            segments_df=segments_df,
             pace_data=pace_data,
             start_times=start_times,
             config=density_config,
-            width_provider=width_provider_instance
+            density_csv_path="data/segments.csv"
         )
         
         # Return only summary data

@@ -126,6 +126,110 @@ html, body, #map {
   font-weight: bold;
 }
 
+.layer-control {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #eee;
+}
+
+.layer-control label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.layer-control select {
+  width: 100%;
+  margin-bottom: 6px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+.analysis-controls {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #eee;
+}
+
+.analysis-controls .bin-btn {
+  background: #2196F3;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: bold;
+  width: 100%;
+}
+
+.analysis-controls .bin-btn:hover {
+  background: #1976D2;
+}
+
+.analysis-controls .bin-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.bin-controls {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #eee;
+}
+
+.bin-controls label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.bin-controls .bin-btn {
+  background: #4CAF50;
+  color: white;
+  border: none;
+  padding: 3px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 10px;
+  margin-right: 4px;
+}
+
+.bin-controls .bin-btn:hover {
+  background: #45a049;
+}
+
+.bin-controls .bin-btn.primary {
+  background: #2196F3;
+  font-weight: bold;
+}
+
+.bin-controls .bin-btn.primary:hover {
+  background: #1976D2;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid #3498db;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.bin-controls .bin-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+
 .zone-filter {
   margin-top: 8px;
   padding-top: 8px;
@@ -170,3 +274,123 @@ html, body, #map {
   margin-top: 8px;
   font-size: 11px;
 }
+
+/* Segment Details Sidebar */
+.segment-details {
+  position: fixed;
+  top: 0;
+  right: -400px;
+  width: 400px;
+  height: 100vh;
+  background: white;
+  box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+  z-index: 10000;
+  transition: right 0.3s ease;
+  overflow-y: auto;
+}
+
+.segment-details.show {
+  right: 0;
+}
+
+.segment-details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #eee;
+  background: #f8f9fa;
+}
+
+.segment-details-header h3 {
+  margin: 0;
+  color: #333;
+  font-size: 18px;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #666;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-btn:hover {
+  color: #333;
+  background: #eee;
+  border-radius: 50%;
+}
+
+.segment-details-content {
+  padding: 20px;
+}
+
+.detail-section {
+  margin-bottom: 20px;
+}
+
+.detail-section h4 {
+  margin: 0 0 10px 0;
+  color: #333;
+  font-size: 14px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.detail-item:last-child {
+  border-bottom: none;
+}
+
+.detail-label {
+  color: #666;
+  font-size: 13px;
+}
+
+.detail-value {
+  color: #333;
+  font-weight: bold;
+  font-size: 13px;
+}
+
+.detail-value.zone {
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: white;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.detail-value.zone.green { background: #4CAF50; }
+.detail-value.zone.yellow { background: #FFC107; }
+.detail-value.zone.orange { background: #FF9800; }
+.detail-value.zone.red { background: #F44336; }
+.detail-value.zone.dark-red { background: #D32F2F; }
+
+.flow-indicator {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+.flow-indicator.overtake { background: #2196F3; }
+.flow-indicator.convergence { background: #FF5722; }
+.flow-indicator.bottleneck { background: #9C27B0; }
+.flow-indicator.normal { background: #4CAF50; }

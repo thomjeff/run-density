@@ -23,6 +23,7 @@ except ImportError:
     from report_utils import get_report_paths
     from density_template_engine import DensityTemplateEngine, create_template_context
 import pandas as pd
+import json
 from datetime import datetime
 
 
@@ -623,9 +624,20 @@ def generate_density_report(
     
     print(f"📊 Density report saved to: {full_path}")
     
+    # Generate and save map dataset
+    map_data = generate_map_dataset(results, start_times)
+    map_path = save_map_dataset(map_data, output_dir)
+    print(f"🗺️ Map dataset saved to: {map_path}")
+    
+    # Generate and save bin dataset
+    bin_data = generate_bin_dataset(results, start_times)
+    bin_path = save_bin_dataset(bin_data, output_dir)
+    print(f"📦 Bin dataset saved to: {bin_path}")
+    
     return {
         "ok": True,
         "report_path": full_path,
+        "map_dataset_path": map_path,
         "analysis_results": results,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
@@ -1162,3 +1174,170 @@ def generate_simple_density_report(
         pace_csv, density_csv, start_times, step_km, time_window_s, 
         include_per_event=False, output_dir="reports"
     )
+
+
+def generate_map_dataset(results: Dict[str, Any], start_times: Dict[str, float]) -> Dict[str, Any]:
+    """
+    Generate map dataset from density analysis results.
+    
+    Args:
+        results: Density analysis results
+        start_times: Event start times in minutes
+    
+    Returns:
+        Map dataset dictionary
+    """
+    segments = results.get("segments", {})
+    
+    # Generate map-friendly data structure
+    map_data = {
+        "ok": True,
+        "source": "density_analysis",
+        "timestamp": datetime.now().isoformat(),
+        "segments": {},
+        "metadata": {
+            "total_segments": len(segments),
+            "analysis_type": "density",
+            "start_times": start_times
+        }
+    }
+    
+    # Process density data for segments
+    for segment_id, segment_data in segments.items():
+        if isinstance(segment_data, dict):
+            # Extract data from the segment summary
+            summary = segment_data.get('summary', {})
+            peak_areal_density = summary.get('peak_areal_density', 0.0)
+            peak_crowd_density = summary.get('peak_crowd_density', 0.0)
+            
+            map_data["segments"][segment_id] = {
+                "segment_id": segment_id,
+                "segment_label": segment_data.get('seg_label', segment_id),
+                "peak_areal_density": peak_areal_density,
+                "peak_crowd_density": peak_crowd_density,
+                "zone": _determine_zone(peak_areal_density),
+                "flow_type": segment_data.get('flow_type', 'none'),
+                "width_m": summary.get('width_m', 3.0)
+            }
+    
+    return map_data
+
+
+def _determine_zone(density: float) -> str:
+    """Determine zone color based on density value."""
+    if density < 0.36:
+        return "green"
+    elif density < 0.54:
+        return "yellow"
+    elif density < 0.72:
+        return "orange"
+    elif density < 1.08:
+        return "red"
+    else:
+        return "dark-red"
+
+
+def save_map_dataset(map_data: Dict[str, Any], output_dir: str) -> str:
+    """
+    Save map dataset to JSON file.
+    
+    Args:
+        map_data: Map dataset dictionary
+        output_dir: Output directory
+    
+    Returns:
+        Path to saved file
+    """
+    # Create reports directory with date
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    reports_dir = os.path.join(output_dir, date_str)
+    os.makedirs(reports_dir, exist_ok=True)
+    
+    # Generate filename
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+    filename = f"map_data_{timestamp}.json"
+    file_path = os.path.join(reports_dir, filename)
+    
+    # Save JSON file
+    with open(file_path, 'w', encoding='utf-8') as f:
+        json.dump(map_data, f, indent=2, default=str)
+    
+    return file_path
+
+def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float]) -> Dict[str, Any]:
+    """
+    Generate bin-level dataset for map visualization.
+    
+    This function creates bin-level data that can be consumed by the map frontend
+    for bin-level visualization, similar to how generate_map_dataset works for segments.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        from .bin_analysis import get_all_segment_bins
+        from .geo_utils import generate_bins_geojson
+        
+        # Use the same data paths as the density analysis
+        pace_csv = "data/runners.csv"
+        segments_csv = "data/segments.csv"
+        
+        # Generate bin data using the same parameters
+        logger.info("Generating bin data from density analysis results")
+        all_bins = get_all_segment_bins(
+            pace_csv=pace_csv,
+            segments_csv=segments_csv,
+            start_times=start_times
+        )
+        
+        # Generate GeoJSON for bins
+        geojson = generate_bins_geojson(all_bins)
+        
+        return {
+            "ok": True,
+            "source": "density_analysis",
+            "timestamp": datetime.now().isoformat(),
+            "geojson": geojson,
+            "metadata": {
+                "total_segments": len(all_bins),
+                "analysis_type": "bins",
+                "bin_size_km": 0.1,
+                "generated_by": "density_report"
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error generating bin dataset: {e}")
+        return {
+            "ok": False,
+            "error": str(e),
+            "geojson": {"type": "FeatureCollection", "features": []},
+            "metadata": {"total_segments": 0, "analysis_type": "bins"}
+        }
+
+def save_bin_dataset(bin_data: Dict[str, Any], output_dir: str) -> str:
+    """
+    Save bin dataset to JSON file in the reports directory.
+    
+    Args:
+        bin_data: The bin dataset to save
+        output_dir: Base output directory for reports
+        
+    Returns:
+        str: Path to the saved file
+    """
+    # Create reports directory with date
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    reports_dir = os.path.join(output_dir, date_str)
+    os.makedirs(reports_dir, exist_ok=True)
+    
+    # Generate filename
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+    filename = f"bin_data_{timestamp}.json"
+    file_path = os.path.join(reports_dir, filename)
+    
+    # Save JSON file
+    with open(file_path, 'w', encoding='utf-8') as f:
+        json.dump(bin_data, f, indent=2, default=str)
+    
+    return file_path
