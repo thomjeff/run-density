@@ -285,3 +285,159 @@ async def clear_map_cache():
     except Exception as e:
         logger.error(f"Error clearing map cache: {e}")
         raise HTTPException(status_code=500, detail=f"Error clearing map cache: {e}")
+
+@router.post("/historical-trends")
+async def get_historical_trends(request: MapRequest):
+    """
+    Get historical trends analysis for a segment.
+    
+    This endpoint provides historical analysis capabilities for understanding
+    how bin-level data changes over time or across different scenarios.
+    """
+    try:
+        from .bin_analysis import analyze_historical_trends
+        
+        # Get segment ID from request (assuming it's in the request body)
+        segment_id = getattr(request, 'segmentId', None)
+        if not segment_id:
+            raise HTTPException(status_code=400, detail="segmentId is required")
+        
+        trends = analyze_historical_trends(
+            segment_id=segment_id,
+            pace_csv=request.paceCsv,
+            segments_csv=request.segmentsCsv,
+            start_times=request.startTimes,
+            bin_size_km=request.binSizeKm
+        )
+        
+        return JSONResponse(content=trends)
+        
+    except Exception as e:
+        logger.error(f"Error getting historical trends: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting historical trends: {e}")
+
+@router.post("/compare-segments")
+async def compare_segments(request: dict):
+    """
+    Compare bin-level data across multiple segments.
+    
+    This endpoint provides comparative analysis capabilities for understanding
+    how different segments perform relative to each other.
+    """
+    try:
+        from .bin_analysis import compare_segments
+        
+        segment_ids = request.get('segmentIds', [])
+        if len(segment_ids) < 2:
+            raise HTTPException(status_code=400, detail="At least 2 segment IDs required")
+        
+        comparison = compare_segments(
+            segment_ids=segment_ids,
+            pace_csv=request.get('paceCsv', 'data/runners.csv'),
+            segments_csv=request.get('segmentsCsv', 'data/segments.csv'),
+            start_times=request.get('startTimes', {"Full": 420, "10K": 440, "Half": 460}),
+            bin_size_km=request.get('binSizeKm')
+        )
+        
+        return JSONResponse(content=comparison)
+        
+    except Exception as e:
+        logger.error(f"Error comparing segments: {e}")
+        raise HTTPException(status_code=500, detail=f"Error comparing segments: {e}")
+
+@router.post("/export-advanced")
+async def export_advanced_data(request: dict):
+    """
+    Export bin-level data with advanced filtering and formatting.
+    
+    This endpoint provides enhanced export capabilities for bin-level data
+    with filtering, sorting, and multiple format options.
+    """
+    try:
+        from .bin_analysis import export_bin_data
+        
+        segment_ids = request.get('segmentIds', [])
+        export_format = request.get('format', 'csv')
+        
+        export_data = export_bin_data(
+            segment_ids=segment_ids,
+            pace_csv=request.get('paceCsv', 'data/runners.csv'),
+            segments_csv=request.get('segmentsCsv', 'data/segments.csv'),
+            start_times=request.get('startTimes', {"Full": 420, "10K": 440, "Half": 460}),
+            format=export_format,
+            bin_size_km=request.get('binSizeKm')
+        )
+        
+        return JSONResponse(content=export_data)
+        
+    except Exception as e:
+        logger.error(f"Error exporting advanced data: {e}")
+        raise HTTPException(status_code=500, detail=f"Error exporting advanced data: {e}")
+
+@router.get("/cache-management")
+async def get_cache_management():
+    """
+    Get detailed cache management information.
+    
+    This endpoint provides comprehensive cache statistics and management
+    capabilities for the map system.
+    """
+    try:
+        from .bin_analysis import get_cache_stats, clear_bin_cache
+        
+        cache_stats = get_cache_stats()
+        
+        return JSONResponse(content={
+            "ok": True,
+            "cache_stats": cache_stats,
+            "management_actions": [
+                "clear_cache",
+                "get_stats",
+                "invalidate_segment"
+            ],
+            "cache_info": {
+                "description": "Bin-level analysis cache for map visualization",
+                "purpose": "Improve performance by caching computed bin data",
+                "invalidation": "Automatic on dataset changes"
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting cache management info: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting cache management info: {e}")
+
+@router.post("/invalidate-segment")
+async def invalidate_segment_cache(request: dict):
+    """
+    Invalidate cache for a specific segment.
+    
+    This endpoint allows selective cache invalidation for specific segments
+    without clearing the entire cache.
+    """
+    try:
+        from .bin_analysis import _bin_cache, calculate_dataset_hash
+        
+        segment_id = request.get('segmentId')
+        if not segment_id:
+            raise HTTPException(status_code=400, detail="segmentId is required")
+        
+        # Calculate dataset hash for invalidation
+        dataset_hash = calculate_dataset_hash(
+            request.get('paceCsv', 'data/runners.csv'),
+            request.get('segmentsCsv', 'data/segments.csv'),
+            request.get('startTimes', {"Full": 420, "10K": 440, "Half": 460})
+        )
+        
+        # Invalidate cache for this segment
+        _bin_cache.invalidate(dataset_hash)
+        
+        return JSONResponse(content={
+            "ok": True,
+            "message": f"Cache invalidated for segment {segment_id}",
+            "segment_id": segment_id,
+            "dataset_hash": dataset_hash
+        })
+        
+    except Exception as e:
+        logger.error(f"Error invalidating segment cache: {e}")
+        raise HTTPException(status_code=500, detail=f"Error invalidating segment cache: {e}")

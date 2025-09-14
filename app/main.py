@@ -129,6 +129,8 @@ async def root():
             "/api/density", "/api/temporal-flow", "/api/report", 
             "/api/density-report", "/api/temporal-flow-report", "/api/flow-audit",
             "/api/segments.geojson", "/api/flow-bins", "/api/export-bins", "/api/map-status",
+            "/api/historical-trends", "/api/compare-segments", "/api/export-advanced",
+            "/api/cache-management", "/api/invalidate-segment", "/api/clear-cache",
             "/health", "/ready"
         ]
     }
