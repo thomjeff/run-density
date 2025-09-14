@@ -13,6 +13,8 @@ Endpoints:
 from __future__ import annotations
 import json
 import logging
+import os
+from datetime import datetime
 from typing import Dict, List, Any, Optional
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse, FileResponse
@@ -22,10 +24,12 @@ try:
     from .bin_analysis import get_all_segment_bins, analyze_segment_bins, get_cache_stats
     from .geo_utils import generate_segments_geojson, generate_bins_geojson
     from .constants import DISTANCE_BIN_SIZE_KM
+    from .cache_manager import get_global_cache_manager
 except ImportError:
     from bin_analysis import get_all_segment_bins, analyze_segment_bins, get_cache_stats
     from geo_utils import generate_segments_geojson, generate_bins_geojson
     from constants import DISTANCE_BIN_SIZE_KM
+    from cache_manager import get_global_cache_manager
 
 logger = logging.getLogger(__name__)
 
@@ -441,3 +445,204 @@ async def invalidate_segment_cache(request: dict):
     except Exception as e:
         logger.error(f"Error invalidating segment cache: {e}")
         raise HTTPException(status_code=500, detail=f"Error invalidating segment cache: {e}")
+
+@router.get("/cache-status")
+async def get_cache_status(
+    analysisType: str = Query(..., description="Type of analysis: density, flow, or bins"),
+    paceCsv: str = Query("data/runners.csv", description="Path to pace data CSV"),
+    segmentsCsv: str = Query("data/segments.csv", description="Path to segments data CSV"),
+    startTimes: str = Query('{"Full": 420, "10K": 440, "Half": 460}', description="JSON string of start times")
+):
+    """
+    Get cache status for analysis results.
+    
+    This endpoint provides information about cached analysis results
+    including timestamps and age of the data.
+    """
+    try:
+        # Parse start times
+        start_times = json.loads(startTimes)
+        
+        # Calculate dataset hash
+        from .bin_analysis import calculate_dataset_hash
+        dataset_hash = calculate_dataset_hash(paceCsv, segmentsCsv, start_times)
+        
+        # Get cache manager
+        cache_manager = get_global_cache_manager()
+        
+        # Get cache status
+        status = cache_manager.get_cache_status(analysisType, dataset_hash)
+        
+        return JSONResponse(content={
+            "ok": True,
+            "cache_status": status,
+            "analysis_type": analysisType,
+            "dataset_hash": dataset_hash
+        })
+        
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid startTimes JSON: {e}")
+    except Exception as e:
+        logger.error(f"Error getting cache status: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting cache status: {e}")
+
+@router.post("/force-refresh")
+async def force_refresh_analysis(request: dict):
+    """
+    Force refresh analysis results, bypassing cache.
+    
+    This endpoint runs fresh analysis and updates the cache
+    with new results and timestamps.
+    """
+    try:
+        analysis_type = request.get('analysisType', 'density')
+        pace_csv = request.get('paceCsv', 'data/runners.csv')
+        segments_csv = request.get('segmentsCsv', 'data/segments.csv')
+        start_times = request.get('startTimes', {"Full": 420, "10K": 440, "Half": 460})
+        
+        # Calculate dataset hash
+        from .bin_analysis import calculate_dataset_hash
+        dataset_hash = calculate_dataset_hash(pace_csv, segments_csv, start_times)
+        
+        # Get cache manager
+        cache_manager = get_global_cache_manager()
+        
+        # Run fresh analysis based on type
+        if analysis_type == 'density':
+            from .density import analyze_density_segments
+            from .io.loader import load_runners, load_segments
+            from datetime import datetime, timedelta
+            
+            # Load data
+            pace_data = load_runners(pace_csv)
+            segments_df = load_segments(segments_csv)
+            
+            # Convert start times from minutes to datetime objects
+            start_times_dt = {}
+            for event, minutes in start_times.items():
+                start_times_dt[event] = datetime(2024, 1, 1) + timedelta(minutes=minutes)
+            
+            # Run analysis
+            results = analyze_density_segments(
+                pace_data=pace_data,
+                start_times=start_times_dt,
+                density_csv_path=segments_csv
+            )
+            
+        elif analysis_type == 'flow':
+            from .flow import analyze_temporal_flow_segments
+            results = analyze_temporal_flow_segments(
+                pace_csv=pace_csv,
+                segments_csv=segments_csv,
+                start_times=start_times
+            )
+            
+        elif analysis_type == 'bins':
+            from .bin_analysis import get_all_segment_bins
+            results = get_all_segment_bins(
+                pace_csv=pace_csv,
+                segments_csv=segments_csv,
+                start_times=start_times
+            )
+            
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown analysis type: {analysis_type}")
+        
+        # Store results in cache
+        metadata = {
+            "version": "v1.6.25",
+            "environment": "cloud" if os.getenv('GOOGLE_CLOUD_PROJECT') else "local",
+            "force_refresh": True
+        }
+        
+        cache_manager.store_analysis(analysis_type, dataset_hash, results, metadata)
+        
+        return JSONResponse(content={
+            "ok": True,
+            "message": f"Fresh {analysis_type} analysis completed and cached",
+            "analysis_type": analysis_type,
+            "dataset_hash": dataset_hash,
+            "timestamp": datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error force refreshing analysis: {e}")
+        raise HTTPException(status_code=500, detail=f"Error force refreshing analysis: {e}")
+
+@router.get("/cached-analysis")
+async def get_cached_analysis(
+    analysisType: str = Query(..., description="Type of analysis: density, flow, or bins"),
+    paceCsv: str = Query("data/runners.csv", description="Path to pace data CSV"),
+    segmentsCsv: str = Query("data/segments.csv", description="Path to segments data CSV"),
+    startTimes: str = Query('{"Full": 420, "10K": 440, "Half": 460}', description="JSON string of start times")
+):
+    """
+    Get cached analysis results.
+    
+    This endpoint returns cached analysis results if available,
+    or indicates if no cached data exists.
+    """
+    try:
+        # Parse start times
+        start_times = json.loads(startTimes)
+        
+        # Calculate dataset hash
+        from .bin_analysis import calculate_dataset_hash
+        dataset_hash = calculate_dataset_hash(paceCsv, segmentsCsv, start_times)
+        
+        # Get cache manager
+        cache_manager = get_global_cache_manager()
+        
+        # Get cached analysis
+        entry = cache_manager.get_analysis(analysisType, dataset_hash)
+        
+        if entry is None:
+            return JSONResponse(content={
+                "ok": False,
+                "message": f"No cached {analysisType} analysis found",
+                "analysis_type": analysisType,
+                "dataset_hash": dataset_hash
+            })
+        
+        return JSONResponse(content={
+            "ok": True,
+            "analysis_type": analysisType,
+            "dataset_hash": dataset_hash,
+            "timestamp": entry.timestamp.isoformat(),
+            "age_hours": (datetime.now() - entry.timestamp).total_seconds() / 3600,
+            "data": entry.data,
+            "metadata": entry.metadata
+        })
+        
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid startTimes JSON: {e}")
+    except Exception as e:
+        logger.error(f"Error getting cached analysis: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting cached analysis: {e}")
+
+@router.post("/cleanup-cache")
+async def cleanup_cache(
+    maxAgeHours: int = Query(24, description="Maximum age of cache entries in hours")
+):
+    """
+    Clean up old cache entries.
+    
+    This endpoint removes cache entries older than the specified age.
+    """
+    try:
+        # Get cache manager
+        cache_manager = get_global_cache_manager()
+        
+        # Clean up old entries
+        cleaned_count = cache_manager.cleanup_old_entries(maxAgeHours)
+        
+        return JSONResponse(content={
+            "ok": True,
+            "message": f"Cleaned up {cleaned_count} old cache entries",
+            "max_age_hours": maxAgeHours,
+            "cleaned_count": cleaned_count
+        })
+        
+    except Exception as e:
+        logger.error(f"Error cleaning up cache: {e}")
+        raise HTTPException(status_code=500, detail=f"Error cleaning up cache: {e}")

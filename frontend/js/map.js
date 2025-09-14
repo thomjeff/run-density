@@ -376,6 +376,172 @@
     }
   }
 
+  async function loadCachedData() {
+    try {
+      updateStatus('Loading cached data...', 'loading');
+      
+      // Load segments first
+      const segments = await fetchSegments();
+      segmentsGeoJSON = segments;
+      renderMap(segments, null);
+      
+      // Check for cached density analysis
+      const densityStatus = await checkCacheStatus('density');
+      if (densityStatus.cached) {
+        const cachedData = await getCachedAnalysis('density');
+        if (cachedData.ok) {
+          currentSummary = cachedData.data.summary;
+          renderMap(segments, currentSummary);
+          updateStatus(`Loaded cached density analysis from ${formatTimestamp(cachedData.timestamp)}`, 'success');
+          return;
+        }
+      }
+      
+      // Check for cached bin analysis
+      const binsStatus = await checkCacheStatus('bins');
+      if (binsStatus.cached) {
+        const cachedData = await getCachedAnalysis('bins');
+        if (cachedData.ok) {
+          // Convert cached bin data to GeoJSON
+          const geojson = convertBinsToGeoJSON(cachedData.data);
+          binsGeoJSON = geojson;
+          if (currentViewMode === 'bins') {
+            renderBins(geojson);
+          }
+          updateStatus(`Loaded cached bin analysis from ${formatTimestamp(cachedData.timestamp)}`, 'success');
+          return;
+        }
+      }
+      
+      // No cached data available
+      updateStatus('No cached data found. Click "Generate New Analysis" to run analysis.', 'info');
+      
+    } catch (error) {
+      console.error('Error loading cached data:', error);
+      updateStatus(`Error loading cached data: ${error.message}`, 'error');
+    }
+  }
+
+  async function checkCacheStatus(analysisType) {
+    try {
+      const response = await fetch(`/api/cache-status?analysisType=${analysisType}&paceCsv=data/runners.csv&segmentsCsv=data/segments.csv&startTimes=${encodeURIComponent('{"Full": 420, "10K": 440, "Half": 460}')}`);
+      const data = await response.json();
+      return data.cache_status;
+    } catch (error) {
+      console.error('Error checking cache status:', error);
+      return { cached: false };
+    }
+  }
+
+  async function getCachedAnalysis(analysisType) {
+    try {
+      const response = await fetch(`/api/cached-analysis?analysisType=${analysisType}&paceCsv=data/runners.csv&segmentsCsv=data/segments.csv&startTimes=${encodeURIComponent('{"Full": 420, "10K": 440, "Half": 460}')}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Error getting cached analysis:', error);
+      return { ok: false };
+    }
+  }
+
+  function formatTimestamp(timestamp) {
+    const date = new Date(timestamp);
+    return date.toLocaleString();
+  }
+
+  function convertBinsToGeoJSON(binsData) {
+    if (!binsData || !binsData.segments) {
+      return { type: "FeatureCollection", features: [] };
+    }
+    
+    const features = [];
+    for (const [segmentId, segmentData] of Object.entries(binsData.segments)) {
+      for (const bin of segmentData.bins) {
+        features.push({
+          type: "Feature",
+          properties: {
+            segment_id: segmentId,
+            bin_index: bin.bin_index,
+            start_km: bin.start_km,
+            end_km: bin.end_km,
+            density: bin.density,
+            density_level: bin.density_level,
+            overtakes: bin.overtakes,
+            co_presence: bin.co_presence,
+            rsi_score: bin.rsi_score,
+            convergence_point: bin.convergence_point
+          },
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [bin.start_km * 1000, 0],
+              [bin.end_km * 1000, 0]
+            ]
+          }
+        });
+      }
+    }
+    
+    return { type: "FeatureCollection", features };
+  }
+
+  async function generateNewAnalysis() {
+    try {
+      updateStatus('Running fresh analysis... This may take 2-3 minutes.', 'loading');
+      
+      // Show progress indicator
+      const progressDiv = document.createElement('div');
+      progressDiv.id = 'progress-indicator';
+      progressDiv.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 10px; margin: 10px 0;">
+          <div class="spinner"></div>
+          <span>Running analysis... Please wait</span>
+        </div>
+      `;
+      document.querySelector('.control-panel').appendChild(progressDiv);
+      
+      // Force refresh analysis
+      const response = await fetch('/api/force-refresh', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          analysisType: currentViewMode === 'bins' ? 'bins' : 'density',
+          paceCsv: "data/runners.csv",
+          segmentsCsv: "data/segments.csv",
+          startTimes: {"Full": 420, "10K": 440, "Half": 460}
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      // Remove progress indicator
+      const progressIndicator = document.getElementById('progress-indicator');
+      if (progressIndicator) {
+        progressIndicator.remove();
+      }
+      
+      // Reload the data
+      await loadCachedData();
+      
+      updateStatus(`Fresh analysis completed at ${formatTimestamp(result.timestamp)}`, 'success');
+      
+    } catch (error) {
+      console.error('Error generating new analysis:', error);
+      updateStatus(`Error generating new analysis: ${error.message}`, 'error');
+      
+      // Remove progress indicator on error
+      const progressIndicator = document.getElementById('progress-indicator');
+      if (progressIndicator) {
+        progressIndicator.remove();
+      }
+    }
+  }
+
   async function fetchBins() {
     try {
       updateStatus('Running bin-level analysis... This may take 2-3 minutes.', 'loading');
@@ -589,6 +755,10 @@
   });
 
   // Bin control handlers
+  document.getElementById('generateAnalysis').addEventListener('click', function() {
+    generateNewAnalysis();
+  });
+
   document.getElementById('loadBins').addEventListener('click', function() {
     fetchBins().then(binsData => {
       renderBins(binsData);
@@ -675,11 +845,7 @@
     }
   });
 
-  // Initial load - just load segments, not full analysis
-  fetchSegments().then(segments => {
-    // Load segments without running full density analysis
-    segmentsGeoJSON = segments;
-    renderMap(segments, null);
-  });
+  // Initial load - check for cached data first
+  loadCachedData();
   updateLegendStatus();
 })();
