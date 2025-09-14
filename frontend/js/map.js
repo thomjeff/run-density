@@ -154,16 +154,31 @@
   }
 
   function renderBins(binsData) {
+    // Performance timing
+    const startTime = performance.now();
+    
     // Remove existing layer if any
     if (currentLayer) {
       map.removeLayer(currentLayer);
     }
 
-    // Create new layer for bins
+    // Pre-calculate styling for better performance
+    const binStyles = new Map();
+    
+    // Create new layer for bins with optimized rendering
     currentLayer = L.geoJSON(binsData, {
       style: f => {
         const bin = f.properties;
-        return styleForBin(bin);
+        const binKey = `${bin.segment_id}-${bin.bin_index}`;
+        
+        // Use cached styles if available
+        if (binStyles.has(binKey)) {
+          return binStyles.get(binKey);
+        }
+        
+        const style = styleForBin(bin);
+        binStyles.set(binKey, style);
+        return style;
       },
       onEachFeature: function (feature, layer) {
         const bin = feature.properties;
@@ -174,26 +189,37 @@
         const rsiScore = bin.rsi_score || 0;
         const convergencePoint = bin.convergence_point || false;
         
-        // Build tooltip text
-        let tooltipText = `<div class="seg-label">${segmentId} — Bin ${binIndex}</div>`;
-        tooltipText += `<div>Density: <b>${density.toFixed(2)}</b> pax/m² (${densityLevel})</div>`;
-        tooltipText += `<div>RSI Score: <b>${rsiScore.toFixed(3)}</b></div>`;
+        // Build tooltip text with optimized string building
+        const tooltipParts = [
+          `<div class="seg-label">${segmentId} — Bin ${binIndex}</div>`,
+          `<div>Density: <b>${density.toFixed(2)}</b> pax/m² (${densityLevel})</div>`,
+          `<div>RSI Score: <b>${rsiScore.toFixed(3)}</b></div>`
+        ];
+        
         if (convergencePoint) {
-          tooltipText += `<div style="color: #FF5722; font-weight: bold;">⚠️ Convergence Point</div>`;
+          tooltipParts.push(`<div style="color: #FF5722; font-weight: bold;">⚠️ Convergence Point</div>`);
         }
         
         // Add overtakes and co-presence data if available
         if (bin.overtakes && Object.keys(bin.overtakes).length > 0) {
-          tooltipText += `<div>Overtakes: ${Object.entries(bin.overtakes).map(([k,v]) => `${k}:${v}`).join(', ')}</div>`;
+          const overtakesStr = Object.entries(bin.overtakes).map(([k,v]) => `${k}:${v}`).join(', ');
+          tooltipParts.push(`<div>Overtakes: ${overtakesStr}</div>`);
         }
         if (bin.co_presence && Object.keys(bin.co_presence).length > 0) {
-          tooltipText += `<div>Co-presence: ${Object.entries(bin.co_presence).map(([k,v]) => `${k}:${v}`).join(', ')}</div>`;
+          const coPresenceStr = Object.entries(bin.co_presence).map(([k,v]) => `${k}:${v}`).join(', ');
+          tooltipParts.push(`<div>Co-presence: ${coPresenceStr}</div>`);
         }
         
+        const tooltipText = tooltipParts.join('');
         layer.bindTooltip(tooltipText, { sticky: true });
         
-        layer.on('mouseover', () => layer.setStyle({ weight: 3, opacity: 0.9 }));
-        layer.on('mouseout', () => layer.setStyle({ weight: 2, opacity: 0.7 }));
+        // Optimized event handlers
+        layer.on('mouseover', () => {
+          layer.setStyle({ weight: 3, opacity: 0.9 });
+        });
+        layer.on('mouseout', () => {
+          layer.setStyle({ weight: 2, opacity: 0.7 });
+        });
       }
     }).addTo(map);
 
@@ -204,11 +230,15 @@
       }
     } catch(_) {}
 
-    // Update UI
+    // Performance timing
+    const endTime = performance.now();
+    const renderTime = Math.round(endTime - startTime);
+
+    // Update UI with performance info
     const meta = document.getElementById('meta');
-    meta.textContent = `Bin-Level View: ${binsData.features.length} bins`;
+    meta.textContent = `Bin-Level View: ${binsData.features.length} bins (${renderTime}ms)`;
     
-    updateStatus(`Loaded ${binsData.features.length} bins`, 'success');
+    updateStatus(`Rendered ${binsData.features.length} bins in ${renderTime}ms`, 'success');
   }
 
   function renderMap(geojson, summary) {
@@ -350,6 +380,9 @@
     try {
       updateStatus('Loading bin data...', 'loading');
       
+      // Add performance timing
+      const startTime = performance.now();
+      
       const response = await fetch('/api/flow-bins', {
         method: 'POST',
         headers: {
@@ -372,20 +405,44 @@
         throw new Error(`API Error: ${binsData.message || 'Unknown error'}`);
       }
 
-      // Convert to GeoJSON format for rendering
+      // Convert to GeoJSON format for rendering with performance optimizations
       const geojson = {
         "type": "FeatureCollection",
         "features": []
       };
 
-      // Process all segments and their bins
-      Object.entries(binsData.segments || {}).forEach(([segmentId, segmentData]) => {
-        segmentData.bins.forEach(bin => {
-          // Create a simple rectangular polygon for each bin
-          const binCenterLat = 45.9620 + (bin.bin_index * 0.001); // Simple offset
-          const binCenterLon = -66.6500 + (bin.bin_index * 0.001);
+      // Pre-calculate constants for better performance
+      const baseLat = 45.9620;
+      const baseLon = -66.6500;
+      const latOffset = 0.001;
+      const lonOffset = 0.001;
+      const binSize = 0.0005;
+
+      // Process all segments and their bins with optimized loops
+      const segments = binsData.segments || {};
+      const segmentIds = Object.keys(segments);
+      
+      for (let i = 0; i < segmentIds.length; i++) {
+        const segmentId = segmentIds[i];
+        const segmentData = segments[segmentId];
+        const bins = segmentData.bins || [];
+        
+        for (let j = 0; j < bins.length; j++) {
+          const bin = bins[j];
           
-          const binSize = 0.0005; // Approximate bin size in degrees
+          // Create a simple rectangular polygon for each bin with optimized calculations
+          const binCenterLat = baseLat + (bin.bin_index * latOffset);
+          const binCenterLon = baseLon + (bin.bin_index * lonOffset);
+          
+          // Pre-calculate polygon coordinates
+          const halfSize = binSize / 2;
+          const coordinates = [[
+            [binCenterLon - halfSize, binCenterLat - halfSize],
+            [binCenterLon + halfSize, binCenterLat - halfSize],
+            [binCenterLon + halfSize, binCenterLat + halfSize],
+            [binCenterLon - halfSize, binCenterLat + halfSize],
+            [binCenterLon - halfSize, binCenterLat - halfSize]
+          ]];
           
           geojson.features.push({
             "type": "Feature",
@@ -406,19 +463,21 @@
             },
             "geometry": {
               "type": "Polygon",
-              "coordinates": [[
-                [binCenterLon - binSize, binCenterLat - binSize],
-                [binCenterLon + binSize, binCenterLat - binSize],
-                [binCenterLon + binSize, binCenterLat + binSize],
-                [binCenterLon - binSize, binCenterLat + binSize],
-                [binCenterLon - binSize, binCenterLat - binSize]
-              ]]
+              "coordinates": coordinates
             }
           });
-        });
-      });
+        }
+      }
 
+      // Performance timing
+      const endTime = performance.now();
+      const loadTime = Math.round(endTime - startTime);
+      
       binsGeoJSON = geojson;
+      
+      // Update status with performance info
+      updateStatus(`Loaded ${geojson.features.length} bins in ${loadTime}ms`, 'success');
+      
       return geojson;
       
     } catch (error) {

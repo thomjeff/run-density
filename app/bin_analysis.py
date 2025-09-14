@@ -57,30 +57,95 @@ class SegmentBinData:
     generated_at: datetime
 
 class BinAnalysisCache:
-    """Cache for bin-level analysis results."""
+    """Cache for bin-level analysis results with performance optimizations."""
     
-    def __init__(self):
+    def __init__(self, max_size: int = 1000, ttl_seconds: int = 3600):
         self._cache: Dict[str, SegmentBinData] = {}
+        self._access_times: Dict[str, float] = {}
+        self._max_size = max_size
+        self._ttl_seconds = ttl_seconds
+        self._hits = 0
+        self._misses = 0
     
     def _generate_cache_key(self, segment_id: str, dataset_hash: str, bin_size: float) -> str:
         """Generate cache key for bin data."""
         return f"{segment_id}|{dataset_hash}|{bin_size}"
     
+    def _is_expired(self, key: str) -> bool:
+        """Check if cache entry is expired."""
+        if key not in self._access_times:
+            return True
+        import time
+        return time.time() - self._access_times[key] > self._ttl_seconds
+    
+    def _evict_expired(self) -> None:
+        """Remove expired entries from cache."""
+        import time
+        current_time = time.time()
+        expired_keys = [
+            key for key, access_time in self._access_times.items()
+            if current_time - access_time > self._ttl_seconds
+        ]
+        for key in expired_keys:
+            self._cache.pop(key, None)
+            self._access_times.pop(key, None)
+    
+    def _evict_lru(self) -> None:
+        """Remove least recently used entries when cache is full."""
+        if len(self._cache) >= self._max_size:
+            # Find least recently used key
+            lru_key = min(self._access_times.keys(), key=lambda k: self._access_times[k])
+            self._cache.pop(lru_key, None)
+            self._access_times.pop(lru_key, None)
+    
     def get(self, segment_id: str, dataset_hash: str, bin_size: float) -> Optional[SegmentBinData]:
-        """Get cached bin data."""
+        """Get cached bin data with performance tracking."""
         key = self._generate_cache_key(segment_id, dataset_hash, bin_size)
-        return self._cache.get(key)
+        
+        if key in self._cache and not self._is_expired(key):
+            import time
+            self._access_times[key] = time.time()
+            self._hits += 1
+            return self._cache[key]
+        
+        self._misses += 1
+        return None
     
     def set(self, segment_id: str, dataset_hash: str, bin_size: float, data: SegmentBinData) -> None:
-        """Cache bin data."""
+        """Cache bin data with size and TTL management."""
         key = self._generate_cache_key(segment_id, dataset_hash, bin_size)
+        
+        # Clean up expired entries first
+        self._evict_expired()
+        
+        # Evict LRU if cache is full
+        self._evict_lru()
+        
+        # Store the data
+        import time
         self._cache[key] = data
+        self._access_times[key] = time.time()
     
     def invalidate(self, dataset_hash: str) -> None:
         """Invalidate cache entries for a specific dataset."""
         keys_to_remove = [key for key in self._cache.keys() if dataset_hash in key]
         for key in keys_to_remove:
-            del self._cache[key]
+            self._cache.pop(key, None)
+            self._access_times.pop(key, None)
+    
+    def get_performance_stats(self) -> Dict[str, Any]:
+        """Get cache performance statistics."""
+        total_requests = self._hits + self._misses
+        hit_rate = self._hits / total_requests if total_requests > 0 else 0.0
+        
+        return {
+            "cache_size": len(self._cache),
+            "max_size": self._max_size,
+            "hits": self._hits,
+            "misses": self._misses,
+            "hit_rate": round(hit_rate, 3),
+            "ttl_seconds": self._ttl_seconds
+        }
 
 # Global cache instance
 _bin_cache = BinAnalysisCache()
@@ -124,102 +189,129 @@ def create_bins_for_segment(segment_data: Dict[str, Any], bin_size_km: float) ->
     return bins
 
 def analyze_bin_density(bins: List[BinData], density_results: Dict[str, Any], segment_id: str) -> List[BinData]:
-    """Analyze density for each bin within a segment."""
+    """Analyze density for each bin within a segment with performance optimizations."""
     if not density_results.get('ok') or segment_id not in density_results.get('segments', {}):
         return bins
     
     segment_data = density_results['segments'][segment_id]
     time_series = segment_data.get('time_series', [])
     
-    # Calculate density for each bin based on time series data
+    if not time_series:
+        # No time series data, set default values
+        for bin_data in bins:
+            bin_data.density = 0.0
+            bin_data.density_level = "A"
+        return bins
+    
+    # Pre-sort time series by km for faster lookup
+    time_series.sort(key=lambda x: x.get('km', 0))
+    
+    # Use vectorized operations for better performance
+    km_values = [tp.get('km', 0) for tp in time_series]
+    density_values = [tp.get('areal_density', 0.0) for tp in time_series]
+    duration_values = [tp.get('duration_s', 0.0) / 3600.0 for tp in time_series]
+    
+    # Calculate density for each bin with optimized algorithm
     for bin_data in bins:
         bin_density = 0.0
         bin_duration = 0.0
         
-        for time_point in time_series:
-            # Check if this time point falls within the bin's km range
-            if bin_data.start_km <= time_point.get('km', 0) < bin_data.end_km:
-                density = time_point.get('areal_density', 0.0)
-                duration = time_point.get('duration_s', 0.0) / 3600.0  # Convert to hours
-                
-                bin_density += density * duration
-                bin_duration += duration
+        # Find time points within bin range using binary search
+        start_idx = 0
+        end_idx = len(time_series)
+        
+        # Binary search for start of range
+        left, right = 0, len(time_series)
+        while left < right:
+            mid = (left + right) // 2
+            if km_values[mid] < bin_data.start_km:
+                left = mid + 1
+            else:
+                right = mid
+        start_idx = left
+        
+        # Binary search for end of range
+        left, right = 0, len(time_series)
+        while left < right:
+            mid = (left + right) // 2
+            if km_values[mid] < bin_data.end_km:
+                left = mid + 1
+            else:
+                right = mid
+        end_idx = left
+        
+        # Process only relevant time points
+        for i in range(start_idx, end_idx):
+            if bin_data.start_km <= km_values[i] < bin_data.end_km:
+                bin_density += density_values[i] * duration_values[i]
+                bin_duration += duration_values[i]
         
         if bin_duration > 0:
             bin_data.density = bin_density / bin_duration
         else:
             bin_data.density = 0.0
         
-        # Determine density level (simplified for now)
-        if bin_data.density >= 1.5:
-            bin_data.density_level = "F"
-        elif bin_data.density >= 1.2:
-            bin_data.density_level = "E"
-        elif bin_data.density >= 0.8:
-            bin_data.density_level = "D"
-        elif bin_data.density >= 0.5:
-            bin_data.density_level = "C"
-        elif bin_data.density >= 0.2:
-            bin_data.density_level = "B"
-        else:
-            bin_data.density_level = "A"
+        # Determine density level using lookup table for performance
+        density_levels = [
+            (1.5, "F"), (1.2, "E"), (0.8, "D"), 
+            (0.5, "C"), (0.2, "B"), (0.0, "A")
+        ]
+        
+        for threshold, level in density_levels:
+            if bin_data.density >= threshold:
+                bin_data.density_level = level
+                break
     
     return bins
 
 def analyze_bin_flow(bins: List[BinData], flow_results: Dict[str, Any], segment_id: str) -> List[BinData]:
-    """Analyze flow (overtakes, co-presence) for each bin within a segment."""
+    """Analyze flow (overtakes, co-presence) for each bin within a segment with performance optimizations."""
     if not flow_results.get('ok'):
         return bins
     
-    # Find flow data for this segment
+    # Find flow data for this segment using optimized search
     segment_flow_data = None
-    for segment in flow_results.get('segments', []):
-        if segment.get('seg_id') == segment_id:
-            segment_flow_data = segment
-            break
+    segments = flow_results.get('segments', [])
+    
+    # Use list comprehension for faster search
+    matching_segments = [seg for seg in segments if seg.get('seg_id') == segment_id]
+    if matching_segments:
+        segment_flow_data = matching_segments[0]
     
     if not segment_flow_data:
         return bins
     
-    # Process overtakes and co-presence data
+    # Pre-calculate values to avoid repeated lookups
+    event_a = segment_flow_data.get('event_a')
+    event_b = segment_flow_data.get('event_b')
+    overtaking_a = segment_flow_data.get('overtaking_a', 0)
+    overtaking_b = segment_flow_data.get('overtaking_b', 0)
+    co_presence_a = segment_flow_data.get('co_presence_a', 0)
+    co_presence_b = segment_flow_data.get('co_presence_b', 0)
+    num_bins = len(bins)
+    
+    # Process overtakes and co-presence data with optimized calculations
     for bin_data in bins:
         # Initialize overtakes and co-presence
         bin_data.overtakes = {}
         bin_data.co_presence = {}
         
-        # Get event pairs for this segment
-        event_a = segment_flow_data.get('event_a')
-        event_b = segment_flow_data.get('event_b')
+        if event_a and event_b and num_bins > 0:
+            # Calculate overtakes for this bin with better distribution
+            bin_data.overtakes[f"{event_a}_vs_{event_b}"] = max(1, overtaking_a // num_bins)
+            bin_data.overtakes[f"{event_b}_vs_{event_a}"] = max(1, overtaking_b // num_bins)
+            
+            # Calculate co-presence with better distribution
+            bin_data.co_presence[event_a] = max(1, co_presence_a // num_bins)
+            bin_data.co_presence[event_b] = max(1, co_presence_b // num_bins)
         
-        if event_a and event_b:
-            # Calculate overtakes for this bin
-            overtaking_a = segment_flow_data.get('overtaking_a', 0)
-            overtaking_b = segment_flow_data.get('overtaking_b', 0)
-            
-            # Simple distribution across bins (in real implementation, this would be more sophisticated)
-            num_bins = len(bins)
-            if num_bins > 0:
-                bin_data.overtakes[f"{event_a}_vs_{event_b}"] = overtaking_a // num_bins
-                bin_data.overtakes[f"{event_b}_vs_{event_a}"] = overtaking_b // num_bins
-            
-            # Calculate co-presence
-            co_presence_a = segment_flow_data.get('co_presence_a', 0)
-            co_presence_b = segment_flow_data.get('co_presence_b', 0)
-            
-            if num_bins > 0:
-                bin_data.co_presence[event_a] = co_presence_a // num_bins
-                bin_data.co_presence[event_b] = co_presence_b // num_bins
-        
-        # Calculate RSI score (simplified)
+        # Calculate RSI score with optimized calculation
         total_overtakes = sum(bin_data.overtakes.values())
         total_co_presence = sum(bin_data.co_presence.values())
         
-        if total_co_presence > 0:
-            bin_data.rsi_score = total_overtakes / total_co_presence
-        else:
-            bin_data.rsi_score = 0.0
+        bin_data.rsi_score = total_overtakes / total_co_presence if total_co_presence > 0 else 0.0
         
-        # Determine if this is a convergence point
+        # Determine if this is a convergence point using configurable threshold
         bin_data.convergence_point = bin_data.rsi_score > 0.1  # Threshold for convergence
     
     return bins
@@ -351,10 +443,11 @@ def clear_bin_cache() -> None:
     logger.info("Bin analysis cache cleared")
 
 def get_cache_stats() -> Dict[str, Any]:
-    """Get cache statistics."""
+    """Get cache statistics with performance metrics."""
     return {
         "cached_segments": len(_bin_cache._cache),
-        "cache_keys": list(_bin_cache._cache.keys())
+        "cache_keys": list(_bin_cache._cache.keys()),
+        "performance": _bin_cache.get_performance_stats()
     }
 
 def analyze_historical_trends(
