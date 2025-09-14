@@ -157,9 +157,27 @@ def calculate_dataset_hash(pace_csv: str, segments_csv: str, start_times: Dict[s
 
 def create_bins_for_segment(segment_data: Dict[str, Any], bin_size_km: float) -> List[BinData]:
     """Create bins for a segment based on its length and bin size."""
-    from_km = segment_data.get('from_km', 0.0)
-    to_km = segment_data.get('to_km', 0.0)
-    segment_length = to_km - from_km
+    # Calculate segment boundaries from event-specific ranges
+    max_km = 0.0
+    min_km = float('inf')
+    
+    # Check all event ranges to find the overall segment span
+    for event in ['full', 'half', '10K']:
+        from_key = f"{event}_from_km"
+        to_key = f"{event}_to_km"
+        
+        if from_key in segment_data and to_key in segment_data:
+            from_km = segment_data.get(from_key)
+            to_km = segment_data.get(to_key)
+            
+            if from_km is not None and to_km is not None:
+                min_km = min(min_km, from_km)
+                max_km = max(max_km, to_km)
+    
+    if min_km == float('inf'):
+        min_km = 0.0
+    
+    segment_length = max_km - min_km
     
     if segment_length <= 0:
         return []
@@ -168,10 +186,10 @@ def create_bins_for_segment(segment_data: Dict[str, Any], bin_size_km: float) ->
     num_bins = int(segment_length / bin_size_km) + 1
     
     for i in range(num_bins):
-        start_km = from_km + (i * bin_size_km)
-        end_km = min(from_km + ((i + 1) * bin_size_km), to_km)
+        start_km = min_km + (i * bin_size_km)
+        end_km = min(min_km + ((i + 1) * bin_size_km), max_km)
         
-        if start_km >= to_km:
+        if start_km >= max_km:
             break
             
         bins.append(BinData(
@@ -348,7 +366,8 @@ def analyze_segment_bins(
     
     logger.info(f"Computing bin-level analysis for segment {segment_id}")
     
-    # Load segment data
+    # Load data
+    pace_data = load_runners(pace_csv)
     segments_df = load_segments(segments_csv)
     segment_row = segments_df[segments_df['seg_id'] == segment_id]
     
@@ -361,11 +380,18 @@ def analyze_segment_bins(
     # Create bins for this segment
     bins = create_bins_for_segment(segment_data, bin_size_km)
     
+    # Convert start times from minutes to datetime objects
+    from datetime import datetime, timedelta
+    start_times_dt = {}
+    for event, minutes in start_times.items():
+        # Convert minutes from midnight to datetime
+        start_times_dt[event] = datetime(2024, 1, 1) + timedelta(minutes=minutes)
+    
     # Run density analysis
     density_results = analyze_density_segments(
-        pace_csv=pace_csv,
-        segments_csv=segments_csv,
-        start_times=start_times
+        pace_data=pace_data,
+        start_times=start_times_dt,
+        density_csv_path=segments_csv
     )
     
     # Analyze bin density
