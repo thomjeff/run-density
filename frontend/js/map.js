@@ -391,7 +391,9 @@
         body: JSON.stringify({
           paceCsv: "data/runners.csv",
           segmentsCsv: "data/segments.csv",
-          startTimes: {"Full": 420, "10K": 440, "Half": 460}
+          startTimes: {"Full": 420, "10K": 440, "Half": 460},
+          segmentId: "A1",
+          binSizeKm: 0.3
         })
       });
 
