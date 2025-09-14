@@ -1,0 +1,30 @@
+<div class="text-xs text-gray-500 mb-2">Newest first. Source: /reports</div>
+<table class="min-w-full text-sm">
+  <thead class="bg-gray-50">
+    <tr>
+      <th class="text-left p-2">File</th>
+      <th class="text-left p-2">Type</th>
+      <th class="text-left p-2">Updated</th>
+      <th class="text-right p-2">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for r in items %}
+    <tr class="border-t">
+      <td class="p-2">{{ r.name }}</td>
+      <td class="p-2">{{ r.kind|capitalize }}</td>
+      <td class="p-2">{{ r.mtime.strftime("%Y-%m-%d %H:%M") if r.mtime else "—" }}</td>
+      <td class="p-2 text-right">
+        <a class="px-2 py-1 border rounded hover:bg-gray-50" href="/reports/open?path={{ r.rel }}" target="_blank" rel="noopener">Open</a>
+        {% if r.ext in [".html", ".htm", ".md", ".pdf", ".csv"] %}
+          <button class="px-2 py-1 border rounded hover:bg-gray-50"
+                  hx-get="/reports/preview?path={{ r.rel|urlencode }}"
+                  hx-target="#report-preview"
+                  hx-swap="innerHTML">Preview</button>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<div id="report-preview" class="mt-4"></div>

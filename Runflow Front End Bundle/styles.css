@@ -1,0 +1,8 @@
+body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+header { background: #003366; color: white; padding: 1em; text-align: center; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1em; padding: 2em; }
+.card { display: block; padding: 2em; background: #f2f2f2; text-align: center; text-decoration: none; border-radius: 8px; }
+.card:hover { background: #ddd; }
+.logo { max-width: 200px; display: block; margin: 0 auto 1em; }
+.logo-small { max-height: 50px; float: left; margin-right: 1em; }
+.login-container { text-align: center; margin-top: 10%; }
