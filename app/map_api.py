@@ -814,12 +814,32 @@ async def get_map_data():
     Get map data for the frontend.
     
     This endpoint provides the data needed for map visualization.
+    Returns cached data if available, otherwise indicates no data.
     """
     try:
-        # Generate map data using the map data generator
-        map_data = generate_map_data()
+        # Try to find existing map dataset first (no analysis)
+        from .map_data_generator import find_latest_map_dataset, _load_map_dataset
         
-        return JSONResponse(content=map_data)
+        map_dataset_path = find_latest_map_dataset()
+        
+        if map_dataset_path:
+            logger.info(f"Using existing map dataset: {map_dataset_path}")
+            map_data = _load_map_dataset(map_dataset_path)
+            return JSONResponse(content=map_data)
+        else:
+            # No cached data available - return empty response
+            logger.info("No existing map dataset found - returning empty data")
+            return JSONResponse(content={
+                "ok": True,
+                "source": "no_data",
+                "timestamp": datetime.now().isoformat(),
+                "segments": {},
+                "metadata": {
+                    "total_segments": 0,
+                    "analysis_type": "no_data",
+                    "message": "No cached analysis data available - use 'Generate New Analysis' button"
+                }
+            })
         
     except Exception as e:
         logger.error(f"Error getting map data: {e}")
