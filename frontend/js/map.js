@@ -378,7 +378,7 @@
 
   async function fetchBins() {
     try {
-      updateStatus('Loading bin data...', 'loading');
+      updateStatus('Running bin-level analysis... This may take 2-3 minutes.', 'loading');
       
       // Add performance timing
       const startTime = performance.now();
@@ -495,7 +495,7 @@
   }
 
   async function fetchDensityData(zoneMetric = 'areal') {
-    updateStatus('Fetching data...', 'loading');
+    updateStatus('Running flow and density analysis... This may take 2-3 minutes.', 'loading');
     
     try {
       // Fetch both segments and density data
@@ -675,7 +675,11 @@
     }
   });
 
-  // Initial load
-  fetchDensityData('areal');
+  // Initial load - just load segments, not full analysis
+  fetchSegments().then(segments => {
+    // Load segments without running full density analysis
+    segmentsGeoJSON = segments;
+    renderMap(segments, null);
+  });
   updateLegendStatus();
 })();
