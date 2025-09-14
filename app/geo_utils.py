@@ -13,8 +13,8 @@ Features:
 
 from __future__ import annotations
 import logging
-from typing import Dict, List, Any, Optional, Tuple
 import math
+from typing import Dict, List, Any, Optional, Tuple
 
 try:
     from .bin_analysis import SegmentBinData, BinData
@@ -36,7 +36,8 @@ def calculate_bin_centroid(
     segment_end_lon: float,
     bin_start_km: float,
     bin_end_km: float,
-    segment_length_km: float
+    segment_length_km: float,
+    line_coords: Optional[List[Tuple[float, float]]] = None
 ) -> Tuple[float, float]:
     """
     Calculate the centroid coordinates for a bin within a segment.
@@ -49,6 +50,7 @@ def calculate_bin_centroid(
         bin_start_km: Starting kilometer of the bin
         bin_end_km: Ending kilometer of the bin
         segment_length_km: Total length of the segment in km
+        line_coords: Optional list of coordinates along the segment path
     
     Returns:
         Tuple of (latitude, longitude) for the bin centroid
@@ -60,11 +62,33 @@ def calculate_bin_centroid(
     bin_center_km = (bin_start_km + bin_end_km) / 2.0
     position_ratio = bin_center_km / segment_length_km
     
-    # Interpolate coordinates
-    lat = segment_start_lat + (segment_end_lat - segment_start_lat) * position_ratio
-    lon = segment_start_lon + (segment_end_lon - segment_start_lon) * position_ratio
-    
-    return lat, lon
+    # If we have detailed line coordinates, use them for more accurate positioning
+    if line_coords and len(line_coords) > 2:
+        # Find the coordinate point closest to our bin center position
+        target_index = int(position_ratio * (len(line_coords) - 1))
+        target_index = max(0, min(target_index, len(line_coords) - 1))
+        
+        # Get the coordinate at the target position
+        lon, lat = line_coords[target_index]
+        
+        # Check for NaN values and provide fallback
+        if math.isnan(lat) or math.isnan(lon):
+            logger.warning(f"NaN coordinates detected in line_coords[{target_index}], using fallback")
+            lat = segment_start_lat + (segment_end_lat - segment_start_lat) * position_ratio
+            lon = segment_start_lon + (segment_end_lon - segment_start_lon) * position_ratio
+        
+        return lat, lon
+    else:
+        # Fallback to simple linear interpolation
+        lat = segment_start_lat + (segment_end_lat - segment_start_lat) * position_ratio
+        lon = segment_start_lon + (segment_end_lon - segment_start_lon) * position_ratio
+        
+        # Check for NaN values and provide default
+        if math.isnan(lat) or math.isnan(lon):
+            logger.warning(f"NaN coordinates detected in interpolation, using defaults")
+            lat, lon = DEFAULT_CENTER_LAT, DEFAULT_CENTER_LON
+        
+        return lat, lon
 
 def generate_segment_geometry(
     segment_id: str,
@@ -102,7 +126,8 @@ def generate_bin_geometry(
     bin_start_km: float,
     bin_end_km: float,
     segment_length_km: float,
-    bin_size_m: float
+    bin_size_m: float,
+    line_coords: Optional[List[Tuple[float, float]]] = None
 ) -> Dict[str, Any]:
     """
     Generate GeoJSON geometry for a bin.
@@ -113,7 +138,8 @@ def generate_bin_geometry(
     center_lat, center_lon = calculate_bin_centroid(
         segment_start_lat, segment_start_lon,
         segment_end_lat, segment_end_lon,
-        bin_start_km, bin_end_km, segment_length_km
+        bin_start_km, bin_end_km, segment_length_km,
+        line_coords
     )
     
     # Calculate bin width in degrees (approximate)
@@ -213,7 +239,7 @@ def generate_segments_geojson(segments_data: Dict[str, SegmentBinData]) -> Dict[
 
 def generate_bins_geojson(segments_data: Dict[str, SegmentBinData]) -> Dict[str, Any]:
     """
-    Generate GeoJSON for individual bins.
+    Generate GeoJSON for individual bins using real segment coordinates from GPX data.
     
     Args:
         segments_data: Dictionary mapping segment_id to SegmentBinData
@@ -223,48 +249,93 @@ def generate_bins_geojson(segments_data: Dict[str, SegmentBinData]) -> Dict[str,
     """
     features = []
     
-    for segment_id, segment_bins in segments_data.items():
-        # Generate segment geometry for reference
-        segment_geometry = generate_segment_geometry(
-            segment_id=segment_id,
-            segment_label=segment_bins.segment_label
-        )
+    # Load real segment coordinates from GPX data
+    try:
+        from .gpx_processor import load_all_courses, generate_segment_coordinates
+        from .io.loader import load_segments
         
-        # Calculate segment length (simplified)
-        segment_length_km = 1.0  # In practice, this would come from actual data
+        # Load GPX courses
+        courses = load_all_courses("data")
+        
+        # Load segments data to get segment definitions
+        segments_df = load_segments("data/segments.csv")
+        segments_list = segments_df.to_dict('records')
+        
+        # Generate real coordinates for all segments
+        segments_with_coords = generate_segment_coordinates(courses, segments_list)
+        
+        # Create a lookup dictionary for segment coordinates
+        segment_coords_lookup = {}
+        for seg in segments_with_coords:
+            if seg.get("line_coords") and len(seg["line_coords"]) >= 2:
+                segment_coords_lookup[seg["seg_id"]] = {
+                    "line_coords": seg["line_coords"],
+                    "from_km": seg["from_km"],
+                    "to_km": seg["to_km"]
+                }
+        
+        logger.info(f"Loaded coordinates for {len(segment_coords_lookup)} segments")
+        
+    except Exception as e:
+        logger.warning(f"Could not load GPX coordinates: {e}. Using fallback coordinates.")
+        segment_coords_lookup = {}
+    
+    for segment_id, segment_bins in segments_data.items():
+        # Get real coordinates for this segment
+        segment_coords = segment_coords_lookup.get(segment_id)
+        
+        if segment_coords and segment_coords["line_coords"]:
+            # Use real segment coordinates
+            line_coords = segment_coords["line_coords"]
+            from_km = segment_coords["from_km"]
+            to_km = segment_coords["to_km"]
+            segment_length_km = to_km - from_km
+            
+            # Calculate segment start and end points
+            start_lon, start_lat = line_coords[0]
+            end_lon, end_lat = line_coords[-1]
+            
+            logger.info(f"Using real coordinates for segment {segment_id}: {len(line_coords)} points, {segment_length_km:.2f}km")
+            
+        else:
+            # Fallback to default coordinates
+            logger.warning(f"No real coordinates found for segment {segment_id}, using defaults")
+            start_lat, start_lon = DEFAULT_CENTER_LAT, DEFAULT_CENTER_LON
+            end_lat, end_lon = DEFAULT_CENTER_LAT + 0.01, DEFAULT_CENTER_LON + 0.01
+            segment_length_km = 1.0
         
         # Generate bin features
         for bin_data in segment_bins.bins:
-            # Calculate bin centroid
+            # Calculate bin centroid using real segment coordinates
             center_lat, center_lon = calculate_bin_centroid(
-                DEFAULT_CENTER_LAT, DEFAULT_CENTER_LON,
-                DEFAULT_CENTER_LAT + 0.01, DEFAULT_CENTER_LON + 0.01,
-                bin_data.start_km, bin_data.end_km, segment_length_km
-            )
-            
-            # Generate bin geometry
-            geometry = generate_bin_geometry(
-                DEFAULT_CENTER_LAT, DEFAULT_CENTER_LON,
-                DEFAULT_CENTER_LAT + 0.01, DEFAULT_CENTER_LON + 0.01,
+                start_lat, start_lon, end_lat, end_lon,
                 bin_data.start_km, bin_data.end_km, segment_length_km,
-                segment_bins.bin_size_m
+                line_coords if segment_coords else None
             )
             
-            # Create bin properties
+            # Generate bin geometry using real segment coordinates
+            geometry = generate_bin_geometry(
+                start_lat, start_lon, end_lat, end_lon,
+                bin_data.start_km, bin_data.end_km, segment_length_km,
+                segment_bins.bin_size_m,
+                line_coords if segment_coords else None
+            )
+            
+            # Create bin properties with NaN safety checks
             properties = {
                 "segment_id": segment_id,
                 "segment_label": segment_bins.segment_label,
                 "bin_index": bin_data.bin_index,
                 "start_km": bin_data.start_km,
                 "end_km": bin_data.end_km,
-                "density": round(bin_data.density, 3),
+                "density": round(bin_data.density, 3) if not math.isnan(bin_data.density) else 0.0,
                 "density_level": bin_data.density_level,
                 "overtakes": bin_data.overtakes,
                 "co_presence": bin_data.co_presence,
-                "rsi_score": round(bin_data.rsi_score, 3),
+                "rsi_score": round(bin_data.rsi_score, 3) if not math.isnan(bin_data.rsi_score) else 0.0,
                 "convergence_point": bin_data.convergence_point,
-                "centroid_lat": round(center_lat, 6),
-                "centroid_lon": round(center_lon, 6)
+                "centroid_lat": round(center_lat, 6) if not math.isnan(center_lat) else round(DEFAULT_CENTER_LAT, 6),
+                "centroid_lon": round(center_lon, 6) if not math.isnan(center_lon) else round(DEFAULT_CENTER_LON, 6)
             }
             
             # Create feature

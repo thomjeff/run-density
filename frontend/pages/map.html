@@ -15,8 +15,8 @@
   <div class="metric-toggle">
     <label>Zone by:</label>
     <select id="metric">
-      <option value="areal">areal</option>
       <option value="crowd">crowd</option>
+      <option value="areal">areal</option>
     </select>
     <button id="refresh" class="refresh-btn">Refresh</button>
   </div>
@@ -25,18 +25,8 @@
     <button id="colorMode" class="display-btn active">Color</button>
     <button id="bwMode" class="display-btn">B&W</button>
   </div>
-  <div class="layer-control">
-    <label>View Mode:</label>
-    <select id="viewMode">
-      <option value="segments">Segments</option>
-      <option value="bins">Bin-Level</option>
-    </select>
-  </div>
-  <div class="bin-controls" id="binControls" style="display: none;">
-    <label>Bin Analysis:</label>
+  <div class="analysis-controls">
     <button id="generateAnalysis" class="bin-btn primary">Generate New Analysis</button>
-    <button id="loadBins" class="bin-btn">Load Bins</button>
-    <button id="clearBins" class="bin-btn">Clear Bins</button>
   </div>
   <div class="zone-filter">
     <label>Show zones:</label>
@@ -54,6 +44,17 @@
   </div>
   <div id="meta"></div>
   <div id="status" class="status loading">Loading density data...</div>
+</div>
+
+<!-- Segment Details Sidebar -->
+<div id="segmentDetails" class="segment-details" style="display: none;">
+  <div class="segment-details-header">
+    <h3 id="selectedSegmentTitle">Segment Details</h3>
+    <button id="closeSegmentDetails" class="close-btn">&times;</button>
+  </div>
+  <div id="segmentDetailsContent" class="segment-details-content">
+    <!-- Content will be populated by JavaScript -->
+  </div>
 </div>
 
 <!-- Legend -->

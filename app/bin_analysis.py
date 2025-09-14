@@ -447,21 +447,99 @@ def get_all_segment_bins(
     segments_df = load_segments(segments_csv)
     segment_ids = segments_df['seg_id'].tolist()
     
+    # Run density and flow analysis ONCE for all segments
+    logger.info("Running density and flow analysis for all segments...")
+    pace_data = load_runners(pace_csv)
+    
+    # Convert start times from minutes to datetime objects
+    from datetime import datetime, timedelta
+    start_times_dt = {}
+    for event, minutes in start_times.items():
+        start_times_dt[event] = datetime(2024, 1, 1) + timedelta(minutes=minutes)
+    
+    # Run analysis once for all segments
+    density_results = analyze_density_segments(
+        pace_data=pace_data,
+        start_times=start_times_dt,
+        density_csv_path=segments_csv
+    )
+    
+    flow_results = analyze_temporal_flow_segments(
+        pace_csv=pace_csv,
+        segments_csv=segments_csv,
+        start_times=start_times
+    )
+    
+    # Now process each segment with the pre-computed results
     results = {}
     for segment_id in segment_ids:
         try:
-            results[segment_id] = analyze_segment_bins(
+            results[segment_id] = _analyze_segment_bins_with_results(
                 segment_id=segment_id,
-                pace_csv=pace_csv,
-                segments_csv=segments_csv,
-                start_times=start_times,
+                segments_df=segments_df,
+                density_results=density_results,
+                flow_results=flow_results,
                 bin_size_km=bin_size_km
             )
         except Exception as e:
             logger.error(f"Error analyzing bins for segment {segment_id}: {e}")
-            continue
+            # Create empty result for failed segment
+            results[segment_id] = SegmentBinData(
+                segment_id=segment_id,
+                segment_label=segment_id,
+                bins=[],
+                total_bins=0,
+                bin_size_m=bin_size_km * 1000,
+                generated_at=datetime.now()
+            )
     
     return results
+
+def _analyze_segment_bins_with_results(
+    segment_id: str,
+    segments_df: Any,
+    density_results: Dict[str, Any],
+    flow_results: Dict[str, Any],
+    bin_size_km: float
+) -> SegmentBinData:
+    """
+    Analyze bin-level data for a specific segment using pre-computed results.
+    
+    This is a helper function that processes individual segments without
+    re-running the full density and flow analysis.
+    """
+    # Get segment data
+    segment_row = segments_df[segments_df['seg_id'] == segment_id]
+    if segment_row.empty:
+        raise ValueError(f"Segment {segment_id} not found in segments data")
+    
+    segment_data = segment_row.iloc[0].to_dict()
+    segment_label = segment_data.get('seg_label', segment_id)
+    
+    # Create bins for this segment
+    bins = create_bins_for_segment(segment_data, bin_size_km)
+    
+    # Analyze density for this segment's bins
+    bins = analyze_bin_density(bins, density_results, segment_id)
+    
+    # Analyze flow for this segment's bins
+    bins = analyze_bin_flow(bins, flow_results, segment_id)
+    
+    # Create result
+    result = SegmentBinData(
+        segment_id=segment_id,
+        segment_label=segment_label,
+        bins=bins,
+        total_bins=len(bins),
+        bin_size_m=bin_size_km * 1000,
+        generated_at=datetime.now()
+    )
+    
+    # Cache the result
+    dataset_hash = calculate_dataset_hash("", "", {})
+    _bin_cache.set(segment_id, dataset_hash, bin_size_km, result)
+    
+    return result
 
 def clear_bin_cache() -> None:
     """Clear all cached bin data."""

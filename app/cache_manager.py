@@ -15,8 +15,90 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, Tuple
 from datetime import datetime, timezone
 from pathlib import Path
+import pandas as pd
+import numpy as np
 
 logger = logging.getLogger(__name__)
+
+class AnalysisJSONEncoder(json.JSONEncoder):
+    """Custom JSON encoder for analysis results containing pandas DataFrames and numpy arrays."""
+    
+    def default(self, obj):
+        if isinstance(obj, pd.DataFrame):
+            return {
+                "_type": "DataFrame",
+                "data": obj.to_dict('records'),
+                "index": obj.index.tolist(),
+                "columns": obj.columns.tolist()
+            }
+        elif isinstance(obj, pd.Series):
+            return {
+                "_type": "Series",
+                "data": obj.to_dict(),
+                "index": obj.index.tolist(),
+                "name": obj.name
+            }
+        elif isinstance(obj, np.ndarray):
+            return {
+                "_type": "ndarray",
+                "data": obj.tolist(),
+                "shape": obj.shape,
+                "dtype": str(obj.dtype)
+            }
+        elif isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
+        elif hasattr(obj, '__dict__'):
+            # Handle custom objects by converting to dict
+            return obj.__dict__
+        return super().default(obj)
+
+def serialize_analysis_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Serialize analysis data for JSON storage."""
+    try:
+        # Convert to JSON and back to ensure serialization works
+        json_str = json.dumps(data, cls=AnalysisJSONEncoder, indent=2)
+        return json.loads(json_str)
+    except Exception as e:
+        logger.error(f"Failed to serialize analysis data: {e}")
+        # Return a simplified version that can be serialized
+        return {
+            "error": "Serialization failed",
+            "original_keys": list(data.keys()) if isinstance(data, dict) else "not_dict",
+            "error_message": str(e)
+        }
+
+def deserialize_analysis_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Deserialize analysis data from JSON storage."""
+    try:
+        # Convert DataFrames back from serialized format
+        def convert_dataframe(obj):
+            if isinstance(obj, dict) and obj.get("_type") == "DataFrame":
+                df = pd.DataFrame(obj["data"])
+                df.index = obj["index"]
+                df.columns = obj["columns"]
+                return df
+            elif isinstance(obj, dict) and obj.get("_type") == "Series":
+                series = pd.Series(obj["data"])
+                series.index = obj["index"]
+                series.name = obj["name"]
+                return series
+            elif isinstance(obj, dict) and obj.get("_type") == "ndarray":
+                return np.array(obj["data"]).reshape(obj["shape"]).astype(obj["dtype"])
+            elif isinstance(obj, dict):
+                return {k: convert_dataframe(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_dataframe(item) for item in obj]
+            else:
+                return obj
+        
+        return convert_dataframe(data)
+    except Exception as e:
+        logger.error(f"Failed to deserialize analysis data: {e}")
+        return data
 
 class CacheEntry:
     """Data structure for cached analysis results."""
@@ -34,7 +116,7 @@ class CacheEntry:
         return {
             "analysis_type": self.analysis_type,
             "dataset_hash": self.dataset_hash,
-            "data": self.data,
+            "data": serialize_analysis_data(self.data),
             "timestamp": self.timestamp.isoformat(),
             "metadata": self.metadata
         }
@@ -45,7 +127,7 @@ class CacheEntry:
         return cls(
             analysis_type=data["analysis_type"],
             dataset_hash=data["dataset_hash"],
-            data=data["data"],
+            data=deserialize_analysis_data(data["data"]),
             timestamp=datetime.fromisoformat(data["timestamp"]),
             metadata=data.get("metadata", {})
         )

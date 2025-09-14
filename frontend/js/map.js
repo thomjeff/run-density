@@ -1,5 +1,13 @@
 // Map Page JavaScript
 (function(){
+  // Configuration - should be loaded from server or environment
+  const CONFIG = {
+    startTimes: {"Full": 420, "10K": 440, "Half": 460},
+    paceCsv: "data/runners.csv",
+    segmentsCsv: "data/segments.csv",
+    apiBaseUrl: "" // Will be set dynamically
+  };
+
   const ZONES = {
     "green":"#4CAF50",
     "yellow":"#FFC107",
@@ -21,12 +29,40 @@
 
   let currentLayer = null;
   let currentSummary = null;
-  let currentViewMode = 'segments';
+  let currentViewMode = 'segments'; // Will be updated after DOM loads
+  let bySeg = {};
+  let allBinsData = null; // Store all bin data for filtering
 
   function updateStatus(message, type = 'loading') {
     const statusEl = document.getElementById('status');
     statusEl.textContent = message;
     statusEl.className = `status ${type}`;
+  }
+
+
+  function filterBinsBySegment(selectedSegmentId) {
+    if (!allBinsData) {
+      console.log('No bin data available for filtering');
+      return null;
+    }
+    
+    if (!selectedSegmentId) {
+      console.log('No segment selected, showing all bins');
+      return allBinsData;
+    }
+    
+    // Filter bins by selected segment
+    const filteredFeatures = allBinsData.features.filter(feature => 
+      feature.properties.segment_id === selectedSegmentId
+    );
+    
+    const filteredBinsData = {
+      ...allBinsData,
+      features: filteredFeatures
+    };
+    
+    console.log(`Filtered bins for segment ${selectedSegmentId}: ${filteredFeatures.length} bins`);
+    return filteredBinsData;
   }
 
   function updateLegendStatus() {
@@ -46,8 +82,115 @@
     }
   }
 
+  function determineZone(density) {
+    // Determine zone color based on density value using same thresholds as backend
+    if (density < 0.36) {
+      return "green";
+    } else if (density < 0.54) {
+      return "yellow";
+    } else if (density < 0.72) {
+      return "orange";
+    } else if (density < 1.08) {
+      return "red";
+    } else {
+      return "dark-red";
+    }
+  }
+
+  function getZoneColor(zone) {
+    const zoneColors = {
+      "green": "#4CAF50",
+      "yellow": "#FFC107", 
+      "orange": "#FF9800",
+      "red": "#F44336",
+      "dark-red": "#D32F2F"
+    };
+    return zoneColors[zone] || "#666";
+  }
+
+  function showSegmentDetails(segmentId, segmentData) {
+    const sidebar = document.getElementById('segmentDetails');
+    const title = document.getElementById('selectedSegmentTitle');
+    const content = document.getElementById('segmentDetailsContent');
+    
+    if (!segmentData) {
+      console.warn('No segment data available for', segmentId);
+      return;
+    }
+    
+    // Update title
+    title.textContent = `${segmentId} — ${segmentData.segment_label || segmentId}`;
+    
+    // Build detailed content
+    let html = '';
+    
+    // Basic Info Section
+    html += '<div class="detail-section">';
+    html += '<h4>Basic Information</h4>';
+    html += `<div class="detail-item"><span class="detail-label">Segment ID</span><span class="detail-value">${segmentId}</span></div>`;
+    html += `<div class="detail-item"><span class="detail-label">Label</span><span class="detail-value">${segmentData.segment_label || '—'}</span></div>`;
+    html += `<div class="detail-item"><span class="detail-label">Width</span><span class="detail-value">${segmentData.width_m ? segmentData.width_m.toFixed(1) + 'm' : '—'}</span></div>`;
+    html += '</div>';
+    
+    // Density Metrics Section
+    html += '<div class="detail-section">';
+    html += '<h4>Density Metrics</h4>';
+    html += `<div class="detail-item"><span class="detail-label">Zone</span><span class="detail-value zone ${segmentData.zone || 'green'}">${(segmentData.zone || 'green').toUpperCase()}</span></div>`;
+    html += `<div class="detail-item"><span class="detail-label">Peak Areal Density</span><span class="detail-value">${segmentData.peak_areal_density ? segmentData.peak_areal_density.toFixed(3) + ' pax/m' : '—'}</span></div>`;
+    html += `<div class="detail-item"><span class="detail-label">Peak Crowd Density</span><span class="detail-value">${segmentData.peak_crowd_density ? segmentData.peak_crowd_density.toFixed(3) + ' pax/m²' : '—'}</span></div>`;
+    html += '</div>';
+    
+    // Flow Information Section
+    html += '<div class="detail-section">';
+    html += '<h4>Flow Information</h4>';
+    const flowType = segmentData.flow_type || 'normal';
+    const flowIndicator = `<span class="flow-indicator ${flowType}"></span>`;
+    html += `<div class="detail-item"><span class="detail-label">Flow Type</span><span class="detail-value">${flowIndicator}${flowType.charAt(0).toUpperCase() + flowType.slice(1)}</span></div>`;
+    html += '</div>';
+    
+    // Add any additional metrics if available
+    if (segmentData.overtakes || segmentData.co_presence) {
+      html += '<div class="detail-section">';
+      html += '<h4>Flow Analysis</h4>';
+      if (segmentData.overtakes) {
+        const overtakesStr = Object.entries(segmentData.overtakes)
+          .map(([key, value]) => `${key}: ${value}`)
+          .join(', ');
+        html += `<div class="detail-item"><span class="detail-label">Overtakes</span><span class="detail-value">${overtakesStr}</span></div>`;
+      }
+      if (segmentData.co_presence) {
+        const coPresenceStr = Object.entries(segmentData.co_presence)
+          .map(([key, value]) => `${key}: ${value}`)
+          .join(', ');
+        html += `<div class="detail-item"><span class="detail-label">Co-presence</span><span class="detail-value">${coPresenceStr}</span></div>`;
+      }
+      html += '</div>';
+    }
+    
+    content.innerHTML = html;
+    sidebar.classList.add('show');
+  }
+
+  function hideSegmentDetails() {
+    const sidebar = document.getElementById('segmentDetails');
+    sidebar.classList.remove('show');
+  }
+
+
+
   function styleFor(seg) {
-    const zone = (seg && seg.zone) || 'green';
+    // Determine zone based on selected metric
+    const metric = document.getElementById('metric').value;
+    let density;
+    if (metric === 'crowd' && seg && seg.peak_crowd_density !== undefined) {
+      density = seg.peak_crowd_density;
+    } else if (seg && seg.peak_areal_density !== undefined) {
+      density = seg.peak_areal_density;
+    } else {
+      density = 0; // Default to green for missing data
+    }
+    
+    const zone = determineZone(density);
     
     // Check if this zone should be visible
     const zoneFilter = document.getElementById('zoneFilter');
@@ -78,12 +221,57 @@
       
       return bwStyles[zone] || bwStyles["green"];
     } else {
-      // Color mode
-      return {
+      // Enhanced color mode with flow type indicators
+      const baseStyle = {
         color: ZONES[zone] || '#4CAF50',
         weight: 6,
         opacity: 0.9
       };
+      
+      // Add flow type visual indicators and highlight high-flow segments
+      if (seg && seg.flow_type) {
+        switch (seg.flow_type) {
+          case 'overtake':
+            baseStyle.dashArray = "8,4"; // Dashed line for overtake segments
+            baseStyle.weight = 7; // Slightly thicker
+            break;
+          case 'convergence':
+            baseStyle.dashArray = "12,6"; // Different dash pattern for convergence
+            baseStyle.weight = 8; // Thicker for convergence points
+            break;
+          case 'bottleneck':
+            baseStyle.dashArray = "4,2"; // Tight dashes for bottlenecks
+            baseStyle.weight = 8; // Thicker for bottlenecks
+            break;
+          default:
+            // Solid line for normal flow
+            break;
+        }
+      }
+      
+      // Add special highlighting for high-flow segments
+      if (seg && seg.peak_crowd_density > 1.5) {
+        // High crowd density - add pulsing effect with thicker line
+        baseStyle.weight = Math.max(baseStyle.weight, 8);
+        baseStyle.opacity = 1.0;
+        // Add a subtle glow effect by making it slightly brighter
+        if (baseStyle.color === '#4CAF50') baseStyle.color = '#66BB6A';
+        else if (baseStyle.color === '#FFC107') baseStyle.color = '#FFD54F';
+        else if (baseStyle.color === '#FF9800') baseStyle.color = '#FFB74D';
+        else if (baseStyle.color === '#F44336') baseStyle.color = '#EF5350';
+      }
+      
+      // Add special highlighting for segments with high overtakes
+      if (seg && seg.overtakes) {
+        const overtakeValues = Object.values(seg.overtakes);
+        const maxOvertakes = Math.max(...overtakeValues);
+        if (maxOvertakes > 500) { // High overtake threshold
+          baseStyle.weight = Math.max(baseStyle.weight, 9);
+          baseStyle.dashArray = "6,3"; // Distinctive pattern for high overtakes
+        }
+      }
+      
+      return baseStyle;
     }
   }
 
@@ -91,6 +279,8 @@
     const densityLevel = bin.density_level || 'A';
     const density = bin.density || 0;
     const convergencePoint = bin.convergence_point || false;
+    
+    console.log('Styling bin:', bin.segment_id, bin.bin_index, 'density_level:', densityLevel);
     
     // Map density levels to colors
     const densityColors = {
@@ -120,7 +310,10 @@
     
     const zone = levelToZone[densityLevel] || "green";
     
+    console.log('Bin zone check:', zone, 'selectedZones:', selectedZones, 'included:', selectedZones.includes(zone));
+    
     if (!selectedZones.includes(zone)) {
+      console.log('Bin filtered out due to zone filter');
       return {
         color: baseColor,
         weight: 2,
@@ -143,23 +336,32 @@
       };
     } else {
       // Color mode for bins
-      return {
+      const style = {
         color: baseColor,
         weight: 2,
         opacity: 0.7,
         fillOpacity: 0.4,
         dashArray: convergencePoint ? "3,3" : null
       };
+      console.log('Final bin style:', style);
+      return style;
     }
   }
 
   function renderBins(binsData) {
+    console.log('renderBins called with:', binsData);
+    console.log('Number of bin features:', binsData.features.length);
+    
     // Performance timing
     const startTime = performance.now();
     
     // Remove existing layer if any
     if (currentLayer) {
+      console.log('Removing existing layer:', currentLayer);
       map.removeLayer(currentLayer);
+      console.log('Layer removed successfully');
+    } else {
+      console.log('No existing layer to remove');
     }
 
     // Pre-calculate styling for better performance
@@ -222,22 +424,26 @@
         });
       }
     }).addTo(map);
+    
+    console.log('Bin layer added to map:', currentLayer);
 
     // Fit bounds if we have features
     try { 
       if (binsData.features.length > 0) {
-        map.fitBounds(currentLayer.getBounds(), {padding:[30,30]});
+        const bounds = currentLayer.getBounds();
+        map.fitBounds(bounds, {padding:[30,30]});
+        console.log('Fitted map bounds to bins:', bounds);
       }
-    } catch(_) {}
+    } catch(error) {
+      console.error('Error fitting bounds:', error);
+    }
 
     // Performance timing
     const endTime = performance.now();
     const renderTime = Math.round(endTime - startTime);
 
     // Update UI with performance info
-    const meta = document.getElementById('meta');
-    meta.textContent = `Bin-Level View: ${binsData.features.length} bins (${renderTime}ms)`;
-    
+    console.log(`Rendered ${binsData.features.length} bins in ${renderTime}ms`);
     updateStatus(`Rendered ${binsData.features.length} bins in ${renderTime}ms`, 'success');
   }
 
@@ -248,12 +454,19 @@
     }
 
     currentSummary = summary;
-    const bySeg = {};
-    (summary.segments || []).forEach(s => { bySeg[s.seg_id] = s; });
+    bySeg = {}; // Use global bySeg variable
+    if (summary && summary.segments) {
+      summary.segments.forEach(s => { bySeg[s.seg_id] = s; });
+    } else if (summary && summary.data && summary.data.segments) {
+      // Handle the actual data structure from density analysis
+      Object.entries(summary.data.segments).forEach(([segId, segData]) => {
+        bySeg[segId] = segData.summary; // Use the summary part of each segment
+      });
+    }
 
     // Debug logging
     console.log('Density summary segments:', Object.keys(bySeg));
-    console.log('GeoJSON features:', geojson.features.map(f => f.properties.seg_id));
+    console.log('GeoJSON features:', geojson.features.map(f => f.properties.segment_id));
     console.log('D2 in density data:', bySeg['D2']);
     console.log('D2 in GeoJSON:', geojson.features.find(f => f.properties.seg_id === 'D2'));
 
@@ -261,19 +474,19 @@
     const problematicSegments = [];
     geojson.features.forEach(feature => {
       if (feature.properties.coord_issue) {
-        problematicSegments.push(feature.properties.seg_id);
-        console.warn(`⚠️ Segment ${feature.properties.seg_id} has coordinate issues`);
+        problematicSegments.push(feature.properties.segment_id);
+        console.warn(`⚠️ Segment ${feature.properties.segment_id} has coordinate issues`);
       }
     });
 
     // Create new layer
     currentLayer = L.geoJSON(geojson, {
       style: f => {
-        const seg = bySeg[f.properties.seg_id];
-        console.log(`Styling ${f.properties.seg_id}:`, seg);
+        const seg = bySeg[f.properties.segment_id];
+        console.log(`Styling ${f.properties.segment_id}:`, seg);
         
         // Special styling for problematic segments
-        if (problematicSegments.includes(f.properties.seg_id)) {
+        if (problematicSegments.includes(f.properties.segment_id)) {
           return {
             color: '#FF0000', // Red to highlight the issue
             weight: 8,
@@ -285,20 +498,61 @@
         return styleFor(seg);
       },
       onEachFeature: function (feature, layer) {
-        const seg = bySeg[feature.properties.seg_id];
-        const label = feature.properties.segment_label || (seg && seg.segment_label) || feature.properties.seg_id;
-        const zone = seg ? seg.zone : 'green';
-        const areal = seg ? seg.areal_density : null;
-        const crowd = seg ? seg.crowd_density : null;
+        const seg = bySeg[feature.properties.segment_id];
+        const label = feature.properties.seg_label || (seg && seg.segment_label) || feature.properties.segment_id;
+        const areal = seg ? seg.peak_areal_density : null;
+        const crowd = seg ? seg.peak_crowd_density : null;
         
-        // Add warning for problematic segments
-        let tooltipText = `<div class="seg-label">${feature.properties.seg_id} — ${label}</div>`;
-        if (problematicSegments.includes(feature.properties.seg_id)) {
-          tooltipText += `<div style="color: red; font-weight: bold;">⚠️ COORDINATE ISSUE</div>`;
+        // Determine zone based on selected metric (same logic as styleFor)
+        const metric = document.getElementById('metric').value;
+        let density;
+        if (metric === 'crowd' && crowd !== null) {
+          density = crowd;
+        } else if (areal !== null) {
+          density = areal;
+        } else {
+          density = 0;
         }
-        tooltipText += `zone: <b>${zone}</b><br/>areal: ${areal ?? '—'} pax/m<br/>crowd: ${crowd ?? '—'} pax/m²`;
+        const zone = determineZone(density);
+        
+        // Enhanced tooltip with comprehensive segment data
+        const segmentData = seg; // Use the seg variable that's already available
+        const flowType = segmentData?.flow_type || 'none';
+        const width = segmentData?.width_m || 0;
+        
+        let tooltipText = `<div class="seg-label" style="font-size: 14px; font-weight: bold; margin-bottom: 8px;">${feature.properties.segment_id} — ${label}</div>`;
+        
+        if (problematicSegments.includes(feature.properties.segment_id)) {
+          tooltipText += `<div style="color: red; font-weight: bold; margin-bottom: 6px;">⚠️ COORDINATE ISSUE</div>`;
+        }
+        
+        // Density metrics with better formatting
+        tooltipText += `<div style="margin-bottom: 6px;">`;
+        tooltipText += `<div style="font-weight: bold; color: #2196F3;">Density Metrics</div>`;
+        tooltipText += `<div>Zone: <b style="color: ${getZoneColor(zone)};">${zone.toUpperCase()}</b></div>`;
+        tooltipText += `<div>Areal: <b>${areal ? areal.toFixed(2) : '—'}</b> pax/m</div>`;
+        tooltipText += `<div>Crowd: <b>${crowd ? crowd.toFixed(2) : '—'}</b> pax/m²</div>`;
+        tooltipText += `</div>`;
+        
+        // Flow and geometry info
+        tooltipText += `<div style="margin-bottom: 6px;">`;
+        tooltipText += `<div style="font-weight: bold; color: #4CAF50;">Flow & Geometry</div>`;
+        tooltipText += `<div>Flow Type: <b>${flowType}</b></div>`;
+        tooltipText += `<div>Width: <b>${width.toFixed(1)}m</b></div>`;
+        tooltipText += `</div>`;
+        
+        // Add segment length if available
+        if (feature.properties.from_km && feature.properties.to_km) {
+          const length = (feature.properties.to_km - feature.properties.from_km).toFixed(2);
+          tooltipText += `<div style="font-size: 11px; color: #666;">Length: ${length}km</div>`;
+        }
         
         layer.bindTooltip(tooltipText, { sticky:true });
+        
+        // Add click handler for segment details
+        layer.on('click', (e) => {
+          showSegmentDetails(feature.properties.segment_id, segmentData);
+        });
         
         layer.on('mouseover', () => layer.setStyle({ weight: 8 }));
         layer.on('mouseout',  () => layer.setStyle({ weight: 6 }));
@@ -312,24 +566,21 @@
       }
     } catch(_) {}
 
-    // Update UI
-    const metricSel = document.getElementById('metric');
-    const meta = document.getElementById('meta');
-    metricSel.value = (summary.zone_by || 'areal');
-    meta.textContent = `Zoning: ${summary.zone_by || 'areal'}`;
+    // Update UI - don't reset the dropdown value
     
     // Show warning for problematic segments
     if (problematicSegments.length > 0) {
-      updateStatus(`Loaded ${summary.segments?.length || 0} segments (${problematicSegments.length} with coordinate issues)`, 'error');
+      updateStatus(`Loaded ${summary?.segments?.length || 0} segments (${problematicSegments.length} with coordinate issues)`, 'error');
       console.warn(`⚠️ Segments with coordinate issues: ${problematicSegments.join(', ')}`);
     } else {
-      updateStatus(`Loaded ${summary.segments?.length || 0} segments`, 'success');
+      updateStatus(`Loaded ${summary?.segments?.length || 0} segments`, 'success');
     }
   }
 
   async function fetchSegments() {
     try {
-      const response = await fetch('/api/segments.geojson?paceCsv=data/runners.csv&segmentsCsv=data/segments.csv&startTimes={"Full":420,"10K":440,"Half":460}');
+      const startTimes = encodeURIComponent(JSON.stringify(CONFIG.startTimes));
+      const response = await fetch(`/api/segments.geojson?paceCsv=${CONFIG.paceCsv}&segmentsCsv=${CONFIG.segmentsCsv}&startTimes=${startTimes}`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -380,41 +631,41 @@
     try {
       updateStatus('Loading cached data...', 'loading');
       
-      // Load segments first
-      const segments = await fetchSegments();
-      segmentsGeoJSON = segments;
-      renderMap(segments, null);
+      // Use new simplified endpoint
+      const response = await fetch('/api/map-data');
       
-      // Check for cached density analysis
-      const densityStatus = await checkCacheStatus('density');
-      if (densityStatus.cached) {
-        const cachedData = await getCachedAnalysis('density');
-        if (cachedData.ok) {
-          currentSummary = cachedData.data.summary;
-          renderMap(segments, currentSummary);
-          updateStatus(`Loaded cached density analysis from ${formatTimestamp(cachedData.timestamp)}`, 'success');
-          return;
-        }
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
-      // Check for cached bin analysis
-      const binsStatus = await checkCacheStatus('bins');
-      if (binsStatus.cached) {
-        const cachedData = await getCachedAnalysis('bins');
-        if (cachedData.ok) {
-          // Convert cached bin data to GeoJSON
-          const geojson = convertBinsToGeoJSON(cachedData.data);
-          binsGeoJSON = geojson;
-          if (currentViewMode === 'bins') {
-            renderBins(geojson);
-          }
-          updateStatus(`Loaded cached bin analysis from ${formatTimestamp(cachedData.timestamp)}`, 'success');
-          return;
-        }
-      }
+      const mapData = await response.json();
       
-      // No cached data available
-      updateStatus('No cached data found. Click "Generate New Analysis" to run analysis.', 'info');
+      if (mapData.ok) {
+        currentSummary = mapData;
+        
+        // Load segments first
+        const segments = await fetchSegments();
+        segmentsGeoJSON = segments;
+        
+        // Convert mapData.segments to the format expected by renderMap
+        const segmentData = {
+          segments: Object.entries(mapData.segments).map(([segmentId, segmentInfo]) => ({
+            seg_id: segmentId,
+            seg_label: segmentInfo.segment_label,
+            peak_areal_density: segmentInfo.peak_areal_density,
+            peak_crowd_density: segmentInfo.peak_crowd_density,
+            flow_type: segmentInfo.flow_type,
+            width_m: segmentInfo.width_m,
+            zone: segmentInfo.zone
+          }))
+        };
+        
+        // Render segments
+        renderMap(segments, segmentData);
+        updateStatus(`Loaded ${mapData.source} data from ${formatTimestamp(mapData.timestamp)}`, 'success');
+      } else {
+        updateStatus(`Error: ${mapData.error || 'Unknown error'}`, 'error');
+      }
       
     } catch (error) {
       console.error('Error loading cached data:', error);
@@ -422,9 +673,36 @@
     }
   }
 
+  async function loadBinData() {
+    console.log('loadBinData called');
+    try {
+      updateStatus('Loading bin data...', 'loading');
+      
+      const response = await fetch('/api/bins-data');
+      const data = await response.json();
+      console.log('Bin data response:', data);
+      
+      if (data.ok && data.geojson) {
+        allBinsData = data.geojson; // Store all bin data
+        binsGeoJSON = data.geojson;
+        
+        // Render bins on the map
+        renderBins(binsGeoJSON);
+        
+        updateStatus(`Loaded bin data from ${data.source} at ${formatTimestamp(data.timestamp)}`, 'success');
+      } else {
+        updateStatus(`Error: ${data.error || 'Failed to load bin data'}`, 'error');
+      }
+      
+    } catch (error) {
+      console.error('Error loading bin data:', error);
+      updateStatus(`Error loading bin data: ${error.message}`, 'error');
+    }
+  }
+
   async function checkCacheStatus(analysisType) {
     try {
-      const response = await fetch(`/api/cache-status?analysisType=${analysisType}&paceCsv=data/runners.csv&segmentsCsv=data/segments.csv&startTimes=${encodeURIComponent('{"Full": 420, "10K": 440, "Half": 460}')}`);
+      const response = await fetch(`/api/cache-status?analysisType=${analysisType}&paceCsv=${CONFIG.paceCsv}&segmentsCsv=${CONFIG.segmentsCsv}&startTimes=${encodeURIComponent(JSON.stringify(CONFIG.startTimes))}`);
       const data = await response.json();
       return data.cache_status;
     } catch (error) {
@@ -435,7 +713,7 @@
 
   async function getCachedAnalysis(analysisType) {
     try {
-      const response = await fetch(`/api/cached-analysis?analysisType=${analysisType}&paceCsv=data/runners.csv&segmentsCsv=data/segments.csv&startTimes=${encodeURIComponent('{"Full": 420, "10K": 440, "Half": 460}')}`);
+      const response = await fetch(`/api/cached-analysis?analysisType=${analysisType}&paceCsv=${CONFIG.paceCsv}&segmentsCsv=${CONFIG.segmentsCsv}&startTimes=${encodeURIComponent(JSON.stringify(CONFIG.startTimes))}`);
       return await response.json();
     } catch (error) {
       console.error('Error getting cached analysis:', error);
@@ -497,21 +775,10 @@
           <span>Running analysis... Please wait</span>
         </div>
       `;
-      document.querySelector('.control-panel').appendChild(progressDiv);
+      document.querySelector('.panel').appendChild(progressDiv);
       
-      // Force refresh analysis
-      const response = await fetch('/api/force-refresh', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          analysisType: currentViewMode === 'bins' ? 'bins' : 'density',
-          paceCsv: "data/runners.csv",
-          segmentsCsv: "data/segments.csv",
-          startTimes: {"Full": 420, "10K": 440, "Half": 460}
-        })
-      });
+      // Force refresh analysis using new simplified endpoint
+      const response = await fetch('/api/map-data?forceRefresh=true');
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -555,9 +822,9 @@
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          paceCsv: "data/runners.csv",
-          segmentsCsv: "data/segments.csv",
-          startTimes: {"Full": 420, "10K": 440, "Half": 460},
+          paceCsv: CONFIG.paceCsv,
+          segmentsCsv: CONFIG.segmentsCsv,
+          startTimes: CONFIG.startTimes,
           segmentId: "A1",
           binSizeKm: 0.3
         })
@@ -667,7 +934,7 @@
       // Fetch both segments and density data
       const [segments, densityResponse] = await Promise.all([
         fetchSegments(),
-        fetch(`/api/density.summary?zoneMetric=${zoneMetric}`, {
+        fetch(`/api/density/analyze?zoneMetric=${zoneMetric}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -675,7 +942,7 @@
           body: JSON.stringify({
             paceCsv: "data/your_pace_data.csv",
             overlapsCsv: "data/overlaps.csv",
-            startTimes: {"Full":420,"Half":460,"10K":440},
+            startTimes: CONFIG.startTimes,
             stepKm: 0.03,
             timeWindow: 60,
             depth_m: 3.0
@@ -713,56 +980,52 @@
   // Event handlers
   document.getElementById('metric').addEventListener('change', function() {
     if (currentViewMode === 'segments') {
-      fetchDensityData(this.value);
+      // Re-render the map with the new metric for zone determination
+      if (segmentsGeoJSON && currentSummary) {
+        renderMap(segmentsGeoJSON, currentSummary);
+      } else {
+        loadCachedData();
+      }
     }
   });
 
   document.getElementById('refresh').addEventListener('click', function() {
-    if (currentViewMode === 'segments') {
-      const metric = document.getElementById('metric').value;
-      fetchDensityData(metric);
-    } else {
-      fetchBins().then(binsData => {
-        renderBins(binsData);
-      });
-    }
+    // Always reload segment data
+    loadCachedData();
   });
 
   // View mode change handler
-  document.getElementById('viewMode').addEventListener('change', function() {
-    currentViewMode = this.value;
-    const binControls = document.getElementById('binControls');
-    
-    if (currentViewMode === 'bins') {
-      binControls.style.display = 'block';
-      // Load bins if not already loaded
-      if (!binsGeoJSON) {
-        fetchBins().then(binsData => {
-          renderBins(binsData);
-        });
-      } else {
-        renderBins(binsGeoJSON);
-      }
-    } else {
-      binControls.style.display = 'none';
-      // Switch back to segments view
-      if (segmentsGeoJSON && currentSummary) {
-        renderMap(segmentsGeoJSON, currentSummary);
-      } else {
-        fetchDensityData('areal');
-      }
-    }
-  });
+  // View mode is now always segments - no event listener needed
 
   // Bin control handlers
   document.getElementById('generateAnalysis').addEventListener('click', function() {
     generateNewAnalysis();
   });
 
+
+  // Segment selector handler
+  document.getElementById('segmentSelector').addEventListener('change', function() {
+    const selectedSegmentId = this.value;
+    console.log('Segment selected:', selectedSegmentId);
+    
+    if (currentViewMode === 'bins' && allBinsData) {
+      // Filter bins by selected segment
+      const filteredBinsData = filterBinsBySegment(selectedSegmentId);
+      
+      if (filteredBinsData) {
+        binsGeoJSON = filteredBinsData;
+        renderBins(binsGeoJSON);
+        
+        // Update status
+        const segmentText = selectedSegmentId ? ` for segment ${selectedSegmentId}` : '';
+        updateStatus(`Showing ${filteredBinsData.features.length} bins${segmentText}`, 'success');
+      }
+    }
+  });
+
   document.getElementById('loadBins').addEventListener('click', function() {
-    fetchBins().then(binsData => {
-      renderBins(binsData);
-    });
+    // Load bin data for bin view
+    loadBinData();
   });
 
   document.getElementById('clearBins').addEventListener('click', function() {
@@ -845,7 +1108,16 @@
     }
   });
 
-  // Initial load - check for cached data first
+  // Segment details sidebar event listeners
+  document.getElementById('closeSegmentDetails').addEventListener('click', hideSegmentDetails);
+
+
+  // Initialize view mode (always segments now)
+  currentViewMode = 'segments';
+  console.log('View mode set to segments only');
+  
+  // Initial load - always load segment data
+  console.log('Loading segment data...');
   loadCachedData();
   updateLegendStatus();
 })();

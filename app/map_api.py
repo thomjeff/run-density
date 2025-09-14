@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import hashlib
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from fastapi import APIRouter, HTTPException, Query
@@ -25,11 +26,13 @@ try:
     from .geo_utils import generate_segments_geojson, generate_bins_geojson
     from .constants import DISTANCE_BIN_SIZE_KM
     from .cache_manager import get_global_cache_manager
+    from .map_data_generator import generate_map_data, find_latest_reports
 except ImportError:
     from bin_analysis import get_all_segment_bins, analyze_segment_bins, get_cache_stats
     from geo_utils import generate_segments_geojson, generate_bins_geojson
     from constants import DISTANCE_BIN_SIZE_KM
     from cache_manager import get_global_cache_manager
+    from map_data_generator import generate_map_data, find_latest_reports
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +54,127 @@ class FlowBinsRequest(BaseModel):
     segmentId: Optional[str] = None
     binSizeKm: Optional[float] = None
 
+@router.get("/map-data")
+async def get_map_data(
+    forceRefresh: bool = Query(False, description="Force refresh by running new analysis")
+):
+    """
+    Get map visualization data from latest reports or run new analysis.
+    
+    This endpoint implements the simplified approach:
+    - Uses existing reports if available and forceRefresh=False
+    - Runs new analysis if no reports found or forceRefresh=True
+    - Returns data in map-friendly JSON format
+    """
+    try:
+        if forceRefresh:
+            logger.info("Force refresh requested - running new analysis")
+            map_data = generate_map_data()
+        else:
+            # Try to use existing reports first
+            density_md, flow_md, flow_csv = find_latest_reports()
+            if density_md and flow_csv:
+                logger.info("Using existing reports for map data")
+                map_data = generate_map_data()
+            else:
+                logger.info("No existing reports found - running new analysis")
+                map_data = generate_map_data()
+        
+        return JSONResponse(content=map_data)
+        
+    except Exception as e:
+        logger.error(f"Error getting map data: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting map data: {e}")
+
+@router.get("/bins-data")
+async def get_bins_data(
+    forceRefresh: bool = Query(False, description="Force refresh by running new analysis")
+):
+    """
+    Get bin-level visualization data for map display.
+    
+    This endpoint provides bin-level data for the map visualization:
+    - Uses existing analysis data if available and forceRefresh=False
+    - Runs new bin analysis if no data found or forceRefresh=True
+    - Returns GeoJSON data for bin-level visualization
+    """
+    try:
+        if forceRefresh:
+            logger.info("Force refresh requested - running new bin analysis")
+            # Use default data paths and start times
+            pace_csv = "data/runners.csv"
+            segments_csv = "data/segments.csv"
+            start_times = {"Full": 420, "10K": 440, "Half": 460}
+            
+            # Run new bin analysis
+            all_bins = get_all_segment_bins(
+                pace_csv=pace_csv,
+                segments_csv=segments_csv,
+                start_times=start_times
+            )
+            
+            # Generate GeoJSON
+            geojson = generate_bins_geojson(all_bins)
+            
+            return JSONResponse(content={
+                "ok": True,
+                "source": "bin_analysis",
+                "timestamp": datetime.now().isoformat(),
+                "geojson": geojson,
+                "metadata": {
+                    "total_segments": len(all_bins),
+                    "analysis_type": "bins",
+                    "bin_size_km": DISTANCE_BIN_SIZE_KM
+                }
+            })
+        else:
+            # Try to load existing bin data from reports
+            try:
+                from .map_data_generator import find_latest_bin_dataset
+                bin_data = find_latest_bin_dataset()
+                
+                if bin_data and bin_data.get('ok'):
+                    logger.info("Using existing bin data from reports")
+                    return JSONResponse(content=bin_data)
+                else:
+                    logger.info("No existing bin data found - returning empty data")
+                    return JSONResponse(content={
+                        "ok": True,
+                        "source": "placeholder",
+                        "timestamp": datetime.now().isoformat(),
+                        "geojson": {
+                            "type": "FeatureCollection",
+                            "features": []
+                        },
+                        "metadata": {
+                            "total_segments": 0,
+                            "analysis_type": "bins",
+                            "bin_size_km": DISTANCE_BIN_SIZE_KM,
+                            "message": "No bin data available - run analysis first"
+                        }
+                    })
+            except Exception as e:
+                logger.warning(f"Error loading bin data: {e}")
+                return JSONResponse(content={
+                    "ok": True,
+                    "source": "placeholder",
+                    "timestamp": datetime.now().isoformat(),
+                    "geojson": {
+                        "type": "FeatureCollection",
+                        "features": []
+                    },
+                    "metadata": {
+                        "total_segments": 0,
+                        "analysis_type": "bins",
+                        "bin_size_km": DISTANCE_BIN_SIZE_KM,
+                        "message": "Error loading bin data"
+                    }
+                })
+        
+    except Exception as e:
+        logger.error(f"Error getting bins data: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting bins data: {e}")
+
 @router.get("/segments.geojson")
 async def get_segments_geojson(
     paceCsv: str = Query(..., description="Path to pace data CSV"),
@@ -59,29 +183,84 @@ async def get_segments_geojson(
     binSizeKm: Optional[float] = Query(None, description="Bin size in kilometers")
 ):
     """
-    Get GeoJSON data for map segments with bin-level information.
+    Get GeoJSON data for map segments with real GPS coordinates from GPX files.
     
-    This endpoint provides the GeoJSON data needed for map visualization,
-    including segment geometry and bin-level density/flow data.
+    This endpoint provides segment geometry for map visualization using actual
+    race course coordinates from GPX files.
     """
     try:
         # Parse start times
         start_times = json.loads(startTimes)
         
-        # Use default bin size if not provided
-        if binSizeKm is None:
-            binSizeKm = DISTANCE_BIN_SIZE_KM
+        # Load segments data
+        from .io.loader import load_segments
+        segments_data = load_segments(segmentsCsv)
         
-        # Get all segment bin data
-        all_bins = get_all_segment_bins(
-            pace_csv=paceCsv,
-            segments_csv=segmentsCsv,
-            start_times=start_times,
-            bin_size_km=binSizeKm
-        )
+        # Load GPX courses for real coordinates
+        from .gpx_processor import load_all_courses, generate_segment_coordinates
         
-        # Generate GeoJSON
-        geojson = generate_segments_geojson(all_bins)
+        # Load all GPX courses
+        courses = load_all_courses("data")
+        
+        # Convert segments to list of dicts for GPX processing
+        # Use the same logic as the bin analysis to determine which event each segment belongs to
+        segments_list = []
+        for _, segment in segments_data.iterrows():
+            segments_list.append({
+                "seg_id": segment['seg_id'],
+                "segment_label": segment.get('seg_label', segment['seg_id']),
+                # Include all event flags and distance fields for proper event selection
+                "10K": segment.get('10K', 'n'),
+                "half": segment.get('half', 'n'),
+                "full": segment.get('full', 'n'),
+                "10K_from_km": segment.get('10K_from_km'),
+                "10K_to_km": segment.get('10K_to_km'),
+                "half_from_km": segment.get('half_from_km'),
+                "half_to_km": segment.get('half_to_km'),
+                "full_from_km": segment.get('full_from_km'),
+                "full_to_km": segment.get('full_to_km')
+            })
+        
+        # Generate real coordinates from GPX data
+        segments_with_coords = generate_segment_coordinates(courses, segments_list)
+        
+        # Create GeoJSON features
+        geojson = {
+            "type": "FeatureCollection",
+            "features": []
+        }
+        
+        for segment_coords in segments_with_coords:
+            # Use real coordinates if available, otherwise fallback
+            if segment_coords.get('line_coords') and not segment_coords.get('coord_issue'):
+                # Convert tuples to lists for GeoJSON format
+                coordinates = [list(coord) for coord in segment_coords['line_coords']]
+            else:
+                # Fallback to placeholder coordinates
+                coordinates = [
+                    [-66.6, 45.9],  # Fredericton area
+                    [-66.5, 45.9]
+                ]
+            
+            feature = {
+                "type": "Feature",
+                "properties": {
+                    "segment_id": segment_coords['seg_id'],
+                    "seg_label": segment_coords['segment_label'],
+                    "from_km": segment_coords['from_km'],
+                    "to_km": segment_coords['to_km'],
+                    "width_m": 5.0,  # Default width
+                    "flow_type": "none",  # Default flow type
+                    "zone": "green",  # Default zone
+                    "coord_issue": segment_coords.get('coord_issue', False),
+                    "course": segment_coords.get('course', 'Full')
+                },
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": coordinates
+                }
+            }
+            geojson["features"].append(feature)
         
         return JSONResponse(content=geojson)
         
@@ -604,12 +783,21 @@ async def get_cached_analysis(
                 "dataset_hash": dataset_hash
             })
         
+        # Handle timezone-aware vs timezone-naive datetime comparison
+        now = datetime.now()
+        if entry.timestamp.tzinfo is not None:
+            # If entry.timestamp is timezone-aware, make now timezone-aware too
+            now = now.replace(tzinfo=entry.timestamp.tzinfo)
+        elif now.tzinfo is not None:
+            # If now is timezone-aware but entry.timestamp is not, make entry.timestamp timezone-aware
+            entry.timestamp = entry.timestamp.replace(tzinfo=now.tzinfo)
+        
         return JSONResponse(content={
             "ok": True,
             "analysis_type": analysisType,
             "dataset_hash": dataset_hash,
             "timestamp": entry.timestamp.isoformat(),
-            "age_hours": (datetime.now() - entry.timestamp).total_seconds() / 3600,
+            "age_hours": (now - entry.timestamp).total_seconds() / 3600,
             "data": entry.data,
             "metadata": entry.metadata
         })
