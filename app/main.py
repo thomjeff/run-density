@@ -656,63 +656,77 @@ async def get_summary_data():
 
 @app.get("/api/segments")
 async def get_segments_data():
-    """Generate segments.json for frontend map."""
+    """Generate segments.json for frontend map using real course data."""
     try:
-        # For Phase 2, return mock data that matches the expected format
-        # This will be replaced with real analysis in Phase 3
-        segments_data = {
-            "segments": [
-                {
-                    "id": "F1",
-                    "label": "Friel to Station Rd.",
-                    "schema": "on_course_narrow",
-                    "los": "E",
-                    "status": "OVERLOAD",
-                    "metrics": {
-                        "areal_density": 0.03,
-                        "linear_density": 0.10,
-                        "flow_rate": 555,
-                        "flow_supply": 1666,
-                        "flow_capacity": 180
-                    },
-                    "notes": ["Supply > Capacity"],
-                    "geometry": {
-                        "type": "LineString",
-                        "coordinates": [
-                            [-66.6500, 45.9620],
-                            [-66.6480, 45.9630],
-                            [-66.6460, 45.9640],
-                            [-66.6440, 45.9650]
-                        ]
-                    }
+        import pandas as pd
+        import xml.etree.ElementTree as ET
+        
+        # Load segments.csv to get segment definitions
+        segments_df = pd.read_csv('data/segments.csv')
+        
+        # Load GPX data for coordinates
+        def load_gpx_coordinates(gpx_file):
+            tree = ET.parse(gpx_file)
+            root = tree.getroot()
+            coordinates = []
+            
+            # Find all track points
+            for trkpt in root.findall('.//{http://www.topografix.com/GPX/1/1}trkpt'):
+                lat = float(trkpt.get('lat'))
+                lon = float(trkpt.get('lon'))
+                coordinates.append([lon, lat])  # GeoJSON format is [lng, lat]
+            
+            return coordinates
+        
+        # Load full course coordinates
+        full_coords = load_gpx_coordinates('data/Full.gpx')
+        
+        # Create segments based on CSV data
+        segments = []
+        for _, row in segments_df.iterrows():
+            # Calculate segment coordinates based on distance
+            start_km = row['full_from_km']
+            end_km = row['full_to_km']
+            
+            # Convert km to approximate coordinate index (rough estimation)
+            # This is a simplified approach - in reality you'd need proper distance calculations
+            total_coords = len(full_coords)
+            start_idx = int((start_km / 42.2) * total_coords)  # 42.2km is approximate marathon distance
+            end_idx = int((end_km / 42.2) * total_coords)
+            
+            # Ensure indices are within bounds
+            start_idx = max(0, min(start_idx, total_coords - 1))
+            end_idx = max(start_idx + 1, min(end_idx, total_coords - 1))
+            
+            # Extract segment coordinates
+            segment_coords = full_coords[start_idx:end_idx + 1]
+            
+            # Determine zone based on density (mock for now)
+            zone = "green"  # Default zone
+            
+            segment = {
+                "id": row['seg_id'],
+                "label": row['seg_label'],
+                "schema": "course_segment",
+                "los": "A",  # Default LOS
+                "status": "STABLE",
+                "metrics": {
+                    "areal_density": 0.2,
+                    "linear_density": 0.15,
+                    "flow_rate": 100,
+                    "flow_supply": 500,
+                    "flow_capacity": 600
                 },
-                {
-                    "id": "A1",
-                    "label": "Start to Queen/Regent",
-                    "schema": "start_corral",
-                    "los": "A",
-                    "status": "STABLE",
-                    "metrics": {
-                        "areal_density": 0.20,
-                        "linear_density": 0.15,
-                        "flow_rate": 182,
-                        "flow_supply": 500,
-                        "flow_capacity": 600
-                    },
-                    "notes": [],
-                    "geometry": {
-                        "type": "LineString",
-                        "coordinates": [
-                            [-66.6600, 45.9500],
-                            [-66.6580, 45.9510],
-                            [-66.6560, 45.9520],
-                            [-66.6540, 45.9530],
-                            [-66.6520, 45.9540],
-                            [-66.6500, 45.9550]
-                        ]
-                    }
+                "notes": [row['notes']] if pd.notna(row['notes']) else [],
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": segment_coords
                 }
-            ]
+            }
+            segments.append(segment)
+        
+        segments_data = {
+            "segments": segments
         }
         
         return JSONResponse(content=segments_data)
