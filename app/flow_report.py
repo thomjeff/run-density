@@ -27,8 +27,22 @@ except ImportError:
     from storage_service import get_storage_service
     from flow_density_correlation import analyze_flow_density_correlation
 
-# Get app version from constants to avoid circular import
-APP_VERSION = "v1.6.15"  # This should match the version in main.py
+# Get app version from main.py to ensure consistency
+def get_app_version():
+    """Get the current app version from main.py"""
+    try:
+        import re
+        with open('app/main.py', 'r') as f:
+            content = f.read()
+            # Look for version="v1.x.x" pattern
+            match = re.search(r'version="(v\d+\.\d+\.\d+)"', content)
+            if match:
+                return match.group(1)
+    except Exception:
+        pass
+    return "unknown"
+
+APP_VERSION = get_app_version()
 
 
 def generate_temporal_flow_report(
@@ -39,7 +53,8 @@ def generate_temporal_flow_report(
     conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
     output_dir: str = "reports",
     density_results: Optional[Dict[str, Any]] = None,
-    segments_config: Optional[Dict[str, Any]] = None
+    segments_config: Optional[Dict[str, Any]] = None,
+    environment: str = "local"
 ) -> Dict[str, Any]:
     """
     Generate a comprehensive temporal flow analysis report.
@@ -91,7 +106,7 @@ def generate_temporal_flow_report(
         print(f"⚠️ Failed to save flow report to storage: {e}")
 
     # Also generate CSV
-    export_temporal_flow_csv(results, output_dir, start_times, min_overlap_duration, conflict_length_m)
+    export_temporal_flow_csv(results, output_dir, start_times, min_overlap_duration, conflict_length_m, environment)
     
     # Return results in the format expected by other functions
     results.update({
@@ -588,7 +603,7 @@ def generate_simple_temporal_flow_report(
     )
 
 
-def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_times: Dict[str, float] = None, min_overlap_duration: float = 5.0, conflict_length_m: float = 100.0) -> None:
+def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_times: Dict[str, float] = None, min_overlap_duration: float = 5.0, conflict_length_m: float = 100.0, environment: str = "local") -> None:
     """Export temporal flow analysis results to CSV with enhanced formatting."""
     import csv
     import pandas as pd
@@ -736,9 +751,9 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
                 segment.get('conflict_length_m', 100.0),  # conflict_length_m from analysis
                 
                 # Group 5: Metadata (moved to end as requested)
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
                 APP_VERSION,
-                "local",  # Environment detection moved to function parameter
+                environment,  # Use passed environment parameter
                 "runners.csv, segments.csv",
                 f"Full:{start_times.get('Full', 420) if start_times else 420}, 10K:{start_times.get('10K', 440) if start_times else 440}, Half:{start_times.get('Half', 460) if start_times else 460}",
                 min_overlap_duration,

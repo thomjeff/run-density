@@ -76,3 +76,40 @@ FRACTION_CLAMP_REASON_EXCEEDS_ONE = "fraction_exceeds_one_clamped"
 # Convergence point analysis
 CONVERGENCE_POINT_TOLERANCE_KM = 0.1  # 100m tolerance around convergence points
 DISTANCE_BIN_SIZE_KM = 0.1  # 100m distance bins
+
+# Map configuration
+DEFAULT_PACE_CSV = "data/runners.csv"
+DEFAULT_SEGMENTS_CSV = "data/segments.csv"
+DEFAULT_START_TIMES = {"Full": 420, "10K": 440, "Half": 460}
+
+# Map center coordinates (Fredericton, NB)
+MAP_CENTER_LAT = 45.9620
+MAP_CENTER_LON = -66.6500
+MAP_DEFAULT_ZOOM = 14
+
+# Map tile provider
+MAP_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+MAP_TILE_ATTRIBUTION = "&copy; OpenStreetMap contributors"
+MAP_MAX_ZOOM = 20
+
+# Default segment properties
+DEFAULT_SEGMENT_WIDTH_M = 5.0
+DEFAULT_FLOW_TYPE = "none"
+DEFAULT_ZONE = "green"
+
+# Map density thresholds for zone determination (frontend)
+MAP_DENSITY_THRESHOLDS = {
+    "green": 0.36,
+    "yellow": 0.54,
+    "orange": 0.72,
+    "red": 1.08
+}
+
+# Map zone colors
+MAP_ZONE_COLORS = {
+    "green": "#4CAF50",
+    "yellow": "#FFC107",
+    "orange": "#FF9800",
+    "red": "#F44336",
+    "dark-red": "#B71C1C"
+}

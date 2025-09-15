@@ -692,7 +692,7 @@ def test_report_content_quality() -> Dict[str, Any]:
             density_content = f.read()
         
         density_checks = {
-            'Proper segment names (A1: Start to Queen/Regent)': 'A1: Start to Queen/Regent' in density_content,
+            'Proper segment names (A1 — Start to Queen/Regent)': 'A1 — Start to Queen/Regent' in density_content,
             'No unknown segments': 'Unknown:' not in density_content,
             'Proper counts (Total Segments: 22)': '**Total Segments:** 22' in density_content and '**Processed Segments:** 22' in density_content
         }

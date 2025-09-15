@@ -24,14 +24,22 @@ from pydantic import BaseModel
 try:
     from .bin_analysis import get_all_segment_bins, analyze_segment_bins, get_cache_stats
     from .geo_utils import generate_segments_geojson, generate_bins_geojson
-    from .constants import DISTANCE_BIN_SIZE_KM
+    from .constants import (
+        DISTANCE_BIN_SIZE_KM, DEFAULT_PACE_CSV, DEFAULT_SEGMENTS_CSV, 
+        DEFAULT_START_TIMES, MAP_CENTER_LAT, MAP_CENTER_LON,
+        DEFAULT_SEGMENT_WIDTH_M, DEFAULT_FLOW_TYPE, DEFAULT_ZONE
+    )
     from .cache_manager import get_global_cache_manager
     from .map_data_generator import find_latest_reports
     from .storage_service import get_storage_service
 except ImportError:
     from bin_analysis import get_all_segment_bins, analyze_segment_bins, get_cache_stats
     from geo_utils import generate_segments_geojson, generate_bins_geojson
-    from constants import DISTANCE_BIN_SIZE_KM
+    from constants import (
+        DISTANCE_BIN_SIZE_KM, DEFAULT_PACE_CSV, DEFAULT_SEGMENTS_CSV, 
+        DEFAULT_START_TIMES, MAP_CENTER_LAT, MAP_CENTER_LON,
+        DEFAULT_SEGMENT_WIDTH_M, DEFAULT_FLOW_TYPE, DEFAULT_ZONE
+    )
     from cache_manager import get_global_cache_manager
     from map_data_generator import find_latest_reports
     from storage_service import get_storage_service
@@ -72,10 +80,10 @@ async def get_bins_data(
     try:
         if forceRefresh:
             logger.info("Force refresh requested - running new bin analysis")
-            # Use default data paths and start times
-            pace_csv = "data/runners.csv"
-            segments_csv = "data/segments.csv"
-            start_times = {"Full": 420, "10K": 440, "Half": 460}
+            # Use default data paths and start times from constants
+            pace_csv = DEFAULT_PACE_CSV
+            segments_csv = DEFAULT_SEGMENTS_CSV
+            start_times = DEFAULT_START_TIMES
             
             # Run new bin analysis
             all_bins = get_all_segment_bins(
@@ -207,10 +215,10 @@ async def get_segments_geojson(
                 # Convert tuples to lists for GeoJSON format
                 coordinates = [list(coord) for coord in segment_coords['line_coords']]
             else:
-                # Fallback to placeholder coordinates
+                # Fallback to placeholder coordinates from constants
                 coordinates = [
-                    [-66.6, 45.9],  # Fredericton area
-                    [-66.5, 45.9]
+                    [MAP_CENTER_LON, MAP_CENTER_LAT],  # Fredericton area
+                    [MAP_CENTER_LON + 0.1, MAP_CENTER_LAT]
                 ]
             
             feature = {
@@ -220,9 +228,9 @@ async def get_segments_geojson(
                     "seg_label": segment_coords['segment_label'],
                     "from_km": segment_coords['from_km'],
                     "to_km": segment_coords['to_km'],
-                    "width_m": 5.0,  # Default width
-                    "flow_type": "none",  # Default flow type
-                    "zone": "green",  # Default zone
+                    "width_m": DEFAULT_SEGMENT_WIDTH_M,  # Default width from constants
+                    "flow_type": DEFAULT_FLOW_TYPE,  # Default flow type from constants
+                    "zone": DEFAULT_ZONE,  # Default zone from constants
                     "coord_issue": segment_coords.get('coord_issue', False),
                     "course": segment_coords.get('course', 'Full')
                 },
@@ -391,6 +399,42 @@ async def export_bins(
         logger.error(f"Error exporting bins: {e}")
         raise HTTPException(status_code=500, detail=f"Error exporting bins: {e}")
 
+@router.get("/map-config")
+async def get_map_config():
+    """
+    Get map configuration for frontend.
+    
+    This endpoint provides configuration constants for the frontend
+    to avoid hardcoded values in JavaScript.
+    """
+    try:
+        from .constants import (
+            DEFAULT_START_TIMES, DEFAULT_PACE_CSV, DEFAULT_SEGMENTS_CSV,
+            MAP_CENTER_LAT, MAP_CENTER_LON, MAP_DEFAULT_ZOOM,
+            MAP_TILE_URL, MAP_TILE_ATTRIBUTION, MAP_MAX_ZOOM,
+            MAP_DENSITY_THRESHOLDS, MAP_ZONE_COLORS
+        )
+        
+        return JSONResponse(content={
+            "ok": True,
+            "config": {
+                "startTimes": DEFAULT_START_TIMES,
+                "paceCsv": DEFAULT_PACE_CSV,
+                "segmentsCsv": DEFAULT_SEGMENTS_CSV,
+                "mapCenter": [MAP_CENTER_LAT, MAP_CENTER_LON],
+                "mapZoom": MAP_DEFAULT_ZOOM,
+                "tileUrl": MAP_TILE_URL,
+                "tileAttribution": MAP_TILE_ATTRIBUTION,
+                "maxZoom": MAP_MAX_ZOOM,
+                "densityThresholds": MAP_DENSITY_THRESHOLDS,
+                "zoneColors": MAP_ZONE_COLORS
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting map config: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting map config: {e}")
+
 @router.get("/map-status")
 async def get_map_status():
     """
@@ -411,7 +455,8 @@ async def get_map_status():
                 "/api/segments.geojson",
                 "/api/flow-bins", 
                 "/api/export-bins",
-                "/api/map-status"
+                "/api/map-status",
+                "/api/map-config"
             ]
         })
         

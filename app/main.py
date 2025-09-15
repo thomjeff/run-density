@@ -313,17 +313,31 @@ async def generate_density_report_endpoint(request: DensityReportRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Density report generation failed: {str(e)}")
 
+def detect_environment() -> str:
+    """Detect the current environment (local, cloud-run, etc.)"""
+    import os
+    if os.getenv("K_SERVICE"):  # Cloud Run sets this environment variable
+        return "cloud-run"
+    elif os.getenv("GAE_SERVICE"):  # App Engine sets this
+        return "app-engine"
+    elif os.getenv("VERCEL"):  # Vercel sets this
+        return "vercel"
+    else:
+        return "local"
+
 @app.post("/api/temporal-flow-report")
 async def generate_temporal_flow_report_endpoint(request: TemporalFlowReportRequest):
     """Generate comprehensive temporal flow analysis report with convergence analysis."""
     try:
+        environment = detect_environment()
         results = generate_temporal_flow_report(
             pace_csv=request.paceCsv,
             segments_csv=request.segmentsCsv,
             start_times=request.startTimes,
             min_overlap_duration=request.minOverlapDuration,
             conflict_length_m=request.conflictLengthM,
-            output_dir=request.outputDir
+            output_dir=request.outputDir,
+            environment=environment
         )
         # Handle NaN values for JSON serialization
         import json
