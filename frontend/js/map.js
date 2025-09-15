@@ -556,12 +556,21 @@
           tooltipText += `<div style="color: red; font-weight: bold; margin-bottom: 6px;">⚠️ COORDINATE ISSUE</div>`;
         }
         
-        // Density metrics with better formatting
+        // Density metrics with better formatting - show only relevant metric
         tooltipText += `<div style="margin-bottom: 6px;">`;
         tooltipText += `<div style="font-weight: bold; color: #2196F3;">Density Metrics</div>`;
         tooltipText += `<div>Zone: <b style="color: ${getZoneColor(zone)};">${zone.toUpperCase()}</b></div>`;
-        tooltipText += `<div>Areal: <b>${areal ? areal.toFixed(2) : '—'}</b> pax/m</div>`;
-        tooltipText += `<div>Crowd: <b>${crowd ? crowd.toFixed(2) : '—'}</b> pax/m²</div>`;
+        
+        // Show only the metric that's being used for zone determination
+        if (metric === 'crowd' && crowd !== null) {
+          tooltipText += `<div>Crowd: <b>${crowd.toFixed(2)}</b> pax/m²</div>`;
+        } else if (areal !== null) {
+          tooltipText += `<div>Areal: <b>${areal.toFixed(2)}</b> pax/m</div>`;
+        } else {
+          // Fallback if no data available
+          tooltipText += `<div>Density: <b>—</b></div>`;
+        }
+        
         tooltipText += `</div>`;
         
         // Flow and geometry info
