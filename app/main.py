@@ -625,6 +625,124 @@ async def check_pdf_status():
             "message": f"Error checking status: {str(e)}"
         })
 
+
+@app.get("/api/summary")
+async def get_summary_data():
+    """Generate summary.json for frontend dashboard."""
+    try:
+        # For Phase 2, return mock data that matches the expected format
+        # This will be replaced with real analysis in Phase 3
+        summary_data = {
+            "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
+            "time_bin_s": 30,
+            "totals": {
+                "segments": 22,
+                "processed": 22,
+                "skipped": 0
+            },
+            "metrics": {
+                "peak_areal_density": 0.85,
+                "peak_flow_rate": 12.4,
+                "critical_segments": 1,
+                "overall_los": "A"
+            }
+        }
+        
+        return JSONResponse(content=summary_data)
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate summary data: {str(e)}")
+
+
+@app.get("/api/segments")
+async def get_segments_data():
+    """Generate segments.json for frontend map."""
+    try:
+        # For Phase 2, return mock data that matches the expected format
+        # This will be replaced with real analysis in Phase 3
+        segments_data = {
+            "segments": [
+                {
+                    "id": "F1",
+                    "label": "Friel to Station Rd.",
+                    "schema": "on_course_narrow",
+                    "los": "E",
+                    "status": "OVERLOAD",
+                    "metrics": {
+                        "areal_density": 0.03,
+                        "linear_density": 0.10,
+                        "flow_rate": 555,
+                        "flow_supply": 1666,
+                        "flow_capacity": 180
+                    },
+                    "notes": ["Supply > Capacity"],
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [[-66.65, 45.96], [-66.64, 45.97]]
+                    }
+                },
+                {
+                    "id": "A1",
+                    "label": "Start to Queen/Regent",
+                    "schema": "start_corral",
+                    "los": "A",
+                    "status": "STABLE",
+                    "metrics": {
+                        "areal_density": 0.20,
+                        "linear_density": 0.15,
+                        "flow_rate": 182,
+                        "flow_supply": 500,
+                        "flow_capacity": 600
+                    },
+                    "notes": [],
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [[-66.66, 45.95], [-66.65, 45.96]]
+                    }
+                }
+            ]
+        }
+        
+        return JSONResponse(content=segments_data)
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate segments data: {str(e)}")
+
+
+@app.get("/api/reports")
+async def get_reports_data():
+    """Generate reports.json for frontend reports page."""
+    try:
+        # For now, return empty reports list
+        # This will be implemented in Phase 3/4 with Cloud Storage integration
+        reports_data = {
+            "files": []
+        }
+        
+        return JSONResponse(content=reports_data)
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate reports data: {str(e)}")
+
+
+@app.get("/frontend/data/summary.json")
+async def serve_summary_json():
+    """Serve summary.json for frontend."""
+    return await get_summary_data()
+
+
+@app.get("/frontend/data/segments.json")
+async def serve_segments_json():
+    """Serve segments.json for frontend."""
+    return await get_segments_data()
+
+
+@app.get("/frontend/data/reports.json")
+async def serve_reports_json():
+    """Serve reports.json for frontend."""
+    return await get_reports_data()
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8081)

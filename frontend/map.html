@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <title>run-density — segment map</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <link rel="stylesheet" href="css/map.css"/>
+    <link rel="stylesheet" href="css/main.css"/>
+    <style>
+        /* layout container for responsive sidebar */
+        .map-layout{display:grid;grid-template-columns:320px 1fr;grid-template-rows:calc(100vh - 0px);height:calc(100vh);}
+        .map-sidebar{overflow:auto;border-right:1px solid #eee;background:#fff}
+        .map-canvas{position:relative}
+        @media (max-width: 900px){
+          .map-layout{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+          .map-sidebar{border-right:none;border-bottom:1px solid #eee}
+        }
+        .sticky-controls{position:sticky;top:0;background:#fff;z-index:10;padding:12px;border-bottom:1px solid #eee}
+    </style>
+</head>
+<body class="map-body">
+    <script>
+        // Authentication guard
+        if (!sessionStorage.getItem('rf_auth')) {
+            window.location.href = 'password.html';
+        }
+        
+        // Check session expiry
+        function checkSessionExpiry() {
+            const TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
+            const now = Date.now();
+            const ts = parseInt(sessionStorage.getItem('rf_auth_ts') || '0');
+            
+            if (ts && (now - ts) > TTL_MS) {
+                sessionStorage.clear();
+                window.location.href = 'password.html';
+            }
+        }
+        
+        // Check on load
+        checkSessionExpiry();
+    </script>
+
+    <div class="map-layout">
+        <!-- Sidebar (controls + details) -->
+        <aside class="map-sidebar">
+            <div class="sticky-controls">
+                <div class="metric-toggle row">
+                    <label>Zone by:</label>
+                    <select id="metric">
+                        <option value="crowd">crowd</option>
+                        <option value="areal">areal</option>
+                    </select>
+                    <button id="refresh" class="refresh-btn">Refresh</button>
+                </div>
+                <div class="display-toggle row">
+                    <label>Display:</label>
+                    <button id="colorMode" class="display-btn active">Color</button>
+                    <button id="bwMode" class="display-btn">B&W</button>
+                </div>
+                <div class="zone-filter">
+                    <label>Show zones:</label>
+                    <select id="zoneFilter" multiple size="5">
+                        <option value="green" selected>green</option>
+                        <option value="yellow" selected>yellow</option>
+                        <option value="orange" selected>orange</option>
+                        <option value="red" selected>red</option>
+                        <option value="dark-red" selected>dark-red</option>
+                    </select>
+                    <div class="zone-controls">
+                        <button id="showAll" class="zone-btn">Show All</button>
+                        <button id="hideAll" class="zone-btn">Hide All</button>
+                    </div>
+                </div>
+                <div id="meta" class="meta"></div>
+                <div id="status" class="status loading">Loading density data...</div>
+            </div>
+
+            <!-- Segment details live area (collapsible on small screens) -->
+            <section id="segmentDetails" class="segment-details">
+                <div class="segment-details-header">
+                    <h3 id="selectedSegmentTitle">Segment Details</h3>
+                    <button id="closeSegmentDetails" class="close-btn" title="Close">&times;</button>
+                </div>
+                <div id="segmentDetailsContent" class="segment-details-content"></div>
+            </section>
+
+            <!-- Legend -->
+            <section class="legend-wrap">
+                <div id="colorLegend" class="legend legend--color">
+                    <div><span class="swatch" style="background:#4CAF50"></span>green</div>
+                    <div><span class="swatch" style="background:#FFC107"></span>yellow</div>
+                    <div><span class="swatch" style="background:#FF9800"></span>orange</div>
+                    <div><span class="swatch" style="background:#F44336"></span>red</div>
+                    <div><span class="swatch" style="background:#B71C1C"></span>dark-red</div>
+                </div>
+                <div id="bwLegend" class="legend legend--bw" style="display:none">
+                    <div><span class="swatch sw--thin"></span>green (thin)</div>
+                    <div><span class="swatch sw--med"></span>yellow (medium)</div>
+                    <div><span class="swatch sw--dash"></span>orange (dashed)</div>
+                    <div><span class="swatch sw--dash sw--lg"></span>red (long dash)</div>
+                    <div><span class="swatch sw--thick"></span>dark-red (thick dash)</div>
+                </div>
+                <small id="legendStatus" class="muted">All zones visible</small>
+            </section>
+        </aside>
+
+        <!-- Map canvas -->
+        <section class="map-canvas">
+            <div id="map"></div>
+        </section>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="js/map.js"></script>
+</body>
+</html>

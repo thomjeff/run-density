@@ -132,7 +132,7 @@
         // Load summary data
         async function loadSummaryData() {
             try {
-                const response = await fetch('data/summary.json');
+                const response = await fetch('/api/summary');
                 if (!response.ok) throw new Error('Failed to load summary data');
                 const data = await response.json();
                 
@@ -155,7 +155,7 @@
         // Load segments data for executive summary
         async function loadSegmentsData() {
             try {
-                const response = await fetch('data/segments.json');
+                const response = await fetch('/api/segments');
                 if (!response.ok) throw new Error('Failed to load segments data');
                 const data = await response.json();
                 
