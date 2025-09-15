@@ -183,31 +183,13 @@
     // Clear existing segments
     segmentsLayer.clearLayers();
     
-    // Add segments based on current filter
-    const zoneCheckboxes = document.querySelectorAll('.zone-checkboxes input[type="checkbox"]');
-    const selectedZones = Array.from(zoneCheckboxes)
-      .filter(checkbox => checkbox.checked)
-      .map(checkbox => checkbox.value);
-    
+    // Add all segments (no filtering)
     segmentsData.forEach(segment => {
-      const density = currentMetric === 'areal' ? segment.metrics?.areal_density : segment.metrics?.linear_density;
-      const zone = density ? determineZone(density) : 'unknown';
-      
-      if (selectedZones.includes(zone)) {
-        const marker = createSegmentMarker(segment);
-        if (marker) {
-          segmentsLayer.addLayer(marker);
-        }
+      const marker = createSegmentMarker(segment);
+      if (marker) {
+        segmentsLayer.addLayer(marker);
       }
     });
-    
-    // Update legend status
-    const legendStatus = document.getElementById('legendStatus');
-    if (legendStatus) {
-      const activeZones = selectedZones.length;
-      const totalZones = zoneCheckboxes.length;
-      legendStatus.textContent = `${activeZones} of ${totalZones} zones visible`;
-    }
   }
 
   // Initialize map
@@ -286,29 +268,6 @@
       });
     }
     
-    // Zone filter checkboxes
-    const zoneCheckboxes = document.querySelectorAll('.zone-checkboxes input[type="checkbox"]');
-    zoneCheckboxes.forEach(checkbox => {
-      checkbox.addEventListener('change', updateMapDisplay);
-    });
-    
-    // Show all zones
-    const showAllBtn = document.getElementById('showAll');
-    if (showAllBtn) {
-      showAllBtn.addEventListener('click', function() {
-        zoneCheckboxes.forEach(checkbox => checkbox.checked = true);
-        updateMapDisplay();
-      });
-    }
-    
-    // Hide all zones
-    const hideAllBtn = document.getElementById('hideAll');
-    if (hideAllBtn) {
-      hideAllBtn.addEventListener('click', function() {
-        zoneCheckboxes.forEach(checkbox => checkbox.checked = false);
-        updateMapDisplay();
-      });
-    }
     
     // Close segment details
     const closeBtn = document.getElementById('closeSegmentDetails');
