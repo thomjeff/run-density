@@ -7,6 +7,27 @@
   <link rel="stylesheet" href="../css/main.css"/>
 </head>
 <body>
+<script>
+  // Authentication guard
+  if (!sessionStorage.getItem('rf_auth')) {
+    window.location.href = '../password.html';
+  }
+  
+  // Check session expiry
+  function checkSessionExpiry() {
+    const TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
+    const now = Date.now();
+    const ts = parseInt(sessionStorage.getItem('rf_auth_ts') || '0');
+    
+    if (ts && (now - ts) > TTL_MS) {
+      sessionStorage.clear();
+      window.location.href = '../password.html';
+    }
+  }
+  
+  // Check on load
+  checkSessionExpiry();
+</script>
   <header class="header">
     <div class="container">
       <h1>run-density</h1>

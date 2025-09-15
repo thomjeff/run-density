@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <title>run-density — Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <link rel="stylesheet" href="css/main.css"/>
+</head>
+<body>
+    <header class="header header--brand">
+        <div class="container header__inner">
+            <div>
+                <h1 class="brand">run-density</h1>
+                <p class="sub">Race Density & Overlap Intelligence for Fredericton Marathon</p>
+            </div>
+             <nav class="top-cta">
+               <a class="btn btn--ghost" href="#" onclick="logout()">Logout</a>
+             </nav>
+        </div>
+    </header>
+
+    <nav class="nav">
+        <div class="container">
+            <ul>
+                <li><a href="index.html" class="active">Home</a></li>
+                <li><a href="map.html">Interactive Map</a></li>
+                <li><a href="reports.html">Reports</a></li>
+                <li><a href="health.html">Health Check</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="container grid grid--2">
+        <!-- Hero / Summary -->
+        <section class="card card--hero">
+            <div>
+                <h2 class="h2">Smarter planning for safer races</h2>
+                <p class="muted">Analyze areal density, throughput and inter‑event overlaps. Use the map to review segment LOS and congestion risks.</p>
+                <div class="actions">
+                    <a href="map.html" class="btn btn--primary">View Map</a>
+                    <a href="reports.html" class="btn">View Reports</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- Key metrics (placeholders; wire to API later) -->
+        <section class="card metrics">
+            <h3 class="h3">Key Metrics</h3>
+            <div class="kpis">
+                <div class="kpi">
+                    <div class="kpi__label">Peak Areal Density</div>
+                    <div class="kpi__value" id="peakArealDensity">— <span class="unit">p/m²</span></div>
+                    <div class="kpi__hint">Start line window</div>
+                </div>
+                <div class="kpi">
+                    <div class="kpi__label">Peak Flow</div>
+                    <div class="kpi__value" id="peakFlowRate">— <span class="unit">p/min/m</span></div>
+                    <div class="kpi__hint">Throughput per meter</div>
+                </div>
+                <div class="kpi kpi--alert">
+                    <div class="kpi__label">Supply > Capacity</div>
+                    <div class="kpi__value" id="criticalSegments">—</div>
+                    <div class="kpi__hint">Critical segments</div>
+                </div>
+                <div class="kpi kpi--ok">
+                    <div class="kpi__label">Overall LOS</div>
+                    <div class="kpi__value" id="overallLOS">—</div>
+                    <div class="kpi__hint">Free flow</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Executive summary table (static skeleton; bind later) -->
+        <section class="card span-2">
+            <div class="card__head">
+                <h3 class="h3">Executive Summary</h3>
+                <div class="legend legend--los">
+                    <span class="badge los-a">A</span>
+                    <span class="badge los-b">B</span>
+                    <span class="badge los-c">C</span>
+                    <span class="badge los-d">D</span>
+                    <span class="badge los-e">E</span>
+                    <span class="badge los-f">F</span>
+                </div>
+            </div>
+            <div class="table-scroll">
+                <table class="table">
+                    <thead>
+                        <tr><th>Segment</th><th>Label</th><th>Key Takeaway</th><th class="t-center">LOS</th></tr>
+                    </thead>
+                    <tbody id="summaryRows">
+                        <tr>
+                            <td colspan="4" class="t-center muted">Loading summary data...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            &copy; 2025 run-density · Fredericton Marathon
+        </div>
+    </footer>
+
+    <script>
+        // Authentication guard
+        if (!sessionStorage.getItem('rf_auth')) {
+            window.location.href = 'password.html';
+        }
+
+        // Check session expiry
+        function checkSessionExpiry() {
+            const TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
+            const now = Date.now();
+            const ts = parseInt(sessionStorage.getItem('rf_auth_ts') || '0');
+            
+            if (ts && (now - ts) > TTL_MS) {
+                sessionStorage.clear();
+                window.location.href = 'password.html';
+            }
+        }
+
+        // Logout function
+        function logout() {
+            sessionStorage.clear();
+            window.location.href = 'password.html';
+        }
+
+        // Load summary data
+        async function loadSummaryData() {
+            try {
+                const response = await fetch('/api/summary');
+                if (!response.ok) throw new Error('Failed to load summary data');
+                const data = await response.json();
+                
+                // Update KPIs
+                document.getElementById('peakArealDensity').textContent = 
+                    `${data.metrics?.peak_areal_density?.toFixed(2) || '—'} p/m²`;
+                document.getElementById('peakFlowRate').textContent = 
+                    `${data.metrics?.peak_flow_rate?.toFixed(1) || '—'} p/min/m`;
+                document.getElementById('criticalSegments').textContent = 
+                    data.metrics?.critical_segments || '—';
+                document.getElementById('overallLOS').textContent = 
+                    data.metrics?.overall_los || '—';
+                
+            } catch (error) {
+                console.warn('Could not load summary data:', error);
+                // Keep placeholder values
+            }
+        }
+
+        // Load segments data for executive summary
+        async function loadSegmentsData() {
+            try {
+                const response = await fetch('/api/segments');
+                if (!response.ok) throw new Error('Failed to load segments data');
+                const data = await response.json();
+                
+                const tbody = document.getElementById('summaryRows');
+                tbody.innerHTML = '';
+                
+                if (data.segments && data.segments.length > 0) {
+                    // Show all segments
+                    data.segments.forEach(segment => {
+                        const row = document.createElement('tr');
+                        
+                        const losClass = segment.los ? `los-${segment.los.toLowerCase()}` : '';
+                        const statusClass = segment.status === 'OVERLOAD' ? 'alert' : '';
+                        const takeaway = segment.notes && segment.notes.length > 0 
+                            ? segment.notes[0] 
+                            : 'No issues detected';
+                        
+                        // Determine LOS pill class based on LOS level
+                        let losPillClass = 'pill';
+                        if (segment.los) {
+                            switch (segment.los.toUpperCase()) {
+                                case 'A': losPillClass = 'pill pill--a'; break;
+                                case 'B': losPillClass = 'pill pill--b'; break;
+                                case 'C': losPillClass = 'pill pill--c'; break;
+                                case 'D': losPillClass = 'pill pill--d'; break;
+                                case 'E': losPillClass = 'pill pill--e'; break;
+                                case 'F': losPillClass = 'pill pill--f'; break;
+                                default: losPillClass = 'pill';
+                            }
+                        }
+                        
+                        row.innerHTML = `
+                            <td class="mono">${segment.id || '—'}</td>
+                            <td>${segment.label || '—'}</td>
+                            <td class="${statusClass}">${takeaway}</td>
+                            <td class="t-center">
+                                <span class="${losPillClass}">${segment.los || '—'}</span>
+                            </td>
+                        `;
+                        
+                        tbody.appendChild(row);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="4" class="t-center muted">No segment data available</td></tr>';
+                }
+                
+            } catch (error) {
+                console.warn('Could not load segments data:', error);
+                document.getElementById('summaryRows').innerHTML = 
+                    '<tr><td colspan="4" class="t-center muted">Error loading segment data</td></tr>';
+            }
+        }
+
+        // Initialize page
+        function init() {
+            checkSessionExpiry();
+            loadSummaryData();
+            loadSegmentsData();
+        }
+
+        // Run on page load
+        init();
+    </script>
+</body>
+</html>
