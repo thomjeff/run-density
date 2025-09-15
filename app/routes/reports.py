@@ -20,74 +20,34 @@ REPORTS_DIR = Path(os.getenv("RUNFLOW_REPORTS_DIR", "reports")).resolve()
 ALLOWED_EXTS = {".html", ".htm", ".md", ".pdf", ".csv"}
 
 def _scan_reports(limit: int = 20) -> List[Dict]:
-    """Scan for reports using storage service (Cloud Storage or local fallback)."""
+    """Scan for reports using local file system (storage service doesn't support cross-date scanning)."""
     rows = []
     
-    try:
-        # Try storage service first (Cloud Storage or local)
-        storage_service = get_storage_service()
+    # Always use local file system for scanning all reports
+    if not REPORTS_DIR.exists():
+        return []
         
-        # Get files from storage service
-        storage_files = storage_service.list_files()
-        
-        for filename in storage_files:
-            if not filename:
-                continue
-                
-            # Check if file has allowed extension
-            file_path = Path(filename)
-            if file_path.suffix.lower() not in ALLOWED_EXTS:
-                continue
-                
-            # Determine report kind
-            lower = filename.lower()
+    for p in REPORTS_DIR.rglob("*"):
+        if p.is_file() and p.suffix.lower() in ALLOWED_EXTS:
+            lower = p.name.lower()
             if "density" in lower:
                 kind = "density"
             elif "flow" in lower:
                 kind = "flow"
             else:
                 kind = "other"
-                
-            # For now, use current time as timestamp (storage service returns filenames only)
-            ts = datetime.now()
-            
+            try:
+                ts = datetime.fromtimestamp(p.stat().st_mtime)
+            except Exception:
+                ts = None
             rows.append({
-                "name": filename,
+                "name": p.name,
                 "kind": kind,
-                "ext": file_path.suffix.lower(),
+                "ext": p.suffix.lower(),
                 "mtime": ts,
-                "rel": filename,  # Use filename as relative path for storage
-                "source": "storage"
+                "rel": str(p.relative_to(REPORTS_DIR)),
+                "source": "local"
             })
-            
-    except Exception as e:
-        print(f"⚠️ Storage service failed, falling back to local files: {e}")
-        
-        # Fallback to local file system
-        if not REPORTS_DIR.exists():
-            return []
-            
-        for p in REPORTS_DIR.rglob("*"):
-            if p.is_file() and p.suffix.lower() in ALLOWED_EXTS:
-                lower = p.name.lower()
-                if "density" in lower:
-                    kind = "density"
-                elif "flow" in lower:
-                    kind = "flow"
-                else:
-                    kind = "other"
-                try:
-                    ts = datetime.fromtimestamp(p.stat().st_mtime)
-                except Exception:
-                    ts = None
-                rows.append({
-                    "name": p.name,
-                    "kind": kind,
-                    "ext": p.suffix.lower(),
-                    "mtime": ts,
-                    "rel": str(p.relative_to(REPORTS_DIR)),
-                    "source": "local"
-                })
     
     # Sort by modification time (newest first)
     rows.sort(key=lambda r: (r["mtime"] or datetime.min), reverse=True)
@@ -122,10 +82,12 @@ def density_latest():
         raise HTTPException(status_code=404, detail="No density report found")
     
     try:
-        storage_service = get_storage_service()
-        content = storage_service.load_file(file_info["rel"])
-        if content is None:
-            raise HTTPException(status_code=404, detail="Density report not found in storage")
+        # Use local file system since we're scanning locally
+        file_path = REPORTS_DIR / file_info["rel"]
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Density report file not found")
+        
+        content = file_path.read_text(encoding="utf-8", errors="ignore")
         
         # Return content as response
         from fastapi.responses import Response
@@ -145,10 +107,12 @@ def flow_latest():
         raise HTTPException(status_code=404, detail="No flow report found")
     
     try:
-        storage_service = get_storage_service()
-        content = storage_service.load_file(file_info["rel"])
-        if content is None:
-            raise HTTPException(status_code=404, detail="Flow report not found in storage")
+        # Use local file system since we're scanning locally
+        file_path = REPORTS_DIR / file_info["rel"]
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Flow report file not found")
+        
+        content = file_path.read_text(encoding="utf-8", errors="ignore")
         
         # Return content as response
         from fastapi.responses import Response
