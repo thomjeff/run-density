@@ -80,65 +80,32 @@
     }
 
     // Load reports data
-    async function loadReportsData() {
+    function loadReportsData() {
       const container = document.getElementById('reportsContainer');
-      container.innerHTML = '<div class="loading">Loading reports...</div>';
+      
+      // Generate reports display (no API calls needed)
+      const reports = [
+        {
+          id: 'density',
+          title: 'Density Analysis Report',
+          description: 'Areal density analysis for marathon segments',
+          generated: new Date().toLocaleString()
+        },
+        {
+          id: 'flow',
+          title: 'Temporal Flow Report', 
+          description: 'Overtaking and co-presence analysis',
+          generated: new Date().toLocaleString()
+        },
+        {
+          id: 'e2e',
+          title: 'End-to-End Test Results',
+          description: 'System validation and test results',
+          generated: new Date().toLocaleString()
+        }
+      ];
 
-      try {
-        // Load density report
-        const densityResponse = await fetch('/api/density-report');
-        const densityData = await densityResponse.text();
-        
-        // Load flow report  
-        const flowResponse = await fetch('/api/temporal-flow-report');
-        const flowData = await flowResponse.text();
-        
-        // Load E2E test results
-        const e2eResponse = await fetch('/api/end-to-end-test');
-        const e2eData = await e2eResponse.text();
-
-        // Generate reports display
-        const reports = [
-          {
-            id: 'density',
-            title: 'Density Analysis Report',
-            description: 'Areal density analysis for marathon segments',
-            type: 'markdown',
-            data: densityData,
-            generated: new Date().toLocaleString()
-          },
-          {
-            id: 'flow',
-            title: 'Temporal Flow Report', 
-            description: 'Overtaking and co-presence analysis',
-            type: 'markdown',
-            data: flowData,
-            generated: new Date().toLocaleString()
-          },
-          {
-            id: 'e2e',
-            title: 'End-to-End Test Results',
-            description: 'System validation and test results',
-            type: 'markdown', 
-            data: e2eData,
-            generated: new Date().toLocaleString()
-          }
-        ];
-
-        // Store reports globally for view function
-        window.loadedReports = reports;
-        displayReports(reports);
-        
-      } catch (error) {
-        console.error('Error loading reports:', error);
-        container.innerHTML = `
-          <div class="error">
-            <strong>Error loading reports:</strong> ${error.message}
-            <br><br>
-            <button class="btn btn--primary" onclick="loadReportsData()">Retry</button>
-          </div>
-        `;
-      }
+      displayReports(reports);
     }
 
     function displayReports(reports) {
@@ -152,7 +119,7 @@
               <p class="report-meta">Generated: ${report.generated}</p>
               <p>${report.description}</p>
               <div class="report-actions">
-                <button class="btn btn--primary btn--small" onclick="downloadReport('${report.id}', '${report.data}')">
+                <button class="btn btn--primary btn--small" onclick="downloadReport('${report.id}')">
                   Download
                 </button>
               </div>
@@ -162,31 +129,8 @@
       `;
     }
 
-    function viewReport(reportId) {
-      // Open report in new window/tab
-      const reportData = getReportData(reportId);
-      if (reportData) {
-        const newWindow = window.open('', '_blank');
-        newWindow.document.write(`
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <title>${reportId} Report</title>
-            <style>
-              body { font-family: system-ui, sans-serif; margin: 40px; line-height: 1.6; }
-              pre { background: #f5f5f5; padding: 16px; border-radius: 6px; overflow-x: auto; }
-              h1, h2, h3 { color: #333; }
-            </style>
-          </head>
-          <body>
-            <pre>${reportData}</pre>
-          </body>
-          </html>
-        `);
-      }
-    }
 
-    function downloadReport(reportId, data) {
+    function downloadReport(reportId) {
       // Map report IDs to actual file names
       const fileMap = {
         'density': 'Density.md',
@@ -204,13 +148,6 @@
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-    }
-
-    function getReportData(reportId) {
-      // Return the actual report data that was loaded
-      const reports = window.loadedReports || [];
-      const report = reports.find(r => r.id === reportId);
-      return report ? report.data : `# ${reportId} Report\n\nReport data not available.`;
     }
 
     // Initialize on page load
