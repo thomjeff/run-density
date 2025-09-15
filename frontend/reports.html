@@ -140,9 +140,12 @@
       
       const fileName = fileMap[reportId] || `${reportId}-report.md`;
       
-      // Create download link to the actual report file
+      // Get today's date in YYYY-MM-DD format for the reports subdirectory
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Create download link to the actual report file in today's directory
       const a = document.createElement('a');
-      a.href = `/reports/${fileName}`;
+      a.href = `/reports/${today}/${fileName}`;
       a.download = fileName;
       a.target = '_blank';
       document.body.appendChild(a);
