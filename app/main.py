@@ -168,7 +168,26 @@ async def analyze_temporal_flow(request: TemporalFlowRequest):
         if request.format == "text":
             narrative = generate_temporal_flow_narrative(results)
             return Response(content=narrative, media_type="text/plain")
-        return JSONResponse(content=results)
+        
+        # Handle JSON serialization for pandas data types
+        import json
+        import math
+        
+        def convert_nan(obj):
+            if isinstance(obj, dict):
+                return {k: convert_nan(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_nan(item) for item in obj]
+            elif isinstance(obj, float) and math.isnan(obj):
+                return None
+            elif hasattr(obj, 'item'):  # numpy scalar
+                return obj.item()
+            else:
+                return obj
+        
+        # Convert the results to ensure JSON serialization
+        results_clean = convert_nan(results)
+        return JSONResponse(content=results_clean)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Temporal flow analysis failed: {str(e)}")
 
@@ -317,6 +336,8 @@ async def generate_temporal_flow_report_endpoint(request: TemporalFlowReportRequ
                 return [convert_nan(item) for item in obj]
             elif isinstance(obj, float) and math.isnan(obj):
                 return None
+            elif hasattr(obj, 'item'):  # numpy scalar
+                return obj.item()
             else:
                 return obj
         
@@ -372,6 +393,8 @@ async def generate_flow_audit_endpoint(request: FlowAuditRequest):
                 return [convert_nan(item) for item in obj]
             elif isinstance(obj, float) and math.isnan(obj):
                 return None
+            elif hasattr(obj, 'item'):  # numpy scalar
+                return obj.item()
             else:
                 return obj
         

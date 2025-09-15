@@ -3102,8 +3102,8 @@ def _analyze_temporal_flow_cloud_run(
         "conflict_length_m": 100.0,
         "temporal_binning_threshold_minutes": 10.0,
         "spatial_binning_threshold_meters": 100.0,
-        "total_segments": len(all_segments),
-        "segments_with_convergence": len(all_segments),
+        "total_segments": int(len(all_segments)),
+        "segments_with_convergence": int(len(all_segments)),
         "segments": []
     }
     
@@ -3122,34 +3122,34 @@ def _analyze_temporal_flow_cloud_run(
         df_b = pace_df[pace_df["event"] == event_b]
         
         # Calculate basic convergence point (simplified)
-        from_km_a = segment.get("from_km_a", 0)
-        to_km_a = segment.get("to_km_a", 1)
-        from_km_b = segment.get("from_km_b", 0)
-        to_km_b = segment.get("to_km_b", 1)
+        from_km_a = float(segment.get("from_km_a", 0))
+        to_km_a = float(segment.get("to_km_a", 1))
+        from_km_b = float(segment.get("from_km_b", 0))
+        to_km_b = float(segment.get("to_km_b", 1))
         
         # Simple convergence point calculation
         cp_km = (from_km_a + to_km_a + from_km_b + to_km_b) / 4.0
         
         # Get flow type and terminology
-        flow_type = segment.get("flow_type", "")
+        flow_type = str(segment.get("flow_type", ""))
         terminology = get_flow_terminology(flow_type)
         
         # Create minimal segment result
         segment_result = {
-            "seg_id": seg_id,
-            "segment_label": segment.get("segment_label", ""),
+            "seg_id": str(seg_id),
+            "segment_label": str(segment.get("segment_label", "")),
             "flow_type": flow_type,
             "terminology": terminology,
-            "event_a": event_a,
-            "event_b": event_b,
-            "from_km_a": from_km_a,
-            "to_km_a": to_km_a,
-            "from_km_b": from_km_b,
-            "to_km_b": to_km_b,
-            "convergence_point": cp_km,
+            "event_a": str(event_a),
+            "event_b": str(event_b),
+            "from_km_a": float(from_km_a),
+            "to_km_a": float(to_km_a),
+            "from_km_b": float(from_km_b),
+            "to_km_b": float(to_km_b),
+            "convergence_point": float(cp_km),
             "has_convergence": True,
-            "total_a": len(df_a),
-            "total_b": len(df_b),
+            "total_a": int(len(df_a)),
+            "total_b": int(len(df_b)),
             "overtaking_a": 5,  # Fixed small number
             "overtaking_b": 5,  # Fixed small number
             "sample_a": df_a['runner_id'].head(3).tolist() if not df_a.empty else [],
@@ -3159,8 +3159,8 @@ def _analyze_temporal_flow_cloud_run(
             "first_entry_b": 0.0,
             "last_exit_b": 100.0,
             "overlap_window_duration": 50.0,
-            "prior_segment_id": segment.get("prior_segment_id", ""),
-            "overtake_flag": segment.get("overtake_flag", "")
+            "prior_segment_id": str(segment.get("prior_segment_id", "")),
+            "overtake_flag": str(segment.get("overtake_flag", ""))
         }
         
         results["segments"].append(segment_result)
