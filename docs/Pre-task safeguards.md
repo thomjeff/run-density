@@ -4,10 +4,11 @@
 
 ## **📋 MANDATORY DOCUMENT REFERENCES**
 
-Before starting ANY work, you **MUST** reference these three documents:
+Before starting ANY work, you **MUST** reference these four documents:
 - `@CRITICAL_CONFIGURATION.md` - Critical rules and workflow requirements
 - `@Application Fundamentals.md` - Core concepts and data structures  
 - `@Application Architecture.md` - System design and testing patterns
+- `@VARIABLE_NAMING_REFERENCE.md` - Authoritative variable names and field mappings
 
 ## **✅ MANDATORY RULE CONFIRMATION**
 
@@ -22,8 +23,9 @@ You **MUST** explicitly confirm understanding of these CRITICAL RULES before pro
 5. MINIMAL CHANGES - will make only necessary changes and test frequently
 6. NO ENDLESS LOOPS - will take action after 3 analysis attempts, not repeat analysis
 7. TYPO CHECKING - will verify variable names and data flow integrity
-8. TODO PERMISSION - will ask for permission before creating todo lists when user asks for thoughts
-9. COMPLETE GITHUB ISSUE READING - will read ENTIRE GitHub issues including ALL comments, no shortcuts
+8. VARIABLE NAMING - will use correct field names (seg_label not segment_label, from_km not 10K_from_km)
+9. TODO PERMISSION - will ask for permission before creating todo lists when user asks for thoughts
+10. COMPLETE GITHUB ISSUE READING - will read ENTIRE GitHub issues including ALL comments, no shortcuts
 ```
 
 ## **🧪 MANDATORY TESTING SEQUENCE**
