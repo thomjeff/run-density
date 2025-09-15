@@ -209,32 +209,13 @@
     // Load and display segments
     loadSegmentsData().then(() => {
       updateMapDisplay();
-      const dataStatus = document.getElementById('dataStatus');
-      if (dataStatus) {
-        dataStatus.textContent = `Loaded ${segmentsData.length} segments`;
-      }
+      console.log(`Loaded and displayed ${segmentsData.length} segments`);
     });
   }
 
   // Event handlers
   function setupEventHandlers() {
     
-    // Refresh button
-    const refreshBtn = document.getElementById('refresh');
-    if (refreshBtn) {
-      refreshBtn.addEventListener('click', function() {
-        const dataStatus = document.getElementById('dataStatus');
-        if (dataStatus) {
-          dataStatus.textContent = 'Refreshing...';
-        }
-        loadSegmentsData().then(() => {
-          updateMapDisplay();
-          if (dataStatus) {
-            dataStatus.textContent = `Loaded ${segmentsData.length} segments`;
-          }
-        });
-      });
-    }
     
     // Display mode toggle
     const colorModeBtn = document.getElementById('colorMode');

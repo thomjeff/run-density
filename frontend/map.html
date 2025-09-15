@@ -8,83 +8,17 @@
     <link rel="stylesheet" href="css/map.css"/>
     <link rel="stylesheet" href="css/main.css"/>
     <style>
-        /* Map Controls Header */
-        .map-controls-header {
-            background: #f8f9fa;
-            border-bottom: 1px solid #e9ecef;
-            padding: 12px 0;
-        }
-        
-        .map-controls {
-            display: flex;
-            align-items: center;
-            gap: 20px;
-            flex-wrap: wrap;
-        }
-        
-        .control-group {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .control-group label {
-            font-weight: 600;
-            color: #495057;
-            white-space: nowrap;
-        }
-        
-        .control-group select {
-            padding: 6px 10px;
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            background: white;
-            font-size: 14px;
-        }
-        
-        .data-status {
-            font-size: 12px;
-            color: #6c757d;
-            font-style: italic;
-        }
-        
-        .display-btn {
-            padding: 6px 12px;
-            border: 1px solid #ced4da;
-            background: white;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        
-        .display-btn.active {
-            background: #007bff;
-            color: white;
-            border-color: #007bff;
-        }
-        
-        .refresh-btn {
-            padding: 6px 12px;
-            background: #28a745;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-        }
         
         
         /* Map container adjustments */
         #map {
-            height: calc(100vh - 200px);
+            height: calc(100vh - 120px);
             width: 100%;
         }
         
         @media (max-width: 768px) {
-            .map-controls {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 12px;
+            #map {
+                height: calc(100vh - 100px);
             }
         }
     </style>
@@ -142,19 +76,6 @@
         </div>
     </nav>
 
-    <!-- Map Controls Header -->
-    <div class="map-controls-header">
-        <div class="container">
-            <div class="map-controls">
-                <div class="control-group">
-                    <span id="dataStatus" class="data-status">Loading density data...</span>
-                </div>
-                <div class="control-group">
-                    <button id="refresh" class="refresh-btn">Refresh Map</button>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- Map container -->
     <div id="map"></div>
