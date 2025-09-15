@@ -27,12 +27,14 @@ try:
     from .constants import DISTANCE_BIN_SIZE_KM
     from .cache_manager import get_global_cache_manager
     from .map_data_generator import find_latest_reports
+    from .storage_service import get_storage_service
 except ImportError:
     from bin_analysis import get_all_segment_bins, analyze_segment_bins, get_cache_stats
     from geo_utils import generate_segments_geojson, generate_bins_geojson
     from constants import DISTANCE_BIN_SIZE_KM
     from cache_manager import get_global_cache_manager
     from map_data_generator import find_latest_reports
+    from storage_service import get_storage_service
 
 logger = logging.getLogger(__name__)
 
@@ -700,39 +702,55 @@ async def get_cached_analysis(
 @router.get("/map-data")
 async def get_map_data(date: str = Query(default=None, description="YYYY-MM-DD")):
     """
-    Get map data for the frontend (read-only from existing reports).
+    Get map data for the frontend from storage service (local or Cloud Storage).
     
-    This endpoint reads map_data.json from the reports directory.
+    This endpoint reads map_data.json from persistent storage.
     Maps are visualization-only and do not run analysis.
     """
-    import pathlib
-    import json
-    
     try:
-        REPORTS_DIR = pathlib.Path("reports")
+        storage_service = get_storage_service()
         
-        def latest_report_dir():
-            dirs = sorted([p for p in REPORTS_DIR.glob("20*--") if p.is_dir()], reverse=True)
-            return dirs[0] if dirs else None
+        # Look for map data files in the specified date or latest
+        if date:
+            # Look for map data in specific date
+            map_files = storage_service.list_files(date, "map_data")
+        else:
+            # Look for map data in latest available date
+            # Try today first, then yesterday, etc.
+            from datetime import datetime, timedelta
+            for days_back in range(7):  # Look back up to 7 days
+                check_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+                map_files = storage_service.list_files(check_date, "map_data")
+                if map_files:
+                    date = check_date
+                    break
         
-        report_dir = (REPORTS_DIR / date) if date else latest_report_dir()
-        
-        if not report_dir:
-            raise HTTPException(status_code=404, detail={"error": "No reports found."})
-        
-        map_file = report_dir / "map_data.json"
-        if not map_file.exists():
+        if not map_files:
             raise HTTPException(status_code=404, detail={"error": "No map data available. Please generate reports first."})
         
-        try:
-            return json.loads(map_file.read_text())
-        except Exception:
-            raise HTTPException(status_code=500, detail={"error": "Corrupt map_data.json"})
+        # Get the most recent map data file (prioritize actual map_data files over test files)
+        map_files.sort(reverse=True)  # Sort by filename (includes timestamp)
+        
+        # Filter out test files and prioritize actual map_data files
+        actual_map_files = [f for f in map_files if f.startswith('map_data_') and not f.startswith('test_')]
+        if actual_map_files:
+            latest_map_file = actual_map_files[0]
+        else:
+            latest_map_file = map_files[0]  # Fallback to any file if no actual map data
+        
+        # Load map data from storage
+        map_data = storage_service.load_json(latest_map_file, date)
+        
+        if not map_data:
+            raise HTTPException(status_code=500, detail={"error": "Failed to load map data from storage."})
+        
+        logger.info(f"Loaded map data from storage: {latest_map_file} (date: {date})")
+        return map_data
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting map data: {e}")
+        logger.error(f"Error getting map data from storage: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting map data: {e}")
 
 @router.post("/cleanup-cache")
