@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Runflow — JSON Health</title>
+<link rel="stylesheet" href="css/main.css"/>
+<style>
+  .ok{color:#10b981}.bad{color:#ef4444}.dot{font-weight:700}
+</style>
+</head>
+<body>
+<script>
+  // Authentication guard
+  if (!sessionStorage.getItem('rf_auth')) {
+    window.location.href = 'password.html';
+  }
+  
+  // Check session expiry
+  function checkSessionExpiry() {
+    const TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
+    const now = Date.now();
+    const ts = parseInt(sessionStorage.getItem('rf_auth_ts') || '0');
+    
+    if (ts && (now - ts) > TTL_MS) {
+      sessionStorage.clear();
+      window.location.href = 'password.html';
+    }
+  }
+  
+  // Check on load
+  checkSessionExpiry();
+</script>
+
+<header class="header">
+  <div class="container header__inner">
+    <div><h1 class="brand">Runflow</h1><p class="sub">JSON Health Check</p></div>
+    <nav><a class="btn" href="index.html">Dashboard</a></nav>
+  </div>
+</header>
+
+<main class="container">
+  <section class="card">
+    <h2 class="h2">Endpoints</h2>
+    <ul id="list" class="muted" style="line-height:1.9">
+      <li><span class="dot">•</span> <code>data/summary.json</code> <span id="s1">…</span></li>
+      <li><span class="dot">•</span> <code>data/segments.json</code> <span id="s2">…</span></li>
+      <li><span class="dot">•</span> <code>data/reports.json</code> <span id="s3">…</span></li>
+    </ul>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn--primary" id="run">Run Check</button>
+      <span class="muted" id="ts">—</span>
+    </div>
+  </section>
+</main>
+
+<footer class="footer"><div class="container">&copy; 2025 Runflow</div></footer>
+
+<script>
+async function ping(url){
+  try{
+    const r = await fetch(url,{cache:'no-store'});
+    if(!r.ok) return {ok:false, msg:`HTTP ${r.status}`};
+    const j = await r.json();
+    return {ok:true, msg:`OK (${Object.keys(j).length} keys)`};
+  }catch(e){ return {ok:false, msg:e.message} }
+}
+async function run(){
+  document.getElementById('ts').textContent = 'Checking…';
+  const [a,b,c] = await Promise.all([
+    ping('data/summary.json'),
+    ping('data/segments.json'),
+    ping('data/reports.json')
+  ]);
+  const paint=(el,res)=>{el.textContent = res.msg; el.className = res.ok?'ok':'bad'};
+  paint(document.getElementById('s1'),a);
+  paint(document.getElementById('s2'),b);
+  paint(document.getElementById('s3'),c);
+  const allOk = a.ok && b.ok && c.ok;
+  document.getElementById('ts').textContent = (new Date()).toLocaleString() +
+    (allOk?' — All good':' — Issues found');
+}
+document.getElementById('run').addEventListener('click', run);
+run();
+</script>
+</body>
+</html>
