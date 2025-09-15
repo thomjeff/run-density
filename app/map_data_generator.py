@@ -192,28 +192,15 @@ def generate_map_data(
     start_times: Dict[str, int] = None
 ) -> Dict[str, Any]:
     """
-    Generate map-friendly data from latest map dataset or run new analysis.
+    DISABLED: This function causes Cloud Run timeouts by running heavy analysis.
     
-    Args:
-        pace_csv: Path to pace data CSV
-        segments_csv: Path to segments data CSV
-        start_times: Event start times in minutes from midnight
-    
-    Returns:
-        Dictionary with map visualization data
+    Maps are now visualization-only and should read from existing reports.
+    Use build_map_json_from_cached() instead to create map data from cached artifacts.
     """
-    if start_times is None:
-        start_times = {"Full": 420, "10K": 440, "Half": 460}
-    
-    # Try to find existing map dataset first
-    map_dataset_path = find_latest_map_dataset()
-    
-    if map_dataset_path:
-        logger.info(f"Using existing map dataset: {map_dataset_path}")
-        return _load_map_dataset(map_dataset_path)
-    else:
-        logger.info("No existing map dataset found, running new analysis")
-        return _generate_from_analysis(pace_csv, segments_csv, start_times)
+    raise RuntimeError(
+        "generate_map_data() is disabled. "
+        "Maps are visualization-only. Use the report pipeline to produce map_data.json."
+    )
 
 def _load_map_dataset(map_dataset_path: str) -> Dict[str, Any]:
     """Load map data from existing map dataset JSON file."""

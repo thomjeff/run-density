@@ -634,97 +634,8 @@ async def get_cache_status(
         logger.error(f"Error getting cache status: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting cache status: {e}")
 
-@router.post("/force-refresh")
-async def force_refresh_analysis(request: dict):
-    """
-    Force refresh analysis results, bypassing cache.
-    
-    This endpoint runs fresh analysis and updates the cache
-    with new results and timestamps.
-    """
-    try:
-        analysis_type = request.get('analysisType', 'density')
-        pace_csv = request.get('paceCsv', 'data/runners.csv')
-        segments_csv = request.get('segmentsCsv', 'data/segments.csv')
-        start_times = request.get('startTimes', {"Full": 420, "10K": 440, "Half": 460})
-        
-        # Calculate dataset hash
-        from .bin_analysis import calculate_dataset_hash
-        dataset_hash = calculate_dataset_hash(pace_csv, segments_csv, start_times)
-        
-        # Get cache manager
-        cache_manager = get_global_cache_manager()
-        
-        # Run fresh analysis based on type
-        if analysis_type == 'density':
-            from .density import analyze_density_segments
-            from .io.loader import load_runners, load_segments
-            from datetime import datetime, timedelta
-            
-            # Load data
-            pace_data = load_runners(pace_csv)
-            segments_df = load_segments(segments_csv)
-            
-            # Convert start times from minutes to datetime objects
-            start_times_dt = {}
-            for event, minutes in start_times.items():
-                start_times_dt[event] = datetime(2024, 1, 1) + timedelta(minutes=minutes)
-            
-            # Run analysis
-            results = analyze_density_segments(
-                pace_data=pace_data,
-                start_times=start_times_dt,
-                density_csv_path=segments_csv
-            )
-            
-        elif analysis_type == 'flow':
-            from .flow import analyze_temporal_flow_segments
-            results = analyze_temporal_flow_segments(
-                pace_csv=pace_csv,
-                segments_csv=segments_csv,
-                start_times=start_times
-            )
-            
-        elif analysis_type == 'bins':
-            from .bin_analysis import get_all_segment_bins
-            results = get_all_segment_bins(
-                pace_csv=pace_csv,
-                segments_csv=segments_csv,
-                start_times=start_times
-            )
-            
-        else:
-            raise HTTPException(status_code=400, detail=f"Unknown analysis type: {analysis_type}")
-        
-        # Store results in cache
-        metadata = {
-            "version": "v1.6.25",
-            "environment": "cloud" if os.getenv('GOOGLE_CLOUD_PROJECT') else "local",
-            "force_refresh": True
-        }
-        
-        cache_manager.store_analysis(analysis_type, dataset_hash, results, metadata)
-        
-        # Generate map data files for frontend consumption
-        try:
-            from .map_data_generator import generate_map_data, save_map_data
-            map_data = generate_map_data(pace_csv, segments_csv, start_times)
-            map_file_path = save_map_data(map_data)
-            logger.info(f"Generated map data file: {map_file_path}")
-        except Exception as e:
-            logger.warning(f"Failed to generate map data files: {e}")
-        
-        return JSONResponse(content={
-            "ok": True,
-            "message": f"Fresh {analysis_type} analysis completed and cached",
-            "analysis_type": analysis_type,
-            "dataset_hash": dataset_hash,
-            "timestamp": datetime.now().isoformat()
-        })
-        
-    except Exception as e:
-        logger.error(f"Error force refreshing analysis: {e}")
-        raise HTTPException(status_code=500, detail=f"Error force refreshing analysis: {e}")
+# REMOVED: /api/force-refresh endpoint - causes Cloud Run timeouts
+# Maps are now visualization-only and read from existing reports
 
 @router.get("/cached-analysis")
 async def get_cached_analysis(
@@ -787,38 +698,39 @@ async def get_cached_analysis(
         raise HTTPException(status_code=500, detail=f"Error getting cached analysis: {e}")
 
 @router.get("/map-data")
-async def get_map_data():
+async def get_map_data(date: str = Query(default=None, description="YYYY-MM-DD")):
     """
-    Get map data for the frontend.
+    Get map data for the frontend (read-only from existing reports).
     
-    This endpoint provides the data needed for map visualization.
-    Returns cached data if available, otherwise indicates no data.
+    This endpoint reads map_data.json from the reports directory.
+    Maps are visualization-only and do not run analysis.
     """
+    import pathlib
+    import json
+    
     try:
-        # Try to find existing map dataset first (no analysis)
-        from .map_data_generator import find_latest_map_dataset, _load_map_dataset
+        REPORTS_DIR = pathlib.Path("reports")
         
-        map_dataset_path = find_latest_map_dataset()
+        def latest_report_dir():
+            dirs = sorted([p for p in REPORTS_DIR.glob("20*--") if p.is_dir()], reverse=True)
+            return dirs[0] if dirs else None
         
-        if map_dataset_path:
-            logger.info(f"Using existing map dataset: {map_dataset_path}")
-            map_data = _load_map_dataset(map_dataset_path)
-            return JSONResponse(content=map_data)
-        else:
-            # No cached data available - return empty response
-            logger.info("No existing map dataset found - returning empty data")
-            return JSONResponse(content={
-                "ok": True,
-                "source": "no_data",
-                "timestamp": datetime.now().isoformat(),
-                "segments": {},
-                "metadata": {
-                    "total_segments": 0,
-                    "analysis_type": "no_data",
-                    "message": "No cached analysis data available - use 'Generate New Analysis' button"
-                }
-            })
+        report_dir = (REPORTS_DIR / date) if date else latest_report_dir()
         
+        if not report_dir:
+            raise HTTPException(status_code=404, detail={"error": "No reports found."})
+        
+        map_file = report_dir / "map_data.json"
+        if not map_file.exists():
+            raise HTTPException(status_code=404, detail={"error": "No map data available. Please generate reports first."})
+        
+        try:
+            return json.loads(map_file.read_text())
+        except Exception:
+            raise HTTPException(status_code=500, detail={"error": "Corrupt map_data.json"})
+        
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting map data: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting map data: {e}")

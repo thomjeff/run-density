@@ -635,7 +635,9 @@
       const response = await fetch('/api/map-data');
       
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const detail = await response.json().catch(() => ({}));
+        showNoDataMessage(detail.error || "No map data available. Please generate reports first.");
+        return;
       }
       
       const mapData = await response.json();
@@ -667,11 +669,36 @@
         updateStatus(`Error: ${mapData.error || 'Unknown error'}`, 'error');
       }
       
-    } catch (error) {
-      console.error('Error loading cached data:', error);
-      updateStatus(`Error loading cached data: ${error.message}`, 'error');
+      } catch (error) {
+        console.error('Error loading cached data:', error);
+        showNoDataMessage("Error loading map data.");
+      }
     }
-  }
+    
+    function showNoDataMessage(msg) {
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = msg;
+      statusEl.className = 'status error';
+      
+      // Clear any existing map layers
+      if (currentLayer) {
+        map.removeLayer(currentLayer);
+        currentLayer = null;
+      }
+      
+      // Show helpful message in the panel
+      const panel = document.querySelector('.panel');
+      if (panel) {
+        const helpDiv = document.createElement('div');
+        helpDiv.className = 'help-message';
+        helpDiv.innerHTML = `
+          <p><strong>No map data available</strong></p>
+          <p>Please generate reports first using the Reports page or E2E testing.</p>
+          <p>Maps are visualization-only and require existing analysis results.</p>
+        `;
+        panel.appendChild(helpDiv);
+      }
+    }
 
   async function loadBinData() {
     console.log('loadBinData called');
@@ -762,60 +789,7 @@
     return { type: "FeatureCollection", features };
   }
 
-  async function generateNewAnalysis() {
-    try {
-      updateStatus('Running fresh analysis... This may take 2-3 minutes.', 'loading');
-      
-      // Show progress indicator
-      const progressDiv = document.createElement('div');
-      progressDiv.id = 'progress-indicator';
-      progressDiv.innerHTML = `
-        <div style="display: flex; align-items: center; gap: 10px; margin: 10px 0;">
-          <div class="spinner"></div>
-          <span>Running analysis... Please wait</span>
-        </div>
-      `;
-      document.querySelector('.panel').appendChild(progressDiv);
-      
-      // Force refresh analysis using force-refresh endpoint
-      const response = await fetch('/api/force-refresh', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          analysisType: 'density'
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      
-      // Remove progress indicator
-      const progressIndicator = document.getElementById('progress-indicator');
-      if (progressIndicator) {
-        progressIndicator.remove();
-      }
-      
-      // Reload the data
-      await loadCachedData();
-      
-      updateStatus(`Fresh analysis completed at ${formatTimestamp(result.timestamp)}`, 'success');
-      
-    } catch (error) {
-      console.error('Error generating new analysis:', error);
-      updateStatus(`Error generating new analysis: ${error.message}`, 'error');
-      
-      // Remove progress indicator on error
-      const progressIndicator = document.getElementById('progress-indicator');
-      if (progressIndicator) {
-        progressIndicator.remove();
-      }
-    }
-  }
+  // REMOVED: generateNewAnalysis function - maps are visualization-only
 
   async function fetchBins() {
     try {
@@ -1005,10 +979,7 @@
   // View mode change handler
   // View mode is now always segments - no event listener needed
 
-  // Bin control handlers
-  document.getElementById('generateAnalysis').addEventListener('click', function() {
-    generateNewAnalysis();
-  });
+  // REMOVED: generateAnalysis event listener - button removed
 
 
   // Segment selector handler - Check if element exists before adding listener
