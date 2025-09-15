@@ -332,7 +332,6 @@ jobs:
         fi
     
     - name: Run Cloud Run E2E tests (Lightweight)
-      if: steps.check-release.outputs.exists == 'false'
       run: |
         echo "=== Running Cloud Run E2E tests (Lightweight) ==="
         echo "Skipping temporal-flow endpoint due to heavy computation timeout"
