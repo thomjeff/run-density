@@ -705,6 +705,15 @@ async def force_refresh_analysis(request: dict):
         
         cache_manager.store_analysis(analysis_type, dataset_hash, results, metadata)
         
+        # Generate map data files for frontend consumption
+        try:
+            from .map_data_generator import generate_map_data, save_map_data
+            map_data = generate_map_data(pace_csv, segments_csv, start_times)
+            map_file_path = save_map_data(map_data)
+            logger.info(f"Generated map data file: {map_file_path}")
+        except Exception as e:
+            logger.warning(f"Failed to generate map data files: {e}")
+        
         return JSONResponse(content={
             "ok": True,
             "message": f"Fresh {analysis_type} analysis completed and cached",

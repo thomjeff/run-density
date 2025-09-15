@@ -777,8 +777,16 @@
       `;
       document.querySelector('.panel').appendChild(progressDiv);
       
-      // Force refresh analysis using new simplified endpoint
-      const response = await fetch('/api/map-data?forceRefresh=true');
+      // Force refresh analysis using force-refresh endpoint
+      const response = await fetch('/api/force-refresh', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          analysisType: 'density'
+        })
+      });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
