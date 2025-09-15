@@ -125,6 +125,8 @@
           }
         ];
 
+        // Store reports globally for view function
+        window.loadedReports = reports;
         displayReports(reports);
         
       } catch (error) {
@@ -200,9 +202,10 @@
     }
 
     function getReportData(reportId) {
-      // This would need to be implemented to get the actual report data
-      // For now, return placeholder
-      return `# ${reportId} Report\n\nReport data would be displayed here.`;
+      // Return the actual report data that was loaded
+      const reports = window.loadedReports || [];
+      const report = reports.find(r => r.id === reportId);
+      return report ? report.data : `# ${reportId} Report\n\nReport data not available.`;
     }
 
     // Initialize on page load
