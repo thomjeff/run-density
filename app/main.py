@@ -768,6 +768,44 @@ async def serve_summary_json():
     return await get_summary_data()
 
 
+@app.get("/api/segments")
+async def get_segments():
+    """Get segments data for frontend dashboard."""
+    try:
+        import pandas as pd
+        # Load segments.csv to get segment definitions
+        segments_df = pd.read_csv("data/segments.csv")
+        
+        # Create segments data for dashboard
+        segments = []
+        for _, row in segments_df.iterrows():
+            # Determine LOS based on some logic (simplified for now)
+            los = "A"  # Default to A, could be enhanced with actual analysis
+            
+            # Create takeaway based on segment properties
+            takeaway = "No issues detected"
+            if row.get('width_m', 5.0) < 3.0:
+                takeaway = "Narrow segment - monitor for bottlenecks"
+            elif row.get('flow_type') == 'parallel':
+                takeaway = "Parallel flow - watch for congestion"
+            
+            segments.append({
+                "id": row['seg_id'],
+                "label": row['seg_label'],
+                "los": los,
+                "status": "STABLE",
+                "notes": [takeaway]
+            })
+        
+        return {
+            "ok": True,
+            "segments": segments,
+            "total": len(segments)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load segments data: {str(e)}")
+
 @app.get("/frontend/data/segments.json")
 async def serve_segments_json():
     """Serve segments.json for frontend."""
