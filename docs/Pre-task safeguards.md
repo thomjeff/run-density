@@ -192,10 +192,12 @@ For ALL releases and merges, you **MUST** follow this complete process:
 3. **Create Pull Request** - With comprehensive description and testing results
 4. **Wait for User Review/Approval** - User will review and merge via GitHub Desktop or Web UI
 5. **Verify Merge to Main** - Check git status and recent commits after user merge
-6. **Run Final E2E Tests on Main** - Confirm no regressions after merge
-7. **Create Release with Assets** - Include latest reports as release assets
-8. **Add E2E Files to Release** - Attach Flow.md, Flow.csv, Density.md, E2E.md to release
-9. **Verify Release and Run Final E2E Tests** - Confirm release is complete and working
+6. **Create Release with Assets** - Include latest reports as release assets
+7. **Add E2E Files to Release** - Attach Flow.md, Flow.csv, Density.md, E2E.md to release
+8. **Verify Release and Run Final E2E Tests** - Confirm release is complete and working
+9. **Run Final E2E Tests on Main (Safeguard for Next Branch)** - Ensure main branch is healthy for future development
+
+**Note**: Step 9 serves as a safeguard to ensure the next dev branch starts from a healthy main branch. Since dev branch E2E tests = main branch E2E tests (same code), running them twice is redundant and delays deployment.
 
 ## **🔄 AUTOMATED CI/CD PIPELINE**
 
