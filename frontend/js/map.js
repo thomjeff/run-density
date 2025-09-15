@@ -184,8 +184,10 @@
     segmentsLayer.clearLayers();
     
     // Add segments based on current filter
-    const zoneFilter = document.getElementById('zoneFilter');
-    const selectedZones = Array.from(zoneFilter.selectedOptions).map(option => option.value);
+    const zoneCheckboxes = document.querySelectorAll('.zone-checkboxes input[type="checkbox"]');
+    const selectedZones = Array.from(zoneCheckboxes)
+      .filter(checkbox => checkbox.checked)
+      .map(checkbox => checkbox.value);
     
     segmentsData.forEach(segment => {
       const density = currentMetric === 'areal' ? segment.metrics?.areal_density : segment.metrics?.linear_density;
@@ -203,7 +205,7 @@
     const legendStatus = document.getElementById('legendStatus');
     if (legendStatus) {
       const activeZones = selectedZones.length;
-      const totalZones = zoneFilter.options.length;
+      const totalZones = zoneCheckboxes.length;
       legendStatus.textContent = `${activeZones} of ${totalZones} zones visible`;
     }
   }
@@ -225,7 +227,10 @@
     // Load and display segments
     loadSegmentsData().then(() => {
       updateMapDisplay();
-      document.getElementById('status').textContent = `Loaded ${segmentsData.length} segments`;
+      const dataStatus = document.getElementById('dataStatus');
+      if (dataStatus) {
+        dataStatus.textContent = `Loaded ${segmentsData.length} segments`;
+      }
     });
   }
 
@@ -244,10 +249,15 @@
     const refreshBtn = document.getElementById('refresh');
     if (refreshBtn) {
       refreshBtn.addEventListener('click', function() {
-        document.getElementById('status').textContent = 'Refreshing...';
+        const dataStatus = document.getElementById('dataStatus');
+        if (dataStatus) {
+          dataStatus.textContent = 'Refreshing...';
+        }
         loadSegmentsData().then(() => {
           updateMapDisplay();
-          document.getElementById('status').textContent = `Loaded ${segmentsData.length} segments`;
+          if (dataStatus) {
+            dataStatus.textContent = `Loaded ${segmentsData.length} segments`;
+          }
         });
       });
     }
@@ -276,17 +286,17 @@
       });
     }
     
-    // Zone filter
-    const zoneFilter = document.getElementById('zoneFilter');
-    if (zoneFilter) {
-      zoneFilter.addEventListener('change', updateMapDisplay);
-    }
+    // Zone filter checkboxes
+    const zoneCheckboxes = document.querySelectorAll('.zone-checkboxes input[type="checkbox"]');
+    zoneCheckboxes.forEach(checkbox => {
+      checkbox.addEventListener('change', updateMapDisplay);
+    });
     
     // Show all zones
     const showAllBtn = document.getElementById('showAll');
     if (showAllBtn) {
       showAllBtn.addEventListener('click', function() {
-        Array.from(zoneFilter.options).forEach(option => option.selected = true);
+        zoneCheckboxes.forEach(checkbox => checkbox.checked = true);
         updateMapDisplay();
       });
     }
@@ -295,7 +305,7 @@
     const hideAllBtn = document.getElementById('hideAll');
     if (hideAllBtn) {
       hideAllBtn.addEventListener('click', function() {
-        Array.from(zoneFilter.options).forEach(option => option.selected = false);
+        zoneCheckboxes.forEach(checkbox => checkbox.checked = false);
         updateMapDisplay();
       });
     }
