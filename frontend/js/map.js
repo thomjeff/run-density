@@ -1,27 +1,62 @@
 // Map Page JavaScript
 (function(){
-  // Configuration - should be loaded from server or environment
-  const CONFIG = {
-    startTimes: {"Full": 420, "10K": 440, "Half": 460},
-    paceCsv: "data/runners.csv",
-    segmentsCsv: "data/segments.csv",
-    apiBaseUrl: "" // Will be set dynamically
+  // Configuration - loaded from server constants
+  let CONFIG = {
+    startTimes: {"Full": 420, "10K": 440, "Half": 460}, // Default fallback
+    paceCsv: "data/runners.csv", // Default fallback
+    segmentsCsv: "data/segments.csv", // Default fallback
+    apiBaseUrl: "", // Will be set dynamically
+    mapCenter: [45.9620, -66.6500], // Default fallback
+    mapZoom: 14, // Default fallback
+    tileUrl: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", // Default fallback
+    tileAttribution: "&copy; OpenStreetMap contributors", // Default fallback
+    maxZoom: 20, // Default fallback
+    densityThresholds: { // Default fallback
+      "green": 0.36,
+      "yellow": 0.54,
+      "orange": 0.72,
+      "red": 1.08
+    },
+    zoneColors: { // Default fallback
+      "green": "#4CAF50",
+      "yellow": "#FFC107",
+      "orange": "#FF9800",
+      "red": "#F44336",
+      "dark-red": "#B71C1C"
+    }
   };
 
-  const ZONES = {
-    "green":"#4CAF50",
-    "yellow":"#FFC107",
-    "orange":"#FF9800",
-    "red":"#F44336",
-    "dark-red":"#B71C1C"
-  };
+  // Zone colors - loaded from server constants
+  let ZONES = CONFIG.zoneColors;
 
-  // Initialize map centered on a default location (can be overridden)
-  const map = L.map('map').setView([45.9620, -66.6500], 14);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 20, 
-    attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(map);
+  // Load configuration from server
+  async function loadConfig() {
+    try {
+      const response = await fetch('/api/map-config');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.ok && data.config) {
+          // Update CONFIG with server values
+          Object.assign(CONFIG, data.config);
+          // Update ZONES with server values
+          ZONES = CONFIG.zoneColors;
+          console.log('Configuration loaded from server:', CONFIG);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load configuration from server, using defaults:', error);
+    }
+  }
+
+  // Initialize map (will be called after config is loaded)
+  let map;
+  function initializeMap() {
+    map = L.map('map').setView(CONFIG.mapCenter, CONFIG.mapZoom);
+    L.tileLayer(CONFIG.tileUrl, {
+      maxZoom: CONFIG.maxZoom, 
+      attribution: CONFIG.tileAttribution
+    }).addTo(map);
+  }
 
   // We'll fetch real segment data from the API
   let segmentsGeoJSON = null;
@@ -83,14 +118,15 @@
   }
 
   function determineZone(density) {
-    // Determine zone color based on density value using same thresholds as backend
-    if (density < 0.36) {
+    // Determine zone color based on density value using thresholds from server config
+    const thresholds = CONFIG.densityThresholds;
+    if (density < thresholds.green) {
       return "green";
-    } else if (density < 0.54) {
+    } else if (density < thresholds.yellow) {
       return "yellow";
-    } else if (density < 0.72) {
+    } else if (density < thresholds.orange) {
       return "orange";
-    } else if (density < 1.08) {
+    } else if (density < thresholds.red) {
       return "red";
     } else {
       return "dark-red";
@@ -98,14 +134,8 @@
   }
 
   function getZoneColor(zone) {
-    const zoneColors = {
-      "green": "#4CAF50",
-      "yellow": "#FFC107", 
-      "orange": "#FF9800",
-      "red": "#F44336",
-      "dark-red": "#D32F2F"
-    };
-    return zoneColors[zone] || "#666";
+    // Use zone colors from server config
+    return ZONES[zone] || "#666";
   }
 
   function showSegmentDetails(segmentId, segmentData) {
@@ -1102,12 +1132,24 @@
   document.getElementById('closeSegmentDetails').addEventListener('click', hideSegmentDetails);
 
 
-  // Initialize view mode (always segments now)
-  currentViewMode = 'segments';
-  console.log('View mode set to segments only');
+  // Initialize application
+  async function initialize() {
+    // Load configuration from server first
+    await loadConfig();
+    
+    // Initialize map with loaded config
+    initializeMap();
+    
+    // Initialize view mode (always segments now)
+    currentViewMode = 'segments';
+    console.log('View mode set to segments only');
+    
+    // Initial load - always load segment data
+    console.log('Loading segment data...');
+    loadCachedData();
+    updateLegendStatus();
+  }
   
-  // Initial load - always load segment data
-  console.log('Loading segment data...');
-  loadCachedData();
-  updateLegendStatus();
+  // Start the application
+  initialize();
 })();
