@@ -22,6 +22,7 @@ try:
     from .flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
     from .report import generate_combined_report, generate_combined_narrative
     from .map_api import router as map_router
+    from .routes.reports import router as reports_router
     # from .test_api import test_router  # Disabled for Cloud Run deployment
     from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 except ImportError:
@@ -33,6 +34,7 @@ except ImportError:
     from flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
     from report import generate_combined_report, generate_combined_narrative
     from map_api import router as map_router
+    from routes.reports import router as reports_router
     # from test_api import test_router  # Disabled for Cloud Run deployment
     from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
@@ -111,6 +113,7 @@ BUILD_AT = os.getenv("BUILD_AT", datetime.datetime.now(datetime.timezone.utc).is
 # Include API routers
 app.include_router(density_router)
 app.include_router(map_router)
+app.include_router(reports_router)
 # app.include_router(test_router)  # Disabled for Cloud Run deployment
 
 # Mount static files
