@@ -51,7 +51,7 @@
   // Global variables
   let map;
   let segmentsLayer;
-  let currentMetric = 'areal';
+  let currentMetric = 'crowd';
   let isColorMode = true;
   let selectedSegment = null;
   let segmentsData = [];
@@ -218,14 +218,6 @@
 
   // Event handlers
   function setupEventHandlers() {
-    // Metric toggle
-    const metricSelect = document.getElementById('metric');
-    if (metricSelect) {
-      metricSelect.addEventListener('change', function() {
-        currentMetric = this.value;
-        updateMapDisplay();
-      });
-    }
     
     // Refresh button
     const refreshBtn = document.getElementById('refresh');

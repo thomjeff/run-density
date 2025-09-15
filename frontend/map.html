@@ -73,33 +73,6 @@
             font-size: 14px;
         }
         
-        /* Inline Legend */
-        .legend-inline {
-            margin-left: 20px;
-        }
-        
-        .legend-inline-content {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            flex-wrap: wrap;
-        }
-        
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            font-size: 14px;
-            color: #495057;
-        }
-        
-        .legend-item .swatch {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 2px;
-            border: 1px solid #ccc;
-        }
         
         /* Map container adjustments */
         #map {
@@ -112,15 +85,6 @@
                 flex-direction: column;
                 align-items: flex-start;
                 gap: 12px;
-            }
-            
-            .legend-inline {
-                margin-left: 0;
-                margin-top: 8px;
-            }
-            
-            .legend-inline-content {
-                gap: 8px;
             }
         }
     </style>
@@ -183,21 +147,7 @@
         <div class="container">
             <div class="map-controls">
                 <div class="control-group">
-                    <label>Zone by:</label>
-                    <select id="metric">
-                        <option value="crowd">crowd</option>
-                        <option value="areal">areal</option>
-                    </select>
                     <span id="dataStatus" class="data-status">Loading density data...</span>
-                </div>
-                <div class="control-group legend-inline">
-                    <div id="colorLegend" class="legend-inline-content">
-                        <span class="legend-item"><span class="swatch" style="background: #4CAF50;"></span>green</span>
-                        <span class="legend-item"><span class="swatch" style="background: #FFC107;"></span>yellow</span>
-                        <span class="legend-item"><span class="swatch" style="background: #FF9800;"></span>orange</span>
-                        <span class="legend-item"><span class="swatch" style="background: #F44336;"></span>red</span>
-                        <span class="legend-item"><span class="swatch" style="background: #B71C1C;"></span>dark-red</span>
-                    </div>
                 </div>
                 <div class="control-group">
                     <button id="refresh" class="refresh-btn">Refresh Map</button>
