@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>run-density — Reports</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="stylesheet" href="css/main.css"/>
+  <style>
+    .report-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+    }
+    .report-card {
+      background: #fff;
+      border: 1px solid #eee;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .report-card h3 {
+      margin: 0 0 12px 0;
+      color: var(--brand);
+    }
+    .report-meta {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+    .report-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .btn--small {
+      padding: 6px 12px;
+      font-size: 0.9rem;
+    }
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--muted);
+    }
+    .error {
+      color: var(--alert);
+      background: #fee;
+      padding: 12px;
+      border-radius: 6px;
+      margin: 12px 0;
+    }
+  </style>
+</head>
+<body>
+  <script>
+    // Authentication guard
+    if (!sessionStorage.getItem('rf_auth')) {
+      window.location.href = 'password.html';
+    }
+    
+    // Check session expiry
+    function checkSessionExpiry() {
+      const TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
+      const now = Date.now();
+      const ts = parseInt(sessionStorage.getItem('rf_auth_ts') || '0');
+      
+      if (ts && (now - ts) > TTL_MS) {
+        sessionStorage.clear();
+        window.location.href = 'password.html';
+      }
+    }
+    
+    // Check on load
+    checkSessionExpiry();
+    
+    // Logout function
+    function logout() {
+      sessionStorage.clear();
+      window.location.href = 'password.html';
+    }
+
+    // Load reports data
+    async function loadReportsData() {
+      const container = document.getElementById('reportsContainer');
+      container.innerHTML = '<div class="loading">Loading reports...</div>';
+
+      try {
+        // Load density report
+        const densityResponse = await fetch('/api/density-report');
+        const densityData = await densityResponse.text();
+        
+        // Load flow report  
+        const flowResponse = await fetch('/api/temporal-flow-report');
+        const flowData = await flowResponse.text();
+        
+        // Load E2E test results
+        const e2eResponse = await fetch('/api/end-to-end-test');
+        const e2eData = await e2eResponse.text();
+
+        // Generate reports display
+        const reports = [
+          {
+            id: 'density',
+            title: 'Density Analysis Report',
+            description: 'Areal density analysis for marathon segments',
+            type: 'markdown',
+            data: densityData,
+            generated: new Date().toLocaleString()
+          },
+          {
+            id: 'flow',
+            title: 'Temporal Flow Report', 
+            description: 'Overtaking and co-presence analysis',
+            type: 'markdown',
+            data: flowData,
+            generated: new Date().toLocaleString()
+          },
+          {
+            id: 'e2e',
+            title: 'End-to-End Test Results',
+            description: 'System validation and test results',
+            type: 'markdown', 
+            data: e2eData,
+            generated: new Date().toLocaleString()
+          }
+        ];
+
+        displayReports(reports);
+        
+      } catch (error) {
+        console.error('Error loading reports:', error);
+        container.innerHTML = `
+          <div class="error">
+            <strong>Error loading reports:</strong> ${error.message}
+            <br><br>
+            <button class="btn btn--primary" onclick="loadReportsData()">Retry</button>
+          </div>
+        `;
+      }
+    }
+
+    function displayReports(reports) {
+      const container = document.getElementById('reportsContainer');
+      
+      container.innerHTML = `
+        <div class="report-grid">
+          ${reports.map(report => `
+            <div class="report-card">
+              <h3>${report.title}</h3>
+              <p class="report-meta">Generated: ${report.generated}</p>
+              <p>${report.description}</p>
+              <div class="report-actions">
+                <button class="btn btn--primary btn--small" onclick="viewReport('${report.id}')">
+                  View Report
+                </button>
+                <button class="btn btn--small" onclick="downloadReport('${report.id}', '${report.data}')">
+                  Download
+                </button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function viewReport(reportId) {
+      // Open report in new window/tab
+      const reportData = getReportData(reportId);
+      if (reportData) {
+        const newWindow = window.open('', '_blank');
+        newWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>${reportId} Report</title>
+            <style>
+              body { font-family: system-ui, sans-serif; margin: 40px; line-height: 1.6; }
+              pre { background: #f5f5f5; padding: 16px; border-radius: 6px; overflow-x: auto; }
+              h1, h2, h3 { color: #333; }
+            </style>
+          </head>
+          <body>
+            <pre>${reportData}</pre>
+          </body>
+          </html>
+        `);
+      }
+    }
+
+    function downloadReport(reportId, data) {
+      const blob = new Blob([data], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${reportId}-report-${new Date().toISOString().split('T')[0]}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function getReportData(reportId) {
+      // This would need to be implemented to get the actual report data
+      // For now, return placeholder
+      return `# ${reportId} Report\n\nReport data would be displayed here.`;
+    }
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      loadReportsData();
+    });
+  </script>
+
+  <header class="header header--brand">
+    <div class="container header__inner">
+      <div>
+        <h1 class="brand">run-density</h1>
+        <p class="sub">Race Density & Overlap Intelligence for Fredericton Marathon</p>
+      </div>
+      <nav class="top-cta">
+        <a class="btn btn--primary" href="index.html">Dashboard</a>
+        <a class="btn btn--ghost" href="#" onclick="logout()">Logout</a>
+      </nav>
+    </div>
+  </header>
+
+  <nav class="nav">
+    <div class="container">
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="map.html">Interactive Map</a></li>
+        <li><a href="reports.html" class="active">Reports</a></li>
+        <li><a href="health.html">Health Check</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <main class="container">
+    <section class="card">
+      <h2 class="h2">Analysis Reports</h2>
+      <p class="muted">View and download the latest density and flow analysis reports.</p>
+      
+      <div id="reportsContainer">
+        <div class="loading">Loading reports...</div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      &copy; 2025 run-density · Fredericton Marathon
+    </div>
+  </footer>
+</body>
+</html>
