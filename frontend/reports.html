@@ -152,10 +152,7 @@
               <p class="report-meta">Generated: ${report.generated}</p>
               <p>${report.description}</p>
               <div class="report-actions">
-                <button class="btn btn--primary btn--small" onclick="viewReport('${report.id}')">
-                  View Report
-                </button>
-                <button class="btn btn--small" onclick="downloadReport('${report.id}', '${report.data}')">
+                <button class="btn btn--primary btn--small" onclick="downloadReport('${report.id}', '${report.data}')">
                   Download
                 </button>
               </div>
@@ -190,15 +187,23 @@
     }
 
     function downloadReport(reportId, data) {
-      const blob = new Blob([data], { type: 'text/markdown' });
-      const url = URL.createObjectURL(blob);
+      // Map report IDs to actual file names
+      const fileMap = {
+        'density': 'Density.md',
+        'flow': 'Flow.csv', 
+        'e2e': 'E2E.md'
+      };
+      
+      const fileName = fileMap[reportId] || `${reportId}-report.md`;
+      
+      // Create download link to the actual report file
       const a = document.createElement('a');
-      a.href = url;
-      a.download = `${reportId}-report-${new Date().toISOString().split('T')[0]}.md`;
+      a.href = `/reports/${fileName}`;
+      a.download = fileName;
+      a.target = '_blank';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
     }
 
     function getReportData(reportId) {
