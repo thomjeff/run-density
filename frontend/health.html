@@ -68,9 +68,9 @@ async function ping(url){
 async function run(){
   document.getElementById('ts').textContent = 'Checking…';
   const [a,b,c] = await Promise.all([
-    ping('data/summary.json'),
-    ping('data/segments.json'),
-    ping('data/reports.json')
+    ping('/api/summary'),
+    ping('/api/segments'),
+    ping('/api/reports')
   ]);
   const paint=(el,res)=>{el.textContent = res.msg; el.className = res.ok?'ok':'bad'};
   paint(document.getElementById('s1'),a);

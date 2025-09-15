@@ -13,10 +13,9 @@
                 <h1 class="brand">run-density</h1>
                 <p class="sub">Race Density & Overlap Intelligence for Fredericton Marathon</p>
             </div>
-            <nav class="top-cta">
-                <a class="btn btn--primary" href="map.html">Open Interactive Map</a>
-                <a class="btn btn--ghost" href="#" onclick="logout()">Logout</a>
-            </nav>
+             <nav class="top-cta">
+               <a class="btn btn--ghost" href="#" onclick="logout()">Logout</a>
+             </nav>
         </div>
     </header>
 
@@ -163,10 +162,8 @@
                 tbody.innerHTML = '';
                 
                 if (data.segments && data.segments.length > 0) {
-                    // Show first 6 segments as specified in issue
-                    const topSegments = data.segments.slice(0, 6);
-                    
-                    topSegments.forEach(segment => {
+                    // Show all segments
+                    data.segments.forEach(segment => {
                         const row = document.createElement('tr');
                         
                         const losClass = segment.los ? `los-${segment.los.toLowerCase()}` : '';
