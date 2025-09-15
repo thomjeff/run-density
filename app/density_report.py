@@ -629,10 +629,11 @@ def generate_density_report(
     map_path = save_map_dataset(map_data, output_dir)
     print(f"🗺️ Map dataset saved to: {map_path}")
     
-    # Generate and save bin dataset
-    bin_data = generate_bin_dataset(results, start_times)
-    bin_path = save_bin_dataset(bin_data, output_dir)
-    print(f"📦 Bin dataset saved to: {bin_path}")
+    # DISABLED: Bin dataset generation causes Cloud Run timeouts
+    # bin_data = generate_bin_dataset(results, start_times)
+    # bin_path = save_bin_dataset(bin_data, output_dir)
+    # print(f"📦 Bin dataset saved to: {bin_path}")
+    print("📦 Bin dataset generation disabled to prevent Cloud Run timeouts")
     
     return {
         "ok": True,
