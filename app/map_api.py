@@ -26,13 +26,13 @@ try:
     from .geo_utils import generate_segments_geojson, generate_bins_geojson
     from .constants import DISTANCE_BIN_SIZE_KM
     from .cache_manager import get_global_cache_manager
-    from .map_data_generator import generate_map_data, find_latest_reports
+    from .map_data_generator import find_latest_reports
 except ImportError:
     from bin_analysis import get_all_segment_bins, analyze_segment_bins, get_cache_stats
     from geo_utils import generate_segments_geojson, generate_bins_geojson
     from constants import DISTANCE_BIN_SIZE_KM
     from cache_manager import get_global_cache_manager
-    from map_data_generator import generate_map_data, find_latest_reports
+    from map_data_generator import find_latest_reports
 
 logger = logging.getLogger(__name__)
 
@@ -54,37 +54,6 @@ class FlowBinsRequest(BaseModel):
     segmentId: Optional[str] = None
     binSizeKm: Optional[float] = None
 
-@router.get("/map-data")
-async def get_map_data(
-    forceRefresh: bool = Query(False, description="Force refresh by running new analysis")
-):
-    """
-    Get map visualization data from latest reports or run new analysis.
-    
-    This endpoint implements the simplified approach:
-    - Uses existing reports if available and forceRefresh=False
-    - Runs new analysis if no reports found or forceRefresh=True
-    - Returns data in map-friendly JSON format
-    """
-    try:
-        if forceRefresh:
-            logger.info("Force refresh requested - running new analysis")
-            map_data = generate_map_data()
-        else:
-            # Try to use existing reports first
-            density_md, flow_md, flow_csv = find_latest_reports()
-            if density_md and flow_csv:
-                logger.info("Using existing reports for map data")
-                map_data = generate_map_data()
-            else:
-                logger.info("No existing reports found - running new analysis")
-                map_data = generate_map_data()
-        
-        return JSONResponse(content=map_data)
-        
-    except Exception as e:
-        logger.error(f"Error getting map data: {e}")
-        raise HTTPException(status_code=500, detail=f"Error getting map data: {e}")
 
 @router.get("/bins-data")
 async def get_bins_data(
