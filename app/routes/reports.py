@@ -123,7 +123,7 @@ def density_latest():
     
     try:
         storage_service = get_storage_service()
-        content = storage_service.load_file(file_info["name"])
+        content = storage_service.load_file(file_info["rel"])
         if content is None:
             raise HTTPException(status_code=404, detail="Density report not found in storage")
         
@@ -146,7 +146,7 @@ def flow_latest():
     
     try:
         storage_service = get_storage_service()
-        content = storage_service.load_file(file_info["name"])
+        content = storage_service.load_file(file_info["rel"])
         if content is None:
             raise HTTPException(status_code=404, detail="Flow report not found in storage")
         
