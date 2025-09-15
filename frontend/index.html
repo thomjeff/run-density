@@ -175,12 +175,26 @@
                             ? segment.notes[0] 
                             : 'No issues detected';
                         
+                        // Determine LOS pill class based on LOS level
+                        let losPillClass = 'pill';
+                        if (segment.los) {
+                            switch (segment.los.toUpperCase()) {
+                                case 'A': losPillClass = 'pill pill--a'; break;
+                                case 'B': losPillClass = 'pill pill--b'; break;
+                                case 'C': losPillClass = 'pill pill--c'; break;
+                                case 'D': losPillClass = 'pill pill--d'; break;
+                                case 'E': losPillClass = 'pill pill--e'; break;
+                                case 'F': losPillClass = 'pill pill--f'; break;
+                                default: losPillClass = 'pill';
+                            }
+                        }
+                        
                         row.innerHTML = `
                             <td class="mono">${segment.id || '—'}</td>
                             <td>${segment.label || '—'}</td>
                             <td class="${statusClass}">${takeaway}</td>
                             <td class="t-center">
-                                <span class="pill ${segment.los === 'E' ? 'pill--red' : ''}">${segment.los || '—'}</span>
+                                <span class="${losPillClass}">${segment.los || '—'}</span>
                             </td>
                         `;
                         

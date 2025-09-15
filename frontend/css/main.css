@@ -81,6 +81,14 @@ body {
   padding:.15rem .5rem;border-radius:999px;font-weight:600;font-size:0.8rem}
 .pill--red{background:#fee2e2;color:#b91c1c}
 
+/* LOS Pill Colors */
+.pill--a{background:#e8f5e8;color:#166534}
+.pill--b{background:#dbeafe;color:#1e40af}
+.pill--c{background:#fef3c7;color:#92400e}
+.pill--d{background:#fed7aa;color:#c2410c}
+.pill--e{background:#fecaca;color:#dc2626}
+.pill--f{background:#fca5a5;color:#b91c1c}
+
 /* Legend */
 .legend {display:flex;gap:12px;flex-wrap:wrap;align-items:center}
 .legend--los .badge {padding:4px 8px;border-radius:4px;font-size:0.8rem;font-weight:600}
