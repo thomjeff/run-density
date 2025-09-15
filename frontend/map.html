@@ -8,17 +8,61 @@
     <link rel="stylesheet" href="css/map.css"/>
     <link rel="stylesheet" href="css/main.css"/>
     <style>
+        /* Map Controls Header */
+        .map-controls-header {
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+            padding: 12px 0;
+        }
         
+        .map-controls {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .data-status {
+            font-size: 14px;
+            color: #6c757d;
+            font-style: italic;
+        }
+        
+        .refresh-btn {
+            padding: 6px 12px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .refresh-btn:hover {
+            background: #218838;
+        }
         
         /* Map container adjustments */
         #map {
-            height: calc(100vh - 120px);
+            height: calc(100vh - 160px);
             width: 100%;
         }
         
         @media (max-width: 768px) {
+            .map-controls {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+            
             #map {
-                height: calc(100vh - 100px);
+                height: calc(100vh - 140px);
             }
         }
     </style>
@@ -76,6 +120,19 @@
         </div>
     </nav>
 
+    <!-- Map Controls Header -->
+    <div class="map-controls-header">
+        <div class="container">
+            <div class="map-controls">
+                <div class="control-group">
+                    <span id="dataStatus" class="data-status">Click refresh to load course data</span>
+                </div>
+                <div class="control-group">
+                    <button id="refresh" class="refresh-btn">Refresh Map</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Map container -->
     <div id="map"></div>

@@ -56,13 +56,26 @@
   let selectedSegment = null;
   let segmentsData = [];
 
-  // Load segments data from JSON
+  // Load segments data from GeoJSON
   async function loadSegmentsData() {
     try {
-      const response = await fetch('/api/segments');
+      const startTimes = encodeURIComponent(JSON.stringify(CONFIG.startTimes));
+      const response = await fetch(`/api/segments.geojson?paceCsv=${CONFIG.paceCsv}&segmentsCsv=${CONFIG.segmentsCsv}&startTimes=${startTimes}`);
       if (!response.ok) throw new Error('Failed to load segments data');
-      const data = await response.json();
-      segmentsData = data.segments || [];
+      const geojson = await response.json();
+      
+      // Convert GeoJSON features to segments data format
+      segmentsData = geojson.features.map(feature => ({
+        id: feature.properties.id,
+        label: feature.properties.label,
+        schema: feature.properties.schema,
+        los: feature.properties.los,
+        status: feature.properties.status,
+        metrics: feature.properties.metrics,
+        notes: feature.properties.notes,
+        geometry: feature.geometry
+      }));
+      
       console.log('Loaded segments data:', segmentsData.length, 'segments');
       return segmentsData;
     } catch (error) {
@@ -215,7 +228,27 @@
 
   // Event handlers
   function setupEventHandlers() {
-    
+    // Refresh button
+    const refreshBtn = document.getElementById('refresh');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', function() {
+        const dataStatus = document.getElementById('dataStatus');
+        if (dataStatus) {
+          dataStatus.textContent = 'Loading course data...';
+        }
+        loadSegmentsData().then(() => {
+          updateMapDisplay();
+          if (dataStatus) {
+            dataStatus.textContent = `Loaded ${segmentsData.length} segments`;
+          }
+        }).catch(error => {
+          console.error('Error loading segments:', error);
+          if (dataStatus) {
+            dataStatus.textContent = 'Error loading course data';
+          }
+        });
+      });
+    }
     
     // Display mode toggle
     const colorModeBtn = document.getElementById('colorMode');
