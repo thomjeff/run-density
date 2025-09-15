@@ -691,6 +691,15 @@ def generate_markdown_report(
     content.append("")
     content.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     content.append("")
+    
+    # Add environment information
+    import os
+    if os.environ.get('TEST_CLOUD_RUN', 'false').lower() == 'true':
+        content.append("**Environment:** https://run-density-ln4r3sfkha-uc.a.run.app (Cloud Run Production)")
+    else:
+        content.append("**Environment:** http://localhost:8080 (Local Development)")
+    content.append("")
+    
     content.append(f"**Analysis Period:** {datetime.now().strftime('%Y-%m-%d')}")
     content.append("")
     content.append(f"**Time Bin Size:** {results.get('time_window_s', 30)} seconds")
