@@ -12,6 +12,12 @@ from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 import os
 
+# Import storage service for persistent file storage
+try:
+    from .storage_service import get_storage_service
+except ImportError:
+    from storage_service import get_storage_service
+
 try:
     from .density import analyze_density_segments, DensityConfig
     from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS
@@ -624,9 +630,9 @@ def generate_density_report(
     
     print(f"📊 Density report saved to: {full_path}")
     
-    # Generate and save map dataset
+    # Generate and save map dataset using storage service
     map_data = generate_map_dataset(results, start_times)
-    map_path = save_map_dataset(map_data, output_dir)
+    map_path = save_map_dataset_to_storage(map_data, output_dir)
     print(f"🗺️ Map dataset saved to: {map_path}")
     
     # DISABLED: Bin dataset generation causes Cloud Run timeouts
@@ -1240,7 +1246,7 @@ def _determine_zone(density: float) -> str:
 
 def save_map_dataset(map_data: Dict[str, Any], output_dir: str) -> str:
     """
-    Save map dataset to JSON file.
+    Save map dataset to JSON file (legacy local-only function).
     
     Args:
         map_data: Map dataset dictionary
@@ -1264,6 +1270,35 @@ def save_map_dataset(map_data: Dict[str, Any], output_dir: str) -> str:
         json.dump(map_data, f, indent=2, default=str)
     
     return file_path
+
+def save_map_dataset_to_storage(map_data: Dict[str, Any], output_dir: str) -> str:
+    """
+    Save map dataset to storage service (local or Cloud Storage).
+    
+    Args:
+        map_data: Map dataset dictionary
+        output_dir: Output directory (used for fallback)
+    
+    Returns:
+        Path to saved file
+    """
+    try:
+        # Use storage service for persistent storage
+        storage_service = get_storage_service()
+        
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+        filename = f"map_data_{timestamp}.json"
+        
+        # Save to storage service (local or Cloud Storage)
+        path = storage_service.save_json(filename, map_data)
+        
+        return path
+        
+    except Exception as e:
+        # Fallback to local file system if storage service fails
+        print(f"⚠️ Storage service failed, falling back to local: {e}")
+        return save_map_dataset(map_data, output_dir)
 
 def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float]) -> Dict[str, Any]:
     """
