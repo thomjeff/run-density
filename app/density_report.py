@@ -630,6 +630,16 @@ def generate_density_report(
     
     print(f"📊 Density report saved to: {full_path}")
     
+    # Also save to storage service for persistence
+    try:
+        storage_service = get_storage_service()
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+        storage_filename = f"{timestamp}-Density.md"
+        storage_path = storage_service.save_file(storage_filename, report_content)
+        print(f"📊 Density report saved to storage: {storage_path}")
+    except Exception as e:
+        print(f"⚠️ Failed to save density report to storage: {e}")
+    
     # Generate and save map dataset using storage service
     map_data = generate_map_dataset(results, start_times)
     map_path = save_map_dataset_to_storage(map_data, output_dir)

@@ -18,11 +18,13 @@ try:
     from .flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
     from .constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
     from .report_utils import get_report_paths, format_decimal_places
+    from .storage_service import get_storage_service
     from .flow_density_correlation import analyze_flow_density_correlation
 except ImportError:
     from flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
     from constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
     from report_utils import get_report_paths, format_decimal_places
+    from storage_service import get_storage_service
     from flow_density_correlation import analyze_flow_density_correlation
 
 # Get app version from constants to avoid circular import
@@ -77,6 +79,16 @@ def generate_temporal_flow_report(
         f.write(report_content)
     
     print(f"📊 Temporal flow report saved to: {full_path}")
+    
+    # Also save to storage service for persistence
+    try:
+        storage_service = get_storage_service()
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+        storage_filename = f"{timestamp}-Flow.md"
+        storage_path = storage_service.save_file(storage_filename, report_content)
+        print(f"📊 Flow report saved to storage: {storage_path}")
+    except Exception as e:
+        print(f"⚠️ Failed to save flow report to storage: {e}")
 
     # Also generate CSV
     export_temporal_flow_csv(results, output_dir, start_times, min_overlap_duration, conflict_length_m)
@@ -734,6 +746,21 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
             ])
     
     print(f"📊 Temporal flow analysis exported to: {full_path}")
+    
+    # Also save to storage service for persistence
+    try:
+        storage_service = get_storage_service()
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+        storage_filename = f"{timestamp}-Flow.csv"
+        
+        # Read the CSV content to save to storage
+        with open(full_path, 'r', encoding='utf-8') as f:
+            csv_content = f.read()
+        
+        storage_path = storage_service.save_file(storage_filename, csv_content)
+        print(f"📊 Flow CSV saved to storage: {storage_path}")
+    except Exception as e:
+        print(f"⚠️ Failed to save flow CSV to storage: {e}")
     
     # Generate Flow Audit CSV if any segments have audit data
     audit_segments = [seg for seg in segments if "flow_audit_data" in seg]
