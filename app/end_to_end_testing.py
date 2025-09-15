@@ -317,7 +317,6 @@ def get_created_files() -> List[str]:
     temporal_md_files = glob.glob('reports/*/????-??-??-????-Flow.md')
     temporal_csv_files = glob.glob('reports/*/????-??-??-????-Flow.csv')
     density_md_files = glob.glob('reports/*/????-??-??-????-Density.md')
-    density_pdf_files = glob.glob('reports/*/????-??-??-????-Density.pdf')
     
     if temporal_md_files:
         files.append(max(temporal_md_files, key=os.path.getctime))
@@ -325,8 +324,6 @@ def get_created_files() -> List[str]:
         files.append(max(temporal_csv_files, key=os.path.getctime))
     if density_md_files:
         files.append(max(density_md_files, key=os.path.getctime))
-    if density_pdf_files:
-        files.append(max(density_pdf_files, key=os.path.getctime))
         
     return files
 
@@ -500,18 +497,9 @@ def test_report_files() -> Dict[str, Any]:
         'success': len(density_md_files) > 0
     }
     
-    # Check for density PDF files (current pattern: YYYY-MM-DD-HHMM-Density.pdf)
-    density_pdf_files = glob.glob('reports/*/????-??-??-????-Density.pdf')
-    results['density_pdf'] = {
-        'count': len(density_pdf_files),
-        'files': density_pdf_files,
-        'success': len(density_pdf_files) > 0
-    }
-    
     print(f"1. Temporal Flow MD files: {'✅' if len(temporal_md_files) > 0 else '❌'}")
     print(f"2. Temporal Flow CSV files: {'✅' if len(temporal_csv_files) > 0 else '❌'}")
     print(f"3. Density Analysis MD files: {'✅' if len(density_md_files) > 0 else '❌'}")
-    print(f"4. Density Analysis PDF files: {'✅' if len(density_pdf_files) > 0 else '❌'}")
     print()
     
     # Summary
@@ -1056,8 +1044,6 @@ def copy_test_files_to_e2e_folder(test_timestamp: str, test_date: str, created_f
             dest_name = f"{test_timestamp}-{test_type}-Flow.csv"
         elif "Density.md" in file_name:
             dest_name = f"{test_timestamp}-{test_type}-Density.md"
-        elif "Density.pdf" in file_name:
-            dest_name = f"{test_timestamp}-{test_type}-Density.pdf"
         else:
             # For other files, keep original name but add timestamp prefix
             dest_name = f"{test_timestamp}-{test_type}-{file_name}"

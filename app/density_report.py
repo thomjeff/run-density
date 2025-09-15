@@ -630,25 +630,9 @@ def generate_density_report(
     
     print(f"📊 Density report saved to: {full_path}")
     
-    # Generate PDF version
-    pdf_path, pdf_relative_path = get_report_paths("Density", "pdf", output_dir)
-    try:
-        from .pdf_generator import convert_markdown_to_pdf
-        pdf_success = convert_markdown_to_pdf(
-            md_content=report_content,
-            output_path=pdf_path,
-            metadata={
-                "title": "Density Analysis Report",
-                "author": "Run Density Analysis System",
-                "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            }
-        )
-        if pdf_success:
-            print(f"📄 Density PDF saved to: {pdf_path}")
-        else:
-            print("⚠️ PDF generation failed - continuing with markdown only")
-    except Exception as e:
-        print(f"⚠️ PDF generation error: {str(e)} - continuing with markdown only")
+    # PDF generation removed - focus on core functionality
+    pdf_path = None
+    print("📄 PDF generation removed - using markdown reports only")
     
     # Also save to storage service for persistence
     try:
@@ -707,6 +691,15 @@ def generate_markdown_report(
     content.append("")
     content.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     content.append("")
+    
+    # Add environment information
+    import os
+    if os.environ.get('TEST_CLOUD_RUN', 'false').lower() == 'true':
+        content.append("**Environment:** https://run-density-ln4r3sfkha-uc.a.run.app (Cloud Run Production)")
+    else:
+        content.append("**Environment:** http://localhost:8080 (Local Development)")
+    content.append("")
+    
     content.append(f"**Analysis Period:** {datetime.now().strftime('%Y-%m-%d')}")
     content.append("")
     content.append(f"**Time Bin Size:** {results.get('time_window_s', 30)} seconds")
