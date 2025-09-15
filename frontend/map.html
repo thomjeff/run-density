@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="css/main.css"/>
     <style>
         /* layout container for responsive sidebar */
-        .map-layout{display:grid;grid-template-columns:320px 1fr;grid-template-rows:calc(100vh - 0px);height:calc(100vh);}
+        .map-layout{display:grid;grid-template-columns:320px 1fr;grid-template-rows:calc(100vh - 120px);height:calc(100vh - 120px);}
         .map-sidebar{overflow:auto;border-right:1px solid #eee;background:#fff}
         .map-canvas{position:relative}
         @media (max-width: 900px){
@@ -40,7 +40,37 @@
         
         // Check on load
         checkSessionExpiry();
+        
+        // Logout function
+        function logout() {
+            sessionStorage.clear();
+            window.location.href = 'password.html';
+        }
     </script>
+
+    <header class="header header--brand">
+        <div class="container header__inner">
+            <div>
+                <h1 class="brand">run-density</h1>
+                <p class="sub">Race Density & Overlap Intelligence for Fredericton Marathon</p>
+            </div>
+            <nav class="top-cta">
+                <a class="btn btn--primary" href="index.html">Dashboard</a>
+                <a class="btn btn--ghost" href="#" onclick="logout()">Logout</a>
+            </nav>
+        </div>
+    </header>
+
+    <nav class="nav">
+        <div class="container">
+            <ul>
+                <li><a href="index.html">Home</a></li>
+                <li><a href="map.html" class="active">Interactive Map</a></li>
+                <li><a href="reports.html">Reports</a></li>
+                <li><a href="health.html">Health Check</a></li>
+            </ul>
+        </div>
+    </nav>
 
     <div class="map-layout">
         <!-- Sidebar (controls + details) -->
