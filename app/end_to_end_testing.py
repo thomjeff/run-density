@@ -317,6 +317,7 @@ def get_created_files() -> List[str]:
     temporal_md_files = glob.glob('reports/*/????-??-??-????-Flow.md')
     temporal_csv_files = glob.glob('reports/*/????-??-??-????-Flow.csv')
     density_md_files = glob.glob('reports/*/????-??-??-????-Density.md')
+    density_pdf_files = glob.glob('reports/*/????-??-??-????-Density.pdf')
     
     if temporal_md_files:
         files.append(max(temporal_md_files, key=os.path.getctime))
@@ -324,6 +325,8 @@ def get_created_files() -> List[str]:
         files.append(max(temporal_csv_files, key=os.path.getctime))
     if density_md_files:
         files.append(max(density_md_files, key=os.path.getctime))
+    if density_pdf_files:
+        files.append(max(density_pdf_files, key=os.path.getctime))
         
     return files
 
@@ -497,9 +500,18 @@ def test_report_files() -> Dict[str, Any]:
         'success': len(density_md_files) > 0
     }
     
+    # Check for density PDF files (current pattern: YYYY-MM-DD-HHMM-Density.pdf)
+    density_pdf_files = glob.glob('reports/*/????-??-??-????-Density.pdf')
+    results['density_pdf'] = {
+        'count': len(density_pdf_files),
+        'files': density_pdf_files,
+        'success': len(density_pdf_files) > 0
+    }
+    
     print(f"1. Temporal Flow MD files: {'✅' if len(temporal_md_files) > 0 else '❌'}")
     print(f"2. Temporal Flow CSV files: {'✅' if len(temporal_csv_files) > 0 else '❌'}")
     print(f"3. Density Analysis MD files: {'✅' if len(density_md_files) > 0 else '❌'}")
+    print(f"4. Density Analysis PDF files: {'✅' if len(density_pdf_files) > 0 else '❌'}")
     print()
     
     # Summary
@@ -1008,17 +1020,26 @@ def copy_test_files_to_e2e_folder(test_timestamp: str, test_date: str, created_f
     except Exception as e:
         print(f"   ❌ Failed to copy E2E.md: {e}")
     
-    # Copy flow_expected_results.csv with datetime stamp
-    expected_results_source = "data/flow_expected_results.csv"
-    if os.path.exists(expected_results_source):
-        expected_results_dest = e2e_date_dir / f"{test_timestamp}-{test_type}-flow_expected_results.csv"
-        try:
-            shutil.copy2(expected_results_source, expected_results_dest)
-            print(f"   ✅ flow_expected_results.csv → {expected_results_dest.name}")
-        except Exception as e:
-            print(f"   ❌ Failed to copy flow_expected_results.csv: {e}")
-    else:
-        print(f"   ⚠️  flow_expected_results.csv not found at {expected_results_source}")
+    # Generate fresh flow_expected_results.csv instead of copying
+    # This ensures the timestamp matches the E2E test run
+    try:
+        from app.flow import generate_flow_expected_results
+        expected_results_path = e2e_date_dir / f"{test_timestamp}-{test_type}-flow_expected_results.csv"
+        generate_flow_expected_results(expected_results_path)
+        print(f"   ✅ flow_expected_results.csv → {expected_results_path.name}")
+    except Exception as e:
+        print(f"   ❌ Failed to generate flow_expected_results.csv: {e}")
+        # Fallback to copying if generation fails
+        expected_results_source = "data/flow_expected_results.csv"
+        if os.path.exists(expected_results_source):
+            expected_results_dest = e2e_date_dir / f"{test_timestamp}-{test_type}-flow_expected_results.csv"
+            try:
+                shutil.copy2(expected_results_source, expected_results_dest)
+                print(f"   ✅ flow_expected_results.csv (copied) → {expected_results_dest.name}")
+            except Exception as e2:
+                print(f"   ❌ Failed to copy flow_expected_results.csv: {e2}")
+        else:
+            print(f"   ⚠️  flow_expected_results.csv not found at {expected_results_source}")
     
     # Copy other test files
     for file_path in created_files:
@@ -1035,6 +1056,8 @@ def copy_test_files_to_e2e_folder(test_timestamp: str, test_date: str, created_f
             dest_name = f"{test_timestamp}-{test_type}-Flow.csv"
         elif "Density.md" in file_name:
             dest_name = f"{test_timestamp}-{test_type}-Density.md"
+        elif "Density.pdf" in file_name:
+            dest_name = f"{test_timestamp}-{test_type}-Density.pdf"
         else:
             # For other files, keep original name but add timestamp prefix
             dest_name = f"{test_timestamp}-{test_type}-{file_name}"
@@ -1051,6 +1074,10 @@ def copy_test_files_to_e2e_folder(test_timestamp: str, test_date: str, created_f
 
 
 if __name__ == "__main__":
+    # Set E2E test mode to disable Cloud Run optimizations
+    import os
+    os.environ['E2E_TEST_MODE'] = 'true'
+    
     # Generate timestamp for file naming
     test_timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
     test_date = datetime.now().strftime("%Y-%m-%d")

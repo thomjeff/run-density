@@ -80,7 +80,7 @@ jobs:
             --image  "${IMAGE}" \
             --platform managed \
             --allow-unauthenticated \
-            --memory=1Gi --cpu=1 \
+            --memory=2Gi --cpu=2 \
             --min-instances=0 --max-instances=3 \
             --timeout=300 --quiet
 
@@ -331,11 +331,11 @@ jobs:
           echo "✅ Release ${{ steps.version.outputs.version }} does not exist - will create"
         fi
     
-    - name: Run Cloud Run E2E tests (Lightweight)
+    - name: Run Cloud Run E2E tests (Full)
       run: |
-        echo "=== Running Cloud Run E2E tests (Lightweight) ==="
-        echo "Skipping temporal-flow endpoint due to heavy computation timeout"
-        TEST_CLOUD_RUN=true SKIP_TEMPORAL_FLOW=true python -m app.end_to_end_testing
+        echo "=== Running Cloud Run E2E tests (Full) ==="
+        echo "Running full E2E tests with 2GB/2CPU resources"
+        TEST_CLOUD_RUN=true python -m app.end_to_end_testing
     
     - name: Skip Release Creation (Already Exists)
       if: steps.check-release.outputs.exists == 'true'
@@ -408,7 +408,7 @@ jobs:
     name: "5️⃣ PR E2E Testing & Artifacts"
     runs-on: ubuntu-latest
     needs: [build-deploy, smoke-test]
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     permissions:
       contents: read
       pull-requests: write

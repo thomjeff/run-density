@@ -630,6 +630,26 @@ def generate_density_report(
     
     print(f"📊 Density report saved to: {full_path}")
     
+    # Generate PDF version
+    pdf_path, pdf_relative_path = get_report_paths("Density", "pdf", output_dir)
+    try:
+        from .pdf_generator import convert_markdown_to_pdf
+        pdf_success = convert_markdown_to_pdf(
+            md_content=report_content,
+            output_path=pdf_path,
+            metadata={
+                "title": "Density Analysis Report",
+                "author": "Run Density Analysis System",
+                "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+        )
+        if pdf_success:
+            print(f"📄 Density PDF saved to: {pdf_path}")
+        else:
+            print("⚠️ PDF generation failed - continuing with markdown only")
+    except Exception as e:
+        print(f"⚠️ PDF generation error: {str(e)} - continuing with markdown only")
+    
     # Also save to storage service for persistence
     try:
         storage_service = get_storage_service()
@@ -654,6 +674,7 @@ def generate_density_report(
     return {
         "ok": True,
         "report_path": full_path,
+        "pdf_path": pdf_path if 'pdf_path' in locals() else None,
         "map_dataset_path": map_path,
         "analysis_results": results,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
