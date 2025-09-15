@@ -6,12 +6,15 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+    types: [opened, synchronize, reopened]
 
 jobs:
   # Part 1: Build & Deploy (Docker → Artifact Registry → Cloud Run)
   build-deploy:
     name: "1️⃣ Build & Deploy (Docker → Artifacts)"
     runs-on: ubuntu-latest
+    # Skip deployment for PR events to prevent race conditions with merge
+    if: github.event_name != 'pull_request'
     permissions:
       contents: read
       id-token: write   # WIF required
@@ -89,6 +92,8 @@ jobs:
     name: "2️⃣ Smoke Test (Production)"
     runs-on: ubuntu-latest
     needs: build-deploy
+    # Skip smoke test for PR events (no deployment to test)
+    if: github.event_name != 'pull_request'
     permissions:
       contents: read
       id-token: write   # we auth again to read the service URL
@@ -185,6 +190,8 @@ jobs:
     name: "3️⃣ Automated Version Management"
     runs-on: ubuntu-latest
     needs: smoke-test
+    # Skip version management for PR events (only needed for main branch)
+    if: github.event_name != 'pull_request'
     permissions:
       contents: write
     
