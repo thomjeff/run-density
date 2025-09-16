@@ -108,10 +108,48 @@ def _scan_reports(limit: int = 20) -> List[Dict]:
 
 def _latest(kind: str) -> Optional[Dict]:
     """Get the latest report of a specific kind from storage or local files."""
-    items = [r for r in _scan_reports(200) if r["kind"] == kind]
-    if not items:
+    try:
+        from datetime import datetime, timedelta
+        from app.storage_service import get_storage_service
+        
+        storage_service = get_storage_service()
+        today = datetime.now().date()
+        
+        # Check the last 7 days for reports
+        for days_back in range(7):
+            check_date = today - timedelta(days=days_back)
+            date_str = check_date.strftime("%Y-%m-%d")
+            
+            # List files for this date
+            files = storage_service.list_files(date=date_str)
+            
+            # Find the latest file of the requested kind
+            matching_files = []
+            for file_path in files:
+                file_name = file_path.split('/')[-1]  # Get just the filename
+                if any(file_name.lower().endswith(ext) for ext in ALLOWED_EXTS):
+                    lower = file_name.lower()
+                    if kind == "density" and "density" in lower:
+                        matching_files.append((date_str, file_name))
+                    elif kind == "flow" and "flow" in lower:
+                        matching_files.append((date_str, file_name))
+            
+            if matching_files:
+                # Sort by filename to get the latest
+                matching_files.sort(key=lambda x: x[1], reverse=True)
+                latest_date, latest_filename = matching_files[0]
+                
+                return {
+                    "rel": latest_filename,
+                    "kind": kind,
+                    "source": "cloud" if storage_service._detect_environment() else "local"
+                }
+        
         return None
-    return items[0]  # Return the file info dict instead of Path
+        
+    except Exception as e:
+        print(f"Error in _latest: {e}")
+        return None
 
 def _safe_join(rel: str) -> Path:
     candidate = (REPORTS_DIR / rel).resolve()
