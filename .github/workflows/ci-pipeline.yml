@@ -87,6 +87,35 @@ jobs:
             --min-instances=0 --max-instances=3 \
             --timeout=300 --quiet
 
+      - name: "Redirect Traffic to Latest Revision"
+        env:
+          REGION:     ${{ steps.params.outputs.REGION }}
+          PROJECT_ID: ${{ steps.params.outputs.PROJECT_ID }}
+          SERVICE:    ${{ steps.params.outputs.SERVICE }}
+        run: |
+          set -euo pipefail
+          echo "Redirecting 100% traffic to latest revision..."
+          
+          # Get the latest revision name
+          LATEST_REVISION=$(gcloud run revisions list \
+            --service="${SERVICE}" \
+            --project="${PROJECT_ID}" \
+            --region="${REGION}" \
+            --sort-by="~metadata.creationTimestamp" \
+            --limit=1 \
+            --format="value(metadata.name)")
+          
+          echo "Latest revision: ${LATEST_REVISION}"
+          
+          # Redirect 100% traffic to latest revision
+          gcloud run services update-traffic "${SERVICE}" \
+            --project="${PROJECT_ID}" \
+            --region="${REGION}" \
+            --to-revisions="${LATEST_REVISION}=100" \
+            --quiet
+          
+          echo "✅ Traffic redirected to ${LATEST_REVISION}"
+
   # Part 2: E2E Validation (Validate deployment with e2e.py)
   e2e-validation:
     name: "2️⃣ E2E Validation"
