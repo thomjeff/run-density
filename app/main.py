@@ -646,6 +646,8 @@ def parse_latest_density_report():
         from datetime import timedelta
         for days_back in range(7):  # Check last 7 days
             check_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+            
+            # Check the old location directly (where E2E saves files)
             files = storage.list_files(date=check_date, pattern="*Density.md")
             for file in files:
                 all_files.append((check_date, file))
@@ -735,6 +737,9 @@ async def get_summary_data():
     try:
         # Try to parse the latest density report first
         report_data = parse_latest_density_report()
+        
+        # Debug: Log what we found
+        print(f"DEBUG: parse_latest_density_report() returned: {report_data}")
         
         if report_data:
             # Use data from existing report
