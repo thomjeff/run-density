@@ -632,29 +632,34 @@ def parse_latest_density_report():
     import re
     from pathlib import Path
     from datetime import datetime
+    from app.storage_service import get_storage_service
+    
+    # Use unified storage service that works in both local and Cloud Run
+    storage = get_storage_service()
     
     # Find the latest density report
-    reports_dir = Path("reports")
-    if not reports_dir.exists():
-        return None
-    
-    # Get all date directories, sorted by date
-    date_dirs = [d for d in reports_dir.iterdir() if d.is_dir() and re.match(r'\d{4}-\d{2}-\d{2}', d.name)]
-    if not date_dirs:
-        return None
-    
-    latest_date_dir = max(date_dirs, key=lambda x: x.name)
-    
-    # Find the latest density report in that directory
-    density_reports = list(latest_date_dir.glob("*Density.md"))
-    if not density_reports:
-        return None
-    
-    latest_report = max(density_reports, key=lambda x: x.name)
-    
     try:
-        with open(latest_report, 'r', encoding='utf-8') as f:
-            content = f.read()
+        # Get all available dates by listing files and extracting dates
+        all_files = []
+        
+        # Try to list files from the last few days to find the latest report
+        from datetime import timedelta
+        for days_back in range(7):  # Check last 7 days
+            check_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+            files = storage.list_files(date=check_date, pattern="*Density.md")
+            for file in files:
+                all_files.append((check_date, file))
+        
+        if not all_files:
+            return None
+        
+        # Sort by date and filename to get the latest
+        latest_date, latest_filename = max(all_files, key=lambda x: (x[0], x[1]))
+        
+        # Load the latest density report content
+        content = storage.load_file(latest_filename, date=latest_date)
+        if not content:
+            return None
         
         # Parse the report content
         lines = content.split('\n')
@@ -683,7 +688,7 @@ def parse_latest_density_report():
                 continue
             elif in_table and line.startswith('|') and '|' in line[1:]:
                 parts = [p.strip() for p in line.split('|')]
-                if len(parts) >= 5 and parts[1] != 'Segment':  # Skip header row
+                if len(parts) >= 5 and parts[1] != 'Segment' and not parts[1].startswith('-'):  # Skip header and separator rows
                     segment_id = parts[1]
                     takeaway = parts[3]
                     los = parts[4].replace('🟢', '').replace('🟡', '').replace('🔴', '').strip()
