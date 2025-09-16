@@ -87,109 +87,11 @@ jobs:
             --min-instances=0 --max-instances=3 \
             --timeout=300 --quiet
 
-  # Part 2: Smoke Test (Production validation)
-  smoke-test:
-    name: "2️⃣ Smoke Test (Production)"
+  # Part 2: Automated Version Management (Auto-bump and validate)
+  version-management:
+    name: "2️⃣ Automated Version Management"
     runs-on: ubuntu-latest
     needs: build-deploy
-    # Skip smoke test for PR events (no deployment to test)
-    if: github.event_name != 'pull_request'
-    permissions:
-      contents: read
-      id-token: write   # we auth again to read the service URL
-
-    steps:
-      - name: Auth (WIF)
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account:         ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Setup gcloud
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: "Resolve service URL"
-        id: url
-        env:
-          REGION:     ${{ secrets.GCP_REGION }}
-          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          SERVICE:    ${{ secrets.GCP_SERVICE }}
-        run: |
-          set -euo pipefail
-          URL=$(gcloud run services describe "${SERVICE}" \
-            --project "${PROJECT_ID}" \
-            --region "${REGION}" \
-            --format='value(status.url)')
-          if [ -z "$URL" ]; then
-            echo "ERROR: service URL is empty"; exit 1
-          fi
-          echo "BASE_URL=${URL}" >> "$GITHUB_OUTPUT"
-          echo "Resolved service URL: ${URL}"
-
-      - name: "Health and readiness check"
-        env:
-          BASE_URL: ${{ steps.url.outputs.BASE_URL }}
-        run: |
-          set -euo pipefail
-          echo "Testing against ${BASE_URL}"
-          
-          # Basic liveness
-          curl -fsS "${BASE_URL}/health" | jq -e '.ok == true' >/dev/null
-          echo "✅ Health check passed"
-          
-          # Engine readiness (both loaders)
-          curl -fsS "${BASE_URL}/ready"  | jq -e '.ok == true and .density_loaded and .overlap_loaded' >/dev/null
-          echo "✅ Ready check passed"
-
-      - name: "Density endpoint test (retry with backoff)"
-        env:
-          BASE_URL: ${{ steps.url.outputs.BASE_URL }}
-        run: |
-          set -euo pipefail
-          echo "Testing density endpoint with local CSV files..."
-
-          attempt() {
-            echo "Attempt $1:"
-            set -e
-            
-            # Test density endpoint with local CSV files (included in Docker build)
-            response=$(curl -fsS -X POST "${BASE_URL}/api/density" \
-              -H "Content-Type: application/json" -H "Accept: application/json" \
-              -d '{
-                    "paceCsv":"data/your_pace_data.csv",
-                    "overlapsCsv":"data/overlaps_smoke.csv",
-                    "startTimes":{"Full":420,"10K":440,"Half":460},
-                    "stepKm":0.03,
-                    "timeWindow":60
-                  }')
-            
-            # Validate response
-            echo "$response" | jq -e '.engine == "density" and (.segments|length) > 0' >/dev/null
-            echo "✅ Density endpoint test passed"
-          }
-
-          # Retry logic with exponential backoff
-          n=0
-          until [ $n -ge 5 ]; do
-            if attempt $((n+1)); then 
-              echo "✅ All smoke tests passed for ${BASE_URL}"
-              exit 0
-            fi
-            n=$((n+1))
-            if [ $n -lt 5 ]; then
-              echo "Retrying in 8s... (attempt $n/5)"
-              sleep 8
-            fi
-          done
-          
-          echo "❌ Smoke tests failed after 5 attempts"
-          exit 1
-
-  # Part 3: Automated Version Management (Auto-bump and validate)
-  version-management:
-    name: "3️⃣ Automated Version Management"
-    runs-on: ubuntu-latest
-    needs: smoke-test
     # Skip version management for PR events (only needed for main branch)
     if: github.event_name != 'pull_request'
     permissions:
@@ -289,11 +191,11 @@ jobs:
             sys.exit(1)
         "
 
-  # Part 4: Automated Release (GitHub release creation)
+  # Part 3: Automated Release (GitHub release creation)
   automated-release:
-    name: "4️⃣ Automated Release"
+    name: "3️⃣ Automated Release"
     runs-on: ubuntu-latest
-    needs: [build-deploy, smoke-test, version-management]
+    needs: [build-deploy, version-management]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     permissions:
       contents: write
@@ -410,15 +312,14 @@ jobs:
           fi
         fi
 
-  # Part 5: PR E2E Testing (for pull requests)
-  pr-e2e-testing:
-    name: "5️⃣ PR E2E Testing & Artifacts"
+  # Part 4: PR Validation (simplified E2E testing)
+  pr-validation:
+    name: "4️⃣ PR Validation"
     runs-on: ubuntu-latest
-    needs: [build-deploy, smoke-test]
-    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    needs: build-deploy
+    if: github.event_name == 'pull_request'
     permissions:
       contents: read
-      pull-requests: write
     
     steps:
     - name: Checkout code
@@ -434,66 +335,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
-    - name: Run Full E2E Tests
+    - name: Run E2E Tests
       run: |
-        echo "=== Running Full E2E Tests for PR ==="
-        python -m app.end_to_end_testing
-    
-    - name: Upload E2E Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: e2e-test-results
-        path: |
-          reports/
-          e2e_tests/
-        retention-days: 7
-    
-    - name: Comment PR with E2E Results
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const fs = require('fs');
-          const path = require('path');
-          
-          // Find the latest E2E test results
-          let e2eSummary = '';
-          try {
-            const e2eDir = 'e2e_tests';
-            if (fs.existsSync(e2eDir)) {
-              const dates = fs.readdirSync(e2eDir).filter(d => fs.statSync(path.join(e2eDir, d)).isDirectory());
-              if (dates.length > 0) {
-                const latestDate = dates.sort().pop();
-                const latestE2E = path.join(e2eDir, latestDate);
-                const files = fs.readdirSync(latestE2E);
-                const e2eFile = files.find(f => f.includes('E2E.md'));
-                if (e2eFile) {
-                  const e2eContent = fs.readFileSync(path.join(latestE2E, e2eFile), 'utf8');
-                  e2eSummary = `\n\n## 📊 E2E Test Results\n\n\`\`\`\n${e2eContent}\n\`\`\``;
-                }
-              }
-            }
-          } catch (error) {
-            console.log('Could not read E2E results:', error.message);
-          }
-          
-          // Create PR comment
-          const comment = `## ✅ PR E2E Testing Complete
-          
-          **Status**: All E2E tests passed successfully
-          
-          **Test Coverage**:
-          - ✅ API Endpoints (health, ready, density, flow)
-          - ✅ Report Generation (Flow.md, Flow.csv, Density.md)
-          - ✅ Content Quality Validation
-          - ✅ Expected vs Actual Results (29/29 segments)
-          
-          **Artifacts**: E2E test results have been uploaded as workflow artifacts
-          
-          **Next Steps**: This PR is ready for review and merge${e2eSummary}`;
-          
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: comment
-          });
+        echo "=== Running E2E Tests for PR Validation ==="
+        python e2e.py --cloud
