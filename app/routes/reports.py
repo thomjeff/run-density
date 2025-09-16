@@ -142,6 +142,7 @@ def _latest(kind: str) -> Optional[Dict]:
                 return {
                     "rel": latest_filename,
                     "kind": kind,
+                    "date": latest_date,
                     "source": "cloud" if storage_service._detect_environment() else "local"
                 }
         
@@ -177,7 +178,7 @@ def density_latest():
         
         # Load content from storage service (Cloud Storage or local)
         if file_info["source"] == "cloud":
-            content = storage_service.load_file(file_info["rel"])
+            content = storage_service.load_file(file_info["rel"], file_info.get("date"))
             if content is None:
                 raise HTTPException(status_code=404, detail="Density report file not found in storage")
         else:
@@ -209,7 +210,7 @@ def flow_latest():
         
         # Load content from storage service (Cloud Storage or local)
         if file_info["source"] == "cloud":
-            content = storage_service.load_file(file_info["rel"])
+            content = storage_service.load_file(file_info["rel"], file_info.get("date"))
             if content is None:
                 raise HTTPException(status_code=404, detail="Flow report file not found in storage")
         else:
