@@ -626,27 +626,216 @@ async def check_pdf_status():
         })
 
 
+def parse_latest_density_report():
+    """Parse the latest density report to extract summary data without running new analysis."""
+    import os
+    import re
+    from pathlib import Path
+    from datetime import datetime
+    
+    # Find the latest density report
+    reports_dir = Path("reports")
+    if not reports_dir.exists():
+        return None
+    
+    # Get all date directories, sorted by date
+    date_dirs = [d for d in reports_dir.iterdir() if d.is_dir() and re.match(r'\d{4}-\d{2}-\d{2}', d.name)]
+    if not date_dirs:
+        return None
+    
+    latest_date_dir = max(date_dirs, key=lambda x: x.name)
+    
+    # Find the latest density report in that directory
+    density_reports = list(latest_date_dir.glob("*Density.md"))
+    if not density_reports:
+        return None
+    
+    latest_report = max(density_reports, key=lambda x: x.name)
+    
+    try:
+        with open(latest_report, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Parse the report content
+        lines = content.split('\n')
+        
+        # Extract basic info
+        total_segments = 0
+        processed_segments = 0
+        peak_areal_density = 0.0
+        peak_flow_rate = 0.0
+        critical_segments = 0
+        overall_los = 'A'
+        
+        # Parse header info
+        for line in lines:
+            if line.startswith('**Total Segments:**'):
+                total_segments = int(line.split('**Total Segments:**')[1].strip())
+            elif line.startswith('**Processed Segments:**'):
+                processed_segments = int(line.split('**Processed Segments:**')[1].strip())
+        
+        # Parse executive summary table
+        in_table = False
+        los_counts = {}
+        for line in lines:
+            if '| Segment | Label | Key Takeaway | LOS |' in line:
+                in_table = True
+                continue
+            elif in_table and line.startswith('|') and '|' in line[1:]:
+                parts = [p.strip() for p in line.split('|')]
+                if len(parts) >= 5 and parts[1] != 'Segment':  # Skip header row
+                    segment_id = parts[1]
+                    takeaway = parts[3]
+                    los = parts[4].replace('🟢', '').replace('🟡', '').replace('🔴', '').strip()
+                    
+                    # Count LOS
+                    if los in ['A', 'B', 'C', 'D', 'E', 'F']:
+                        los_counts[los] = los_counts.get(los, 0) + 1
+                    
+                    # Count critical segments (D, E, F or supply > capacity warnings)
+                    if los in ['D', 'E', 'F'] or 'Supply > Capacity' in takeaway or 'risk of congestion' in takeaway:
+                        critical_segments += 1
+                    
+                    # Extract density values from takeaway text
+                    density_match = re.search(r'(\d+\.\d+) p/m²', takeaway)
+                    if density_match:
+                        density = float(density_match.group(1))
+                        peak_areal_density = max(peak_areal_density, density)
+            elif in_table and not line.startswith('|'):
+                break
+        
+        # Calculate overall LOS (most common)
+        if los_counts:
+            overall_los = max(los_counts.items(), key=lambda x: x[1])[0]
+        
+        # Estimate peak flow rate (simplified - could be enhanced)
+        peak_flow_rate = peak_areal_density * 60  # Rough estimate
+        
+        return {
+            "total_segments": total_segments,
+            "processed_segments": processed_segments,
+            "peak_areal_density": peak_areal_density,
+            "peak_flow_rate": peak_flow_rate,
+            "critical_segments": critical_segments,
+            "overall_los": overall_los
+        }
+        
+    except Exception as e:
+        print(f"Error parsing density report: {e}")
+        return None
+
+def parse_latest_density_report_segments():
+    """Parse the latest density report to extract segment data without running new analysis."""
+    import os
+    import re
+    from pathlib import Path
+    from datetime import datetime
+    
+    # Find the latest density report
+    reports_dir = Path("reports")
+    if not reports_dir.exists():
+        return []
+    
+    # Get all date directories, sorted by date
+    date_dirs = [d for d in reports_dir.iterdir() if d.is_dir() and re.match(r'\d{4}-\d{2}-\d{2}', d.name)]
+    if not date_dirs:
+        return []
+    
+    latest_date_dir = max(date_dirs, key=lambda x: x.name)
+    
+    # Find the latest density report in that directory
+    density_reports = list(latest_date_dir.glob("*Density.md"))
+    if not density_reports:
+        return []
+    
+    latest_report = max(density_reports, key=lambda x: x.name)
+    
+    try:
+        with open(latest_report, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Parse the report content
+        lines = content.split('\n')
+        
+        segments = []
+        in_table = False
+        
+        for line in lines:
+            if '| Segment | Label | Key Takeaway | LOS |' in line:
+                in_table = True
+                continue
+            elif in_table and line.startswith('|') and '|' in line[1:]:
+                parts = [p.strip() for p in line.split('|')]
+                if len(parts) >= 5 and parts[1] != 'Segment':  # Skip header row
+                    segment_id = parts[1]
+                    segment_label = parts[2]
+                    takeaway = parts[3]
+                    los = parts[4].replace('🟢', '').replace('🟡', '').replace('🔴', '').strip()
+                    
+                    # Determine status based on LOS
+                    if los in ['D', 'E', 'F']:
+                        status = 'OVERLOAD'
+                    elif los in ['B', 'C']:
+                        status = 'MODERATE'
+                    else:
+                        status = 'STABLE'
+                    
+                    segments.append({
+                        "id": segment_id,
+                        "label": segment_label,
+                        "los": los,
+                        "status": status,
+                        "notes": [takeaway]
+                    })
+            elif in_table and not line.startswith('|'):
+                break
+        
+        return segments
+        
+    except Exception as e:
+        print(f"Error parsing density report segments: {e}")
+        return []
+
 @app.get("/api/summary")
 async def get_summary_data():
     """Generate summary.json for frontend dashboard."""
     try:
-        # For Phase 2, return mock data that matches the expected format
-        # This will be replaced with real analysis in Phase 3
-        summary_data = {
-            "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
-            "time_bin_s": 30,
-            "totals": {
-                "segments": 22,
-                "processed": 22,
-                "skipped": 0
-            },
-            "metrics": {
-                "peak_areal_density": 0.85,
-                "peak_flow_rate": 12.4,
-                "critical_segments": 1,
-                "overall_los": "A"
+        # Try to parse real data from latest density report
+        report_data = parse_latest_density_report()
+        
+        if report_data:
+            summary_data = {
+                "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
+                "time_bin_s": 30,
+                "totals": {
+                    "segments": report_data["total_segments"],
+                    "processed": report_data["processed_segments"],
+                    "skipped": 0
+                },
+                "metrics": {
+                    "peak_areal_density": report_data["peak_areal_density"],
+                    "peak_flow_rate": report_data["peak_flow_rate"],
+                    "critical_segments": report_data["critical_segments"],
+                    "overall_los": report_data["overall_los"]
+                }
             }
-        }
+        else:
+            # Fallback to mock data if no report found
+            summary_data = {
+                "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
+                "time_bin_s": 30,
+                "totals": {
+                    "segments": 22,
+                    "processed": 22,
+                    "skipped": 0
+                },
+                "metrics": {
+                    "peak_areal_density": 0.85,
+                    "peak_flow_rate": 12.4,
+                    "critical_segments": 1,
+                    "overall_los": "A"
+                }
+            }
         
         return JSONResponse(content=summary_data)
         
@@ -772,30 +961,33 @@ async def serve_summary_json():
 async def get_segments():
     """Get segments data for frontend dashboard."""
     try:
-        import pandas as pd
-        # Load segments.csv to get segment definitions
-        segments_df = pd.read_csv("data/segments.csv")
+        # Try to parse real data from latest density report
+        segments = parse_latest_density_report_segments()
         
-        # Create segments data for dashboard
-        segments = []
-        for _, row in segments_df.iterrows():
-            # Determine LOS based on some logic (simplified for now)
-            los = "A"  # Default to A, could be enhanced with actual analysis
+        if not segments:
+            # Fallback to basic segments.csv data if no report found
+            import pandas as pd
+            segments_df = pd.read_csv("data/segments.csv")
             
-            # Create takeaway based on segment properties
-            takeaway = "No issues detected"
-            if row.get('width_m', 5.0) < 3.0:
-                takeaway = "Narrow segment - monitor for bottlenecks"
-            elif row.get('flow_type') == 'parallel':
-                takeaway = "Parallel flow - watch for congestion"
-            
-            segments.append({
-                "id": row['seg_id'],
-                "label": row['seg_label'],
-                "los": los,
-                "status": "STABLE",
-                "notes": [takeaway]
-            })
+            segments = []
+            for _, row in segments_df.iterrows():
+                # Determine LOS based on some logic (simplified for now)
+                los = "A"  # Default to A, could be enhanced with actual analysis
+                
+                # Create takeaway based on segment properties
+                takeaway = "No issues detected"
+                if row.get('width_m', 5.0) < 3.0:
+                    takeaway = "Narrow segment - monitor for bottlenecks"
+                elif row.get('flow_type') == 'parallel':
+                    takeaway = "Parallel flow - watch for congestion"
+                
+                segments.append({
+                    "id": row['seg_id'],
+                    "label": row['seg_label'],
+                    "los": los,
+                    "status": "STABLE",
+                    "notes": [takeaway]
+                })
         
         return {
             "ok": True,
