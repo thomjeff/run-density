@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>run-density — segment map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="/frontend/css/map.css"/>
+</head>
+<body>
+<div id="map"></div>
+
+<!-- Control panel -->
+<div class="panel">
+  <div class="metric-toggle">
+    <label>Zone by:</label>
+    <select id="metric">
+      <option value="crowd">crowd</option>
+      <option value="areal">areal</option>
+    </select>
+    <button id="refresh" class="refresh-btn">Refresh</button>
+  </div>
+  <div class="display-toggle">
+    <label>Display:</label>
+    <button id="colorMode" class="display-btn active">Color</button>
+    <button id="bwMode" class="display-btn">B&W</button>
+  </div>
+  <!-- REMOVED: Generate New Analysis button - maps are visualization-only -->
+  <div class="zone-filter">
+    <label>Show zones:</label>
+    <select id="zoneFilter" multiple size="3">
+      <option value="green" selected>green</option>
+      <option value="yellow" selected>yellow</option>
+      <option value="orange" selected>orange</option>
+      <option value="red" selected>red</option>
+      <option value="dark-red" selected>dark-red</option>
+    </select>
+    <div class="zone-controls">
+      <button id="showAll" class="zone-btn">Show All</button>
+      <button id="hideAll" class="zone-btn">Hide All</button>
+    </div>
+  </div>
+  <div id="meta"></div>
+  <div id="status" class="status loading">Loading density data...</div>
+</div>
+
+<!-- Segment Details Sidebar -->
+<div id="segmentDetails" class="segment-details" style="display: none;">
+  <div class="segment-details-header">
+    <h3 id="selectedSegmentTitle">Segment Details</h3>
+    <button id="closeSegmentDetails" class="close-btn">&times;</button>
+  </div>
+  <div id="segmentDetailsContent" class="segment-details-content">
+    <!-- Content will be populated by JavaScript -->
+  </div>
+</div>
+
+<!-- Legend -->
+<div class="legend" style="position: absolute; bottom: 20px; right: 20px; z-index: 9999;">
+  <div id="colorLegend">
+    <div><span class="swatch" style="background: #4CAF50;"></span>green</div>
+    <div><span class="swatch" style="background: #FFC107;"></span>yellow</div>
+    <div><span class="swatch" style="background: #FF9800;"></span>orange</div>
+    <div><span class="swatch" style="background: #F44336;"></span>red</div>
+    <div><span class="swatch" style="background: #B71C1C;"></span>dark-red</div>
+  </div>
+  <div id="bwLegend" style="display: none;">
+    <div><span class="swatch" style="background: #000000; width: 2px;"></span>green (thin)</div>
+    <div><span class="swatch" style="background: #000000; width: 3px;"></span>yellow (medium)</div>
+    <div><span class="swatch" style="background: #000000; width: 4px; border-style: dashed; border-width: 2px;"></span>orange (dashed)</div>
+    <div><span class="swatch" style="background: #000000; width: 5px; border-style: dashed; border-width: 2px;"></span>red (long dash)</div>
+    <div><span class="swatch" style="background: #000000; width: 6px; border-style: dashed; border-width: 2px;"></span>dark-red (thick dash)</div>
+  </div>
+  <div style="margin-top: 8px; font-size: 10px; color: #666;">
+    <strong>Zone Filter Active</strong><br/>
+    <span id="legendStatus">All zones visible</span>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/frontend/js/map.js"></script>
+</body>
+</html>

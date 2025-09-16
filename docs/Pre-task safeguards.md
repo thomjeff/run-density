@@ -151,10 +151,37 @@ gh issue create --title "Example"
 ## **🔧 CURRENT DEVELOPMENT ISSUES**
 
 **Active Issues for Development Branch:**
-- **Issue #143**: CRITICAL - Cloud Run E2E tests using stale/cached reports (HIGH priority)
-- **Issue #144**: Flow zone cleanup - Remove duplicate columns (MEDIUM priority)  
-- **Issue #142**: PR E2E artifacts workflow improvements (MEDIUM priority)
-- **Issue #131**: Density enhancements (MEDIUM priority)
+- **Issue #191**: Runflow Front-End (Phase 2) - HTMX integration, time windows, enhanced interactions (HIGH priority)
+- **Issue #185**: Incorrect E2E Report Metadata - Environment, timestamp, version fixes (HIGH priority)
+- **Issue #182**: Align Markdown Report Formatting - Consistent report appearance (MEDIUM priority)
+- **Issue #166**: Remove Redundant Zone Values - Map tooltip cleanup (MEDIUM priority)
+- **Issue #165**: Remove Hardcoded Values - Configuration management (MEDIUM priority)
+- **Issue #164**: Add Single-Segment Testing - Development workflow improvement (MEDIUM priority)
+- **Issue #160**: CI Version Consistency - Pipeline improvement (MEDIUM priority)
+- **Issue #145**: Code Hygiene Review - General cleanup (LOW priority)
+- **Issue #85**: Density Phase 2+ - Full testing implementation (LOW priority)
+
+## **🎨 FRONTEND IMPLEMENTATION STATUS**
+
+**Issue #187 - COMPLETED (v1.6.32)**:
+- ✅ **Phase 1**: Core Infrastructure - Password gate, dashboard, health check, navigation
+- ✅ **Phase 2**: Interactive Map - Leaflet.js, GPX data, controls, course display
+- ✅ **Phase 3**: Reports Page - Data integration, download functionality
+- ✅ **Production Deployed**: All pages accessible at Cloud Run URL
+- ✅ **Testing Complete**: E2E tests passing, Flow.csv validation perfect (29/29 segments)
+
+**Current Frontend Status**:
+- **Cloud Run URL**: https://run-density-ln4r3sfkha-uc.a.run.app/frontend/
+- **Pages**: password.html, index.html, map.html, reports.html, health.html
+- **Features**: Complete frontend with dashboard, map, reports, health check
+- **Next Phase**: Issue #191 - Advanced features and HTMX integration
+
+**Frontend Development Notes**:
+- **Configuration**: Use app/constants.py for all configuration values
+- **API Endpoints**: /api/summary, /api/segments, /api/reports for frontend data
+- **Session Management**: Client-side authentication with sessionStorage (8-hour TTL)
+- **Responsive Design**: Mobile-friendly interface with modern CSS
+- **Testing**: All frontend pages tested and working on Cloud Run
 
 ## **🐛 COMMON DEBUGGING PATTERNS**
 
@@ -176,12 +203,33 @@ gh issue create --title "Example"
    - Test with known good data first
 
 **Recommended Development Order:**
-1. **Issue #144** (Flow zone cleanup) - Safe technical debt, low risk
-2. **Issue #142** (PR E2E artifacts) - Process improvement, low risk
-3. **Issue #131** (Density enhancements) - Feature work, medium risk
-4. **Issue #143** (Cloud Run E2E) - Critical bug, high risk, needs investigation
+1. **Issue #191** (Frontend Phase 2) - Demo preparation, high priority
+2. **Issue #185** (E2E Metadata) - Data accuracy, high priority
+3. **Issue #182** (Markdown Formatting) - Report consistency, medium priority
+4. **Issue #166** (Zone Values) - UI cleanup, medium priority
+5. **Issue #165** (Hardcoded Values) - Configuration management, medium priority
+6. **Issue #164** (Single-Segment Testing) - Development workflow, medium priority
+7. **Issue #160** (CI Version) - Process improvement, medium priority
+8. **Issue #145** (Code Hygiene) - General cleanup, low priority
+9. **Issue #85** (Density Phase 2+) - Feature work, low priority
 
 **Each issue gets its own commit for easy rollback within the branch.**
+
+## **🎯 CURRENT MILESTONE: DEMO PREPARATION**
+
+**Milestone 9 - Demo**: Fredericton Marathon committee presentation
+- **Deadline**: 1 day remaining
+- **Status**: Phase 1 frontend complete, Phase 2 in progress
+- **Priority**: Issue #191 (Frontend Phase 2) for advanced features
+- **Focus**: HTMX integration, time windows, enhanced interactions
+
+**Demo Readiness Checklist**:
+- ✅ **Basic Frontend**: Dashboard, map, reports working
+- ✅ **Cloud Run Deployed**: All pages accessible
+- ✅ **Flow.csv Validation**: Perfect match (29/29 segments)
+- ⏳ **Advanced Features**: HTMX, time windows, enhanced interactions
+- ⏳ **Report Metadata**: Environment, timestamp, version accuracy
+- ⏳ **Final Polish**: UI improvements, error handling, performance
 
 ## **🚀 9-STEP MERGE/TEST PROCESS**
 

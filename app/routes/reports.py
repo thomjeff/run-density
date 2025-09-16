@@ -20,38 +20,91 @@ REPORTS_DIR = Path(os.getenv("RUNFLOW_REPORTS_DIR", "reports")).resolve()
 ALLOWED_EXTS = {".html", ".htm", ".md", ".pdf", ".csv"}
 
 def _scan_reports(limit: int = 20) -> List[Dict]:
-    """Scan for reports using local file system (storage service doesn't support cross-date scanning)."""
+    """Scan for reports using storage service (Cloud Storage or local file system)."""
     rows = []
     
-    # Always use local file system for scanning all reports
-    if not REPORTS_DIR.exists():
-        return []
+    try:
+        storage_service = get_storage_service()
         
-    for p in REPORTS_DIR.rglob("*"):
-        if p.is_file() and p.suffix.lower() in ALLOWED_EXTS:
-            lower = p.name.lower()
-            if "density" in lower:
-                kind = "density"
-            elif "flow" in lower:
-                kind = "flow"
-            else:
-                kind = "other"
-            try:
-                ts = datetime.fromtimestamp(p.stat().st_mtime)
-            except Exception:
-                ts = None
-            rows.append({
-                "name": p.name,
-                "kind": kind,
-                "ext": p.suffix.lower(),
-                "mtime": ts,
-                "rel": str(p.relative_to(REPORTS_DIR)),
-                "source": "local"
-            })
-    
-    # Sort by modification time (newest first)
-    rows.sort(key=lambda r: (r["mtime"] or datetime.min), reverse=True)
-    return rows[:limit]
+        # Get all available dates by scanning the bucket/ directory structure
+        # For now, let's check the last few days
+        from datetime import datetime, timedelta
+        today = datetime.now().date()
+        
+        for days_back in range(7):  # Check last 7 days
+            check_date = today - timedelta(days=days_back)
+            date_str = check_date.strftime("%Y-%m-%d")
+            
+            # List files for this date
+            files = storage_service.list_files(date=date_str)
+            
+            for file_path in files:
+                file_name = file_path.split('/')[-1]  # Get just the filename
+                if any(file_name.lower().endswith(ext) for ext in ALLOWED_EXTS):
+                    lower = file_name.lower()
+                    if "density" in lower:
+                        kind = "density"
+                    elif "flow" in lower:
+                        kind = "flow"
+                    else:
+                        kind = "other"
+                    
+                    # Try to extract timestamp from filename or use current time
+                    try:
+                        # Extract timestamp from filename like "2025-09-16-0115-Density.md"
+                        if len(file_name) >= 19 and file_name[10] == '-':
+                            time_str = file_name[10:15]  # "0115"
+                            hour = int(time_str[:2])
+                            minute = int(time_str[2:])
+                            ts = datetime.combine(check_date, datetime.min.time().replace(hour=hour, minute=minute))
+                        else:
+                            ts = datetime.now()
+                    except Exception:
+                        ts = datetime.now()
+                    
+                    rows.append({
+                        "name": file_name,
+                        "kind": kind,
+                        "ext": file_name.split('.')[-1].lower(),
+                        "mtime": ts,
+                        "rel": file_path,
+                        "source": "cloud" if storage_service.use_cloud_storage else "local"
+                    })
+        
+        # Sort by modification time (newest first)
+        rows.sort(key=lambda r: (r["mtime"] or datetime.min), reverse=True)
+        return rows[:limit]
+        
+    except Exception as e:
+        # Fallback to local file system
+        if not REPORTS_DIR.exists():
+            return []
+            
+        for p in REPORTS_DIR.rglob("*"):
+            if p.is_file() and p.suffix.lower() in ALLOWED_EXTS:
+                lower = p.name.lower()
+                if "density" in lower:
+                    kind = "density"
+                elif "flow" in lower:
+                    kind = "flow"
+                else:
+                    kind = "other"
+                try:
+                    ts = datetime.fromtimestamp(p.stat().st_mtime)
+                except Exception:
+                    ts = None
+                rows.append({
+                    "name": p.name,
+                    "kind": kind,
+                    "ext": p.suffix.lower(),
+                    "mtime": ts,
+                    "rel": str(p.relative_to(REPORTS_DIR)),
+                    "source": "local"
+                })
+        
+        # Sort by modification time (newest first)
+        rows.sort(key=lambda r: (r["mtime"] or datetime.min), reverse=True)
+        return rows[:limit]
 
 def _latest(kind: str) -> Optional[Dict]:
     """Get the latest report of a specific kind from storage or local files."""
@@ -82,12 +135,19 @@ def density_latest():
         raise HTTPException(status_code=404, detail="No density report found")
     
     try:
-        # Use local file system since we're scanning locally
-        file_path = REPORTS_DIR / file_info["rel"]
-        if not file_path.exists():
-            raise HTTPException(status_code=404, detail="Density report file not found")
+        storage_service = get_storage_service()
         
-        content = file_path.read_text(encoding="utf-8", errors="ignore")
+        # Load content from storage service (Cloud Storage or local)
+        if file_info["source"] == "cloud":
+            content = storage_service.load_file(file_info["rel"])
+            if content is None:
+                raise HTTPException(status_code=404, detail="Density report file not found in storage")
+        else:
+            # Local file system fallback
+            file_path = REPORTS_DIR / file_info["rel"]
+            if not file_path.exists():
+                raise HTTPException(status_code=404, detail="Density report file not found")
+            content = file_path.read_text(encoding="utf-8", errors="ignore")
         
         # Return content as response
         from fastapi.responses import Response
@@ -107,12 +167,19 @@ def flow_latest():
         raise HTTPException(status_code=404, detail="No flow report found")
     
     try:
-        # Use local file system since we're scanning locally
-        file_path = REPORTS_DIR / file_info["rel"]
-        if not file_path.exists():
-            raise HTTPException(status_code=404, detail="Flow report file not found")
+        storage_service = get_storage_service()
         
-        content = file_path.read_text(encoding="utf-8", errors="ignore")
+        # Load content from storage service (Cloud Storage or local)
+        if file_info["source"] == "cloud":
+            content = storage_service.load_file(file_info["rel"])
+            if content is None:
+                raise HTTPException(status_code=404, detail="Flow report file not found in storage")
+        else:
+            # Local file system fallback
+            file_path = REPORTS_DIR / file_info["rel"]
+            if not file_path.exists():
+                raise HTTPException(status_code=404, detail="Flow report file not found")
+            content = file_path.read_text(encoding="utf-8", errors="ignore")
         
         # Return content as response
         from fastapi.responses import Response
