@@ -692,8 +692,8 @@ def parse_latest_density_report():
                     if los in ['A', 'B', 'C', 'D', 'E', 'F']:
                         los_counts[los] = los_counts.get(los, 0) + 1
                     
-                    # Count critical segments (D, E, F)
-                    if los in ['D', 'E', 'F']:
+                    # Count critical segments (D, E, F or supply > capacity warnings)
+                    if los in ['D', 'E', 'F'] or 'Supply > Capacity' in takeaway or 'risk of congestion' in takeaway:
                         critical_segments += 1
                     
                     # Extract density values from takeaway text
