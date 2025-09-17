@@ -60,6 +60,7 @@ body {
 
 /* KPIs */
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.metrics-expanded .kpis{grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:32px;margin-top:16px}
 @media (max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}}
 .kpi{padding:14px;border:1px solid #eee;border-radius:10px;background:#fafafa}
 .kpi__label{font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px}
