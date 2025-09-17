@@ -30,19 +30,45 @@
   
   // Check on load
   checkSessionExpiry();
+  
+  // Logout function
+  function logout() {
+    sessionStorage.clear();
+    window.location.href = 'password.html';
+  }
 </script>
 
-<header class="header">
+<header class="header header--brand">
   <div class="container header__inner">
     <div><h1 class="brand">Runflow</h1><p class="sub">JSON Health Check</p></div>
-    <nav><a class="btn" href="index.html">Dashboard</a></nav>
+    <nav class="top-cta">
+      <a class="btn btn--primary" href="index.html">Dashboard</a>
+      <a class="btn btn--ghost" href="#" onclick="logout()">Logout</a>
+    </nav>
   </div>
 </header>
 
+<nav class="nav">
+  <div class="container">
+    <ul>
+      <li><a href="index.html">Home</a></li>
+      <li><a href="map.html">Interactive Map</a></li>
+      <li><a href="reports.html">Reports</a></li>
+      <li><a href="health.html" class="active">Health Check</a></li>
+    </ul>
+  </div>
+</nav>
+
 <main class="container">
   <section class="card">
-    <h2 class="h2">Endpoints</h2>
-    <ul id="list" class="muted" style="line-height:1.9">
+    <h2 class="h2">System Health Check</h2>
+    <div style="margin-bottom:20px;padding:12px;background:#f8f9fa;border-radius:6px;font-size:0.95rem">
+      <div><strong>Environment:</strong> <span id="environment">Detecting...</span></div>
+      <div><strong>Version:</strong> <span id="version">Loading...</span></div>
+      <div><strong>Last Check:</strong> <span id="lastCheck">—</span></div>
+    </div>
+    <h3 class="h3">API Endpoints</h3>
+    <ul id="list" class="muted" style="line-height:2.2;font-size:1.1rem">
       <li><span class="dot">•</span> <code>data/summary.json</code> <span id="s1">…</span></li>
       <li><span class="dot">•</span> <code>data/segments.json</code> <span id="s2">…</span></li>
       <li><span class="dot">•</span> <code>data/reports.json</code> <span id="s3">…</span></li>
@@ -65,8 +91,34 @@ async function ping(url){
     return {ok:true, msg:`OK (${Object.keys(j).length} keys)`};
   }catch(e){ return {ok:false, msg:e.message} }
 }
+// Load environment and version info
+async function loadSystemInfo() {
+  try {
+    // Get version from health endpoint
+    const healthResponse = await fetch('/health');
+    if (healthResponse.ok) {
+      const healthData = await healthResponse.json();
+      document.getElementById('version').textContent = healthData.version || 'Unknown';
+    }
+    
+    // Detect environment based on URL
+    const hostname = window.location.hostname;
+    let environment = 'Local Development';
+    if (hostname.includes('run.app') || hostname.includes('cloudrun')) {
+      environment = 'Cloud Run Production';
+    }
+    document.getElementById('environment').textContent = environment;
+  } catch (error) {
+    console.warn('Failed to load system info:', error);
+    document.getElementById('version').textContent = 'Unknown';
+    document.getElementById('environment').textContent = 'Unknown';
+  }
+}
+
 async function run(){
   document.getElementById('ts').textContent = 'Checking…';
+  document.getElementById('lastCheck').textContent = 'Running...';
+  
   const [a,b,c] = await Promise.all([
     ping('/api/summary'),
     ping('/api/segments'),
@@ -77,10 +129,15 @@ async function run(){
   paint(document.getElementById('s2'),b);
   paint(document.getElementById('s3'),c);
   const allOk = a.ok && b.ok && c.ok;
-  document.getElementById('ts').textContent = (new Date()).toLocaleString() +
-    (allOk?' — All good':' — Issues found');
+  const timestamp = (new Date()).toLocaleString();
+  document.getElementById('ts').textContent = timestamp + (allOk?' — All good':' — Issues found');
+  document.getElementById('lastCheck').textContent = timestamp;
 }
+
 document.getElementById('run').addEventListener('click', run);
+
+// Initialize
+loadSystemInfo();
 run();
 </script>
 </body>
