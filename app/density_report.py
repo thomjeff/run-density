@@ -686,10 +686,33 @@ def generate_markdown_report(
     # Build report content
     content = []
     
-    # Header
+    # Header with standardized format (Issue #182)
     content.append("# Improved Per-Event Density Analysis Report")
     content.append("")
     content.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    content.append("")
+    content.append(f"**Analysis Engine:** density")
+    content.append("")
+    
+    # Add version information using version module
+    try:
+        from .version import get_current_version
+        version = get_current_version()
+    except ImportError:
+        try:
+            from version import get_current_version
+            version = get_current_version()
+        except ImportError:
+            # Fallback to extracting from main.py
+            import re
+            try:
+                with open('app/main.py', 'r') as f:
+                    content_text = f.read()
+                    match = re.search(r'version="(v\d+\.\d+\.\d+)"', content_text)
+                    version = match.group(1) if match else "unknown"
+            except Exception:
+                version = "unknown"
+    content.append(f"**Version:** {version}")
     content.append("")
     
     # Add environment information
@@ -700,7 +723,7 @@ def generate_markdown_report(
         content.append("**Environment:** http://localhost:8080 (Local Development)")
     content.append("")
     
-    content.append(f"**Analysis Period:** {datetime.now().strftime('%Y-%m-%d')}")
+    content.append(f"**Analysis Period:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     content.append("")
     content.append(f"**Time Bin Size:** {results.get('time_window_s', 30)} seconds")
     content.append("")
