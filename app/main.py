@@ -692,32 +692,28 @@ def parse_latest_density_report():
                 continue
             
             # Look for density values in metrics tables
-            if current_segment and line.strip().startswith('| Density |'):
-                # Next line should contain the actual density value
-                if i + 1 < len(lines):
-                    next_line = lines[i + 1]
-                    if '|' in next_line:
-                        parts = [p.strip() for p in next_line.split('|')]
-                        if len(parts) >= 2:
-                            try:
-                                density = float(parts[1])
-                                peak_areal_density = max(peak_areal_density, density)
-                            except ValueError:
-                                pass
+            if current_segment and '| Density |' in line:
+                # Extract density value from the same line
+                if '|' in line:
+                    parts = [p.strip() for p in line.split('|')]
+                    if len(parts) >= 3:  # | Density | 0.20 | p/m² |
+                        try:
+                            density = float(parts[2])
+                            peak_areal_density = max(peak_areal_density, density)
+                        except ValueError:
+                            pass
             
             # Look for flow rate values
-            if current_segment and line.strip().startswith('| Flow Rate |'):
-                # Next line should contain the actual flow rate value
-                if i + 1 < len(lines):
-                    next_line = lines[i + 1]
-                    if '|' in next_line:
-                        parts = [p.strip() for p in next_line.split('|')]
-                        if len(parts) >= 2:
-                            try:
-                                flow_rate = float(parts[1])
-                                peak_flow_rate = max(peak_flow_rate, flow_rate)
-                            except ValueError:
-                                pass
+            if current_segment and '| Flow Rate |' in line:
+                # Extract flow rate value from the same line
+                if '|' in line:
+                    parts = [p.strip() for p in line.split('|')]
+                    if len(parts) >= 3:  # | Flow Rate | 182 | p/min/m |
+                        try:
+                            flow_rate = float(parts[2])
+                            peak_flow_rate = max(peak_flow_rate, flow_rate)
+                        except ValueError:
+                            pass
             
             # Count critical segments from LOS indicators
             if '🟡' in line or '🔴' in line:
@@ -736,9 +732,6 @@ def parse_latest_density_report():
         # Calculate overall LOS (most common)
         if los_counts:
             overall_los = max(los_counts.items(), key=lambda x: x[1])[0]
-        
-        # Estimate peak flow rate (simplified - could be enhanced)
-        peak_flow_rate = peak_areal_density * 60  # Rough estimate
         
         return {
             "total_segments": total_segments,
