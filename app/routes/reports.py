@@ -206,11 +206,11 @@ def density_latest():
         
         # Return content as response
         from fastapi.responses import Response
-        media_type = mimetypes.guess_type(file_info["name"])[0] or "text/plain"
+        media_type = mimetypes.guess_type(file_info["rel"])[0] or "text/plain"
         return Response(
             content=content,
             media_type=media_type,
-            headers={"Content-Disposition": f"attachment; filename={file_info['name']}"}
+            headers={"Content-Disposition": f"attachment; filename={file_info['rel']}"}
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading density report: {str(e)}")
@@ -241,11 +241,11 @@ def flow_latest():
         
         # Return content as response
         from fastapi.responses import Response
-        media_type = mimetypes.guess_type(file_info["name"])[0] or "text/plain"
+        media_type = mimetypes.guess_type(file_info["rel"])[0] or "text/plain"
         return Response(
             content=content,
             media_type=media_type,
-            headers={"Content-Disposition": f"attachment; filename={file_info['name']}"}
+            headers={"Content-Disposition": f"attachment; filename={file_info['rel']}"}
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading flow report: {str(e)}")
