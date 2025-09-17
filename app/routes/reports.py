@@ -145,12 +145,14 @@ def _latest(kind: str) -> Optional[Dict]:
                 matching_files.sort(key=lambda x: x[1], reverse=True)
                 latest_date, latest_filename = matching_files[0]
                 
-                return {
+                result = {
                     "rel": latest_filename,
                     "kind": kind,
                     "date": latest_date,
                     "source": "cloud" if storage_service._detect_environment() else "local"
                 }
+                print(f"DEBUG: _latest() returning: {result}")
+                return result
         
         return None
         
@@ -185,7 +187,9 @@ def density_latest():
         # Load content from storage service (Cloud Storage or local)
         if file_info["source"] == "cloud":
             # Files are saved directly in YYYY-MM-DD/ not reports/YYYY-MM-DD/
-            content = storage_service._load_from_gcs(f"{file_info.get('date')}/{file_info['rel']}")
+            file_path = f"{file_info.get('date')}/{file_info['rel']}"
+            print(f"DEBUG: density_latest() loading file from path: {file_path}")
+            content = storage_service._load_from_gcs(file_path)
             if content is None:
                 raise HTTPException(status_code=404, detail="Density report file not found in storage")
         else:
@@ -218,7 +222,9 @@ def flow_latest():
         # Load content from storage service (Cloud Storage or local)
         if file_info["source"] == "cloud":
             # Files are saved directly in YYYY-MM-DD/ not reports/YYYY-MM-DD/
-            content = storage_service._load_from_gcs(f"{file_info.get('date')}/{file_info['rel']}")
+            file_path = f"{file_info.get('date')}/{file_info['rel']}"
+            print(f"DEBUG: flow_latest() loading file from path: {file_path}")
+            content = storage_service._load_from_gcs(file_path)
             if content is None:
                 raise HTTPException(status_code=404, detail="Flow report file not found in storage")
         else:
