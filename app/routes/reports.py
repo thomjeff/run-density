@@ -122,6 +122,7 @@ def _latest(kind: str) -> Optional[Dict]:
             
             # List files for this date
             files = storage_service.list_files(date=date_str)
+            print(f"DEBUG: _latest() checking date {date_str}, found {len(files)} files: {files}")
             
             # Find the latest file of the requested kind
             matching_files = []
