@@ -647,8 +647,10 @@ def parse_latest_density_report():
         for days_back in range(7):  # Check last 7 days
             check_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
             
-            # Check the old location directly (where E2E saves files)
-            files = storage.list_files(date=check_date, pattern="Density.md")
+            # Check the reports folder structure (reports/YYYY-MM-DD/)
+            # We need to construct the full path for the reports folder
+            reports_date_path = f"reports/{check_date}"
+            files = storage._list_gcs_files(reports_date_path, "Density.md") if storage.config.use_cloud_storage else storage._list_local_files(reports_date_path, "Density.md")
             for file in files:
                 all_files.append((check_date, file))
         
@@ -658,8 +660,8 @@ def parse_latest_density_report():
         # Sort by date and filename to get the latest
         latest_date, latest_filename = max(all_files, key=lambda x: (x[0], x[1]))
         
-        # Load the latest density report content
-        content = storage.load_file(latest_filename, date=latest_date)
+        # Load the latest density report content from the reports folder
+        content = storage._load_from_gcs(f"reports/{latest_date}/{latest_filename}") if storage.config.use_cloud_storage else storage._load_from_local(f"reports/{latest_date}/{latest_filename}")
         if not content:
             return None
         
