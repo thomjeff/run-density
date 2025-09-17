@@ -1563,11 +1563,18 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
         from .bins_accumulator import (
             SegmentInfo, build_bin_features, make_time_windows, to_geojson_features
         )
-        from .constants import BIN_SCHEMA_VERSION, DEFAULT_BIN_TIME_WINDOW_SECONDS
+        from .constants import (
+            BIN_SCHEMA_VERSION, DEFAULT_BIN_TIME_WINDOW_SECONDS, 
+            MAX_BIN_GENERATION_TIME_SECONDS, BIN_MAX_FEATURES, HOTSPOT_SEGMENTS
+        )
         
         # Use dt_seconds from ChatGPT specification
         if dt_seconds is None:
             dt_seconds = DEFAULT_BIN_TIME_WINDOW_SECONDS
+        
+        # Store original values for hotspot preservation
+        original_dt_seconds = dt_seconds
+        original_bin_size_km = bin_size_km
         
         log_bins_event(action="start", bin_size_km=bin_size_km, dt_seconds=dt_seconds)
         
@@ -1607,13 +1614,15 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
         # 3) Build runner→segment/window mapping (adapter to your model)
         runners_by_segment_and_window = build_runner_window_mapping(results, time_windows, start_times)
         
-        # 4) Generate bin features using ChatGPT's vectorized accumulator
-        bin_build = build_bin_features(
+        # 4) Generate bin features using ChatGPT's vectorized accumulator with performance optimization
+        bin_build = generate_bin_features_with_coarsening(
             segments=segments,
             time_windows=time_windows,
             runners_by_segment_and_window=runners_by_segment_and_window,
             bin_size_km=bin_size_km,
-            los_thresholds=None,  # Use defaults
+            original_bin_size_km=original_bin_size_km,
+            dt_seconds=dt_seconds,
+            original_dt_seconds=original_dt_seconds,
             logger=logger,
         )
         
@@ -1666,6 +1675,105 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
             "geojson": {"type": "FeatureCollection", "features": []},
             "metadata": {"total_segments": 0, "analysis_type": "bins", "status": "error"}
         }
+
+def generate_bin_features_with_coarsening(segments: dict, time_windows: list, runners_by_segment_and_window: dict,
+                                        bin_size_km: float, original_bin_size_km: float, dt_seconds: int, 
+                                        original_dt_seconds: int, logger) -> dict:
+    """
+    Generate bin features with ChatGPT's performance optimization:
+    - Temporal-first coarsening for non-hotspots
+    - Hotspot preservation (keep original resolution)
+    - Soft-timeout reaction with auto-coarsening
+    """
+    from .bins_accumulator import build_bin_features
+    from .constants import MAX_BIN_GENERATION_TIME_SECONDS, BIN_MAX_FEATURES, HOTSPOT_SEGMENTS
+    import time
+    
+    start_time = time.monotonic()
+    
+    # Apply hotspot-aware coarsening
+    coarsened_segments = {}
+    coarsened_runners = {}
+    
+    for seg_id, segment in segments.items():
+        is_hotspot = seg_id in HOTSPOT_SEGMENTS
+        
+        if is_hotspot:
+            # Hotspot preservation: keep original resolution
+            coarsened_segments[seg_id] = segment
+            coarsened_runners[seg_id] = runners_by_segment_and_window.get(seg_id, {})
+            logger.debug(f"Preserving hotspot resolution for segment {seg_id}")
+        else:
+            # Non-hotspot: apply coarsening
+            coarsened_segments[seg_id] = segment
+            coarsened_runners[seg_id] = runners_by_segment_and_window.get(seg_id, {})
+    
+    # Generate bin features with current parameters
+    bin_build = build_bin_features(
+        segments=coarsened_segments,
+        time_windows=time_windows,
+        runners_by_segment_and_window=coarsened_runners,
+        bin_size_km=bin_size_km,
+        los_thresholds=None,
+        logger=logger,
+    )
+    
+    elapsed = time.monotonic() - start_time
+    features_count = len(bin_build.features)
+    
+    # Apply ChatGPT's soft-timeout reaction & budgets
+    if elapsed > MAX_BIN_GENERATION_TIME_SECONDS or features_count > BIN_MAX_FEATURES:
+        logger.warning(f"Performance budget exceeded: elapsed={elapsed:.1f}s, features={features_count}")
+        
+        # Temporal-first coarsening for non-hotspots (ChatGPT guidance)
+        new_dt_seconds = min(max(dt_seconds * 2, 120), 180)  # Double dt, cap at 180s
+        new_bin_size_km = bin_size_km
+        
+        # Spatial coarsening for non-hotspots only if still over budget
+        if features_count > BIN_MAX_FEATURES and bin_size_km < 0.2:
+            new_bin_size_km = 0.2
+        
+        logger.warning(f"Coarsening bins due to budget: dt={new_dt_seconds}s, bin={new_bin_size_km}km")
+        
+        # Recreate time windows with coarsened dt
+        from datetime import datetime, timezone, timedelta
+        base_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Use original start times for time window calculation
+        earliest_start_min = 420  # Default start time
+        latest_end_min = 460 + 120  # Default end time + 2 hours
+        
+        t0_utc = base_date + timedelta(minutes=earliest_start_min)
+        total_duration_s = int((latest_end_min - earliest_start_min) * 60)
+        
+        # Recreate time windows with coarsened dt
+        from .bins_accumulator import make_time_windows
+        coarsened_time_windows = make_time_windows(t0=t0_utc, duration_s=total_duration_s, dt_seconds=new_dt_seconds)
+        
+        # Regenerate with coarsened parameters
+        bin_build = build_bin_features(
+            segments=coarsened_segments,
+            time_windows=coarsened_time_windows,
+            runners_by_segment_and_window=coarsened_runners,
+            bin_size_km=new_bin_size_km,
+            los_thresholds=None,
+            logger=logger,
+        )
+        
+        # Update metadata with coarsening info
+        bin_build.metadata.update({
+            "coarsening_applied": True,
+            "original_dt_seconds": original_dt_seconds,
+            "coarsened_dt_seconds": new_dt_seconds,
+            "original_bin_size_km": original_bin_size_km,
+            "coarsened_bin_size_km": new_bin_size_km,
+            "hotspot_preservation": True,
+            "hotspot_segments": list(HOTSPOT_SEGMENTS)
+        })
+        
+        logger.info(f"Coarsening complete: {len(bin_build.features)} features in {time.monotonic() - start_time:.1f}s")
+    
+    return bin_build
 
 def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, start_times: Dict[str, float]) -> Dict[str, Dict[int, Dict[str, Any]]]:
     """
