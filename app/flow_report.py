@@ -132,14 +132,36 @@ def generate_markdown_report(
     # Build report content
     content = []
     
-    # Header
+    # Header with standardized format (Issue #182)
     content.append("# Temporal Flow Analysis Report")
     content.append("")
     content.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     content.append("")
     content.append(f"**Analysis Engine:** {results.get('engine', 'temporal_flow')}")
     content.append("")
-    content.append(f"**Analysis Period:** {results.get('timestamp', 'N/A')}")
+    
+    # Add version information using version module
+    try:
+        from .version import get_current_version
+        version = get_current_version()
+    except ImportError:
+        try:
+            from version import get_current_version
+            version = get_current_version()
+        except ImportError:
+            version = APP_VERSION
+    content.append(f"**Version:** {version}")
+    content.append("")
+    
+    # Add environment information
+    import os
+    if os.environ.get('TEST_CLOUD_RUN', 'false').lower() == 'true':
+        content.append("**Environment:** https://run-density-ln4r3sfkha-uc.a.run.app (Cloud Run Production)")
+    else:
+        content.append("**Environment:** http://localhost:8080 (Local Development)")
+    content.append("")
+    
+    content.append(f"**Analysis Period:** {results.get('timestamp', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))}")
     content.append("")
     content.append(f"**Min Overlap Duration:** {results.get('min_overlap_duration', 5.0)} seconds")
     content.append("")
