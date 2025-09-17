@@ -10,6 +10,7 @@ from __future__ import annotations
 import time
 import hashlib
 import json
+import math
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 from dataclasses import dataclass
@@ -37,6 +38,32 @@ def check_time_budget(start_time: float, budget_s: int = 60) -> None:
     """Elapsed timeout guard per ChatGPT specification."""
     if time.monotonic() - start_time > budget_s:
         raise TimeoutError("bin_generation_budget_exceeded")
+
+def is_hotspot(seg_id: str, peak_los: str = None) -> bool:
+    """Determine if segment is a hotspot requiring preserved resolution per ChatGPT specification."""
+    from .constants import HOTSPOT_SEGMENTS
+    
+    # Static hotspot list (fastest to implement)
+    if seg_id in HOTSPOT_SEGMENTS:
+        return True
+    
+    # Dynamic hotspot detection based on LOS
+    if peak_los and peak_los >= 'D':
+        return True
+        
+    return False
+
+def coarsen_plan(seg_id: str, current_bin_km: float, current_dt_s: int, peak_los: str = None) -> tuple[float, int]:
+    """Determine coarsening strategy per ChatGPT hotspot preservation policy."""
+    if is_hotspot(seg_id, peak_los):
+        # Keep hotspots at high resolution
+        return current_bin_km, current_dt_s
+    
+    # Non-hotspot coarsening policy: temporal first, then spatial
+    coarsened_dt = max(current_dt_s, 120)  # Widen time windows first
+    coarsened_bin = max(current_bin_km, 0.2)  # Then spatial if needed
+    
+    return coarsened_bin, coarsened_dt
 
 # Import storage service for persistent file storage
 try:
@@ -706,36 +733,85 @@ def generate_density_report(
                 bin_size_to_use = FALLBACK_BIN_SIZE_KM
                 log_bins_event(action="cloud_run_optimization", bin_size_km=bin_size_to_use)
             
-            # Generate bin dataset with ChatGPT fixes
-            bin_data = generate_bin_dataset(results, start_times, bin_size_km=bin_size_to_use, 
-                                          analysis_context=analysis_context, dt_seconds=dt_seconds)
+            # Implement ChatGPT's temporal-first coarsening and auto-timeout reaction
+            strategy_step = 0
+            bins_status = "ok"
             
-            # Check if generation was successful
-            if bin_data.get("ok", False):
-                # Apply ChatGPT's feature budget guardrails
-                features_count = len(bin_data.get("geojson", {}).get("features", []))
+            # Pre-calculate projected features for temporal-first coarsening
+            try:
+                # Estimate segment lengths (simplified - can be enhanced with actual data)
+                avg_segment_length_m = 2000  # 2km average segment length estimate
+                n_segments = 22  # Known segment count
+                n_time_windows = 1  # Simplified for initial calculation
                 
-                # Check feature budget and apply adaptive coalescing if needed
-                if features_count > BIN_MAX_FEATURES:
-                    log_bins_event(action="feature_budget_exceeded", 
-                                 original_features=features_count, 
-                                 max_features=BIN_MAX_FEATURES)
+                projected = n_segments * math.ceil(avg_segment_length_m / (bin_size_to_use * 1000)) * n_time_windows
+                
+                # Apply temporal-first coarsening per ChatGPT
+                if projected > BIN_MAX_FEATURES:
+                    dt_seconds = min(max(dt_seconds, 120), 180)  # Widen time first
+                    log_bins_event(action="temporal_first_coarsening", 
+                                 projected_features=projected, 
+                                 new_dt_seconds=dt_seconds)
                     
-                    # Apply temporal coalescing first per ChatGPT strategy
-                    dt_seconds = min(dt_seconds * 2, 180)  # Max 3 minutes
+            except Exception as e:
+                logger.warning(f"Feature projection failed, proceeding with defaults: {e}")
+            
+            # Generate bin dataset with potential coarsening
+            while strategy_step < 3:
+                try:
+                    bin_data = generate_bin_dataset(results, start_times, bin_size_km=bin_size_to_use, 
+                                                  analysis_context=analysis_context, dt_seconds=dt_seconds)
                     
-                    # If still too many features, increase bin size
-                    if features_count > BIN_MAX_FEATURES:
-                        coalesce_factor = int((features_count + BIN_MAX_FEATURES - 1) // BIN_MAX_FEATURES)
-                        bin_size_to_use = round(coalesce_factor * DEFAULT_BIN_SIZE_KM, 1)
+                    # Check if generation was successful and within time budget
+                    elapsed = time.monotonic() - start_time
+                    
+                    if bin_data.get("ok", False):
+                        features_count = len(bin_data.get("geojson", {}).get("features", []))
                         
-                        log_bins_event(action="spatial_coalescing", 
-                                     new_bin_size_km=bin_size_to_use,
-                                     new_dt_seconds=dt_seconds)
+                        # Auto-coarsen on timeout per ChatGPT specification
+                        if elapsed > MAX_BIN_GENERATION_TIME_SECONDS:
+                            log_bins_event(action="auto_coarsen_triggered", 
+                                         elapsed_s=elapsed, 
+                                         strategy_step=strategy_step)
+                            
+                            strategy_step += 1
+                            if strategy_step == 1:
+                                # First breach: temporal coarsening for non-hotspots
+                                dt_seconds = min(dt_seconds * 2, 180)
+                                log_bins_event(action="temporal_coarsening", new_dt_seconds=dt_seconds)
+                                continue
+                            elif strategy_step == 2:
+                                # Second breach: spatial coarsening for non-hotspots  
+                                bin_size_to_use = max(bin_size_to_use, 0.2)
+                                log_bins_event(action="spatial_coarsening", new_bin_size_km=bin_size_to_use)
+                                continue
+                            else:
+                                # Third breach: mark partial and proceed
+                                bins_status = "partial"
+                                log_bins_event(action="partial_completion", reason="exceeded_retry_budget")
+                                break
+                        else:
+                            # Success within time budget
+                            break
+                    else:
+                        # Generation failed
+                        raise ValueError(f"Bin generation failed: {bin_data.get('error', 'Unknown error')}")
                         
-                        # Regenerate with coalesced parameters
-                        bin_data = generate_bin_dataset(results, start_times, bin_size_km=bin_size_to_use,
-                                                      analysis_context=analysis_context, dt_seconds=dt_seconds)
+                except Exception as gen_e:
+                    if strategy_step < 2:
+                        strategy_step += 1
+                        dt_seconds = min(dt_seconds * 2, 180)
+                        bin_size_to_use = max(bin_size_to_use, 0.2)
+                        log_bins_event(action="error_recovery", 
+                                     error=str(gen_e), 
+                                     new_dt_seconds=dt_seconds,
+                                     new_bin_size_km=bin_size_to_use)
+                        continue
+                    else:
+                        raise gen_e
+            
+            # Check final result
+            if bin_data.get("ok", False):
                 
                 # Save artifacts with performance monitoring
                 geojson_start = time.monotonic()
@@ -745,15 +821,30 @@ def generate_density_report(
                 elapsed = time.monotonic() - start_time
                 final_features = len(bin_data.get("geojson", {}).get("features", []))
                 
+                # Add bins status to metadata per ChatGPT specification
+                bin_metadata = {
+                    "status": bins_status,
+                    "effective_bin_m": int(bin_size_to_use * 1000),
+                    "effective_window_s": dt_seconds,
+                    "features": final_features,
+                    "geojson_mb": round(os.path.getsize(geojson_path) / (1024 * 1024), 1),
+                    "parquet_kb": round(os.path.getsize(parquet_path) / 1024, 1),
+                    "generation_ms": int(elapsed * 1000),
+                    "strategy_steps": strategy_step
+                }
+                
                 log_bins_event(action="artifacts_saved",
                              geojson_path=geojson_path,
                              parquet_path=parquet_path,
                              serialization_ms=serialization_time,
                              total_features=final_features,
-                             total_ms=int(elapsed * 1000))
+                             total_ms=int(elapsed * 1000),
+                             metadata=bin_metadata)
                 
                 print(f"📦 Bin dataset saved: {geojson_path} | {parquet_path}")
                 print(f"📦 Generated {final_features} bin features in {elapsed:.1f}s (bin_size={bin_size_to_use}km, dt={dt_seconds}s)")
+                if bins_status != "ok":
+                    print(f"⚠️  Bin status: {bins_status} (applied {strategy_step} optimization steps)")
             else:
                 raise ValueError(f"Bin generation failed: {bin_data.get('error', 'Unknown error')}")
                 

@@ -93,6 +93,15 @@ MAX_BIN_GENERATION_TIME_SECONDS = 120  # P95 target per ChatGPT performance plan
 BIN_HARD_LIMIT_SECONDS = 180  # Absolute ceiling before failover per ChatGPT
 BIN_SCHEMA_VERSION = "1.0.0"  # Schema version for validation (updated per ChatGPT)
 
+# Hotspot preservation for bin dataset generation (ChatGPT final optimizations)
+HOTSPOT_SEGMENTS = {
+    "F1",   # Bridge approaches - critical for reopening decisions
+    "H1",   # Trail/Aberdeen critical counterflow area
+    "J1", "J4", "J5",  # Bridge/Mill complex - high traffic convergence
+    "K1",   # Bridge/Mill to Station - major throughput area
+    "L1"    # Trail/Aberdeen counterflow - operational decisions
+}
+
 # Map center coordinates (Fredericton, NB)
 MAP_CENTER_LAT = 45.9620
 MAP_CENTER_LON = -66.6500
