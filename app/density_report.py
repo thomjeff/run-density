@@ -1580,18 +1580,27 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
         
         # 1) Build segment catalog from results
         segments = {}
-        if analysis_context and hasattr(analysis_context, 'segments'):
-            # Use segments from analysis context
-            for seg in analysis_context.segments:
-                seg_id = seg.get('seg_id') or seg.get('id')
-                length_m = float(seg.get('length_m', 1000.0))  # Default 1km
-                width_m = float(seg.get('width_m', 5.0))  # Default 5m width
-                coords = seg.get('coords', None)
-                segments[seg_id] = SegmentInfo(seg_id, length_m, width_m, coords)
+        if 'segments' in results and results['segments']:
+            # Use segments from density analysis results
+            results_segments = results['segments']
+            if isinstance(results_segments, dict):
+                # Real density analysis returns segments as a dict
+                for seg_id, seg_data in results_segments.items():
+                    length_m = float(seg_data.get('length_m', 1000.0))  # Default 1km
+                    width_m = float(seg_data.get('width_m', 5.0))  # Default 5m width
+                    coords = seg_data.get('coords', None)
+                    segments[seg_id] = SegmentInfo(seg_id, length_m, width_m, coords)
+            elif isinstance(results_segments, list):
+                # Fallback for list format
+                for seg in results_segments:
+                    seg_id = seg.get('seg_id') or seg.get('id')
+                    length_m = float(seg.get('length_m', 1000.0))
+                    width_m = float(seg.get('width_m', 5.0))
+                    coords = seg.get('coords', None)
+                    segments[seg_id] = SegmentInfo(seg_id, length_m, width_m, coords)
         else:
             # Fallback: create segments from results data
-            logger.warning("No segment data in analysis context, using fallback")
-            # This is a fallback - in real implementation, segments should come from analysis
+            logger.warning("No segment data in results, using fallback")
             segments = {
                 "A1": SegmentInfo("A1", 1000.0, 5.0),
                 "B1": SegmentInfo("B1", 800.0, 4.0)
@@ -1790,9 +1799,19 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
     
     # Get segments from results or create default structure
     if 'segments' in results:
-        for seg in results['segments']:
-            seg_id = seg.get('seg_id') or seg.get('id')
-            mapping[seg_id] = {}
+        segments = results['segments']
+        if isinstance(segments, dict):
+            # Real density analysis returns segments as a dict
+            for seg_id, seg_data in segments.items():
+                mapping[seg_id] = {}
+        elif isinstance(segments, list):
+            # Fallback for list format
+            for seg in segments:
+                seg_id = seg.get('seg_id') or seg.get('id')
+                mapping[seg_id] = {}
+        else:
+            # Unknown format, use fallback
+            mapping = {"A1": {}, "B1": {}}
     else:
         # Fallback segments
         mapping = {"A1": {}, "B1": {}}
