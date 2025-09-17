@@ -616,6 +616,9 @@ def generate_density_report(
     Returns:
         Dict with analysis results and report path
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     print("🔍 Starting density analysis...")
     
     # Load pace data
@@ -813,9 +816,23 @@ def generate_density_report(
             # Check final result
             if bin_data.get("ok", False):
                 
+                # 🧪 Quick diagnostic to add before saving
+                bin_geojson = bin_data.get("geojson", {})
+                md = bin_geojson.get("metadata", {})
+                occ = md.get("occupied_bins")
+                nz = md.get("nonzero_density_bins")
+                tot = md.get("total_features")
+                if logger:
+                    logger.info("Pre-save bins: total=%s occupied=%s nonzero=%s", tot, occ, nz)
+                    if tot in (None, 0) or occ in (None, 0) or nz in (None, 0):
+                        logger.error("Pre-save check indicates empty occupancy; saving anyway for debugging.")
+                
                 # Save artifacts with performance monitoring
                 geojson_start = time.monotonic()
-                geojson_path, parquet_path = save_bin_artifacts(bin_data, output_dir)
+                # Use the new defensive saver from save_bins.py
+                from .save_bins import save_bin_artifacts
+                # Pass the geojson part of bin_data, not the entire bin_data dict
+                geojson_path, parquet_path = save_bin_artifacts(bin_data.get("geojson", {}), output_dir)
                 serialization_time = int((time.monotonic() - geojson_start) * 1000)
                 
                 elapsed = time.monotonic() - start_time
@@ -846,7 +863,8 @@ def generate_density_report(
                 if bins_status != "ok":
                     print(f"⚠️  Bin status: {bins_status} (applied {strategy_step} optimization steps)")
             else:
-                raise ValueError(f"Bin generation failed: {bin_data.get('error', 'Unknown error')}")
+                error_msg = bin_data.get('error', 'Unknown error') if bin_data else 'Bin data is None'
+                raise ValueError(f"Bin generation failed: {error_msg}")
                 
         except Exception as e:
             print(f"⚠️ Bin dataset unavailable: {e}")
@@ -1854,7 +1872,7 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
     
     return mapping
 
-def save_bin_artifacts(bin_data: Dict[str, Any], output_dir: str) -> tuple[str, str]:
+def save_bin_artifacts_legacy(bin_data: Dict[str, Any], output_dir: str) -> tuple[str, str]:
     """
     Save bin dataset as both GeoJSON and Parquet files per ChatGPT specification.
     
@@ -2112,5 +2130,6 @@ def save_bin_dataset(bin_data: Dict[str, Any], output_dir: str) -> str:
     """
     Legacy function - redirects to save_bin_artifacts for backward compatibility.
     """
+    from .save_bins import save_bin_artifacts
     geojson_path, _ = save_bin_artifacts(bin_data, output_dir)
     return geojson_path
