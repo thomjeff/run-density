@@ -681,35 +681,57 @@ def parse_latest_density_report():
             elif line.startswith('**Processed Segments:**'):
                 processed_segments = int(line.split('**Processed Segments:**')[1].strip())
         
-        # Parse executive summary table
-        in_table = False
+        # Parse individual segment sections to get actual density values
+        current_segment = None
         los_counts = {}
-        for line in lines:
-            if '| Segment | Label | Key Takeaway | LOS |' in line:
-                in_table = True
+        
+        for i, line in enumerate(lines):
+            # Look for segment headers like "### Segment A1 — Start to Queen/Regent"
+            if line.startswith('### Segment ') and '—' in line:
+                current_segment = line.split('—')[0].replace('### Segment ', '').strip()
                 continue
-            elif in_table and line.startswith('|') and '|' in line[1:]:
-                parts = [p.strip() for p in line.split('|')]
-                if len(parts) >= 5 and parts[1] != 'Segment' and not parts[1].startswith('-'):  # Skip header and separator rows
-                    segment_id = parts[1]
-                    takeaway = parts[3]
-                    los = parts[4].replace('🟢', '').replace('🟡', '').replace('🔴', '').strip()
-                    
-                    # Count LOS
-                    if los in ['A', 'B', 'C', 'D', 'E', 'F']:
-                        los_counts[los] = los_counts.get(los, 0) + 1
-                    
-                    # Count critical segments (D, E, F or supply > capacity warnings)
-                    if los in ['D', 'E', 'F'] or 'Supply > Capacity' in takeaway or 'risk of congestion' in takeaway:
-                        critical_segments += 1
-                    
-                    # Extract density values from takeaway text
-                    density_match = re.search(r'(\d+\.\d+) p/m²', takeaway)
-                    if density_match:
-                        density = float(density_match.group(1))
-                        peak_areal_density = max(peak_areal_density, density)
-            elif in_table and not line.startswith('|'):
-                break
+            
+            # Look for density values in metrics tables
+            if current_segment and line.strip().startswith('| Density |'):
+                # Next line should contain the actual density value
+                if i + 1 < len(lines):
+                    next_line = lines[i + 1]
+                    if '|' in next_line:
+                        parts = [p.strip() for p in next_line.split('|')]
+                        if len(parts) >= 2:
+                            try:
+                                density = float(parts[1])
+                                peak_areal_density = max(peak_areal_density, density)
+                            except ValueError:
+                                pass
+            
+            # Look for flow rate values
+            if current_segment and line.strip().startswith('| Flow Rate |'):
+                # Next line should contain the actual flow rate value
+                if i + 1 < len(lines):
+                    next_line = lines[i + 1]
+                    if '|' in next_line:
+                        parts = [p.strip() for p in next_line.split('|')]
+                        if len(parts) >= 2:
+                            try:
+                                flow_rate = float(parts[1])
+                                peak_flow_rate = max(peak_flow_rate, flow_rate)
+                            except ValueError:
+                                pass
+            
+            # Count critical segments from LOS indicators
+            if '🟡' in line or '🔴' in line:
+                if '🟡' in line:
+                    los_counts['C'] = los_counts.get('C', 0) + 1
+                    los_counts['D'] = los_counts.get('D', 0) + 1
+                if '🔴' in line:
+                    los_counts['E'] = los_counts.get('E', 0) + 1
+                    los_counts['F'] = los_counts.get('F', 0) + 1
+                    critical_segments += 1
+            
+            # Count supply > capacity warnings
+            if 'Supply > Capacity' in line or 'risk of congestion' in line:
+                critical_segments += 1
         
         # Calculate overall LOS (most common)
         if los_counts:
