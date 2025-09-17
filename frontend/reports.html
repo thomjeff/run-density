@@ -162,11 +162,11 @@
     }
 
 
-    function downloadReport(reportId) {
-      // Use the backend endpoints that automatically find the latest reports
+    async function downloadReport(reportId) {
+      // Use POST endpoints that generate reports as per Issue #190 working solution
       const endpointMap = {
-        'density': '/reports/density/latest',
-        'flow': '/reports/flow/latest'
+        'density': '/api/density-report',
+        'flow': '/api/temporal-flow-report'
       };
       
       const endpoint = endpointMap[reportId];
@@ -175,13 +175,39 @@
         return;
       }
       
-      // Create download link to the backend endpoint
-      const a = document.createElement('a');
-      a.href = endpoint;
-      a.target = '_blank';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      try {
+        // POST request with required parameters (from Issue #190 working solution)
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            paceCsv: 'data/runners.csv',
+            segmentsCsv: 'data/segments.csv',
+            startTimes: { 'Full': 420, '10K': 440, 'Half': 460 }
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        // Get the response as blob and download
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${reportId}-report.md`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+      } catch (error) {
+        console.error('Download failed:', error);
+        alert(`Download failed: ${error.message}`);
+      }
     }
 
     function downloadCSV(csvId, filename) {

@@ -987,7 +987,7 @@ def parse_latest_density_report_segments():
                 continue
             elif in_table and line.startswith('|') and '|' in line[1:]:
                 parts = [p.strip() for p in line.split('|')]
-                if len(parts) >= 5 and parts[1] != 'Segment':  # Skip header row
+                if len(parts) >= 5 and parts[1] != 'Segment' and not parts[1].startswith('-'):  # Skip header and separator rows
                     segment_id = parts[1]
                     segment_label = parts[2]
                     takeaway = parts[3]
