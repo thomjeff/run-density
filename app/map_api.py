@@ -532,9 +532,9 @@ async def compare_segments(request: dict):
         
         comparison = compare_segments(
             segment_ids=segment_ids,
-            pace_csv=request.get('paceCsv', 'data/runners.csv'),
-            segments_csv=request.get('segmentsCsv', 'data/segments.csv'),
-            start_times=request.get('startTimes', {"Full": 420, "10K": 440, "Half": 460}),
+            pace_csv=request.get('paceCsv', DEFAULT_PACE_CSV),
+            segments_csv=request.get('segmentsCsv', DEFAULT_SEGMENTS_CSV),
+            start_times=request.get('startTimes', DEFAULT_START_TIMES),
             bin_size_km=request.get('binSizeKm')
         )
         
@@ -560,9 +560,9 @@ async def export_advanced_data(request: dict):
         
         export_data = export_bin_data(
             segment_ids=segment_ids,
-            pace_csv=request.get('paceCsv', 'data/runners.csv'),
-            segments_csv=request.get('segmentsCsv', 'data/segments.csv'),
-            start_times=request.get('startTimes', {"Full": 420, "10K": 440, "Half": 460}),
+            pace_csv=request.get('paceCsv', DEFAULT_PACE_CSV),
+            segments_csv=request.get('segmentsCsv', DEFAULT_SEGMENTS_CSV),
+            start_times=request.get('startTimes', DEFAULT_START_TIMES),
             format=export_format,
             bin_size_km=request.get('binSizeKm')
         )
@@ -622,9 +622,9 @@ async def invalidate_segment_cache(request: dict):
         
         # Calculate dataset hash for invalidation
         dataset_hash = calculate_dataset_hash(
-            request.get('paceCsv', 'data/runners.csv'),
-            request.get('segmentsCsv', 'data/segments.csv'),
-            request.get('startTimes', {"Full": 420, "10K": 440, "Half": 460})
+            request.get('paceCsv', DEFAULT_PACE_CSV),
+            request.get('segmentsCsv', DEFAULT_SEGMENTS_CSV),
+            request.get('startTimes', DEFAULT_START_TIMES)
         )
         
         # Invalidate cache for this segment
@@ -644,9 +644,9 @@ async def invalidate_segment_cache(request: dict):
 @router.get("/cache-status")
 async def get_cache_status(
     analysisType: str = Query(..., description="Type of analysis: density, flow, or bins"),
-    paceCsv: str = Query("data/runners.csv", description="Path to pace data CSV"),
-    segmentsCsv: str = Query("data/segments.csv", description="Path to segments data CSV"),
-    startTimes: str = Query('{"Full": 420, "10K": 440, "Half": 460}', description="JSON string of start times")
+    paceCsv: str = Query(DEFAULT_PACE_CSV, description="Path to pace data CSV"),
+    segmentsCsv: str = Query(DEFAULT_SEGMENTS_CSV, description="Path to segments data CSV"),
+    startTimes: str = Query(f'{DEFAULT_START_TIMES}', description="JSON string of start times")
 ):
     """
     Get cache status for analysis results.
@@ -687,9 +687,9 @@ async def get_cache_status(
 @router.get("/cached-analysis")
 async def get_cached_analysis(
     analysisType: str = Query(..., description="Type of analysis: density, flow, or bins"),
-    paceCsv: str = Query("data/runners.csv", description="Path to pace data CSV"),
-    segmentsCsv: str = Query("data/segments.csv", description="Path to segments data CSV"),
-    startTimes: str = Query('{"Full": 420, "10K": 440, "Half": 460}', description="JSON string of start times")
+    paceCsv: str = Query(DEFAULT_PACE_CSV, description="Path to pace data CSV"),
+    segmentsCsv: str = Query(DEFAULT_SEGMENTS_CSV, description="Path to segments data CSV"),
+    startTimes: str = Query(f'{DEFAULT_START_TIMES}', description="JSON string of start times")
 ):
     """
     Get cached analysis results.
