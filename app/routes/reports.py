@@ -198,10 +198,11 @@ def density_latest():
             if content is None:
                 raise HTTPException(status_code=404, detail="Density report file not found in storage")
         else:
-            # Local file system fallback
-            file_path = REPORTS_DIR / file_info["rel"]
+            # Local file system fallback - construct full path with date directory
+            file_path = REPORTS_DIR / file_info["date"] / file_info["rel"]
+            print(f"DEBUG: density_latest() loading local file from path: {file_path}")
             if not file_path.exists():
-                raise HTTPException(status_code=404, detail="Density report file not found")
+                raise HTTPException(status_code=404, detail=f"Density report file not found at {file_path}")
             content = file_path.read_text(encoding="utf-8", errors="ignore")
         
         # Return content as response
@@ -233,10 +234,11 @@ def flow_latest():
             if content is None:
                 raise HTTPException(status_code=404, detail="Flow report file not found in storage")
         else:
-            # Local file system fallback
-            file_path = REPORTS_DIR / file_info["rel"]
+            # Local file system fallback - construct full path with date directory
+            file_path = REPORTS_DIR / file_info["date"] / file_info["rel"]
+            print(f"DEBUG: flow_latest() loading local file from path: {file_path}")
             if not file_path.exists():
-                raise HTTPException(status_code=404, detail="Flow report file not found")
+                raise HTTPException(status_code=404, detail=f"Flow report file not found at {file_path}")
             content = file_path.read_text(encoding="utf-8", errors="ignore")
         
         # Return content as response
