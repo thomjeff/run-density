@@ -120,8 +120,8 @@ def _latest(kind: str) -> Optional[Dict]:
             check_date = today - timedelta(days=days_back)
             date_str = check_date.strftime("%Y-%m-%d")
             
-            # List files for this date
-            files = storage_service.list_files(date=date_str)
+            # List files for this date - files are saved directly in YYYY-MM-DD/ not reports/YYYY-MM-DD/
+            files = storage_service._list_gcs_files(date_str) if storage_service._detect_environment() else storage_service._list_local_files(date_str)
             print(f"DEBUG: _latest() checking date {date_str}, found {len(files)} files: {files}")
             
             # Find the latest file of the requested kind
@@ -179,7 +179,8 @@ def density_latest():
         
         # Load content from storage service (Cloud Storage or local)
         if file_info["source"] == "cloud":
-            content = storage_service.load_file(file_info["rel"], file_info.get("date"))
+            # Files are saved directly in YYYY-MM-DD/ not reports/YYYY-MM-DD/
+            content = storage_service._load_from_gcs(f"{file_info.get('date')}/{file_info['rel']}")
             if content is None:
                 raise HTTPException(status_code=404, detail="Density report file not found in storage")
         else:
@@ -211,7 +212,8 @@ def flow_latest():
         
         # Load content from storage service (Cloud Storage or local)
         if file_info["source"] == "cloud":
-            content = storage_service.load_file(file_info["rel"], file_info.get("date"))
+            # Files are saved directly in YYYY-MM-DD/ not reports/YYYY-MM-DD/
+            content = storage_service._load_from_gcs(f"{file_info.get('date')}/{file_info['rel']}")
             if content is None:
                 raise HTTPException(status_code=404, detail="Flow report file not found in storage")
         else:
