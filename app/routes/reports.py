@@ -121,7 +121,12 @@ def _latest(kind: str) -> Optional[Dict]:
             date_str = check_date.strftime("%Y-%m-%d")
             
             # List files for this date - files are saved directly in YYYY-MM-DD/ not reports/YYYY-MM-DD/
-            files = storage_service._list_gcs_files(date_str) if storage_service._detect_environment() else storage_service._list_local_files(date_str)
+            if storage_service._detect_environment():
+                # For Cloud Storage, we need to call the private method with the correct path
+                files = storage_service._list_gcs_files(date_str)
+            else:
+                # For local, use the public interface
+                files = storage_service.list_files(date=date_str)
             print(f"DEBUG: _latest() checking date {date_str}, found {len(files)} files: {files}")
             
             # Find the latest file of the requested kind
