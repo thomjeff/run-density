@@ -648,7 +648,7 @@ def parse_latest_density_report():
             check_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
             
             # Check the old location directly (where E2E saves files)
-            files = storage.list_files(date=check_date, pattern="*Density.md")
+            files = storage.list_files(date=check_date, pattern="Density.md")
             for file in files:
                 all_files.append((check_date, file))
         
