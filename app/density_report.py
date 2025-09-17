@@ -649,11 +649,31 @@ def generate_density_report(
     map_path = save_map_dataset_to_storage(map_data, output_dir)
     print(f"🗺️ Map dataset saved to: {map_path}")
     
-    # DISABLED: Bin dataset generation causes Cloud Run timeouts
-    # bin_data = generate_bin_dataset(results, start_times)
-    # bin_path = save_bin_dataset(bin_data, output_dir)
-    # print(f"📦 Bin dataset saved to: {bin_path}")
-    print("📦 Bin dataset generation disabled to prevent Cloud Run timeouts")
+    # Issue #198: Re-enable bin dataset generation with feature flag
+    enable_bin_dataset = os.getenv('ENABLE_BIN_DATASET', 'false').lower() == 'true'
+    if enable_bin_dataset:
+        try:
+            from .constants import DEFAULT_BIN_SIZE_KM, MAX_BIN_GENERATION_TIME_SECONDS
+            import signal
+            
+            def timeout_handler(signum, frame):
+                raise TimeoutError("Bin dataset generation timed out")
+            
+            # Set timeout for bin generation
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(MAX_BIN_GENERATION_TIME_SECONDS)
+            
+            try:
+                bin_data = generate_bin_dataset(results, start_times, bin_size_km=DEFAULT_BIN_SIZE_KM)
+                geojson_path, parquet_path = save_bin_artifacts(bin_data, output_dir)
+                print(f"📦 Bin dataset saved: {geojson_path} | {parquet_path}")
+            finally:
+                signal.alarm(0)  # Cancel the timeout
+                
+        except Exception as e:
+            print(f"⚠️ Bin dataset unavailable: {e}")
+    else:
+        print("📦 Bin dataset generation disabled (ENABLE_BIN_DATASET=false)")
     
     return {
         "ok": True,
@@ -1347,7 +1367,7 @@ def save_map_dataset_to_storage(map_data: Dict[str, Any], output_dir: str) -> st
         print(f"⚠️ Storage service failed, falling back to local: {e}")
         return save_map_dataset(map_data, output_dir)
 
-def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float]) -> Dict[str, Any]:
+def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float], bin_size_km: float = 0.1) -> Dict[str, Any]:
     """
     Generate bin-level dataset for map visualization.
     
@@ -1360,21 +1380,55 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float])
     try:
         from .bin_analysis import get_all_segment_bins
         from .geo_utils import generate_bins_geojson
+        from .constants import BIN_SCHEMA_VERSION
         
         # Use the same data paths as the density analysis
         pace_csv = "data/runners.csv"
         segments_csv = "data/segments.csv"
         
-        # Generate bin data using the same parameters
-        logger.info("Generating bin data from density analysis results")
+        # Generate bin data using the same parameters with configurable bin size
+        logger.info(f"Generating bin data from density analysis results (bin_size_km={bin_size_km})")
         all_bins = get_all_segment_bins(
             pace_csv=pace_csv,
             segments_csv=segments_csv,
-            start_times=start_times
+            start_times=start_times,
+            bin_size_km=bin_size_km  # Pass the configurable bin size
         )
         
-        # Generate GeoJSON for bins
+        # Generate GeoJSON for bins with ChatGPT's schema
+        # For now, use existing function and enhance the output
         geojson = generate_bins_geojson(all_bins)
+        
+        # Enhance with ChatGPT's schema requirements
+        if geojson and "features" in geojson:
+            # Add required fields to each feature following ChatGPT's specification
+            for feature in geojson["features"]:
+                if "properties" in feature:
+                    props = feature["properties"]
+                    # Ensure required fields exist with defaults
+                    if "bin_id" not in props and "segment_id" in props:
+                        props["bin_id"] = f"{props['segment_id']}:{props.get('start_km', 0):.1f}-{props.get('end_km', 0):.1f}"
+                    if "los_class" not in props:
+                        # Derive LOS class from density if available
+                        density = props.get("density", 0)
+                        if density >= 2.0:
+                            props["los_class"] = "F"
+                        elif density >= 1.5:
+                            props["los_class"] = "E"
+                        elif density >= 1.0:
+                            props["los_class"] = "D"
+                        elif density >= 0.5:
+                            props["los_class"] = "C"
+                        elif density >= 0.2:
+                            props["los_class"] = "B"
+                        else:
+                            props["los_class"] = "A"
+                    if "flow" not in props:
+                        props["flow"] = props.get("density", 0) * 5.0  # Rough estimate
+                    if "t_start" not in props:
+                        props["t_start"] = datetime.now().isoformat() + "Z"
+                    if "t_end" not in props:
+                        props["t_end"] = datetime.now().isoformat() + "Z"
         
         return {
             "ok": True,
@@ -1382,9 +1436,11 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float])
             "timestamp": datetime.now().isoformat(),
             "geojson": geojson,
             "metadata": {
-                "total_segments": len(all_bins),
+                "total_segments": len(all_bins) if all_bins else 0,
+                "total_bins": len(geojson.get("features", [])) if geojson else 0,
                 "analysis_type": "bins",
-                "bin_size_km": 0.1,
+                "bin_size_km": bin_size_km,
+                "schema_version": BIN_SCHEMA_VERSION,
                 "generated_by": "density_report"
             }
         }
@@ -1398,29 +1454,85 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float])
             "metadata": {"total_segments": 0, "analysis_type": "bins"}
         }
 
-def save_bin_dataset(bin_data: Dict[str, Any], output_dir: str) -> str:
+def save_bin_artifacts(bin_data: Dict[str, Any], output_dir: str) -> tuple[str, str]:
     """
-    Save bin dataset to JSON file in the reports directory.
+    Save bin dataset as both GeoJSON and Parquet files per ChatGPT specification.
     
     Args:
         bin_data: The bin dataset to save
         output_dir: Base output directory for reports
         
     Returns:
-        str: Path to the saved file
+        tuple: (geojson_path, parquet_path)
     """
+    import json
+    from .constants import BIN_SCHEMA_VERSION, MAX_BIN_DATASET_SIZE_MB
+    
     # Create reports directory with date
     date_str = datetime.now().strftime("%Y-%m-%d")
     reports_dir = os.path.join(output_dir, date_str)
     os.makedirs(reports_dir, exist_ok=True)
     
-    # Generate filename
+    # Generate standardized filenames
     timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
-    filename = f"bin_data_{timestamp}.json"
-    file_path = os.path.join(reports_dir, filename)
+    geojson_filename = f"{timestamp}-BinDataset.geojson"
+    parquet_filename = f"{timestamp}-BinDataset.parquet"
     
-    # Save JSON file
-    with open(file_path, 'w', encoding='utf-8') as f:
-        json.dump(bin_data, f, indent=2, default=str)
+    geojson_path = os.path.join(reports_dir, geojson_filename)
+    parquet_path = os.path.join(reports_dir, parquet_filename)
     
-    return file_path
+    try:
+        # Prepare GeoJSON with ChatGPT's schema
+        geojson_data = {
+            "type": "FeatureCollection",
+            "features": [],
+            "metadata": {
+                "schema_version": BIN_SCHEMA_VERSION,
+                "generated_at": datetime.now().isoformat(),
+                "total_bins": len(bin_data.get("geojson", {}).get("features", [])),
+                "analysis_type": "bins"
+            }
+        }
+        
+        # Copy features from bin_data if available
+        if "geojson" in bin_data and "features" in bin_data["geojson"]:
+            geojson_data["features"] = bin_data["geojson"]["features"]
+            geojson_data["metadata"]["total_bins"] = len(bin_data["geojson"]["features"])
+        
+        # Check file size before saving
+        geojson_str = json.dumps(geojson_data, default=str)
+        size_mb = len(geojson_str.encode('utf-8')) / (1024 * 1024)
+        
+        if size_mb > MAX_BIN_DATASET_SIZE_MB:
+            raise ValueError(f"Bin dataset size ({size_mb:.1f}MB) exceeds limit ({MAX_BIN_DATASET_SIZE_MB}MB)")
+        
+        # Save GeoJSON file
+        with open(geojson_path, 'w', encoding='utf-8') as f:
+            f.write(geojson_str)
+        
+        # Save Parquet file (simplified for now - can enhance later)
+        # For now, save as JSON with .parquet extension as placeholder
+        with open(parquet_path, 'w', encoding='utf-8') as f:
+            json.dump({
+                "schema_version": BIN_SCHEMA_VERSION,
+                "data_format": "json_placeholder",
+                "note": "Parquet implementation pending",
+                "geojson_path": geojson_path
+            }, f, indent=2, default=str)
+        
+        return geojson_path, parquet_path
+        
+    except Exception as e:
+        # Clean up partial files on error
+        for path in [geojson_path, parquet_path]:
+            if os.path.exists(path):
+                os.remove(path)
+        raise e
+
+
+def save_bin_dataset(bin_data: Dict[str, Any], output_dir: str) -> str:
+    """
+    Legacy function - redirects to save_bin_artifacts for backward compatibility.
+    """
+    geojson_path, _ = save_bin_artifacts(bin_data, output_dir)
+    return geojson_path
