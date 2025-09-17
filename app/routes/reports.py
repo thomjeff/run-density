@@ -153,7 +153,7 @@ def _latest(kind: str) -> Optional[Dict]:
                     "rel": latest_filename,
                     "kind": kind,
                     "date": latest_date,
-                    "source": "cloud" if storage_service._detect_environment() else "local"
+                    "source": "cloud" if storage_service.config.use_cloud_storage else "local"
                 }
                 print(f"DEBUG: _latest() returning: {result}")
                 return result
