@@ -7,7 +7,7 @@ import os
 import datetime
 from typing import Dict, Any, Optional
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import Response
+from fastapi.responses import Response, FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse
 from pydantic import BaseModel
@@ -114,6 +114,31 @@ BUILD_AT = os.getenv("BUILD_AT", datetime.datetime.now(datetime.timezone.utc).is
 app.include_router(density_router)
 app.include_router(map_router)
 app.include_router(reports_router)
+
+# CSV Data Endpoints for Reports Page
+@app.get("/data/runners.csv")
+async def get_runners_csv():
+    """Serve runners.csv file for download."""
+    file_path = "data/runners.csv"
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Runners CSV file not found")
+    return FileResponse(file_path, filename="runners.csv", media_type="text/csv")
+
+@app.get("/data/segments.csv") 
+async def get_segments_csv():
+    """Serve segments.csv file for download."""
+    file_path = "data/segments.csv"
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Segments CSV file not found")
+    return FileResponse(file_path, filename="segments.csv", media_type="text/csv")
+
+@app.get("/data/flow_expected_results.csv")
+async def get_expected_results_csv():
+    """Serve flow_expected_results.csv file for download.""" 
+    file_path = "data/flow_expected_results.csv"
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Expected results CSV file not found")
+    return FileResponse(file_path, filename="flow_expected_results.csv", media_type="text/csv")
 # app.include_router(test_router)  # Disabled for Cloud Run deployment
 
 # Mount static files

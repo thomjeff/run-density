@@ -88,14 +88,35 @@
         {
           id: 'density',
           title: 'Density Analysis Report',
-          description: 'Areal density analysis for marathon segments',
-          generated: new Date().toLocaleString()
+          description: 'Highlights where runners bunch up along the course, showing critical segments where crowding could affect safety, flow, or runner experience.',
+          type: 'report'
         },
         {
           id: 'flow',
           title: 'Temporal Flow Report', 
-          description: 'Overtaking and co-presence analysis',
-          generated: new Date().toLocaleString()
+          description: 'Shows how groups of runners overlap or overtake each other across time, helping plan start waves, staffing, and course adjustments.',
+          type: 'report'
+        },
+        {
+          id: 'runners',
+          title: 'Runner Data',
+          description: 'Provides participant start times and event assignments, used for modeling runner distribution across the course.',
+          type: 'csv',
+          filename: 'runners.csv'
+        },
+        {
+          id: 'segments',
+          title: 'Segment Data',
+          description: 'Defines course sections and characteristics, serving as the framework for density and flow calculations.',
+          type: 'csv',
+          filename: 'segments.csv'
+        },
+        {
+          id: 'expected',
+          title: 'Expected Results',
+          description: 'Baseline outputs from the analysis engine, useful for validating calculations and cross-checking reports.',
+          type: 'csv',
+          filename: 'flow_expected_results.csv'
         }
       ];
 
@@ -107,18 +128,35 @@
       
       container.innerHTML = `
         <div class="report-grid">
-          ${reports.map(report => `
-            <div class="report-card">
-              <h3>${report.title}</h3>
-              <p class="report-meta">Generated: ${report.generated}</p>
-              <p>${report.description}</p>
-              <div class="report-actions">
-                <button class="btn btn--primary btn--small" onclick="downloadReport('${report.id}')">
-                  Download
-                </button>
-              </div>
-            </div>
-          `).join('')}
+          ${reports.map(report => {
+            // Different display for reports vs CSV files
+            if (report.type === 'csv') {
+              return `
+                <div class="report-card">
+                  <h3>${report.title}</h3>
+                  <p class="report-meta">Data File: ${report.filename}</p>
+                  <p>${report.description}</p>
+                  <div class="report-actions">
+                    <button class="btn btn--primary btn--small" onclick="downloadCSV('${report.id}', '${report.filename}')">
+                      Download CSV
+                    </button>
+                  </div>
+                </div>
+              `;
+            } else {
+              return `
+                <div class="report-card">
+                  <h3>${report.title}</h3>
+                  <p>${report.description}</p>
+                  <div class="report-actions">
+                    <button class="btn btn--primary btn--small" onclick="downloadReport('${report.id}')">
+                      Download
+                    </button>
+                  </div>
+                </div>
+              `;
+            }
+          }).join('')}
         </div>
       `;
     }
@@ -144,6 +182,29 @@
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+    }
+
+    function downloadCSV(csvId, filename) {
+      // Download CSV files from data directory
+      const csvEndpoints = {
+        'runners': '/data/runners.csv',
+        'segments': '/data/segments.csv', 
+        'expected': '/data/flow_expected_results.csv'
+      };
+      
+      const endpoint = csvEndpoints[csvId];
+      if (!endpoint) {
+        alert('CSV file not available');
+        return;
+      }
+      
+      // Create download link
+      const link = document.createElement('a');
+      link.href = endpoint;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
 
     // Initialize on page load
