@@ -958,9 +958,11 @@ def parse_latest_density_report_segments():
         
         for line in lines:
             if '| Segment | Label | Key Takeaway | LOS |' in line:
+                print(f"DEBUG: parse_latest_density_report_segments() found table header: {line}")
                 in_table = True
                 continue
             elif in_table and line.startswith('|') and '|' in line[1:]:
+                print(f"DEBUG: parse_latest_density_report_segments() processing table row: {line}")
                 parts = [p.strip() for p in line.split('|')]
                 if len(parts) >= 5 and parts[1] != 'Segment':  # Skip header row
                     segment_id = parts[1]
