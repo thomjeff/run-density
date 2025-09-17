@@ -919,29 +919,36 @@ def parse_latest_density_report_segments():
     import re
     from pathlib import Path
     from datetime import datetime
+    from app.storage_service import get_storage_service
+    
+    # Use unified storage service that works in both local and Cloud Run
+    storage = get_storage_service()
     
     # Find the latest density report
-    reports_dir = Path("reports")
-    if not reports_dir.exists():
-        return []
-    
-    # Get all date directories, sorted by date
-    date_dirs = [d for d in reports_dir.iterdir() if d.is_dir() and re.match(r'\d{4}-\d{2}-\d{2}', d.name)]
-    if not date_dirs:
-        return []
-    
-    latest_date_dir = max(date_dirs, key=lambda x: x.name)
-    
-    # Find the latest density report in that directory
-    density_reports = list(latest_date_dir.glob("*Density.md"))
-    if not density_reports:
-        return []
-    
-    latest_report = max(density_reports, key=lambda x: x.name)
-    
     try:
-        with open(latest_report, 'r', encoding='utf-8') as f:
-            content = f.read()
+        # Get all available dates by listing files and extracting dates
+        all_files = []
+        
+        # Try to list files from the last few days to find the latest report
+        from datetime import timedelta
+        for days_back in range(7):  # Check last 7 days
+            check_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+            
+            # Files are saved directly in YYYY-MM-DD/ not reports/YYYY-MM-DD/
+            files = storage._list_gcs_files(check_date, "Density.md") if storage.config.use_cloud_storage else storage._list_local_files(check_date, "Density.md")
+            for file in files:
+                all_files.append((check_date, file))
+        
+        if not all_files:
+            return []
+        
+        # Sort by date and filename to get the latest
+        latest_date, latest_filename = max(all_files, key=lambda x: (x[0], x[1]))
+        
+        # Load the latest density report content
+        content = storage._load_from_gcs(f"{latest_date}/{latest_filename}") if storage.config.use_cloud_storage else storage._load_from_local(f"{latest_date}/{latest_filename}")
+        if not content:
+            return []
         
         # Parse the report content
         lines = content.split('\n')
