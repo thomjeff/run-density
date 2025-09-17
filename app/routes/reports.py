@@ -131,13 +131,17 @@ def _latest(kind: str) -> Optional[Dict]:
             
             # Find the latest file of the requested kind
             matching_files = []
+            print(f"DEBUG: _latest() looking for kind '{kind}' in {len(files)} files")
             for file_path in files:
                 file_name = file_path.split('/')[-1]  # Get just the filename
                 if any(file_name.lower().endswith(ext) for ext in ALLOWED_EXTS):
                     lower = file_name.lower()
+                    print(f"DEBUG: _latest() checking file '{file_name}' (lower: '{lower}')")
                     if kind == "density" and "density" in lower:
+                        print(f"DEBUG: _latest() found density match: {file_name}")
                         matching_files.append((date_str, file_name))
                     elif kind == "flow" and "flow" in lower:
+                        print(f"DEBUG: _latest() found flow match: {file_name}")
                         matching_files.append((date_str, file_name))
             
             if matching_files:
