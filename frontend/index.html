@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8"/>
-    <title>run-density — Dashboard</title>
+    <title>Runflow — Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <link rel="stylesheet" href="css/main.css"/>
 </head>
@@ -10,7 +10,7 @@
     <header class="header header--brand">
         <div class="container header__inner">
             <div>
-                <h1 class="brand">run-density</h1>
+                <h1 class="brand">Runflow</h1>
                 <p class="sub">Race Density & Overlap Intelligence for Fredericton Marathon</p>
             </div>
              <nav class="top-cta">
@@ -30,22 +30,11 @@
         </div>
     </nav>
 
-    <main class="container grid grid--2">
-        <!-- Hero / Summary -->
-        <section class="card card--hero">
-            <div>
-                <h2 class="h2">Smarter planning for safer races</h2>
-                <p class="muted">Analyze areal density, throughput and inter‑event overlaps. Use the map to review segment LOS and congestion risks.</p>
-                <div class="actions">
-                    <a href="map.html" class="btn btn--primary">View Map</a>
-                    <a href="reports.html" class="btn">View Reports</a>
-                </div>
-            </div>
-        </section>
-
-        <!-- Key metrics (placeholders; wire to API later) -->
-        <section class="card metrics">
+    <main class="container">
+        <!-- Key metrics - expanded to full width -->
+        <section class="card metrics-expanded">
             <h3 class="h3">Key Metrics</h3>
+            <p class="muted">Analyze areal density, throughput and inter‑event overlaps. Use the map to review segment LOS and congestion risks.</p>
             <div class="kpis">
                 <div class="kpi">
                     <div class="kpi__label">Peak Areal Density</div>
@@ -71,7 +60,7 @@
         </section>
 
         <!-- Executive summary table (static skeleton; bind later) -->
-        <section class="card span-2">
+        <section class="card">
             <div class="card__head">
                 <h3 class="h3">Executive Summary</h3>
                 <div class="legend legend--los">
@@ -100,7 +89,7 @@
 
     <footer class="footer">
         <div class="container">
-            &copy; 2025 run-density · Fredericton Marathon
+            &copy; 2025 Runflow · Fredericton Marathon
         </div>
     </footer>
 

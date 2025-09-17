@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <title>run-density — Reports</title>
+  <title>Runflow — Reports</title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <link rel="stylesheet" href="css/main.css"/>
   <style>
@@ -88,14 +88,35 @@
         {
           id: 'density',
           title: 'Density Analysis Report',
-          description: 'Areal density analysis for marathon segments',
-          generated: new Date().toLocaleString()
+          description: 'Highlights where runners bunch up along the course, showing critical segments where crowding could affect safety, flow, or runner experience.',
+          type: 'report'
         },
         {
           id: 'flow',
           title: 'Temporal Flow Report', 
-          description: 'Overtaking and co-presence analysis',
-          generated: new Date().toLocaleString()
+          description: 'Shows how groups of runners overlap or overtake each other across time, helping plan start waves, staffing, and course adjustments.',
+          type: 'report'
+        },
+        {
+          id: 'runners',
+          title: 'Runner Data',
+          description: 'Provides participant start times and event assignments, used for modeling runner distribution across the course.',
+          type: 'csv',
+          filename: 'runners.csv'
+        },
+        {
+          id: 'segments',
+          title: 'Segment Data',
+          description: 'Defines course sections and characteristics, serving as the framework for density and flow calculations.',
+          type: 'csv',
+          filename: 'segments.csv'
+        },
+        {
+          id: 'expected',
+          title: 'Expected Results',
+          description: 'Baseline outputs from the analysis engine, useful for validating calculations and cross-checking reports.',
+          type: 'csv',
+          filename: 'flow_expected_results.csv'
         }
       ];
 
@@ -107,25 +128,43 @@
       
       container.innerHTML = `
         <div class="report-grid">
-          ${reports.map(report => `
-            <div class="report-card">
-              <h3>${report.title}</h3>
-              <p class="report-meta">Generated: ${report.generated}</p>
-              <p>${report.description}</p>
-              <div class="report-actions">
-                <button class="btn btn--primary btn--small" onclick="downloadReport('${report.id}')">
-                  Download
-                </button>
-              </div>
-            </div>
-          `).join('')}
+          ${reports.map(report => {
+            // Different display for reports vs CSV files
+            if (report.type === 'csv') {
+              return `
+                <div class="report-card">
+                  <h3>${report.title}</h3>
+                  <p class="report-meta">Data File: ${report.filename}</p>
+                  <p>${report.description}</p>
+                  <div class="report-actions">
+                    <button class="btn btn--primary btn--small" onclick="downloadCSV('${report.id}', '${report.filename}')">
+                      Download CSV
+                    </button>
+                  </div>
+                </div>
+              `;
+            } else {
+              return `
+                <div class="report-card">
+                  <h3>${report.title}</h3>
+                  <p>${report.description}</p>
+                  <div class="report-actions">
+                    <button class="btn btn--primary btn--small" onclick="downloadReport('${report.id}')">
+                      Download
+                    </button>
+                  </div>
+                </div>
+              `;
+            }
+          }).join('')}
         </div>
       `;
     }
 
 
     function downloadReport(reportId) {
-      // Use the backend endpoints that automatically find the latest reports
+      // CRITICAL: Use GET endpoints that serve existing reports, NOT POST endpoints that generate new analysis
+      // This prevents triggering CPU/RAM intensive analysis operations from the UI
       const endpointMap = {
         'density': '/reports/density/latest',
         'flow': '/reports/flow/latest'
@@ -137,13 +176,37 @@
         return;
       }
       
-      // Create download link to the backend endpoint
+      // Simple GET request to download existing report - no analysis triggered
       const a = document.createElement('a');
       a.href = endpoint;
       a.target = '_blank';
+      a.download = `${reportId}-report.md`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+    }
+
+    function downloadCSV(csvId, filename) {
+      // Download CSV files from data directory
+      const csvEndpoints = {
+        'runners': '/data/runners.csv',
+        'segments': '/data/segments.csv', 
+        'expected': '/data/flow_expected_results.csv'
+      };
+      
+      const endpoint = csvEndpoints[csvId];
+      if (!endpoint) {
+        alert('CSV file not available');
+        return;
+      }
+      
+      // Create download link
+      const link = document.createElement('a');
+      link.href = endpoint;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
 
     // Initialize on page load
@@ -155,7 +218,7 @@
   <header class="header header--brand">
     <div class="container header__inner">
       <div>
-        <h1 class="brand">run-density</h1>
+        <h1 class="brand">Runflow</h1>
         <p class="sub">Race Density & Overlap Intelligence for Fredericton Marathon</p>
       </div>
       <nav class="top-cta">
@@ -189,7 +252,7 @@
 
   <footer class="footer">
     <div class="container">
-      &copy; 2025 run-density · Fredericton Marathon
+      &copy; 2025 Runflow · Fredericton Marathon
     </div>
   </footer>
 </body>
