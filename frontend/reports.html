@@ -162,11 +162,12 @@
     }
 
 
-    async function downloadReport(reportId) {
-      // Use POST endpoints that generate reports as per Issue #190 working solution
+    function downloadReport(reportId) {
+      // CRITICAL: Use GET endpoints that serve existing reports, NOT POST endpoints that generate new analysis
+      // This prevents triggering CPU/RAM intensive analysis operations from the UI
       const endpointMap = {
-        'density': '/api/density-report',
-        'flow': '/api/temporal-flow-report'
+        'density': '/reports/density/latest',
+        'flow': '/reports/flow/latest'
       };
       
       const endpoint = endpointMap[reportId];
@@ -175,39 +176,14 @@
         return;
       }
       
-      try {
-        // POST request with required parameters (from Issue #190 working solution)
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            paceCsv: 'data/runners.csv',
-            segmentsCsv: 'data/segments.csv',
-            startTimes: { 'Full': 420, '10K': 440, 'Half': 460 }
-          })
-        });
-        
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        // Get the response as blob and download
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${reportId}-report.md`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-      } catch (error) {
-        console.error('Download failed:', error);
-        alert(`Download failed: ${error.message}`);
-      }
+      // Simple GET request to download existing report - no analysis triggered
+      const a = document.createElement('a');
+      a.href = endpoint;
+      a.target = '_blank';
+      a.download = `${reportId}-report.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     }
 
     function downloadCSV(csvId, filename) {
