@@ -653,22 +653,29 @@ def generate_density_report(
     enable_bin_dataset = os.getenv('ENABLE_BIN_DATASET', 'false').lower() == 'true'
     if enable_bin_dataset:
         try:
-            from .constants import DEFAULT_BIN_SIZE_KM, MAX_BIN_GENERATION_TIME_SECONDS
-            import signal
+            from .constants import DEFAULT_BIN_SIZE_KM, FALLBACK_BIN_SIZE_KM, MAX_BIN_DATASET_SIZE_MB
+            import time
             
-            def timeout_handler(signum, frame):
-                raise TimeoutError("Bin dataset generation timed out")
+            # Try with default bin size first, fall back to larger bins if needed
+            start_time = time.time()
+            bin_size_to_use = DEFAULT_BIN_SIZE_KM
             
-            # Set timeout for bin generation
-            signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(MAX_BIN_GENERATION_TIME_SECONDS)
+            # For Cloud Run, start with larger bins to reduce processing time
+            if os.getenv('TEST_CLOUD_RUN', 'false').lower() == 'true':
+                bin_size_to_use = FALLBACK_BIN_SIZE_KM
+                print(f"📦 Using larger bins ({bin_size_to_use}km) for Cloud Run performance")
             
-            try:
-                bin_data = generate_bin_dataset(results, start_times, bin_size_km=DEFAULT_BIN_SIZE_KM)
+            bin_data = generate_bin_dataset(results, start_times, bin_size_km=bin_size_to_use)
+            
+            # Check if generation was successful
+            if bin_data.get("ok", False):
                 geojson_path, parquet_path = save_bin_artifacts(bin_data, output_dir)
+                elapsed = time.time() - start_time
+                features_count = len(bin_data.get("geojson", {}).get("features", []))
                 print(f"📦 Bin dataset saved: {geojson_path} | {parquet_path}")
-            finally:
-                signal.alarm(0)  # Cancel the timeout
+                print(f"📦 Generated {features_count} bin features in {elapsed:.1f}s (bin_size={bin_size_to_use}km)")
+            else:
+                raise ValueError(f"Bin generation failed: {bin_data.get('error', 'Unknown error')}")
                 
         except Exception as e:
             print(f"⚠️ Bin dataset unavailable: {e}")
