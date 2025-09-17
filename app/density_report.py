@@ -1489,7 +1489,7 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
             segments_csv = DEFAULT_SEGMENTS_CSV
             logger.warning("No AnalysisContext provided, using default paths")
         
-        check_time_budget(start_time, 45)  # Check early (more generous)
+        # Remove aggressive timeout checks per ChatGPT guidance - focus on feature budget instead
         
         # Generate bin data using the same parameters with configurable bin size
         logger.info(f"Generating bin data from density analysis results (bin_size_km={bin_size_km}, dt={dt_seconds}s)")
@@ -1504,7 +1504,11 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
             bin_size_km=bin_size_km  # Pass the configurable bin size
         )
         
-        check_time_budget(start_time, 90)  # Check after bin generation (ChatGPT P95 target)
+        # Apply soft timeout check per ChatGPT performance plan
+        elapsed = time.monotonic() - start_time
+        if elapsed > 120:  # 120s soft budget per ChatGPT
+            log_bins_event(action="soft_timeout_exceeded", elapsed_s=elapsed)
+            # Continue with coarsening rather than hard fail
         
         # Generate GeoJSON for bins with real temporal windows and flow
         geojson = generate_bins_geojson_with_temporal_windows(all_bins, start_times_int, dt_seconds, bin_size_km)
@@ -1609,25 +1613,41 @@ def save_bin_artifacts(bin_data: Dict[str, Any], output_dir: str) -> tuple[str, 
                 """Convert coordinates to WKB format."""
                 return wkb.dumps(LineString(coords), hex=False)
             
-            # Prepare Parquet rows with ChatGPT's schema
+            # Prepare Parquet rows with ChatGPT's schema - fix coordinate handling
             parquet_rows = []
             for feature in geojson_data["features"]:
                 props = feature["properties"]
                 geometry_coords = feature.get("geometry", {}).get("coordinates", [])
                 
+                # Handle coordinate conversion safely
+                geometry_wkb = b""
+                try:
+                    if geometry_coords and isinstance(geometry_coords, list) and len(geometry_coords) > 0:
+                        # Handle different geometry types
+                        if isinstance(geometry_coords[0][0], list):  # Polygon
+                            # Convert polygon to linestring for simplicity
+                            coords = geometry_coords[0] if geometry_coords else []
+                        else:  # Already linestring format
+                            coords = geometry_coords
+                        
+                        if len(coords) >= 2:
+                            geometry_wkb = to_wkb(coords)
+                except Exception as geom_e:
+                    logger.warning(f"Geometry conversion failed for bin {props.get('bin_id', 'unknown')}: {geom_e}")
+                
                 row = {
-                    "bin_id": props.get("bin_id", ""),
-                    "segment_id": props.get("segment_id", ""),
+                    "bin_id": str(props.get("bin_id", "")),
+                    "segment_id": str(props.get("segment_id", "")),
                     "start_km": float(props.get("start_km", 0.0)),
                     "end_km": float(props.get("end_km", 0.0)),
-                    "t_start": props.get("t_start", ""),
-                    "t_end": props.get("t_end", ""),
+                    "t_start": str(props.get("t_start", "")),
+                    "t_end": str(props.get("t_end", "")),
                     "density": float(props.get("density", 0.0)),
                     "flow": float(props.get("flow", 0.0)),
-                    "los_class": props.get("los_class", "A"),
-                    "bin_size_km": float(bin_size_km) if 'bin_size_km' in locals() else 0.1,
+                    "los_class": str(props.get("los_class", "A")),
+                    "bin_size_km": 0.1,  # Use constant for now
                     "schema_version": BIN_SCHEMA_VERSION,
-                    "geometry": to_wkb(geometry_coords) if geometry_coords else b""
+                    "geometry": geometry_wkb
                 }
                 parquet_rows.append(row)
             

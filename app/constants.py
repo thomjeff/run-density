@@ -89,7 +89,8 @@ MAX_BIN_DATASET_SIZE_MB = 15  # File size limit per ChatGPT
 BIN_MAX_FEATURES = 10000  # Feature count limit per ChatGPT
 BIN_MAX_GEOJSON_MB_GZ = 15  # Compressed GeoJSON size limit
 DEFAULT_BIN_TIME_WINDOW_SECONDS = 60  # 1-minute analysis windows per ChatGPT
-MAX_BIN_GENERATION_TIME_SECONDS = 90  # P95 target per ChatGPT (reduced from 120s)
+MAX_BIN_GENERATION_TIME_SECONDS = 120  # P95 target per ChatGPT performance plan (relaxed for initial deployment)
+BIN_HARD_LIMIT_SECONDS = 180  # Absolute ceiling before failover per ChatGPT
 BIN_SCHEMA_VERSION = "1.0.0"  # Schema version for validation (updated per ChatGPT)
 
 # Map center coordinates (Fredericton, NB)
