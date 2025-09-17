@@ -1,7 +1,23 @@
 /* Map Page Styles */
-html, body, #map { 
+html, body { 
   height: 100%; 
   margin: 0; 
+}
+
+/* Ensure body doesn't overflow or hide content */
+body {
+  overflow: visible !important;
+}
+
+/* Map container - positioned to not overlap header/nav */
+#map { 
+  height: calc(100vh - 140px); /* Subtract header (~80px) + nav (~40px) + padding (~20px) */
+  width: 100%;
+  margin: 0;
+  position: relative;
+  z-index: 1; /* Ensure map stays below header/nav */
+  top: 0;
+  left: 0;
 }
 
 .legend { 

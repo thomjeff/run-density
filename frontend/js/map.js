@@ -637,7 +637,8 @@
             "geometry": { 
               "type":"LineString",
               "coordinates": [
-                [-66.6528, 45.9611], [-66.6505, 45.9620]
+                [CONFIG.mapCenter[1] - 0.0028, CONFIG.mapCenter[0] - 0.0009], 
+                [CONFIG.mapCenter[1] - 0.0005, CONFIG.mapCenter[0]]
               ]
             }
           },
@@ -647,7 +648,8 @@
             "geometry": { 
               "type":"LineString",
               "coordinates": [
-                [-66.6528, 45.9611], [-66.6505, 45.9620]
+                [CONFIG.mapCenter[1] - 0.0028, CONFIG.mapCenter[0] - 0.0009], 
+                [CONFIG.mapCenter[1] - 0.0005, CONFIG.mapCenter[0]]
               ]
             }
           },
@@ -657,7 +659,8 @@
             "geometry": { 
               "type":"LineString",
               "coordinates": [
-                [-66.6528, 45.9611], [-66.6505, 45.9620]
+                [CONFIG.mapCenter[1] - 0.0028, CONFIG.mapCenter[0] - 0.0009], 
+                [CONFIG.mapCenter[1] - 0.0005, CONFIG.mapCenter[0]]
               ]
             }
           }
@@ -868,8 +871,8 @@
       };
 
       // Pre-calculate constants for better performance
-      const baseLat = 45.9620;
-      const baseLon = -66.6500;
+      const baseLat = CONFIG.mapCenter[0];
+      const baseLon = CONFIG.mapCenter[1];
       const latOffset = 0.001;
       const lonOffset = 0.001;
       const binSize = 0.0005;

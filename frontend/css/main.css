@@ -14,14 +14,14 @@ body {
 .container {max-width:1200px;margin:0 auto;padding:16px}
 
 /* Header */
-.header {background:#fff;border-bottom:1px solid #eee}
+.header {background:#fff;border-bottom:1px solid #eee;position:relative;z-index:1000 !important;display:block !important;visibility:visible !important}
 .header--brand {padding: 20px 0}
 .header__inner {display:flex;align-items:center;justify-content:space-between}
 .brand {margin:0;font-weight:800;font-size: 1.5rem;color: var(--brand)}
 .sub {margin:.25rem 0 0;color:var(--muted);font-size: 0.9rem}
 
 /* Navigation */
-.nav {background:#fff;border-bottom:1px solid #eee;padding: 0}
+.nav {background:#fff;border-bottom:1px solid #eee;padding: 0;position:relative;z-index:999 !important;display:block !important;visibility:visible !important}
 .nav ul {list-style:none;margin:0;padding:0;display:flex;gap:32px}
 .nav li {margin:0}
 .nav a {display:block;padding:16px 0;color:var(--ink);text-decoration:none;border-bottom:2px solid transparent;transition:border-color 0.2s}
