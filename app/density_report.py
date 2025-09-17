@@ -1388,10 +1388,14 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
         
         # Generate bin data using the same parameters with configurable bin size
         logger.info(f"Generating bin data from density analysis results (bin_size_km={bin_size_km})")
+        
+        # Convert start_times from float to int (minutes) as expected by get_all_segment_bins
+        start_times_int = {event: int(minutes) for event, minutes in start_times.items()}
+        
         all_bins = get_all_segment_bins(
             pace_csv=pace_csv,
             segments_csv=segments_csv,
-            start_times=start_times,
+            start_times=start_times_int,
             bin_size_km=bin_size_km  # Pass the configurable bin size
         )
         

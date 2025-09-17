@@ -86,7 +86,7 @@ DEFAULT_START_TIMES = {"Full": 420, "10K": 440, "Half": 460}
 DEFAULT_BIN_SIZE_KM = 0.1  # 100m bins per ChatGPT recommendation
 FALLBACK_BIN_SIZE_KM = 0.2  # Fallback for performance issues
 MAX_BIN_DATASET_SIZE_MB = 15  # File size limit per ChatGPT
-MAX_BIN_GENERATION_TIME_SECONDS = 60  # Timeout for bin generation
+MAX_BIN_GENERATION_TIME_SECONDS = 120  # Timeout for bin generation (increased for initial testing)
 BIN_SCHEMA_VERSION = "1.0"  # Schema version for validation
 
 # Map center coordinates (Fredericton, NB)
