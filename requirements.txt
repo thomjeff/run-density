@@ -19,3 +19,7 @@ pypandoc>=1.11
 
 # Google Cloud Storage
 google-cloud-storage>=2.10.0
+
+# Bin dataset generation (Issue #198)
+pyarrow>=10.0.0
+shapely>=2.0.0

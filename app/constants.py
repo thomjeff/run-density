@@ -82,6 +82,26 @@ DEFAULT_PACE_CSV = "data/runners.csv"
 DEFAULT_SEGMENTS_CSV = "data/segments.csv"
 DEFAULT_START_TIMES = {"Full": 420, "10K": 440, "Half": 460}
 
+# Bin dataset configuration (Issue #198) - ChatGPT PR1 fixes
+DEFAULT_BIN_SIZE_KM = 0.1  # 100m bins per ChatGPT recommendation
+FALLBACK_BIN_SIZE_KM = 0.2  # Fallback for performance issues
+MAX_BIN_DATASET_SIZE_MB = 15  # File size limit per ChatGPT
+BIN_MAX_FEATURES = 10000  # Feature count limit per ChatGPT
+BIN_MAX_GEOJSON_MB_GZ = 15  # Compressed GeoJSON size limit
+DEFAULT_BIN_TIME_WINDOW_SECONDS = 60  # 1-minute analysis windows per ChatGPT
+MAX_BIN_GENERATION_TIME_SECONDS = 120  # P95 target per ChatGPT performance plan (relaxed for initial deployment)
+BIN_HARD_LIMIT_SECONDS = 180  # Absolute ceiling before failover per ChatGPT
+BIN_SCHEMA_VERSION = "1.0.0"  # Schema version for validation (updated per ChatGPT)
+
+# Hotspot preservation for bin dataset generation (ChatGPT final optimizations)
+HOTSPOT_SEGMENTS = {
+    "F1",   # Bridge approaches - critical for reopening decisions
+    "H1",   # Trail/Aberdeen critical counterflow area
+    "J1", "J4", "J5",  # Bridge/Mill complex - high traffic convergence
+    "K1",   # Bridge/Mill to Station - major throughput area
+    "L1"    # Trail/Aberdeen counterflow - operational decisions
+}
+
 # Map center coordinates (Fredericton, NB)
 MAP_CENTER_LAT = 45.9620
 MAP_CENTER_LON = -66.6500
