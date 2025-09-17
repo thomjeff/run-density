@@ -82,12 +82,15 @@ DEFAULT_PACE_CSV = "data/runners.csv"
 DEFAULT_SEGMENTS_CSV = "data/segments.csv"
 DEFAULT_START_TIMES = {"Full": 420, "10K": 440, "Half": 460}
 
-# Bin dataset configuration (Issue #198)
+# Bin dataset configuration (Issue #198) - ChatGPT PR1 fixes
 DEFAULT_BIN_SIZE_KM = 0.1  # 100m bins per ChatGPT recommendation
 FALLBACK_BIN_SIZE_KM = 0.2  # Fallback for performance issues
 MAX_BIN_DATASET_SIZE_MB = 15  # File size limit per ChatGPT
-MAX_BIN_GENERATION_TIME_SECONDS = 120  # Timeout for bin generation (increased for initial testing)
-BIN_SCHEMA_VERSION = "1.0"  # Schema version for validation
+BIN_MAX_FEATURES = 10000  # Feature count limit per ChatGPT
+BIN_MAX_GEOJSON_MB_GZ = 15  # Compressed GeoJSON size limit
+DEFAULT_BIN_TIME_WINDOW_SECONDS = 60  # 1-minute analysis windows per ChatGPT
+MAX_BIN_GENERATION_TIME_SECONDS = 90  # P95 target per ChatGPT (reduced from 120s)
+BIN_SCHEMA_VERSION = "1.0.0"  # Schema version for validation (updated per ChatGPT)
 
 # Map center coordinates (Fredericton, NB)
 MAP_CENTER_LAT = 45.9620
