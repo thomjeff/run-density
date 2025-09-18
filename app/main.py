@@ -124,6 +124,9 @@ BOOT_ENV = {
     "output_dir": env_str("OUTPUT_DIR", "reports"),
     "bin_max_features": env_str("BIN_MAX_FEATURES"),
     "bin_dt_s": env_str("DEFAULT_BIN_TIME_WINDOW_SECONDS"),
+    "raw_enable_bin_dataset": os.getenv("ENABLE_BIN_DATASET"),
+    "all_env_vars_with_BIN": {k: v for k, v in os.environ.items() if "BIN" in k},
+    "all_env_vars_with_ENABLE": {k: v for k, v in os.environ.items() if "ENABLE" in k}
 }
 logging.getLogger().info("BOOT_ENV %s", BOOT_ENV)
 
