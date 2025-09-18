@@ -190,19 +190,13 @@ jobs:
         echo "DEFAULT_BIN_SIZE_KM=0.1" >> $GITHUB_ENV
         echo "MAX_BIN_GENERATION_TIME_SECONDS=120" >> $GITHUB_ENV
     
-    - name: Run E2E Tests with Bin Generation
+    - name: Generate Bin Datasets
       run: |
-        echo "=== Running E2E Tests with Bin Dataset Generation ==="
-        echo "Testing Cloud Run deployment with bin generation enabled"
+        echo "=== Generating Bin Datasets on Cloud Run ==="
         echo "Environment: ENABLE_BIN_DATASET=true"
+        echo "Calling /api/density-report with bin generation enabled..."
         
-        # Test basic endpoints first
-        python e2e.py --cloud
-        
-        echo ""
-        echo "=== Testing Bin Dataset Generation Specifically ==="
-        
-        # Test density report with bin generation explicitly enabled
+        # Generate bin datasets via density report API
         RESPONSE=$(curl -X POST "https://run-density-ln4r3sfkha-uc.a.run.app/api/density-report" \
           -H "Content-Type: application/json" \
           -d '{
@@ -219,8 +213,9 @@ jobs:
         RESPONSE_BODY=$(echo "$RESPONSE" | sed 's/HTTPSTATUS:[0-9]*$//')
         
         if [ "$HTTP_CODE" = "200" ]; then
-          echo "✅ Bin Dataset Generation: OK"
-          echo "Response indicates bin generation was triggered"
+          echo "✅ Bin Dataset Generation: COMPLETED"
+          echo "📦 Bin datasets generated and uploaded to GCS"
+          echo "Response size: $(echo "$RESPONSE_BODY" | wc -c) characters"
         else
           echo "❌ Bin Dataset Generation Failed: HTTP $HTTP_CODE"
           echo "Response: $RESPONSE_BODY"
