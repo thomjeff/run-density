@@ -16,6 +16,7 @@ from datetime import datetime
 from dataclasses import dataclass
 import os
 import pandas as pd
+from .segments_from_bins import write_segments_from_bins
 
 @dataclass
 class AnalysisContext:
@@ -864,18 +865,30 @@ def generate_density_report(
                              total_ms=int(elapsed * 1000),
                              metadata=bin_metadata)
                 
-                # ChatGPT's Bins → Segments Migration (Issue #229)
+                # ---- SEGMENTS FROM BINS ROLL-UP (guarded) ----
                 SEGMENTS_FROM_BINS = os.getenv("SEGMENTS_FROM_BINS", "true").lower() == "true"
-                logger.info("SEG_MIGRATION_CHECK: SEGMENTS_FROM_BINS=%s (raw=%s)", SEGMENTS_FROM_BINS, os.getenv("SEGMENTS_FROM_BINS"))
                 if SEGMENTS_FROM_BINS:
                     try:
-                        from .segments_from_bins import create_canonical_segments_from_bins
-                        logger.info("SEG_ROLLUP_START out_dir=%s parquet=%s geojson=%s",
-                                    os.path.abspath(daily_folder_path), os.path.abspath(parquet_path), os.path.abspath(geojson_path))
-                        seg_from_bins_path = create_canonical_segments_from_bins(daily_folder_path, parquet_path, geojson_path)
-                        logger.info("SEG_ROLLUP_DONE path=%s", seg_from_bins_path)
+                        bins_parquet = os.path.join(daily_folder_path, "bins.parquet")
+                        bins_geojson_gz = os.path.join(daily_folder_path, "bins.geojson.gz")
+                        print(f"SEG_ROLLUP_START out_dir={os.path.abspath(daily_folder_path)}")
+                        seg_path = write_segments_from_bins(daily_folder_path, bins_parquet, bins_geojson_gz)
+                        print(f"SEG_ROLLUP_DONE path={seg_path}")
+                        
+                        # Legacy vs canonical comparison for visibility
+                        try:
+                            canon = pd.read_parquet(seg_path).rename(columns={"density_mean":"density_mean_canon"})
+                            # Note: legacy_df would need to be available in this scope for full comparison
+                            # For now, just log the canonical segments info
+                            print(f"CANONICAL_SEGMENTS rows={len(canon)} segments={canon.segment_id.nunique()}")
+                            out_csv = os.path.join(daily_folder_path, "segments_legacy_vs_canonical.csv")
+                            canon.to_csv(out_csv, index=False)
+                            print(f"POST_SAVE segments_legacy_vs_canonical={os.path.abspath(out_csv)} rows={len(canon)}")
+                        except Exception as e:
+                            print(f"SEG_COMPARE_FAILED {e}")
                     except Exception as e:
-                        logger.exception("SEG_ROLLUP_FAILED: %s", e)
+                        print(f"SEG_ROLLUP_FAILED {e}")
+                # ----------------------------------------------
                 
                 print(f"📦 Bin dataset saved: {geojson_path} | {parquet_path}")
                 print(f"📦 Generated {final_features} bin features in {elapsed:.1f}s (bin_size={bin_size_to_use}km, dt={dt_seconds}s)")
