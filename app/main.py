@@ -110,6 +110,23 @@ APP_VERSION = os.getenv("APP_VERSION", app.version)
 GIT_SHA = os.getenv("GIT_SHA", "local")
 BUILD_AT = os.getenv("BUILD_AT", datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z")
 
+# Boot environment logging for bin dataset debugging
+import logging
+import pathlib
+try:
+    from .util_env import env_bool, env_str
+except ImportError:
+    from util_env import env_bool, env_str
+
+BOOT_ENV = {
+    "cwd": str(pathlib.Path.cwd()),
+    "enable_bin_dataset": env_bool("ENABLE_BIN_DATASET", False),
+    "output_dir": env_str("OUTPUT_DIR", "reports"),
+    "bin_max_features": env_str("BIN_MAX_FEATURES"),
+    "bin_dt_s": env_str("DEFAULT_BIN_TIME_WINDOW_SECONDS"),
+}
+logging.getLogger().info("BOOT_ENV %s", BOOT_ENV)
+
 # Include API routers
 app.include_router(density_router)
 app.include_router(map_router)
@@ -175,6 +192,17 @@ async def readiness_check():
         "density_loaded": True,
         "overlap_loaded": True,
         "version": APP_VERSION
+    }
+
+@app.get("/api/debug/env")
+async def debug_env():
+    """Debug endpoint to verify environment variables for bin dataset generation."""
+    return {
+        "enable_bin_dataset": env_bool("ENABLE_BIN_DATASET", False),
+        "output_dir": env_str("OUTPUT_DIR", "reports"),
+        "bin_max_features": env_str("BIN_MAX_FEATURES"),
+        "bin_dt_s": env_str("DEFAULT_BIN_TIME_WINDOW_SECONDS"),
+        "boot_env": BOOT_ENV
     }
 
 # Density analysis is now handled by the density API router

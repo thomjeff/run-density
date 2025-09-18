@@ -832,7 +832,11 @@ def generate_density_report(
                 # Use the new defensive saver from save_bins.py
                 from .save_bins import save_bin_artifacts
                 # Pass the geojson part of bin_data, not the entire bin_data dict
-                geojson_path, parquet_path = save_bin_artifacts(bin_data.get("geojson", {}), output_dir)
+                # Use daily folder path like other reports
+                from .report_utils import get_date_folder_path
+                daily_folder_path, _ = get_date_folder_path(output_dir)
+                os.makedirs(daily_folder_path, exist_ok=True)
+                geojson_path, parquet_path = save_bin_artifacts(bin_data.get("geojson", {}), daily_folder_path)
                 serialization_time = int((time.monotonic() - geojson_start) * 1000)
                 
                 elapsed = time.monotonic() - start_time
