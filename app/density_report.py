@@ -862,6 +862,18 @@ def generate_density_report(
                              total_ms=int(elapsed * 1000),
                              metadata=bin_metadata)
                 
+                # ChatGPT's Bins → Segments Migration (Issue #229)
+                SEGMENTS_FROM_BINS = os.getenv("SEGMENTS_FROM_BINS", "true").lower() == "true"
+                if SEGMENTS_FROM_BINS:
+                    try:
+                        from .segments_from_bins import create_canonical_segments_from_bins
+                        log.info("SEG_ROLLUP_START out_dir=%s parquet=%s geojson=%s",
+                                 os.path.abspath(daily_folder_path), os.path.abspath(parquet_path), os.path.abspath(geojson_path))
+                        seg_from_bins_path = create_canonical_segments_from_bins(daily_folder_path, parquet_path, geojson_path)
+                        log.info("SEG_ROLLUP_DONE path=%s", seg_from_bins_path)
+                    except Exception as e:
+                        log.exception("SEG_ROLLUP_FAILED: %s", e)
+                
                 print(f"📦 Bin dataset saved: {geojson_path} | {parquet_path}")
                 print(f"📦 Generated {final_features} bin features in {elapsed:.1f}s (bin_size={bin_size_to_use}km, dt={dt_seconds}s)")
                 if bins_status != "ok":
