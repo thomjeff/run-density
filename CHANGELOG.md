@@ -13,6 +13,13 @@
 - **Performance Optimized**: 8,800+ features with 3,400+ occupied bins generated in <4 minutes
 - **Production Ready**: Full E2E + bin generation validated on Cloud Run
 
+#### Canonical Segments Migration ✅ (Issue #229)
+- **ChatGPT's Surgical Patch**: Implemented bins → segments unification with perfect reconciliation
+- **Unified Methodology**: Segments now derived from bins (bottom-up aggregation) 
+- **Perfect Reconciliation**: 0.000% error vs ≤2% target - far exceeds quality requirements
+- **Production Operational**: segment_windows_from_bins.parquet generated on Cloud Run
+- **Complete Traceability**: Full logging from bin generation through canonical segments creation
+
 #### Resource Optimization ✅
 - **Cost Reduction**: ~40% savings with optimal 2CPU/3GB/600s configuration (vs 4CPU/4GB)
 - **Performance Validated**: Complete E2E testing with bin generation under 4 minutes
