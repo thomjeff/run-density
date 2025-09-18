@@ -599,7 +599,8 @@ def generate_density_report(
     step_km: float = DEFAULT_STEP_KM,
     time_window_s: float = DEFAULT_TIME_WINDOW_SECONDS,
     include_per_event: bool = True,
-    output_dir: str = "reports"
+    output_dir: str = "reports",
+    enable_bin_dataset: bool = False
 ) -> Dict[str, Any]:
     """
     Generate a comprehensive density analysis report.
@@ -706,8 +707,9 @@ def generate_density_report(
     print(f"🗺️ Map dataset saved to: {map_path}")
     
     # Issue #198: Re-enable bin dataset generation with feature flag
-    enable_bin_dataset = os.getenv('ENABLE_BIN_DATASET', 'false').lower() == 'true'
-    if enable_bin_dataset:
+    # Use API parameter if provided, otherwise fall back to environment variable
+    enable_bins = enable_bin_dataset or os.getenv('ENABLE_BIN_DATASET', 'false').lower() == 'true'
+    if enable_bins:
         try:
             from .constants import (DEFAULT_BIN_SIZE_KM, FALLBACK_BIN_SIZE_KM, BIN_MAX_FEATURES, 
                                    DEFAULT_BIN_TIME_WINDOW_SECONDS, MAX_BIN_GENERATION_TIME_SECONDS)

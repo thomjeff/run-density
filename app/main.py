@@ -85,6 +85,7 @@ class DensityReportRequest(BaseModel):
     timeWindow: int = DEFAULT_TIME_WINDOW_SECONDS
     includePerEvent: bool = True
     outputDir: str = "reports"
+    enable_bin_dataset: bool = False
 
 class TemporalFlowReportRequest(BaseModel):
     paceCsv: str
@@ -338,7 +339,8 @@ async def generate_density_report_endpoint(request: DensityReportRequest):
             step_km=request.stepKm,
             time_window_s=request.timeWindow,
             include_per_event=request.includePerEvent,
-            output_dir=request.outputDir
+            output_dir=request.outputDir,
+            enable_bin_dataset=request.enable_bin_dataset
         )
         # Handle NaN values and dataclass objects for JSON serialization
         import json
