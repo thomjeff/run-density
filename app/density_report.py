@@ -864,6 +864,7 @@ def generate_density_report(
                 
                 # ChatGPT's Bins → Segments Migration (Issue #229)
                 SEGMENTS_FROM_BINS = os.getenv("SEGMENTS_FROM_BINS", "true").lower() == "true"
+                log.info("SEG_MIGRATION_CHECK: SEGMENTS_FROM_BINS=%s (raw=%s)", SEGMENTS_FROM_BINS, os.getenv("SEGMENTS_FROM_BINS"))
                 if SEGMENTS_FROM_BINS:
                     try:
                         from .segments_from_bins import create_canonical_segments_from_bins

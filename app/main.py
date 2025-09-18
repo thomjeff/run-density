@@ -202,6 +202,7 @@ async def debug_env():
     """Debug endpoint to verify environment variables for bin dataset generation."""
     return {
         "enable_bin_dataset": env_bool("ENABLE_BIN_DATASET", False),
+        "segments_from_bins": env_bool("SEGMENTS_FROM_BINS", True),
         "output_dir": env_str("OUTPUT_DIR", "reports"),
         "bin_max_features": env_str("BIN_MAX_FEATURES"),
         "bin_dt_s": env_str("DEFAULT_BIN_TIME_WINDOW_SECONDS"),
