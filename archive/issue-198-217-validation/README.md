@@ -34,6 +34,10 @@
 - `Test2_Complete_Bins_Enabled_Artifacts_2025-09-18.zip` - Test 2 with bin generation
 - `Test2_Complete_Validation_With_Reconciliation_2025-09-18.zip` - Test 2 with reconciliation
 
+### **Historical Directories**
+- `run-density-feature-issue/` - Original issue planning materials, samples, and tests
+- `Issue-198-ChatGPT-Review-Package-v2/` - ChatGPT review package documentation directory
+
 ## 🎯 **Final Resolution Summary**
 
 ### **Issues Resolved**
