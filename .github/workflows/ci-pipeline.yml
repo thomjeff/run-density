@@ -227,13 +227,14 @@ jobs:
         echo "=== Bin Dataset Quality Validation ==="
         REPORT_DATE=$(date +%Y-%m-%d)
         
-        # Download artifacts for validation
-        mkdir -p ./validation_temp
-        gsutil cp gs://run-density-reports/$REPORT_DATE/bins.parquet ./validation_temp/
-        gsutil cp gs://run-density-reports/$REPORT_DATE/map_data_*.json ./validation_temp/ || echo "Map data will be checked separately"
+        # Download artifacts for validation (need both geojson.gz and parquet)
+        mkdir -p ./validation_temp/$REPORT_DATE
+        gsutil cp gs://run-density-reports/$REPORT_DATE/bins.geojson.gz ./validation_temp/$REPORT_DATE/
+        gsutil cp gs://run-density-reports/$REPORT_DATE/bins.parquet ./validation_temp/$REPORT_DATE/
+        gsutil cp gs://run-density-reports/$REPORT_DATE/map_data_*.json ./validation_temp/$REPORT_DATE/ || echo "Map data will be checked separately"
         
         # Run validation using existing tools
-        python scripts/validation/verify_bins.py --reports-dir ./validation_temp || echo "Verification completed with warnings"
+        python scripts/validation/verify_bins.py --reports-dir ./validation_temp
         
         echo "✅ Bin dataset quality validation completed"
 
