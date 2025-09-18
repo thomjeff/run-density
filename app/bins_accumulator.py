@@ -170,23 +170,7 @@ def build_bin_features(
             # Avoid divide-by-zero, though validated above
             inv_area = 1.0 / area_m2
 
-            # DEBUG: ChatGPT diagnostic block for Issue #222
-            if logger and seg_id == "A1" and w_idx == 0:  # Debug first segment, first window
-                logger.info(f"🔬 DEBUG Issue #222 - Bin Density Calculation:")
-                logger.info(f"  bin_size_km: {bin_size_km}")
-                logger.info(f"  bin_len_m: {bin_len_m} (bin_size_km * 1000)")
-                logger.info(f"  seg.width_m: {seg.width_m}")
-                logger.info(f"  area_m2: {area_m2} (bin_len_m * width_m)")
-                logger.info(f"  inv_area: {inv_area} (1.0 / area_m2)")
-                logger.info(f"  counts[0:3]: {counts[:3]}")
-                logger.info(f"  density[0:3] before calc: [counts * inv_area]")
-
             density = counts.astype(np.float64) * inv_area  # p/m^2
-            
-            # DEBUG: Show calculated densities
-            if logger and seg_id == "A1" and w_idx == 0:
-                logger.info(f"  density[0:3] after calc: {density[:3]} p/m²")
-                logger.info(f"  max density in bin: {np.max(density):.6f} p/m²")
             mean_speed = np.divide(
                 sum_speed,
                 np.maximum(counts, 1),  # prevent div by zero
