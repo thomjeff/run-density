@@ -866,6 +866,21 @@ def generate_density_report(
                 print(f"📦 Generated {final_features} bin features in {elapsed:.1f}s (bin_size={bin_size_to_use}km, dt={dt_seconds}s)")
                 if bins_status != "ok":
                     print(f"⚠️  Bin status: {bins_status} (applied {strategy_step} optimization steps)")
+                
+                # Upload to GCS if enabled (following ChatGPT5 guidance)
+                gcs_upload_enabled = os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}
+                if gcs_upload_enabled:
+                    try:
+                        from .gcs_uploader import upload_bin_artifacts
+                        bucket_name = os.getenv("GCS_BUCKET", "run-density-reports")
+                        upload_success = upload_bin_artifacts(daily_folder_path, bucket_name)
+                        if upload_success:
+                            print(f"☁️ Bin artifacts uploaded to GCS: gs://{bucket_name}/{os.path.basename(daily_folder_path)}/")
+                        else:
+                            print(f"⚠️ GCS upload failed, bin files remain in container: {daily_folder_path}")
+                    except Exception as e:
+                        print(f"⚠️ GCS upload error: {e}")
+                        # Continue execution - local files still available
             else:
                 error_msg = bin_data.get('error', 'Unknown error') if bin_data else 'Bin data is None'
                 raise ValueError(f"Bin generation failed: {error_msg}")
