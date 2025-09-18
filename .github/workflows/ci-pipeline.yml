@@ -83,9 +83,9 @@ jobs:
             --image  "${IMAGE}" \
             --platform managed \
             --allow-unauthenticated \
-            --memory=2Gi --cpu=2 \
+            --memory=3Gi --cpu=2 \
             --min-instances=0 --max-instances=3 \
-            --timeout=300 --quiet
+            --timeout=600 --quiet
 
       - name: "Redirect Traffic to Latest Revision"
         env:
