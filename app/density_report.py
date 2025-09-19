@@ -1497,6 +1497,9 @@ def generate_map_dataset(results: Dict[str, Any], start_times: Dict[str, float])
     """
     Generate map dataset from density analysis results.
     
+    Issue #231: Now prioritizes canonical segments from bins when available.
+    Falls back to legacy density analysis if canonical segments not found.
+    
     Args:
         results: Density analysis results
         start_times: Event start times in minutes
@@ -1504,6 +1507,86 @@ def generate_map_dataset(results: Dict[str, Any], start_times: Dict[str, float])
     Returns:
         Map dataset dictionary
     """
+    # Issue #231: Try canonical segments first (ChatGPT's roadmap)
+    try:
+        from .canonical_segments import (
+            is_canonical_segments_available, get_segment_peak_densities, 
+            get_segment_time_series, get_canonical_segments_metadata
+        )
+        
+        if is_canonical_segments_available():
+            print("🎯 Issue #231: Using canonical segments as source of truth")
+            
+            # Get canonical segments metadata
+            metadata = get_canonical_segments_metadata()
+            
+            # Get peak densities and time series from canonical data
+            segment_peaks = get_segment_peak_densities()
+            segment_time_series = get_segment_time_series()
+            
+            # Load segments CSV for labels and other metadata
+            try:
+                from .io.loader import load_segments
+                segments_df = load_segments("data/segments.csv")
+                segments_dict = {}
+                for _, row in segments_df.iterrows():
+                    segments_dict[row['seg_id']] = {
+                        'seg_label': row.get('seg_label', row['seg_id']),
+                        'width_m': row.get('width_m', 3.0),
+                        'flow_type': row.get('flow_type', 'none')
+                    }
+            except Exception as e:
+                print(f"⚠️ Could not load segments CSV: {e}, using defaults")
+                segments_dict = {}
+            
+            # Generate map-friendly data structure with canonical segments
+            map_data = {
+                "ok": True,
+                "source": "canonical_segments",
+                "timestamp": datetime.now().isoformat(),
+                "segments": {},
+                "metadata": {
+                    "total_segments": metadata.get("unique_segments", 0),
+                    "total_windows": metadata.get("total_windows", 0),
+                    "analysis_type": "canonical_segments_from_bins",
+                    "methodology": "bottom_up_aggregation",
+                    "density_method": "segments_from_bins",
+                    "schema_version": "1.1.0",
+                    "start_times": start_times
+                }
+            }
+            
+            # Process each segment from canonical data
+            for segment_id, peak_data in segment_peaks.items():
+                segment_info = segments_dict.get(segment_id, {})
+                time_series = segment_time_series.get(segment_id, [])
+                
+                # Use peak_areal_density from canonical data
+                peak_areal_density = peak_data["peak_areal_density"]
+                
+                map_data["segments"][segment_id] = {
+                    "segment_id": segment_id,
+                    "segment_label": segment_info.get('seg_label', segment_id),
+                    "peak_areal_density": peak_areal_density,
+                    "peak_mean_density": peak_data["peak_mean_density"],
+                    "zone": _determine_zone(peak_areal_density),
+                    "flow_type": segment_info.get('flow_type', 'none'),
+                    "width_m": segment_info.get('width_m', 3.0),
+                    "total_windows": peak_data["total_windows"],
+                    "time_series": time_series,
+                    "source": "canonical_segments"
+                }
+            
+            print(f"✅ Generated map data from canonical segments: {len(segment_peaks)} segments")
+            return map_data
+            
+    except ImportError:
+        print("⚠️ Canonical segments module not available, using legacy analysis")
+    except Exception as e:
+        print(f"⚠️ Error using canonical segments: {e}, falling back to legacy analysis")
+    
+    # Legacy fallback: Use density analysis results
+    print("📊 Using legacy density analysis for map data")
     segments = results.get("segments", {})
     
     # Generate map-friendly data structure
