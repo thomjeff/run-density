@@ -2,6 +2,13 @@
 
 ## [v1.6.41] - 2025-09-19
 
+### Issue #232 Complete - CI Release Workflow Fix
+- **Status**: ✅ **FULLY COMPLETE** - CI workflow now properly handles new feature releases
+- **Root Cause**: `--verify-tag` flag expected existing tags, preventing new release creation
+- **Solution**: Removed `--verify-tag` flag so `gh release create` creates both tag and release together
+- **Validation**: Release v1.6.41 successfully created automatically by CI pipeline
+- **New Workflow**: Developers bump version → CI detects new feature → Creates release automatically
+
 ### Issue #231 Complete - Canonical Segments as Source of Truth
 - **Status**: ✅ **FULLY COMPLETE** - ChatGPT's roadmap 100% implemented with perfect validation
 - **Achievement**: Canonical segments promoted to source of truth across all systems
