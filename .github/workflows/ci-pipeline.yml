@@ -289,10 +289,10 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
-    - name: Check version consistency
+    - name: Check version and determine release action
       id: version-check
       run: |
-        echo "=== Version Consistency Check ==="
+        echo "=== Version and Release Strategy Check ==="
         
         # Get versions using Python
         CODE_VERSION=$(python -c "from app.version import get_current_version; print(get_current_version())")
@@ -301,53 +301,19 @@ jobs:
         echo "Current version in code: $CODE_VERSION"
         echo "Latest git tag: $GIT_TAG"
         
-        # Check consistency and set outputs
+        # Determine action based on version comparison
         if [ "$CODE_VERSION" = "$GIT_TAG" ]; then
-            echo "✅ Version consistency check passed!"
-            echo "consistent=true" >> $GITHUB_OUTPUT
+            echo "✅ Code version matches latest tag"
+            echo "🔍 Checking if release exists for this version..."
+            echo "action=check_existing" >> $GITHUB_OUTPUT
             echo "version=$CODE_VERSION" >> $GITHUB_OUTPUT
         else
-            echo "⚠️  Version mismatch detected - will auto-fix"
-            echo "consistent=false" >> $GITHUB_OUTPUT
-            echo "code_version=$CODE_VERSION" >> $GITHUB_OUTPUT
-            echo "git_tag=$GIT_TAG" >> $GITHUB_OUTPUT
+            echo "🚀 Code version is newer than latest tag - new feature completed!"
+            echo "📦 Will create new release for version: $CODE_VERSION"
+            echo "action=create_new" >> $GITHUB_OUTPUT
+            echo "version=$CODE_VERSION" >> $GITHUB_OUTPUT
+            echo "previous_tag=$GIT_TAG" >> $GITHUB_OUTPUT
         fi
-    
-    - name: Auto-fix version mismatch
-      if: steps.version-check.outputs.consistent == 'false'
-      run: |
-        echo "=== Auto-fixing Version Mismatch ==="
-        GIT_TAG="${{ steps.version-check.outputs.git_tag }}"
-        echo "Updating code version to match git tag: $GIT_TAG"
-        
-        python -c "
-        from app.version import update_version_in_code
-        import sys
-        
-        git_tag = '$GIT_TAG'
-        if update_version_in_code(git_tag):
-            print(f'✅ Updated code version to {git_tag}')
-        else:
-            print(f'❌ Failed to update code version to {git_tag}')
-            sys.exit(1)
-        "
-    
-    - name: Commit version fix
-      if: steps.version-check.outputs.consistent == 'false'
-      run: |
-        echo "=== Committing Version Fix ==="
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        
-        git add app/main.py
-        git commit -m "Auto-fix version consistency: Update code version to match git tag
-        
-        - Automated fix for Issue #150: Recurring CI Version Consistency Failures
-        - Code version now matches latest git tag
-        - This prevents CI failures due to version mismatches"
-        
-        git push origin main
-        echo "✅ Version fix committed and pushed"
     
     - name: Verify final version consistency
       run: |
@@ -376,8 +342,9 @@ jobs:
         print(f'version={version}')
         " >> $GITHUB_OUTPUT
     
-    - name: Check if release already exists
+    - name: Check if release already exists (for existing versions)
       id: check-release
+      if: steps.version-check.outputs.action == 'check_existing'
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
@@ -391,21 +358,28 @@ jobs:
         fi
     
     - name: Skip Release Creation (Already Exists)
-      if: steps.check-release.outputs.exists == 'true'
+      if: steps.version-check.outputs.action == 'check_existing' && steps.check-release.outputs.exists == 'true'
       run: |
         echo "=== Release Already Exists ==="
         echo "✅ Release ${{ steps.version.outputs.version }} already exists"
         echo "Skipping release creation to avoid duplicates"
         echo "This is expected behavior when multiple pushes occur with the same version"
     
-    - name: Create GitHub Release
-      if: steps.check-release.outputs.exists == 'false'
+    - name: Create GitHub Release (New Version)
+      if: steps.version-check.outputs.action == 'create_new' || (steps.version-check.outputs.action == 'check_existing' && steps.check-release.outputs.exists == 'false')
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         echo "=== Creating GitHub Release ==="
-        echo "Release check result: ${{ steps.check-release.outputs.exists }}"
-        echo "Creating release: ${{ steps.version.outputs.version }}"
+        
+        if [ "${{ steps.version-check.outputs.action }}" = "create_new" ]; then
+          echo "🚀 Creating NEW release for version: ${{ steps.version.outputs.version }}"
+          echo "📈 Previous version was: ${{ steps.version-check.outputs.previous_tag }}"
+          RELEASE_TYPE="New Feature Release"
+        else
+          echo "🔄 Creating release for existing version: ${{ steps.version.outputs.version }}"
+          RELEASE_TYPE="Standard Release"
+        fi
         
         # Double-check release doesn't exist before creating
         if gh release view ${{ steps.version.outputs.version }} >/dev/null 2>&1; then
@@ -415,28 +389,33 @@ jobs:
         fi
         
         gh release create ${{ steps.version.outputs.version }} \
-          --title "Release ${{ steps.version.outputs.version }}" \
-          --notes "## 🚀 Automated Release ${{ steps.version.outputs.version }}
+          --title "$RELEASE_TYPE ${{ steps.version.outputs.version }}" \
+          --notes "## 🚀 $RELEASE_TYPE ${{ steps.version.outputs.version }}
 
-        This release was created automatically from the simplified CI pipeline.
+        This release was created automatically from the CI pipeline.
+
+        ### Release Type
+        - **Type**: $RELEASE_TYPE
+        - **Previous Version**: ${{ steps.version-check.outputs.previous_tag || 'Same version' }}
+        - **New Features**: ${{ steps.version-check.outputs.action == 'create_new' && 'Yes - version bumped for new functionality' || 'Standard release' }}
 
         ### Validation
         - ✅ Build & Deploy completed successfully
-        - ✅ E2E validation passed (e2e.py --cloud)
-        - ✅ Version consistency validated
+        - ✅ E2E validation passed (density/flow)
+        - ✅ Bin dataset validation passed
         - ✅ Quality gate enforced before release
 
         ### Workflow
-        Deploy → E2E Test → Release (only if E2E passes)
+        Deploy → E2E Test → Bin Validation → Release (only if all tests pass)
 
         ### Next Steps
-        1. Review the release notes
+        1. Review the release notes and attached assets
         2. Verify production deployment is working
         3. Monitor Cloud Run performance" \
           --verify-tag
     
     - name: Upload Release Assets
-      if: steps.check-release.outputs.exists == 'false'
+      if: steps.version-check.outputs.action == 'create_new' || (steps.version-check.outputs.action == 'check_existing' && steps.check-release.outputs.exists == 'false')
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
