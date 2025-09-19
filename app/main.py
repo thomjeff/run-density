@@ -201,12 +201,25 @@ async def readiness_check():
 @app.get("/api/debug/env")
 async def debug_env():
     """Debug endpoint to verify environment variables for bin dataset generation."""
+    # Check canonical segments availability
+    canonical_status = {"available": False, "error": "Not checked"}
+    try:
+        from .canonical_segments import is_canonical_segments_available, get_canonical_segments_metadata
+        canonical_available = is_canonical_segments_available()
+        canonical_status = {
+            "available": canonical_available,
+            "metadata": get_canonical_segments_metadata() if canonical_available else None
+        }
+    except Exception as e:
+        canonical_status = {"available": False, "error": str(e)}
+    
     return {
         "enable_bin_dataset": env_bool("ENABLE_BIN_DATASET", False),
         "segments_from_bins": env_bool("SEGMENTS_FROM_BINS", True),
         "output_dir": env_str("OUTPUT_DIR", "reports"),
         "bin_max_features": env_str("BIN_MAX_FEATURES"),
         "bin_dt_s": env_str("DEFAULT_BIN_TIME_WINDOW_SECONDS"),
+        "canonical_segments": canonical_status,
         "boot_env": BOOT_ENV
     }
 
@@ -1053,9 +1066,87 @@ def parse_latest_density_report_segments():
 
 @app.get("/api/segments")
 async def get_segments():
-    """Get segments data for frontend dashboard using pre-existing analysis data."""
+    """Get segments data for frontend dashboard using canonical segments when available."""
     try:
-        # Try to parse the latest density report first
+        # Issue #231: Try canonical segments first (ChatGPT's roadmap)
+        try:
+            from .canonical_segments import (
+                is_canonical_segments_available, get_segment_peak_densities,
+                get_canonical_segments_metadata
+            )
+            
+            if is_canonical_segments_available():
+                print("🎯 Issue #231: /api/segments using canonical segments as source of truth")
+                
+                # Get canonical segments data
+                segment_peaks = get_segment_peak_densities()
+                metadata = get_canonical_segments_metadata()
+                
+                # Load segments CSV for labels
+                try:
+                    import pandas as pd
+                    segments_df = pd.read_csv("data/segments.csv")
+                    segments_dict = {}
+                    for _, row in segments_df.iterrows():
+                        segments_dict[row['seg_id']] = {
+                            'seg_label': row.get('seg_label', row['seg_id'])
+                        }
+                except Exception as e:
+                    print(f"⚠️ Could not load segments CSV: {e}, using defaults")
+                    segments_dict = {}
+                
+                # Build segments list from canonical data
+                segments = []
+                for segment_id, peak_data in segment_peaks.items():
+                    segment_info = segments_dict.get(segment_id, {})
+                    peak_areal_density = peak_data["peak_areal_density"]
+                    
+                    # Determine LOS and status from canonical density
+                    if peak_areal_density < 0.36:
+                        los = "A"
+                        status = "STABLE"
+                    elif peak_areal_density < 0.54:
+                        los = "B"
+                        status = "STABLE"
+                    elif peak_areal_density < 0.72:
+                        los = "C"
+                        status = "MODERATE"
+                    elif peak_areal_density < 1.08:
+                        los = "D"
+                        status = "MODERATE"
+                    else:
+                        los = "E"
+                        status = "OVERLOAD"
+                    
+                    segments.append({
+                        "id": segment_id,
+                        "label": segment_info.get('seg_label', segment_id),
+                        "los": los,
+                        "status": status,
+                        "notes": [f"Canonical segments: {peak_data['total_windows']} windows"],
+                        "peak_areal_density": peak_areal_density,
+                        "peak_mean_density": peak_data["peak_mean_density"],
+                        "source": "canonical_segments"
+                    })
+                
+                return {
+                    "ok": True,
+                    "segments": segments,
+                    "total": len(segments),
+                    "metadata": {
+                        "source": "canonical_segments",
+                        "methodology": "bottom_up_aggregation",
+                        "total_windows": metadata.get("total_windows", 0)
+                    }
+                }
+                
+        except ImportError:
+            print("⚠️ Canonical segments module not available, using legacy approach")
+        except Exception as e:
+            print(f"⚠️ Error using canonical segments: {e}, falling back to legacy approach")
+        
+        # Legacy fallback: Try to parse the latest density report first
+        print("📊 /api/segments using legacy density report parsing")
         segments = parse_latest_density_report_segments()
         
         if segments:
@@ -1063,10 +1154,12 @@ async def get_segments():
             return {
                 "ok": True,
                 "segments": segments,
-                "total": len(segments)
+                "total": len(segments),
+                "metadata": {"source": "density_report"}
             }
         else:
-            # Fallback to hardcoded values if no report found
+            # Final fallback to hardcoded values if no report found
+            print("⚠️ No density report found, using segments CSV fallback")
             import pandas as pd
             segments_df = pd.read_csv("data/segments.csv")
             
@@ -1077,13 +1170,15 @@ async def get_segments():
                     "label": row['seg_label'],
                     "los": "A",
                     "status": "STABLE",
-                    "notes": ["No issues detected"]
+                    "notes": ["No density analysis available"],
+                    "source": "segments_csv"
                 })
             
             return {
                 "ok": True,
                 "segments": segments,
-                "total": len(segments)
+                "total": len(segments),
+                "metadata": {"source": "segments_csv"}
             }
         
     except Exception as e:

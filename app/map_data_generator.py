@@ -26,11 +26,21 @@ try:
     from .flow import analyze_temporal_flow_segments
     from .io.loader import load_runners, load_segments
     from .constants import DISTANCE_BIN_SIZE_KM
+    from .canonical_segments import (
+        load_canonical_segments, get_segment_peak_densities, 
+        get_segment_time_series, is_canonical_segments_available,
+        get_canonical_segments_metadata
+    )
 except ImportError:
     from density import analyze_density_segments
     from flow import analyze_temporal_flow_segments
     from io.loader import load_runners, load_segments
     from constants import DISTANCE_BIN_SIZE_KM
+    from canonical_segments import (
+        load_canonical_segments, get_segment_peak_densities, 
+        get_segment_time_series, is_canonical_segments_available,
+        get_canonical_segments_metadata
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -293,6 +303,90 @@ def _generate_from_reports(density_md_path: str, flow_csv_path: str) -> Dict[str
         
     except Exception as e:
         logger.error(f"Error parsing reports: {e}")
+        return {"ok": False, "error": str(e)}
+
+def _generate_from_canonical_segments() -> Dict[str, Any]:
+    """Generate map data from canonical segments (Issue #231 - ChatGPT's roadmap)."""
+    try:
+        logger.info("Generating map data from canonical segments")
+        
+        # Check if canonical segments are available
+        if not is_canonical_segments_available():
+            logger.warning("Canonical segments not available, falling back to legacy analysis")
+            return {"ok": False, "error": "Canonical segments not available"}
+        
+        # Get canonical segments metadata
+        metadata = get_canonical_segments_metadata()
+        
+        # Get peak densities for each segment
+        segment_peaks = get_segment_peak_densities()
+        
+        # Get time series data for each segment
+        segment_time_series = get_segment_time_series()
+        
+        # Load segments CSV for labels and other metadata
+        try:
+            segments_df = load_segments("data/segments.csv")
+            segments_dict = {}
+            for _, row in segments_df.iterrows():
+                segments_dict[row['seg_id']] = {
+                    'seg_label': row.get('seg_label', row['seg_id']),
+                    'width_m': row.get('width_m', 3.0),
+                    'flow_type': row.get('flow_type', 'none')
+                }
+        except Exception as e:
+            logger.warning(f"Could not load segments CSV: {e}, using defaults")
+            segments_dict = {}
+        
+        # Generate map-friendly data structure
+        map_data = {
+            "ok": True,
+            "source": "canonical_segments",
+            "timestamp": datetime.now().isoformat(),
+            "segments": {},
+            "metadata": {
+                "total_segments": metadata.get("unique_segments", 0),
+                "total_windows": metadata.get("total_windows", 0),
+                "analysis_type": "canonical_segments_from_bins",
+                "methodology": "bottom_up_aggregation",
+                "density_method": "segments_from_bins",
+                "schema_version": "1.1.0"
+            }
+        }
+        
+        # Process each segment
+        segment_count = 0
+        for segment_id, peak_data in segment_peaks.items():
+            segment_info = segments_dict.get(segment_id, {})
+            time_series = segment_time_series.get(segment_id, [])
+            
+            # Use peak_areal_density from canonical data
+            peak_areal_density = peak_data["peak_areal_density"]
+            
+            map_data["segments"][segment_id] = {
+                "segment_id": segment_id,
+                "segment_label": segment_info.get('seg_label', segment_id),
+                "peak_areal_density": peak_areal_density,
+                "peak_mean_density": peak_data["peak_mean_density"],
+                "zone": _determine_zone(peak_areal_density),
+                "flow_type": segment_info.get('flow_type', 'none'),
+                "width_m": segment_info.get('width_m', 3.0),
+                "total_windows": peak_data["total_windows"],
+                "time_series": time_series,
+                "source": "canonical_segments"
+            }
+            segment_count += 1
+        
+        # Validate the data
+        if segment_count == 0:
+            logger.warning("No segments found in canonical segments data")
+            return {"ok": False, "error": "No segments found in canonical segments data"}
+        
+        logger.info(f"Successfully generated map data from canonical segments: {segment_count} segments")
+        return map_data
+        
+    except Exception as e:
+        logger.error(f"Error generating map data from canonical segments: {e}")
         return {"ok": False, "error": str(e)}
 
 def _generate_from_analysis(pace_csv: str, segments_csv: str, start_times: Dict[str, int]) -> Dict[str, Any]:
