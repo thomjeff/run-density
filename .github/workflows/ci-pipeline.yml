@@ -418,8 +418,7 @@ jobs:
         ### Next Steps
         1. Review the release notes and attached assets
         2. Verify production deployment is working
-        3. Monitor Cloud Run performance" \
-          --verify-tag
+        3. Monitor Cloud Run performance"
     
     - name: Upload Release Assets
       if: steps.version-check.outputs.action == 'create_new' || (steps.version-check.outputs.action == 'check_existing' && steps.check-release.outputs.exists == 'false')
