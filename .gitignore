@@ -41,8 +41,8 @@ peaks_crowd.csv
 /reports
 /chats
 
-# Cursor session files
-cursor/
+# Cursor session files (removed to preserve session context)
+# cursor/
 
 # E2E test artifacts
 e2e_tests/
