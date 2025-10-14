@@ -677,39 +677,23 @@ def generate_density_report(
             "details": str(e)
         }
     
-    # Generate markdown report with operational intelligence (Issue #236)
-    report_content = generate_markdown_report(
+    # Generate initial report WITHOUT operational intelligence (Issue #236/239 fix)
+    # Operational intelligence requires bins, which are generated later
+    report_content_initial = generate_markdown_report(
         results, 
         start_times, 
         include_per_event,
-        include_operational_intelligence=True,  # Enable operational intelligence by default
+        include_operational_intelligence=False,  # Disable for now, will regenerate after bins
         output_dir=output_dir
     )
     
-    # Save report using standardized naming convention
+    # Save initial report
     full_path, relative_path = get_report_paths("Density", "md", output_dir)
     
     with open(full_path, 'w', encoding='utf-8') as f:
-        f.write(report_content)
+        f.write(report_content_initial)
     
-    print(f"📊 Density report saved to: {full_path}")
-    
-    # Generate tooltips.json for map integration (Issue #236)
-    if '_operational_intelligence' in results:
-        try:
-            from .canonical_density_report import generate_tooltips_json
-            from .bin_intelligence import get_flagged_bins
-            
-            oi_data = results['_operational_intelligence']
-            bins_flagged = oi_data['bins_flagged']
-            flagged = get_flagged_bins(bins_flagged)
-            
-            if len(flagged) > 0:
-                tooltips_path = os.path.join(output_dir, "tooltips.json")
-                if generate_tooltips_json(flagged, oi_data['config'], tooltips_path):
-                    print(f"🗺️ Tooltips JSON saved to: {tooltips_path}")
-        except Exception as e:
-            logger.warning(f"Could not generate tooltips.json: {e}")
+    print(f"📊 Density report (initial) saved to: {full_path}")
     
     # PDF generation removed - focus on core functionality
     pdf_path = None
@@ -940,6 +924,43 @@ def generate_density_report(
             print(f"⚠️ Bin dataset unavailable: {e}")
     else:
         print("📦 Bin dataset generation disabled (ENABLE_BIN_DATASET=false)")
+    
+    # Regenerate report WITH operational intelligence now that bins exist (Issue #239 fix)
+    if enable_bins:
+        try:
+            print("📊 Regenerating density report with operational intelligence...")
+            report_content_final = generate_markdown_report(
+                results,
+                start_times,
+                include_per_event,
+                include_operational_intelligence=True,
+                output_dir=output_dir
+            )
+            
+            # Overwrite with enhanced report
+            with open(full_path, 'w', encoding='utf-8') as f:
+                f.write(report_content_final)
+            
+            print(f"📊 Density report (with operational intelligence) saved to: {full_path}")
+            
+            # Generate tooltips.json if operational intelligence was added
+            if '_operational_intelligence' in results:
+                try:
+                    from .canonical_density_report import generate_tooltips_json
+                    from .bin_intelligence import get_flagged_bins
+                    
+                    oi_data = results['_operational_intelligence']
+                    bins_flagged = oi_data['bins_flagged']
+                    flagged = get_flagged_bins(bins_flagged)
+                    
+                    if len(flagged) > 0:
+                        tooltips_path = os.path.join(output_dir, "tooltips.json")
+                        if generate_tooltips_json(flagged, oi_data['config'], tooltips_path):
+                            print(f"🗺️ Tooltips JSON saved to: {tooltips_path}")
+                except Exception as e:
+                    logger.warning(f"Could not generate tooltips.json: {e}")
+        except Exception as e:
+            logger.warning(f"Could not regenerate report with operational intelligence: {e}")
     
     # Remove non-JSON-serializable operational intelligence data before returning (Issue #236)
     # This data was only needed for report generation, not for API response
