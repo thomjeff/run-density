@@ -1,5 +1,84 @@
 # Changelog
 
+## [Unreleased] - feat/233-canonical-density-reporting
+
+### Issue #233 - Operational Intelligence (Map + Report)
+- **Status**: 🚧 **IN DEVELOPMENT** - Core implementation complete, pending validation
+- **Branch**: `feat/233-canonical-density-reporting`
+- **Achievement**: Canonical bins-based operational intelligence with LOS flagging and severity analysis
+
+#### Core Implementation ✅
+- **config/reporting.yml**: Complete configuration with LOS thresholds, flagging rules, and reporting settings (167 lines)
+- **app/io_bins.py**: Canonical bins loader with parquet/geojson.gz fallback, dtype normalization, bin_len_m computation (337 lines)
+- **app/los.py**: Level of Service classification engine (A-F) with ranking and utilities (234 lines)
+- **app/bin_intelligence.py**: Operational intelligence flagging with LOS + utilization thresholds, severity assignment (CRITICAL/CAUTION/WATCH) (321 lines)
+- **app/canonical_density_report.py**: Main orchestration module generating executive summary, appendices, tooltips JSON, and map snippets (487 lines)
+
+#### Enhanced Existing Modules ✅
+- **app/flow_validation.py**: Added `--expected` flag support for flow oracle validation (Issue #233 requirement: Flow frozen)
+- **app/map_data_generator.py**: Added `export_snippet()` function with safe no-op placeholder for PNG map snippet generation
+
+#### Testing Infrastructure ✅
+- **Unit Tests (61 tests, @pytest.mark.fast)**: 
+  - `tests/test_los.py`: LOS classification, ranking, DataFrame operations (20 tests)
+  - `tests/test_io_bins.py`: Bins I/O, normalization, metadata extraction (18 tests)
+  - `tests/test_bin_intelligence.py`: Flagging logic, severity assignment, segment rollup (23 tests)
+- **Integration Tests (@pytest.mark.int)**:
+  - `tests/test_canonical_report_integration.py`: End-to-end report generation with real canonical bins
+- **E2E Tests (@pytest.mark.e2e)**:
+  - `tests/test_canonical_reconciliation.py`: CI guardrails for canonical inputs, flow validation, reconciliation quality
+- **Makefile Targets**: `make test-fast`, `make test-int`, `make test-e2e`, `make test-all`
+
+#### Operational Intelligence Features ✅
+- **LOS Classification**: Fruin's pedestrian Level of Service standards (A-F) based on areal density
+- **Dual Flagging Logic**: 
+  - LOS threshold (default: >= C at 1.0 people/m²)
+  - Top N% utilization (default: P95, top 5% globally)
+- **Severity Assignment**: CRITICAL (both), CAUTION (LOS high), WATCH (utilization high), NONE
+- **Executive Summary**: One-page segment-level rollup with worst-case metrics, severity distribution, action items
+- **Appendices**: Detailed per-segment bin-level analysis for flagged segments
+- **Tooltips JSON**: Interactive map data with segment IDs, LOS, severity, density, reasons
+- **Map Snippets**: Placeholder for PNG visualization (1200px, LOS-colored, ±200m padding)
+
+#### Technical Compliance ✅
+- **Metadata**: `schema_version: "1.1.0"`, `density_method: "segments_from_bins"`
+- **Data Sources**: Canonical segments parquet (primary), bins.geojson.gz (fallback)
+- **Flow Frozen**: Flow algorithm validation against `data/flow_expected_results.csv` oracle
+- **No Hardcoded Values**: All configuration in `config/reporting.yml`
+- **Graceful Degradation**: Falls back to geojson.gz if parquet unavailable
+
+#### Infrastructure Changes ✅
+- **New Directories**: `/config` for configuration files, `/work` for ephemeral validation artifacts
+- **Updated .gitignore**: Added `/work/` for validation outputs
+- **GitHub Issue #234**: Created for future migration of `data/density_rulebook.yml` → `config/density_rulebook.yml`
+
+#### ChatGPT V2 Plan Compliance ✅
+All 8 implementation steps from ChatGPT's V2 Plan completed:
+1. ✅ config/reporting.yml created
+2. ✅ app/io_bins.py implemented
+3. ✅ app/los.py implemented
+4. ✅ app/bin_intelligence.py implemented
+5. ✅ app/canonical_density_report.py implemented
+6. ✅ app/flow_validation.py enhanced with --expected flag
+7. ✅ export_snippet() added to app/map_data_generator.py
+8. ✅ Testing infrastructure complete (unit, integration, E2E)
+
+#### Development Stats
+- **Production Code**: 2,417 lines added across 6 modules
+- **Test Code**: 1,594 lines across 5 test files
+- **Total Lines**: 4,011 lines of code
+- **Test Coverage**: 61 unit tests + integration tests + E2E CI guardrails
+- **Commits**: 3 major milestones (core implementation, unit tests, integration/E2E tests)
+
+#### Next Steps 📋
+- [ ] Run E2E validation with real canonical bins from reports/2025-09-19/
+- [ ] Generate actual operational intelligence reports
+- [ ] Verify executive summary format and content
+- [ ] Test integration with frontend map visualization
+- [ ] Create PR for review and merge to main
+
+---
+
 ## [v1.6.41] - 2025-09-19
 
 ### Issue #232 Complete - CI Release Workflow Fix
