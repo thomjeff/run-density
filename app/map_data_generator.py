@@ -599,3 +599,63 @@ def save_map_data(map_data: Dict[str, Any], filename: str = None) -> str:
     
     logger.info(f"Map data saved to {file_path}")
     return str(file_path)
+
+
+def export_snippet(
+    segment_id: str,
+    start_m: float,
+    end_m: float,
+    los: str,
+    utilization_pct: float,
+    outfile_path: str,
+    width_px: int = 1200,
+    padding_m: float = 200
+) -> bool:
+    """
+    Render PNG map snippet centered on [start_m, end_m] along the segment polyline.
+    
+    Colors by LOS (A-F), applies striping if utilization_pct > 100.
+    If map stack unavailable, safely no-ops and returns False.
+    
+    This is a placeholder implementation for Issue #233. Future implementation will:
+    - Use existing Leaflet/Mapbox stack for rendering
+    - Extract polyline slice from GPX data for segment
+    - Color bins by LOS (Green A-B, Amber C-D, Red E-F)
+    - Add striping overlay if utilization > 100%
+    - Export PNG at specified width with padding around flagged area
+    
+    Args:
+        segment_id: Segment identifier
+        start_m: Start position in meters along segment
+        end_m: End position in meters along segment
+        los: Level of Service classification (A-F)
+        utilization_pct: Utilization percentage (striping if > 100%)
+        outfile_path: Output file path for PNG
+        width_px: PNG width in pixels (default: 1200)
+        padding_m: Padding around flagged area in meters (default: 200)
+        
+    Returns:
+        True on success, False on no-op
+        
+    Example:
+        >>> success = export_snippet(
+        ...     'A1', 0, 900, 'C', 85.0,
+        ...     'reports/snippets/A1_0-900.png',
+        ...     width_px=1200, padding_m=200
+        ... )
+        >>> print(success)
+        False  # No-op until map engine implemented
+    """
+    logger.warning(
+        f"Map snippet export not yet implemented for segment {segment_id} "
+        f"[{start_m:.0f}m - {end_m:.0f}m], LOS {los}, utilization {utilization_pct:.1f}%"
+    )
+    logger.info(
+        f"TODO: Implement map snippet rendering using existing Leaflet/Mapbox stack"
+    )
+    logger.info(f"  Requested output: {outfile_path}")
+    logger.info(f"  Dimensions: {width_px}px wide, ±{padding_m}m padding")
+    
+    # Safe no-op: Return False to indicate map engine not available
+    # Future implementation will integrate with existing map rendering infrastructure
+    return False
