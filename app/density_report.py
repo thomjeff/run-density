@@ -941,12 +941,16 @@ def generate_density_report(
     else:
         print("📦 Bin dataset generation disabled (ENABLE_BIN_DATASET=false)")
     
+    # Remove non-JSON-serializable operational intelligence data before returning (Issue #236)
+    # This data was only needed for report generation, not for API response
+    results_for_api = {k: v for k, v in results.items() if k != '_operational_intelligence'}
+    
     return {
         "ok": True,
         "report_path": full_path,
         "pdf_path": pdf_path if 'pdf_path' in locals() else None,
         "map_dataset_path": map_path,
-        "analysis_results": results,
+        "analysis_results": results_for_api,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 
