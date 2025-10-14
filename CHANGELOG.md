@@ -1,5 +1,53 @@
 # Changelog
 
+## [Unreleased] - feat/236-operational-intelligence-reports
+
+### Issue #236 - Operational Intelligence Reports (Phase 2)
+- **Status**: ✅ **COMPLETE** - Unified density report with operational intelligence
+- **Branch**: `feat/236-operational-intelligence-reports`
+- **Achievement**: Integrated operational intelligence into existing density.md report
+
+#### Implementation ✅
+- **Schema Fixes**: Updated `app/io_bins.py` to prioritize bins.parquet (8,800 bins with spatial data) over segment_windows_from_bins.parquet (temporal aggregations)
+- **Unified Report**: Integrated operational intelligence into `app/density_report.py`
+  - Section 1: Operational Intelligence Summary (after Quick Reference)
+  - Section 2: Per-Segment Analysis (existing, unchanged)
+  - Section 3: Bin-Level Detail (Appendix, flagged segments only)
+- **Tooltips Generation**: Auto-generates tooltips.json alongside density report (330KB, 851 flagged bins)
+- **API Fix**: Removed non-JSON-serializable data from API response
+
+#### Report Structure ✅
+1. **Operational Intelligence Summary** (Line 34):
+   - Key metrics (total bins, flagged bins, worst severity/LOS)
+   - Severity distribution (CRITICAL/CAUTION/WATCH)
+   - Flagged segments table (worst bin per segment)
+2. **Per-Segment Analysis** (Middle):
+   - Existing density analysis preserved (no changes)
+3. **Bin-Level Detail** (Appendix):
+   - Detailed bin-by-bin breakdown for flagged segments only
+   - Sorted by severity, then density
+
+#### Operational Intelligence Results ✅
+- **Total Bins Analyzed**: 8,800 (0.2km bins across 22 segments)
+- **Flagged Bins**: 851 (9.7% - top 5% utilization)
+- **Severity Distribution**: All WATCH (utilization-based)
+- **LOS Distribution**: All Level A (free flow - no density concerns)
+- **Tooltips**: 851 entries for map integration
+
+#### Development Stats
+- **3 Commits**: Schema fixes, integration, API serialization fix
+- **Report Size**: 75KB (vs 16KB baseline) - includes operational intelligence
+- **Tooltips**: 330KB JSON with 851 flagged bin entries
+- **E2E Tests**: ALL PASSED ✅
+- **Zero Regressions**: Existing density analysis unchanged
+
+#### Next Steps 📋
+- [ ] Issue #237: Frontend integration (map, dashboard)
+- [ ] Deploy to Cloud Run and validate
+- [ ] Test operational intelligence with production data
+
+---
+
 ## [Unreleased] - feat/233-canonical-density-reporting
 
 ### Issue #233 - Operational Intelligence (Map + Report)
