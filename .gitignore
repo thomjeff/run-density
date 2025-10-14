@@ -46,3 +46,6 @@ peaks_crowd.csv
 
 # E2E test artifacts
 e2e_tests/
+
+# Work directory (ephemeral validation artifacts)
+/work/

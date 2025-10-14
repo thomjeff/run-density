@@ -192,3 +192,22 @@ smoke-overlap-tsv:
 	@curl -sS -X POST "http://127.0.0.1:8081/api/overlap.narrative?as=tsv&sample_bibs=3" \
 	  -H 'Content-Type: application/json' \
 	  -d '{"paceCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv","overlapsCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv","startTimes":{"Full":420,"Half":460,"10K":440},"stepKm":0.03,"timeWindow":300,"depth_m":3.0}'
+
+# -------- Testing Targets (Issue #233) --------
+.PHONY: test-fast test-int test-e2e test-all
+
+test-fast:
+	@echo ">> Running fast unit tests (<1s)"
+	@. .venv/bin/activate && pytest -v -m fast tests/
+
+test-int:
+	@echo ">> Running integration tests"
+	@. .venv/bin/activate && pytest -v -m int tests/
+
+test-e2e:
+	@echo ">> Running E2E tests (CI guardrails)"
+	@. .venv/bin/activate && pytest -v -m e2e tests/
+
+test-all:
+	@echo ">> Running all tests (fast → int → e2e)"
+	@. .venv/bin/activate && pytest -v tests/

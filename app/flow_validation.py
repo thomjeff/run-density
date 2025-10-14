@@ -391,24 +391,103 @@ def validate_flow_analysis_results(segments: List[Dict[str, Any]], baseline_segm
 if __name__ == "__main__":
     """Command-line interface for validation framework."""
     import sys
+    import argparse
     
-    if len(sys.argv) < 2:
-        print("Usage: python flow_validation.py <segments_json_file> [baseline_json_file] [output_path]")
+    parser = argparse.ArgumentParser(
+        description='Validate flow analysis results against expected baseline',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Validate with expected results (flow frozen for Issue #233)
+  python app/flow_validation.py --expected data/flow_expected_results.csv
+  
+  # Validate segments JSON with baseline
+  python app/flow_validation.py segments.json --baseline baseline.json
+  
+  # Validate and save report
+  python app/flow_validation.py segments.json --baseline baseline.json --output report.json
+        """
+    )
+    
+    parser.add_argument('segments_file', nargs='?',
+                       help='Path to segments JSON file')
+    parser.add_argument('--expected', '-e',
+                       help='Path to expected results CSV (flow oracle for Issue #233)')
+    parser.add_argument('--baseline', '-b',
+                       help='Path to baseline segments JSON for comparison')
+    parser.add_argument('--output', '-o',
+                       help='Path to save validation report JSON')
+    parser.add_argument('--verbose', '-v', action='store_true',
+                       help='Enable verbose output')
+    
+    args = parser.parse_args()
+    
+    # Validate input
+    if not args.segments_file and not args.expected:
+        parser.print_help()
+        print("\nError: Either segments_file or --expected must be provided")
         sys.exit(1)
     
-    # Load segments from JSON file
-    with open(sys.argv[1], 'r') as f:
-        segments = json.load(f)
-    
-    baseline_segments = None
-    if len(sys.argv) > 2:
-        with open(sys.argv[2], 'r') as f:
-            baseline_segments = json.load(f)
-    
-    output_path = sys.argv[3] if len(sys.argv) > 3 else None
-    
-    # Run validation
-    summary = validate_flow_analysis_results(segments, baseline_segments, output_path)
-    
-    # Exit with appropriate code
-    sys.exit(0 if summary['failed_checks'] == 0 else 1)
+    try:
+        # Load segments from JSON file
+        segments = None
+        if args.segments_file:
+            with open(args.segments_file, 'r') as f:
+                segments = json.load(f)
+            if args.verbose:
+                print(f"Loaded segments from: {args.segments_file}")
+        
+        # Load baseline/expected results
+        baseline_segments = None
+        if args.expected:
+            # Load expected results from CSV (flow oracle)
+            expected_df = pd.read_csv(args.expected)
+            # Convert to segments format for validation
+            # This assumes flow_expected_results.csv has compatible schema
+            baseline_segments = expected_df.to_dict('records')
+            if args.verbose:
+                print(f"Loaded expected results from: {args.expected}")
+                print(f"  -> {len(baseline_segments)} expected segments")
+        elif args.baseline:
+            with open(args.baseline, 'r') as f:
+                baseline_segments = json.load(f)
+            if args.verbose:
+                print(f"Loaded baseline from: {args.baseline}")
+        
+        # Run validation
+        if args.verbose:
+            print("\nRunning flow validation...")
+        
+        summary = validate_flow_analysis_results(segments, baseline_segments, args.output)
+        
+        # Display summary
+        print("\n" + "="*60)
+        print("FLOW VALIDATION SUMMARY")
+        print("="*60)
+        print(f"Total checks: {summary['total_checks']}")
+        print(f"Passed checks: {summary['passed_checks']}")
+        print(f"Failed checks: {summary['failed_checks']}")
+        print(f"Success rate: {summary.get('success_rate', 0):.1f}%")
+        
+        if summary['failed_checks'] > 0:
+            print("\n⚠️  VALIDATION FAILED")
+            print("Review failed checks for details")
+        else:
+            print("\n✅ VALIDATION PASSED")
+            print("All checks succeeded - Flow is frozen for Issue #233")
+        
+        if args.output:
+            print(f"\nDetailed report saved to: {args.output}")
+        
+        # Exit with appropriate code
+        sys.exit(0 if summary['failed_checks'] == 0 else 1)
+        
+    except FileNotFoundError as e:
+        print(f"\nError: File not found - {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\nError: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)

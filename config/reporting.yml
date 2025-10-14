@@ -1,0 +1,119 @@
+# Canonical Density Reporting Configuration
+# Issue #233: Operational Intelligence
+#
+# This configuration file defines thresholds, paths, and reporting settings
+# for canonical density analysis and operational intelligence features.
+
+# Schema and methodology metadata
+schema_version: "1.1.0"
+density_method: "segments_from_bins"
+
+# LOS (Level of Service) threshold definitions
+# Based on Fruin's pedestrian level of service standards
+# Values represent areal density (people per square meter)
+los:
+  A: 0.0   # Free flow, no restrictions
+  B: 0.5   # Stable flow, minor speed restrictions
+  C: 1.0   # Stable flow, significant speed restrictions
+  D: 1.5   # Unstable flow, severe restrictions
+  E: 2.0   # Very unstable flow, stop-and-go
+  F: 3.0   # Breakdown flow, gridlock
+
+# Flagging rules for operational intelligence
+flagging:
+  min_los_flag: "C"              # Flag bins with LOS >= C (1.0 people/m²)
+  utilization_pctile: 95         # Flag bins in top 5% utilization globally
+  require_min_bin_len_m: 10      # Minimum bin length to consider for flagging
+  
+  # Severity assignment logic
+  # CRITICAL: Both LOS >= C AND top 5% utilization
+  # CAUTION: LOS >= C only
+  # WATCH: Top 5% utilization only
+  # NONE: Neither condition met
+
+# Input/Output paths
+io:
+  # Canonical segments (primary source)
+  bins_parquet: "segment_windows_from_bins.parquet"
+  
+  # Fallback if parquet unavailable
+  bins_geojson_fallback: "bins.geojson.gz"
+  
+  # Supporting data files
+  segments_csv: "data/segments.csv"
+  runners_csv: "data/runners.csv"
+  
+  # Flow validation oracle (frozen for Issue #233)
+  flow_expected_results: "data/flow_expected_results.csv"
+
+# Output directory structure
+outputs:
+  reports_dir: "reports"
+  appendix_dir: "reports/appendix"
+  snippets_dir: "reports/snippets"
+  tooltips_json: "reports/tooltips.json"
+  recon_out: "work/canonical_reconciliation_results.csv"
+  
+  # Executive summary output
+  executive_summary: "reports/density-executive-summary.md"
+
+# Reporting configuration
+reporting:
+  # Density mode: "peak" | "mean" | "sustained"
+  # peak: Use maximum density in time window (default, conservative)
+  # mean: Use average density in time window
+  # sustained: Flag only if density sustained above threshold
+  density_mode: "peak"
+  
+  # Map snippet settings
+  snippet_width_px: 1200         # PNG width in pixels
+  zoom_padding_m: 200            # Padding around flagged area (meters)
+  
+  # Map color scheme for LOS levels
+  los_colors:
+    A: "#4CAF50"                 # Green - excellent
+    B: "#8BC34A"                 # Light green - good
+    C: "#FFC107"                 # Amber - acceptable
+    D: "#FF9800"                 # Orange - concerning
+    E: "#FF5722"                 # Red-orange - poor
+    F: "#F44336"                 # Red - unacceptable
+  
+  # Utilization visualization
+  utilization_stripe_threshold: 100  # Add striping for utilization > 100%
+
+# CI/CD guardrails and validation thresholds
+ci_guardrails:
+  # Canonical reconciliation thresholds
+  max_p95_abs_rel_err: 0.02      # Maximum allowed P95 absolute relative error
+  max_failures: 0                 # No failures allowed in reconciliation
+  
+  # Flow validation (frozen for Issue #233)
+  flow_validation_enabled: true
+  flow_tolerance: 0.001          # Flow validation tolerance
+  
+  # Required file checks
+  required_files:
+    - "segment_windows_from_bins.parquet"
+    - "data/flow_expected_results.csv"
+    - "work/canonical_reconciliation_results.csv"
+
+# Legacy handling
+legacy:
+  # Mark legacy density outputs as deprecated
+  deprecate_legacy_series: true
+  
+  # Exclude legacy outputs from new summaries
+  exclude_from_summary: true
+  
+  # Preserve for transition period
+  retain_for_docs: true
+
+# Logging configuration
+logging:
+  level: "INFO"                  # DEBUG | INFO | WARNING | ERROR
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  # Performance monitoring
+  log_performance_metrics: true
+  log_memory_usage: true
+
