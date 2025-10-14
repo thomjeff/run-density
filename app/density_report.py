@@ -2147,6 +2147,9 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
     """
     Build runner→segment/window mapping adapter for bins_accumulator.
     
+    Uses actual runner data from pace CSV with proper segment km ranges per event.
+    Fixed Issue #239: Replaced placeholder random data with real runner calculations.
+    
     This function maps runner data to the format expected by ChatGPT's bins_accumulator:
     runners_by_segment_and_window[seg_id][w_idx] = {"pos_m": np.ndarray, "speed_mps": np.ndarray}
     """
@@ -2156,54 +2159,98 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
     # Initialize mapping structure
     mapping = {}
     
-    # Get segments from results or create default structure
-    if 'segments' in results:
-        segments = results['segments']
-        if isinstance(segments, dict):
-            # Real density analysis returns segments as a dict
-            for seg_id, seg_data in segments.items():
-                mapping[seg_id] = {}
-        elif isinstance(segments, list):
-            # Fallback for list format
-            for seg in segments:
-                seg_id = seg.get('seg_id') or seg.get('id')
-                mapping[seg_id] = {}
-        else:
-            # Unknown format, use fallback
-            mapping = {"A1": {}, "B1": {}}
-    else:
-        # Fallback segments
-        mapping = {"A1": {}, "B1": {}}
+    # Get segments from results
+    segments_dict = results.get('segments', {})
+    if not segments_dict:
+        return {}
+    
+    for seg_id in segments_dict.keys():
+        mapping[seg_id] = {}
+    
+    # Load pace data and segments configuration
+    try:
+        pace_data = pd.read_csv("data/runners.csv")
+        segments_config = pd.read_csv("data/segments.csv")
+    except Exception as e:
+        logger.warning(f"Could not load data for runner mapping: {e}")
+        return mapping
+    
+    # Build segment km ranges per event
+    segment_ranges = {}
+    for _, seg_row in segments_config.iterrows():
+        seg_id = seg_row['seg_id']
+        segment_ranges[seg_id] = {
+            'Full': (seg_row['full_from_km'], seg_row['full_to_km']) if pd.notna(seg_row.get('full_from_km')) else None,
+            'Half': (seg_row['half_from_km'], seg_row['half_to_km']) if pd.notna(seg_row.get('half_from_km')) else None,
+            '10K': (seg_row['10K_from_km'], seg_row['10K_to_km']) if pd.notna(seg_row.get('10K_from_km')) else None,
+        }
+    
+    # Convert start times to seconds from midnight
+    start_times_sec = {event: float(mins) * 60.0 for event, mins in start_times.items()}
+    
+    # Precompute for all runners
+    pace_data['pace_sec_per_km'] = pace_data['pace'] * 60.0
     
     # Process each time window
     for (t_start, t_end, w_idx) in time_windows:
-        # Calculate midpoint for runner position sampling
-        tm = t_start + (t_end - t_start) / 2
+        # Time window midpoint in seconds from midnight
+        t_mid = t_start + (t_end - t_start) / 2
+        t_mid_sec = t_mid.hour * 3600 + t_mid.minute * 60 + t_mid.second
         
-        # Sample runners at this time point
-        for seg_id in mapping.keys():
+        # For each segment
+        for seg_id in segments_dict.keys():
+            if seg_id not in segment_ranges:
+                mapping[seg_id][w_idx] = {
+                    "pos_m": np.array([], dtype=np.float64),
+                    "speed_mps": np.array([], dtype=np.float64)
+                }
+                continue
+            
             pos_m_list = []
             speed_mps_list = []
             
-            # TODO: This is a placeholder implementation
-            # In real implementation, this would:
-            # 1. Get runners from results.runners or analysis_context.runners
-            # 2. For each runner, determine which segment they're on at time tm
-            # 3. Calculate their position along that segment in meters
-            # 4. Get their speed at that time
-            # 5. Add to pos_m_list and speed_mps_list if on this segment
-            
-            # Placeholder: Create some synthetic runner data for testing
-            # This should be replaced with real runner data mapping
-            import random
-            num_runners = random.randint(0, 5)  # Random 0-5 runners per segment/window
-            for _ in range(num_runners):
-                # Random position along segment (0 to 1000m)
-                pos_m = random.uniform(0, 1000)
-                # Random speed (2-4 m/s typical running speed)
-                speed_mps = random.uniform(2.0, 4.0)
-                pos_m_list.append(pos_m)
-                speed_mps_list.append(speed_mps)
+            # For each event that uses this segment
+            for event in ['Full', 'Half', '10K']:
+                km_range = segment_ranges[seg_id].get(event)
+                if km_range is None:
+                    continue
+                
+                from_km, to_km = km_range
+                if pd.isna(from_km) or pd.isna(to_km):
+                    continue
+                
+                # Get runners for this event
+                event_runners = pace_data[pace_data['event'] == event]
+                
+                for _, runner in event_runners.iterrows():
+                    pace_sec_per_km = runner['pace_sec_per_km']
+                    start_offset_sec = runner['start_offset']
+                    
+                    # Calculate when this runner reaches segment start and end
+                    runner_start_time = start_times_sec[event] + start_offset_sec
+                    time_at_seg_start = runner_start_time + pace_sec_per_km * from_km
+                    time_at_seg_end = runner_start_time + pace_sec_per_km * to_km
+                    
+                    # Check if runner is in segment during this time window
+                    # Runner is "in" segment if they enter before window ends and exit after window starts
+                    if time_at_seg_start <= (t_mid_sec + 30) and time_at_seg_end >= (t_mid_sec - 30):  # ±30s tolerance
+                        # Calculate runner's position at t_mid
+                        time_since_runner_start = t_mid_sec - runner_start_time
+                        
+                        if time_since_runner_start >= 0:
+                            # Runner's absolute position (km from their event start)
+                            runner_abs_km = (time_since_runner_start / pace_sec_per_km) if pace_sec_per_km > 0 else 0
+                            
+                            # Check if within this segment's range for this event
+                            if from_km <= runner_abs_km <= to_km:
+                                # Position relative to segment start (meters)
+                                pos_m = (runner_abs_km - from_km) * 1000.0
+                                
+                                # Calculate speed in m/s
+                                speed_mps = 1000.0 / pace_sec_per_km if pace_sec_per_km > 0 else 0
+                                
+                                pos_m_list.append(pos_m)
+                                speed_mps_list.append(speed_mps)
             
             # Convert to numpy arrays
             mapping[seg_id][w_idx] = {
