@@ -68,10 +68,11 @@ def find_canonical_bins_file(
     
     # Look for canonical bins files in the latest directories
     for date_dir in date_dirs:
-        # Try parquet first (primary format)
+        # Try bins.parquet first (bin-level spatial data with start_km/end_km)
+        # Then segment_windows_from_bins.parquet (temporal aggregations, no spatial detail)
         parquet_candidates = [
-            date_dir / "segment_windows_from_bins.parquet",
-            date_dir / "bins.parquet"
+            date_dir / "bins.parquet",
+            date_dir / "segment_windows_from_bins.parquet"
         ]
         
         for parquet_file in parquet_candidates:
