@@ -2,6 +2,29 @@
 
 ## [Unreleased] - feat/236-operational-intelligence-reports
 
+### Issue #239 - CRITICAL BUG FIX: Runner Mapping in bins_accumulator
+- **Status**: ✅ **FIXED** - Realistic density values restored
+- **Branch**: `feat/236-operational-intelligence-reports`
+- **Critical Fix**: Replaced placeholder random data with actual runner mapping
+
+#### The Bug
+- **Line 2199**: `random.randint(0, 5)` placeholder never replaced with real runner data
+- **Impact**: Densities 200x+ too low (0.004 vs 0.20-0.80 p/m²)
+- **Discovered**: During Issue #236 testing, values showed as 0.00 p/m²
+
+#### The Fix
+1. **Runner Mapping**: Implemented proper mapping using pace data, start times, offsets
+2. **Segment Ranges**: Load per-event km ranges from segments.csv
+3. **Position Calculation**: Calculate runner positions based on pace and time
+4. **Timing Fix**: Regenerate report AFTER bins so operational intelligence uses fresh data
+
+#### Results After Fix
+- **Peak Density**: 0.8330 p/m² (was 0.0040) - 208x increase ✅
+- **F1 Peak**: 0.8330 p/m² (LOS B - pinch point) ✅
+- **A1 Peak**: 0.5000 p/m² (LOS B - start area) ✅
+- **A2 Peak**: 0.2540 p/m² (LOS A - normal) ✅
+- **Realistic Ordering**: F1 > I1 > A1 > A2 > A3 ✅
+
 ### Issue #236 - Operational Intelligence Reports (Phase 2)
 - **Status**: ✅ **COMPLETE** - Unified density report with operational intelligence
 - **Branch**: `feat/236-operational-intelligence-reports`
