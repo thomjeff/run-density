@@ -677,8 +677,14 @@ def generate_density_report(
             "details": str(e)
         }
     
-    # Generate markdown report
-    report_content = generate_markdown_report(results, start_times, include_per_event)
+    # Generate markdown report with operational intelligence (Issue #236)
+    report_content = generate_markdown_report(
+        results, 
+        start_times, 
+        include_per_event,
+        include_operational_intelligence=True,  # Enable operational intelligence by default
+        output_dir=output_dir
+    )
     
     # Save report using standardized naming convention
     full_path, relative_path = get_report_paths("Density", "md", output_dir)
@@ -687,6 +693,23 @@ def generate_density_report(
         f.write(report_content)
     
     print(f"📊 Density report saved to: {full_path}")
+    
+    # Generate tooltips.json for map integration (Issue #236)
+    if '_operational_intelligence' in results:
+        try:
+            from .canonical_density_report import generate_tooltips_json
+            from .bin_intelligence import get_flagged_bins
+            
+            oi_data = results['_operational_intelligence']
+            bins_flagged = oi_data['bins_flagged']
+            flagged = get_flagged_bins(bins_flagged)
+            
+            if len(flagged) > 0:
+                tooltips_path = os.path.join(output_dir, "tooltips.json")
+                if generate_tooltips_json(flagged, oi_data['config'], tooltips_path):
+                    print(f"🗺️ Tooltips JSON saved to: {tooltips_path}")
+        except Exception as e:
+            logger.warning(f"Could not generate tooltips.json: {e}")
     
     # PDF generation removed - focus on core functionality
     pdf_path = None
@@ -928,12 +951,101 @@ def generate_density_report(
     }
 
 
+def generate_operational_intelligence_summary(stats: Dict[str, Any], segment_summary: pd.DataFrame, config: Dict[str, Any]) -> List[str]:
+    """
+    Generate operational intelligence executive summary section.
+    
+    Args:
+        stats: Flagging statistics
+        segment_summary: Segment-level rollup
+        config: Configuration dictionary
+        
+    Returns:
+        List of markdown lines for operational intelligence section
+    """
+    from .los import get_los_description
+    
+    content = []
+    
+    content.append("## Operational Intelligence Summary")
+    content.append("")
+    content.append("*Based on bin-level analysis with LOS classification and utilization flagging*")
+    content.append("")
+    
+    # Key Metrics
+    content.append("### Key Metrics")
+    content.append("")
+    content.append("| Metric | Value |")
+    content.append("|--------|-------|")
+    content.append(f"| Total Bins Analyzed | {stats['total_bins']:,} |")
+    content.append(f"| Flagged Bins | {stats['flagged_bins']:,} ({stats['flagged_percentage']:.1f}%) |")
+    content.append(f"| Worst Severity | {stats['worst_severity']} |")
+    content.append(f"| Worst LOS | {stats['worst_los']} - {get_los_description(stats['worst_los'])} |")
+    content.append(f"| Peak Density | {stats['peak_density_range']['max']:.2f} people/m² |")
+    content.append("")
+    
+    # Severity Distribution
+    if stats['flagged_bins'] > 0:
+        content.append("### Severity Distribution")
+        content.append("")
+        content.append("| Severity | Count | Description |")
+        content.append("|----------|-------|-------------|")
+        
+        severity_descriptions = {
+            'CRITICAL': 'Both LOS >= C AND top 5% utilization',
+            'CAUTION': 'LOS >= C only',
+            'WATCH': 'Top 5% utilization only'
+        }
+        
+        for severity in ['CRITICAL', 'CAUTION', 'WATCH']:
+            count = stats['severity_distribution'].get(severity, 0)
+            desc = severity_descriptions.get(severity, '')
+            content.append(f"| {severity} | {count} | {desc} |")
+        
+        content.append("")
+        
+        # Flagged Segments Table
+        if len(segment_summary) > 0:
+            content.append("### Flagged Segments (Worst Bin per Segment)")
+            content.append("")
+            content.append("| Segment | Range (km) | LOS | Density (p/m²) | Flagged Bins | Severity |")
+            content.append("|---------|------------|-----|----------------|--------------|----------|")
+            
+            for _, row in segment_summary.head(10).iterrows():  # Top 10 worst segments
+                seg_label = row.get('seg_label', row['segment_id'])
+                range_str = f"{row['worst_bin_start_km']:.2f}-{row['worst_bin_end_km']:.2f}"
+                los = row['worst_los']
+                density = f"{row['peak_density']:.2f}"
+                count = row['flagged_bin_count']
+                severity = row['severity']
+                
+                content.append(f"| {seg_label} | {range_str} | {los} | {density} | {count} | {severity} |")
+            
+            if len(segment_summary) > 10:
+                content.append(f"| ... | ... | ... | ... | ... | ... |")
+                content.append(f"| *{len(segment_summary) - 10} more segments* | | | | | |")
+            
+            content.append("")
+    else:
+        content.append("### ✅ No Operational Intelligence Flags")
+        content.append("")
+        content.append("All bins operating within acceptable parameters (LOS < C and utilization < top 5%).")
+        content.append("")
+    
+    content.append("---")
+    content.append("")
+    
+    return content
+
+
 def generate_markdown_report(
     results: Dict[str, Any], 
     start_times: Dict[str, float], 
-    include_per_event: bool = True
+    include_per_event: bool = True,
+    include_operational_intelligence: bool = True,
+    output_dir: str = "reports"
 ) -> str:
-    """Generate markdown content for the density report."""
+    """Generate markdown content for the density report with optional operational intelligence."""
     
     # Event start times for ordering
     event_order = sorted(start_times.items(), key=lambda x: x[1])
@@ -1012,6 +1124,52 @@ def generate_markdown_report(
     content.append("")
     content.append("**Color Coding:** 🟢 Green (A-B), 🟡 Yellow (C-D), 🔴 Red (E-F)")
     content.append("")
+    
+    # Operational Intelligence Executive Summary (Issue #236)
+    if include_operational_intelligence:
+        try:
+            from .io_bins import load_bins
+            from .bin_intelligence import FlaggingConfig, apply_bin_flagging, summarize_segment_flags, get_flagging_statistics
+            
+            # Load configuration
+            import yaml
+            try:
+                with open("config/reporting.yml", "r") as f:
+                    config = yaml.safe_load(f)
+            except FileNotFoundError:
+                config = None
+            
+            if config:
+                # Load bins
+                bins_df = load_bins(reports_dir=output_dir)
+                
+                if bins_df is not None and len(bins_df) > 0:
+                    # Apply flagging
+                    flagging_cfg = FlaggingConfig(
+                        min_los_flag=config['flagging']['min_los_flag'],
+                        utilization_pctile=config['flagging']['utilization_pctile'],
+                        require_min_bin_len_m=config['flagging']['require_min_bin_len_m'],
+                        density_field='density_peak'
+                    )
+                    
+                    bins_flagged = apply_bin_flagging(bins_df, flagging_cfg, los_thresholds=config.get('los'))
+                    stats = get_flagging_statistics(bins_flagged)
+                    segment_summary = summarize_segment_flags(bins_flagged)
+                    
+                    # Generate operational intelligence sections
+                    content.extend(generate_operational_intelligence_summary(stats, segment_summary, config))
+                    content.append("")
+                    
+                    # Store for bin detail appendix later
+                    results['_operational_intelligence'] = {
+                        'bins_flagged': bins_flagged,
+                        'stats': stats,
+                        'segment_summary': segment_summary,
+                        'config': config
+                    }
+        except Exception as e:
+            logger.warning(f"Could not generate operational intelligence: {e}")
+            # Continue without operational intelligence
     
     # Executive Summary Table (TL;DR for race directors)
     summary_table = generate_summary_table(results.get("segments", {}))
@@ -1096,6 +1254,55 @@ def generate_markdown_report(
     content.append("| E | 1.08 - 1.63 | 0.80 - 1.00 | Very Dense |")
     content.append("| F | 1.63+ | 1.00+ | Extremely Dense |")
     content.append("")
+    
+    # Bin-Level Detail for Flagged Segments (Issue #236)
+    if '_operational_intelligence' in results:
+        oi_data = results['_operational_intelligence']
+        bins_flagged = oi_data['bins_flagged']
+        
+        # Get only flagged bins
+        from .bin_intelligence import get_flagged_bins
+        flagged = get_flagged_bins(bins_flagged)
+        
+        if len(flagged) > 0:
+            content.append("### Bin-Level Detail (Flagged Segments Only)")
+            content.append("")
+            content.append("Detailed bin-by-bin breakdown for segments with operational intelligence flags:")
+            content.append("")
+            
+            # Group by segment
+            for segment_id in flagged['segment_id'].unique():
+                seg_bins = flagged[flagged['segment_id'] == segment_id]
+                seg_label = seg_bins.iloc[0].get('seg_label', segment_id)
+                
+                content.append(f"#### {seg_label} ({segment_id})")
+                content.append("")
+                content.append(f"**Flagged Bins:** {len(seg_bins)}")
+                content.append("")
+                content.append("| Start (km) | End (km) | Length (m) | Density (p/m²) | LOS | Severity | Reason |")
+                content.append("|------------|----------|------------|----------------|-----|----------|--------|")
+                
+                # Sort by severity, then density
+                seg_bins_sorted = seg_bins.sort_values(
+                    by=['severity_rank', 'density_peak'],
+                    ascending=[False, False]
+                )
+                
+                for _, bin_row in seg_bins_sorted.iterrows():
+                    start_km = f"{bin_row['start_km']:.3f}"
+                    end_km = f"{bin_row['end_km']:.3f}"
+                    length_m = f"{bin_row.get('bin_len_m', 0):.0f}"
+                    density = f"{bin_row['density_peak']:.2f}"
+                    los = bin_row['los']
+                    severity = bin_row['severity']
+                    reason = bin_row['flag_reason']
+                    
+                    content.append(f"| {start_km} | {end_km} | {length_m} | {density} | {los} | {severity} | {reason} |")
+                
+                content.append("")
+            
+            content.append("---")
+            content.append("")
     
     return "\n".join(content)
 
