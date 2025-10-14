@@ -174,6 +174,7 @@ def normalize_bins_dtypes(df: pd.DataFrame) -> pd.DataFrame:
         'segment_id': 'string',
         'start_km': 'float64',
         'end_km': 'float64',
+        'density': 'float64',
         'density_mean': 'float64',
         'density_peak': 'float64',
         'n_bins': 'Int64',  # Nullable integer
@@ -186,6 +187,12 @@ def normalize_bins_dtypes(df: pd.DataFrame) -> pd.DataFrame:
                 df[col] = df[col].astype(dtype)
             except Exception as e:
                 logger.warning(f"Could not convert {col} to {dtype}: {e}")
+    
+    # Handle bins.parquet schema: 'density' column -> 'density_peak' for consistency
+    if 'density' in df.columns and 'density_peak' not in df.columns:
+        df['density_peak'] = df['density']
+        df['density_mean'] = df['density']  # Assume peak = mean for bins
+        logger.debug("Normalized 'density' column to 'density_peak' and 'density_mean'")
     
     # Handle timestamp columns
     timestamp_cols = ['t_start', 't_end']
@@ -242,15 +249,21 @@ def validate_bins_schema(df: pd.DataFrame) -> bool:
     required_columns = [
         'segment_id',
         'start_km',
-        'end_km',
-        'density_mean',
-        'density_peak'
+        'end_km'
     ]
+    
+    # Need at least one density column
+    density_columns = ['density', 'density_mean', 'density_peak']
+    has_density = any(col in df.columns for col in density_columns)
     
     missing_columns = [col for col in required_columns if col not in df.columns]
     
     if missing_columns:
         logger.error(f"Missing required columns in bins data: {missing_columns}")
+        return False
+    
+    if not has_density:
+        logger.error(f"Missing density column - need one of: {density_columns}")
         return False
     
     logger.debug("Bins schema validation passed")
