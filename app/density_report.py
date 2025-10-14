@@ -985,7 +985,7 @@ def generate_operational_intelligence_summary(stats: Dict[str, Any], segment_sum
     content.append(f"| Flagged Bins | {stats['flagged_bins']:,} ({stats['flagged_percentage']:.1f}%) |")
     content.append(f"| Worst Severity | {stats['worst_severity']} |")
     content.append(f"| Worst LOS | {stats['worst_los']} - {get_los_description(stats['worst_los'])} |")
-    content.append(f"| Peak Density | {stats['peak_density_range']['max']:.2f} people/m² |")
+    content.append(f"| Peak Density | {stats['peak_density_range']['max']:.4f} people/m² |")
     content.append("")
     
     # Severity Distribution
@@ -1019,7 +1019,7 @@ def generate_operational_intelligence_summary(stats: Dict[str, Any], segment_sum
                 seg_label = row.get('seg_label', row['segment_id'])
                 range_str = f"{row['worst_bin_start_km']:.2f}-{row['worst_bin_end_km']:.2f}"
                 los = row['worst_los']
-                density = f"{row['peak_density']:.2f}"
+                density = f"{row['peak_density']:.4f}"  # Use 4 decimals to show small values
                 count = row['flagged_bin_count']
                 severity = row['severity']
                 
@@ -1296,7 +1296,7 @@ def generate_markdown_report(
                     start_km = f"{bin_row['start_km']:.3f}"
                     end_km = f"{bin_row['end_km']:.3f}"
                     length_m = f"{bin_row.get('bin_len_m', 0):.0f}"
-                    density = f"{bin_row['density_peak']:.2f}"
+                    density = f"{bin_row['density_peak']:.4f}"  # Use 4 decimals to show small values
                     los = bin_row['los']
                     severity = bin_row['severity']
                     reason = bin_row['flag_reason']
