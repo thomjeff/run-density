@@ -33,8 +33,8 @@ flagging:
 
 # Input/Output paths
 io:
-  # Canonical segments (primary source)
-  bins_parquet: "segment_windows_from_bins.parquet"
+  # Canonical bins (primary source for bin-level analysis)
+  bins_parquet: "bins.parquet"
   
   # Fallback if parquet unavailable
   bins_geojson_fallback: "bins.geojson.gz"

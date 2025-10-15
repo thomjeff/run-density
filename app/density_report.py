@@ -189,14 +189,23 @@ def generate_key_takeaway(segment_id: str, segment_data: Dict[str, Any], v2_cont
     # General segment logic
     else:
         los_letter = v2_context.get('los', 'Unknown')
-        density = v2_context.get('areal_density', 0)
+        # Use peak_areal_density (correct field name from v2_context)
+        density = v2_context.get('peak_areal_density', 0)
+        
+        # Dynamic precision based on density value (Issue #239 - ChatGPT recommendation)
+        if density < 0.01:
+            density_str = f"{density:.4f}"
+        elif density < 0.10:
+            density_str = f"{density:.3f}"
+        else:
+            density_str = f"{density:.2f}"
         
         if los_letter in ['E', 'F']:
-            return f"High density ({density:.2f} p/m²) - extra marshals needed"
+            return f"High density ({density_str} p/m²) - extra marshals needed"
         elif los_letter in ['C', 'D']:
-            return f"Moderate density ({density:.2f} p/m²) - maintain cadence"
+            return f"Moderate density ({density_str} p/m²) - maintain cadence"
         else:
-            return f"Low density ({density:.2f} p/m²) - comfortable flow"
+            return f"Low density ({density_str} p/m²) - comfortable flow"
 
 
 def render_segment_v2(md, ctx, rulebook):
@@ -677,16 +686,23 @@ def generate_density_report(
             "details": str(e)
         }
     
-    # Generate markdown report
-    report_content = generate_markdown_report(results, start_times, include_per_event)
+    # Generate initial report WITHOUT operational intelligence (Issue #236/239 fix)
+    # Operational intelligence requires bins, which are generated later
+    report_content_initial = generate_markdown_report(
+        results, 
+        start_times, 
+        include_per_event,
+        include_operational_intelligence=False,  # Disable for now, will regenerate after bins
+        output_dir=output_dir
+    )
     
-    # Save report using standardized naming convention
+    # Save initial report
     full_path, relative_path = get_report_paths("Density", "md", output_dir)
     
     with open(full_path, 'w', encoding='utf-8') as f:
-        f.write(report_content)
+        f.write(report_content_initial)
     
-    print(f"📊 Density report saved to: {full_path}")
+    print(f"📊 Density report (initial) saved to: {full_path}")
     
     # PDF generation removed - focus on core functionality
     pdf_path = None
@@ -918,22 +934,153 @@ def generate_density_report(
     else:
         print("📦 Bin dataset generation disabled (ENABLE_BIN_DATASET=false)")
     
+    # Regenerate report WITH operational intelligence now that bins exist (Issue #239 fix)
+    if enable_bins:
+        try:
+            print("📊 Regenerating density report with operational intelligence...")
+            report_content_final = generate_markdown_report(
+                results,
+                start_times,
+                include_per_event,
+                include_operational_intelligence=True,
+                output_dir=output_dir
+            )
+            
+            # Overwrite with enhanced report
+            with open(full_path, 'w', encoding='utf-8') as f:
+                f.write(report_content_final)
+            
+            print(f"📊 Density report (with operational intelligence) saved to: {full_path}")
+            
+            # Generate tooltips.json if operational intelligence was added
+            if '_operational_intelligence' in results:
+                try:
+                    from .canonical_density_report import generate_tooltips_json
+                    from .bin_intelligence import get_flagged_bins
+                    
+                    oi_data = results['_operational_intelligence']
+                    bins_flagged = oi_data['bins_flagged']
+                    flagged = get_flagged_bins(bins_flagged)
+                    
+                    if len(flagged) > 0:
+                        # Use daily folder path for tooltips.json (same as bins artifacts)
+                        tooltips_path = os.path.join(daily_folder_path, "tooltips.json") if 'daily_folder_path' in locals() else os.path.join(output_dir, "tooltips.json")
+                        if generate_tooltips_json(flagged, oi_data['config'], tooltips_path):
+                            print(f"🗺️ Tooltips JSON saved to: {tooltips_path}")
+                except Exception as e:
+                    logger.warning(f"Could not generate tooltips.json: {e}")
+        except Exception as e:
+            logger.warning(f"Could not regenerate report with operational intelligence: {e}")
+    
+    # Remove non-JSON-serializable operational intelligence data before returning (Issue #236)
+    # This data was only needed for report generation, not for API response
+    results_for_api = {k: v for k, v in results.items() if k != '_operational_intelligence'}
+    
     return {
         "ok": True,
         "report_path": full_path,
         "pdf_path": pdf_path if 'pdf_path' in locals() else None,
         "map_dataset_path": map_path,
-        "analysis_results": results,
+        "analysis_results": results_for_api,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
+
+
+def generate_operational_intelligence_summary(stats: Dict[str, Any], segment_summary: pd.DataFrame, config: Dict[str, Any]) -> List[str]:
+    """
+    Generate operational intelligence executive summary section.
+    
+    Args:
+        stats: Flagging statistics
+        segment_summary: Segment-level rollup
+        config: Configuration dictionary
+        
+    Returns:
+        List of markdown lines for operational intelligence section
+    """
+    from .los import get_los_description
+    
+    content = []
+    
+    content.append("## Operational Intelligence Summary")
+    content.append("")
+    content.append("*Based on bin-level analysis with LOS classification and utilization flagging*")
+    content.append("")
+    
+    # Key Metrics
+    content.append("### Key Metrics")
+    content.append("")
+    content.append("| Metric | Value |")
+    content.append("|--------|-------|")
+    content.append(f"| Total Bins Analyzed | {stats['total_bins']:,} |")
+    content.append(f"| Flagged Bins | {stats['flagged_bins']:,} ({stats['flagged_percentage']:.1f}%) |")
+    content.append(f"| Worst Severity | {stats['worst_severity']} |")
+    content.append(f"| Worst LOS | {stats['worst_los']} - {get_los_description(stats['worst_los'])} |")
+    content.append(f"| Peak Density | {stats['peak_density_range']['max']:.4f} people/m² |")
+    content.append("")
+    
+    # Severity Distribution
+    if stats['flagged_bins'] > 0:
+        content.append("### Severity Distribution")
+        content.append("")
+        content.append("| Severity | Count | Description |")
+        content.append("|----------|-------|-------------|")
+        
+        severity_descriptions = {
+            'CRITICAL': 'Both LOS >= C AND top 5% utilization',
+            'CAUTION': 'LOS >= C only',
+            'WATCH': 'Top 5% utilization only'
+        }
+        
+        for severity in ['CRITICAL', 'CAUTION', 'WATCH']:
+            count = stats['severity_distribution'].get(severity, 0)
+            desc = severity_descriptions.get(severity, '')
+            content.append(f"| {severity} | {count} | {desc} |")
+        
+        content.append("")
+        
+        # Flagged Segments Table
+        if len(segment_summary) > 0:
+            content.append("### Flagged Segments (Worst Bin per Segment)")
+            content.append("")
+            content.append("| Segment | Range (km) | LOS | Density (p/m²) | Flagged Bins | Severity |")
+            content.append("|---------|------------|-----|----------------|--------------|----------|")
+            
+            for _, row in segment_summary.head(10).iterrows():  # Top 10 worst segments
+                seg_label = row.get('seg_label', row['segment_id'])
+                range_str = f"{row['worst_bin_start_km']:.2f}-{row['worst_bin_end_km']:.2f}"
+                los = row['worst_los']
+                density = f"{row['peak_density']:.4f}"  # Use 4 decimals to show small values
+                count = row['flagged_bin_count']
+                severity = row['severity']
+                
+                content.append(f"| {seg_label} | {range_str} | {los} | {density} | {count} | {severity} |")
+            
+            if len(segment_summary) > 10:
+                content.append(f"| ... | ... | ... | ... | ... | ... |")
+                content.append(f"| *{len(segment_summary) - 10} more segments* | | | | | |")
+            
+            content.append("")
+    else:
+        content.append("### ✅ No Operational Intelligence Flags")
+        content.append("")
+        content.append("All bins operating within acceptable parameters (LOS < C and utilization < top 5%).")
+        content.append("")
+    
+    content.append("---")
+    content.append("")
+    
+    return content
 
 
 def generate_markdown_report(
     results: Dict[str, Any], 
     start_times: Dict[str, float], 
-    include_per_event: bool = True
+    include_per_event: bool = True,
+    include_operational_intelligence: bool = True,
+    output_dir: str = "reports"
 ) -> str:
-    """Generate markdown content for the density report."""
+    """Generate markdown content for the density report with optional operational intelligence."""
     
     # Event start times for ordering
     event_order = sorted(start_times.items(), key=lambda x: x[1])
@@ -1012,6 +1159,52 @@ def generate_markdown_report(
     content.append("")
     content.append("**Color Coding:** 🟢 Green (A-B), 🟡 Yellow (C-D), 🔴 Red (E-F)")
     content.append("")
+    
+    # Operational Intelligence Executive Summary (Issue #236)
+    if include_operational_intelligence:
+        try:
+            from .io_bins import load_bins
+            from .bin_intelligence import FlaggingConfig, apply_bin_flagging, summarize_segment_flags, get_flagging_statistics
+            
+            # Load configuration
+            import yaml
+            try:
+                with open("config/reporting.yml", "r") as f:
+                    config = yaml.safe_load(f)
+            except FileNotFoundError:
+                config = None
+            
+            if config:
+                # Load bins
+                bins_df = load_bins(reports_dir=output_dir)
+                
+                if bins_df is not None and len(bins_df) > 0:
+                    # Apply flagging
+                    flagging_cfg = FlaggingConfig(
+                        min_los_flag=config['flagging']['min_los_flag'],
+                        utilization_pctile=config['flagging']['utilization_pctile'],
+                        require_min_bin_len_m=config['flagging']['require_min_bin_len_m'],
+                        density_field='density_peak'
+                    )
+                    
+                    bins_flagged = apply_bin_flagging(bins_df, flagging_cfg, los_thresholds=config.get('los'))
+                    stats = get_flagging_statistics(bins_flagged)
+                    segment_summary = summarize_segment_flags(bins_flagged)
+                    
+                    # Generate operational intelligence sections
+                    content.extend(generate_operational_intelligence_summary(stats, segment_summary, config))
+                    content.append("")
+                    
+                    # Store for bin detail appendix later
+                    results['_operational_intelligence'] = {
+                        'bins_flagged': bins_flagged,
+                        'stats': stats,
+                        'segment_summary': segment_summary,
+                        'config': config
+                    }
+        except Exception as e:
+            logger.warning(f"Could not generate operational intelligence: {e}")
+            # Continue without operational intelligence
     
     # Executive Summary Table (TL;DR for race directors)
     summary_table = generate_summary_table(results.get("segments", {}))
@@ -1096,6 +1289,55 @@ def generate_markdown_report(
     content.append("| E | 1.08 - 1.63 | 0.80 - 1.00 | Very Dense |")
     content.append("| F | 1.63+ | 1.00+ | Extremely Dense |")
     content.append("")
+    
+    # Bin-Level Detail for Flagged Segments (Issue #236)
+    if '_operational_intelligence' in results:
+        oi_data = results['_operational_intelligence']
+        bins_flagged = oi_data['bins_flagged']
+        
+        # Get only flagged bins
+        from .bin_intelligence import get_flagged_bins
+        flagged = get_flagged_bins(bins_flagged)
+        
+        if len(flagged) > 0:
+            content.append("### Bin-Level Detail (Flagged Segments Only)")
+            content.append("")
+            content.append("Detailed bin-by-bin breakdown for segments with operational intelligence flags:")
+            content.append("")
+            
+            # Group by segment
+            for segment_id in flagged['segment_id'].unique():
+                seg_bins = flagged[flagged['segment_id'] == segment_id]
+                seg_label = seg_bins.iloc[0].get('seg_label', segment_id)
+                
+                content.append(f"#### {seg_label} ({segment_id})")
+                content.append("")
+                content.append(f"**Flagged Bins:** {len(seg_bins)}")
+                content.append("")
+                content.append("| Start (km) | End (km) | Length (m) | Density (p/m²) | LOS | Severity | Reason |")
+                content.append("|------------|----------|------------|----------------|-----|----------|--------|")
+                
+                # Sort by severity, then density
+                seg_bins_sorted = seg_bins.sort_values(
+                    by=['severity_rank', 'density_peak'],
+                    ascending=[False, False]
+                )
+                
+                for _, bin_row in seg_bins_sorted.iterrows():
+                    start_km = f"{bin_row['start_km']:.3f}"
+                    end_km = f"{bin_row['end_km']:.3f}"
+                    length_m = f"{bin_row.get('bin_len_m', 0):.0f}"
+                    density = f"{bin_row['density_peak']:.4f}"  # Use 4 decimals to show small values
+                    los = bin_row['los']
+                    severity = bin_row['severity']
+                    reason = bin_row['flag_reason']
+                    
+                    content.append(f"| {start_km} | {end_km} | {length_m} | {density} | {los} | {severity} | {reason} |")
+                
+                content.append("")
+            
+            content.append("---")
+            content.append("")
     
     return "\n".join(content)
 
@@ -1936,6 +2178,9 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
     """
     Build runner→segment/window mapping adapter for bins_accumulator.
     
+    Uses actual runner data from pace CSV with proper segment km ranges per event.
+    Fixed Issue #239: Replaced placeholder random data with real runner calculations.
+    
     This function maps runner data to the format expected by ChatGPT's bins_accumulator:
     runners_by_segment_and_window[seg_id][w_idx] = {"pos_m": np.ndarray, "speed_mps": np.ndarray}
     """
@@ -1945,54 +2190,98 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
     # Initialize mapping structure
     mapping = {}
     
-    # Get segments from results or create default structure
-    if 'segments' in results:
-        segments = results['segments']
-        if isinstance(segments, dict):
-            # Real density analysis returns segments as a dict
-            for seg_id, seg_data in segments.items():
-                mapping[seg_id] = {}
-        elif isinstance(segments, list):
-            # Fallback for list format
-            for seg in segments:
-                seg_id = seg.get('seg_id') or seg.get('id')
-                mapping[seg_id] = {}
-        else:
-            # Unknown format, use fallback
-            mapping = {"A1": {}, "B1": {}}
-    else:
-        # Fallback segments
-        mapping = {"A1": {}, "B1": {}}
+    # Get segments from results
+    segments_dict = results.get('segments', {})
+    if not segments_dict:
+        return {}
+    
+    for seg_id in segments_dict.keys():
+        mapping[seg_id] = {}
+    
+    # Load pace data and segments configuration
+    try:
+        pace_data = pd.read_csv("data/runners.csv")
+        segments_config = pd.read_csv("data/segments.csv")
+    except Exception as e:
+        logger.warning(f"Could not load data for runner mapping: {e}")
+        return mapping
+    
+    # Build segment km ranges per event
+    segment_ranges = {}
+    for _, seg_row in segments_config.iterrows():
+        seg_id = seg_row['seg_id']
+        segment_ranges[seg_id] = {
+            'Full': (seg_row['full_from_km'], seg_row['full_to_km']) if pd.notna(seg_row.get('full_from_km')) else None,
+            'Half': (seg_row['half_from_km'], seg_row['half_to_km']) if pd.notna(seg_row.get('half_from_km')) else None,
+            '10K': (seg_row['10K_from_km'], seg_row['10K_to_km']) if pd.notna(seg_row.get('10K_from_km')) else None,
+        }
+    
+    # Convert start times to seconds from midnight
+    start_times_sec = {event: float(mins) * 60.0 for event, mins in start_times.items()}
+    
+    # Precompute for all runners
+    pace_data['pace_sec_per_km'] = pace_data['pace'] * 60.0
     
     # Process each time window
     for (t_start, t_end, w_idx) in time_windows:
-        # Calculate midpoint for runner position sampling
-        tm = t_start + (t_end - t_start) / 2
+        # Time window midpoint in seconds from midnight
+        t_mid = t_start + (t_end - t_start) / 2
+        t_mid_sec = t_mid.hour * 3600 + t_mid.minute * 60 + t_mid.second
         
-        # Sample runners at this time point
-        for seg_id in mapping.keys():
+        # For each segment
+        for seg_id in segments_dict.keys():
+            if seg_id not in segment_ranges:
+                mapping[seg_id][w_idx] = {
+                    "pos_m": np.array([], dtype=np.float64),
+                    "speed_mps": np.array([], dtype=np.float64)
+                }
+                continue
+            
             pos_m_list = []
             speed_mps_list = []
             
-            # TODO: This is a placeholder implementation
-            # In real implementation, this would:
-            # 1. Get runners from results.runners or analysis_context.runners
-            # 2. For each runner, determine which segment they're on at time tm
-            # 3. Calculate their position along that segment in meters
-            # 4. Get their speed at that time
-            # 5. Add to pos_m_list and speed_mps_list if on this segment
-            
-            # Placeholder: Create some synthetic runner data for testing
-            # This should be replaced with real runner data mapping
-            import random
-            num_runners = random.randint(0, 5)  # Random 0-5 runners per segment/window
-            for _ in range(num_runners):
-                # Random position along segment (0 to 1000m)
-                pos_m = random.uniform(0, 1000)
-                # Random speed (2-4 m/s typical running speed)
-                speed_mps = random.uniform(2.0, 4.0)
-                pos_m_list.append(pos_m)
-                speed_mps_list.append(speed_mps)
+            # For each event that uses this segment
+            for event in ['Full', 'Half', '10K']:
+                km_range = segment_ranges[seg_id].get(event)
+                if km_range is None:
+                    continue
+                
+                from_km, to_km = km_range
+                if pd.isna(from_km) or pd.isna(to_km):
+                    continue
+                
+                # Get runners for this event
+                event_runners = pace_data[pace_data['event'] == event]
+                
+                for _, runner in event_runners.iterrows():
+                    pace_sec_per_km = runner['pace_sec_per_km']
+                    start_offset_sec = runner['start_offset']
+                    
+                    # Calculate when this runner reaches segment start and end
+                    runner_start_time = start_times_sec[event] + start_offset_sec
+                    time_at_seg_start = runner_start_time + pace_sec_per_km * from_km
+                    time_at_seg_end = runner_start_time + pace_sec_per_km * to_km
+                    
+                    # Check if runner is in segment during this time window
+                    # Runner is "in" segment if they enter before window ends and exit after window starts
+                    if time_at_seg_start <= (t_mid_sec + 30) and time_at_seg_end >= (t_mid_sec - 30):  # ±30s tolerance
+                        # Calculate runner's position at t_mid
+                        time_since_runner_start = t_mid_sec - runner_start_time
+                        
+                        if time_since_runner_start >= 0:
+                            # Runner's absolute position (km from their event start)
+                            runner_abs_km = (time_since_runner_start / pace_sec_per_km) if pace_sec_per_km > 0 else 0
+                            
+                            # Check if within this segment's range for this event
+                            if from_km <= runner_abs_km <= to_km:
+                                # Position relative to segment start (meters)
+                                pos_m = (runner_abs_km - from_km) * 1000.0
+                                
+                                # Calculate speed in m/s
+                                speed_mps = 1000.0 / pace_sec_per_km if pace_sec_per_km > 0 else 0
+                                
+                                pos_m_list.append(pos_m)
+                                speed_mps_list.append(speed_mps)
             
             # Convert to numpy arrays
             mapping[seg_id][w_idx] = {
