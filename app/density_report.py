@@ -2219,8 +2219,19 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
     # Convert start times to seconds from midnight
     start_times_sec = {event: float(mins) * 60.0 for event, mins in start_times.items()}
     
-    # Precompute for all runners
-    pace_data['pace_sec_per_km'] = pace_data['pace'] * 60.0
+    # Vectorize runner calculations (same pattern as flow.py - Issue #239 performance fix)
+    # Convert to numpy arrays for vectorized operations instead of iterating
+    pace_data['pace_sec_per_km'] = pace_data['pace'].values * 60.0
+    pace_data['start_offset_sec'] = pace_data.get('start_offset', pd.Series([0]*len(pace_data))).fillna(0).values.astype(float)
+    
+    # Add event start time to each runner
+    pace_data['event_start_sec'] = pace_data['event'].map(start_times_sec)
+    pace_data['runner_start_time'] = pace_data['event_start_sec'] + pace_data['start_offset_sec']
+    
+    # Precompute speed for all runners
+    pace_data['speed_mps'] = np.where(pace_data['pace_sec_per_km'] > 0, 
+                                       1000.0 / pace_data['pace_sec_per_km'], 
+                                       0)
     
     # Process each time window
     for (t_start, t_end, w_idx) in time_windows:
@@ -2237,8 +2248,8 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
                 }
                 continue
             
-            pos_m_list = []
-            speed_mps_list = []
+            pos_m_arrays = []
+            speed_mps_arrays = []
             
             # For each event that uses this segment
             for event in ['Full', 'Half', '10K']:
@@ -2250,44 +2261,65 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
                 if pd.isna(from_km) or pd.isna(to_km):
                     continue
                 
-                # Get runners for this event
-                event_runners = pace_data[pace_data['event'] == event]
+                # Get runners for this event (vectorized filter)
+                event_mask = pace_data['event'] == event
+                event_runners = pace_data[event_mask]
                 
-                for _, runner in event_runners.iterrows():
-                    pace_sec_per_km = runner['pace_sec_per_km']
-                    start_offset_sec = runner['start_offset']
+                if len(event_runners) == 0:
+                    continue
+                
+                # Vectorized calculations for all runners in this event
+                runner_start_times = event_runners['runner_start_time'].values
+                pace_sec_per_km = event_runners['pace_sec_per_km'].values
+                speed_mps = event_runners['speed_mps'].values
+                
+                # Calculate when runners reach segment boundaries
+                time_at_seg_start = runner_start_times + pace_sec_per_km * from_km
+                time_at_seg_end = runner_start_times + pace_sec_per_km * to_km
+                
+                # Vectorized check: runner in segment during time window (±30s tolerance)
+                in_window_mask = (time_at_seg_start <= (t_mid_sec + 30)) & (time_at_seg_end >= (t_mid_sec - 30))
+                
+                # Filter to runners in window
+                valid_runners = event_runners[in_window_mask]
+                if len(valid_runners) == 0:
+                    continue
+                
+                # Vectorized position calculations
+                time_since_start = t_mid_sec - valid_runners['runner_start_time'].values
+                started_mask = time_since_start >= 0
+                
+                if not started_mask.any():
+                    continue
+                
+                # Calculate runner positions (vectorized)
+                valid_pace = valid_runners['pace_sec_per_km'].values[started_mask]
+                runner_abs_km = np.where(valid_pace > 0, 
+                                        time_since_start[started_mask] / valid_pace, 
+                                        0)
+                
+                # Check if within segment range (vectorized)
+                in_segment_mask = (runner_abs_km >= from_km) & (runner_abs_km <= to_km)
+                
+                if in_segment_mask.any():
+                    # Position relative to segment start (meters)
+                    pos_m = (runner_abs_km[in_segment_mask] - from_km) * 1000.0
+                    speeds = valid_runners['speed_mps'].values[started_mask][in_segment_mask]
                     
-                    # Calculate when this runner reaches segment start and end
-                    runner_start_time = start_times_sec[event] + start_offset_sec
-                    time_at_seg_start = runner_start_time + pace_sec_per_km * from_km
-                    time_at_seg_end = runner_start_time + pace_sec_per_km * to_km
-                    
-                    # Check if runner is in segment during this time window
-                    # Runner is "in" segment if they enter before window ends and exit after window starts
-                    if time_at_seg_start <= (t_mid_sec + 30) and time_at_seg_end >= (t_mid_sec - 30):  # ±30s tolerance
-                        # Calculate runner's position at t_mid
-                        time_since_runner_start = t_mid_sec - runner_start_time
-                        
-                        if time_since_runner_start >= 0:
-                            # Runner's absolute position (km from their event start)
-                            runner_abs_km = (time_since_runner_start / pace_sec_per_km) if pace_sec_per_km > 0 else 0
-                            
-                            # Check if within this segment's range for this event
-                            if from_km <= runner_abs_km <= to_km:
-                                # Position relative to segment start (meters)
-                                pos_m = (runner_abs_km - from_km) * 1000.0
-                                
-                                # Calculate speed in m/s
-                                speed_mps = 1000.0 / pace_sec_per_km if pace_sec_per_km > 0 else 0
-                                
-                                pos_m_list.append(pos_m)
-                                speed_mps_list.append(speed_mps)
+                    pos_m_arrays.append(pos_m)
+                    speed_mps_arrays.append(speeds)
             
-            # Convert to numpy arrays
-            mapping[seg_id][w_idx] = {
-                "pos_m": np.asarray(pos_m_list, dtype=np.float64),
-                "speed_mps": np.asarray(speed_mps_list, dtype=np.float64)
-            }
+            # Concatenate all arrays for this segment/window
+            if pos_m_arrays:
+                mapping[seg_id][w_idx] = {
+                    "pos_m": np.concatenate(pos_m_arrays),
+                    "speed_mps": np.concatenate(speed_mps_arrays)
+                }
+            else:
+                mapping[seg_id][w_idx] = {
+                    "pos_m": np.array([], dtype=np.float64),
+                    "speed_mps": np.array([], dtype=np.float64)
+                }
     
     return mapping
 
