@@ -189,14 +189,23 @@ def generate_key_takeaway(segment_id: str, segment_data: Dict[str, Any], v2_cont
     # General segment logic
     else:
         los_letter = v2_context.get('los', 'Unknown')
-        density = v2_context.get('areal_density', 0)
+        # Use peak_areal_density (correct field name from v2_context)
+        density = v2_context.get('peak_areal_density', 0)
+        
+        # Dynamic precision based on density value (Issue #239 - ChatGPT recommendation)
+        if density < 0.01:
+            density_str = f"{density:.4f}"
+        elif density < 0.10:
+            density_str = f"{density:.3f}"
+        else:
+            density_str = f"{density:.2f}"
         
         if los_letter in ['E', 'F']:
-            return f"High density ({density:.2f} p/m²) - extra marshals needed"
+            return f"High density ({density_str} p/m²) - extra marshals needed"
         elif los_letter in ['C', 'D']:
-            return f"Moderate density ({density:.2f} p/m²) - maintain cadence"
+            return f"Moderate density ({density_str} p/m²) - maintain cadence"
         else:
-            return f"Low density ({density:.2f} p/m²) - comfortable flow"
+            return f"Low density ({density_str} p/m²) - comfortable flow"
 
 
 def render_segment_v2(md, ctx, rulebook):
