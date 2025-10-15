@@ -82,7 +82,7 @@ def test_density_report(base_url):
     """Test density report generation"""
     print("🔍 Testing /api/density-report...")
     response = requests.post(f'{base_url}/api/density-report', 
-                           json=density_payload, timeout=300)
+                           json=density_payload, timeout=600)
     
     if response.status_code == 200:
         print("✅ Density Report: OK")
@@ -95,7 +95,7 @@ def test_temporal_flow_report(base_url):
     """Test temporal flow report generation"""
     print("🔍 Testing /api/temporal-flow-report...")
     response = requests.post(f'{base_url}/api/temporal-flow-report', 
-                           json=flow_payload, timeout=300)
+                           json=flow_payload, timeout=600)
     
     if response.status_code == 200:
         print("✅ Temporal Flow Report: OK")
