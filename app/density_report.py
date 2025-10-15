@@ -713,7 +713,7 @@ def generate_density_report(
         storage_service = get_storage_service()
         timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
         storage_filename = f"{timestamp}-Density.md"
-        storage_path = storage_service.save_file(storage_filename, report_content)
+        storage_path = storage_service.save_file(storage_filename, report_content_initial)
         print(f"📊 Density report saved to storage: {storage_path}")
     except Exception as e:
         print(f"⚠️ Failed to save density report to storage: {e}")
