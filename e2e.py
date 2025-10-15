@@ -44,7 +44,8 @@ Examples:
 density_payload = {
     'paceCsv': 'data/runners.csv',
     'densityCsv': 'data/segments.csv',
-    'startTimes': DEFAULT_START_TIMES
+    'startTimes': DEFAULT_START_TIMES,
+    'enable_bin_dataset': True  # Always include operational intelligence (Issue #236/239)
 }
 
 flow_payload = {
