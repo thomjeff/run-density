@@ -954,7 +954,8 @@ def generate_density_report(
                     flagged = get_flagged_bins(bins_flagged)
                     
                     if len(flagged) > 0:
-                        tooltips_path = os.path.join(output_dir, "tooltips.json")
+                        # Use daily folder path for tooltips.json (same as bins artifacts)
+                        tooltips_path = os.path.join(daily_folder_path, "tooltips.json") if 'daily_folder_path' in locals() else os.path.join(output_dir, "tooltips.json")
                         if generate_tooltips_json(flagged, oi_data['config'], tooltips_path):
                             print(f"🗺️ Tooltips JSON saved to: {tooltips_path}")
                 except Exception as e:
