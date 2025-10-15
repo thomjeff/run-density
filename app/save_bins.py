@@ -104,7 +104,7 @@ def save_bin_artifacts(
             "t_start":              p.get("t_start"),
             "t_end":                p.get("t_end"),
             "density":              _safe_float(p.get("density")),
-            "flow":                 _safe_float(p.get("flow")),
+            "rate":                 _safe_float(p.get("rate")),
             "los_class":            p.get("los_class"),
             "bin_size_km":          _safe_float(p.get("bin_size_km")),
             "schema_version":       (metadata.get("schema_version") or "1.0.0"),

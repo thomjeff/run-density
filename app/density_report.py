@@ -2149,11 +2149,50 @@ def generate_bin_features_with_coarsening(segments: dict, time_windows: list, ru
         from .bins_accumulator import make_time_windows
         coarsened_time_windows = make_time_windows(t0=t0_utc, duration_s=total_duration_s, dt_seconds=new_dt_seconds)
         
-        # Regenerate with coarsened parameters
+        # Issue #243 Fix: Re-map runners to new coarsened window indices
+        # Each new coarsened window aggregates runners from multiple old windows
+        import numpy as np
+        coarsening_factor = new_dt_seconds // dt_seconds  # e.g., 120s / 60s = 2
+        re_mapped_runners = {}
+        
+        for seg_id, old_windows in coarsened_runners.items():
+            re_mapped_runners[seg_id] = {}
+            
+            for new_w_idx, (t_start, t_end, _) in enumerate(coarsened_time_windows):
+                # Determine which old window indices map to this new window
+                old_start_idx = new_w_idx * coarsening_factor
+                old_end_idx = old_start_idx + coarsening_factor
+                
+                # Aggregate runners from all old windows that fall into this new window
+                all_pos_m = []
+                all_speed_mps = []
+                
+                for old_idx in range(old_start_idx, old_end_idx):
+                    if old_idx in old_windows:
+                        old_data = old_windows[old_idx]
+                        if len(old_data.get("pos_m", [])) > 0:
+                            all_pos_m.append(old_data["pos_m"])
+                            all_speed_mps.append(old_data["speed_mps"])
+                
+                # Concatenate all runner arrays for this new window
+                if all_pos_m:
+                    re_mapped_runners[seg_id][new_w_idx] = {
+                        "pos_m": np.concatenate(all_pos_m),
+                        "speed_mps": np.concatenate(all_speed_mps)
+                    }
+                else:
+                    re_mapped_runners[seg_id][new_w_idx] = {
+                        "pos_m": np.array([], dtype=np.float64),
+                        "speed_mps": np.array([], dtype=np.float64)
+                    }
+        
+        logger.info(f"Re-mapped runners to {len(coarsened_time_windows)} coarsened windows (factor={coarsening_factor})")
+        
+        # Regenerate with coarsened parameters and re-mapped runners
         bin_build = build_bin_features(
             segments=coarsened_segments,
             time_windows=coarsened_time_windows,
-            runners_by_segment_and_window=coarsened_runners,
+            runners_by_segment_and_window=re_mapped_runners,  # Use re-mapped data
             bin_size_km=new_bin_size_km,
             los_thresholds=None,
             logger=logger,
@@ -2224,35 +2263,77 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
     pace_data['pace_sec_per_km'] = pace_data['pace'].values * 60.0
     pace_data['start_offset_sec'] = pace_data.get('start_offset', pd.Series([0]*len(pace_data))).fillna(0).values.astype(float)
     
-    # Add event start time to each runner
-    pace_data['event_start_sec'] = pace_data['event'].map(start_times_sec)
-    pace_data['runner_start_time'] = pace_data['event_start_sec'] + pace_data['start_offset_sec']
-    
     # Precompute speed for all runners
     pace_data['speed_mps'] = np.where(pace_data['pace_sec_per_km'] > 0, 
                                        1000.0 / pace_data['pace_sec_per_km'], 
                                        0)
     
-    # Process each time window
-    for (t_start, t_end, w_idx) in time_windows:
-        # Time window midpoint in seconds from midnight
-        t_mid = t_start + (t_end - t_start) / 2
-        t_mid_sec = t_mid.hour * 3600 + t_mid.minute * 60 + t_mid.second
+    # Issue #243 Fix: Loop through events first, then their relevant windows
+    # Keep global clock-time grid but map each event to correct indices
+    # Calculate WINDOW_SECONDS from the time_windows themselves
+    if len(time_windows) >= 2:
+        (t0, t1, _) = time_windows[0]
+        (t2, t3, _) = time_windows[1]
+        WINDOW_SECONDS = int((t2 - t0).total_seconds())
+    else:
+        WINDOW_SECONDS = 120  # Default fallback
+    
+    earliest_start_min = min(start_times.values())
+    
+    for event in ['Full', '10K', 'Half']:
+        # Get event start time
+        event_min = start_times.get(event)
+        if event_min is None:
+            continue
         
-        # For each segment
-        for seg_id in segments_dict.keys():
-            if seg_id not in segment_ranges:
-                mapping[seg_id][w_idx] = {
-                    "pos_m": np.array([], dtype=np.float64),
-                    "speed_mps": np.array([], dtype=np.float64)
-                }
+        event_start_sec = event_min * 60.0
+        
+        # Calculate which global window index this event starts at
+        start_idx = int(((event_min - earliest_start_min) * 60) // WINDOW_SECONDS)
+        
+        # Get runners for this event
+        event_mask = pace_data['event'] == event
+        event_runners = pace_data[event_mask]
+        
+        
+        if len(event_runners) == 0:
+            continue
+        
+        # Calculate runner start times anchored to THIS event's start
+        event_runners_copy = event_runners.copy()
+        event_runners_copy['runner_start_time'] = event_start_sec + event_runners_copy['start_offset_sec']
+        
+        # Process only the windows relevant to this event (starting from start_idx)
+        for global_w_idx in range(start_idx, len(time_windows)):
+            (t_start, t_end, _) = time_windows[global_w_idx]
+            w_idx = global_w_idx  # Use global window index for mapping
+            
+            # Time window midpoint in seconds from midnight
+            t_mid = t_start + (t_end - t_start) / 2
+            t_mid_sec = t_mid.hour * 3600 + t_mid.minute * 60 + t_mid.second
+            
+            # Skip windows before this event starts
+            if t_mid_sec < (event_start_sec - WINDOW_SECONDS):
                 continue
             
-            pos_m_arrays = []
-            speed_mps_arrays = []
+            # Stop processing if we're way past when runners could be on course
+            # (this is an optimization - don't process windows after event is done)
+            max_runner_time = event_start_sec + event_runners_copy['start_offset_sec'].max() + (50 * 1000)  # ~50km at slow pace
+            if t_mid_sec > max_runner_time:
+                break
             
-            # For each event that uses this segment
-            for event in ['Full', 'Half', '10K']:
+            # For each segment this event uses
+            for seg_id in segments_dict.keys():
+                if seg_id not in segment_ranges:
+                    if seg_id not in mapping:
+                        mapping[seg_id] = {}
+                    if w_idx not in mapping[seg_id]:
+                        mapping[seg_id][w_idx] = {
+                            "pos_m": np.array([], dtype=np.float64),
+                            "speed_mps": np.array([], dtype=np.float64)
+                        }
+                    continue
+                
                 km_range = segment_ranges[seg_id].get(event)
                 if km_range is None:
                     continue
@@ -2261,28 +2342,29 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
                 if pd.isna(from_km) or pd.isna(to_km):
                     continue
                 
-                # Get runners for this event (vectorized filter)
-                event_mask = pace_data['event'] == event
-                event_runners = pace_data[event_mask]
-                
-                if len(event_runners) == 0:
-                    continue
-                
                 # Vectorized calculations for all runners in this event
-                runner_start_times = event_runners['runner_start_time'].values
-                pace_sec_per_km = event_runners['pace_sec_per_km'].values
-                speed_mps = event_runners['speed_mps'].values
+                runner_start_times = event_runners_copy['runner_start_time'].values
+                pace_sec_per_km = event_runners_copy['pace_sec_per_km'].values
+                speed_mps = event_runners_copy['speed_mps'].values
                 
-                # Calculate when runners reach segment boundaries
+                # Calculate when runners reach segment boundaries (anchored to EVENT start time)
                 time_at_seg_start = runner_start_times + pace_sec_per_km * from_km
                 time_at_seg_end = runner_start_times + pace_sec_per_km * to_km
                 
                 # Vectorized check: runner in segment during time window (±30s tolerance)
                 in_window_mask = (time_at_seg_start <= (t_mid_sec + 30)) & (time_at_seg_end >= (t_mid_sec - 30))
                 
+                
                 # Filter to runners in window
-                valid_runners = event_runners[in_window_mask]
+                valid_runners = event_runners_copy[in_window_mask]
                 if len(valid_runners) == 0:
+                    if seg_id not in mapping:
+                        mapping[seg_id] = {}
+                    if w_idx not in mapping[seg_id]:
+                        mapping[seg_id][w_idx] = {
+                            "pos_m": np.array([], dtype=np.float64),
+                            "speed_mps": np.array([], dtype=np.float64)
+                        }
                     continue
                 
                 # Vectorized position calculations
@@ -2290,6 +2372,13 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
                 started_mask = time_since_start >= 0
                 
                 if not started_mask.any():
+                    if seg_id not in mapping:
+                        mapping[seg_id] = {}
+                    if w_idx not in mapping[seg_id]:
+                        mapping[seg_id][w_idx] = {
+                            "pos_m": np.array([], dtype=np.float64),
+                            "speed_mps": np.array([], dtype=np.float64)
+                        }
                     continue
                 
                 # Calculate runner positions (vectorized)
@@ -2306,20 +2395,34 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
                     pos_m = (runner_abs_km[in_segment_mask] - from_km) * 1000.0
                     speeds = valid_runners['speed_mps'].values[started_mask][in_segment_mask]
                     
-                    pos_m_arrays.append(pos_m)
-                    speed_mps_arrays.append(speeds)
-            
-            # Concatenate all arrays for this segment/window
-            if pos_m_arrays:
-                mapping[seg_id][w_idx] = {
-                    "pos_m": np.concatenate(pos_m_arrays),
-                    "speed_mps": np.concatenate(speed_mps_arrays)
-                }
-            else:
-                mapping[seg_id][w_idx] = {
-                    "pos_m": np.array([], dtype=np.float64),
-                    "speed_mps": np.array([], dtype=np.float64)
-                }
+                    # Initialize segment/window in mapping if needed
+                    if seg_id not in mapping:
+                        mapping[seg_id] = {}
+                    
+                    # Append or create arrays for this segment/window
+                    if w_idx in mapping[seg_id]:
+                        # Append to existing (in case another event already added runners)
+                        mapping[seg_id][w_idx]["pos_m"] = np.concatenate([
+                            mapping[seg_id][w_idx]["pos_m"],
+                            pos_m
+                        ])
+                        mapping[seg_id][w_idx]["speed_mps"] = np.concatenate([
+                            mapping[seg_id][w_idx]["speed_mps"],
+                            speeds
+                        ])
+                    else:
+                        mapping[seg_id][w_idx] = {
+                            "pos_m": pos_m,
+                            "speed_mps": speeds
+                        }
+                else:
+                    if seg_id not in mapping:
+                        mapping[seg_id] = {}
+                    if w_idx not in mapping[seg_id]:
+                        mapping[seg_id][w_idx] = {
+                            "pos_m": np.array([], dtype=np.float64),
+                            "speed_mps": np.array([], dtype=np.float64)
+                        }
     
     return mapping
 
@@ -2420,7 +2523,7 @@ def save_bin_artifacts_legacy(bin_data: Dict[str, Any], output_dir: str) -> tupl
                     "t_start": str(props.get("t_start", "")),
                     "t_end": str(props.get("t_end", "")),
                     "density": float(props.get("density", 0.0)),
-                    "flow": float(props.get("flow", 0.0)),
+                    "rate": float(props.get("rate", 0.0)),
                     "los_class": str(props.get("los_class", "A")),
                     "bin_size_km": 0.1,  # Use constant for now
                     "schema_version": BIN_SCHEMA_VERSION,
@@ -2442,7 +2545,7 @@ def save_bin_artifacts_legacy(bin_data: Dict[str, Any], output_dir: str) -> tupl
                     ('t_start', pa.string()),
                     ('t_end', pa.string()),
                     ('density', pa.float64()),
-                    ('flow', pa.float64()),
+                    ('rate', pa.float64()),
                     ('los_class', pa.string()),
                     ('bin_size_km', pa.float64()),
                     ('schema_version', pa.string()),
@@ -2532,9 +2635,9 @@ def generate_bins_geojson_with_temporal_windows(all_bins_data, start_times: Dict
             # Calculate speed in m/s from pace
             speed_mps = 1000 / (avg_pace_min_per_km * 60)  # Convert min/km to m/s
             
-            # Apply ChatGPT's flow formula
-            flow_persons_per_sec = density * width_m * speed_mps
-            props["flow"] = flow_persons_per_sec
+            # Apply throughput rate formula (renamed from 'flow' to avoid confusion with Flow analysis)
+            rate_persons_per_sec = density * width_m * speed_mps
+            props["rate"] = rate_persons_per_sec
             
             # Ensure bin_id format per ChatGPT spec
             if "bin_id" not in props:

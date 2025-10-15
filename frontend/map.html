@@ -108,13 +108,15 @@
 </div>
 
 <!-- Legend -->
-<div class="legend" style="position: absolute; bottom: 20px; right: 20px; z-index: 9999;">
+<div class="legend" style="position: absolute; bottom: 20px; right: 20px; z-index: 9999; background: white; padding: 12px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); max-width: 200px;">
+  <div style="font-weight: bold; margin-bottom: 8px; font-size: 14px;">Level of Service (LOS)</div>
   <div id="colorLegend">
-    <div><span class="swatch" style="background: #4CAF50;"></span>green</div>
-    <div><span class="swatch" style="background: #FFC107;"></span>yellow</div>
-    <div><span class="swatch" style="background: #FF9800;"></span>orange</div>
-    <div><span class="swatch" style="background: #F44336;"></span>red</div>
-    <div><span class="swatch" style="background: #B71C1C;"></span>dark-red</div>
+    <div style="margin: 4px 0;"><span class="swatch" style="background: #4CAF50;"></span><strong>A</strong> - Free flow</div>
+    <div style="margin: 4px 0;"><span class="swatch" style="background: #8BC34A;"></span><strong>B</strong> - Comfortable</div>
+    <div style="margin: 4px 0;"><span class="swatch" style="background: #FFC107;"></span><strong>C</strong> - Moderate</div>
+    <div style="margin: 4px 0;"><span class="swatch" style="background: #FF9800;"></span><strong>D</strong> - Dense</div>
+    <div style="margin: 4px 0;"><span class="swatch" style="background: #FF5722;"></span><strong>E</strong> - Very dense</div>
+    <div style="margin: 4px 0;"><span class="swatch" style="background: #F44336;"></span><strong>F</strong> - Extremely dense</div>
   </div>
   <div id="bwLegend" style="display: none;">
     <div><span class="swatch" style="background: #000000; width: 2px;"></span>green (thin)</div>
@@ -123,6 +125,14 @@
     <div><span class="swatch" style="background: #000000; width: 5px; border-style: dashed; border-width: 2px;"></span>red (long dash)</div>
     <div><span class="swatch" style="background: #000000; width: 6px; border-style: dashed; border-width: 2px;"></span>dark-red (thick dash)</div>
   </div>
+  
+  <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid #ddd;">
+    <div style="font-weight: bold; margin-bottom: 6px; font-size: 12px;">Severity Flags</div>
+    <div style="margin: 3px 0; font-size: 11px;">🚨 <strong>CRITICAL</strong> - High LOS + Utilization</div>
+    <div style="margin: 3px 0; font-size: 11px;">⚡ <strong>CAUTION</strong> - High LOS only</div>
+    <div style="margin: 3px 0; font-size: 11px;">👁️ <strong>WATCH</strong> - High utilization only</div>
+  </div>
+  
   <div style="margin-top: 8px; font-size: 10px; color: #666;">
     <strong>Zone Filter Active</strong><br/>
     <span id="legendStatus">All zones visible</span>
