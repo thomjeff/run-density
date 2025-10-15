@@ -1,7 +1,7 @@
 import pathlib
 
 FORBID = ["paceCsv", "flow.csv", "density.csv", "segments_old.csv"]  # runtime use only
-ALLOW_IN = ["data/archive/"]  # allow occurrences inside archive
+ALLOW_IN = ["archive/"]  # allow occurrences inside archive
 
 def test_forbidden_identifiers_absent():
     root = pathlib.Path(__file__).resolve().parents[1]
