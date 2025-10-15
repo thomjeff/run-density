@@ -32,8 +32,8 @@ This document captures critical configuration details, workflows, and operationa
 - **DO NOT use `gh run view --log` (causes interactive prompts)**
 
 ### **Step 5: Run E2E Tests Against Cloud Run Production**
-- Set environment variable: `TEST_CLOUD_RUN=true`
-- Run: `python3 -m app.end_to_end_testing`
+- Set environment variable: `python e2e.py --cloud`
+- Run: `python e2e.py --local`
 - **CRITICAL**: Use the SAME automated testing module for both local and Cloud Run
 - **NEVER** use manual curl commands for Cloud Run testing
 - Verify all tests pass against production deployment
@@ -42,7 +42,7 @@ This document captures critical configuration details, workflows, and operationa
 ### **Step 6: Run E2E Tests Locally on Main Branch**
 - Switch to main branch: `git checkout main`
 - Kill existing local environment and create fresh environment
-- Run: `python3 -m app.end_to_end_testing` (without TEST_CLOUD_RUN)
+- Run: `python e2e.py --local` (without TEST_CLOUD_RUN)
 - **CRITICAL**: Use the SAME automated testing module for both local and Cloud Run
 - **NEVER** use manual curl commands for local testing
 - Verify all tests pass locally
@@ -58,7 +58,7 @@ This document captures critical configuration details, workflows, and operationa
 - Recommendations for future workflow
 
 ### **Environment Variables for E2E Testing**
-- `TEST_CLOUD_RUN=true`: Test against Cloud Run production
+- `python e2e.py --cloud`: Test against Cloud Run production
 - `TEST_CLOUD_RUN=false` (default): Test against local TestClient
 - URLs automatically configured via `app/constants.py`:
   - `CLOUD_RUN_URL`: "https://run-density-ln4r3sfkha-uc.a.run.app"
@@ -124,12 +124,12 @@ curl -X POST "$BASE/api/temporal-flow" -H "Content-Type: application/json" \
 **NEVER manually construct curl commands or guess API parameters.** This wastes time and leads to errors.
 
 **ALWAYS use the automated test scripts:**
-- **Primary**: `python3 -m app.end_to_end_testing` - Comprehensive testing suite
+- **Primary**: `python e2e.py --local` - Comprehensive testing suite
 - **Secondary**: `python3 -m tests.temporal_flow_tests` - Flow-specific tests
 - **Secondary**: `python3 -m tests.density_tests` - Density-specific tests
 
 **Available Test Scripts:**
-- `app/end_to_end_testing.py` - Main comprehensive testing suite
+- `e2e.py` - Main comprehensive testing suite
 - `app/flow_validation.py` - Flow analysis validation framework
 - `tests/temporal_flow_tests.py` - Temporal Flow Integration Tests
 - `tests/test_flow_unit.py` - Flow Unit Tests
@@ -155,7 +155,7 @@ python3 -m venv test_env && source test_env/bin/activate
 pip install -r requirements.txt
 
 # 3. **USE AUTOMATED TEST SCRIPTS ONLY** - NEVER manually construct API calls
-python3 -m app.end_to_end_testing
+python e2e.py --local
 
 # 4. **ALTERNATIVE**: Direct report generation (if automated scripts fail)
 python3 -c "
@@ -182,31 +182,31 @@ pip install -r requirements.txt
 
 # 3. Run comprehensive end-to-end tests
 python3 -c "
-from app.end_to_end_testing import run_comprehensive_tests
+# Legacy module removed - use e2e.py instead run_comprehensive_tests
 results = run_comprehensive_tests()
 "
 
 # Or run the module directly
-python3 app/end_to_end_testing.py
+python3 e2e.py
 ```
 
 ### Individual Test Components:
 ```bash
 # Test only API endpoints
 python3 -c "
-from app.end_to_end_testing import test_api_endpoints
+# Legacy module removed - use e2e.py instead test_api_endpoints
 results = test_api_endpoints()
 "
 
 # Test only report generation
 python3 -c "
-from app.end_to_end_testing import test_report_generation
+# Legacy module removed - use e2e.py instead test_report_generation
 results = test_report_generation()
 "
 
 # Test only report content quality
 python3 -c "
-from app.end_to_end_testing import test_report_content_quality
+# Legacy module removed - use e2e.py instead test_report_content_quality
 results = test_report_content_quality()
 "
 ```
@@ -384,9 +384,9 @@ results = test_report_content_quality()
 11. **Application Fundamentals** - Refer to `docs/Application Fundamentals.md` for core concepts
 12. **🚨 BRANCH CREATION WITHOUT TESTING** - NEVER create branches without first testing the source branch. This leads to broken branches built on broken foundations.
 13. **🚨 MERGING WITHOUT APPROVAL** - NEVER merge PRs to main without explicit user approval. Always get permission before merging.
-14. **🚨 MANUAL API TESTING** - NEVER manually construct curl commands or guess API parameters. Always use automated test scripts (`python3 -m app.end_to_end_testing`). Manual API calls waste time and lead to errors.
+14. **🚨 MANUAL API TESTING** - NEVER manually construct curl commands or guess API parameters. Always use automated test scripts (`python e2e.py --local`). Manual API calls waste time and lead to errors.
 15. **🚨 GUESSING PRODUCTION URLS** - NEVER guess production URLs or endpoints. Always use the documented production environment details in this configuration file. URL guessing wastes time and leads to failed tests.
-16. **🚨 TESTING METHODOLOGY INCONSISTENCY** - NEVER use different testing approaches for local vs Cloud Run testing. Always use the SAME automated testing module (`python3 -m app.end_to_end_testing`) with appropriate environment variables. Inconsistent testing methodologies make results incomparable and unreliable.
+16. **🚨 TESTING METHODOLOGY INCONSISTENCY** - NEVER use different testing approaches for local vs Cloud Run testing. Always use the SAME automated testing module (`python e2e.py --local`) with appropriate environment variables. Inconsistent testing methodologies make results incomparable and unreliable.
 
 ## **🚨 CRITICAL: 9-STEP MERGE/TEST PROCESS (UPDATED)**
 
@@ -399,7 +399,7 @@ results = test_report_content_quality()
 
 ### **Step 2: Run Final E2E Tests on Dev Branch**
 - Ensure all tests pass before merge
-- Use `python3 -m app.end_to_end_testing`
+- Use `python e2e.py --local`
 - Verify no regressions detected
 
 ### **Step 3: Create Pull Request**
@@ -417,7 +417,7 @@ results = test_report_content_quality()
 
 ### **Step 6: Run Final E2E Tests on Main**
 - Confirm no regressions after merge
-- Use `python3 -m app.end_to_end_testing`
+- Use `python e2e.py --local`
 - Verify all tests pass
 
 ### **Step 7: Create Release with Assets**

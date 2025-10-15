@@ -32,12 +32,12 @@ You **MUST** explicitly confirm understanding of these CRITICAL RULES before pro
 
 After ANY code changes, you **MUST**:
 1. **ACTIVATE VIRTUAL ENVIRONMENT FIRST**: `source .venv/bin/activate` (CRITICAL - prevents ModuleNotFoundError)
-2. **USE AUTOMATED TEST SCRIPTS ONLY**: `python3 -m app.end_to_end_testing`
+2. **USE AUTOMATED TEST SCRIPTS ONLY**: `python e2e.py --local`
 3. **NEVER manually construct curl commands** - this wastes time and leads to errors
 4. **NEVER guess API parameters** - use the automated scripts that know the correct endpoints
 5. **MAINTAIN TESTING CONSISTENCY** - Use the SAME testing methodology for both local and Cloud Run testing
-6. **FOR CLOUD RUN TESTING**: Use `TEST_CLOUD_RUN=true python3 -m app.end_to_end_testing` (skips heavy computation)
-7. **FOR LOCAL TESTING**: Use `python3 -m app.end_to_end_testing` (full E2E with all endpoints)
+6. **FOR CLOUD RUN TESTING**: Use `TEST_CLOUD_RUN=true python e2e.py --local` (skips heavy computation)
+7. **FOR LOCAL TESTING**: Use `python e2e.py --local` (full E2E with all endpoints)
 8. **FOR CI PIPELINE**: Automatically uses `SKIP_TEMPORAL_FLOW=true` due to Cloud Run resource limits
 9. Generate actual reports (MD + CSV), not just JSON data
 10. Verify no hardcoded values were introduced
@@ -101,7 +101,7 @@ After ANY code changes, you **MUST**:
 source .venv/bin/activate
 
 # THEN run your commands
-python3 -m app.end_to_end_testing
+python e2e.py --local
 ```
 
 **Why this is critical:**
@@ -124,7 +124,7 @@ python3 -m app.end_to_end_testing
 ```bash
 # For Python/E2E work
 source test_env/bin/activate
-python3 -m app.end_to_end_testing
+python e2e.py --local
 
 # For GitHub CLI, system commands, or non-Python work
 deactivate
@@ -278,7 +278,7 @@ For ALL releases and merges, you **MUST** follow this complete process:
 - **Full flow audit**: Resource-intensive analysis that would timeout
 
 #### **🔧 E2E Testing Strategy:**
-- **Local Development**: Full E2E testing with all endpoints (`python3 -m app.end_to_end_testing`)
+- **Local Development**: Full E2E testing with all endpoints (`python e2e.py --local`)
 - **CI Pipeline**: Resource-constrained testing (`SKIP_TEMPORAL_FLOW=true`)
 - **Production Validation**: Manual full E2E tests when needed
 - **Cloud Run Limits**: 1GB RAM / 1 CPU - designed for basic functionality only
