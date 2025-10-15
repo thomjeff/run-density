@@ -985,6 +985,95 @@ async def serve_summary_json():
     return await get_summary_data()
 
 
+def _load_tooltips_json():
+    """Load operational intelligence from tooltips.json (Issue #237)."""
+    try:
+        from pathlib import Path
+        import json
+        
+        # Try to find tooltips.json in latest report directory
+        reports_dir = Path("reports")
+        if not reports_dir.exists():
+            return None
+        
+        # Check date directories (newest first)
+        date_dirs = sorted([d for d in reports_dir.iterdir() if d.is_dir() and d.name.startswith("2025-")], reverse=True)
+        
+        for date_dir in date_dirs:
+            tooltips_file = date_dir / "tooltips.json"
+            if tooltips_file.exists():
+                with open(tooltips_file, 'r') as f:
+                    data = json.load(f)
+                print(f"📊 Loaded operational intelligence from {tooltips_file}")
+                return data
+        
+        print("⚠️ No tooltips.json found - operational intelligence not available")
+        return None
+        
+    except Exception as e:
+        print(f"⚠️ Error loading tooltips.json: {e}")
+        return None
+
+
+def _build_operational_intelligence_lookup(tooltips_data):
+    """Build segment-level operational intelligence lookup from tooltips (Issue #237)."""
+    if not tooltips_data or 'tooltips' not in tooltips_data:
+        return {}
+    
+    tooltips = tooltips_data['tooltips']
+    oi_by_segment = {}
+    
+    # Aggregate bin-level data to segment-level
+    for tooltip in tooltips:
+        seg_id = tooltip.get('segment_id')
+        if not seg_id:
+            continue
+        
+        if seg_id not in oi_by_segment:
+            oi_by_segment[seg_id] = {
+                'los': tooltip.get('los'),
+                'los_description': tooltip.get('los_description'),
+                'los_color': tooltip.get('los_color'),
+                'severity': tooltip.get('severity', 'NONE'),
+                'flag_reason': tooltip.get('flag_reason', 'NONE'),
+                'flagged_bins_count': 0,
+                'max_density': tooltip.get('density_peak', 0)
+            }
+        
+        # Count flagged bins and track worst severity
+        if tooltip.get('severity') and tooltip['severity'] != 'NONE':
+            oi_by_segment[seg_id]['flagged_bins_count'] += 1
+            
+            # Track worst severity (CRITICAL > CAUTION > WATCH)
+            current_severity = oi_by_segment[seg_id]['severity']
+            new_severity = tooltip['severity']
+            if new_severity == 'CRITICAL' or (new_severity == 'CAUTION' and current_severity == 'WATCH'):
+                oi_by_segment[seg_id]['severity'] = new_severity
+        
+        # Track maximum density
+        bin_density = tooltip.get('density_peak', 0)
+        if bin_density > oi_by_segment[seg_id]['max_density']:
+            oi_by_segment[seg_id]['max_density'] = bin_density
+            oi_by_segment[seg_id]['los'] = tooltip.get('los')
+            oi_by_segment[seg_id]['los_description'] = tooltip.get('los_description')
+            oi_by_segment[seg_id]['los_color'] = tooltip.get('los_color')
+    
+    return oi_by_segment
+
+
+def _get_los_color(los: str) -> str:
+    """Get color for LOS level (Issue #237)."""
+    colors = {
+        'A': '#4CAF50',  # Green
+        'B': '#8BC34A',  # Light green
+        'C': '#FFC107',  # Amber
+        'D': '#FF9800',  # Orange
+        'E': '#FF5722',  # Red-orange
+        'F': '#F44336'   # Red
+    }
+    return colors.get(los, '#9E9E9E')  # Grey for unknown
+
+
 def parse_latest_density_report_segments():
     """Parse the latest density report to extract segment data without running new analysis."""
     import os
@@ -1066,8 +1155,11 @@ def parse_latest_density_report_segments():
 
 @app.get("/api/segments")
 async def get_segments():
-    """Get segments data for frontend dashboard using canonical segments when available."""
+    """Get segments data for frontend dashboard with operational intelligence (Issue #237)."""
     try:
+        # Issue #237: Load operational intelligence from tooltips.json
+        tooltips_data = _load_tooltips_json()
+        
         # Issue #231: Try canonical segments first (ChatGPT's roadmap)
         try:
             from .canonical_segments import (
@@ -1095,34 +1187,59 @@ async def get_segments():
                     print(f"⚠️ Could not load segments CSV: {e}, using defaults")
                     segments_dict = {}
                 
-                # Build segments list from canonical data
+                # Build operational intelligence lookup from tooltips
+                oi_by_segment = _build_operational_intelligence_lookup(tooltips_data)
+                
+                # Build segments list from canonical data with operational intelligence
                 segments = []
                 for segment_id, peak_data in segment_peaks.items():
                     segment_info = segments_dict.get(segment_id, {})
                     peak_areal_density = peak_data["peak_areal_density"]
                     
-                    # Determine LOS and status from canonical density
-                    if peak_areal_density < 0.36:
-                        los = "A"
-                        status = "STABLE"
-                    elif peak_areal_density < 0.54:
-                        los = "B"
-                        status = "STABLE"
-                    elif peak_areal_density < 0.72:
-                        los = "C"
-                        status = "MODERATE"
-                    elif peak_areal_density < 1.08:
-                        los = "D"
+                    # Get operational intelligence for this segment
+                    oi = oi_by_segment.get(segment_id, {})
+                    
+                    # Use LOS from operational intelligence if available, otherwise calculate
+                    if oi.get('los'):
+                        los = oi['los']
+                    else:
+                        # Determine LOS from canonical density
+                        if peak_areal_density < 0.5:
+                            los = "A"
+                        elif peak_areal_density < 1.0:
+                            los = "B"
+                        elif peak_areal_density < 1.5:
+                            los = "C"
+                        elif peak_areal_density < 2.0:
+                            los = "D"
+                        elif peak_areal_density < 3.0:
+                            los = "E"
+                        else:
+                            los = "F"
+                    
+                    # Determine status from LOS and severity
+                    severity = oi.get('severity', 'NONE')
+                    if severity == 'CRITICAL':
+                        status = "CRITICAL"
+                    elif severity in ['CAUTION', 'WATCH']:
+                        status = "FLAGGED"
+                    elif los in ['E', 'F']:
+                        status = "OVERLOAD"
+                    elif los in ['C', 'D']:
                         status = "MODERATE"
                     else:
-                        los = "E"
-                        status = "OVERLOAD"
+                        status = "STABLE"
                     
                     segments.append({
                         "id": segment_id,
                         "label": segment_info.get('seg_label', segment_id),
                         "los": los,
+                        "los_description": oi.get('los_description', ''),
+                        "los_color": oi.get('los_color', _get_los_color(los)),
                         "status": status,
+                        "severity": severity,
+                        "flag_reason": oi.get('flag_reason', 'NONE'),
+                        "flagged_bins_count": oi.get('flagged_bins_count', 0),
                         "notes": [f"Canonical segments: {peak_data['total_windows']} windows"],
                         "peak_areal_density": peak_areal_density,
                         "peak_mean_density": peak_data["peak_mean_density"],
@@ -1136,7 +1253,8 @@ async def get_segments():
                     "metadata": {
                         "source": "canonical_segments",
                         "methodology": "bottom_up_aggregation",
-                        "total_windows": metadata.get("total_windows", 0)
+                        "total_windows": metadata.get("total_windows", 0),
+                        "has_operational_intelligence": tooltips_data is not None
                     }
                 }
                 
@@ -1188,6 +1306,34 @@ async def get_segments():
 async def serve_segments_json():
     """Serve segments.json for frontend."""
     return await get_segments_data()
+
+
+@app.get("/api/tooltips")
+async def get_tooltips():
+    """Get operational intelligence tooltips for map integration (Issue #237)."""
+    try:
+        tooltips_data = _load_tooltips_json()
+        
+        if tooltips_data:
+            return {
+                "ok": True,
+                "tooltips": tooltips_data.get('tooltips', []),
+                "metadata": {
+                    "generated": tooltips_data.get('generated'),
+                    "schema_version": tooltips_data.get('schema_version'),
+                    "density_method": tooltips_data.get('density_method'),
+                    "total_bins": len(tooltips_data.get('tooltips', []))
+                }
+            }
+        else:
+            return {
+                "ok": False,
+                "error": "No operational intelligence data available",
+                "tooltips": [],
+                "metadata": {}
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load tooltips: {str(e)}")
 
 
 @app.get("/frontend/data/reports.json")

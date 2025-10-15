@@ -67,11 +67,44 @@
   let currentViewMode = 'segments'; // Will be updated after DOM loads
   let bySeg = {};
   let allBinsData = null; // Store all bin data for filtering
+  
+  // Issue #237: Operational Intelligence
+  let operationalIntelligence = null; // Store tooltips data
+  let oiByBin = {}; // Lookup for bin-level operational intelligence
 
   function updateStatus(message, type = 'loading') {
     const statusEl = document.getElementById('status');
     statusEl.textContent = message;
     statusEl.className = `status ${type}`;
+  }
+
+  // Issue #237: Load operational intelligence from tooltips
+  async function loadOperationalIntelligence() {
+    try {
+      console.log('Loading operational intelligence...');
+      const response = await fetch('/api/tooltips');
+      const data = await response.json();
+      
+      if (data.ok && data.tooltips) {
+        operationalIntelligence = data;
+        
+        // Build lookup by segment_id + bin range for fast access
+        oiByBin = {};
+        data.tooltips.forEach(tooltip => {
+          const key = `${tooltip.segment_id}-${tooltip.start_km}-${tooltip.end_km}`;
+          oiByBin[key] = tooltip;
+        });
+        
+        console.log(`✅ Loaded ${data.tooltips.length} operational intelligence tooltips`);
+        return true;
+      } else {
+        console.log('⚠️ No operational intelligence available');
+        return false;
+      }
+    } catch (error) {
+      console.warn('Failed to load operational intelligence:', error);
+      return false;
+    }
   }
 
 
@@ -312,17 +345,27 @@
     
     console.log('Styling bin:', bin.segment_id, bin.bin_index, 'density_level:', densityLevel);
     
-    // Map density levels to colors
-    const densityColors = {
-      "A": "#4CAF50",    // Green
-      "B": "#8BC34A",    // Light Green
-      "C": "#FFC107",    // Yellow
-      "D": "#FF9800",    // Orange
-      "E": "#F44336",    // Red
-      "F": "#B71C1C"     // Dark Red
-    };
+    // Issue #237: Check for operational intelligence data
+    const binKey = `${bin.segment_id}-${bin.start_km}-${bin.end_km}`;
+    const oi = oiByBin[binKey];
     
-    const baseColor = densityColors[densityLevel] || "#4CAF50";
+    // Use LOS color from operational intelligence if available
+    let baseColor;
+    if (oi && oi.los_color) {
+      baseColor = oi.los_color;
+      console.log('Using OI color for bin:', binKey, oi.los_color, 'LOS:', oi.los);
+    } else {
+      // Fallback to density level colors
+      const densityColors = {
+        "A": "#4CAF50",    // Green
+        "B": "#8BC34A",    // Light Green
+        "C": "#FFC107",    // Yellow
+        "D": "#FF9800",    // Orange
+        "E": "#F44336",    // Red
+        "F": "#B71C1C"     // Dark Red
+      };
+      baseColor = densityColors[densityLevel] || "#4CAF50";
+    }
     
     // Check if this density level should be visible
     const zoneFilter = document.getElementById('zoneFilter');
@@ -440,6 +483,26 @@
         if (bin.co_presence && Object.keys(bin.co_presence).length > 0) {
           const coPresenceStr = Object.entries(bin.co_presence).map(([k,v]) => `${k}:${v}`).join(', ');
           tooltipParts.push(`<div>Co-presence: ${coPresenceStr}</div>`);
+        }
+        
+        // Issue #237: Add operational intelligence to tooltip
+        const binKey = `${bin.segment_id}-${bin.start_km}-${bin.end_km}`;
+        const oi = oiByBin[binKey];
+        if (oi) {
+          tooltipParts.push(`<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #ddd;"><strong>Operational Intelligence:</strong></div>`);
+          tooltipParts.push(`<div>LOS: <b style="color: ${oi.los_color}">${oi.los}</b> - ${oi.los_description}</div>`);
+          
+          // Add severity badge if flagged
+          if (oi.severity && oi.severity !== 'NONE') {
+            const severityBadges = {
+              'CRITICAL': '🚨 CRITICAL',
+              'CAUTION': '⚡ CAUTION',
+              'WATCH': '👁️ WATCH'
+            };
+            const badge = severityBadges[oi.severity] || oi.severity;
+            tooltipParts.push(`<div>Severity: <b style="color: #F44336">${badge}</b></div>`);
+            tooltipParts.push(`<div>Reason: ${oi.flag_reason}</div>`);
+          }
         }
         
         const tooltipText = tooltipParts.join('');
@@ -1151,6 +1214,9 @@
     
     // Initialize map with loaded config
     initializeMap();
+    
+    // Issue #237: Load operational intelligence
+    await loadOperationalIntelligence();
     
     // Initialize view mode (always segments now)
     currentViewMode = 'segments';
