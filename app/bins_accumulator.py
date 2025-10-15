@@ -30,7 +30,7 @@ class BinFeature:
     t_start: datetime
     t_end: datetime
     density: float                          # p / m^2
-    flow: float                             # p / s (absolute for this bin/time window)
+    rate: float                             # p / s (throughput rate) - renamed from 'flow' to avoid confusion with Flow analysis
     los_class: str                          # derived from density thresholds
     bin_size_km: float
 
@@ -177,7 +177,7 @@ def build_bin_features(
                 where=(counts > 0),
                 out=np.zeros_like(sum_speed),
             )
-            flow = density * seg.width_m * mean_speed  # p/s
+            rate = density * seg.width_m * mean_speed  # p/s (throughput rate)
 
             # Counters
             occupied_bins = int(np.count_nonzero(counts))
@@ -191,7 +191,7 @@ def build_bin_features(
                 start_m = b * bin_len_m
                 end_m = min((b + 1) * bin_len_m, seg.length_m)
                 d = float(density[b])
-                f = float(flow[b])
+                r = float(rate[b])
                 los = los_classify(d, los_thresholds)
                 bf = BinFeature(
                     segment_id=seg_id,
@@ -201,7 +201,7 @@ def build_bin_features(
                     t_start=t_start,
                     t_end=t_end,
                     density=d,
-                    flow=f,
+                    rate=r,
                     los_class=los,
                     bin_size_km=bin_size_km,
                 )
@@ -263,7 +263,7 @@ def to_geojson_features(features: List[BinFeature]) -> List[Dict[str, Any]]:
             "t_start": f.t_start.isoformat().replace("+00:00", "Z"),
             "t_end": f.t_end.isoformat().replace("+00:00", "Z"),
             "density": f.density,
-            "flow": f.flow,
+            "rate": f.rate,
             "los_class": f.los_class,
             "bin_size_km": f.bin_size_km,
         }
