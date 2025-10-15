@@ -49,3 +49,6 @@ e2e_tests/
 
 # Work directory (ephemeral validation artifacts)
 /work/
+
+# macOS system files
+__MACOSX/
