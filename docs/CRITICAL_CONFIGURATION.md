@@ -424,9 +424,10 @@ results = test_report_content_quality()
 - Include latest reports as release assets
 - Use `gh release create` with proper description
 
-### **Step 8: Add E2E Files to Release**
-- Attach Flow.md, Flow.csv, Density.md, E2E.md to release
+### **Step 8: Add Report Files to Release**
+- Attach Flow.md, Flow.csv, Density.md to release
 - Use `gh release upload` command
+- Note: E2E test results are in GitHub Actions logs and release notes
 
 ### **Step 9: Verify Release and Run Final E2E Tests**
 - Confirm release is complete and working

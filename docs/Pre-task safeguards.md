@@ -241,7 +241,7 @@ For ALL releases and merges, you **MUST** follow this complete process:
 4. **Wait for User Review/Approval** - User will review and merge via GitHub Desktop or Web UI
 5. **Verify Merge to Main** - Check git status and recent commits after user merge
 6. **Create Release with Assets** - Include latest reports as release assets
-7. **Add E2E Files to Release** - Attach Flow.md, Flow.csv, Density.md, E2E.md to release
+7. **Add Report Files to Release** - Attach Flow.md, Flow.csv, Density.md to release
 8. **Verify Release and Run Final E2E Tests** - Confirm release is complete and working
 9. **Run Final E2E Tests on Main (Safeguard for Next Branch)** - Ensure main branch is healthy for future development
 
@@ -301,10 +301,11 @@ For ALL releases and merges, you **MUST** follow this complete process:
 For EVERY release, you **MUST** attach these files:
 - **Flow.md** - Latest temporal flow analysis report
 - **Flow.csv** - Latest temporal flow data
-- **Density.md** - Latest density analysis report  
-- **E2E.md** - Latest end-to-end test results
+- **Density.md** - Latest density analysis report
 
-**Command**: `gh release upload <version> <file1> <file2> <file3> <file4>`
+**Note**: E2E test results are captured in GitHub Actions logs and release notes, not as separate files.
+
+**Command**: `gh release upload <version> <file1> <file2> <file3>`
 
 ## **✅ SUCCESS CRITERIA**
 
@@ -315,7 +316,7 @@ Work is complete ONLY when:
 - All changes committed to version branch (e.g., v1.6.3-flow-debug)
 - All validation tests pass
 - **9-step merge/test process completed**
-- **Release assets attached (Flow.md, Flow.csv, Density.md, E2E.md)**
+- **Release assets attached (Flow.md, Flow.csv, Density.md)**
 
 ---
 
