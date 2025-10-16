@@ -170,7 +170,12 @@ def generate_new_density_report(
         'app_version': app_version,
         'window_s': 30,  # TODO: Get from actual data
         'bin_km': 0.2,   # TODO: Get from actual data
-        'rulebook': rulebook
+        'rulebook': rulebook,
+        'rate_warn_threshold': flagging_config.rate_warn_threshold,
+        'rate_critical_threshold': flagging_config.rate_critical_threshold,
+        'full_runners': 368,  # TODO: Get from actual data
+        '10k_runners': 618,   # TODO: Get from actual data
+        'half_runners': 912   # TODO: Get from actual data
     }
     
     # Generate report using new template engine

@@ -940,13 +940,20 @@ def generate_density_report(
         try:
             if use_new_report_format:
                 print("📊 Generating new density report (Issue #246)...")
+                # Generate timestamped filename
+                timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+                timestamped_path = os.path.join(daily_folder_path, f"{timestamp}-Density.md")
+                
                 # Use the new report system
                 new_report_results = generate_new_density_report_issue246(
                     reports_dir=daily_folder_path,
-                    output_path=full_path,
+                    output_path=timestamped_path,
                     app_version="1.6.42"
                 )
                 report_content_final = new_report_results['report_content']
+                
+                # Update full_path to the timestamped version
+                full_path = timestamped_path
                 print(f"📊 New density report saved to: {full_path}")
             else:
                 print("📊 Regenerating density report with operational intelligence...")

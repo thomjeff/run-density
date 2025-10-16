@@ -90,11 +90,11 @@ class NewDensityTemplateEngine:
         content.append("---")
         content.append("")
         
-        # 7. Flagged Bins Summary
-        content.append(self._generate_flagged_bins_summary(segment_summary_df))
-        content.append("")
-        content.append("---")
-        content.append("")
+        # 7. Flagged Bins Summary (merged into Flagged Segments)
+        # content.append(self._generate_flagged_bins_summary(segment_summary_df))
+        # content.append("")
+        # content.append("---")
+        # content.append("")
         
         # 8. Operational Heatmap (placeholder)
         content.append(self._generate_operational_heatmap_placeholder())
@@ -102,7 +102,13 @@ class NewDensityTemplateEngine:
         content.append("---")
         content.append("")
         
-        # 9. Segment Details
+        # 9. Bin-Level Detail
+        content.append(self._generate_bin_level_detail(flagged_bins_df))
+        content.append("")
+        content.append("---")
+        content.append("")
+        
+        # 10. Segment Details
         content.append(self._generate_segment_details(segments_df, segment_windows_df, segment_summary_df))
         content.append("")
         content.append("---")
@@ -160,7 +166,7 @@ class NewDensityTemplateEngine:
         lines.extend([
             f"- **Operational Status:** {operational_status} ({alert_reason})",
             "",
-            "> Note: LOS = comfort index; operational flags reflect throughput surges even under LOS A/B."
+            "> LOS (Level of Service) describes how comfortable runners are within a section — A means free-flowing, while E/F indicate crowding. Even when the average LOS is good (A/B), short-lived surges in runner volume or pace can temporarily push sections toward operational limits, which is why some areas are flagged."
         ])
         
         return "\n".join(lines)
@@ -170,17 +176,31 @@ class NewDensityTemplateEngine:
         lines = [
             "## Methodology & Inputs",
             f"- **Window Size:** {context.get('window_s', 30)} s; **Bin Size:** {context.get('bin_km', 0.2)} km",
-            "- LOS & Rate triggers per `density_rulebook.yml`.",
-            "- Data read from Parquet sources only."
+            "",
+            "### LOS and Rate Triggers (from Rulebook)",
+            "- **LOS thresholds** define crowding levels based on density (p/m²):",
+            "  - A: < 0.36 | B: 0.36–0.54 | C: 0.54–0.72 | D: 0.72–1.08 | E: 1.08–1.63 | F: > 1.63",
+            "- **Rate thresholds** define throughput risk based on flow references (persons/m/min):",
+            f"  - Warning: {context.get('rate_warn_threshold', 0):.1f} | Critical: {context.get('rate_critical_threshold', 0):.1f}",
+            "",
+            "These thresholds come from the Fredericton Marathon rulebook and align with crowd management standards for mass participation events."
         ]
         return "\n".join(lines)
     
     def _generate_start_times_cohorts(self, context: Dict[str, Any]) -> str:
         """Generate start times and cohorts section."""
+        # Get runner counts from context if available
+        full_count = context.get('full_runners', 368)
+        tenk_count = context.get('10k_runners', 618)
+        half_count = context.get('half_runners', 912)
+        
         lines = [
             "## Start Times & Cohorts",
-            "Full: 07:00 | 10K: 07:20 | Half: 07:40",
-            "Bins may contain multiple event cohorts simultaneously."
+            f"- **Full Marathon** — 07:00 ({full_count:,} runners)",
+            f"- **10K** — 07:20 ({tenk_count:,} runners)",
+            f"- **Half Marathon** — 07:40 ({half_count:,} runners)",
+            "",
+            "> Bins may include runners from multiple events as waves overlap in time."
         ]
         return "\n".join(lines)
     
@@ -189,26 +209,20 @@ class NewDensityTemplateEngine:
         lines = [
             "## Course Overview",
             "",
-            "| Segment | Label | Type | Width (m) | Bins | Windows Active |",
-            "|----------|--------|-------|-----------|-------|----------------|"
+            "| Segment | Label | Schema | Width (m) | Bins |",
+            "|----------|--------|--------|-----------|-------|"
         ]
         
-        # Merge segments with window counts
-        if len(segment_windows_df) > 0:
-            window_counts = segment_windows_df.groupby('segment_id').size().reset_index(name='windows_active')
-            segments_with_windows = segments_df.merge(window_counts, on='segment_id', how='left')
-            segments_with_windows['windows_active'] = segments_with_windows['windows_active'].fillna(0)
-        else:
-            segments_with_windows = segments_df.copy()
-            segments_with_windows['windows_active'] = 0
+        # Sort segments by segment_id for course order
+        segments_sorted = segments_df.sort_values('segment_id')
         
         # Add bin counts (assuming 5 bins per segment for now - this should be calculated)
-        segments_with_windows['bins'] = 5  # TODO: Calculate actual bin counts
+        segments_sorted['bins'] = 5  # TODO: Calculate actual bin counts
         
-        for _, row in segments_with_windows.iterrows():
+        for _, row in segments_sorted.iterrows():
             lines.append(
                 f"| {row['segment_id']} | {row['seg_label']} | {row['segment_type']} | "
-                f"{row['width_m']} | {row['bins']} | {row['windows_active']} |"
+                f"{row['width_m']} | {row['bins']} |"
             )
         
         return "\n".join(lines)
@@ -218,22 +232,22 @@ class NewDensityTemplateEngine:
         lines = [
             "## Flagged Segments — Complete List",
             "",
-            "| Segment | Label | Worst Bin (km) | Time | Density (p/m²) | Rate (p/s) | Util% | LOS | Severity | Reason |",
-            "|----------|--------|----------------|-------|----------------|-------------|--------|------|-----------|---------|"
+            "| Segment | Label | Flagged Bins | Total Bins | % | Worst Bin (km) | Time | Density (p/m²) | Rate (p/s) | LOS | Severity | Reason |",
+            "|----------|--------|--------------|------------|---|----------------|-------|----------------|-------------|-----|-----------|---------|"
         ]
         
-        # Filter to only flagged segments
-        flagged_segments = segment_summary_df[segment_summary_df['flagged_bins'] > 0]
+        # Filter to only flagged segments and sort by segment_id for course order
+        flagged_segments = segment_summary_df[segment_summary_df['flagged_bins'] > 0].sort_values('segment_id')
         
         if len(flagged_segments) == 0:
-            lines.append("| *No flagged segments* | | | | | | | | | |")
+            lines.append("| *No flagged segments* | | | | | | | | | | | |")
         else:
             for _, row in flagged_segments.iterrows():
-                # TODO: Get actual worst bin details (km range, time, rate, util%)
+                # TODO: Get actual worst bin details (km range, time, rate)
                 lines.append(
-                    f"| {row['segment_id']} | {row['seg_label']} | 0.8-1.0 | 07:20 | "
-                    f"{row['peak_density']:.4f} | N/A | N/A | {row['peak_los']} | "
-                    f"{row['worst_severity']} | {row['worst_reason']} |"
+                    f"| {row['segment_id']} | {row['seg_label']} | {row['flagged_bins']} | {row['total_bins']} | "
+                    f"{row['flagged_percentage']:.1f}% | 0.8-1.0 | 07:20 | {row['peak_density']:.4f} | N/A | "
+                    f"{row['peak_los']} | {row['worst_severity']} | {row['worst_reason']} |"
                 )
         
         return "\n".join(lines)
@@ -271,6 +285,51 @@ class NewDensityTemplateEngine:
             "- Time-based animation of crowd flows",
             "- Interactive bin-level detail views"
         ]
+        return "\n".join(lines)
+    
+    def _generate_bin_level_detail(self, flagged_bins_df: pd.DataFrame) -> str:
+        """Generate bin-level detail table for diagnostic visibility."""
+        lines = [
+            "## Bin-Level Detail",
+            "",
+            "Detailed bin-by-bin breakdown for segments with operational intelligence flags:",
+            ""
+        ]
+        
+        if len(flagged_bins_df) == 0:
+            lines.append("*No flagged bins to display*")
+            return "\n".join(lines)
+        
+        # Group by segment and sort by segment_id, then by t_start
+        flagged_bins_sorted = flagged_bins_df.sort_values(['segment_id', 't_start'])
+        
+        current_segment = None
+        for _, row in flagged_bins_sorted.iterrows():
+            segment_id = row['segment_id']
+            seg_label = row.get('seg_label', segment_id)
+            
+            # Start new segment section
+            if current_segment != segment_id:
+                if current_segment is not None:
+                    lines.append("")  # Add spacing between segments
+                
+                current_segment = segment_id
+                lines.extend([
+                    f"### {seg_label} ({segment_id})",
+                    "",
+                    "| Start (km) | End (km) | Start (t) | End (t) | Density (p/m²) | Rate (p/s) | LOS |",
+                    "|------------|----------|-----------|---------|----------------|-------------|-----|"
+                ])
+            
+            # Format time as HH:MM
+            start_time = row['t_start'].strftime('%H:%M') if hasattr(row['t_start'], 'strftime') else str(row['t_start'])[:5]
+            end_time = row['t_end'].strftime('%H:%M') if hasattr(row['t_end'], 'strftime') else str(row['t_end'])[:5]
+            
+            lines.append(
+                f"| {row.get('start_km', 0):.1f} | {row.get('end_km', 0):.1f} | {start_time} | {end_time} | "
+                f"{row['density']:.3f} | {row['rate']:.3f} | {row['los']} |"
+            )
+        
         return "\n".join(lines)
     
     def _generate_segment_details(self, segments_df: pd.DataFrame, segment_windows_df: pd.DataFrame, segment_summary_df: pd.DataFrame) -> str:
