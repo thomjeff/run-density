@@ -84,8 +84,8 @@ class NewDensityTemplateEngine:
         content.append("---")
         content.append("")
         
-        # 6. Flagged Segments — Complete List
-        content.append(self._generate_flagged_segments_complete(segment_summary_df))
+        # 6. Flagged Segments
+        content.append(self._generate_flagged_segments_complete(segment_summary_df, segments_df))
         content.append("")
         content.append("---")
         content.append("")
@@ -237,22 +237,24 @@ class NewDensityTemplateEngine:
         
         return "\n".join(lines)
     
-    def _generate_flagged_segments_complete(self, segment_summary_df: pd.DataFrame) -> str:
+    def _generate_flagged_segments_complete(self, segment_summary_df: pd.DataFrame, segments_df: pd.DataFrame) -> str:
         """Generate complete list of flagged segments (no truncation)."""
         lines = [
             "## Flagged Segments",
             "",
-            "| Segment | Label | Flagged Bins | Total Bins | % | Worst Bin (km) | Time | Density (p/m²) | Rate (p/s) | LOS | Severity | Reason |",
-            "|----------|--------|--------------|------------|---|----------------|-------|----------------|-------------|-----|-----------|---------|"
+            "| Segment | Label | Flagged Bins | Total Bins | % | Worst Bin (km) | Time | Density (p/m²) | Rate (p/s) | Util% | LOS | Severity | Reason |",
+            "|----------|--------|--------------|------------|---|----------------|-------|----------------|-------------|-------|-----|-----------|---------|"
         ]
         
-        # Filter to only flagged segments and sort by segment_id for course order
-        flagged_segments = segment_summary_df[segment_summary_df['flagged_bins'] > 0].sort_values('segment_id')
+        # Merge with segments to get segment_type for Util% calculation
+        flagged_with_schema = segment_summary_df[segment_summary_df['flagged_bins'] > 0].merge(
+            segments_df[['segment_id', 'segment_type']], on='segment_id', how='left'
+        ).sort_values('segment_id')
         
-        if len(flagged_segments) == 0:
-            lines.append("| *No flagged segments* | | | | | | | | | | | |")
+        if len(flagged_with_schema) == 0:
+            lines.append("| *No flagged segments* | | | | | | | | | | | | |")
         else:
-            for _, row in flagged_segments.iterrows():
+            for _, row in flagged_with_schema.iterrows():
                 # Format worst bin km range
                 worst_km = f"{row['worst_bin_start_km']:.1f}-{row['worst_bin_end_km']:.1f}"
                 
@@ -278,9 +280,21 @@ class NewDensityTemplateEngine:
                 # Format worst bin rate
                 worst_rate = f"{row['worst_bin_rate']:.3f}" if row['worst_bin_rate'] > 0 else "N/A"
                 
+                # Calculate Util% based on segment schema
+                segment_type = row['segment_type']
+                flow_ref_critical = None
+                if segment_type == 'start_corral':
+                    flow_ref_critical = 600
+                elif segment_type == 'on_course_narrow':
+                    flow_ref_critical = 400
+                
+                util_display = "N/A"
+                if flow_ref_critical and row['peak_rate_per_m_per_min'] > 0:
+                    util_display = f"{(row['peak_rate_per_m_per_min'] / flow_ref_critical * 100):.0f}%"
+                
                 lines.append(
                     f"| {row['segment_id']} | {row['seg_label']} | {row['flagged_bins']} | {row['total_bins']} | "
-                    f"{row['flagged_percentage']:.1f}% | {worst_km} | {worst_time} | {row['worst_bin_density']:.4f} | {worst_rate} | "
+                    f"{row['flagged_percentage']:.1f}% | {worst_km} | {worst_time} | {row['worst_bin_density']:.4f} | {worst_rate} | {util_display} | "
                     f"{row['worst_bin_los']} | {row['worst_severity']} | {row['worst_reason']} |"
                 )
         
@@ -397,13 +411,20 @@ class NewDensityTemplateEngine:
                 # Convert rate from p/m/min to p/s
                 peak_rate_ps = summary['peak_rate_per_m_per_min'] / 60.0
                 
-                # Calculate Util% if we have rate thresholds
-                # Use rate_per_m_per_min and critical threshold from context
+                # Calculate Util% if we have rate thresholds for this schema
+                segment_type = seg_row['segment_type']
+                flow_ref_critical = None
+                
+                # Get flow_ref.critical from rulebook based on segment_type
+                if segment_type == 'start_corral':
+                    flow_ref_critical = 600  # runners/min/m
+                elif segment_type == 'on_course_narrow':
+                    flow_ref_critical = 400  # runners/min/m
+                # on_course_open has no flow_ref
+                
                 util_pct = "N/A"
-                if 'peak_rate_per_m_per_min' in summary and summary['peak_rate_per_m_per_min'] > 0:
-                    # TODO: Get flow_ref.critical from rulebook for this segment's schema
-                    # For now, use a placeholder
-                    util_pct = "N/A"
+                if flow_ref_critical and summary['peak_rate_per_m_per_min'] > 0:
+                    util_pct = f"{(summary['peak_rate_per_m_per_min'] / flow_ref_critical * 100):.0f}%"
                 
                 # Format worst bin details
                 worst_km = f"{summary['worst_bin_start_km']:.1f}-{summary['worst_bin_end_km']:.1f}"
@@ -417,7 +438,7 @@ class NewDensityTemplateEngine:
                 lines.extend([
                     "",
                     f"### {seg_label} ({seg_id})",
-                    f"- **Type:** {seg_row['segment_type']} · **Width:** {seg_row['width_m']} m · **Bins:** {summary['total_bins']}",
+                    f"- **Schema:** {seg_row['segment_type']} · **Width:** {seg_row['width_m']} m · **Bins:** {summary['total_bins']}",
                     f"- **Active:** 07:00 → 10:00",  # TODO: Calculate actual active times
                     peaks_line,
                     f"- **Worst Bin:** {worst_km} km at {worst_time} — {summary['worst_severity']} ({summary['worst_reason']})",
@@ -427,7 +448,7 @@ class NewDensityTemplateEngine:
                 lines.extend([
                     "",
                     f"### {seg_label} ({seg_id})",
-                    f"- **Type:** {seg_row['segment_type']} · **Width:** {seg_row['width_m']} m",
+                    f"- **Schema:** {seg_row['segment_type']} · **Width:** {seg_row['width_m']} m",
                     "- **Status:** No operational flags"
                 ])
         
