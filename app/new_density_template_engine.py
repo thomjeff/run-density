@@ -233,7 +233,7 @@ class NewDensityTemplateEngine:
             )
         
         lines.append("")
-        lines.append("> Note: Each spatial bin is analyzed across 80 time windows (30-second intervals), creating ~400 space-time bins per segment.")
+        lines.append("> Note: Each spatial bin is analyzed across 80 time windows (30-second intervals). Total space-time bins per segment = spatial bins × 80 (e.g., A1: 5 × 80 = 400; I1: 121 × 80 = 9,680).")
         
         return "\n".join(lines)
     
