@@ -144,9 +144,13 @@ class NewDensityTemplateEngine:
         ]
         
         # Key metrics
+        # Convert peak_rate_per_m_per_min to p/s for display
+        peak_rate_per_m_per_min = stats.get('peak_rate_per_m_per_min', 0)
+        peak_rate_ps = peak_rate_per_m_per_min / 60.0  # Convert to persons/second
+        
         lines.extend([
             f"- **Peak Density:** {stats.get('peak_density', 0):.4f} p/m² (LOS {stats.get('worst_los', 'A')})",
-            f"- **Peak Rate:** {stats.get('peak_rate_per_m_per_min', 0):.2f} p/m/min",
+            f"- **Peak Rate:** {peak_rate_ps:.2f} p/s",
             f"- **Segments with Flags:** {len(segment_summary_df[segment_summary_df['flagged_bins'] > 0])} / {len(segment_summary_df)}",
             f"- **Flagged Bins:** {stats.get('flagged_bins', 0)} / {stats.get('total_bins', 0)}"
         ])
@@ -166,7 +170,7 @@ class NewDensityTemplateEngine:
         lines.extend([
             f"- **Operational Status:** {operational_status} ({alert_reason})",
             "",
-            "> LOS (Level of Service) describes how comfortable runners are within a section — A means free-flowing, while E/F indicate crowding. Even when the average LOS is good (A/B), short-lived surges in runner volume or pace can temporarily push sections toward operational limits, which is why some areas are flagged."
+            "> LOS (Level of Service) describes how comfortable runners are within a section — A means free-flowing, while E/F indicate crowding. Even when overall LOS is good, short-lived surges in runner flow can stress aid stations or intersections, requiring active flow management."
         ])
         
         return "\n".join(lines)
@@ -389,14 +393,35 @@ class NewDensityTemplateEngine:
             
             if len(seg_summary) > 0:
                 summary = seg_summary.iloc[0]
+                
+                # Convert rate from p/m/min to p/s
+                peak_rate_ps = summary['peak_rate_per_m_per_min'] / 60.0
+                
+                # Calculate Util% if we have rate thresholds
+                # Use rate_per_m_per_min and critical threshold from context
+                util_pct = "N/A"
+                if 'peak_rate_per_m_per_min' in summary and summary['peak_rate_per_m_per_min'] > 0:
+                    # TODO: Get flow_ref.critical from rulebook for this segment's schema
+                    # For now, use a placeholder
+                    util_pct = "N/A"
+                
+                # Format worst bin details
+                worst_km = f"{summary['worst_bin_start_km']:.1f}-{summary['worst_bin_end_km']:.1f}"
+                worst_time = summary['worst_bin_t_start'].strftime('%H:%M') if hasattr(summary['worst_bin_t_start'], 'strftime') else str(summary['worst_bin_t_start']).split('T')[1][:5] if 'T' in str(summary['worst_bin_t_start']) else "N/A"
+                
+                # Build peaks line with Util%
+                peaks_line = f"- **Peaks:** Density {summary['peak_density']:.4f} p/m² (LOS {summary['peak_los']}), Rate {peak_rate_ps:.2f} p/s"
+                if util_pct != "N/A":
+                    peaks_line += f", Util {util_pct}"
+                
                 lines.extend([
                     "",
                     f"### {seg_label} ({seg_id})",
                     f"- **Type:** {seg_row['segment_type']} · **Width:** {seg_row['width_m']} m · **Bins:** {summary['total_bins']}",
                     f"- **Active:** 07:00 → 10:00",  # TODO: Calculate actual active times
-                    f"- **Peaks:** Density {summary['peak_density']:.4f} p/m² (LOS {summary['peak_los']}), Rate {summary['peak_rate_per_m_per_min']:.2f} p/m/min",
-                    f"- **Worst Bin:** 0.8-1.0 km at 07:20 — {summary['worst_severity']} ({summary['worst_reason']})",  # TODO: Get actual worst bin details
-                    f"- **Mitigations:** {self._get_mitigations_for_segment(seg_id, summary['worst_reason'])}"
+                    peaks_line,
+                    f"- **Worst Bin:** {worst_km} km at {worst_time} — {summary['worst_severity']} ({summary['worst_reason']})",
+                    f"- **Mitigations:** {self._get_mitigations_for_segment(seg_id, summary['worst_reason'], seg_row['segment_type'])}"
                 ])
             else:
                 lines.extend([
@@ -442,6 +467,7 @@ class NewDensityTemplateEngine:
             "- **Density (ρ):** Areal density in persons per square meter (p/m²)",
             "- **Rate (q):** Throughput rate in persons per second (p/s)",
             "- **Rate per meter per minute:** (rate / width_m) × 60 in persons/m/min",
+            "- **Utilization (%):** Current flow rate / reference flow rate (critical)",
             "- **LOS (Level of Service):** Crowd comfort class (A–F)",
             "- **Bin:** Space–time cell [segment_id, start_km–end_km, t_start–t_end]",
             "",
@@ -468,13 +494,26 @@ class NewDensityTemplateEngine:
         
         return "\n".join(lines)
     
-    def _get_mitigations_for_segment(self, segment_id: str, reason: str) -> str:
-        """Get mitigation text for a specific segment and reason."""
-        if reason == 'los_high':
-            return "Monitor crowd density, consider flow management"
-        elif reason == 'rate_high':
-            return "Monitor flow rates, consider temporary holds"
-        elif reason == 'both':
-            return "Implement flow management and density controls"
-        else:
+    def _get_mitigations_for_segment(self, segment_id: str, reason: str, segment_type: str = None) -> str:
+        """Get mitigation text for a specific segment based on schema and reason."""
+        if reason == 'none':
             return "No mitigations required"
+        
+        # Schema-specific base mitigations
+        schema_mitigations = {
+            'start_corral': "Expand chute width and manage wave timing",
+            'on_course_narrow': "Deploy lateral barriers and regulate inflow",
+            'on_course_open': "Monitor via visual flow sensors"
+        }
+        
+        base_mitigation = schema_mitigations.get(segment_type, "Monitor flow management")
+        
+        # Add reason-specific actions
+        if reason == 'los_high':
+            return f"{base_mitigation}; monitor crowd density"
+        elif reason == 'rate_high':
+            return f"{base_mitigation}; consider temporary holds"
+        elif reason == 'both':
+            return f"{base_mitigation}; implement density controls and flow metering"
+        else:
+            return base_mitigation
