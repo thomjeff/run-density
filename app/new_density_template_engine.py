@@ -236,7 +236,7 @@ class NewDensityTemplateEngine:
     def _generate_flagged_segments_complete(self, segment_summary_df: pd.DataFrame) -> str:
         """Generate complete list of flagged segments (no truncation)."""
         lines = [
-            "## Flagged Segments — Complete List",
+            "## Flagged Segments",
             "",
             "| Segment | Label | Flagged Bins | Total Bins | % | Worst Bin (km) | Time | Density (p/m²) | Rate (p/s) | LOS | Severity | Reason |",
             "|----------|--------|--------------|------------|---|----------------|-------|----------------|-------------|-----|-----------|---------|"
@@ -249,11 +249,35 @@ class NewDensityTemplateEngine:
             lines.append("| *No flagged segments* | | | | | | | | | | | |")
         else:
             for _, row in flagged_segments.iterrows():
-                # TODO: Get actual worst bin details (km range, time, rate)
+                # Format worst bin km range
+                worst_km = f"{row['worst_bin_start_km']:.1f}-{row['worst_bin_end_km']:.1f}"
+                
+                # Format worst bin time (HH:MM only)
+                if pd.notna(row['worst_bin_t_start']):
+                    t_start = row['worst_bin_t_start']
+                    # Handle pandas Timestamp
+                    if hasattr(t_start, 'strftime'):
+                        worst_time = t_start.strftime('%H:%M')
+                    # Handle string timestamps
+                    elif isinstance(t_start, str):
+                        # Extract HH:MM from ISO format (e.g., "2025-10-16T07:20:00Z")
+                        if 'T' in t_start:
+                            time_part = t_start.split('T')[1]
+                            worst_time = time_part[:5]  # HH:MM
+                        else:
+                            worst_time = t_start[:5]
+                    else:
+                        worst_time = str(t_start)[:5]
+                else:
+                    worst_time = "N/A"
+                
+                # Format worst bin rate
+                worst_rate = f"{row['worst_bin_rate']:.3f}" if row['worst_bin_rate'] > 0 else "N/A"
+                
                 lines.append(
                     f"| {row['segment_id']} | {row['seg_label']} | {row['flagged_bins']} | {row['total_bins']} | "
-                    f"{row['flagged_percentage']:.1f}% | 0.8-1.0 | 07:20 | {row['peak_density']:.4f} | N/A | "
-                    f"{row['peak_los']} | {row['worst_severity']} | {row['worst_reason']} |"
+                    f"{row['flagged_percentage']:.1f}% | {worst_km} | {worst_time} | {row['worst_bin_density']:.4f} | {worst_rate} | "
+                    f"{row['worst_bin_los']} | {row['worst_severity']} | {row['worst_reason']} |"
                 )
         
         return "\n".join(lines)
@@ -328,8 +352,20 @@ class NewDensityTemplateEngine:
                 ])
             
             # Format time as HH:MM
-            start_time = row['t_start'].strftime('%H:%M') if hasattr(row['t_start'], 'strftime') else str(row['t_start'])[:5]
-            end_time = row['t_end'].strftime('%H:%M') if hasattr(row['t_end'], 'strftime') else str(row['t_end'])[:5]
+            t_start = row['t_start']
+            t_end = row['t_end']
+            
+            # Handle pandas Timestamp
+            if hasattr(t_start, 'strftime'):
+                start_time = t_start.strftime('%H:%M')
+                end_time = t_end.strftime('%H:%M')
+            # Handle string timestamps (ISO format)
+            elif isinstance(t_start, str) and 'T' in t_start:
+                start_time = t_start.split('T')[1][:5]  # HH:MM
+                end_time = t_end.split('T')[1][:5] if isinstance(t_end, str) and 'T' in t_end else str(t_end)[:5]
+            else:
+                start_time = str(t_start)[:5]
+                end_time = str(t_end)[:5]
             
             lines.append(
                 f"| {row.get('start_km', 0):.1f} | {row.get('end_km', 0):.1f} | {start_time} | {end_time} | "

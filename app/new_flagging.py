@@ -134,7 +134,7 @@ def apply_new_flagging(
     Args:
         df: Bins DataFrame with columns: segment_id, density, rate, bin_len_m
         config: Flagging configuration
-        segments_df: Segments DataFrame with width_m (optional, for rate calculations)
+        segments_df: Segments DataFrame with width_m and seg_label (optional)
         
     Returns:
         DataFrame with added columns:
@@ -142,17 +142,19 @@ def apply_new_flagging(
         - rate_per_m_per_min: Rate per meter per minute
         - flag_reason: 'los_high', 'rate_high', 'both', 'none'
         - flag_severity: 'critical', 'watch', 'none'
+        - seg_label: Segment label (if segments_df provided)
     """
     result_df = df.copy()
     
     # Add LOS classification
     result_df['los'] = result_df['density'].apply(classify_density_los)
     
-    # Calculate rate_per_m_per_min
-    if segments_df is not None and 'width_m' in segments_df.columns:
-        # Merge with segments to get width_m
-        segments_lookup = segments_df.set_index('segment_id')['width_m'].to_dict()
-        result_df['width_m'] = result_df['segment_id'].map(segments_lookup)
+    # Calculate rate_per_m_per_min and merge seg_label
+    if segments_df is not None:
+        # Merge with segments to get width_m and seg_label
+        segments_lookup = segments_df.set_index('segment_id')[['width_m', 'seg_label']].to_dict()
+        result_df['width_m'] = result_df['segment_id'].map(segments_lookup['width_m'])
+        result_df['seg_label'] = result_df['segment_id'].map(segments_lookup['seg_label'])
         result_df['rate_per_m_per_min'] = result_df.apply(
             lambda row: calculate_rate_per_m_per_min(row['rate'], row['width_m']), 
             axis=1
@@ -161,6 +163,7 @@ def apply_new_flagging(
         # Fallback: assume 3.0m width if no segments data
         logger.warning("No segments data provided, using default width 3.0m for rate calculations")
         result_df['width_m'] = 3.0
+        result_df['seg_label'] = result_df['segment_id']  # Use segment_id as label
         result_df['rate_per_m_per_min'] = result_df['rate'].apply(
             lambda rate: calculate_rate_per_m_per_min(rate, 3.0)
         )
@@ -235,7 +238,7 @@ def summarize_segment_flags_new(df: pd.DataFrame) -> pd.DataFrame:
         flagged = group[group['flag_severity'] != 'none']
         flagged_count = len(flagged)
         
-        # Get worst severity and reason
+        # Get worst severity and reason with bin details
         if flagged_count > 0:
             # Sort by severity rank, then by density, then by rate
             flagged_copy = flagged.copy()
@@ -244,11 +247,24 @@ def summarize_segment_flags_new(df: pd.DataFrame) -> pd.DataFrame:
                 ['severity_rank', 'density', 'rate_per_m_per_min'], 
                 ascending=[False, False, False]
             )
-            worst_severity = flagged_sorted.iloc[0]['flag_severity']
-            worst_reason = flagged_sorted.iloc[0]['flag_reason']
+            worst_bin = flagged_sorted.iloc[0]
+            worst_severity = worst_bin['flag_severity']
+            worst_reason = worst_bin['flag_reason']
+            worst_bin_start_km = worst_bin.get('start_km', 0)
+            worst_bin_end_km = worst_bin.get('end_km', 0)
+            worst_bin_t_start = worst_bin.get('t_start', None)
+            worst_bin_rate = worst_bin.get('rate', 0)
+            worst_bin_density = worst_bin['density']
+            worst_bin_los = worst_bin['los']
         else:
             worst_severity = 'none'
             worst_reason = 'none'
+            worst_bin_start_km = 0
+            worst_bin_end_km = 0
+            worst_bin_t_start = None
+            worst_bin_rate = 0
+            worst_bin_density = 0
+            worst_bin_los = 'A'
         
         # Get segment label if available
         seg_label = group.iloc[0].get('seg_label', seg_id)
@@ -261,6 +277,12 @@ def summarize_segment_flags_new(df: pd.DataFrame) -> pd.DataFrame:
             'flagged_percentage': (flagged_count / total_bins * 100) if total_bins > 0 else 0,
             'worst_severity': worst_severity,
             'worst_reason': worst_reason,
+            'worst_bin_start_km': worst_bin_start_km,
+            'worst_bin_end_km': worst_bin_end_km,
+            'worst_bin_t_start': worst_bin_t_start,
+            'worst_bin_rate': worst_bin_rate,
+            'worst_bin_density': worst_bin_density,
+            'worst_bin_los': worst_bin_los,
             'peak_density': group['density'].max(),
             'peak_rate_per_m_per_min': group['rate_per_m_per_min'].max(),
             'peak_los': group['los'].max()  # Highest LOS letter
