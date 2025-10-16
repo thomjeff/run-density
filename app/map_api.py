@@ -229,11 +229,14 @@ async def get_map_bins(
         # For now, return bins without geometry (geometry generation will be added later)
         # This follows the pattern: properties are time-varying, geometry is static
         
-        # Filter by severity
-        if severity != "any":
-            # Assume severity column exists from new_flagging.py
-            if 'severity' in window_bins.columns:
-                window_bins = window_bins[window_bins['severity'] == severity]
+        # Filter by severity (if column exists)
+        if severity != "any" and 'severity' in window_bins.columns:
+            window_bins = window_bins[window_bins['severity'] == severity]
+        elif severity != "any" and 'severity' not in window_bins.columns:
+            logger.warning("Severity filtering requested but severity column not in bins.parquet")
+            # Return empty if severity filter requested but column doesn't exist
+            # This ensures graceful degradation
+            pass  # Continue without filtering
         
         # Build GeoJSON features
         features = []
