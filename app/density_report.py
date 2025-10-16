@@ -2054,7 +2054,6 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
         geojson_features = to_geojson_features(bin_build.features)
         
         # Issue #249: Add geometry backfill using bin_geometries.py
-        print("🗺️ [DEBUG] Starting bin geometry generation...")
         logger.info("🗺️ Generating bin polygon geometries...")
         geom_start = time.monotonic()
         
