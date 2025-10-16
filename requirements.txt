@@ -23,3 +23,7 @@ google-cloud-storage>=2.10.0
 # Bin dataset generation (Issue #198)
 pyarrow>=10.0.0
 shapely>=2.0.0
+
+# Map bin visualization (Issue #249)
+geopandas>=0.14.0
+pyproj>=3.6.0

@@ -104,6 +104,46 @@ def test_temporal_flow_report(base_url):
         print(f"❌ Temporal Flow Report: FAILED (status: {response.status_code})")
         return False
 
+def test_map_manifest(base_url):
+    """Test map manifest endpoint (Issue #249)"""
+    print("🔍 Testing /api/map/manifest...")
+    response = requests.get(f'{base_url}/api/map/manifest', timeout=30)
+    
+    if response.status_code == 200:
+        data = response.json()
+        if data.get('ok') and data.get('window_count') and data.get('segments'):
+            print(f"✅ Map Manifest: OK ({data['window_count']} windows, {len(data['segments'])} segments)")
+            return True
+        else:
+            print(f"❌ Map Manifest: Invalid response structure")
+            return False
+    else:
+        print(f"❌ Map Manifest: FAILED (status: {response.status_code})")
+        return False
+
+def test_map_bins(base_url):
+    """Test map bins endpoint (Issue #249)"""
+    print("🔍 Testing /api/map/bins...")
+    # Use wide bbox to capture all bins
+    bbox = "-7500000,5700000,-7300000,5800000"
+    response = requests.get(
+        f'{base_url}/api/map/bins?window_idx=0&bbox={bbox}&severity=any', 
+        timeout=30
+    )
+    
+    if response.status_code == 200:
+        data = response.json()
+        if data.get('type') == 'FeatureCollection' and 'features' in data:
+            feature_count = len(data['features'])
+            print(f"✅ Map Bins: OK ({feature_count} bins returned)")
+            return True
+        else:
+            print(f"❌ Map Bins: Invalid GeoJSON structure")
+            return False
+    else:
+        print(f"❌ Map Bins: FAILED (status: {response.status_code})")
+        return False
+
 def main():
     """Run E2E test with proper resource management"""
     # Parse command line arguments
@@ -146,6 +186,21 @@ def main():
     
     # Test 3: Density report (heavy operation)
     if not test_density_report(base_url):
+        all_passed = False
+    
+    print()
+    print("⏳ Waiting for resource cleanup (10s)...")
+    time.sleep(10)
+    print()
+    
+    # Test 4: Map manifest (Issue #249)
+    if not test_map_manifest(base_url):
+        all_passed = False
+    
+    print()
+    
+    # Test 5: Map bins (Issue #249)
+    if not test_map_bins(base_url):
         all_passed = False
     
     print()

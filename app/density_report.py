@@ -2053,12 +2053,96 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
         # 5) Build geometries + GeoJSON
         geojson_features = to_geojson_features(bin_build.features)
         
-        # TODO: Add geometry backfill using existing geometry slicer
-        # for f in geojson_features:
-        #     seg_id = f["properties"]["segment_id"]
-        #     start_km = f["properties"]["start_km"]
-        #     end_km = f["properties"]["end_km"]
-        #     f["geometry"] = build_linestring_for_bin(segments[seg_id].coords, start_km, end_km)
+        # Issue #249: Add geometry backfill using bin_geometries.py
+        logger.info("🗺️ Generating bin polygon geometries...")
+        geom_start = time.monotonic()
+        
+        try:
+            from .bin_geometries import generate_bin_polygon
+            from .gpx_processor import load_all_courses, generate_segment_coordinates
+            from .io.loader import load_segments
+            import pandas as pd
+            
+            # Get segments_csv path from analysis_context
+            segments_csv_path = analysis_context.segments_csv_path if analysis_context else "data/segments.csv"
+            
+            # Load segment metadata for geometry
+            segments_df = load_segments(segments_csv_path)
+            
+            # Load GPX courses for centerlines
+            courses = load_all_courses("data")
+            
+            # Convert segments to dict format for GPX processor
+            segments_list = []
+            for _, segment in segments_df.iterrows():
+                segments_list.append({
+                    "seg_id": segment['seg_id'],
+                    "segment_label": segment.get('seg_label', segment['seg_id']),
+                    "10K": segment.get('10K', 'n'),
+                    "half": segment.get('half', 'n'),
+                    "full": segment.get('full', 'n'),
+                    "10K_from_km": segment.get('10K_from_km'),
+                    "10K_to_km": segment.get('10K_to_km'),
+                    "half_from_km": segment.get('half_from_km'),
+                    "half_to_km": segment.get('half_to_km'),
+                    "full_from_km": segment.get('full_from_km'),
+                    "full_to_km": segment.get('full_to_km')
+                })
+            
+            # Generate segment centerlines from GPX
+            segments_with_coords = generate_segment_coordinates(courses, segments_list)
+            
+            # Build lookup: segment_id -> centerline_coords
+            centerlines = {}
+            for seg_coords in segments_with_coords:
+                if seg_coords.get('line_coords') and not seg_coords.get('coord_issue'):
+                    centerlines[seg_coords['seg_id']] = seg_coords['line_coords']
+            
+            # Build lookup: segment_id -> width_m
+            widths = {}
+            for _, seg in segments_df.iterrows():
+                widths[seg['seg_id']] = float(seg.get('width_m', 5.0))
+            
+            # Add geometry to each feature
+            geometries_added = 0
+            geometries_failed = 0
+            
+            for f in geojson_features:
+                seg_id = f["properties"]["segment_id"]
+                start_km = f["properties"]["start_km"]
+                end_km = f["properties"]["end_km"]
+                
+                # Get centerline and width
+                centerline = centerlines.get(seg_id)
+                width_m = widths.get(seg_id, 5.0)
+                
+                if centerline:
+                    # Generate polygon geometry
+                    polygon = generate_bin_polygon(
+                        segment_centerline_coords=centerline,
+                        bin_start_km=start_km,
+                        bin_end_km=end_km,
+                        segment_width_m=width_m
+                    )
+                    
+                    if polygon and polygon.is_valid:
+                        # Convert to GeoJSON geometry dict
+                        import json
+                        f["geometry"] = json.loads(json.dumps(polygon.__geo_interface__))
+                        geometries_added += 1
+                    else:
+                        geometries_failed += 1
+                        # Leave as None
+                else:
+                    geometries_failed += 1
+                    # No centerline available, leave geometry as None
+            
+            geom_time = int((time.monotonic() - geom_start) * 1000)
+            logger.info(f"✅ Bin geometries generated: {geometries_added} successful, {geometries_failed} failed ({geom_time}ms)")
+            
+        except Exception as geom_error:
+            logger.warning(f"⚠️ Geometry generation failed, bins will have null geometry: {geom_error}")
+            # Continue without geometries - bins will still have properties
         
         geojson = {"type": "FeatureCollection", "features": geojson_features, "metadata": bin_build.metadata}
         
