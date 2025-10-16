@@ -14,6 +14,7 @@ Version: 1.6.0
 
 import pandas as pd
 import numpy as np
+import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Any, Protocol
 import logging
@@ -1716,6 +1717,14 @@ def analyze_density_segments(pace_data: pd.DataFrame,
                 summary_dict["flow_rate"] = None
                 summary_dict["fired_actions"] = []
             
+            # Calculate segment length from segment boundaries (Issue #248 fix)
+            length_km = max_km - min_km
+            length_m = length_km * 1000.0
+            
+            # Calculate expected spatial bin count
+            bin_km = config.step_km
+            spatial_bin_count = int(math.ceil(length_km / bin_km)) if length_km > 0 else 0
+            
             results["segments"][segment.segment_id] = {
                 "summary": summary_dict,
                 "time_series": density_results,
@@ -1724,7 +1733,16 @@ def analyze_density_segments(pace_data: pd.DataFrame,
                 "seg_label": d["seg_label"],
                 "flow_type": d["flow_type"],
                 "per_event": per_event_summaries,
-                "v2_context": v2_context if 'v2_context' in locals() else None
+                "v2_context": v2_context if 'v2_context' in locals() else None,
+                # Issue #248: Add segment dimensions for accurate bin generation
+                "start_km": min_km,
+                "end_km": max_km,
+                "length_m": length_m,
+                "length_km": length_km,
+                "spatial_bin_count": spatial_bin_count,
+                "bin_km": bin_km,
+                "width_m": d["width_m"],
+                "segment_type": d.get("segment_type", "road")
             }
             results["summary"]["processed_segments"] += 1
         else:

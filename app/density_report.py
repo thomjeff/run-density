@@ -610,7 +610,8 @@ def generate_density_report(
     time_window_s: float = DEFAULT_TIME_WINDOW_SECONDS,
     include_per_event: bool = True,
     output_dir: str = "reports",
-    enable_bin_dataset: bool = False
+    enable_bin_dataset: bool = False,
+    use_new_report_format: bool = True
 ) -> Dict[str, Any]:
     """
     Generate a comprehensive density analysis report.
@@ -937,20 +938,38 @@ def generate_density_report(
     # Regenerate report WITH operational intelligence now that bins exist (Issue #239 fix)
     if enable_bins:
         try:
-            print("📊 Regenerating density report with operational intelligence...")
-            report_content_final = generate_markdown_report(
-                results,
-                start_times,
-                include_per_event,
-                include_operational_intelligence=True,
-                output_dir=output_dir
-            )
-            
-            # Overwrite with enhanced report
-            with open(full_path, 'w', encoding='utf-8') as f:
-                f.write(report_content_final)
-            
-            print(f"📊 Density report (with operational intelligence) saved to: {full_path}")
+            if use_new_report_format:
+                print("📊 Generating new density report (Issue #246)...")
+                # Generate timestamped filename
+                timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+                timestamped_path = os.path.join(daily_folder_path, f"{timestamp}-Density.md")
+                
+                # Use the new report system
+                new_report_results = generate_new_density_report_issue246(
+                    reports_dir=daily_folder_path,
+                    output_path=timestamped_path,
+                    app_version="1.6.42"
+                )
+                report_content_final = new_report_results['report_content']
+                
+                # Update full_path to the timestamped version
+                full_path = timestamped_path
+                print(f"📊 New density report saved to: {full_path}")
+            else:
+                print("📊 Regenerating density report with operational intelligence...")
+                report_content_final = generate_markdown_report(
+                    results,
+                    start_times,
+                    include_per_event,
+                    include_operational_intelligence=True,
+                    output_dir=output_dir
+                )
+                
+                # Overwrite with enhanced report
+                with open(full_path, 'w', encoding='utf-8') as f:
+                    f.write(report_content_final)
+                
+                print(f"📊 Density report (with operational intelligence) saved to: {full_path}")
             
             # Generate tooltips.json if operational intelligence was added
             if '_operational_intelligence' in results:
@@ -1976,9 +1995,15 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
             if isinstance(results_segments, dict):
                 # Real density analysis returns segments as a dict
                 for seg_id, seg_data in results_segments.items():
-                    length_m = float(seg_data.get('length_m', 1000.0))  # Default 1km
-                    width_m = float(seg_data.get('width_m', 5.0))  # Default 5m width
+                    # Issue #248: Use actual segment length from density analysis
+                    length_m = float(seg_data.get('length_m', 1000.0))
+                    width_m = float(seg_data.get('width_m', 5.0))
                     coords = seg_data.get('coords', None)
+                    
+                    # Log if we're using default (indicates missing data)
+                    if 'length_m' not in seg_data:
+                        logger.warning(f"Segment {seg_id}: length_m not in seg_data, using default {length_m}m")
+                    
                     segments[seg_id] = SegmentInfo(seg_id, length_m, width_m, coords)
             elif isinstance(results_segments, list):
                 # Fallback for list format
@@ -2687,3 +2712,45 @@ def save_bin_dataset(bin_data: Dict[str, Any], output_dir: str) -> str:
     from .save_bins import save_bin_artifacts
     geojson_path, _ = save_bin_artifacts(bin_data, output_dir)
     return geojson_path
+
+
+def generate_new_density_report_issue246(
+    reports_dir: str,
+    output_path: Optional[str] = None,
+    app_version: str = "1.6.42"
+) -> Dict[str, Any]:
+    """
+    Generate the new density report per Issue #246 specification.
+    
+    This function integrates the new report system into the existing density_report.py
+    to replace the legacy report structure.
+    
+    Args:
+        reports_dir: Directory containing Parquet files
+        output_path: Path to save the report (optional)
+        app_version: Application version
+        
+    Returns:
+        Dictionary with report content and metadata
+    """
+    from .new_density_report import generate_new_density_report
+    from pathlib import Path
+    
+    # Convert string paths to Path objects
+    reports_path = Path(reports_dir)
+    output_path_obj = Path(output_path) if output_path else None
+    
+    # Generate the new report
+    results = generate_new_density_report(reports_path, output_path_obj, app_version)
+    
+    # Return in the format expected by the existing API
+    return {
+        'report_content': results['report_content'],
+        'stats': results['stats'],
+        'segment_summary': results['segment_summary'],
+        'flagged_bins': results['flagged_bins'],
+        'context': results['context'],
+        'generation_time': results['generation_time'],
+        'success': True,
+        'message': 'New density report generated successfully'
+    }
