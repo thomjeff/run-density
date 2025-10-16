@@ -1995,9 +1995,15 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
             if isinstance(results_segments, dict):
                 # Real density analysis returns segments as a dict
                 for seg_id, seg_data in results_segments.items():
-                    length_m = float(seg_data.get('length_m', 1000.0))  # Default 1km
-                    width_m = float(seg_data.get('width_m', 5.0))  # Default 5m width
+                    # Issue #248: Use actual segment length from density analysis
+                    length_m = float(seg_data.get('length_m', 1000.0))
+                    width_m = float(seg_data.get('width_m', 5.0))
                     coords = seg_data.get('coords', None)
+                    
+                    # Log if we're using default (indicates missing data)
+                    if 'length_m' not in seg_data:
+                        logger.warning(f"Segment {seg_id}: length_m not in seg_data, using default {length_m}m")
+                    
                     segments[seg_id] = SegmentInfo(seg_id, length_m, width_m, coords)
             elif isinstance(results_segments, list):
                 # Fallback for list format
