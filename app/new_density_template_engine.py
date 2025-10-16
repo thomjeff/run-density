@@ -79,7 +79,7 @@ class NewDensityTemplateEngine:
         content.append("")
         
         # 5. Course Overview
-        content.append(self._generate_course_overview(segments_df, segment_windows_df))
+        content.append(self._generate_course_overview(segments_df, segment_windows_df, bins_df))
         content.append("")
         content.append("---")
         content.append("")
@@ -204,26 +204,32 @@ class NewDensityTemplateEngine:
         ]
         return "\n".join(lines)
     
-    def _generate_course_overview(self, segments_df: pd.DataFrame, segment_windows_df: pd.DataFrame) -> str:
+    def _generate_course_overview(self, segments_df: pd.DataFrame, segment_windows_df: pd.DataFrame, bins_df: pd.DataFrame) -> str:
         """Generate course overview table."""
         lines = [
             "## Course Overview",
             "",
-            "| Segment | Label | Schema | Width (m) | Bins |",
-            "|----------|--------|--------|-----------|-------|"
+            "| Segment | Label | Schema | Width (m) | Spatial Bins |",
+            "|----------|--------|--------|-----------|--------------|"
         ]
         
-        # Sort segments by segment_id for course order
-        segments_sorted = segments_df.sort_values('segment_id')
+        # Calculate spatial bin counts per segment (unique start_km values)
+        spatial_bins = bins_df.groupby('segment_id')['start_km'].nunique().to_dict()
         
-        # Add bin counts (assuming 5 bins per segment for now - this should be calculated)
-        segments_sorted['bins'] = 5  # TODO: Calculate actual bin counts
+        # Sort segments by segment_id for course order
+        segments_sorted = segments_df.sort_values('segment_id').copy()
+        
+        # Add spatial bin counts
+        segments_sorted['spatial_bins'] = segments_sorted['segment_id'].map(spatial_bins).fillna(0).astype(int)
         
         for _, row in segments_sorted.iterrows():
             lines.append(
                 f"| {row['segment_id']} | {row['seg_label']} | {row['segment_type']} | "
-                f"{row['width_m']} | {row['bins']} |"
+                f"{row['width_m']} | {row['spatial_bins']} |"
             )
+        
+        lines.append("")
+        lines.append("> Note: Each spatial bin is analyzed across 80 time windows (30-second intervals), creating ~400 space-time bins per segment.")
         
         return "\n".join(lines)
     
