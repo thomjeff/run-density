@@ -109,13 +109,20 @@ def create_flagging_config(rulebook: Dict[str, Any], bins_df: pd.DataFrame) -> N
         config.rate_critical_threshold = flow_ref['critical']
     else:
         # Calculate thresholds from data (top 10% and 5% of rate_per_m_per_min)
-        if len(bins_df) > 0:
+        # Only use occupied bins (density > 0) for threshold calculation
+        occupied_bins = bins_df[bins_df['density'] > 0]
+        if len(occupied_bins) > 0:
             # Calculate rate_per_m_per_min for threshold calculation
             # Assume 3.0m width for threshold calculation
-            rate_per_m_per_min = (bins_df['rate'] / 3.0) * 60.0
+            rate_per_m_per_min = (occupied_bins['rate'] / 3.0) * 60.0
             config.rate_warn_threshold = rate_per_m_per_min.quantile(0.90)  # Top 10%
             config.rate_critical_threshold = rate_per_m_per_min.quantile(0.95)  # Top 5%
-            print(f"📊 Calculated rate thresholds: warn={config.rate_warn_threshold:.2f}, critical={config.rate_critical_threshold:.2f}")
+            print(f"📊 Calculated rate thresholds from {len(occupied_bins)} occupied bins: warn={config.rate_warn_threshold:.2f}, critical={config.rate_critical_threshold:.2f}")
+        else:
+            # Fallback to defaults if no occupied bins
+            config.rate_warn_threshold = 15.0
+            config.rate_critical_threshold = 25.0
+            print(f"⚠️ No occupied bins found, using default thresholds")
     
     return config
 

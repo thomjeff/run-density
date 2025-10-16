@@ -172,13 +172,14 @@ def apply_new_flagging(
     if 'bin_len_m' in result_df.columns:
         result_df = result_df[result_df['bin_len_m'] >= config.require_min_bin_len_m].copy()
     
-    # Apply flagging logic
+    # Apply flagging logic only to occupied bins (density > 0)
+    # Empty bins cannot be flagged
     flagging_results = result_df.apply(
         lambda row: classify_flag_reason_new(
             row['density'], 
             row['rate_per_m_per_min'], 
             config
-        ), 
+        ) if row['density'] > 0 else ('none', 'none'), 
         axis=1
     )
     
