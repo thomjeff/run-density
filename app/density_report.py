@@ -1213,7 +1213,7 @@ def generate_markdown_report(
     # Methodology section using v2.0 rulebook
     try:
         import yaml
-        with open("data/density_rulebook.yml", "r") as f:
+        with open("config/density_rulebook.yml", "r") as f:
             rulebook = yaml.safe_load(f)
         
         from io import StringIO
@@ -1354,7 +1354,7 @@ def generate_segment_section(
     # Try to load v2 rulebook and use new rendering
     try:
         import yaml
-        with open("data/density_rulebook.yml", "r") as f:
+        with open("config/density_rulebook.yml", "r") as f:
             rulebook = yaml.safe_load(f)
         
         # Check if this is v2 rulebook
@@ -1443,7 +1443,7 @@ def generate_template_narratives(segment_id: str, segment_data: Dict[str, Any]) 
     try:
         # Load the rulebook
         import yaml
-        with open("data/density_rulebook.yml", "r") as f:
+        with open("config/density_rulebook.yml", "r") as f:
             rulebook = yaml.safe_load(f)
         
         # Get density value from summary object
