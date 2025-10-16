@@ -1693,7 +1693,7 @@ def analyze_density_segments(pace_data: pd.DataFrame,
             try:
                 import yaml
                 
-                with open("data/density_rulebook.yml", 'r') as f:
+                with open("config/density_rulebook.yml", 'r') as f:
                     rulebook = yaml.safe_load(f)
                 
                 # Convert summary to dict first

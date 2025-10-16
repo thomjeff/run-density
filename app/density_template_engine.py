@@ -191,7 +191,7 @@ def get_schema_config(schema_name: str, rulebook: dict) -> Schema:
 class DensityTemplateEngine:
     """Basic template engine for density report narratives."""
     
-    def __init__(self, rulebook_path: str = "data/density_rulebook.yml"):
+    def __init__(self, rulebook_path: str = "config/density_rulebook.yml"):
         """Initialize the template engine with rulebook."""
         self.rulebook_path = rulebook_path
         self.templates = self._load_templates()
