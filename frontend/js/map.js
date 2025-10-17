@@ -161,10 +161,15 @@
   async function loadBinsForWindow(windowIdx) {
     console.log(`📥 Loading bins for window ${windowIdx}...`);
     
+    // Get severity filter for cache key (Phase 1.5)
+    const severityFilter = document.getElementById('severity-filter');
+    const severityValue = severityFilter ? severityFilter.value : 'any';
+    const cacheKey = `${windowIdx}_${severityValue}`;
+    
     // Check cache first
-    if (mapState.cachedWindows.has(windowIdx)) {
-      console.log(`  ✅ Using cached data for window ${windowIdx}`);
-      return mapState.cachedWindows.get(windowIdx);
+    if (mapState.cachedWindows.has(cacheKey)) {
+      console.log(`  ✅ Using cached data for window ${windowIdx} (severity: ${severityValue})`);
+      return mapState.cachedWindows.get(cacheKey);
     }
     
     try {
@@ -181,8 +186,8 @@
       
       console.log(`  📐 Bbox: ${bbox}`);
       
-      // Fetch bins from server
-      const url = `/api/map/bins?window_idx=${windowIdx}&bbox=${bbox}&severity=any`;
+      // Fetch bins from server (severityValue already set above)
+      const url = `/api/map/bins?window_idx=${windowIdx}&bbox=${bbox}&severity=${severityValue}`;
       const response = await fetch(url);
       
       if (!response.ok) {
@@ -191,11 +196,16 @@
       
       const geojson = await response.json();
       
-      // Cache the result
+      // Cache the result (include severity in cache key for Phase 1.5)
       manageCacheSize();
-      mapState.cachedWindows.set(windowIdx, geojson);
+      const cacheKey = `${windowIdx}_${severityValue}`;
+      mapState.cachedWindows.set(cacheKey, geojson);
       
       console.log(`✅ Loaded ${geojson.features.length} bins for window ${windowIdx}`);
+      
+      // Log performance metrics (Phase 1.5)
+      setTimeout(() => logPerformanceMetrics(), 100);
+      
       return geojson;
     } catch (error) {
       console.error(`❌ Failed to load bins for window ${windowIdx}:`, error);
@@ -344,13 +354,23 @@
   function featStyleBins(feature) {
     const props = feature.properties || {};
     const los = props.los_class || "A";
-    const severity = props.severity || "none";
+    const severity = props.flag_severity || "none";  // Issue #254: Use flag_severity
     
-    return {
-      weight: severity === "critical" ? 2 : 0.5,
-      color: severity === "critical" ? "#c0392b" : "#333",
+    // Severity-based styling (Phase 1.5)
+    const severityStyles = {
+      "critical": { borderColor: "#c0392b", borderWeight: 2.5, fillOpacity: 0.8 },  // Red border, high opacity
+      "caution":  { borderColor: "#e67e22", borderWeight: 2.0, fillOpacity: 0.7 },  // Orange border
+      "watch":    { borderColor: "#f1c40f", borderWeight: 1.5, fillOpacity: 0.6 },  // Yellow border
+      "none":     { borderColor: "#333",    borderWeight: 0.5, fillOpacity: 0.4 }   // Subtle
+    };
+    
+    const style = severityStyles[severity] || severityStyles["none"];
+    
+      return {
+      weight: style.borderWeight,
+      color: style.borderColor,
       fillColor: LOS_COLORS[los] || "#999",
-      fillOpacity: severity === "none" ? 0.4 : 0.7,
+      fillOpacity: style.fillOpacity,
       opacity: 0.8
     };
   }
@@ -379,12 +399,55 @@
   function showBinTooltip(e) {
     const props = e.target.feature.properties;
     
-    const html = `
-      <div class="tooltip-header"><b>${props.segment_id} · Bin ${props.start_km.toFixed(1)}-${props.end_km.toFixed(1)} km</b></div>
-      <div>Time: ${props.t_start_hhmm}–${props.t_end_hhmm}</div>
+    // Enhanced tooltip with P90 flagging metrics (Phase 1.5 + Issue #254)
+    const severity = props.flag_severity || 'none';
+    const reason = props.flag_reason || 'none';
+    
+    // Severity badge with color
+    const severityColors = {
+      'critical': '#c0392b',
+      'caution': '#e67e22',
+      'watch': '#f1c40f',
+      'none': '#95a5a6'
+    };
+    const sevColor = severityColors[severity] || '#95a5a6';
+    const sevBadge = `<span style="background: ${sevColor}; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;">${severity.toUpperCase()}</span>`;
+    
+    // Build metrics section
+    let metricsHtml = `
       <div>Density: ${fmt(props.density)} p/m² (LOS ${props.los_class})</div>
-      <div>Rate: ${fmt(props.rate)} p/s${props.util_pct ? `, Util: ${props.util_pct}%` : ''}</div>
-      <div>Severity: ${props.severity || 'none'}${props.flag_reason ? ` (${props.flag_reason})` : ''}</div>
+      <div>Rate: ${fmt(props.rate)} p/s`;
+    
+    if (props.rate_per_m_per_min) {
+      metricsHtml += ` (${fmt(props.rate_per_m_per_min)} p/m/min)`;
+    }
+    metricsHtml += `</div>`;
+    
+    // Utilization metrics (if available)
+    if (props.util_percentile !== null && props.util_percentile !== undefined) {
+      metricsHtml += `<div>Utilization: P${Math.round(props.util_percentile)}`;
+      if (props.util_percent) {
+        metricsHtml += ` (${Math.round(props.util_percent)}% of capacity)`;
+      }
+      metricsHtml += `</div>`;
+    }
+    
+    // Flag reason (if flagged)
+    let flagHtml = '';
+    if (severity !== 'none') {
+      flagHtml = `<div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #ddd;">
+        <strong>Flag Reason:</strong> ${reason}
+      </div>`;
+    }
+    
+    const html = `
+      <div class="tooltip-header">
+        <b>${props.segment_id} · ${props.start_km.toFixed(1)}-${props.end_km.toFixed(1)} km</b>
+      </div>
+      <div style="margin: 4px 0;">${sevBadge}</div>
+      <div>Time: ${props.t_start_hhmm}–${props.t_end_hhmm} (Window ${props.window_idx})</div>
+      ${metricsHtml}
+      ${flagHtml}
     `;
     
     L.popup({ className: 'bin-popup' })
@@ -395,6 +458,26 @@
 
   function fmt(x) {
     return (x == null || isNaN(x)) ? "—" : Number(x).toFixed(3);
+  }
+
+  // Performance monitoring (Phase 1.5)
+  function logPerformanceMetrics() {
+    if (mapState.activeLayers.bins) {
+      const binCount = mapState.activeLayers.bins.getLayers().length;
+      const cacheSize = mapState.cachedWindows.size;
+      const memoryUsage = performance.memory ? 
+        `${Math.round(performance.memory.usedJSHeapSize / 1024 / 1024)}MB` : 'N/A';
+      
+      console.log(`📊 Performance: ${binCount} bins, ${cacheSize} cached windows, ${memoryUsage} memory`);
+      
+      // Check payload size (approximate)
+      if (mapState.cachedWindows.size > 0) {
+        const latestWindow = Array.from(mapState.cachedWindows.values()).pop();
+        const payloadSize = JSON.stringify(latestWindow).length;
+        const payloadKB = Math.round(payloadSize / 1024);
+        console.log(`📦 Latest payload: ${payloadKB}KB (target: ≤800KB)`);
+      }
+    }
   }
 
   function fmtWindowToTime(windowIdx) {
@@ -542,7 +625,51 @@
     // Server-side severity filtering happens in loadBinsForWindow
     console.log('🔍 Applying filters...');
     
-    // Refresh bins with current filter settings
+    // Get current filter values (Phase 1.5)
+    const severityFilter = document.getElementById('severity-filter');
+    const prefixFilter = document.getElementById('prefix-filter');
+    const losFilter = document.getElementById('los-filter');
+    
+    const severityValue = severityFilter ? severityFilter.value : 'any';
+    const prefixValue = prefixFilter ? prefixFilter.value : 'all';
+    const losValue = losFilter ? losFilter.value : 'all';
+    
+    console.log(`  📊 Filters: severity=${severityValue}, prefix=${prefixValue}, los=${losValue}`);
+    
+    // Apply client-side filters to current bins layer
+    if (mapState.activeLayers.bins) {
+      mapState.activeLayers.bins.eachLayer(function(layer) {
+        const feature = layer.feature;
+        const props = feature.properties || {};
+        
+        // Check if bin passes filters
+        let showBin = true;
+        
+        // Segment prefix filter
+        if (prefixValue !== 'all') {
+          const segmentId = props.segment_id || '';
+          showBin = showBin && segmentId.startsWith(prefixValue);
+        }
+        
+        // LOS filter
+        if (losValue !== 'all') {
+          const losClass = props.los_class || 'A';
+          showBin = showBin && losClass === losValue;
+        }
+        
+        // Update layer visibility
+        if (showBin) {
+          layer.setStyle(featStyleBins(feature));
+          layer.setOpacity(1.0);
+        } else {
+          layer.setOpacity(0.0);  // Hide but keep in layer for performance
+        }
+      });
+      
+      console.log(`  ✅ Applied client-side filters to bins layer`);
+    }
+    
+    // Refresh bins with current filter settings (for server-side severity filter)
     refreshBinsForWindow();
   }
 
