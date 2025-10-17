@@ -2053,6 +2053,85 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
         # 5) Build geometries + GeoJSON
         geojson_features = to_geojson_features(bin_build.features)
         
+        # Issue #254: Apply unified flagging with utilization percentile
+        logger.info(f"🎯 Applying unified flagging policy to {len(geojson_features)} bins...")
+        flag_start = time.monotonic()
+        
+        try:
+            from . import rulebook
+            from .utilization import add_utilization_percentile
+            from .schema_resolver import resolve_schema
+            import pandas as pd
+            
+            # Convert features to DataFrame for vectorized processing
+            flag_rows = []
+            for idx, (feature, bin_feature) in enumerate(zip(geojson_features, bin_build.features)):
+                props = feature["properties"]
+                
+                # Compute window_idx by finding matching time window
+                window_idx = 0
+                for w_idx, (t_start, t_end, duration) in enumerate(time_windows):
+                    if bin_feature.t_start == t_start and bin_feature.t_end == t_end:
+                        window_idx = w_idx
+                        break
+                
+                flag_rows.append({
+                    "feature_idx": idx,
+                    "segment_id": props["segment_id"],
+                    "bin_id": props["bin_id"],
+                    "start_km": props["start_km"],
+                    "end_km": props["end_km"],
+                    "t_start": props["t_start"],
+                    "t_end": props["t_end"],
+                    "density": props["density"],
+                    "rate": props["rate"],  # p/s
+                    "los_class": props["los_class"],
+                    "bin_size_km": props["bin_size_km"],
+                    # Add missing fields for flagging
+                    "window_idx": window_idx,
+                    "width_m": next((s.width_m for s in segments if s.segment_id == props["segment_id"]), 5.0),
+                    "schema_key": resolve_schema(props["segment_id"], segments_dict),
+                })
+            
+            flags_df = pd.DataFrame(flag_rows)
+            
+            # Compute utilization percentile per window (course-wide)
+            flags_df = add_utilization_percentile(flags_df, cohort="window")
+            
+            # Apply rulebook flagging to each bin
+            flag_results = []
+            for _, row in flags_df.iterrows():
+                result = rulebook.evaluate_flags(
+                    density_pm2=row["density"],
+                    rate_p_s=row["rate"],
+                    width_m=row["width_m"],
+                    schema_key=row["schema_key"],
+                    util_percentile=row.get("util_percentile")
+                )
+                flag_results.append(result)
+            
+            # Add flag results back to GeoJSON features
+            for idx, (feature, result) in enumerate(zip(geojson_features, flag_results)):
+                props = feature["properties"]
+                props["flag_severity"] = result.severity
+                props["flag_reason"] = result.flag_reason
+                props["rate_per_m_per_min"] = result.rate_per_m_per_min
+                props["util_percent"] = result.util_percent
+                props["util_percentile"] = result.util_percentile
+                props["window_idx"] = flags_df.iloc[idx]["window_idx"]
+                props["schema_key"] = flags_df.iloc[idx]["schema_key"]
+                props["width_m"] = flags_df.iloc[idx]["width_m"]
+                # Update LOS from rulebook (may differ from bins_accumulator default)
+                props["los_class"] = result.los_class
+            
+            flag_time = int((time.monotonic() - flag_start) * 1000)
+            flagged_count = sum(1 for r in flag_results if r.severity != "none")
+            logger.info(f"✅ Flagging complete: {flagged_count}/{len(flag_results)} bins flagged ({flag_time}ms)")
+            
+        except Exception as flag_error:
+            logger.warning(f"⚠️ Flagging failed, bins will have no flags: {flag_error}")
+            # Continue without flags - bins will still have base properties
+        
         # Issue #249: Add geometry backfill using bin_geometries.py
         logger.info("🗺️ Generating bin polygon geometries...")
         geom_start = time.monotonic()
@@ -2642,9 +2721,19 @@ def save_bin_artifacts_legacy(bin_data: Dict[str, Any], output_dir: str) -> tupl
                     "end_km": float(props.get("end_km", 0.0)),
                     "t_start": str(props.get("t_start", "")),
                     "t_end": str(props.get("t_end", "")),
+                    "window_idx": int(props.get("window_idx", 0)),
                     "density": float(props.get("density", 0.0)),
                     "rate": float(props.get("rate", 0.0)),
                     "los_class": str(props.get("los_class", "A")),
+                    # Issue #254: Unified flagging fields
+                    "flag_severity": str(props.get("flag_severity", "none")),
+                    "flag_reason": str(props.get("flag_reason") or ""),
+                    "rate_per_m_per_min": float(props.get("rate_per_m_per_min") or 0.0),
+                    "util_percent": float(props.get("util_percent") or 0.0),
+                    "util_percentile": float(props.get("util_percentile") or 0.0),
+                    "schema_key": str(props.get("schema_key", "on_course_open")),
+                    "width_m": float(props.get("width_m", 5.0)),
+                    # Original fields
                     "bin_size_km": 0.1,  # Use constant for now
                     "schema_version": BIN_SCHEMA_VERSION,
                     "geometry": geometry_wkb
@@ -2664,9 +2753,19 @@ def save_bin_artifacts_legacy(bin_data: Dict[str, Any], output_dir: str) -> tupl
                     ('end_km', pa.float64()),
                     ('t_start', pa.string()),
                     ('t_end', pa.string()),
+                    ('window_idx', pa.int64()),
                     ('density', pa.float64()),
                     ('rate', pa.float64()),
                     ('los_class', pa.string()),
+                    # Issue #254: Unified flagging fields
+                    ('flag_severity', pa.string()),
+                    ('flag_reason', pa.string()),
+                    ('rate_per_m_per_min', pa.float64()),
+                    ('util_percent', pa.float64()),
+                    ('util_percentile', pa.float64()),
+                    ('schema_key', pa.string()),
+                    ('width_m', pa.float64()),
+                    # Original fields
                     ('bin_size_km', pa.float64()),
                     ('schema_version', pa.string()),
                     ('geometry', pa.binary())

@@ -50,9 +50,10 @@ class FlagResult:
     """Result of flag evaluation for a single bin."""
     los_class: str                      # "A".."F"
     rate_per_m_per_min: Optional[float] # None if width <= 0 or rate missing
-    util_percent: Optional[float]       # None if no flow_ref.critical
-    severity: str                       # "none"|"watch"|"critical"
-    flag_reason: Optional[str]          # None|"density"|"rate"|"both"
+    util_percent: Optional[float]       # % of flow_ref.critical (schema capacity)
+    util_percentile: Optional[float]    # Percentile rank within cohort (0-100)
+    severity: str                       # "none"|"watch"|"caution"|"critical"
+    flag_reason: Optional[str]          # None|"density"|"utilization"|"rate"|"both"
 
 # ---------- Loader / SSOT ----------
 
@@ -86,7 +87,31 @@ def _load_yaml(path: Optional[str] = None) -> Dict[str, Any]:
 def version(path: Optional[str] = None) -> str:
     """Get rulebook version."""
     data = _load_yaml(path)
-    return str(data.get("version", "unversioned"))
+    # Try meta.version first, fallback to version
+    meta = data.get("meta", {})
+    return str(meta.get("version") or data.get("version", "unversioned"))
+
+@functools.lru_cache(maxsize=1)
+def get_policy(path: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Get global policy configuration.
+    
+    Returns policy dict with:
+    - density_watch_at: LOS threshold for watch flagging (e.g., "C")
+    - density_critical_at: LOS threshold for critical flagging (e.g., "E")
+    - utilization_pctile: Percentile threshold for utilization flagging (e.g., 95)
+    - utilization_cohort: Cohort for percentile calculation (e.g., "window")
+    """
+    data = _load_yaml(path)
+    policy = data.get("globals", {}).get("policy", {})
+    
+    # Defaults matching user's operational baseline
+    return {
+        "density_watch_at": policy.get("density_watch_at", "C"),
+        "density_critical_at": policy.get("density_critical_at", "E"),
+        "utilization_pctile": policy.get("utilization_pctile", 95),
+        "utilization_cohort": policy.get("utilization_cohort", "window")
+    }
 
 @functools.lru_cache(maxsize=1)
 def _threshold_index(path: Optional[str] = None) -> Dict[str, SchemaThresholds]:
@@ -186,6 +211,22 @@ def classify_los(density_pm2: float, bands: LosBands) -> str:
     if d <= bands.E: return "E"
     return "F"  # > E → F
 
+def los_ge(los_class: str, threshold: str) -> bool:
+    """
+    Check if LOS class is greater than or equal to threshold.
+    
+    LOS ordering: A < B < C < D < E < F
+    
+    Args:
+        los_class: Current LOS (e.g., "C")
+        threshold: Threshold LOS (e.g., "C")
+        
+    Returns:
+        True if los_class >= threshold
+    """
+    los_order = {"A": 0, "B": 1, "C": 2, "D": 3, "E": 4, "F": 5}
+    return los_order.get(los_class, 0) >= los_order.get(threshold, 0)
+
 def _severity_from_value(val: float, warn: Optional[float], crit: Optional[float]) -> Optional[str]:
     """
     Determine severity level from a value and thresholds.
@@ -211,77 +252,101 @@ def evaluate_flags(
     rate_p_s: Optional[float],
     width_m: Optional[float],
     schema_key: str,
+    util_percentile: Optional[float] = None,  # NEW: precomputed percentile rank
     path: Optional[str] = None
 ) -> FlagResult:
     """
-    Evaluate flagging for a single bin.
+    Evaluate flagging for a single bin using unified policy (Issue #254 v2.2).
     
-    This is the MAIN function that all consumers should use.
+    Implements ChatGPT's specification:
+    - Density trigger: LOS >= C (watch), LOS >= E (critical)
+    - Utilization trigger: percentile >= P95 (watch)
+    - Rate trigger: Schema-specific flow_ref thresholds
+    - Combined severity: CRITICAL > CAUTION > WATCH > NONE
     
     Args:
         density_pm2: Areal density in persons per square meter
         rate_p_s: Throughput rate in persons per second (None if no flow)
         width_m: Segment width in meters (None or <=0 if unknown)
         schema_key: Segment schema key (e.g., "start_corral", "on_course_narrow")
-        path: Optional path to rulebook YAML (defaults to config/density_rulebook.yml)
+        util_percentile: Precomputed percentile rank (0-100) within cohort
+        path: Optional path to rulebook YAML
     
     Returns:
-        FlagResult with los_class, rate_per_m_per_min, util_percent, severity, flag_reason
+        FlagResult with los_class, rpm, util_percent, util_percentile, severity, flag_reason
     """
     th = get_thresholds(schema_key, path)
+    policy = get_policy(path)
     
-    # Classify LOS from density
+    # 1) Classify LOS from density
     los = classify_los(density_pm2, th.los)
 
-    # Compute rate per meter per minute if possible
+    # 2) Compute rate per meter per minute
     rpm: Optional[float] = None
     if rate_p_s is not None and width_m and width_m > 0:
         rpm = (float(rate_p_s) / float(width_m)) * 60.0
     
-    # Compute utilization vs flow_ref.critical if available
-    util: Optional[float] = None
+    # 3) Compute utilization vs flow_ref.critical (schema capacity)
+    util_vs_crit: Optional[float] = None
     if rpm is not None and th.flow_ref and th.flow_ref.critical:
-        util = 100.0 * rpm / th.flow_ref.critical
+        util_vs_crit = 100.0 * rpm / th.flow_ref.critical
 
-    # Density-based flag: E/F are critical, D is watch, A/B/C are none
-    # (Adjust if your rulebook has explicit density warn/critical separate from LOS)
-    density_flag = None
-    if los in ("E", "F"):
-        density_flag = "critical"
-    elif los == "D":
-        density_flag = "watch"
-
-    # Rate-based flag: check against schema thresholds
+    # 4) Independent triggers
+    # Density trigger: from policy (watch at C, critical at E)
+    density_watch = los_ge(los, policy["density_watch_at"])
+    density_critical = los_ge(los, policy["density_critical_at"])
+    
+    # Utilization trigger: percentile >= P95
+    util_watch = (util_percentile is not None and util_percentile >= policy["utilization_pctile"])
+    
+    # Rate trigger: schema-specific flow_ref
     rate_flag = None
     if rpm is not None and th.flow_ref:
         rate_flag = _severity_from_value(rpm, th.flow_ref.warn, th.flow_ref.critical)
 
-    # Combine severity: highest level wins
-    if density_flag == "critical" or rate_flag == "critical":
+    # 5) Combine per severity rules (ChatGPT's specification)
+    # CRITICAL: (LOS ≥ C AND util ≥ P95) OR rate critical OR (density critical)
+    # CAUTION:  LOS ≥ C ONLY OR (LOS ≥ C AND rate watch)
+    # WATCH:    util ≥ P95 ONLY OR rate watch ONLY
+    # NONE:     else
+    
+    severity = "none"
+    reason = None
+    
+    if (density_watch and util_watch) or density_critical or rate_flag == "critical":
         severity = "critical"
-    elif density_flag == "watch" or rate_flag == "watch":
+        # Determine reason
+        if density_watch and util_watch:
+            reason = "both"
+        elif density_critical and rate_flag == "critical":
+            reason = "both"
+        elif rate_flag == "critical":
+            reason = "rate"
+        elif density_critical:
+            reason = "density"
+        else:
+            reason = "both"  # density_watch + util_watch
+            
+    elif density_watch or rate_flag == "watch":
+        severity = "caution"
+        if density_watch and rate_flag == "watch":
+            reason = "both"
+        elif density_watch:
+            reason = "density"
+        else:
+            reason = "rate"
+            
+    elif util_watch:
         severity = "watch"
-    else:
-        severity = "none"
-
-    # Determine reason
-    reason = _combine_reason(density_flag, rate_flag)
+        reason = "utilization"
 
     return FlagResult(
         los_class=los,
         rate_per_m_per_min=(None if rpm is None else float(rpm)),
-        util_percent=(None if util is None else float(util)),
+        util_percent=(None if util_vs_crit is None else float(util_vs_crit)),
+        util_percentile=util_percentile,
         severity=severity,
         flag_reason=reason
     )
 
-def _combine_reason(density_flag: Optional[str], rate_flag: Optional[str]) -> Optional[str]:
-    """Combine density and rate flags into a reason code."""
-    if density_flag and rate_flag:
-        return "both"
-    if density_flag:
-        return "density"
-    if rate_flag:
-        return "rate"
-    return None
 

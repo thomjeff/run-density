@@ -177,18 +177,67 @@ def apply_new_flagging(
         result_df['seg_label'] = result_df['segment_id']
         result_df['schema_key'] = result_df['segment_id'].apply(lambda sid: resolve_schema(sid, None))
     
-    # Apply rulebook evaluation
+    # Issue #254: Compute utilization percentile before flagging
+    try:
+        from .utilization import add_utilization_percentile
+        from datetime import datetime
+        
+        # Compute window_idx from t_start (if available)
+        if 't_start' in result_df.columns:
+            def compute_window_idx(t_start_str):
+                """Compute window index from ISO timestamp."""
+                try:
+                    if not t_start_str or pd.isna(t_start_str):
+                        return 0
+                    # Parse ISO timestamp
+                    dt = datetime.fromisoformat(t_start_str.replace('Z', '+00:00'))
+                    # Assume race starts at 07:00
+                    race_start = datetime(dt.year, dt.month, dt.day, 7, 0, 0, tzinfo=dt.tzinfo)
+                    elapsed_seconds = (dt - race_start).total_seconds()
+                    
+                    # Detect window duration from data (2-minute vs 30-second windows)
+                    # If time ends in :00, :02, :04, etc. it's 2-minute windows
+                    # Otherwise it's 30-second windows
+                    if dt.minute % 2 == 0 and dt.second == 0:
+                        window_duration = 120  # 2-minute windows
+                    else:
+                        window_duration = 30   # 30-second windows
+                    
+                    return max(0, int(elapsed_seconds // window_duration))
+                except Exception:
+                    return 0
+            
+            result_df['window_idx'] = result_df['t_start'].apply(compute_window_idx)
+        else:
+            result_df['window_idx'] = 0
+        
+        # Add utilization percentile (Issue #254 v2.2)
+        # First ensure rate_per_m_per_min exists (required by add_utilization_percentile)
+        from .utilization import ensure_rpm
+        result_df = ensure_rpm(result_df)
+        
+        # Now compute percentile
+        result_df = add_utilization_percentile(result_df, cohort="window")
+        logger.info(f"Computed utilization percentiles: P95={result_df['util_percentile'].quantile(0.95):.1f}")
+    except Exception as util_error:
+        logger.warning(f"Could not compute utilization percentile: {util_error}")
+        result_df['util_percentile'] = None
+        result_df['window_idx'] = 0
+    
+    # Apply rulebook evaluation with percentile
     def evaluate_row(row):
         result = rulebook.evaluate_flags(
             density_pm2=row['density'],
             rate_p_s=row.get('rate'),
             width_m=row.get('width_m', 3.0),
-            schema_key=row.get('schema_key', 'on_course_open')
+            schema_key=row.get('schema_key', 'on_course_open'),
+            util_percentile=row.get('util_percentile')  # NEW: pass percentile
         )
         return pd.Series({
             'los': result.los_class,
             'rate_per_m_per_min': result.rate_per_m_per_min,
             'util_percent': result.util_percent,
+            'util_percentile': result.util_percentile,  # NEW: preserve percentile
             'flag_severity': result.severity,
             'flag_reason': result.flag_reason
         })
@@ -197,6 +246,7 @@ def apply_new_flagging(
     result_df['los'] = eval_results['los']
     result_df['rate_per_m_per_min'] = eval_results['rate_per_m_per_min']
     result_df['util_percent'] = eval_results['util_percent']
+    result_df['util_percentile'] = eval_results['util_percentile']  # NEW: add to results
     result_df['flag_severity'] = eval_results['flag_severity']
     result_df['flag_reason'] = eval_results['flag_reason']
     
