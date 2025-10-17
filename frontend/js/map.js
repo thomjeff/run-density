@@ -173,7 +173,7 @@
       const sw = bounds.getSouthWest();
       const ne = bounds.getNorthEast();
       
-      // Convert lat/lng to Web Mercator meters
+      // Convert lat/lng to Web Mercator meters (zoom level 0 = meters)
       const swMercator = L.CRS.EPSG3857.latLngToPoint(sw, 0);
       const neMercator = L.CRS.EPSG3857.latLngToPoint(ne, 0);
       
@@ -274,12 +274,18 @@
   }
 
   async function loadFlaggedBinsForWindow(windowIdx) {
+    // Use same bbox calculation as loadBinsForWindow
     const bounds = map.getBounds();
-    const sw = map.project(bounds.getSouthWest(), map.getZoom());
-    const ne = map.project(bounds.getNorthEast(), map.getZoom());
-    const bbox = `${sw.x},${sw.y},${ne.x},${ne.y}`;
+    const sw = bounds.getSouthWest();
+    const ne = bounds.getNorthEast();
     
-    const url = `/api/map/bins?window_idx=${windowIdx}&bbox=${bbox}&severity=critical,watch`;
+    // Convert lat/lng to Web Mercator meters (zoom level 0 = meters)
+    const swMercator = L.CRS.EPSG3857.latLngToPoint(sw, 0);
+    const neMercator = L.CRS.EPSG3857.latLngToPoint(ne, 0);
+    
+    const bbox = `${swMercator.x},${swMercator.y},${neMercator.x},${neMercator.y}`;
+    
+    const url = `/api/map/bins?window_idx=${windowIdx}&bbox=${bbox}&severity=any`;
     const response = await fetch(url);
     const geojson = await response.json();
     
