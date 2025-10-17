@@ -17,6 +17,7 @@ import numpy as np
 
 # Issue #254: Use centralized rulebook for all flagging
 from . import rulebook
+from .schema_resolver import resolve_schema
 
 logger = logging.getLogger(__name__)
 
@@ -158,18 +159,23 @@ def apply_new_flagging(
             result_df['width_m'] = result_df['segment_id'].map(seg_lookup['width_m']).fillna(3.0)
             result_df['seg_label'] = result_df['segment_id'].map(seg_lookup['seg_label']).fillna(result_df['segment_id'])
             
-            if 'segment_type' in segments_df.columns:
-                result_df['schema_key'] = result_df['segment_id'].map(seg_lookup['segment_type']).fillna('on_course_open')
-            else:
-                result_df['schema_key'] = 'on_course_open'
+            # Resolve schema using schema_resolver (Issue #254)
+            def get_schema(segment_id):
+                segment_type = None
+                if 'segment_type' in segments_df.columns:
+                    lookup = seg_lookup['segment_type'].get(segment_id)
+                    segment_type = lookup if pd.notna(lookup) else None
+                return resolve_schema(segment_id, segment_type)
+            
+            result_df['schema_key'] = result_df['segment_id'].apply(get_schema)
         else:
             result_df['width_m'] = 3.0
             result_df['seg_label'] = result_df['segment_id']
-            result_df['schema_key'] = 'on_course_open'
+            result_df['schema_key'] = result_df['segment_id'].apply(lambda sid: resolve_schema(sid, None))
     else:
         result_df['width_m'] = 3.0
         result_df['seg_label'] = result_df['segment_id']
-        result_df['schema_key'] = 'on_course_open'
+        result_df['schema_key'] = result_df['segment_id'].apply(lambda sid: resolve_schema(sid, None))
     
     # Apply rulebook evaluation
     def evaluate_row(row):
@@ -199,6 +205,18 @@ def apply_new_flagging(
     watch = len(result_df[result_df['flag_severity'] == 'watch'])
     
     logger.info(f"Rulebook flagging: {flagged}/{len(result_df)} flagged ({critical} critical, {watch} watch) = {flagged/len(result_df)*100:.1f}%")
+    
+    # Log schema distribution (Issue #254 telemetry)
+    if 'schema_key' in result_df.columns:
+        schema_counts = result_df['schema_key'].value_counts().to_dict()
+        logger.info(f"Schema distribution: {schema_counts}")
+        
+        # Log flagging by schema
+        for schema in schema_counts.keys():
+            schema_bins = result_df[result_df['schema_key'] == schema]
+            schema_flagged = len(schema_bins[schema_bins['flag_severity'] != 'none'])
+            if schema_flagged > 0:
+                logger.info(f"  {schema}: {schema_flagged}/{len(schema_bins)} flagged ({schema_flagged/len(schema_bins)*100:.1f}%)")
     
     return result_df
 
