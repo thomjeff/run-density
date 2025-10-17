@@ -58,6 +58,22 @@ class FlagResult:
 
 _DEFAULT_RULEBOOK_PATH = pathlib.Path("config/density_rulebook.yml")
 
+def _extract_max(threshold_obj, default: float) -> float:
+    """
+    Extract max value from threshold object.
+    
+    Handles both formats:
+    - Simple number: 0.36
+    - Dict with min/max: {min: 0.0, max: 0.36, label: "..."}
+    """
+    if threshold_obj is None:
+        return default
+    if isinstance(threshold_obj, (int, float)):
+        return float(threshold_obj)
+    if isinstance(threshold_obj, dict) and 'max' in threshold_obj:
+        return float(threshold_obj['max'])
+    return default
+
 @functools.lru_cache(maxsize=1)
 def _load_yaml(path: Optional[str] = None) -> Dict[str, Any]:
     """Load rulebook YAML (cached)."""
@@ -77,31 +93,39 @@ def _threshold_index(path: Optional[str] = None) -> Dict[str, SchemaThresholds]:
     """Build index of schema thresholds from rulebook (cached)."""
     data = _load_yaml(path)
 
-    # Expected YAML structure:
-    # version: "2.1"
-    # schemas:
-    #   start_corral:
-    #     label: "Start Corral"
-    #     los: { A: 0.50, B: 0.90, C: 1.60, D: 2.30, E: 3.00, F: 99.0 }
-    #     flow_ref: { warn: 500, critical: 600 }   # p/min/m
-    #   on_course_narrow:
-    #     los: {...}
-    #     flow_ref: { warn: 300, critical: 400 }
+    # Load global LOS thresholds (fallback for schemas without their own)
+    global_los_cfg = data.get("globals", {}).get("los_thresholds", {})
+    default_bands = LosBands(
+        A=float(_extract_max(global_los_cfg.get("A"), 0.36)),
+        B=float(_extract_max(global_los_cfg.get("B"), 0.54)),
+        C=float(_extract_max(global_los_cfg.get("C"), 0.72)),
+        D=float(_extract_max(global_los_cfg.get("D"), 1.08)),
+        E=float(_extract_max(global_los_cfg.get("E"), 1.63)),
+        F=float(_extract_max(global_los_cfg.get("F"), 999.0)),
+    )
+    
+    logger.info(f"Global LOS bands: A={default_bands.A}, B={default_bands.B}, C={default_bands.C}, D={default_bands.D}, E={default_bands.E}, F={default_bands.F}")
 
     out: Dict[str, SchemaThresholds] = {}
     schemas = data.get("schemas", {})
     
     for key, cfg in schemas.items():
-        los_cfg = cfg.get("los", {})
-        # Ensure all bands exist (F can be large if omitted)
-        bands = LosBands(
-            A=float(los_cfg.get("A", 0.5)),
-            B=float(los_cfg.get("B", 0.9)),
-            C=float(los_cfg.get("C", 1.6)),
-            D=float(los_cfg.get("D", 2.3)),
-            E=float(los_cfg.get("E", 3.0)),
-            F=float(los_cfg.get("F", 99.0)),
-        )
+        # Use schema-specific LOS if present, otherwise use global defaults
+        if "los_thresholds" in cfg:
+            los_cfg = cfg["los_thresholds"]
+            bands = LosBands(
+                A=float(_extract_max(los_cfg.get("A"), default_bands.A)),
+                B=float(_extract_max(los_cfg.get("B"), default_bands.B)),
+                C=float(_extract_max(los_cfg.get("C"), default_bands.C)),
+                D=float(_extract_max(los_cfg.get("D"), default_bands.D)),
+                E=float(_extract_max(los_cfg.get("E"), default_bands.E)),
+                F=float(_extract_max(los_cfg.get("F"), default_bands.F)),
+            )
+            logger.info(f"Schema {key}: Using schema-specific LOS bands")
+        else:
+            # Use global defaults
+            bands = default_bands
+            logger.info(f"Schema {key}: Using global LOS bands")
         
         # Load flow_ref if present
         fr = None
