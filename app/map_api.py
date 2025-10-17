@@ -151,6 +151,125 @@ async def get_map_manifest():
         raise HTTPException(status_code=500, detail=f"Error getting map manifest: {e}")
 
 
+@router.get("/map/segments")
+async def get_map_segments():
+    """
+    Get segment corridors for map visualization (Issue #249 Phase 1.5).
+    
+    Returns segments as GeoJSON LineStrings with:
+    - GPX centerline geometry
+    - Segment metadata (label, schema, width)
+    - Aggregated stats (peak density, worst window, etc.)
+    
+    Used for low-zoom overview and context layer at all zooms.
+    """
+    try:
+        import pandas as pd
+        from pathlib import Path
+        from shapely.geometry import mapping
+        
+        # Find latest data
+        reports_dir = Path("reports")
+        latest_date_dir = None
+        if reports_dir.exists():
+            date_dirs = sorted([d for d in reports_dir.iterdir() if d.is_dir()], reverse=True)
+            for date_dir in date_dirs:
+                if (date_dir / "bins.parquet").exists():
+                    latest_date_dir = date_dir
+                    break
+        
+        if not latest_date_dir:
+            raise HTTPException(status_code=404, detail="No segment data available")
+        
+        # Load segments metadata from CSV (needed for event-specific km ranges)
+        segments_file = Path("data/segments.csv")
+        if not segments_file.exists():
+            raise HTTPException(status_code=404, detail="Segments metadata not found")
+        
+        segments_df = pd.read_csv(segments_file)
+        
+        # Load GPX centerlines
+        try:
+            from .gpx_processor import load_all_courses, generate_segment_coordinates
+            from .io.loader import load_segments
+        except ImportError:
+            from gpx_processor import load_all_courses, generate_segment_coordinates
+            from io.loader import load_segments
+        
+        courses = load_all_courses("data")
+        
+        # Convert to format for GPX processor
+        segments_list = []
+        for _, seg in segments_df.iterrows():
+            segments_list.append({
+                "seg_id": seg['seg_id'],
+                "segment_label": seg.get('seg_label', seg['seg_id']),
+                "10K": seg.get('10K', 'n'),
+                "half": seg.get('half', 'n'),
+                "full": seg.get('full', 'n'),
+                "10K_from_km": seg.get('10K_from_km'),
+                "10K_to_km": seg.get('10K_to_km'),
+                "half_from_km": seg.get('half_from_km'),
+                "half_to_km": seg.get('half_to_km'),
+                "full_from_km": seg.get('full_from_km'),
+                "full_to_km": seg.get('full_to_km')
+            })
+        
+        # Generate centerlines
+        segments_with_coords = generate_segment_coordinates(courses, segments_list)
+        
+        logger.info(f"Generated {len(segments_with_coords)} segment centerlines")
+        
+        # Build GeoJSON features
+        features = []
+        for seg_coords in segments_with_coords:
+            if not seg_coords.get('line_coords'):
+                logger.warning(f"Segment {seg_coords.get('seg_id')}: No line_coords")
+                continue
+            if seg_coords.get('coord_issue'):
+                logger.warning(f"Segment {seg_coords.get('seg_id')}: Coord issue - {seg_coords.get('error', 'unknown')}")
+                continue
+            
+            seg_id = seg_coords['seg_id']
+            seg_meta = segments_df[segments_df['seg_id'] == seg_id].iloc[0]
+            
+            # Convert coords to GeoJSON LineString
+            coordinates = [list(coord) for coord in seg_coords['line_coords']]
+            
+            feature = {
+                "type": "Feature",
+                "properties": {
+                    "segment_id": seg_id,
+                    "segment_label": seg_coords['segment_label'],
+                    "schema_key": seg_meta.get('segment_type', 'on_course_open'),
+                    "width_m": float(seg_meta.get('width_m', 5.0)),
+                    "from_km": seg_coords['from_km'],
+                    "to_km": seg_coords['to_km'],
+                    "length_km": seg_coords['to_km'] - seg_coords['from_km']
+                },
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": coordinates
+                }
+            }
+            features.append(feature)
+        
+        return JSONResponse(content={
+            "type": "FeatureCollection",
+            "features": features,
+            "metadata": {
+                "count": len(features),
+                "source": "gpx_processor"
+            }
+        })
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting map segments: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting map segments: {e}")
+
+
 @router.get("/map/bins")
 async def get_map_bins(
     window_idx: int = Query(..., description="Time window index (0-based)"),
