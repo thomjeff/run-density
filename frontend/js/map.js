@@ -49,7 +49,7 @@
       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 20,
         attribution: '&copy; OpenStreetMap contributors'
-      }).addTo(map);
+    }).addTo(map);
       
       // Load manifest
       await loadManifest();
@@ -107,34 +107,38 @@
     console.log('📥 Loading segments layer...');
     
     try {
-      // Use existing /api/segments endpoint (enhanced with OI from Issue #237)
-      const response = await fetch('/api/segments');
+      // Use new /api/map/segments endpoint (Issue #249 Phase 1.5)
+      const response = await fetch('/api/map/segments');
       if (!response.ok) {
         throw new Error(`Segments fetch failed: ${response.status}`);
       }
       
-      const data = await response.json();
-      if (!data.ok || !data.segments) {
-        throw new Error('Segments data not available');
+      const geojson = await response.json();
+      if (!geojson.features || geojson.features.length === 0) {
+        throw new Error('No segment features available');
       }
       
-      // Create segments GeoJSON layer
-      // Note: Currently uses existing segment geometry from GPX processor
-      // Will be enhanced with corridor polygons in future phase
-      
-      mapState.activeLayers.segments = L.geoJSON(null, {
+      // Create segments GeoJSON layer with GPX centerlines
+      mapState.activeLayers.segments = L.geoJSON(geojson, {
         style: featStyleSegments,
         onEachFeature: (feature, layer) => {
-          layer.on('click', showSegmentTooltip);
+          layer.on('click', (e) => showSegmentTooltip(e, feature));
+          layer.on('mouseover', function() {
+            this.setStyle({ weight: 6, opacity: 1.0 });
+          });
+          layer.on('mouseout', function() {
+            mapState.activeLayers.segments.resetStyle(this);
+          });
         }
       });
       
-      // Add segment features (placeholder - need real geometry)
-      // This will be populated when we integrate bin_geometries.py
+      // Add to map (will be controlled by LOD)
+      mapState.activeLayers.segments.addTo(map);
       
-      console.log('✅ Segments layer loaded');
+      console.log(`✅ Segments layer loaded: ${geojson.features.length} segments`);
     } catch (error) {
       console.error('❌ Failed to load segments:', error);
+      throw error;
     }
   }
 
@@ -300,7 +304,7 @@
     const props = feature.properties || {};
     const los = props.los_class || props.max_los || "A";
     
-    return {
+      return {
       weight: 5,
       color: LOS_COLORS[los] || "#999",
       fillOpacity: 0.3,
@@ -326,16 +330,15 @@
   // TOOLTIPS
   // ============================================================================
 
-  function showSegmentTooltip(e) {
-    const props = e.target.feature.properties;
+  function showSegmentTooltip(e, feature) {
+    const props = feature.properties;
     
+    // Basic segment info (from /api/map/segments)
     const html = `
       <div class="tooltip-header"><b>${props.segment_label || props.segment_id}</b></div>
       <div>Schema: ${props.schema_key || '—'} · Width: ${props.width_m ? props.width_m.toFixed(1) : '—'} m</div>
-      <div>Worst Window: ${fmtWindowToTime(props.worst_window_idx || 0)}</div>
-      <div>Peak Density: ${fmt(props.peak_density)} p/m² (LOS ${props.max_los || props.los_class || 'A'})</div>
-      <div>Peak Rate: ${fmt(props.peak_rate)} p/s${props.util_pct ? `, Util: ${props.util_pct}%` : ''}</div>
-      <div>Flagged Bins: ${props.flags_count || 0}</div>
+      <div>Length: ${props.length_km ? props.length_km.toFixed(2) : '—'} km (${props.from_km?.toFixed(1)} - ${props.to_km?.toFixed(1)} km)</div>
+      <div class="tooltip-note">⚠️ Aggregated stats coming in next phase</div>
     `;
     
     L.popup({ className: 'segment-popup' })
