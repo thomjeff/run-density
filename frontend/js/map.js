@@ -202,6 +202,10 @@
       mapState.cachedWindows.set(cacheKey, geojson);
       
       console.log(`✅ Loaded ${geojson.features.length} bins for window ${windowIdx}`);
+      
+      // Log performance metrics (Phase 1.5)
+      setTimeout(() => logPerformanceMetrics(), 100);
+      
       return geojson;
     } catch (error) {
       console.error(`❌ Failed to load bins for window ${windowIdx}:`, error);
@@ -362,7 +366,7 @@
     
     const style = severityStyles[severity] || severityStyles["none"];
     
-    return {
+      return {
       weight: style.borderWeight,
       color: style.borderColor,
       fillColor: LOS_COLORS[los] || "#999",
@@ -454,6 +458,26 @@
 
   function fmt(x) {
     return (x == null || isNaN(x)) ? "—" : Number(x).toFixed(3);
+  }
+
+  // Performance monitoring (Phase 1.5)
+  function logPerformanceMetrics() {
+    if (mapState.activeLayers.bins) {
+      const binCount = mapState.activeLayers.bins.getLayers().length;
+      const cacheSize = mapState.cachedWindows.size;
+      const memoryUsage = performance.memory ? 
+        `${Math.round(performance.memory.usedJSHeapSize / 1024 / 1024)}MB` : 'N/A';
+      
+      console.log(`📊 Performance: ${binCount} bins, ${cacheSize} cached windows, ${memoryUsage} memory`);
+      
+      // Check payload size (approximate)
+      if (mapState.cachedWindows.size > 0) {
+        const latestWindow = Array.from(mapState.cachedWindows.values()).pop();
+        const payloadSize = JSON.stringify(latestWindow).length;
+        const payloadKB = Math.round(payloadSize / 1024);
+        console.log(`📦 Latest payload: ${payloadKB}KB (target: ≤800KB)`);
+      }
+    }
   }
 
   function fmtWindowToTime(windowIdx) {
@@ -601,7 +625,51 @@
     // Server-side severity filtering happens in loadBinsForWindow
     console.log('🔍 Applying filters...');
     
-    // Refresh bins with current filter settings
+    // Get current filter values (Phase 1.5)
+    const severityFilter = document.getElementById('severity-filter');
+    const prefixFilter = document.getElementById('prefix-filter');
+    const losFilter = document.getElementById('los-filter');
+    
+    const severityValue = severityFilter ? severityFilter.value : 'any';
+    const prefixValue = prefixFilter ? prefixFilter.value : 'all';
+    const losValue = losFilter ? losFilter.value : 'all';
+    
+    console.log(`  📊 Filters: severity=${severityValue}, prefix=${prefixValue}, los=${losValue}`);
+    
+    // Apply client-side filters to current bins layer
+    if (mapState.activeLayers.bins) {
+      mapState.activeLayers.bins.eachLayer(function(layer) {
+        const feature = layer.feature;
+        const props = feature.properties || {};
+        
+        // Check if bin passes filters
+        let showBin = true;
+        
+        // Segment prefix filter
+        if (prefixValue !== 'all') {
+          const segmentId = props.segment_id || '';
+          showBin = showBin && segmentId.startsWith(prefixValue);
+        }
+        
+        // LOS filter
+        if (losValue !== 'all') {
+          const losClass = props.los_class || 'A';
+          showBin = showBin && losClass === losValue;
+        }
+        
+        // Update layer visibility
+        if (showBin) {
+          layer.setStyle(featStyleBins(feature));
+          layer.setOpacity(1.0);
+        } else {
+          layer.setOpacity(0.0);  // Hide but keep in layer for performance
+        }
+      });
+      
+      console.log(`  ✅ Applied client-side filters to bins layer`);
+    }
+    
+    // Refresh bins with current filter settings (for server-side severity filter)
     refreshBinsForWindow();
   }
 
