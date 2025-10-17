@@ -168,11 +168,18 @@
     }
     
     try {
-      // Get current map bounds in Web Mercator
+      // Get current map bounds in Web Mercator meters (not pixels)
       const bounds = map.getBounds();
-      const sw = map.project(bounds.getSouthWest(), map.getZoom());
-      const ne = map.project(bounds.getNorthEast(), map.getZoom());
-      const bbox = `${sw.x},${sw.y},${ne.x},${ne.y}`;
+      const sw = bounds.getSouthWest();
+      const ne = bounds.getNorthEast();
+      
+      // Convert lat/lng to Web Mercator meters
+      const swMercator = L.CRS.EPSG3857.latLngToPoint(sw, 0);
+      const neMercator = L.CRS.EPSG3857.latLngToPoint(ne, 0);
+      
+      const bbox = `${swMercator.x},${swMercator.y},${neMercator.x},${neMercator.y}`;
+      
+      console.log(`  📐 Bbox: ${bbox}`);
       
       // Fetch bins from server
       const url = `/api/map/bins?window_idx=${windowIdx}&bbox=${bbox}&severity=any`;
