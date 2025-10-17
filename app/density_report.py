@@ -2092,14 +2092,18 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
             # Generate segment centerlines from GPX
             segments_with_coords = generate_segment_coordinates(courses, segments_list)
             
-            # Build lookup: segment_id -> centerline_coords
-            centerlines = {}
-            for seg_coords in segments_with_coords:
-                if seg_coords.get('line_coords') and not seg_coords.get('coord_issue'):
-                    centerlines[seg_coords['seg_id']] = seg_coords['line_coords']
+            # Build lookups
+            centerlines = {}  # segment_id -> centerline_coords (course-absolute)
+            segment_offsets = {}  # segment_id -> course_offset_km (to convert bin-relative to course-absolute)
+            widths = {}  # segment_id -> width_m
             
-            # Build lookup: segment_id -> width_m
-            widths = {}
+            for seg_coords in segments_with_coords:
+                seg_id = seg_coords['seg_id']
+                if seg_coords.get('line_coords') and not seg_coords.get('coord_issue'):
+                    centerlines[seg_id] = seg_coords['line_coords']
+                    # Store the course offset (from_km) to convert bin-relative km to course-absolute km
+                    segment_offsets[seg_id] = seg_coords.get('from_km', 0.0)
+            
             for _, seg in segments_df.iterrows():
                 widths[seg['seg_id']] = float(seg.get('width_m', 5.0))
             
@@ -2109,19 +2113,26 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
             
             for f in geojson_features:
                 seg_id = f["properties"]["segment_id"]
-                start_km = f["properties"]["start_km"]
-                end_km = f["properties"]["end_km"]
+                bin_start_km = f["properties"]["start_km"]  # Bin-relative km
+                bin_end_km = f["properties"]["end_km"]      # Bin-relative km
                 
-                # Get centerline and width
+                # Get centerline, offset, and width
                 centerline = centerlines.get(seg_id)
+                segment_offset = segment_offsets.get(seg_id, 0.0)  # Course-absolute offset
                 width_m = widths.get(seg_id, 5.0)
                 
-                if centerline:
-                    # Generate polygon geometry
+                if centerline and segment_offset is not None:
+                    # CRITICAL FIX: Bins use segment-relative km, but centerline is already sliced
+                    # The centerline from gpx_processor is ALREADY sliced to segment boundaries
+                    # So we should use bin-relative km directly (0.0 = start of centerline)
+                    # The centerline itself spans the full segment length
+                    
+                    # Generate polygon geometry using bin-relative coordinates
+                    # (centerline is already segment-specific, not full course)
                     polygon = generate_bin_polygon(
                         segment_centerline_coords=centerline,
-                        bin_start_km=start_km,
-                        bin_end_km=end_km,
+                        bin_start_km=bin_start_km,  # Use bin-relative (centerline is segment-sliced)
+                        bin_end_km=bin_end_km,
                         segment_width_m=width_m
                     )
                     
