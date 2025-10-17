@@ -206,12 +206,12 @@ For ALL releases and merges, follow this complete process:
 3. **Create Pull Request** - Comprehensive description + testing results
 4. **Wait for User Review/Approval** - User reviews and merges via GitHub UI
 5. **Verify Merge to Main** - `git checkout main && git pull`
-6. **Monitor CI/CD Pipeline** - `gh run list --limit 1`
-7. **Run E2E Tests on Cloud Run** - `TEST_CLOUD_RUN=true python e2e.py --cloud`
-8. **Run E2E Tests on Main Locally** - `python e2e.py --local`
-9. **Verify Production Health** - All endpoints responding correctly
+6. **Monitor CI/CD Pipeline** - All 4 stages must pass (Build, E2E Cloud Run, Bin Datasets, Release)
+7. **Run E2E Tests on Main Locally** - `python e2e.py --local` (validates next dev baseline)
+8. **Verify Production Health** - All endpoints responding correctly
 
-**Note**: Step 9 ensures next dev branch starts from healthy main.
+**Note**: Step 7 ensures next dev branch starts from healthy main.
+**Note**: Cloud Run E2E tests run automatically in CI (Step 6, stage 2). Manual Cloud Run testing is redundant.
 
 ## **🔄 AUTOMATED CI/CD PIPELINE**
 

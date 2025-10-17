@@ -41,28 +41,43 @@
   async function init() {
     try {
       console.log('🗺️ Initializing map...');
+      updateStatus('Initializing map...', 'loading');
       
       // Initialize Leaflet map
+      console.log('  📍 Creating Leaflet map...');
       map = L.map('map').setView([45.9620, -66.6500], 13);
       
       // Add OSM base tiles
+      console.log('  🗺️ Adding base tiles...');
       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 20,
         attribution: '&copy; OpenStreetMap contributors'
       }).addTo(map);
       
       // Load manifest
+      console.log('  📥 Loading manifest...');
+      updateStatus('Loading manifest...', 'loading');
       await loadManifest();
+      console.log('  ✅ Manifest loaded');
       
       // Initialize UI controls
+      console.log('  🎛️ Initializing controls...');
       setupTimeSlider();
       setupPlaybackControls();
       setupFilters();
       setupZoomLOD();
+      console.log('  ✅ Controls initialized');
       
       // Load initial data (window 0)
+      console.log('  📥 Loading segments layer...');
+      updateStatus('Loading segments...', 'loading');
       await loadSegmentsLayer();
+      console.log('  ✅ Segments loaded');
+      
+      console.log('  📥 Loading bins for window 0...');
+      updateStatus('Loading bins...', 'loading');
       await loadBinsForWindow(mapState.currentWindow);
+      console.log('  ✅ Bins loaded');
       
       updateTimeDisplay();
       updateStatus('✅ Map loaded', 'success');
@@ -70,7 +85,8 @@
       console.log('✅ Map initialization complete');
     } catch (error) {
       console.error('❌ Map initialization failed:', error);
-      updateStatus('❌ Failed to load map', 'error');
+      console.error('Error stack:', error.stack);
+      updateStatus(`❌ Failed to load map: ${error.message}`, 'error');
     }
   }
 
@@ -107,34 +123,38 @@
     console.log('📥 Loading segments layer...');
     
     try {
-      // Use existing /api/segments endpoint (enhanced with OI from Issue #237)
-      const response = await fetch('/api/segments');
+      // Use new /api/map/segments endpoint (Issue #249 Phase 1.5)
+      const response = await fetch('/api/map/segments');
       if (!response.ok) {
         throw new Error(`Segments fetch failed: ${response.status}`);
       }
       
-      const data = await response.json();
-      if (!data.ok || !data.segments) {
-        throw new Error('Segments data not available');
+      const geojson = await response.json();
+      if (!geojson.features || geojson.features.length === 0) {
+        throw new Error('No segment features available');
       }
       
-      // Create segments GeoJSON layer
-      // Note: Currently uses existing segment geometry from GPX processor
-      // Will be enhanced with corridor polygons in future phase
-      
-      mapState.activeLayers.segments = L.geoJSON(null, {
+      // Create segments GeoJSON layer with GPX centerlines
+      mapState.activeLayers.segments = L.geoJSON(geojson, {
         style: featStyleSegments,
         onEachFeature: (feature, layer) => {
-          layer.on('click', showSegmentTooltip);
+          layer.on('click', (e) => showSegmentTooltip(e, feature));
+          layer.on('mouseover', function() {
+            this.setStyle({ weight: 6, opacity: 1.0 });
+          });
+          layer.on('mouseout', function() {
+            mapState.activeLayers.segments.resetStyle(this);
+          });
         }
       });
       
-      // Add segment features (placeholder - need real geometry)
-      // This will be populated when we integrate bin_geometries.py
+      // Add to map (will be controlled by LOD)
+      mapState.activeLayers.segments.addTo(map);
       
-      console.log('✅ Segments layer loaded');
+      console.log(`✅ Segments layer loaded: ${geojson.features.length} segments`);
     } catch (error) {
       console.error('❌ Failed to load segments:', error);
+      throw error;
     }
   }
 
@@ -148,11 +168,18 @@
     }
     
     try {
-      // Get current map bounds in Web Mercator
+      // Get current map bounds in Web Mercator meters (not pixels)
       const bounds = map.getBounds();
-      const sw = map.project(bounds.getSouthWest(), map.getZoom());
-      const ne = map.project(bounds.getNorthEast(), map.getZoom());
-      const bbox = `${sw.x},${sw.y},${ne.x},${ne.y}`;
+      const sw = bounds.getSouthWest();
+      const ne = bounds.getNorthEast();
+      
+      // Convert lat/lng to Web Mercator meters (zoom level 0 = meters)
+      const swMercator = L.CRS.EPSG3857.latLngToPoint(sw, 0);
+      const neMercator = L.CRS.EPSG3857.latLngToPoint(ne, 0);
+      
+      const bbox = `${swMercator.x},${swMercator.y},${neMercator.x},${neMercator.y}`;
+      
+      console.log(`  📐 Bbox: ${bbox}`);
       
       // Fetch bins from server
       const url = `/api/map/bins?window_idx=${windowIdx}&bbox=${bbox}&severity=any`;
@@ -247,12 +274,18 @@
   }
 
   async function loadFlaggedBinsForWindow(windowIdx) {
+    // Use same bbox calculation as loadBinsForWindow
     const bounds = map.getBounds();
-    const sw = map.project(bounds.getSouthWest(), map.getZoom());
-    const ne = map.project(bounds.getNorthEast(), map.getZoom());
-    const bbox = `${sw.x},${sw.y},${ne.x},${ne.y}`;
+    const sw = bounds.getSouthWest();
+    const ne = bounds.getNorthEast();
     
-    const url = `/api/map/bins?window_idx=${windowIdx}&bbox=${bbox}&severity=critical,watch`;
+    // Convert lat/lng to Web Mercator meters (zoom level 0 = meters)
+    const swMercator = L.CRS.EPSG3857.latLngToPoint(sw, 0);
+    const neMercator = L.CRS.EPSG3857.latLngToPoint(ne, 0);
+    
+    const bbox = `${swMercator.x},${swMercator.y},${neMercator.x},${neMercator.y}`;
+    
+    const url = `/api/map/bins?window_idx=${windowIdx}&bbox=${bbox}&severity=any`;
     const response = await fetch(url);
     const geojson = await response.json();
     
@@ -300,7 +333,7 @@
     const props = feature.properties || {};
     const los = props.los_class || props.max_los || "A";
     
-    return {
+      return {
       weight: 5,
       color: LOS_COLORS[los] || "#999",
       fillOpacity: 0.3,
@@ -326,16 +359,15 @@
   // TOOLTIPS
   // ============================================================================
 
-  function showSegmentTooltip(e) {
-    const props = e.target.feature.properties;
+  function showSegmentTooltip(e, feature) {
+    const props = feature.properties;
     
+    // Basic segment info (from /api/map/segments)
     const html = `
       <div class="tooltip-header"><b>${props.segment_label || props.segment_id}</b></div>
       <div>Schema: ${props.schema_key || '—'} · Width: ${props.width_m ? props.width_m.toFixed(1) : '—'} m</div>
-      <div>Worst Window: ${fmtWindowToTime(props.worst_window_idx || 0)}</div>
-      <div>Peak Density: ${fmt(props.peak_density)} p/m² (LOS ${props.max_los || props.los_class || 'A'})</div>
-      <div>Peak Rate: ${fmt(props.peak_rate)} p/s${props.util_pct ? `, Util: ${props.util_pct}%` : ''}</div>
-      <div>Flagged Bins: ${props.flags_count || 0}</div>
+      <div>Length: ${props.length_km ? props.length_km.toFixed(2) : '—'} km (${props.from_km?.toFixed(1)} - ${props.to_km?.toFixed(1)} km)</div>
+      <div class="tooltip-note">⚠️ Aggregated stats coming in next phase</div>
     `;
     
     L.popup({ className: 'segment-popup' })
