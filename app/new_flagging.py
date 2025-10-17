@@ -1,15 +1,11 @@
 """
 New Flagging Logic for Issue #246 - New Density Report
 
-Implements the spec's triggers & severity exactly:
-- rate (persons/s) is canonical; map any legacy flow field to rate at read time
-- Severity: critical > watch > none
-- Reasons: los_high, rate_high, both
+DEPRECATED: This module is being replaced by app/rulebook.py (Issue #254).
+New code should use rulebook.evaluate_flags() directly for consistency.
 
-Based on Issue #246 requirements:
-- Density triggers: density ≥ C → watch, ≥ E → critical
-- Rate triggers: rate_per_m_per_min ≥ warn → watch, ≥ critical → critical
-- Both conditions: highest severity
+This module now acts as a thin wrapper around rulebook.py to maintain
+backward compatibility during the transition.
 """
 
 from __future__ import annotations
@@ -18,6 +14,9 @@ from typing import Dict, Optional, Tuple, List
 from dataclasses import dataclass
 import pandas as pd
 import numpy as np
+
+# Issue #254: Use centralized rulebook for all flagging
+from . import rulebook
 
 logger = logging.getLogger(__name__)
 
@@ -125,74 +124,81 @@ def classify_flag_reason_new(
 
 def apply_new_flagging(
     df: pd.DataFrame,
-    config: NewFlaggingConfig,
+    config: NewFlaggingConfig = None,  # DEPRECATED - kept for compatibility
     segments_df: Optional[pd.DataFrame] = None
 ) -> pd.DataFrame:
     """
-    Apply new flagging logic to bins per Issue #246 spec.
+    Apply new flagging logic using centralized rulebook (Issue #254).
     
     Args:
-        df: Bins DataFrame with columns: segment_id, density, rate, bin_len_m
-        config: Flagging configuration
-        segments_df: Segments DataFrame with width_m and seg_label (optional)
+        df: Bins DataFrame with columns: segment_id, density, rate
+        config: DEPRECATED - thresholds now loaded from rulebook
+        segments_df: Segments DataFrame with width_m, seg_label, segment_type
         
     Returns:
-        DataFrame with added columns:
-        - los: LOS classification (A-F)
-        - rate_per_m_per_min: Rate per meter per minute
-        - flag_reason: 'los_high', 'rate_high', 'both', 'none'
-        - flag_severity: 'critical', 'watch', 'none'
-        - seg_label: Segment label (if segments_df provided)
+        DataFrame with rulebook-based flagging columns
     """
     result_df = df.copy()
     
-    # Add LOS classification
-    result_df['los'] = result_df['density'].apply(classify_density_los)
+    logger.info(f"apply_new_flagging (rulebook): {len(result_df)} rows")
     
-    # Calculate rate_per_m_per_min and merge seg_label
+    if 'segment_id' not in result_df.columns:
+        raise ValueError("segment_id column required")
+    
+    # Load segment metadata
     if segments_df is not None:
-        # Merge with segments to get width_m and seg_label
-        segments_lookup = segments_df.set_index('segment_id')[['width_m', 'seg_label']].to_dict()
-        result_df['width_m'] = result_df['segment_id'].map(segments_lookup['width_m'])
-        result_df['seg_label'] = result_df['segment_id'].map(segments_lookup['seg_label'])
-        result_df['rate_per_m_per_min'] = result_df.apply(
-            lambda row: calculate_rate_per_m_per_min(row['rate'], row['width_m']), 
-            axis=1
-        )
+        segment_id_col = 'seg_id' if 'seg_id' in segments_df.columns else 'segment_id'
+        
+        if segment_id_col in segments_df.columns:
+            seg_lookup_cols = [segment_id_col, 'width_m', 'seg_label']
+            if 'segment_type' in segments_df.columns:
+                seg_lookup_cols.append('segment_type')
+            
+            seg_lookup = segments_df[seg_lookup_cols].set_index(segment_id_col)
+            result_df['width_m'] = result_df['segment_id'].map(seg_lookup['width_m']).fillna(3.0)
+            result_df['seg_label'] = result_df['segment_id'].map(seg_lookup['seg_label']).fillna(result_df['segment_id'])
+            
+            if 'segment_type' in segments_df.columns:
+                result_df['schema_key'] = result_df['segment_id'].map(seg_lookup['segment_type']).fillna('on_course_open')
+            else:
+                result_df['schema_key'] = 'on_course_open'
+        else:
+            result_df['width_m'] = 3.0
+            result_df['seg_label'] = result_df['segment_id']
+            result_df['schema_key'] = 'on_course_open'
     else:
-        # Fallback: assume 3.0m width if no segments data
-        logger.warning("No segments data provided, using default width 3.0m for rate calculations")
         result_df['width_m'] = 3.0
-        result_df['seg_label'] = result_df['segment_id']  # Use segment_id as label
-        result_df['rate_per_m_per_min'] = result_df['rate'].apply(
-            lambda rate: calculate_rate_per_m_per_min(rate, 3.0)
+        result_df['seg_label'] = result_df['segment_id']
+        result_df['schema_key'] = 'on_course_open'
+    
+    # Apply rulebook evaluation
+    def evaluate_row(row):
+        result = rulebook.evaluate_flags(
+            density_pm2=row['density'],
+            rate_p_s=row.get('rate'),
+            width_m=row.get('width_m', 3.0),
+            schema_key=row.get('schema_key', 'on_course_open')
         )
+        return pd.Series({
+            'los': result.los_class,
+            'rate_per_m_per_min': result.rate_per_m_per_min,
+            'util_percent': result.util_percent,
+            'flag_severity': result.severity,
+            'flag_reason': result.flag_reason
+        })
     
-    # Filter by minimum bin length
-    if 'bin_len_m' in result_df.columns:
-        result_df = result_df[result_df['bin_len_m'] >= config.require_min_bin_len_m].copy()
+    eval_results = result_df.apply(evaluate_row, axis=1)
+    result_df['los'] = eval_results['los']
+    result_df['rate_per_m_per_min'] = eval_results['rate_per_m_per_min']
+    result_df['util_percent'] = eval_results['util_percent']
+    result_df['flag_severity'] = eval_results['flag_severity']
+    result_df['flag_reason'] = eval_results['flag_reason']
     
-    # Apply flagging logic only to occupied bins (density > 0)
-    # Empty bins cannot be flagged
-    flagging_results = result_df.apply(
-        lambda row: classify_flag_reason_new(
-            row['density'], 
-            row['rate_per_m_per_min'], 
-            config
-        ) if row['density'] > 0 else ('none', 'none'), 
-        axis=1
-    )
+    flagged = len(result_df[result_df['flag_severity'] != 'none'])
+    critical = len(result_df[result_df['flag_severity'] == 'critical'])
+    watch = len(result_df[result_df['flag_severity'] == 'watch'])
     
-    result_df['flag_reason'] = [r[0] for r in flagging_results]
-    result_df['flag_severity'] = [r[1] for r in flagging_results]
-    
-    # Log statistics
-    flagged_count = len(result_df[result_df['flag_reason'] != 'none'])
-    critical_count = len(result_df[result_df['flag_severity'] == 'critical'])
-    watch_count = len(result_df[result_df['flag_severity'] == 'watch'])
-    
-    logger.info(f"Applied new flagging: {flagged_count} flagged bins "
-                f"({critical_count} critical, {watch_count} watch)")
+    logger.info(f"Rulebook flagging: {flagged}/{len(result_df)} flagged ({critical} critical, {watch} watch) = {flagged/len(result_df)*100:.1f}%")
     
     return result_df
 

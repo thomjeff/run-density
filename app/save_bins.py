@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 import pyarrow as pa
 import pyarrow.parquet as pq
+import pandas as pd
 
 JsonDict = t.Dict[str, t.Any]
 Feature = JsonDict
@@ -110,15 +111,68 @@ def save_bin_artifacts(
             "schema_version":       (metadata.get("schema_version") or "1.0.0"),
             "analysis_hash":        metadata.get("analysis_hash"),
         })
+    
+    # Apply rulebook-based flagging (Issue #254)
+    try:
+        from .new_flagging import apply_new_flagging
+        from .io.loader import load_segments
+        
+        # Convert rows to DataFrame for flagging
+        bins_df = pd.DataFrame(rows)
+        
+        if logger:
+            logger.info(f"Flagging input: {len(bins_df)} rows, columns: {list(bins_df.columns)}")
+        
+        # Load segments metadata for width_m, seg_label, segment_type
+        segments_df = None
+        try:
+            segments_df = load_segments("data/segments.csv")
+        except Exception as e:
+            if logger:
+                logger.warning(f"Could not load segments.csv for flagging: {e}")
+        
+        # Apply rulebook-based flagging (no config needed - thresholds from YAML)
+        flagged_df = apply_new_flagging(bins_df, segments_df=segments_df)
+        
+        # Convert back to rows with new columns
+        rows = flagged_df.to_dict('records')
+        
+        if logger:
+            logger.info(f"Applied rulebook flagging: {len(flagged_df)} bins processed")
+            
+    except Exception as e:
+        if logger:
+            logger.warning(f"Rulebook flagging failed, using original data: {e}")
+            logger.warning(f"Rows count: {len(rows)}, first row keys: {list(rows[0].keys()) if rows else 'No rows'}")
+            import traceback
+            logger.warning(f"Traceback: {traceback.format_exc()}")
+        # Continue with original rows if flagging fails
+    
     table = pa.Table.from_pylist(rows)
     parquet_path = os.path.join(output_dir, f"{base_name}.parquet")
     pq.write_table(table, parquet_path, compression="zstd", compression_level=3)
 
     # -------- GeoJSON (gzip) --------
-    # Keep exactly what caller gave us (don't mutate geometries). Ensure minimal structure.
+    # Update features with severity information if flagging was applied
+    updated_features = features.copy()
+    if len(rows) > 0 and 'flag_severity' in rows[0]:
+        # Create a lookup for severity data
+        severity_lookup = {row['bin_id']: {
+            'flag_severity': row.get('flag_severity', 'none'),
+            'flag_reason': row.get('flag_reason', 'none'),
+            'los': row.get('los', row.get('los_class', 'A')),
+            'rate_per_m_per_min': row.get('rate_per_m_per_min', 0.0)
+        } for row in rows}
+        
+        # Update features with severity data
+        for feature in updated_features:
+            bin_id = feature.get('properties', {}).get('bin_id')
+            if bin_id and bin_id in severity_lookup:
+                feature['properties'].update(severity_lookup[bin_id])
+    
     fc = {
         "type": "FeatureCollection",
-        "features": features,
+        "features": updated_features,
         "metadata": {
             **metadata,
             "saved_at": datetime.now(timezone.utc).isoformat(),

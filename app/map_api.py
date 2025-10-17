@@ -130,6 +130,13 @@ async def get_map_manifest():
         # Get date from directory name
         date_str = latest_date_dir.name
         
+        # Issue #254: Add rulebook version for consistency tracking
+        try:
+            from . import rulebook
+            rb_version = rulebook.version()
+        except Exception:
+            rb_version = "unknown"
+        
         return JSONResponse(content={
             "ok": True,
             "date": date_str,
@@ -137,10 +144,12 @@ async def get_map_manifest():
             "window_seconds": window_seconds,
             "lod": lod_thresholds,
             "segments": segment_index,
+            "rulebook_version": rb_version,
             "metadata": {
                 "generated_at": datetime.now().isoformat(),
                 "source": "bins.parquet",
-                "total_segments": len(segment_index)
+                "total_segments": len(segment_index),
+                "rulebook_version": rb_version
             }
         })
         
@@ -366,9 +375,11 @@ async def get_map_bins(
             # Continue without geometries - bins will still have properties
         
         # Filter by severity (if column exists)
-        if severity != "any" and 'severity' in window_bins.columns:
-            window_bins = window_bins[window_bins['severity'] == severity]
-        elif severity != "any" and 'severity' not in window_bins.columns:
+        # Handle field name inconsistency: parquet uses 'flag_severity', API expects 'severity'
+        severity_col = 'flag_severity' if 'flag_severity' in window_bins.columns else 'severity'
+        if severity != "any" and severity_col in window_bins.columns:
+            window_bins = window_bins[window_bins[severity_col] == severity]
+        elif severity != "any" and severity_col not in window_bins.columns:
             logger.warning("Severity filtering requested but severity column not in bins.parquet")
             # Return empty if severity filter requested but column doesn't exist
             # This ensures graceful degradation
@@ -398,7 +409,9 @@ async def get_map_bins(
                     "density": float(bin_row['density']),
                     "rate": float(bin_row['rate']),
                     "los_class": bin_row['los_class'],
-                    "severity": bin_row.get('severity', 'none')
+                    "severity": bin_row.get(severity_col, 'none'),
+                    "flag_reason": bin_row.get('flag_reason', 'none'),
+                    "rate_per_m_per_min": bin_row.get('rate_per_m_per_min', 0.0)
                 },
                 "geometry": bin_geometries.get(bin_id)  # Attach geometry from lookup
             }
