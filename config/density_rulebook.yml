@@ -1,23 +1,23 @@
-# Density_Rulebook_v2.yml
-# Version: 2.0
+# Density_Rulebook_v2.2.yml
+# Version: 2.2
 # Purpose: YAML-only operational rulebook for Fredericton Marathon.
 # Notes:
 # - All density values are in runners/m² (areal density).
 # - All flow values are in runners/min/m (throughput per meter of width).
-# - Comparator keys like `*_gte` mean **greater than or equal to** (not "gate").
+# - Version 2.2: Unified flagging policy (merged from reporting.yml)
 
 meta:
-  version: 2.0
+  version: 2.2
   units:
     density: "runners/m²"
     flow: "runners/min/m"
   notes:
-    - "`gte` means greater-than-or-equal; used in trigger conditions (e.g., density_gte, flow_gte)."
-    - "Start (A1) uses the start_corral schema; other segments use on-course schemas."
-    - "Effective width must reflect any reserved emergency lane at A1."
+    - "LOS classification uses inclusive upper bounds (<=)."
+    - "Utilization percentile computed per time window, course-wide."
+    - "Severity rules combine density + utilization + rate triggers."
 
 globals:
-  # Default on-course LOS (Fruin-derived) used by on_course_open unless overridden
+  # Canonical LOS bands (p/m²). Inclusive upper bounds (<=).
   los_thresholds:
     A: { min: 0.0, max: 0.36, label: "Free flow" }
     B: { min: 0.36, max: 0.54, label: "Comfortable" }
@@ -25,6 +25,20 @@ globals:
     D: { min: 0.72, max: 1.08, label: "Dense" }
     E: { min: 1.08, max: 1.63, label: "Very dense" }
     F: { min: 1.63, max: 999.0, label: "Extremely dense" }
+  
+  # Operational policy (tuned to ~10% flagging rate, matching operational baseline)
+  policy:
+    density_watch_at: "C"           # Start flagging at LOS C (0.54 p/m²)
+    density_critical_at: "E"        # Critical threshold at LOS E (1.08 p/m²)
+    utilization_pctile: 90          # Top 10% utilization → watch trigger (was 95 = 5%)
+    utilization_cohort: "window"    # Percentile cohort: "window" | "window_schema" | "window_segment"
+    
+    # Severity rules (descending precedence)
+    # Combined logic: density + utilization + rate
+    # CRITICAL: (LOS ≥ C AND util ≥ P90) OR rate critical
+    # CAUTION:  LOS ≥ C ONLY OR (LOS ≥ C AND rate watch)
+    # WATCH:    util ≥ P90 ONLY OR rate watch ONLY
+    # NONE:     else
 
 schemas:
   start_corral:
