@@ -41,28 +41,43 @@
   async function init() {
     try {
       console.log('🗺️ Initializing map...');
+      updateStatus('Initializing map...', 'loading');
       
       // Initialize Leaflet map
+      console.log('  📍 Creating Leaflet map...');
       map = L.map('map').setView([45.9620, -66.6500], 13);
       
       // Add OSM base tiles
+      console.log('  🗺️ Adding base tiles...');
       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 20,
         attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
+      }).addTo(map);
       
       // Load manifest
+      console.log('  📥 Loading manifest...');
+      updateStatus('Loading manifest...', 'loading');
       await loadManifest();
+      console.log('  ✅ Manifest loaded');
       
       // Initialize UI controls
+      console.log('  🎛️ Initializing controls...');
       setupTimeSlider();
       setupPlaybackControls();
       setupFilters();
       setupZoomLOD();
+      console.log('  ✅ Controls initialized');
       
       // Load initial data (window 0)
+      console.log('  📥 Loading segments layer...');
+      updateStatus('Loading segments...', 'loading');
       await loadSegmentsLayer();
+      console.log('  ✅ Segments loaded');
+      
+      console.log('  📥 Loading bins for window 0...');
+      updateStatus('Loading bins...', 'loading');
       await loadBinsForWindow(mapState.currentWindow);
+      console.log('  ✅ Bins loaded');
       
       updateTimeDisplay();
       updateStatus('✅ Map loaded', 'success');
@@ -70,7 +85,8 @@
       console.log('✅ Map initialization complete');
     } catch (error) {
       console.error('❌ Map initialization failed:', error);
-      updateStatus('❌ Failed to load map', 'error');
+      console.error('Error stack:', error.stack);
+      updateStatus(`❌ Failed to load map: ${error.message}`, 'error');
     }
   }
 
