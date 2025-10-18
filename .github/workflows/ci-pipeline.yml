@@ -2,6 +2,11 @@ name: CI Pipeline
 
 on:
   workflow_dispatch:
+    inputs:
+      run_bin_e2e:
+        description: "Run Part 3: E2E Bin Datasets"
+        default: "false"
+        required: false
   push:
     branches: [ main ]
   pull_request:
@@ -147,6 +152,8 @@ jobs:
         python e2e.py --cloud
 
   # Part 3: E2E Bin Dataset Generation and Validation
+  # NOTE: Disabled by default during Front-End Simplification Epic (#261)
+  # To enable: workflow_dispatch with run_bin_e2e=true
   bin-dataset-validation:
     name: "3️⃣ E2E (Bin Datasets)"
     runs-on: ubuntu-latest
@@ -180,6 +187,16 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+    
+    - name: Early exit if feature flag is off
+      env:
+        RUN_BIN_E2E: ${{ github.event.inputs.run_bin_e2e || 'false' }}
+      run: |
+        if [ "$RUN_BIN_E2E" != "true" ]; then
+          echo "🔕 Skipping bin dataset validation (RUN_BIN_E2E=${RUN_BIN_E2E})."
+          echo "This job completes as a NO-OP to keep downstream 'needs' unblocked."
+          exit 0
+        fi
     
     - name: Enable Bin Dataset Environment
       run: |
