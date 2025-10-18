@@ -1,0 +1,9 @@
+{
+  "items": [{
+    "segment_id": "S001",
+    "flag_type": "co_presence",
+    "severity": "warn",
+    "window": "08:10–08:20",
+    "note": "Half + 10K overlap at bridge approach"
+  }]
+}

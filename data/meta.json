@@ -1,0 +1,8 @@
+{
+  "run_timestamp": "2025-10-18T12:00:00Z",
+  "environment": "local",
+  "rulebook_hash": "abc123",
+  "dataset_version": "v2025.10.18",
+  "run_hash": "0b985dac1ebb9a83debd117043e571381d549469769cddaf2bbe5b5b97d31d92",
+  "validated": true
+}
