@@ -28,9 +28,5 @@ shapely>=2.0.0
 geopandas>=0.14.0
 pyproj>=3.6.0
 
-# Phase 2: Static Map Generation (Issue #263)
-folium>=0.17
-matplotlib>=3.8
-
 # Testing
 pytest>=8.0
