@@ -235,22 +235,78 @@ Actual: Matches expected results perfectly
 
 ## 🔄 **FOR FRESH CURSOR SESSION**
 
-### **Starting Point:**
-- **Branch**: `main` (contains all P90 policy work)
-- **Status**: Backend 100% functional
-- **Data**: Perfect quality with realistic flagging rates
+### **🧭 Dev Reset & Next Steps**
+**Date**: 2025-10-18  
+**Branch**: `main` (dev rolled back)  
+**Purpose**: Establish a clean, verified baseline before resuming visualization work.
 
-### **Immediate Tasks:**
-1. **Fix Issue #260** - Resolve Cloud Run density report timeout
-2. **Run E2E on main** - Verify baseline functionality
-3. **Deploy to Cloud Run** - Confirm production health
-4. **Create clean feature branch** - For new visualization work
-5. **Focus on data integration** - Connect UI to live density.md data
+### **✅ 1. What's Stable**
+- **Single source of truth**: `rulebook.py` + `config/density_rulebook.yml`
+- **Policy**:
+  - `utilization_pctile: 90` (P90)
+  - Global LOS thresholds: 0.36 / 0.54 / 0.72 / 1.08 / 1.63
+- **Known-good outputs**: All density + flow artifacts produce cleanly on main
+- **Flagged bins**: ≈ 1,875 (~9.6%)
+- **Flagged segments**: ≈ 17 / 22
 
-### **Avoid:**
-- Complex time-based navigation
-- Multiple map.js versions
-- Long debugging sessions
-- Stub data instead of live data
+### **🧪 2. Run One Full E2E**
+```bash
+make e2e
+# or
+python -m app.cli density-report && python -m app.cli flow-report
+```
 
-**The backend is perfect. The frontend needs a simple, data-focused approach.**
+**Expected files in timestamped directory:**
+- `Density.md`
+- `bins.parquet`
+- `bins.geojson.gz`
+- `segment_windows_from_bins.parquet`
+- `Flow.md`
+- `flow.csv`
+
+**Validation checks:**
+- Flagged bins in report ≈ count of `flag_severity != 'none'` in `bins.parquet`
+- Segment LOS_peak = max LOS seen in that segment's bins
+
+**If not: stop and fix before new dev work.**
+
+### **🧹 3. Clean Repo**
+- Keep `main` only; archive old dev branch if needed
+- Move prototype maps to `frontend/js/experimental/` with note: "Uses stub data — not live rulebook/bins"
+- Remove unused map versions to reduce confusion
+
+### **⚙️ 4. Deployment Reminder**
+When main passes E2E locally, deploy to Cloud Run and confirm:
+- `Density.md` is produced (this failed once before)
+- Flagged % in prod ≈ 9–10%
+
+### **🚫 5. Avoid Duplication**
+All LOS/flag/rate/util logic must come from:
+- `rulebook.py` + `config/density_rulebook.yml`
+
+**No secondary calculations in reports or maps.**
+
+### **🌱 6. Next Feature Branch**
+When ready:
+```bash
+git checkout -b feature/visualization_rethink
+```
+Start from clean main, E2E verified.  
+Keep map read-only or static until backend remains stable.
+
+### **📦 7. Optional Snapshot**
+After first passing run, zip and keep:
+- `Density.md`
+- `bins.parquet`
+- `segment_windows_from_bins.parquet`
+- `bins.geojson.gz`
+- `Flow.md`
+- `flow.csv`
+- `config/density_rulebook.yml`
+- `app/rulebook.py`
+
+**Name it**: `snapshots/2025-10-18_main_e2e_pass.zip`
+
+### **🎯 Focus Now**
+**Verify backend integrity, produce consistent Density/Flow reports.**  
+**Visualization can wait until the data is stable.**
