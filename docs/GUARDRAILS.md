@@ -203,15 +203,37 @@ For ALL releases and merges, follow this complete process:
 
 1. **Verify Dev Branch Health** - Check git status and recent commits
 2. **Run Final E2E Tests on Dev Branch** - `python e2e.py --local` must pass
+   - **Exception**: Skip for non-application changes (docs, validation-only features, CI configs)
+   - **Rationale**: E2E tests validate core application behavior; changes isolated to separate systems don't require full E2E
 3. **Create Pull Request** - Comprehensive description + testing results
-4. **Wait for User Review/Approval** - User reviews and merges via GitHub UI
+   - **Note**: PR creation/merge automatically triggers CI/CD pipeline (Build, Deploy, E2E)
+   - **Alternative**: For non-application changes, can merge directly to main (triggers CI automatically)
+4. **Wait for User Review/Approval** - User reviews and merges via GitHub UI (or merge directly if authorized)
 5. **Verify Merge to Main** - `git checkout main && git pull`
 6. **Monitor CI/CD Pipeline** - All 4 stages must pass (Build, E2E Cloud Run, Bin Datasets, Release)
+   - **Automated E2E**: CI runs full E2E tests on Cloud Run automatically
+   - **Skip Manual E2E**: Local E2E tests (Step 2, 7) are redundant if CI passes
 7. **Run E2E Tests on Main Locally** - `python e2e.py --local` (validates next dev baseline)
+   - **Optional**: Skip if CI E2E tests passed and change doesn't affect application code
+   - **Purpose**: Ensures next dev branch starts from healthy main baseline
 8. **Verify Production Health** - All endpoints responding correctly
+
+**When to Skip E2E Tests:**
+- **Documentation-only changes** (README, GUARDRAILS, docs/)
+- **Validation-only features** (frontend/validation/ - operates independently)
+- **CI/CD configuration** (.github/workflows/ - validated by CI itself)
+- **Non-code assets** (frontend/assets/, archive/)
+
+**When E2E Tests Are Required:**
+- Changes to `app/` directory (core application logic)
+- Changes to `data/` files (inputs that affect analysis)
+- Changes to `config/` files (rulebook, reporting configuration)
+- API endpoint modifications (`app/main.py`, `app/routes/`)
+- Dependency updates (`requirements.txt` affecting main app)
 
 **Note**: Step 7 ensures next dev branch starts from healthy main.
 **Note**: Cloud Run E2E tests run automatically in CI (Step 6, stage 2). Manual Cloud Run testing is redundant.
+**Note**: PR merge to main automatically triggers CI/CD pipeline. No manual deployment needed.
 
 ## **🔄 AUTOMATED CI/CD PIPELINE**
 
