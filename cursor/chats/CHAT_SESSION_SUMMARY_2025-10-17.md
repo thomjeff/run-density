@@ -47,6 +47,7 @@
 - **Severity Integration**: Flag severity mapping and filtering
 
 ### **Frontend Map Redesign** ⚠️
+- **Will be replaced**: With ChatGPT help, this information from previous Cursor session will be replaced with new GitHub Issues (type = enhancement)
 - **Segment-First Approach**: Focus on flagged segments with clear visual encoding
 - **Dual Color Modes**: LOS-based strokes with flag glow effects
 - **Simplified UI**: Removed time slider complexity, added severity-based styling
@@ -55,6 +56,7 @@
 ## 📊 **VALIDATION RESULTS**
 
 ### **Data Quality Validation: PERFECT** ✅
+- This is a quick look (sanity check): doesn't replace a complete review and compare with known good report(s).
 ```
 Total bins: 19,440
 Flagged bins: 1,875 (9.6% flagging rate)
@@ -65,6 +67,7 @@ Severity breakdown:
 ```
 
 ### **Flow Report Validation: MATCHES EXPECTED** ✅
+- This is a quick look (sanity check): doesn't replace a complete review and compare with known good report(s).
 ```
 Expected: overtaking_a = 2,472
 Actual: Matches expected results perfectly
