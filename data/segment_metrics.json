@@ -1,0 +1,10 @@
+{
+  "items": [{
+    "segment_id": "S001",
+    "worst_los": "C",
+    "peak_density_window": "08:05–08:20",
+    "co_presence_pct": 35.0,
+    "overtaking_pct": 12.0,
+    "utilization_pct": 60.0
+  }]
+}

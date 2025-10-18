@@ -1,0 +1,16 @@
+{
+  "type": "FeatureCollection",
+  "features": [{
+    "type": "Feature",
+    "properties": {
+      "segment_id": "S001",
+      "label": "Bridge Northbound",
+      "length_m": 420.5,
+      "events": ["Full","Half","10K"]
+    },
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [[-66.65,45.96],[-66.64,45.97]]
+    }
+  }]
+}

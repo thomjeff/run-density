@@ -1,29 +1,3 @@
-fastapi>=0.104.0
-starlette>=0.27.0
-uvicorn>=0.24.0
-gunicorn>=21.2.0
-jinja2>=3.1.0
-
-pydantic>=2.5.0
-typing-extensions>=4.8.0
-
-pandas>=2.0.0
-numpy>=1.24.0
-
-requests>=2.31.0
-httpx>=0.24.0
-pyyaml>=6.0
-
-# PDF Generation
-pypandoc>=1.11
-
-# Google Cloud Storage
-google-cloud-storage>=2.10.0
-
-# Bin dataset generation (Issue #198)
-pyarrow>=10.0.0
-shapely>=2.0.0
-
-# Map bin visualization (Issue #249)
-geopandas>=0.14.0
-pyproj>=3.6.0
+pydantic>=2.7
+jinja2>=3.1
+pytest>=8.0
