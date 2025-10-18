@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Runflow – Race-Crew Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    body { font: 14px system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 16px; background: #f5f5f5; }
+    .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.08); padding: 16px; }
+    .span-3 { grid-column: span 3; } .span-4 { grid-column: span 4; } .span-6{ grid-column: span 6; } .span-12 { grid-column: span 12; }
+    @media print { body { margin: 8mm; background: #fff; } .card { box-shadow: none; page-break-inside: avoid; } }
+    .badge { display:inline-block; padding:4px 8px; border-radius:8px; background:#f5f5f5; }
+    .table { width:100%; border-collapse: collapse; } .table th,.table td{ padding:6px; border-bottom:1px solid #eee; text-align:left; }
+    .legend { display:flex; gap:10px; align-items:center; flex-wrap: wrap; margin-top:8px; }
+    .swatch { width:14px; height:14px; border-radius:3px; display:inline-block; vertical-align:middle; border:1px solid #ddd; }
+    h3 { margin:0 0 12px 0; font-size:18px; font-weight:600; }
+    h4 { margin:0 0 8px 0; font-size:14px; font-weight:600; color:#666; }
+  </style>
+</head>
+<body>
+  {% include "_header.j2" %}
+  <div class="grid">
+
+    <!-- Tiles row -->
+    {% include "_tiles.j2" %}
+
+    <!-- Charts -->
+    <div class="card span-6">
+      <h3>LOS Distribution</h3>
+      <img src="charts/los_distribution.svg" alt="LOS distribution by segments" style="width:100%; height:auto;"/>
+      <div class="legend">
+        {% for k in los_order %}
+          <span><span class="swatch" style="background: {{ los_colors[k] }}"></span> <b>{{ k }}</b> – {{ los_labels[k] }}</span>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card span-6">
+      <h3>Start Times</h3>
+      <img src="charts/start_timeline.svg" alt="Event start times timeline" style="width:100%; height:auto;"/>
+    </div>
+
+    <!-- Top 10 -->
+    <div class="card span-12">
+      <h3>Top 10 Segments by Risk</h3>
+      <table class="table">
+        <thead><tr><th>Seg ID</th><th>Label</th><th>LOS</th><th>Flag</th><th>Link</th></tr></thead>
+        <tbody>
+        {% for row in top10 %}
+          <tr>
+            <td><code>{{ row.segment_id }}</code></td>
+            <td>{{ row.label }}</td>
+            <td><span style="color:{{ los_colors[row.worst_los] }}; font-weight:600;">{{ row.worst_los }}</span></td>
+            <td>{{ row.flag or "" }}</td>
+            <td><a href="../map/output/map.html?focus={{ row.segment_id }}" target="_blank">Open on Map →</a></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- Provenance -->
+  <div style="position:fixed;bottom:10px;left:10px;opacity:.95; background:#fff; padding:8px 12px; border-radius:6px; box-shadow:0 2px 6px rgba(0,0,0,0.1);">
+    {{ provenance_html | safe }}
+  </div>
+
+  {% include "_footer.j2" %}
+</body>
+</html>
