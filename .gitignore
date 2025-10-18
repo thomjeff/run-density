@@ -2,5 +2,8 @@ frontend/validation/output/
 frontend/map/output/
 frontend/dashboard/output/
 frontend/reports/output/
+frontend/e2e/__pycache__/
+frontend/release/__pycache__/
+release/
 __pycache__/
 *.pyc
