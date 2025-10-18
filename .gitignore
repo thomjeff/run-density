@@ -1,5 +1,6 @@
 frontend/validation/output/
 frontend/map/output/
 frontend/dashboard/output/
+frontend/reports/output/
 __pycache__/
 *.pyc

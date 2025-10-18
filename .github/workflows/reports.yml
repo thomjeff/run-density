@@ -1,0 +1,41 @@
+name: Build Density Report
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  reports:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      
+      - name: Install deps
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements-core.txt
+          pip install -r requirements-frontend.txt
+          pip install -r requirements-dev.txt
+      
+      - name: Phase 1 Gate – Validate Data
+        run: RUNFLOW_ENV=cloud python frontend/validation/scripts/validate_data.py
+      
+      - name: Build Report
+        run: python frontend/reports/scripts/build_density_report.py
+      
+      - name: Tests
+        run: pytest -q frontend/reports/tests/
+      
+      - name: Upload Report Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runflow-density-report
+          path: |
+            frontend/reports/output/density.html
+            frontend/reports/output/mini_maps/
+            frontend/reports/output/sparklines/
+
