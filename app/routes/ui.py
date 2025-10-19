@@ -12,6 +12,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from app.common.config import load_reporting
+
 # Initialize templates
 templates = Jinja2Templates(directory="templates")
 
@@ -76,12 +78,32 @@ async def segments(request: Request):
     Segments page with Leaflet map and metadata table.
     
     Returns:
-        HTML: Segment list and course map
+        HTML: Segment list and course map with LOS colors injected
     """
     meta = get_stub_meta()
+    
+    # Load LOS colors from SSOT
+    try:
+        reporting_config = load_reporting()
+        los_colors = reporting_config.get("reporting", {}).get("los_colors", {})
+    except Exception as e:
+        # Fallback to hardcoded colors if YAML loading fails
+        los_colors = {
+            "A": "#4CAF50",
+            "B": "#8BC34A", 
+            "C": "#FFC107",
+            "D": "#FF9800",
+            "E": "#FF5722",
+            "F": "#F44336"
+        }
+    
     return templates.TemplateResponse(
         "pages/segments.html",
-        {"request": request, "meta": meta}
+        {
+            "request": request, 
+            "meta": meta,
+            "los_colors": los_colors
+        }
     )
 
 

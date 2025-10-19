@@ -5,6 +5,84 @@
 {% block extra_head %}
 <!-- Leaflet CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+    #segments-map {
+        height: 500px;
+        border-radius: 4px;
+        overflow: hidden;
+        position: relative;
+    }
+    
+    .map-loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(255, 255, 255, 0.9);
+        padding: 1rem 2rem;
+        border-radius: 4px;
+        font-weight: 500;
+        color: #666;
+    }
+    
+    .los-legend {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        background: white;
+        padding: 0.75rem;
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        z-index: 1000;
+        font-size: 0.875rem;
+    }
+    
+    .los-legend h4 {
+        margin: 0 0 0.5rem 0;
+        font-size: 0.875rem;
+        color: #2c3e50;
+    }
+    
+    .los-legend-items {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    
+    .los-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+    
+    .los-swatch {
+        width: 16px;
+        height: 16px;
+        border-radius: 2px;
+        border: 1px solid #ddd;
+    }
+    
+    .los-label {
+        font-size: 0.75rem;
+        color: #666;
+    }
+    
+    .segment-tooltip {
+        font-size: 0.875rem;
+        line-height: 1.4;
+    }
+    
+    .segment-tooltip .segment-id {
+        font-weight: 600;
+        color: #2c3e50;
+    }
+    
+    .segment-tooltip .segment-metrics {
+        margin-top: 0.25rem;
+        font-size: 0.75rem;
+        color: #666;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -20,8 +98,39 @@
 <!-- Map Container -->
 <div class="card">
     <h3 style="margin-bottom: 1rem;">Course Map</h3>
-    <div id="map" style="height: 500px; border-radius: 4px; overflow: hidden;">
-        <div class="placeholder">Loading map data...</div>
+    <div id="segments-map" aria-label="Course segments map">
+        <div class="map-loading">Loading map data...</div>
+    </div>
+    
+    <!-- LOS Legend -->
+    <div class="los-legend">
+        <h4>Level of Service</h4>
+        <div class="los-legend-items">
+            <div class="los-legend-item">
+                <div class="los-swatch" style="background: #4CAF50;"></div>
+                <span class="los-label">A</span>
+            </div>
+            <div class="los-legend-item">
+                <div class="los-swatch" style="background: #8BC34A;"></div>
+                <span class="los-label">B</span>
+            </div>
+            <div class="los-legend-item">
+                <div class="los-swatch" style="background: #FFC107;"></div>
+                <span class="los-label">C</span>
+            </div>
+            <div class="los-legend-item">
+                <div class="los-swatch" style="background: #FF9800;"></div>
+                <span class="los-label">D</span>
+            </div>
+            <div class="los-legend-item">
+                <div class="los-swatch" style="background: #FF5722;"></div>
+                <span class="los-label">E</span>
+            </div>
+            <div class="los-legend-item">
+                <div class="los-swatch" style="background: #F44336;"></div>
+                <span class="los-label">F</span>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -37,11 +146,14 @@
                 <th>Width (m)</th>
                 <th>Direction</th>
                 <th>Events</th>
+                <th>LOS</th>
+                <th>Peak Density</th>
+                <th>Peak Rate</th>
             </tr>
         </thead>
         <tbody>
             <tr>
-                <td colspan="6" class="placeholder">Loading segment data...</td>
+                <td colspan="9" class="placeholder">Loading segment data...</td>
             </tr>
         </tbody>
     </table>
@@ -52,9 +164,217 @@
 {% block extra_scripts %}
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- LOS Colors from SSOT -->
 <script>
-    // Leaflet map initialization will go here in later steps
-    console.log('Leaflet loaded - map initialization pending');
+    const LOS_COLORS = {{ los_colors | tojson }};
 </script>
+
+<script>
+    // Initialize map
+    let map;
+    let segmentsLayer;
+    
+    // Get focus parameter from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const focusSegmentId = urlParams.get('focus');
+    
+    // Initialize map when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        initMap();
+        loadSegments();
+    });
+    
+    function initMap() {
+        // Create map centered on a default location (will be adjusted to data bounds)
+        map = L.map('segments-map').setView([40.7128, -74.0060], 13);
+        
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+        
+        // Remove loading indicator
+        const loadingEl = document.querySelector('.map-loading');
+        if (loadingEl) {
+            loadingEl.remove();
+        }
+    }
+    
+    function loadSegments() {
+        fetch('/api/segments/geojson')
+            .then(response => response.json())
+            .then(data => {
+                if (data.features && data.features.length > 0) {
+                    renderSegments(data);
+                    updateTable(data.features);
+                } else {
+                    showNoDataMessage();
+                }
+            })
+            .catch(error => {
+                console.error('Error loading segments:', error);
+                showErrorMessage();
+            });
+    }
+    
+    function renderSegments(geojson) {
+        // Clear existing layer
+        if (segmentsLayer) {
+            map.removeLayer(segmentsLayer);
+        }
+        
+        // Create segments layer
+        segmentsLayer = L.geoJSON(geojson, {
+            style: function(feature) {
+                const los = feature.properties.worst_los || 'Unknown';
+                const color = LOS_COLORS[los] || '#666666';
+                
+                return {
+                    color: color,
+                    weight: 4,
+                    opacity: 0.8,
+                    fillOpacity: 0.3
+                };
+            },
+            onEachFeature: function(feature, layer) {
+                // Add tooltip
+                const props = feature.properties;
+                const tooltipContent = `
+                    <div class="segment-tooltip">
+                        <div class="segment-id">${props.seg_id} — ${props.label}</div>
+                        <div>${props.length_km} km • ${props.width_m} m • ${props.direction}</div>
+                        <div>Events: ${props.events.join(', ')}</div>
+                        <div class="segment-metrics">
+                            LOS: ${props.worst_los} • Peak ${props.peak_density} p/m² @ ${props.peak_rate} p/s
+                        </div>
+                    </div>
+                `;
+                
+                layer.bindTooltip(tooltipContent, {
+                    permanent: false,
+                    direction: 'top',
+                    offset: [0, -10]
+                });
+                
+                // Add click handler for table highlighting
+                layer.on('click', function() {
+                    highlightSegmentInTable(props.seg_id);
+                });
+            }
+        }).addTo(map);
+        
+        // Fit map to segments bounds
+        if (segmentsLayer.getBounds().isValid()) {
+            map.fitBounds(segmentsLayer.getBounds(), { padding: [20, 20] });
+        }
+        
+        // Focus on specific segment if requested
+        if (focusSegmentId) {
+            focusOnSegment(focusSegmentId);
+        }
+    }
+    
+    function focusOnSegment(segmentId) {
+        if (!segmentsLayer) return;
+        
+        segmentsLayer.eachLayer(function(layer) {
+            if (layer.feature.properties.seg_id === segmentId) {
+                // Highlight the segment
+                layer.setStyle({
+                    weight: 6,
+                    opacity: 1.0
+                });
+                
+                // Fit bounds to this segment
+                map.fitBounds(layer.getBounds(), { padding: [50, 50] });
+                
+                // Open tooltip
+                layer.openTooltip();
+                
+                // Highlight in table
+                highlightSegmentInTable(segmentId);
+            }
+        });
+    }
+    
+    function highlightSegmentInTable(segmentId) {
+        // Remove existing highlights
+        document.querySelectorAll('#segments-table tr.highlighted').forEach(row => {
+            row.classList.remove('highlighted');
+        });
+        
+        // Find and highlight the row
+        const rows = document.querySelectorAll('#segments-table tbody tr');
+        rows.forEach(row => {
+            const idCell = row.querySelector('td:first-child');
+            if (idCell && idCell.textContent === segmentId) {
+                row.classList.add('highlighted');
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        });
+    }
+    
+    function updateTable(features) {
+        const tbody = document.querySelector('#segments-table tbody');
+        tbody.innerHTML = '';
+        
+        features.forEach(feature => {
+            const props = feature.properties;
+            const row = document.createElement('tr');
+            
+            row.innerHTML = `
+                <td>${props.seg_id}</td>
+                <td>${props.label}</td>
+                <td>${props.length_km}</td>
+                <td>${props.width_m}</td>
+                <td>${props.direction}</td>
+                <td>${props.events.join(', ')}</td>
+                <td><span class="badge-los badge-${props.worst_los}">${props.worst_los}</span></td>
+                <td>${props.peak_density.toFixed(2)}</td>
+                <td>${props.peak_rate.toFixed(2)}</td>
+            `;
+            
+            // Add click handler to focus on map
+            row.addEventListener('click', function() {
+                focusOnSegment(props.seg_id);
+            });
+            
+            tbody.appendChild(row);
+        });
+    }
+    
+    function showNoDataMessage() {
+        const tbody = document.querySelector('#segments-table tbody');
+        tbody.innerHTML = '<tr><td colspan="9" class="placeholder">No segment data available</td></tr>';
+        
+        const mapEl = document.getElementById('segments-map');
+        mapEl.innerHTML = '<div class="map-loading">No segment data available</div>';
+    }
+    
+    function showErrorMessage() {
+        const tbody = document.querySelector('#segments-table tbody');
+        tbody.innerHTML = '<tr><td colspan="9" class="placeholder">Error loading segment data</td></tr>';
+        
+        const mapEl = document.getElementById('segments-map');
+        mapEl.innerHTML = '<div class="map-loading">Error loading segment data</div>';
+    }
+</script>
+
+<style>
+    /* Table row highlighting */
+    #segments-table tr.highlighted {
+        background-color: #e3f2fd !important;
+        border-left: 4px solid #2196f3;
+    }
+    
+    #segments-table tbody tr {
+        cursor: pointer;
+    }
+    
+    #segments-table tbody tr:hover {
+        background-color: #f5f5f5;
+    }
+</style>
 {% endblock %}
 
