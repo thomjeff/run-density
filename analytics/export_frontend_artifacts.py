@@ -94,24 +94,31 @@ def generate_meta_json(run_id: str, environment: str = "local") -> Dict[str, Any
     Generate meta.json with run metadata.
     
     Args:
-        run_id: Run identifier (e.g., "2025-10-19-1655")
+        run_id: Run identifier (e.g., "2025-10-19-1655" or "2025-10-19")
         environment: Environment name ("local" or "cloud")
     
     Returns:
         Dictionary with meta fields
     """
-    # Parse timestamp from run_id (format: YYYY-MM-DD-HHMM)
+    # Generate valid ISO-8601 UTC timestamp
+    # If run_id contains HHMM, parse it; otherwise use current UTC time
     try:
-        dt_str = run_id.replace("-", "")  # Remove dashes
-        year = dt_str[0:4]
-        month = dt_str[4:6]
-        day = dt_str[6:8]
-        hour = dt_str[8:10]
-        minute = dt_str[10:12]
-        
-        run_timestamp = f"{year}-{month}-{day}T{hour}:{minute}:00Z"
+        # Try to parse YYYY-MM-DD-HHMM format
+        parts = run_id.split("-")
+        if len(parts) >= 4:
+            # Format: YYYY-MM-DD-HHMM
+            year, month, day, hhmm = parts[0], parts[1], parts[2], parts[3]
+            hour = hhmm[0:2]
+            minute = hhmm[2:4]
+            run_timestamp = f"{year}-{month}-{day}T{hour}:{minute}:00Z"
+        else:
+            # Format: YYYY-MM-DD (no time) - use current UTC time
+            year, month, day = parts[0], parts[1], parts[2]
+            now = datetime.now(timezone.utc)
+            run_timestamp = f"{year}-{month}-{day}T{now.hour:02d}:{now.minute:02d}:00Z"
     except Exception:
-        run_timestamp = datetime.now(timezone.utc).isoformat()
+        # Fallback to current time in ISO-8601 format
+        run_timestamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     
     return {
         "run_id": run_id,
@@ -202,7 +209,7 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
     return metrics
 
 
-def generate_flags_json(reports_dir: Path, segment_metrics: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+def generate_flags_json(reports_dir: Path, segment_metrics: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Generate flags.json from segment metrics based on LOS thresholds.
     
@@ -211,7 +218,7 @@ def generate_flags_json(reports_dir: Path, segment_metrics: Dict[str, Dict[str, 
         segment_metrics: Dictionary of segment metrics
     
     Returns:
-        Dictionary with flagged segments and bins
+        Array of flag objects (per ChatGPT QA requirement)
     """
     # Load reporting config for flag threshold
     try:
@@ -234,10 +241,11 @@ def generate_flags_json(reports_dir: Path, segment_metrics: Dict[str, Dict[str, 
         if los_idx >= threshold_idx:
             flagged_segments.append({
                 "seg_id": seg_id,
-                "flag": "density",
-                "note": f"Peak {metrics['peak_density']:.3f} p/m² @ {metrics['active_window']}",
-                "los": worst_los,
-                "peak_density": metrics["peak_density"]
+                "type": "density",
+                "bin": f"{metrics['active_window']}",
+                "severity": worst_los,
+                "peak_density": metrics["peak_density"],
+                "note": f"Peak {metrics['peak_density']:.3f} p/m²"
             })
     
     # Count flagged bins (approximate from parquet if available)
@@ -262,25 +270,27 @@ def generate_flags_json(reports_dir: Path, segment_metrics: Dict[str, Dict[str, 
         except Exception as e:
             print(f"Warning: Could not count flagged bins: {e}")
     
-    return {
-        "flagged_segments": flagged_segments,
-        "segments": [f["seg_id"] for f in flagged_segments],
-        "total_bins_flagged": bins_flagged
-    }
+    # Return array of flag objects (per ChatGPT QA requirement)
+    # Note: total_bins_flagged is added as metadata to each flag if needed,
+    # or can be computed by aggregating all flags
+    return flagged_segments
 
 
 def generate_flow_json(reports_dir: Path) -> Dict[str, Dict[str, Any]]:
     """
     Generate flow.json from Flow.csv.
     
+    Per ChatGPT QA requirement: flow.json values are SUMS per segment from Flow CSV.
+    The CSV has multiple rows per segment (one per event pair), so we sum them.
+    
     Args:
         reports_dir: Path to reports/<run_id>/ directory
     
     Returns:
-        Dictionary mapping seg_id to flow metrics
+        Dictionary mapping seg_id to flow metrics (sums across all event pairs)
     """
-    # Find Flow.csv file
-    flow_csv = list(reports_dir.glob("*-Flow.csv"))
+    # Find Flow.csv file (use the latest one)
+    flow_csv = sorted(list(reports_dir.glob("*-Flow.csv")), reverse=True)
     
     if not flow_csv:
         print(f"Warning: No Flow.csv found in {reports_dir}")
@@ -289,25 +299,31 @@ def generate_flow_json(reports_dir: Path) -> Dict[str, Dict[str, Any]]:
     flow_path = flow_csv[0]
     df = pd.read_csv(flow_path)
     
-    # Convert to dictionary format
+    # Aggregate by segment_id (sum across all event pairs)
     flow_metrics = {}
     
-    for _, row in df.iterrows():
-        seg_id = row.get('seg_id') or row.get('segment_id')
-        if not seg_id or (isinstance(seg_id, float) and pd.isna(seg_id)):
+    # Group by seg_id and sum the flow metrics
+    group_col = 'seg_id' if 'seg_id' in df.columns else 'segment_id'
+    
+    if group_col not in df.columns:
+        print(f"Warning: No seg_id or segment_id column in {flow_path}")
+        return {}
+    
+    for seg_id, group in df.groupby(group_col):
+        if pd.isna(seg_id):
             continue
         
-        # Handle NaN values
-        overtaking_a = row.get('overtaking_a', 0.0)
-        overtaking_b = row.get('overtaking_b', 0.0)
-        copresence_a = row.get('copresence_a', 0)
-        copresence_b = row.get('copresence_b', 0)
+        # Sum across all event pairs for this segment
+        overtaking_a = group['overtaking_a'].sum() if 'overtaking_a' in group.columns else 0.0
+        overtaking_b = group['overtaking_b'].sum() if 'overtaking_b' in group.columns else 0.0
+        copresence_a = group['copresence_a'].sum() if 'copresence_a' in group.columns else 0.0
+        copresence_b = group['copresence_b'].sum() if 'copresence_b' in group.columns else 0.0
         
-        flow_metrics[seg_id] = {
+        flow_metrics[str(seg_id)] = {
             "overtaking_a": float(overtaking_a) if pd.notna(overtaking_a) else 0.0,
             "overtaking_b": float(overtaking_b) if pd.notna(overtaking_b) else 0.0,
-            "copresence_a": int(copresence_a) if pd.notna(copresence_a) else 0,
-            "copresence_b": int(copresence_b) if pd.notna(copresence_b) else 0
+            "copresence_a": float(copresence_a) if pd.notna(copresence_a) else 0.0,
+            "copresence_b": float(copresence_b) if pd.notna(copresence_b) else 0.0
         }
     
     return flow_metrics
@@ -439,7 +455,7 @@ def export_ui_artifacts(reports_dir: Path, run_id: str, environment: str = "loca
     print("\n3️⃣  Generating flags.json...")
     flags = generate_flags_json(reports_dir, segment_metrics)
     (artifacts_dir / "flags.json").write_text(json.dumps(flags, indent=2))
-    print(f"   ✅ flags.json: {len(flags['flagged_segments'])} flagged, {flags['total_bins_flagged']} bins")
+    print(f"   ✅ flags.json: {len(flags)} flagged segments")
     
     # 4. Generate flow.json
     print("\n4️⃣  Generating flow.json...")

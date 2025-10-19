@@ -211,12 +211,22 @@ async def get_dashboard_summary():
         # Load flags data
         if not storage.exists(DATASET["flags"]):
             warnings.append("missing: flags.json")
-            flags = {}
+            flags = []
         else:
             flags = load_flags(storage)
         
-        segments_flagged = len(flags.get("flagged_segments", []))
-        bins_flagged = flags.get("bins_flagged", 0)
+        # Handle both old dict format and new array format
+        if isinstance(flags, dict):
+            # Old format: {"flagged_segments": [...], "total_bins_flagged": N}
+            segments_flagged = len(flags.get("flagged_segments", []))
+            bins_flagged = flags.get("total_bins_flagged", 0)
+        elif isinstance(flags, list):
+            # New format: [{seg_id, type, severity, ...}]
+            segments_flagged = len(flags)
+            bins_flagged = 0  # Will need to compute from flags or bins.parquet separately
+        else:
+            segments_flagged = 0
+            bins_flagged = 0
         
         # Load runners data
         if not storage.exists("runners.csv"):

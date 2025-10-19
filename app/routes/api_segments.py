@@ -181,7 +181,13 @@ async def get_segments_summary():
         flagged_count = 0
         if storage.exists("flags.json"):
             flags = storage.read_json("flags.json")
-            flagged_count = len(flags.get("flagged_segments", []))
+            # Handle both dict and array formats
+            if isinstance(flags, dict):
+                flagged_count = len(flags.get("flagged_segments", []))
+            elif isinstance(flags, list):
+                flagged_count = len(flags)
+            else:
+                flagged_count = 0
         
         summary = {
             "total_segments": total_segments,
