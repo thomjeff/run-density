@@ -28,6 +28,45 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.common.config import load_rulebook, load_reporting
 
 
+def _load_bins_df(reports_root: Path, run_id: str) -> pd.DataFrame:
+    """Load and normalize bins.parquet DataFrame."""
+    bins_path = reports_root / run_id / "bins.parquet"
+    df = pd.read_parquet(bins_path)
+    
+    # Normalize expected columns
+    rename_map = {}
+    if "seg_id" in df.columns and "segment_id" not in df.columns:
+        rename_map["seg_id"] = "segment_id"
+    if "rate" in df.columns and "rate_p_s" not in df.columns:
+        rename_map["rate"] = "rate_p_s"
+    
+    df = df.rename(columns=rename_map)
+    
+    # Basic guards
+    assert "segment_id" in df.columns, f"segment_id column not found. Available: {list(df.columns)}"
+    assert "rate_p_s" in df.columns, f"rate_p_s column not found. Available: {list(df.columns)}"
+    
+    return df
+
+
+def _compute_peak_rate_per_segment(bins_df: pd.DataFrame) -> dict:
+    """Compute peak rate per segment from bins.parquet."""
+    # idxmax per segment_id to grab the whole bin row
+    idx = bins_df.groupby("segment_id")["rate_p_s"].idxmax()
+    peaks = bins_df.loc[idx, ["segment_id", "rate_p_s", "start_km", "end_km", "t_end"]].copy()
+    
+    # Build dict { seg_id: {peak_rate, peak_rate_time, peak_rate_km} }
+    out = {}
+    for _, row in peaks.iterrows():
+        seg = str(row["segment_id"])
+        out[seg] = {
+            "peak_rate": float(round(row["rate_p_s"], 3)),
+            "peak_rate_time": str(row.get("t_end", "")),   # use t_end for time
+            "peak_rate_km": f'{row.get("start_km", "")}-{row.get("end_km", "")}'
+        }
+    return out
+
+
 def get_git_sha() -> str:
     """Get current git commit SHA (short)."""
     try:
@@ -174,14 +213,9 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
         else:
             peak_density = 0.0
         
-        # Rate might be 'rate', 'flow_rate', or need to be computed
-        if 'rate' in group.columns:
-            peak_rate = group['rate'].max()
-        elif 'flow_rate' in group.columns:
-            peak_rate = group['flow_rate'].max()
-        else:
-            # No rate data available
-            peak_rate = 0.0
+        # Peak rate will be computed from bins.parquet separately
+        # Set to 0.0 for now, will be updated later
+        peak_rate = 0.0
         
         # Active window: min start time to max end time
         # Use t_start/t_end or start_time/end_time
@@ -382,10 +416,10 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
                 "properties": {
                     "seg_id": seg_id,
                     "label": dims.get("seg_label", dims.get("name", seg_id)),
-                    "length_km": float(dims.get("length_km", 0.0)),
+                    "length_km": float(dims.get("full_length", dims.get("half_length", dims.get("10K_length", 0.0)))),
                     "width_m": float(dims.get("width_m", 0.0)),
                     "direction": dims.get("direction", "uni"),
-                    "events": dims.get("events", "").split("+") if dims.get("events") else []
+                    "events": [event for event in ["Full", "Half", "10K"] if dims.get(event.lower(), False)]
                 }
             }
         
@@ -448,6 +482,27 @@ def export_ui_artifacts(reports_dir: Path, run_id: str, environment: str = "loca
     # 2. Generate segment_metrics.json
     print("\n2️⃣  Generating segment_metrics.json...")
     segment_metrics = generate_segment_metrics_json(reports_dir)
+    
+    # 2a. Compute peak_rate from bins.parquet and merge into segment_metrics
+    print("   📊 Computing peak_rate from bins.parquet...")
+    try:
+        bins_df = _load_bins_df(reports_dir.parent, run_id)
+        peak_rate_map = _compute_peak_rate_per_segment(bins_df)
+        
+        # Merge peak_rate data into segment_metrics
+        for seg_id, seg_metrics in segment_metrics.items():
+            if seg_id in peak_rate_map:
+                seg_metrics["peak_rate"] = peak_rate_map[seg_id]["peak_rate"]
+                seg_metrics["peak_rate_time"] = peak_rate_map[seg_id]["peak_rate_time"]
+                seg_metrics["peak_rate_km"] = peak_rate_map[seg_id]["peak_rate_km"]
+            else:
+                # Segment has no bins (rare): set to 0.0 but add a warning
+                seg_metrics.setdefault("peak_rate", 0.0)
+        
+        print(f"   ✅ peak_rate computed for {len(peak_rate_map)} segments")
+    except Exception as e:
+        print(f"   ⚠️  Warning: Could not compute peak_rate from bins.parquet: {e}")
+    
     (artifacts_dir / "segment_metrics.json").write_text(json.dumps(segment_metrics, indent=2))
     print(f"   ✅ segment_metrics.json: {len(segment_metrics)} segments")
     

@@ -120,7 +120,7 @@
             <td>${totals.overtaking_b.toFixed(0)}</td>
             <td>${totals.copresence_a.toFixed(0)}</td>
             <td>${totals.copresence_b.toFixed(0)}</td>
-            <td>—</td>
+            <td>${totals.total_copresence ? totals.total_copresence.toFixed(0) : '—'}</td>
         `;
         
         tbody.appendChild(totalRow);

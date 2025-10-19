@@ -137,6 +137,24 @@
         background: #fdf2f2;
         border-left: 4px solid #e74c3c;
     }
+    
+    /* LOS Badge Styles */
+    .badge-los {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: white;
+    }
+    
+    .badge-A { background-color: #2ecc71; }
+    .badge-B { background-color: #f39c12; }
+    .badge-C { background-color: #e67e22; }
+    .badge-D { background-color: #e74c3c; }
+    .badge-E { background-color: #9b59b6; }
+    .badge-F { background-color: #34495e; }
 </style>
 {% endblock %}
 
@@ -193,6 +211,8 @@
     }
     
     function updateDashboard(data) {
+        console.log('updateDashboard called with data:', data);
+        
         // Update timestamp
         document.getElementById('last-updated').textContent = formatTimestamp(data.timestamp);
         
@@ -255,43 +275,75 @@
     
     function updateModelInputs(data) {
         // Total runners
-        document.querySelector('#metric-total-runners .kpi-value').textContent = data.total_runners.toLocaleString();
+        const totalRunnersEl = document.querySelector('#metric-total-runners .kpi-value');
+        if (totalRunnersEl) {
+            totalRunnersEl.textContent = data.total_runners.toLocaleString();
+        }
         
         // Cohorts
-        const cohorts = data.cohorts;
-        const cohortText = Object.entries(cohorts)
-            .map(([event, info]) => `${event}: ${info.count} @ ${info.start}`)
-            .join(' • ');
-        document.querySelector('#metric-cohorts .kpi-value').textContent = cohortText || 'No data';
+        const cohortsEl = document.querySelector('#metric-cohorts .kpi-value');
+        if (cohortsEl) {
+            const cohorts = data.cohorts;
+            const cohortText = Object.entries(cohorts)
+                .map(([event, info]) => `${event}: ${info.count} @ ${info.start}`)
+                .join(' • ');
+            cohortsEl.textContent = cohortText || 'No data';
+        }
         
         // Segments
-        document.querySelector('#metric-segments .kpi-value').textContent = data.segments_total;
+        const segmentsEl = document.querySelector('#metric-segments .kpi-value');
+        if (segmentsEl) {
+            segmentsEl.textContent = data.segments_total;
+        }
     }
     
     function updateModelOutputs(data) {
+        console.log('updateModelOutputs called with data:', data);
+        
         // Peak density with LOS badge
-        const peakDensityEl = document.querySelector('#kpi-peak-density .kpi-value');
-        peakDensityEl.textContent = data.peak_density.toFixed(3);
+        const peakDensityEl = document.querySelector('#kpi-peak-density');
+        console.log('peakDensityEl found:', peakDensityEl);
+        if (peakDensityEl) {
+            peakDensityEl.textContent = data.peak_density.toFixed(3);
+            console.log('Set peak density to:', data.peak_density.toFixed(3));
+        }
         
         const losBadgeEl = document.querySelector('#kpi-peak-density-los .badge-los');
-        losBadgeEl.textContent = data.peak_density_los;
-        losBadgeEl.className = `badge-los badge-${data.peak_density_los}`;
+        if (losBadgeEl) {
+            losBadgeEl.textContent = data.peak_density_los;
+            losBadgeEl.className = `badge-los badge-${data.peak_density_los}`;
+        }
         
         // Peak rate
-        document.querySelector('#kpi-peak-rate .kpi-value').textContent = data.peak_rate.toFixed(2);
+        const peakRateEl = document.querySelector('#kpi-peak-rate');
+        if (peakRateEl) {
+            peakRateEl.textContent = data.peak_rate.toFixed(2);
+        }
         
         // Flagged segments
-        const flaggedSegmentsText = `${data.segments_flagged} / ${data.segments_total}`;
-        document.querySelector('#kpi-flagged-segments .kpi-value').textContent = flaggedSegmentsText;
+        const flaggedSegmentsEl = document.querySelector('#kpi-flagged-segments');
+        if (flaggedSegmentsEl) {
+            const flaggedSegmentsText = `${data.segments_flagged} / ${data.segments_total}`;
+            flaggedSegmentsEl.textContent = flaggedSegmentsText;
+        }
         
         // Flagged bins
-        document.querySelector('#kpi-flagged-bins .kpi-value').textContent = data.bins_flagged.toLocaleString();
+        const flaggedBinsEl = document.querySelector('#kpi-flagged-bins');
+        if (flaggedBinsEl) {
+            flaggedBinsEl.textContent = data.bins_flagged.toLocaleString();
+        }
         
         // Overtaking segments
-        document.querySelector('#kpi-overtaking .kpi-value').textContent = data.segments_overtaking;
+        const overtakingEl = document.querySelector('#kpi-overtaking');
+        if (overtakingEl) {
+            overtakingEl.textContent = data.segments_overtaking;
+        }
         
         // Co-presence segments
-        document.querySelector('#kpi-copresence .kpi-value').textContent = data.segments_copresence;
+        const copresenceEl = document.querySelector('#kpi-copresence');
+        if (copresenceEl) {
+            copresenceEl.textContent = data.segments_copresence;
+        }
     }
     
     function formatTimestamp(timestamp) {

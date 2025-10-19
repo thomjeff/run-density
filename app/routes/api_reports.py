@@ -44,13 +44,32 @@ async def get_reports_list():
         # List reports
         reports = list_reports(storage, run_id)
         
+        # Add core data files from data/ directory
+        core_data_files = [
+            {"name": "runners.csv", "path": "data/runners.csv", "description": "Runner data with start times and event assignments"},
+            {"name": "segments.csv", "path": "data/segments.csv", "description": "Course segment definitions and characteristics"},
+            {"name": "flow_expected_results.csv", "path": "data/flow_expected_results.csv", "description": "Expected results for validation"}
+        ]
+        
+        # Check if core data files exist and add them
+        for data_file in core_data_files:
+            if storage.exists(data_file["path"]):
+                reports.append({
+                    "name": data_file["name"],
+                    "path": data_file["path"],
+                    "mtime": storage.mtime(data_file["path"]),
+                    "size": storage.size(data_file["path"]),
+                    "description": data_file["description"],
+                    "type": "data_file"
+                })
+        
         response = JSONResponse(content=reports)
         response.headers["Cache-Control"] = "public, max-age=60"
         return response
         
     except Exception as e:
         logger.error(f"Error listing reports: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to list reports: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"database to list reports: {str(e)}")
 
 
 @router.get("/api/reports/download")
@@ -65,7 +84,7 @@ async def download_report(path: str = Query(..., description="Report file path")
         File download
     """
     try:
-        # Security: validate path is under reports/ and doesn't traverse
+        # Security: validate path is under reports/ or data/ and doesn't traverse
         if ".." in path or path.startswith("/"):
             raise HTTPException(status_code=400, detail="Invalid file path")
         
@@ -74,13 +93,18 @@ async def download_report(path: str = Query(..., description="Report file path")
         if not run_id:
             raise HTTPException(status_code=404, detail="No reports available")
         
-        # Validate path starts with run_id
-        if not path.startswith(run_id):
+        # Validate path starts with run_id (for reports) or is a data file
+        if not (path.startswith(run_id) or path.startswith("data/")):
             raise HTTPException(status_code=403, detail="Access denied")
         
         # For local mode, serve directly
         if storage.mode == "local":
-            file_path = Path("reports") / path
+            # Handle both reports/ and data/ files
+            if path.startswith("data/"):
+                file_path = Path(path)  # data/runners.csv -> data/runners.csv
+            else:
+                file_path = Path("reports") / path  # 2025-10-19/file.md -> reports/2025-10-19/file.md
+            
             if not file_path.exists():
                 raise HTTPException(status_code=404, detail="File not found")
             
@@ -92,7 +116,12 @@ async def download_report(path: str = Query(..., description="Report file path")
         else:
             # For GCS mode, stream from bucket
             try:
-                content = storage.read_bytes(f"reports/{path}")
+                # Handle both reports/ and data/ files
+                if path.startswith("data/"):
+                    content = storage.read_bytes(path)  # data/runners.csv
+                else:
+                    content = storage.read_bytes(f"reports/{path}")  # reports/2025-10-19/file.md
+                
                 filename = Path(path).name
                 
                 return StreamingResponse(

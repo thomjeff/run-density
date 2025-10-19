@@ -53,7 +53,8 @@
         // Group by type
         const densityReports = reports.filter(r => r.name.includes('Density'));
         const flowReports = reports.filter(r => r.name.includes('Flow'));
-        const dataFiles = reports.filter(r => !r.name.includes('Density') && !r.name.includes('Flow'));
+        const dataFiles = reports.filter(r => r.type === 'data_file');
+        const otherReports = reports.filter(r => !r.name.includes('Density') && !r.name.includes('Flow') && r.type !== 'data_file');
         
         let html = '';
         
@@ -82,6 +83,16 @@
             html += '<h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Data Files</h4>';
             html += '<ul style="list-style: none; padding: 0;">';
             dataFiles.forEach(report => {
+                html += renderDataFileItem(report);
+            });
+            html += '</ul>';
+        }
+        
+        // Other Reports
+        if (otherReports.length > 0) {
+            html += '<h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Other Reports</h4>';
+            html += '<ul style="list-style: none; padding: 0;">';
+            otherReports.forEach(report => {
                 html += renderReportItem(report);
             });
             html += '</ul>';
@@ -104,6 +115,27 @@
                    class="button"
                    download="${report.name}"
                    style="padding: 0.5rem 1rem; background: #3498db; color: white; text-decoration: none; border-radius: 4px; font-size: 0.875rem;">
+                    Download
+                </a>
+            </li>
+        `;
+    }
+    
+    function renderDataFileItem(report) {
+        const size = formatFileSize(report.size);
+        const mtime = report.mtime ? new Date(report.mtime * 1000).toLocaleString() : 'N/A';
+        
+        return `
+            <li style="padding: 0.75rem; border-bottom: 1px solid #ecf0f1; display: flex; justify-content: space-between; align-items: center;">
+                <div style="flex: 1;">
+                    <div style="font-weight: 600;">${report.name}</div>
+                    <div style="font-size: 0.875rem; color: #7f8c8d; margin-bottom: 0.25rem;">${size} • ${mtime}</div>
+                    <div style="font-size: 0.8rem; color: #95a5a6; font-style: italic;">${report.description || 'Data file'}</div>
+                </div>
+                <a href="/api/reports/download?path=${encodeURIComponent(report.path)}" 
+                   class="button"
+                   download="${report.name}"
+                   style="padding: 0.5rem 1rem; background: #3498db; color: white; text-decoration: none; border-radius: 4px; font-size: 0.875rem; margin-left: 1rem;">
                     Download
                 </a>
             </li>

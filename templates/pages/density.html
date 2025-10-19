@@ -56,6 +56,25 @@
     <div class="card">
         <h3 id="detail-title">Segment Detail</h3>
         
+        <!-- Segment Metrics -->
+        <div style="margin: 1.5rem 0; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+            <h4 style="margin-bottom: 0.75rem;">Key Metrics</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                <div>
+                    <strong>Peak Density:</strong> <span id="detail-peak-density">—</span>
+                </div>
+                <div>
+                    <strong>Level of Service:</strong> <span id="detail-los-badge">—</span>
+                </div>
+                <div>
+                    <strong>Peak Rate:</strong> <span id="detail-peak-rate">—</span>
+                </div>
+                <div>
+                    <strong>Active Window:</strong> <span id="detail-active">—</span>
+                </div>
+            </div>
+        </div>
+        
         <!-- Heatmap -->
         <div id="heatmap-container" style="margin: 1.5rem 0;">
             <h4 style="margin-bottom: 0.75rem;">Density Heatmap</h4>
@@ -125,9 +144,9 @@
                 <td>${segment.peak_density.toFixed(3)}</td>
                 <td>${losBadge}</td>
                 <td>${segment.peak_rate.toFixed(2)}</td>
-                <td>—</td>
+                <td>${segment.utilization ? segment.utilization.toFixed(3) : '—'}</td>
                 <td>${flaggedIcon}</td>
-                <td>—</td>
+                <td>${segment.worst_bin || '—'}</td>
             `;
             
             tbody.appendChild(row);
@@ -155,14 +174,17 @@
         // Update title
         document.getElementById('detail-title').textContent = `${detail.seg_id}: ${detail.name}`;
         
-        // Update metrics
-        document.getElementById('detail-peak-density').textContent = detail.peak_density.toFixed(3) + ' p/m²';
+        // Update metrics with null checks
+        const peakDensity = detail.peak_density || 0;
+        document.getElementById('detail-peak-density').textContent = peakDensity.toFixed(3) + ' p/m²';
         
-        const losBadge = `<span class="badge-los badge-${detail.worst_los}">${detail.worst_los}</span>`;
+        const worstLos = detail.worst_los || 'Unknown';
+        const losBadge = `<span class="badge-los badge-${worstLos}">${worstLos}</span>`;
         document.getElementById('detail-los-badge').innerHTML = losBadge;
         
-        document.getElementById('detail-peak-rate').textContent = detail.peak_rate.toFixed(2) + ' p/s';
-        document.getElementById('detail-active').textContent = detail.active;
+        const peakRate = detail.peak_rate || 0;
+        document.getElementById('detail-peak-rate').textContent = peakRate.toFixed(2) + ' p/s';
+        document.getElementById('detail-active').textContent = detail.active || 'N/A';
         
         // Show heatmap or empty state
         const heatmapImg = document.getElementById('heatmap-image');
@@ -171,7 +193,7 @@
         if (detail.heatmap_url) {
             heatmapImg.style.display = 'block';
             noBinData.style.display = 'none';
-            document.getElementById('heatmap-image').querySelector('img').src = detail.heatmap_url;
+            heatmapImg.src = detail.heatmap_url;
         } else {
             heatmapImg.style.display = 'none';
             noBinData.style.display = 'block';

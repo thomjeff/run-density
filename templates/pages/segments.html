@@ -189,10 +189,42 @@
         // Create map centered on a default location (will be adjusted to data bounds)
         map = L.map('segments-map').setView([40.7128, -74.0060], 13);
         
-        // Add OpenStreetMap tiles
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
+        // Add more reliable tile layer with fallback options
+        const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19,
+            subdomains: ['a', 'b', 'c'],
+            errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+            timeout: 10000
         }).addTo(map);
+        
+        // Add fallback tile layer in case primary fails
+        const fallbackLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '© OpenStreetMap contributors, © CARTO',
+            maxZoom: 19,
+            subdomains: 'abcd',
+            timeout: 10000
+        });
+        
+        // Try to load primary tiles, fallback if needed
+        let tileErrorCount = 0;
+        tileLayer.on('tileerror', function() {
+            tileErrorCount++;
+            console.warn(`Tile error ${tileErrorCount}, trying fallback`);
+            if (tileErrorCount > 5) {
+                map.removeLayer(tileLayer);
+                map.addLayer(fallbackLayer);
+            }
+        });
+        
+        // Set a timeout to switch to fallback if tiles don't load
+        setTimeout(() => {
+            if (tileErrorCount > 0) {
+                console.warn('Switching to fallback tiles due to errors');
+                map.removeLayer(tileLayer);
+                map.addLayer(fallbackLayer);
+            }
+        }, 5000);
         
         // Remove loading indicator
         const loadingEl = document.querySelector('.map-loading');
@@ -202,13 +234,22 @@
     }
     
     function loadSegments() {
+        console.log('Loading segments data...');
         fetch('/api/segments/geojson')
-            .then(response => response.json())
+            .then(response => {
+                console.log('Segments API response:', response.status);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
             .then(data => {
+                console.log('Segments data loaded:', data);
                 if (data.features && data.features.length > 0) {
                     renderSegments(data);
                     updateTable(data.features);
                 } else {
+                    console.warn('No segment features found in data');
                     showNoDataMessage();
                 }
             })

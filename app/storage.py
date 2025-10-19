@@ -22,6 +22,8 @@ DATASET = {
     "segments": "segments.geojson", 
     "metrics": "segment_metrics.json",
     "flags": "flags.json",
+    "flow": "flow.json",
+    "runners": "data/runners.csv"  # Absolute path from project root
 }
 
 
@@ -75,6 +77,10 @@ class Storage:
     def _full_local(self, path: str) -> Path:
         """Get full local path from relative path."""
         assert self.root is not None, "root must be set for local mode"
+        # Handle absolute paths (starting with data/, config/, etc.)
+        if path.startswith(('data/', 'config/', 'reports/')):
+            return Path(path).resolve()
+        # Handle relative paths from artifacts root
         return (self.root / path).resolve()
     
     def read_json(self, path: str) -> Dict[str, Any]:
@@ -156,6 +162,26 @@ class Storage:
         # GCS updated time → epoch seconds
         updated = blob.reload() or blob.updated  # ensure metadata
         return blob.updated.timestamp() if blob.updated else 0.0
+    
+    def size(self, path: str) -> int:
+        """
+        Get file size in bytes.
+        
+        Args:
+            path: Relative path to file
+            
+        Returns:
+            int: File size in bytes (0 if not exists)
+        """
+        if self.mode == "local":
+            p = self._full_local(path)
+            return p.stat().st_size if p.exists() else 0
+        blob = self._bkt.blob(f"{self.prefix}/{path}" if self.prefix else path)
+        if not blob.exists():
+            return 0
+        # GCS size
+        blob.reload()  # ensure metadata
+        return blob.size or 0
     
     def list_paths(self, prefix: str) -> List[str]:
         """
@@ -240,7 +266,7 @@ def load_latest_run_id(storage: Storage) -> Optional[str]:
         Run ID string (e.g., "2025-10-19") or None if not found
     """
     try:
-        pointer = storage.read_json("../latest.json")
+        pointer = storage.read_json("artifacts/latest.json")
         return pointer.get("run_id")
     except Exception:
         # Fallback: try direct read for local mode

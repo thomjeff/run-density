@@ -36,12 +36,12 @@ def load_runners_data() -> Dict[str, Any]:
         Dict with total_runners and cohorts data
     """
     try:
-        if not storage.exists("runners.csv"):
+        if not storage.exists(DATASET["runners"]):
             logger.warning("runners.csv not found in storage")
             return {"total_runners": 0, "cohorts": {}}
         
         # Read CSV data
-        csv_content = storage.read_text("runners.csv")
+        csv_content = storage.read_text(DATASET["runners"])
         lines = csv_content.strip().split('\n')
         
         if len(lines) < 2:
@@ -67,6 +67,27 @@ def load_runners_data() -> Dict[str, Any]:
         return {"total_runners": 0, "cohorts": {}}
 
 
+def load_bins_flagged_count() -> int:
+    """
+    Load bins data and count flagged bins.
+    
+    Returns:
+        int: Number of flagged bins
+    """
+    try:
+        # Try to read bins.parquet from reports directory
+        import pandas as pd
+        bins_df = pd.read_parquet("reports/2025-10-19/bins.parquet")
+        
+        # Count bins with flag_severity != 'none'
+        flagged_bins = len(bins_df[bins_df['flag_severity'] != 'none'])
+        return flagged_bins
+        
+    except Exception as e:
+        logger.error(f"Error loading bins data: {e}")
+        return 0
+
+
 def load_flow_data() -> Dict[str, int]:
     """
     Load flow data for overtaking and co-presence counts.
@@ -75,30 +96,29 @@ def load_flow_data() -> Dict[str, int]:
         Dict with segments_overtaking and segments_copresence counts
     """
     try:
-        if not storage.exists("flow.json"):
+        if not storage.exists(DATASET["flow"]):
             logger.warning("flow.json not found in storage")
             return {"segments_overtaking": 0, "segments_copresence": 0}
         
-        flow_data = storage.read_json("flow.json")
+        flow_data = storage.read_json(DATASET["flow"])
         
         # Count segments with overtaking and co-presence
         segments_overtaking = 0
         segments_copresence = 0
         
-        if "features" in flow_data:
-            for feature in flow_data["features"]:
-                props = feature.get("properties", {})
-                
-                # Check for overtaking (any non-zero overtake counts)
-                overtakes_a_to_b = props.get("overtakes_a_to_b", 0)
-                overtakes_b_to_a = props.get("overtakes_b_to_a", 0)
-                if overtakes_a_to_b > 0 or overtakes_b_to_a > 0:
-                    segments_overtaking += 1
-                
-                # Check for co-presence
-                copresence = props.get("copresence", 0)
-                if copresence > 0:
-                    segments_copresence += 1
+        # flow.json is a simple object with segment IDs as keys
+        for seg_id, values in flow_data.items():
+            # Check for overtaking (any non-zero overtake counts)
+            overtaking_a = values.get("overtaking_a", 0)
+            overtaking_b = values.get("overtaking_b", 0)
+            if overtaking_a > 0 or overtaking_b > 0:
+                segments_overtaking += 1
+            
+            # Check for co-presence
+            copresence_a = values.get("copresence_a", 0)
+            copresence_b = values.get("copresence_b", 0)
+            if copresence_a > 0 or copresence_b > 0:
+                segments_copresence += 1
         
         return {
             "segments_overtaking": segments_overtaking,
@@ -223,13 +243,14 @@ async def get_dashboard_summary():
         elif isinstance(flags, list):
             # New format: [{seg_id, type, severity, ...}]
             segments_flagged = len(flags)
-            bins_flagged = 0  # Will need to compute from flags or bins.parquet separately
+            # Calculate bins_flagged from bins.parquet
+            bins_flagged = load_bins_flagged_count()
         else:
             segments_flagged = 0
             bins_flagged = 0
         
         # Load runners data
-        if not storage.exists("runners.csv"):
+        if not storage.exists(DATASET["runners"]):
             warnings.append("missing: runners.csv")
         
         runners_data = load_runners_data()
@@ -237,7 +258,7 @@ async def get_dashboard_summary():
         cohorts = runners_data["cohorts"]
         
         # Load flow data
-        if not storage.exists("flow.json"):
+        if not storage.exists(DATASET["flow"]):
             warnings.append("missing: flow.json")
         
         flow_data = load_flow_data()
