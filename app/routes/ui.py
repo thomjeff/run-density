@@ -63,12 +63,32 @@ async def dashboard(request: Request):
     Dashboard page with KPIs and summary tiles.
     
     Returns:
-        HTML: Dashboard with model inputs/outputs
+        HTML: Dashboard with model inputs/outputs and LOS colors
     """
     meta = get_stub_meta()
+    
+    # Load LOS colors from SSOT
+    try:
+        reporting_config = load_reporting()
+        los_colors = reporting_config.get("reporting", {}).get("los_colors", {})
+    except Exception as e:
+        # Fallback to hardcoded colors if YAML loading fails
+        los_colors = {
+            "A": "#4CAF50",
+            "B": "#8BC34A", 
+            "C": "#FFC107",
+            "D": "#FF9800",
+            "E": "#FF5722",
+            "F": "#F44336"
+        }
+    
     return templates.TemplateResponse(
         "pages/dashboard.html",
-        {"request": request, "meta": meta}
+        {
+            "request": request, 
+            "meta": meta,
+            "los_colors": los_colors
+        }
     )
 
 
