@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Flow Analysis{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Temporal Flow Analysis</h2>
+    {% if meta %}
+    <div class="provenance">
+        {% include "partials/_provenance.html" %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Flow Metrics Table -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Event Interactions</h3>
+    <div style="overflow-x: auto;">
+        <table id="flow-table" style="min-width: 100%;">
+            <thead>
+                <tr>
+                    <th style="position: sticky; left: 0; background: #f8f9fa; z-index: 10;">ID</th>
+                    <th style="position: sticky; left: 60px; background: #f8f9fa; z-index: 10;">Name</th>
+                    <th style="text-align: right;">Convergence Point</th>
+                    <th style="text-align: right;">Overtakes (A→B)</th>
+                    <th style="text-align: right;">Overtakes (B→A)</th>
+                    <th style="text-align: right;">Co-presence</th>
+                    <th>Has Convergence</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td colspan="7" class="placeholder">Loading flow data...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+    /* Sticky columns for flow table */
+    #flow-table th:nth-child(1),
+    #flow-table td:nth-child(1) {
+        position: sticky;
+        left: 0;
+        background: white;
+        z-index: 5;
+    }
+    
+    #flow-table th:nth-child(2),
+    #flow-table td:nth-child(2) {
+        position: sticky;
+        left: 60px;
+        background: white;
+        z-index: 5;
+    }
+    
+    #flow-table th {
+        background: #f8f9fa !important;
+    }
+    
+    /* Right-align numeric columns */
+    #flow-table td:nth-child(n+3):nth-child(-n+6) {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }
+    
+    @media (max-width: 768px) {
+        #flow-table {
+            font-size: 0.875rem;
+        }
+    }
+</style>
+{% endblock %}
+

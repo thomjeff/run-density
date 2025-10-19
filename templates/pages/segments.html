@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Segments{% endblock %}
+
+{% block extra_head %}
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Course Segments</h2>
+    {% if meta %}
+    <div class="provenance">
+        {% include "partials/_provenance.html" %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Map Container -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Course Map</h3>
+    <div id="map" style="height: 500px; border-radius: 4px; overflow: hidden;">
+        <div class="placeholder">Loading map data...</div>
+    </div>
+</div>
+
+<!-- Segment Metadata Table -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Segment Metadata</h3>
+    <table id="segments-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Length (km)</th>
+                <th>Width (m)</th>
+                <th>Direction</th>
+                <th>Events</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td colspan="6" class="placeholder">Loading segment data...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    // Leaflet map initialization will go here in later steps
+    console.log('Leaflet loaded - map initialization pending');
+</script>
+{% endblock %}
+

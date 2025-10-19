@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Reports{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Report Downloads</h2>
+    {% if meta %}
+    <div class="provenance">
+        {% include "partials/_provenance.html" %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Available Reports -->
+<div class="card">
+    <h3 style="margin-bottom: 1.5rem;">Available Reports & Artifacts</h3>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+        
+        <!-- Density Report Card -->
+        <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.5rem;">
+            <h4 style="margin-bottom: 0.5rem; color: #2c3e50;">📊 Density Report</h4>
+            <p style="font-size: 0.875rem; color: #7f8c8d; margin-bottom: 1rem;">
+                Comprehensive spatial crowding analysis with LOS classifications.
+            </p>
+            <div id="density-report-links" class="placeholder" style="padding: 1rem;">
+                Available formats: MD, HTML, PDF
+            </div>
+        </div>
+        
+        <!-- Flow Report Card -->
+        <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.5rem;">
+            <h4 style="margin-bottom: 0.5rem; color: #2c3e50;">🔄 Flow Report</h4>
+            <p style="font-size: 0.875rem; color: #7f8c8d; margin-bottom: 1rem;">
+                Temporal flow analysis with convergence and overtaking metrics.
+            </p>
+            <div id="flow-report-links" class="placeholder" style="padding: 1rem;">
+                Available formats: MD, CSV, XLSX
+            </div>
+        </div>
+        
+        <!-- Datasets Card -->
+        <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.5rem;">
+            <h4 style="margin-bottom: 0.5rem; color: #2c3e50;">📁 Datasets</h4>
+            <p style="font-size: 0.875rem; color: #7f8c8d; margin-bottom: 1rem;">
+                Input data and generated artifacts for analysis.
+            </p>
+            <div id="dataset-links" class="placeholder" style="padding: 1rem;">
+                Available: runners.csv, segments.geojson, bins.parquet
+            </div>
+        </div>
+        
+    </div>
+</div>
+
+{% endblock %}
+

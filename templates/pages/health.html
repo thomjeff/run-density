@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}Health Check{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>System Health</h2>
+    {% if meta %}
+    <div class="provenance">
+        {% include "partials/_provenance.html" %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Environment Status -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Environment</h3>
+    <div style="display: flex; align-items: center; gap: 1rem;">
+        <span id="env-pill" style="padding: 0.5rem 1rem; background: #2ecc71; color: white; border-radius: 20px; font-weight: 600;">
+            {{ meta.environment|upper if meta else "UNKNOWN" }}
+        </span>
+        <span style="color: #7f8c8d; font-size: 0.875rem;">
+            Last updated: {{ meta.run_timestamp if meta else "N/A" }}
+        </span>
+    </div>
+</div>
+
+<!-- File Presence Checks -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Data Files</h3>
+    <table id="file-status-table">
+        <thead>
+            <tr>
+                <th>File</th>
+                <th>Status</th>
+                <th>Modified</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>segments.geojson</td>
+                <td id="status-segments" class="placeholder">Checking...</td>
+                <td id="mtime-segments">—</td>
+            </tr>
+            <tr>
+                <td>segment_metrics.json</td>
+                <td id="status-metrics" class="placeholder">Checking...</td>
+                <td id="mtime-metrics">—</td>
+            </tr>
+            <tr>
+                <td>flags.json</td>
+                <td id="status-flags" class="placeholder">Checking...</td>
+                <td id="mtime-flags">—</td>
+            </tr>
+            <tr>
+                <td>meta.json</td>
+                <td id="status-meta" class="placeholder">Checking...</td>
+                <td id="mtime-meta">—</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- Configuration Hashes -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Configuration</h3>
+    <table>
+        <tbody>
+            <tr>
+                <td><strong>Rulebook Hash</strong></td>
+                <td id="rulebook-hash">{{ meta.rulebook_hash[:16] if meta and meta.rulebook_hash else "N/A" }}...</td>
+            </tr>
+            <tr>
+                <td><strong>Reporting Hash</strong></td>
+                <td id="reporting-hash">{{ meta.reporting_hash[:16] if meta and meta.reporting_hash else "N/A" }}...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- API Endpoint Checks -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">API Endpoints</h3>
+    <table id="endpoint-status-table">
+        <thead>
+            <tr>
+                <th>Endpoint</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>GET /health</td>
+                <td id="status-health" class="placeholder">Checking...</td>
+            </tr>
+            <tr>
+                <td>GET /api/segments</td>
+                <td id="status-api-segments" class="placeholder">Checking...</td>
+            </tr>
+            <tr>
+                <td>GET /api/summary</td>
+                <td id="status-api-summary" class="placeholder">Checking...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+    #env-pill {
+        animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.85; }
+    }
+    
+    .status-ok {
+        color: #2ecc71;
+        font-weight: 600;
+    }
+    
+    .status-error {
+        color: #e74c3c;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+

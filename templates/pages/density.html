@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Density Analysis{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Density Analysis</h2>
+    {% if meta %}
+    <div class="provenance">
+        {% include "partials/_provenance.html" %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Density Legend -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Level of Service (LOS) Legend</h3>
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+        <span class="badge-los badge-A">A - Free Flow</span>
+        <span class="badge-los badge-B">B - Comfortable</span>
+        <span class="badge-los badge-C">C - Moderate</span>
+        <span class="badge-los badge-D">D - Dense</span>
+        <span class="badge-los badge-E">E - Very Dense</span>
+        <span class="badge-los badge-F">F - Extremely Dense</span>
+    </div>
+</div>
+
+<!-- Segment Density Table -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Segment Analysis</h3>
+    <table id="density-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Schema</th>
+                <th>Active Window</th>
+                <th>Peak Density</th>
+                <th>LOS</th>
+                <th>Peak Rate</th>
+                <th>Utilization</th>
+                <th>Flag</th>
+                <th>Worst Bin</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td colspan="10" class="placeholder">Loading density data...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- Segment Detail Panel (shows on row click) -->
+<div id="segment-detail" style="display: none;">
+    <div class="card">
+        <h3 id="detail-title">Segment Detail</h3>
+        
+        <!-- Heatmap -->
+        <div id="heatmap-container" style="margin: 1.5rem 0;">
+            <h4 style="margin-bottom: 0.75rem;">Density Heatmap</h4>
+            <img id="heatmap-image" src="" alt="Density heatmap" style="max-width: 100%; border-radius: 4px;" />
+            <div id="heatmap-placeholder" class="placeholder">No heatmap data available for this segment.</div>
+        </div>
+        
+        <!-- Bin-Level Table -->
+        <div id="bin-table-container" style="margin: 1.5rem 0;">
+            <h4 style="margin-bottom: 0.75rem;">Bin-Level Details</h4>
+            <div id="bin-table-content" class="placeholder">No bin-level data available.</div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Segment detail panel interaction will be added in later steps
+    console.log('Density page loaded - interaction pending');
+</script>
+{% endblock %}
+

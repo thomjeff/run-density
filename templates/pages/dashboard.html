@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Dashboard</h2>
+    {% if meta %}
+    <div class="provenance">
+        {% include "partials/_provenance.html" %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Model Inputs Section -->
+<div class="card">
+    <h3 style="margin-bottom: 1.5rem; color: #2c3e50;">Model Inputs</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <div id="metric-events" class="placeholder">Events: Loading...</div>
+        <div id="metric-start-times" class="placeholder">Start Times: Loading...</div>
+        <div id="metric-total-runners" class="placeholder">Total Participants: Loading...</div>
+    </div>
+</div>
+
+<!-- Model Outputs Section -->
+<div class="card">
+    <h3 style="margin-bottom: 1.5rem; color: #2c3e50;">Model Outputs</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem;">
+        
+        <div class="kpi">
+            <div id="kpi-peak-density" class="kpi-value">—</div>
+            <div class="kpi-label">Peak Density (p/m²)</div>
+        </div>
+        
+        <div class="kpi">
+            <div id="kpi-peak-rate" class="kpi-value">—</div>
+            <div class="kpi-label">Peak Rate (p/s)</div>
+        </div>
+        
+        <div class="kpi">
+            <div id="kpi-flagged-segments" class="kpi-value">—</div>
+            <div class="kpi-label">Segments with Flags</div>
+        </div>
+        
+        <div class="kpi">
+            <div id="kpi-overtaking" class="kpi-value">—</div>
+            <div class="kpi-label">Overtaking Segments</div>
+        </div>
+        
+        <div class="kpi">
+            <div id="kpi-copresence" class="kpi-value">—</div>
+            <div class="kpi-label">Co-presence Segments</div>
+        </div>
+        
+        <div class="kpi">
+            <div id="kpi-predicted-ops" class="kpi-value">—</div>
+            <div class="kpi-label">Predicted Operations</div>
+        </div>
+        
+    </div>
+</div>
+
+<!-- Action Required (Placeholder for flagged bins) -->
+<div class="card" id="action-required" style="display: none;">
+    <h3 style="margin-bottom: 1rem; color: #e74c3c;">⚠️ Action Required</h3>
+    <div id="flagged-bins-list" class="placeholder">Flagged bins will appear here...</div>
+</div>
+
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+    @media (max-width: 768px) {
+        main .kpi {
+            min-width: 150px;
+        }
+    }
+</style>
+{% endblock %}
+
