@@ -145,6 +145,40 @@ jobs:
         echo "=== Running E2E Tests for Deployment Validation ==="
         echo "Testing Cloud Run deployment with e2e.py"
         python e2e.py --cloud
+    
+    - name: Validate Dashboard Data (Main Only)
+      if: github.ref == 'refs/heads/main'
+      run: |
+        echo "=== Validating Dashboard Data Artifacts ==="
+        python -c "
+        import sys
+        import httpx
+        
+        # Fetch dashboard summary from deployed service
+        response = httpx.get('${{ secrets.CLOUD_RUN_URL }}/api/dashboard/summary', timeout=30.0)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Check for warnings
+        warnings = data.get('warnings', [])
+        if len(warnings) > 0:
+            print(f'❌ Dashboard validation failed: {len(warnings)} warnings detected')
+            for w in warnings:
+                print(f'   - {w}')
+            print()
+            print('This indicates missing data artifacts. Step 7 exporter must run successfully.')
+            sys.exit(1)
+        
+        # Check for non-zero metrics
+        if data.get('segments_total', 0) == 0:
+            print('❌ Dashboard validation failed: segments_total is 0')
+            sys.exit(1)
+        
+        print(f'✅ Dashboard validation passed')
+        print(f'   segments_total: {data.get(\"segments_total\", 0)}')
+        print(f'   peak_density: {data.get(\"peak_density\", 0.0)}')
+        print(f'   warnings: {len(warnings)}')
+        "
 
   # Part 3: E2E Bin Dataset Generation and Validation
   bin-dataset-validation:
