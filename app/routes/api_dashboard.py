@@ -15,7 +15,7 @@ import json
 import logging
 from datetime import datetime
 
-from app.storage import create_storage_from_env, load_meta, load_segment_metrics, load_flags
+from app.storage import create_storage_from_env, load_meta, load_segment_metrics, load_flags, DATASET
 from app.common.config import load_rulebook, load_reporting
 
 # Configure logging
@@ -174,13 +174,26 @@ async def get_dashboard_summary():
         - runners.csv → total_runners, cohorts
     """
     try:
+        # Track missing files for warnings
+        warnings = []
+        
         # Load meta data
-        meta = load_meta(storage)
+        if not storage.exists(DATASET["meta"]):
+            warnings.append("missing: meta.json")
+            meta = {}
+        else:
+            meta = load_meta(storage)
+        
         timestamp = meta.get("run_timestamp", datetime.now().isoformat() + "Z")
         environment = meta.get("environment", "local")
         
         # Load segment metrics
-        segment_metrics = load_segment_metrics(storage)
+        if not storage.exists(DATASET["metrics"]):
+            warnings.append("missing: segment_metrics.json")
+            segment_metrics = {}
+        else:
+            segment_metrics = load_segment_metrics(storage)
+        
         segments_total = len(segment_metrics)
         
         # Calculate peak density and rate across all segments
@@ -196,16 +209,27 @@ async def get_dashboard_summary():
         peak_density_los = calculate_peak_density_los(peak_density)
         
         # Load flags data
-        flags = load_flags(storage)
+        if not storage.exists(DATASET["flags"]):
+            warnings.append("missing: flags.json")
+            flags = {}
+        else:
+            flags = load_flags(storage)
+        
         segments_flagged = len(flags.get("flagged_segments", []))
         bins_flagged = flags.get("bins_flagged", 0)
         
         # Load runners data
+        if not storage.exists("runners.csv"):
+            warnings.append("missing: runners.csv")
+        
         runners_data = load_runners_data()
         total_runners = runners_data["total_runners"]
         cohorts = runners_data["cohorts"]
         
         # Load flow data
+        if not storage.exists("flow.json"):
+            warnings.append("missing: flow.json")
+        
         flow_data = load_flow_data()
         segments_overtaking = flow_data["segments_overtaking"]
         segments_copresence = flow_data["segments_copresence"]
@@ -229,7 +253,8 @@ async def get_dashboard_summary():
             "peak_rate": round(peak_rate, 2),
             "segments_overtaking": segments_overtaking,
             "segments_copresence": segments_copresence,
-            "status": status
+            "status": status,
+            "warnings": warnings
         }
         
         logger.info(f"Dashboard summary: {segments_total} segments, {total_runners} runners, status={status}")
@@ -256,7 +281,8 @@ async def get_dashboard_summary():
             "peak_rate": 0.0,
             "segments_overtaking": 0,
             "segments_copresence": 0,
-            "status": "normal"
+            "status": "normal",
+            "warnings": ["error: failed to load dashboard data"]
         }
         
         return JSONResponse(

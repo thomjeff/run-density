@@ -36,26 +36,9 @@
                 <th>Modified</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="file-status-tbody">
             <tr>
-                <td>segments.geojson</td>
-                <td id="status-segments" class="placeholder">Checking...</td>
-                <td id="mtime-segments">—</td>
-            </tr>
-            <tr>
-                <td>segment_metrics.json</td>
-                <td id="status-metrics" class="placeholder">Checking...</td>
-                <td id="mtime-metrics">—</td>
-            </tr>
-            <tr>
-                <td>flags.json</td>
-                <td id="status-flags" class="placeholder">Checking...</td>
-                <td id="mtime-flags">—</td>
-            </tr>
-            <tr>
-                <td>meta.json</td>
-                <td id="status-meta" class="placeholder">Checking...</td>
-                <td id="mtime-meta">—</td>
+                <td colspan="3" class="placeholder">Loading data status...</td>
             </tr>
         </tbody>
     </table>
@@ -105,6 +88,76 @@
     </table>
 </div>
 
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Load data health status
+    document.addEventListener('DOMContentLoaded', function() {
+        loadDataHealth();
+    });
+    
+    function loadDataHealth() {
+        fetch('/api/health/data')
+            .then(response => response.json())
+            .then(data => {
+                updateFileStatusTable(data);
+            })
+            .catch(error => {
+                console.error('Error loading data health:', error);
+                showHealthError();
+            });
+    }
+    
+    function updateFileStatusTable(data) {
+        const tbody = document.getElementById('file-status-tbody');
+        tbody.innerHTML = '';
+        
+        // Filter out storage metadata
+        const fileData = Object.entries(data).filter(([key, value]) => key !== '_storage');
+        
+        fileData.forEach(([filename, info]) => {
+            const row = document.createElement('tr');
+            
+            const statusClass = info.exists ? 'status-ok' : 'status-error';
+            const statusText = info.exists ? '✅ Found' : '❌ Missing';
+            const mtimeText = info.mtime && info.mtime !== 'error' ? formatTimestamp(info.mtime) : '—';
+            
+            row.innerHTML = `
+                <td>${filename}</td>
+                <td class="${statusClass}">${statusText}</td>
+                <td>${mtimeText}</td>
+            `;
+            
+            tbody.appendChild(row);
+        });
+        
+        // Add storage info if available
+        if (data._storage) {
+            const storageRow = document.createElement('tr');
+            storageRow.innerHTML = `
+                <td><strong>Storage Mode</strong></td>
+                <td class="status-ok">${data._storage.mode}</td>
+                <td>${data._storage.root || data._storage.bucket || '—'}</td>
+            `;
+            tbody.appendChild(storageRow);
+        }
+    }
+    
+    function showHealthError() {
+        const tbody = document.getElementById('file-status-tbody');
+        tbody.innerHTML = '<tr><td colspan="3" class="placeholder">Error loading data status</td></tr>';
+    }
+    
+    function formatTimestamp(timestamp) {
+        try {
+            const date = new Date(timestamp);
+            return date.toLocaleString();
+        } catch (e) {
+            return timestamp;
+        }
+    }
+</script>
 {% endblock %}
 
 {% block extra_styles %}

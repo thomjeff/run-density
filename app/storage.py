@@ -15,6 +15,14 @@ import json
 import os
 import time
 
+# Single source of truth for dataset paths
+DATASET = {
+    "meta": "data/meta.json",
+    "segments": "data/segments.geojson", 
+    "metrics": "data/segment_metrics.json",
+    "flags": "data/flags.json",
+}
+
 
 class Storage:
     """

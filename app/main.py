@@ -26,6 +26,7 @@ try:
     from .routes.ui import router as ui_router
     from .routes.api_segments import router as api_segments_router
     from .routes.api_dashboard import router as api_dashboard_router
+    from .routes.api_health import router as api_health_router
     # from .test_api import test_router  # Disabled for Cloud Run deployment
     from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 except ImportError:
@@ -41,6 +42,7 @@ except ImportError:
     from routes.ui import router as ui_router
     from routes.api_segments import router as api_segments_router
     from routes.api_dashboard import router as api_dashboard_router
+    from routes.api_health import router as api_health_router
     # from test_api import test_router  # Disabled for Cloud Run deployment
     from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
@@ -144,6 +146,7 @@ app.include_router(reports_router)
 app.include_router(ui_router)
 app.include_router(api_segments_router)
 app.include_router(api_dashboard_router)
+app.include_router(api_health_router)
 
 # CSV Data Endpoints for Reports Page
 @app.get("/data/runners.csv")

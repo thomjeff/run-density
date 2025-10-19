@@ -17,6 +17,17 @@
     </div>
 </div>
 
+<!-- Data Missing Banner -->
+<div id="data-missing-banner" class="card" style="display: none; margin-bottom: 1.5rem;">
+    <div style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; border-radius: 4px; background: #fff3cd; border-left: 4px solid #ffc107;">
+        <span style="font-size: 1.25rem;">⚠️</span>
+        <div>
+            <div style="font-weight: 600; color: #856404;">Data Not Found</div>
+            <div id="data-missing-message" style="font-size: 0.875rem; color: #856404;">Data not found for one or more inputs (meta.json, metrics, or flags). Showing placeholders.</div>
+        </div>
+    </div>
+</div>
+
 <!-- Status Banner -->
 <div id="status-banner" class="card" style="display: none; margin-bottom: 1.5rem;">
     <div id="status-content" style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; border-radius: 4px;">
@@ -185,6 +196,9 @@
         // Update timestamp
         document.getElementById('last-updated').textContent = formatTimestamp(data.timestamp);
         
+        // Update data missing banner
+        updateDataMissingBanner(data);
+        
         // Update status banner
         updateStatusBanner(data);
         
@@ -193,6 +207,26 @@
         
         // Update model outputs
         updateModelOutputs(data);
+    }
+    
+    function updateDataMissingBanner(data) {
+        const banner = document.getElementById('data-missing-banner');
+        const message = document.getElementById('data-missing-message');
+        
+        if (data.warnings && data.warnings.length > 0) {
+            banner.style.display = 'block';
+            const missingFiles = data.warnings.filter(w => w.startsWith('missing:')).map(w => w.replace('missing: ', ''));
+            if (missingFiles.length > 0) {
+                message.textContent = `Data not found for: ${missingFiles.join(', ')}. Showing placeholders.`;
+            } else {
+                message.textContent = 'Data loading issues detected. Showing placeholders.';
+            }
+        } else if (data.segments_total === 0 && data.total_runners === 0) {
+            banner.style.display = 'block';
+            message.textContent = 'No data available. Showing placeholders.';
+        } else {
+            banner.style.display = 'none';
+        }
     }
     
     function updateStatusBanner(data) {
