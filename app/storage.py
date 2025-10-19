@@ -16,11 +16,12 @@ import os
 import time
 
 # Single source of truth for dataset paths
+# These paths are relative to the ARTIFACTS_ROOT resolved from latest.json
 DATASET = {
-    "meta": "data/meta.json",
-    "segments": "data/segments.geojson", 
-    "metrics": "data/segment_metrics.json",
-    "flags": "data/flags.json",
+    "meta": "meta.json",
+    "segments": "segments.geojson", 
+    "metrics": "segment_metrics.json",
+    "flags": "flags.json",
 }
 
 
@@ -187,9 +188,11 @@ def create_storage_from_env() -> Storage:
     """
     Create Storage instance from environment variables.
     
+    Resolves artifacts/<run_id>/ui/ from artifacts/latest.json pointer.
+    
     Environment Variables:
         RUNFLOW_ENV: "local" or "cloud"
-        DATA_ROOT: Root directory for local mode (default: "./data")
+        DATA_ROOT: Root directory for local mode (default: resolved from artifacts/latest.json)
         GCS_BUCKET: Bucket name for cloud mode
         GCS_PREFIX: Optional prefix for GCS paths
     
@@ -199,7 +202,25 @@ def create_storage_from_env() -> Storage:
     env = os.getenv("RUNFLOW_ENV", "local")
     
     if env == "local":
-        root = os.getenv("DATA_ROOT", "./data")
+        root = os.getenv("DATA_ROOT")
+        
+        # Try to resolve from artifacts/latest.json pointer
+        if not root:
+            latest_pointer = Path("artifacts/latest.json")
+            if latest_pointer.exists():
+                try:
+                    pointer_data = json.loads(latest_pointer.read_text())
+                    run_id = pointer_data.get("run_id")
+                    if run_id:
+                        root = f"artifacts/{run_id}/ui"
+                except Exception as e:
+                    import logging
+                    logging.warning(f"Could not read artifacts/latest.json: {e}")
+        
+        # Fallback to "./data" if pointer not found
+        if not root:
+            root = "./data"
+        
         return Storage(mode="local", root=root)
     else:
         bucket = os.getenv("GCS_BUCKET")

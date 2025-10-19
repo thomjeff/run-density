@@ -1,0 +1,524 @@
+"""
+Analytics-Driven Frontend Artifacts Exporter (RF-FE-002)
+
+Transforms real analytics outputs from /reports/<run_id>/ into UI artifacts
+in artifacts/<run_id>/ui/ for the FastAPI dashboard.
+
+NO placeholder data. NO markdown parsing. NO folium/geopandas/matplotlib.
+Uses real parquet/CSV/GeoJSON from analytics pipeline.
+
+Author: Cursor AI Assistant (per ChatGPT specification)
+Epic: RF-FE-002 | Issue: #279 | Step: 7
+Architecture: Option 3 - Hybrid Approach | Local=Cloud Parity
+"""
+
+import json
+import pandas as pd
+import gzip
+import sys
+from pathlib import Path
+from datetime import datetime, timezone
+from typing import Dict, Any, List, Tuple
+import hashlib
+import subprocess
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from app.common.config import load_rulebook, load_reporting
+
+
+def get_git_sha() -> str:
+    """Get current git commit SHA (short)."""
+    try:
+        result = subprocess.run(
+            ['git', 'rev-parse', '--short', 'HEAD'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout.strip()
+    except Exception:
+        return "unknown"
+
+
+def compute_rulebook_hash() -> str:
+    """Compute SHA256 hash of normalized density_rulebook.yml."""
+    try:
+        rulebook_path = Path("config/density_rulebook.yml")
+        content = rulebook_path.read_bytes()
+        return f"sha256:{hashlib.sha256(content).hexdigest()[:16]}"
+    except Exception as e:
+        print(f"Warning: Could not compute rulebook hash: {e}")
+        return "sha256:unknown"
+
+
+def classify_los(density: float, los_thresholds: Dict[str, Any]) -> str:
+    """
+    Classify density into LOS grade using rulebook thresholds.
+    
+    Args:
+        density: Peak density in persons/m²
+        los_thresholds: Dictionary with keys A-F mapping to threshold dicts (min/max) or floats
+    
+    Returns:
+        LOS grade (A-F)
+    """
+    # Handle both old format (flat thresholds) and new format (min/max dicts)
+    grades_with_ranges = []
+    
+    for grade, threshold_info in los_thresholds.items():
+        if isinstance(threshold_info, dict):
+            # New format: {"min": 0.0, "max": 0.36, "label": "..."}
+            min_val = threshold_info.get("min", 0.0)
+            max_val = threshold_info.get("max", float('inf'))
+            grades_with_ranges.append((grade, min_val, max_val))
+        else:
+            # Old format: just a number (upper bound)
+            grades_with_ranges.append((grade, 0.0, threshold_info))
+    
+    # Sort by min value
+    grades_with_ranges.sort(key=lambda x: x[1])
+    
+    # Find the appropriate grade
+    for grade, min_val, max_val in grades_with_ranges:
+        if min_val <= density < max_val:
+            return grade
+    
+    # If above all ranges, return the last grade (F)
+    return grades_with_ranges[-1][0] if grades_with_ranges else "F"
+
+
+def generate_meta_json(run_id: str, environment: str = "local") -> Dict[str, Any]:
+    """
+    Generate meta.json with run metadata.
+    
+    Args:
+        run_id: Run identifier (e.g., "2025-10-19-1655")
+        environment: Environment name ("local" or "cloud")
+    
+    Returns:
+        Dictionary with meta fields
+    """
+    # Parse timestamp from run_id (format: YYYY-MM-DD-HHMM)
+    try:
+        dt_str = run_id.replace("-", "")  # Remove dashes
+        year = dt_str[0:4]
+        month = dt_str[4:6]
+        day = dt_str[6:8]
+        hour = dt_str[8:10]
+        minute = dt_str[10:12]
+        
+        run_timestamp = f"{year}-{month}-{day}T{hour}:{minute}:00Z"
+    except Exception:
+        run_timestamp = datetime.now(timezone.utc).isoformat()
+    
+    return {
+        "run_id": run_id,
+        "run_timestamp": run_timestamp,
+        "environment": environment,
+        "dataset_version": get_git_sha(),
+        "rulebook_hash": compute_rulebook_hash()
+    }
+
+
+def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]]:
+    """
+    Generate segment_metrics.json from segment_windows_from_bins.parquet.
+    
+    Args:
+        reports_dir: Path to reports/<run_id>/ directory
+    
+    Returns:
+        Dictionary mapping seg_id to metrics
+    """
+    parquet_path = reports_dir / "segment_windows_from_bins.parquet"
+    
+    if not parquet_path.exists():
+        print(f"Warning: {parquet_path} not found, returning empty metrics")
+        return {}
+    
+    # Load rulebook for LOS classification
+    try:
+        rulebook = load_rulebook()
+        los_thresholds = rulebook.get("globals", {}).get("los_thresholds", {})
+    except Exception as e:
+        print(f"Warning: Could not load rulebook for LOS classification: {e}")
+        # Fallback thresholds
+        los_thresholds = {"A": 0.2, "B": 0.4, "C": 0.6, "D": 0.8, "E": 1.0, "F": float('inf')}
+    
+    # Read parquet
+    df = pd.read_parquet(parquet_path)
+    
+    # Group by segment_id and aggregate metrics
+    metrics = {}
+    
+    # Use either 'segment_id' or 'seg_id' column
+    group_col = 'segment_id' if 'segment_id' in df.columns else 'seg_id'
+    
+    for seg_id, group in df.groupby(group_col):
+        # Compute peak density (use density_peak if available, else density_mean or density)
+        if 'density_peak' in group.columns:
+            peak_density = group['density_peak'].max()
+        elif 'density_mean' in group.columns:
+            peak_density = group['density_mean'].max()
+        elif 'density' in group.columns:
+            peak_density = group['density'].max()
+        else:
+            peak_density = 0.0
+        
+        # Rate might be 'rate', 'flow_rate', or need to be computed
+        if 'rate' in group.columns:
+            peak_rate = group['rate'].max()
+        elif 'flow_rate' in group.columns:
+            peak_rate = group['flow_rate'].max()
+        else:
+            # No rate data available
+            peak_rate = 0.0
+        
+        # Active window: min start time to max end time
+        # Use t_start/t_end or start_time/end_time
+        if 't_start' in group.columns and 't_end' in group.columns:
+            start_dt = pd.to_datetime(group['t_start']).min()
+            end_dt = pd.to_datetime(group['t_end']).max()
+            active_window = f"{start_dt.strftime('%H:%M')}–{end_dt.strftime('%H:%M')}"
+        elif 'start_time' in group.columns and 'end_time' in group.columns:
+            start_dt = pd.to_datetime(group['start_time']).min()
+            end_dt = pd.to_datetime(group['end_time']).max()
+            active_window = f"{start_dt.strftime('%H:%M')}–{end_dt.strftime('%H:%M')}"
+        else:
+            active_window = "N/A"
+        
+        # Classify LOS
+        worst_los = classify_los(peak_density, los_thresholds)
+        
+        metrics[seg_id] = {
+            "worst_los": worst_los,
+            "peak_density": round(peak_density, 4),
+            "peak_rate": round(peak_rate, 2),
+            "active_window": active_window
+        }
+    
+    return metrics
+
+
+def generate_flags_json(reports_dir: Path, segment_metrics: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Generate flags.json from segment metrics based on LOS thresholds.
+    
+    Args:
+        reports_dir: Path to reports/<run_id>/ directory
+        segment_metrics: Dictionary of segment metrics
+    
+    Returns:
+        Dictionary with flagged segments and bins
+    """
+    # Load reporting config for flag threshold
+    try:
+        reporting = load_reporting()
+        flag_los_threshold = reporting.get("reporting", {}).get("flag_los_threshold", "D")
+    except Exception:
+        flag_los_threshold = "D"
+    
+    # Flag segments with LOS >= threshold
+    flagged_segments = []
+    
+    # LOS order for comparison
+    los_order = ["A", "B", "C", "D", "E", "F"]
+    threshold_idx = los_order.index(flag_los_threshold) if flag_los_threshold in los_order else 3
+    
+    for seg_id, metrics in segment_metrics.items():
+        worst_los = metrics.get("worst_los", "A")
+        los_idx = los_order.index(worst_los) if worst_los in los_order else 0
+        
+        if los_idx >= threshold_idx:
+            flagged_segments.append({
+                "seg_id": seg_id,
+                "flag": "density",
+                "note": f"Peak {metrics['peak_density']:.3f} p/m² @ {metrics['active_window']}",
+                "los": worst_los,
+                "peak_density": metrics["peak_density"]
+            })
+    
+    # Count flagged bins (approximate from parquet if available)
+    bins_flagged = 0
+    parquet_path = reports_dir / "bins.parquet"
+    if parquet_path.exists():
+        try:
+            df_bins = pd.read_parquet(parquet_path)
+            if 'density' in df_bins.columns:
+                # Count bins above threshold
+                rulebook = load_rulebook()
+                los_thresholds = rulebook.get("globals", {}).get("los_thresholds", {})
+                
+                # Get threshold value from nested dict
+                threshold_info = los_thresholds.get(flag_los_threshold, {"min": 0.6})
+                if isinstance(threshold_info, dict):
+                    threshold_density = threshold_info.get("min", 0.6)
+                else:
+                    threshold_density = threshold_info
+                
+                bins_flagged = len(df_bins[df_bins['density'] >= threshold_density])
+        except Exception as e:
+            print(f"Warning: Could not count flagged bins: {e}")
+    
+    return {
+        "flagged_segments": flagged_segments,
+        "segments": [f["seg_id"] for f in flagged_segments],
+        "total_bins_flagged": bins_flagged
+    }
+
+
+def generate_flow_json(reports_dir: Path) -> Dict[str, Dict[str, Any]]:
+    """
+    Generate flow.json from Flow.csv.
+    
+    Args:
+        reports_dir: Path to reports/<run_id>/ directory
+    
+    Returns:
+        Dictionary mapping seg_id to flow metrics
+    """
+    # Find Flow.csv file
+    flow_csv = list(reports_dir.glob("*-Flow.csv"))
+    
+    if not flow_csv:
+        print(f"Warning: No Flow.csv found in {reports_dir}")
+        return {}
+    
+    flow_path = flow_csv[0]
+    df = pd.read_csv(flow_path)
+    
+    # Convert to dictionary format
+    flow_metrics = {}
+    
+    for _, row in df.iterrows():
+        seg_id = row.get('seg_id') or row.get('segment_id')
+        if not seg_id or (isinstance(seg_id, float) and pd.isna(seg_id)):
+            continue
+        
+        # Handle NaN values
+        overtaking_a = row.get('overtaking_a', 0.0)
+        overtaking_b = row.get('overtaking_b', 0.0)
+        copresence_a = row.get('copresence_a', 0)
+        copresence_b = row.get('copresence_b', 0)
+        
+        flow_metrics[seg_id] = {
+            "overtaking_a": float(overtaking_a) if pd.notna(overtaking_a) else 0.0,
+            "overtaking_b": float(overtaking_b) if pd.notna(overtaking_b) else 0.0,
+            "copresence_a": int(copresence_a) if pd.notna(copresence_a) else 0,
+            "copresence_b": int(copresence_b) if pd.notna(copresence_b) else 0
+        }
+    
+    return flow_metrics
+
+
+def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
+    """
+    Generate segments.geojson from bins.geojson.gz by aggregating bins into segment polylines.
+    
+    Args:
+        reports_dir: Path to reports/<run_id>/ directory
+    
+    Returns:
+        GeoJSON FeatureCollection
+    """
+    bins_geojson_path = reports_dir / "bins.geojson.gz"
+    
+    if not bins_geojson_path.exists():
+        print(f"Warning: {bins_geojson_path} not found, returning empty GeoJSON")
+        return {"type": "FeatureCollection", "features": []}
+    
+    # Read bins GeoJSON
+    with gzip.open(bins_geojson_path, 'rt') as f:
+        bins_data = json.load(f)
+    
+    # Load dimensions for segment metadata
+    dimensions_path = Path("data/segments.csv")
+    if not dimensions_path.exists():
+        print(f"Warning: {dimensions_path} not found")
+        segment_dims = {}
+    else:
+        df_dims = pd.read_csv(dimensions_path)
+        segment_dims = df_dims.set_index('seg_id').to_dict('index')
+    
+    # Group bins by seg_id and create simplified polylines
+    segments_features = {}
+    
+    for feature in bins_data.get("features", []):
+        props = feature.get("properties", {})
+        seg_id = props.get("seg_id") or props.get("segment_id")
+        
+        if not seg_id:
+            continue
+        
+        # Get or create segment feature
+        if seg_id not in segments_features:
+            # Get segment dimensions
+            dims = segment_dims.get(seg_id, {})
+            
+            segments_features[seg_id] = {
+                "type": "Feature",
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": []
+                },
+                "properties": {
+                    "seg_id": seg_id,
+                    "label": dims.get("seg_label", dims.get("name", seg_id)),
+                    "length_km": float(dims.get("length_km", 0.0)),
+                    "width_m": float(dims.get("width_m", 0.0)),
+                    "direction": dims.get("direction", "uni"),
+                    "events": dims.get("events", "").split("+") if dims.get("events") else []
+                }
+            }
+        
+        # Add bin centroid to segment's coordinate list
+        geom = feature.get("geometry", {})
+        if geom.get("type") == "Polygon":
+            # Compute centroid (simple average of coordinates)
+            coords = geom.get("coordinates", [[]])[0]
+            if coords:
+                lon = sum(c[0] for c in coords) / len(coords)
+                lat = sum(c[1] for c in coords) / len(coords)
+                segments_features[seg_id]["geometry"]["coordinates"].append([lon, lat])
+    
+    # Simplify polylines (remove duplicates, order by distance)
+    features = []
+    for seg_id, feature in segments_features.items():
+        coords = feature["geometry"]["coordinates"]
+        
+        # Remove duplicate points
+        unique_coords = []
+        for coord in coords:
+            if not unique_coords or coord != unique_coords[-1]:
+                unique_coords.append(coord)
+        
+        feature["geometry"]["coordinates"] = unique_coords
+        features.append(feature)
+    
+    return {
+        "type": "FeatureCollection",
+        "features": features
+    }
+
+
+def export_ui_artifacts(reports_dir: Path, run_id: str, environment: str = "local") -> Path:
+    """
+    Export all UI artifacts from analytics outputs.
+    
+    Args:
+        reports_dir: Path to reports/<run_id>/ directory
+        run_id: Run identifier (e.g., "2025-10-19-1655")
+        environment: Environment name ("local" or "cloud")
+    
+    Returns:
+        Path to artifacts/<run_id>/ui/ directory
+    """
+    print(f"\n{'='*60}")
+    print(f"Exporting UI Artifacts for {run_id}")
+    print(f"{'='*60}\n")
+    
+    # Create output directory
+    artifacts_dir = Path("artifacts") / run_id / "ui"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    
+    # 1. Generate meta.json
+    print("1️⃣  Generating meta.json...")
+    meta = generate_meta_json(run_id, environment)
+    (artifacts_dir / "meta.json").write_text(json.dumps(meta, indent=2))
+    print(f"   ✅ meta.json: run_id={meta['run_id']}, dataset_version={meta['dataset_version']}")
+    
+    # 2. Generate segment_metrics.json
+    print("\n2️⃣  Generating segment_metrics.json...")
+    segment_metrics = generate_segment_metrics_json(reports_dir)
+    (artifacts_dir / "segment_metrics.json").write_text(json.dumps(segment_metrics, indent=2))
+    print(f"   ✅ segment_metrics.json: {len(segment_metrics)} segments")
+    
+    # 3. Generate flags.json
+    print("\n3️⃣  Generating flags.json...")
+    flags = generate_flags_json(reports_dir, segment_metrics)
+    (artifacts_dir / "flags.json").write_text(json.dumps(flags, indent=2))
+    print(f"   ✅ flags.json: {len(flags['flagged_segments'])} flagged, {flags['total_bins_flagged']} bins")
+    
+    # 4. Generate flow.json
+    print("\n4️⃣  Generating flow.json...")
+    flow = generate_flow_json(reports_dir)
+    (artifacts_dir / "flow.json").write_text(json.dumps(flow, indent=2))
+    print(f"   ✅ flow.json: {len(flow)} segments with flow metrics")
+    
+    # 5. Generate segments.geojson
+    print("\n5️⃣  Generating segments.geojson...")
+    segments_geojson = generate_segments_geojson(reports_dir)
+    (artifacts_dir / "segments.geojson").write_text(json.dumps(segments_geojson, indent=2))
+    print(f"   ✅ segments.geojson: {len(segments_geojson['features'])} features")
+    
+    print(f"\n{'='*60}")
+    print(f"✅ All artifacts exported to: {artifacts_dir}")
+    print(f"{'='*60}\n")
+    
+    return artifacts_dir
+
+
+def update_latest_pointer(run_id: str) -> None:
+    """
+    Update artifacts/latest.json to point to the most recent run.
+    
+    Args:
+        run_id: Run identifier (e.g., "2025-10-19-1655")
+    """
+    artifacts_dir = Path("artifacts")
+    artifacts_dir.mkdir(exist_ok=True)
+    
+    # Parse timestamp from run_id
+    try:
+        dt_str = run_id.replace("-", "")
+        year = dt_str[0:4]
+        month = dt_str[4:6]
+        day = dt_str[6:8]
+        hour = dt_str[8:10]
+        minute = dt_str[10:12]
+        
+        ts = f"{year}-{month}-{day}T{hour}:{minute}:00Z"
+    except Exception:
+        ts = datetime.now(timezone.utc).isoformat()
+    
+    pointer = {
+        "run_id": run_id,
+        "ts": ts
+    }
+    
+    pointer_path = artifacts_dir / "latest.json"
+    pointer_path.write_text(json.dumps(pointer, indent=2))
+    
+    print(f"✅ Updated artifacts/latest.json → {run_id}")
+
+
+def main():
+    """Main entry point for standalone execution."""
+    import sys
+    
+    if len(sys.argv) < 2:
+        print("Usage: python export_frontend_artifacts.py <run_id>")
+        print("Example: python export_frontend_artifacts.py 2025-10-19-1655")
+        sys.exit(1)
+    
+    run_id = sys.argv[1]
+    reports_dir = Path("reports") / run_id
+    
+    if not reports_dir.exists():
+        print(f"Error: Reports directory not found: {reports_dir}")
+        sys.exit(1)
+    
+    # Export artifacts
+    artifacts_dir = export_ui_artifacts(reports_dir, run_id)
+    
+    # Update pointer
+    update_latest_pointer(run_id)
+    
+    print("\n🎉 Export complete!")
+
+
+if __name__ == "__main__":
+    main()
+

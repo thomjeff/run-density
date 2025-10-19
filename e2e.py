@@ -167,6 +167,36 @@ def main():
     if all_passed:
         print("🎉 ALL TESTS PASSED!")
         print("✅ Cloud Run is working correctly")
+        
+        # Export frontend artifacts from generated reports
+        print("\n" + "=" * 60)
+        print("Exporting UI Artifacts")
+        print("=" * 60)
+        try:
+            from analytics.export_frontend_artifacts import export_ui_artifacts, update_latest_pointer
+            from pathlib import Path
+            
+            # Find the latest report directory
+            reports_dir = Path("reports")
+            if reports_dir.exists():
+                # Get the most recent report directory
+                run_dirs = sorted([d for d in reports_dir.iterdir() if d.is_dir()], reverse=True)
+                if run_dirs:
+                    latest_run_dir = run_dirs[0]
+                    run_id = latest_run_dir.name
+                    
+                    print(f"Exporting artifacts from: {latest_run_dir}")
+                    export_ui_artifacts(latest_run_dir, run_id)
+                    update_latest_pointer(run_id)
+                    print("✅ UI artifacts exported successfully")
+                else:
+                    print("⚠️ No report directories found in reports/")
+            else:
+                print("⚠️ Reports directory not found")
+        except Exception as e:
+            print(f"⚠️ Warning: Could not export UI artifacts: {e}")
+            print("   Dashboard will show warnings for missing data")
+        
         sys.exit(0)
     else:
         print("❌ SOME TESTS FAILED!")
