@@ -14,21 +14,24 @@
 
 <!-- Flow Metrics Table -->
 <div class="card">
-    <h3 style="margin-bottom: 1rem;">Event Interactions</h3>
+    <h3 style="margin-bottom: 1rem;">Segment Flow Metrics</h3>
+    <p style="margin-bottom: 1rem; color: #7f8c8d; font-size: 0.875rem;">
+        Values are sums across all event pairs per segment from temporal flow analysis.
+    </p>
     <div style="overflow-x: auto;">
-        <table id="flow-table" style="min-width: 100%;">
+        <table id="flow-table">
             <thead>
                 <tr>
-                    <th style="position: sticky; left: 0; background: #f8f9fa; z-index: 10;">ID</th>
-                    <th style="position: sticky; left: 60px; background: #f8f9fa; z-index: 10;">Name</th>
-                    <th style="text-align: right;">Convergence Point</th>
-                    <th style="text-align: right;">Overtakes (A→B)</th>
-                    <th style="text-align: right;">Overtakes (B→A)</th>
-                    <th style="text-align: right;">Co-presence</th>
-                    <th>Has Convergence</th>
+                    <th>Segment</th>
+                    <th>Name</th>
+                    <th>Overtaking A</th>
+                    <th>Overtaking B</th>
+                    <th>Co-presence A</th>
+                    <th>Co-presence B</th>
+                    <th>Flow Type</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="flow-tbody">
                 <tr>
                     <td colspan="7" class="placeholder">Loading flow data...</td>
                 </tr>
@@ -39,40 +42,119 @@
 
 {% endblock %}
 
-{% block extra_styles %}
-<style>
-    /* Sticky columns for flow table */
-    #flow-table th:nth-child(1),
-    #flow-table td:nth-child(1) {
-        position: sticky;
-        left: 0;
-        background: white;
-        z-index: 5;
+{% block extra_scripts %}
+<script>
+    let flowData = {};
+    
+    // Load flow data on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        loadFlowData();
+    });
+    
+    function loadFlowData() {
+        fetch('/api/flow/segments')
+            .then(response => response.json())
+            .then(data => {
+                flowData = data;
+                renderFlowTable(data);
+            })
+            .catch(error => {
+                console.error('Error loading flow data:', error);
+                showFlowError();
+            });
     }
     
-    #flow-table th:nth-child(2),
-    #flow-table td:nth-child(2) {
-        position: sticky;
-        left: 60px;
-        background: white;
-        z-index: 5;
+    function renderFlowTable(flow) {
+        const tbody = document.getElementById('flow-tbody');
+        tbody.innerHTML = '';
+        
+        const segments = Object.values(flow);
+        
+        if (!segments || segments.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="placeholder">No flow data available</td></tr>';
+            return;
+        }
+        
+        // Sort by seg_id
+        segments.sort((a, b) => a.seg_id.localeCompare(b.seg_id));
+        
+        segments.forEach(segment => {
+            const row = document.createElement('tr');
+            
+            row.innerHTML = `
+                <td>${segment.seg_id}</td>
+                <td>${segment.name}</td>
+                <td>${segment.overtaking_a.toFixed(0)}</td>
+                <td>${segment.overtaking_b.toFixed(0)}</td>
+                <td>${segment.copresence_a.toFixed(0)}</td>
+                <td>${segment.copresence_b.toFixed(0)}</td>
+                <td>${segment.flow_type || 'overtake'}</td>
+            `;
+            
+            tbody.appendChild(row);
+        });
+        
+        // Add summary row
+        const totalRow = document.createElement('tr');
+        totalRow.style.fontWeight = '600';
+        totalRow.style.background = '#f8f9fa';
+        
+        const totals = {
+            overtaking_a: 0,
+            overtaking_b: 0,
+            copresence_a: 0,
+            copresence_b: 0
+        };
+        
+        segments.forEach(seg => {
+            totals.overtaking_a += seg.overtaking_a;
+            totals.overtaking_b += seg.overtaking_b;
+            totals.copresence_a += seg.copresence_a;
+            totals.copresence_b += seg.copresence_b;
+        });
+        
+        totalRow.innerHTML = `
+            <td>TOTAL</td>
+            <td>${segments.length} segments</td>
+            <td>${totals.overtaking_a.toFixed(0)}</td>
+            <td>${totals.overtaking_b.toFixed(0)}</td>
+            <td>${totals.copresence_a.toFixed(0)}</td>
+            <td>${totals.copresence_b.toFixed(0)}</td>
+            <td>—</td>
+        `;
+        
+        tbody.appendChild(totalRow);
+    }
+    
+    function showFlowError() {
+        const tbody = document.getElementById('flow-tbody');
+        tbody.innerHTML = '<tr><td colspan="7" class="placeholder">Error loading flow data</td></tr>';
+    }
+</script>
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+    #flow-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    #flow-table th,
+    #flow-table td {
+        padding: 0.75rem;
+        text-align: left;
+        border-bottom: 1px solid #ecf0f1;
     }
     
     #flow-table th {
-        background: #f8f9fa !important;
+        background: #f8f9fa;
+        font-weight: 600;
+        color: #2c3e50;
     }
     
-    /* Right-align numeric columns */
-    #flow-table td:nth-child(n+3):nth-child(-n+6) {
-        text-align: right;
-        font-variant-numeric: tabular-nums;
-    }
-    
-    @media (max-width: 768px) {
-        #flow-table {
-            font-size: 0.875rem;
-        }
+    #flow-table tbody tr:hover {
+        background: #f8f9fa;
     }
 </style>
 {% endblock %}
-

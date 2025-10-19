@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="page-header">
-    <h2>Report Downloads</h2>
+    <h2>Generated Reports</h2>
     {% if meta %}
     <div class="provenance">
         {% include "partials/_provenance.html" %}
@@ -12,47 +12,122 @@
     {% endif %}
 </div>
 
-<!-- Available Reports -->
+<!-- Reports List -->
 <div class="card">
-    <h3 style="margin-bottom: 1.5rem;">Available Reports & Artifacts</h3>
-    
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
-        
-        <!-- Density Report Card -->
-        <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.5rem;">
-            <h4 style="margin-bottom: 0.5rem; color: #2c3e50;">📊 Density Report</h4>
-            <p style="font-size: 0.875rem; color: #7f8c8d; margin-bottom: 1rem;">
-                Comprehensive spatial crowding analysis with LOS classifications.
-            </p>
-            <div id="density-report-links" class="placeholder" style="padding: 1rem;">
-                Available formats: MD, HTML, PDF
-            </div>
-        </div>
-        
-        <!-- Flow Report Card -->
-        <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.5rem;">
-            <h4 style="margin-bottom: 0.5rem; color: #2c3e50;">🔄 Flow Report</h4>
-            <p style="font-size: 0.875rem; color: #7f8c8d; margin-bottom: 1rem;">
-                Temporal flow analysis with convergence and overtaking metrics.
-            </p>
-            <div id="flow-report-links" class="placeholder" style="padding: 1rem;">
-                Available formats: MD, CSV, XLSX
-            </div>
-        </div>
-        
-        <!-- Datasets Card -->
-        <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.5rem;">
-            <h4 style="margin-bottom: 0.5rem; color: #2c3e50;">📁 Datasets</h4>
-            <p style="font-size: 0.875rem; color: #7f8c8d; margin-bottom: 1rem;">
-                Input data and generated artifacts for analysis.
-            </p>
-            <div id="dataset-links" class="placeholder" style="padding: 1rem;">
-                Available: runners.csv, segments.geojson, bins.parquet
-            </div>
-        </div>
-        
+    <h3 style="margin-bottom: 1rem;">Available Reports</h3>
+    <div id="reports-list">
+        <p class="placeholder">Loading reports...</p>
     </div>
 </div>
 
 {% endblock %}
 
+{% block extra_scripts %}
+<script>
+    // Load reports on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        loadReports();
+    });
+    
+    function loadReports() {
+        fetch('/api/reports/list')
+            .then(response => response.json())
+            .then(data => {
+                renderReportsList(data);
+            })
+            .catch(error => {
+                console.error('Error loading reports:', error);
+                showReportsError();
+            });
+    }
+    
+    function renderReportsList(reports) {
+        const container = document.getElementById('reports-list');
+        container.innerHTML = '';
+        
+        if (!reports || reports.length === 0) {
+            container.innerHTML = '<p class="placeholder">No reports available</p>';
+            return;
+        }
+        
+        // Group by type
+        const densityReports = reports.filter(r => r.name.includes('Density'));
+        const flowReports = reports.filter(r => r.name.includes('Flow'));
+        const dataFiles = reports.filter(r => !r.name.includes('Density') && !r.name.includes('Flow'));
+        
+        let html = '';
+        
+        // Density Reports
+        if (densityReports.length > 0) {
+            html += '<h4 style="margin-top: 1rem; margin-bottom: 0.5rem;">Density Reports</h4>';
+            html += '<ul style="list-style: none; padding: 0;">';
+            densityReports.forEach(report => {
+                html += renderReportItem(report);
+            });
+            html += '</ul>';
+        }
+        
+        // Flow Reports
+        if (flowReports.length > 0) {
+            html += '<h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Flow Reports</h4>';
+            html += '<ul style="list-style: none; padding: 0;">';
+            flowReports.forEach(report => {
+                html += renderReportItem(report);
+            });
+            html += '</ul>';
+        }
+        
+        // Data Files
+        if (dataFiles.length > 0) {
+            html += '<h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Data Files</h4>';
+            html += '<ul style="list-style: none; padding: 0;">';
+            dataFiles.forEach(report => {
+                html += renderReportItem(report);
+            });
+            html += '</ul>';
+        }
+        
+        container.innerHTML = html;
+    }
+    
+    function renderReportItem(report) {
+        const size = formatFileSize(report.size);
+        const mtime = report.mtime ? new Date(report.mtime * 1000).toLocaleString() : 'N/A';
+        
+        return `
+            <li style="padding: 0.75rem; border-bottom: 1px solid #ecf0f1; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-weight: 600;">${report.name}</div>
+                    <div style="font-size: 0.875rem; color: #7f8c8d;">${size} • ${mtime}</div>
+                </div>
+                <a href="/api/reports/download?path=${encodeURIComponent(report.path)}" 
+                   class="button"
+                   download="${report.name}"
+                   style="padding: 0.5rem 1rem; background: #3498db; color: white; text-decoration: none; border-radius: 4px; font-size: 0.875rem;">
+                    Download
+                </a>
+            </li>
+        `;
+    }
+    
+    function formatFileSize(bytes) {
+        if (!bytes) return 'N/A';
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+    
+    function showReportsError() {
+        const container = document.getElementById('reports-list');
+        container.innerHTML = '<p class="placeholder">Error loading reports</p>';
+    }
+</script>
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .button:hover {
+        background: #2980b9;
+    }
+</style>
+{% endblock %}

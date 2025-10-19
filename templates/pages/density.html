@@ -74,9 +74,115 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<!-- LOS Colors from SSOT -->
 <script>
-    // Segment detail panel interaction will be added in later steps
-    console.log('Density page loaded - interaction pending');
+    const LOS_COLORS = {{ los_colors | tojson }};
+</script>
+
+<script>
+    let densityData = [];
+    
+    // Load density data on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        loadDensityData();
+    });
+    
+    function loadDensityData() {
+        fetch('/api/density/segments')
+            .then(response => response.json())
+            .then(data => {
+                densityData = data;
+                renderDensityTable(data);
+            })
+            .catch(error => {
+                console.error('Error loading density data:', error);
+                showDensityError();
+            });
+    }
+    
+    function renderDensityTable(segments) {
+        const tbody = document.querySelector('#density-table tbody');
+        tbody.innerHTML = '';
+        
+        if (!segments || segments.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="10" class="placeholder">No density data available</td></tr>';
+            return;
+        }
+        
+        segments.forEach(segment => {
+            const row = document.createElement('tr');
+            row.style.cursor = 'pointer';
+            row.addEventListener('click', () => showSegmentDetail(segment.seg_id));
+            
+            const losBadge = `<span class="badge-los badge-${segment.worst_los}">${segment.worst_los}</span>`;
+            const flaggedIcon = segment.flagged ? '⚠️' : '';
+            
+            row.innerHTML = `
+                <td>${segment.seg_id}</td>
+                <td>${segment.name}</td>
+                <td>${segment.schema}</td>
+                <td>${segment.active}</td>
+                <td>${segment.peak_density.toFixed(3)}</td>
+                <td>${losBadge}</td>
+                <td>${segment.peak_rate.toFixed(2)}</td>
+                <td>—</td>
+                <td>${flaggedIcon}</td>
+                <td>—</td>
+            `;
+            
+            tbody.appendChild(row);
+        });
+    }
+    
+    function showDensityError() {
+        const tbody = document.querySelector('#density-table tbody');
+        tbody.innerHTML = '<tr><td colspan="10" class="placeholder">Error loading density data</td></tr>';
+    }
+    
+    function showSegmentDetail(seg_id) {
+        // Fetch detailed data
+        fetch(`/api/density/segment/${seg_id}`)
+            .then(response => response.json())
+            .then(detail => {
+                renderSegmentDetail(detail);
+            })
+            .catch(error => {
+                console.error('Error loading segment detail:', error);
+            });
+    }
+    
+    function renderSegmentDetail(detail) {
+        // Update title
+        document.getElementById('detail-title').textContent = `${detail.seg_id}: ${detail.name}`;
+        
+        // Update metrics
+        document.getElementById('detail-peak-density').textContent = detail.peak_density.toFixed(3) + ' p/m²';
+        
+        const losBadge = `<span class="badge-los badge-${detail.worst_los}">${detail.worst_los}</span>`;
+        document.getElementById('detail-los-badge').innerHTML = losBadge;
+        
+        document.getElementById('detail-peak-rate').textContent = detail.peak_rate.toFixed(2) + ' p/s';
+        document.getElementById('detail-active').textContent = detail.active;
+        
+        // Show heatmap or empty state
+        const heatmapImg = document.getElementById('heatmap-image');
+        const noBinData = document.getElementById('heatmap-placeholder');
+        
+        if (detail.heatmap_url) {
+            heatmapImg.style.display = 'block';
+            noBinData.style.display = 'none';
+            document.getElementById('heatmap-image').querySelector('img').src = detail.heatmap_url;
+        } else {
+            heatmapImg.style.display = 'none';
+            noBinData.style.display = 'block';
+        }
+        
+        // Show detail panel
+        document.getElementById('segment-detail').style.display = 'block';
+        
+        // Scroll to panel
+        document.getElementById('segment-detail').scrollIntoView({ behavior: 'smooth' });
+    }
 </script>
 {% endblock %}
 
