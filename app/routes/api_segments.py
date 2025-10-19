@@ -28,7 +28,8 @@ storage = create_storage_from_env()
 
 
 def enrich_segment_features(segments_geojson: Dict[str, Any], 
-                          segment_metrics: Dict[str, Any]) -> List[Dict[str, Any]]:
+                          segment_metrics: Dict[str, Any],
+                          flagged_seg_ids: set) -> List[Dict[str, Any]]:
     """
     Enrich segment features with metrics data.
     
@@ -73,7 +74,8 @@ def enrich_segment_features(segments_geojson: Dict[str, Any],
             "worst_los": segment_metrics_data.get("worst_los", "Unknown"),
             "peak_density": segment_metrics_data.get("peak_density", 0.0),
             "peak_rate": segment_metrics_data.get("peak_rate", 0.0),
-            "active": segment_metrics_data.get("active_window", "Unknown")
+            "active": segment_metrics_data.get("active_window", "Unknown"),
+            "is_flagged": seg_id in flagged_seg_ids  # Mark if segment is flagged
         }
         
         # Create enriched feature
@@ -120,8 +122,22 @@ async def get_segments_geojson():
         else:
             logger.warning("segment_metrics.json not found in storage")
         
+        # Load flags to mark flagged segments
+        flagged_seg_ids = set()
+        flags_path = "flags.json"
+        if storage.exists(flags_path):
+            try:
+                flags = storage.read_json(flags_path)
+                # Handle both dict and array formats
+                if isinstance(flags, list):
+                    flagged_seg_ids = {f.get("seg_id") for f in flags if f.get("seg_id")}
+                elif isinstance(flags, dict):
+                    flagged_seg_ids = {f.get("seg_id") for f in flags.get("flagged_segments", []) if f.get("seg_id")}
+            except Exception as e:
+                logger.warning(f"Could not read flags: {e}")
+        
         # Enrich features
-        enriched_features = enrich_segment_features(segments_geojson, segment_metrics)
+        enriched_features = enrich_segment_features(segments_geojson, segment_metrics, flagged_seg_ids)
         
         # Build response
         response_data = {

@@ -230,6 +230,81 @@ def create_storage_from_env() -> Storage:
         return Storage(mode="gcs", bucket=bucket, prefix=prefix)
 
 
+# ===== UI Artifact Helpers (Step 8) =====
+
+def load_latest_run_id(storage: Storage) -> Optional[str]:
+    """
+    Load the latest run_id from artifacts/latest.json.
+    
+    Returns:
+        Run ID string (e.g., "2025-10-19") or None if not found
+    """
+    try:
+        pointer = storage.read_json("../latest.json")
+        return pointer.get("run_id")
+    except Exception:
+        # Fallback: try direct read for local mode
+        if storage.mode == "local":
+            try:
+                latest_path = Path("artifacts/latest.json")
+                if latest_path.exists():
+                    import json
+                    return json.loads(latest_path.read_text()).get("run_id")
+            except Exception:
+                pass
+        return None
+
+
+def list_reports(storage: Storage, run_id: str) -> List[Dict[str, Any]]:
+    """
+    List all report files for a given run_id.
+    
+    Args:
+        storage: Storage instance
+        run_id: Run identifier
+    
+    Returns:
+        List of dicts with name, path, mtime, size
+    """
+    reports_prefix = f"../reports/{run_id}"
+    
+    try:
+        if storage.mode == "local":
+            # Read from local reports directory
+            reports_dir = Path("reports") / run_id
+            if not reports_dir.exists():
+                return []
+            
+            files = []
+            for file_path in reports_dir.iterdir():
+                if file_path.is_file():
+                    files.append({
+                        "name": file_path.name,
+                        "path": str(file_path.relative_to(Path("reports"))),
+                        "mtime": file_path.stat().st_mtime,
+                        "size": file_path.stat().st_size
+                    })
+            
+            return sorted(files, key=lambda x: x["name"])
+        else:
+            # GCS mode - list blobs
+            paths = storage.list_paths(reports_prefix)
+            files = []
+            for path in paths:
+                files.append({
+                    "name": Path(path).name,
+                    "path": path,
+                    "mtime": 0,
+                    "size": 0
+                })
+            return files
+            
+    except Exception as e:
+        import logging
+        logging.warning(f"Could not list reports for {run_id}: {e}")
+        return []
+
+
 # Lightweight artifact loading helpers with graceful fallbacks
 
 def load_segments_geojson(storage: Storage) -> Optional[Dict[str, Any]]:
