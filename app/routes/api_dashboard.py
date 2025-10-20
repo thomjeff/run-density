@@ -267,8 +267,8 @@ async def get_dashboard_summary():
         elif isinstance(flags, list):
             # New format: [{seg_id, type, severity, ...}]
             segments_flagged = len(flags)
-            # Calculate bins_flagged from bins.parquet
-            bins_flagged = load_bins_flagged_count()
+            # Calculate bins_flagged from flags data
+            bins_flagged = sum(f.get("flagged_bins", 0) for f in flags)
         else:
             segments_flagged = 0
             bins_flagged = 0
