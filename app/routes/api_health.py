@@ -15,9 +15,12 @@ import json
 import logging
 from pathlib import Path
 
+from app.storage_service import StorageService
+
 # Create router
 router = APIRouter()
 logger = logging.getLogger(__name__)
+storage_service = StorageService()
 
 
 @router.get("/api/health/data")
@@ -32,27 +35,13 @@ async def get_health_data():
         JSON with system health information (environment, files, hashes, endpoints)
     """
     try:
-        # Find the latest health.json artifact
-        artifacts_dir = Path("artifacts").resolve()
-        if not artifacts_dir.exists():
-            raise HTTPException(status_code=404, detail="No artifacts directory found")
+        # Use storage service to find the latest health.json artifact
+        health_data = storage_service.load_ui_artifact("health.json")
         
-        # Find the most recent run directory
-        run_dirs = [d for d in artifacts_dir.iterdir() if d.is_dir() and d.name not in ["latest.json", "ui"]]
-        if not run_dirs:
-            raise HTTPException(status_code=404, detail="No artifact runs found")
+        if health_data is None:
+            raise HTTPException(status_code=404, detail="health.json not found in storage")
         
-        latest_run = max(run_dirs, key=lambda d: d.name)
-        health_path = latest_run / "ui" / "health.json"
-        
-        if not health_path.exists():
-            raise HTTPException(status_code=404, detail=f"health.json not found in {latest_run.name}")
-        
-        # Load and return health data
-        with open(health_path, 'r') as f:
-            health_data = json.load(f)
-        
-        logger.info(f"Loaded health data from {health_path}")
+        logger.info("Loaded health data from storage")
         return JSONResponse(content=health_data)
         
     except HTTPException:

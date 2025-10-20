@@ -169,6 +169,44 @@ class StorageService:
                 return None
         return None
     
+    def load_ui_artifact(self, filename: str, date: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        Load UI artifact JSON from storage.
+        
+        UI artifacts are stored in artifacts/{date}/ui/ directory structure.
+        
+        Args:
+            filename: Name of the UI artifact file (e.g., "health.json", "flags.json")
+            date: Optional date string (YYYY-MM-DD), defaults to today
+            
+        Returns:
+            Parsed JSON data, or None if not found
+        """
+        if date is None:
+            date = datetime.now().strftime("%Y-%m-%d")
+        
+        # UI artifacts are stored in artifacts/{date}/ui/ path
+        ui_artifact_path = f"artifacts/{date}/ui/{filename}"
+        
+        try:
+            if self.config.use_cloud_storage:
+                content = self._load_from_gcs(ui_artifact_path)
+            else:
+                content = self._load_from_local(ui_artifact_path)
+            
+            if content is None:
+                logger.warning(f"UI artifact not found: {ui_artifact_path}")
+                return None
+            
+            return json.loads(content)
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse UI artifact JSON {ui_artifact_path}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Error loading UI artifact {ui_artifact_path}: {e}")
+            return None
+    
     def list_files(self, date: Optional[str] = None, pattern: Optional[str] = None) -> List[str]:
         """
         List files in storage for a given date.
