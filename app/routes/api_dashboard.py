@@ -255,6 +255,7 @@ async def get_dashboard_summary():
         
         # Load flags data from UI artifacts
         flags = storage_service.load_ui_artifact("flags.json")
+        logger.info(f"Loaded flags data: {type(flags)}, length: {len(flags) if flags else 0}")
         if flags is None:
             warnings.append("missing: flags.json")
             flags = []
@@ -269,6 +270,7 @@ async def get_dashboard_summary():
             segments_flagged = len(flags)
             # Calculate bins_flagged from flags data
             bins_flagged = sum(f.get("flagged_bins", 0) for f in flags)
+            logger.info(f"Calculated bins_flagged: {bins_flagged} from {len(flags)} flag entries")
         else:
             segments_flagged = 0
             bins_flagged = 0
