@@ -135,6 +135,16 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     
+    - name: Auth (WIF)
+      id: auth
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+        service_account:         ${{ secrets.GCP_SERVICE_ACCOUNT }}
+    
+    - name: Setup gcloud
+      uses: google-github-actions/setup-gcloud@v2
+    
     - name: Setup Python
       uses: actions/setup-python@v4
       with:
@@ -151,6 +161,24 @@ jobs:
         echo "=== Running E2E Tests for Deployment Validation ==="
         echo "Testing Cloud Run deployment with e2e.py"
         python e2e.py --cloud
+    
+    - name: Generate UI Artifacts
+      run: |
+        echo "=== Generating UI Artifacts for APIs ==="
+        REPORT_DATE=$(date +%Y-%m-%d)
+        
+        # Generate UI artifacts using the latest run_id
+        python analytics/export_frontend_artifacts.py $REPORT_DATE
+        
+        # Upload UI artifacts to Cloud Storage for API access
+        if [ -d "artifacts/$REPORT_DATE/ui" ]; then
+          echo "Uploading UI artifacts to Cloud Storage..."
+          gsutil -m cp -r artifacts/$REPORT_DATE/ui/* gs://run-density-reports/artifacts/$REPORT_DATE/ui/
+          echo "✅ UI artifacts uploaded to Cloud Storage"
+        else
+          echo "❌ UI artifacts directory not found: artifacts/$REPORT_DATE/ui"
+          exit 1
+        fi
     
     - name: Validate Dashboard Data (Main Only)
       if: github.ref == 'refs/heads/main'
@@ -324,6 +352,25 @@ jobs:
         python scripts/validation/verify_bins.py --reports-dir ./validation_temp
         
         echo "✅ Bin dataset quality validation completed"
+    
+    - name: Generate UI Artifacts
+      if: github.event.inputs.run_bin_e2e == 'true'
+      run: |
+        echo "=== Generating UI Artifacts for APIs ==="
+        REPORT_DATE=$(date +%Y-%m-%d)
+        
+        # Generate UI artifacts using the latest run_id
+        python analytics/export_frontend_artifacts.py $REPORT_DATE
+        
+        # Upload UI artifacts to Cloud Storage for API access
+        if [ -d "artifacts/$REPORT_DATE/ui" ]; then
+          echo "Uploading UI artifacts to Cloud Storage..."
+          gsutil -m cp -r artifacts/$REPORT_DATE/ui/* gs://run-density-reports/artifacts/$REPORT_DATE/ui/
+          echo "✅ UI artifacts uploaded to Cloud Storage"
+        else
+          echo "❌ UI artifacts directory not found: artifacts/$REPORT_DATE/ui"
+          exit 1
+        fi
 
   # Part 4: Automated Release (GitHub release creation)
   automated-release:
