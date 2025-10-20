@@ -54,7 +54,11 @@ jobs:
       
       # Phase 4.5: Generate UI artifacts (JSON files for APIs)
       - name: Generate UI artifacts
-        run: python analytics/export_frontend_artifacts.py
+        run: |
+          # Get the latest run_id from latest.json
+          RUN_ID=$(python -c "import json; print(json.load(open('artifacts/latest.json'))['run_id'])")
+          echo "Using run_id: $RUN_ID"
+          python analytics/export_frontend_artifacts.py $RUN_ID
       
       # Phase 5: Bundle release
       - name: Create release bundle
@@ -92,12 +96,16 @@ jobs:
             artifacts/*/ui/
       
       # Upload JSON artifacts to Cloud Storage for API access
+      - name: Auth (WIF)
+        if: always()
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+      
       - name: Setup gcloud
         if: always()
         uses: google-github-actions/setup-gcloud@v2
-        with:
-          service_account_key: ${{ secrets.GCP_SA_KEY }}
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
       
       - name: Upload artifacts to Cloud Storage
         if: always()
