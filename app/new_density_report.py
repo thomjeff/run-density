@@ -30,6 +30,9 @@ from .new_flagging import (
 )
 from .new_density_template_engine import NewDensityTemplateEngine
 
+# Issue #283: Import SSOT for flagging logic parity
+from . import flagging as ssot_flagging
+
 
 def load_parquet_sources(reports_dir: Path) -> Dict[str, pd.DataFrame]:
     """Load all required Parquet sources for the new report."""
@@ -166,9 +169,23 @@ def generate_new_density_report(
     # Get flagged bins only
     flagged_bins = get_flagged_bins_new(bins_flagged)
     
-    # Generate summaries
+    # Issue #283: Use SSOT for flagging statistics to ensure report/artifact parity
+    stats_ssot = ssot_flagging.get_flagging_summary_for_report(bins_flagged, rulebook)
+    
+    # Generate summaries (keep segment_summary for template compatibility)
     segment_summary = summarize_segment_flags_new(bins_flagged)
-    stats = get_flagging_statistics_new(bins_flagged)
+    
+    # Map SSOT stats to expected format for template engine
+    stats = {
+        'total_bins': stats_ssot['total_bins'],
+        'flagged_bins': stats_ssot['flagged_bins'],
+        'flagged_percentage': (stats_ssot['flagged_bins'] / stats_ssot['total_bins'] * 100) if stats_ssot['total_bins'] > 0 else 0,
+        'worst_severity': stats_ssot['worst_severity'],
+        'worst_los': stats_ssot['worst_los'],
+        'peak_density': stats_ssot['peak_density'],
+        'peak_rate': stats_ssot['peak_rate'],  # Now in p/s (canonical)
+        'peak_rate_per_m_per_min': 0  # Deprecated, computed on-demand if needed
+    }
     
     # Create report context
     context = {

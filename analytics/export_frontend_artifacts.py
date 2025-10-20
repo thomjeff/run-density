@@ -27,6 +27,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.common.config import load_rulebook, load_reporting
 
+# Issue #283: Import SSOT for flagging logic parity
+from app import flagging as ssot_flagging
+
 
 def _load_bins_df(reports_root: Path, run_id: str) -> pd.DataFrame:
     """Load and normalize bins.parquet DataFrame."""
@@ -245,95 +248,67 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
 
 def generate_flags_json(reports_dir: Path, segment_metrics: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Generate flags.json from tooltips.json (canonical source per ChatGPT recommendation).
+    Generate flags.json from SSOT (Issue #283 fix).
     
-    This derives segment-level flags from bin-level operational intelligence,
-    treating tooltips.json as the source of truth for what requires attention.
+    Reads authoritative flags from bins.parquet and uses the SSOT flagging module
+    to ensure parity between the Density report and UI artifacts.
     
     Args:
         reports_dir: Path to reports/<run_id>/ directory
-        segment_metrics: Dictionary of segment metrics (for fallback)
+        segment_metrics: Dictionary of segment metrics (for enrichment)
     
     Returns:
-        Array of flag objects with worst severity per segment
+        Array of flag objects with canonical names + legacy aliases
     """
-    flagged_segments = []
+    print("   📊 Generating flags.json from SSOT (Issue #283 fix)...")
     
-    # Try to load tooltips.json first (canonical source)
-    tooltips_path = reports_dir / "tooltips.json"
-    if tooltips_path.exists():
-        try:
-            tooltips_data = json.loads(tooltips_path.read_text())
-            tooltips = tooltips_data.get("tooltips", [])
-            
-            # Group by segment and find worst severity
-            segment_flags = {}
-            severity_rank = {"CRITICAL": 3, "CAUTION": 2, "WATCH": 1, "none": 0}
-            
-            for tip in tooltips:
-                seg_id = tip.get("segment_id")
-                severity = tip.get("severity", "none")
-                
-                if seg_id and severity != "none":
-                    if seg_id not in segment_flags:
-                        segment_flags[seg_id] = {
-                            "severity": severity,
-                            "severity_rank": severity_rank.get(severity, 0),
-                            "los": tip.get("los", "A"),
-                            "peak_density": tip.get("density_peak", 0.0),
-                            "bin_count": 1
-                        }
-                    else:
-                        # Update to worst severity
-                        if severity_rank.get(severity, 0) > segment_flags[seg_id]["severity_rank"]:
-                            segment_flags[seg_id]["severity"] = severity
-                            segment_flags[seg_id]["severity_rank"] = severity_rank.get(severity, 0)
-                            segment_flags[seg_id]["los"] = tip.get("los", "A")
-                            segment_flags[seg_id]["peak_density"] = max(
-                                segment_flags[seg_id]["peak_density"], 
-                                tip.get("density_peak", 0.0)
-                            )
-                        segment_flags[seg_id]["bin_count"] += 1
-            
-            # Convert to flags array
-            for seg_id, flag_data in segment_flags.items():
-                flagged_segments.append({
-                    "seg_id": seg_id,
-                    "type": "density",
-                    "severity": flag_data["severity"],
-                    "worst_los": flag_data["los"],
-                    "peak_density": flag_data["peak_density"],
-                    "flagged_bin_count": flag_data["bin_count"],
-                    "note": f"{flag_data['severity']}: {flag_data['bin_count']} bins flagged"
-                })
-            
-            print(f"   📊 Derived flags from tooltips.json: {len(segment_flags)} segments")
-            return flagged_segments
-            
-        except Exception as e:
-            print(f"   ⚠️ Could not parse tooltips.json: {e}, falling back to LOS threshold")
-    
-    # Fallback: Use LOS threshold approach (legacy)
-    print(f"   ⚠️ Tooltips.json not found, using legacy LOS threshold approach")
-    flag_los_threshold = "D"
-    los_order = ["A", "B", "C", "D", "E", "F"]
-    threshold_idx = los_order.index(flag_los_threshold)
-    
-    for seg_id, metrics in segment_metrics.items():
-        worst_los = metrics.get("worst_los", "A")
-        los_idx = los_order.index(worst_los) if worst_los in los_order else 0
+    try:
+        # Load bins.parquet (authoritative source)
+        bins_path = reports_dir / "bins.parquet"
+        if not bins_path.exists():
+            print(f"   ⚠️ bins.parquet not found at {bins_path}, returning empty flags")
+            return []
         
-        if los_idx >= threshold_idx:
-            flagged_segments.append({
-                "seg_id": seg_id,
+        bins_df = pd.read_parquet(bins_path)
+        print(f"   📊 Loaded {len(bins_df)} bins from bins.parquet")
+        
+        # Use SSOT to compute and summarize flags
+        bin_flags = ssot_flagging.compute_bin_flags(bins_df)
+        summary = ssot_flagging.summarize_flags(bin_flags)
+        
+        print(f"   ✅ SSOT: {summary['flagged_bin_total']} flagged bins across {len(summary['segments_with_flags'])} segments")
+        
+        # Convert SSOT per_segment to flags.json format
+        # Includes both canonical names and legacy aliases for one-release compatibility
+        flagged_segments = []
+        for seg_data in summary['per_segment']:
+            flag_entry = {
+                # Canonical names (Issue #283)
+                "segment_id": seg_data["segment_id"],
+                "flagged_bins": seg_data["flagged_bins"],
+                "worst_severity": seg_data["worst_severity"],
+                "worst_los": seg_data["worst_los"],
+                "peak_density": round(seg_data["peak_density"], 3),
+                "peak_rate": round(seg_data["peak_rate"], 3),  # p/s - canonical
+                
+                # Legacy aliases (DEPRECATED - remove in next release)
+                "seg_id": seg_data["segment_id"],
+                "flagged_bin_count": seg_data["flagged_bins"],
+                
+                # Additional fields
                 "type": "density",
-                "severity": worst_los,
-                "worst_los": worst_los,
-                "peak_density": metrics["peak_density"],
-                "note": f"Peak {metrics['peak_density']:.3f} p/m²"
-            })
-    
-    return flagged_segments
+                "note": f"{seg_data['worst_severity']}: {seg_data['flagged_bins']} bins flagged"
+            }
+            flagged_segments.append(flag_entry)
+        
+        print(f"   ✅ Generated {len(flagged_segments)} flag entries with canonical names + legacy aliases")
+        return flagged_segments
+        
+    except Exception as e:
+        print(f"   ⚠️ Error generating flags from SSOT: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
 
 
 def generate_flow_json(reports_dir: Path) -> Dict[str, Dict[str, Any]]:
