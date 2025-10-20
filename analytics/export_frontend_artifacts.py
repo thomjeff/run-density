@@ -434,77 +434,54 @@ def generate_flow_metrics_legacy(reports_dir: Path) -> Dict[str, Dict[str, Any]]
     return flow_metrics
 
 
-def generate_flow_json(reports_dir: Path) -> Dict[str, Any]:
+def generate_flow_json(reports_dir: Path) -> List[Dict[str, Any]]:
     """
-    Generate authoritative flow.json with time-series rate data from bins.parquet.
+    Generate flow.json with event-pair overtaking/copresence data from Flow.csv.
     
-    Issue #287: Emit complete per-segment time series of rate (p/s) for entire active window.
-    Source of truth: bins.parquet (same bins that drive the density report).
+    Issue #290: Dashboard API expects event-pair format with overtaking_a, overtaking_b,
+    copresence_a, copresence_b fields, not time-series rate data.
     
     Args:
         reports_dir: Path to reports/<run_id>/ directory
     
     Returns:
-        Dictionary with schema_version, units, rows (bin-level time series), and summaries (segment aggregates)
+        List of event-pair objects with overtaking/copresence data
     """
-    bins_path = reports_dir / "bins.parquet"
+    # Find Flow.csv file (use the latest one)
+    flow_csv = sorted(list(reports_dir.glob("*-Flow.csv")), reverse=True)
     
-    if not bins_path.exists():
-        print(f"   ⚠️  bins.parquet not found at {bins_path}")
-        return {
-            "schema_version": "1.0.0",
-            "units": {"rate": "persons_per_second", "time": "ISO8601"},
-            "rows": [],
-            "summaries": []
+    if not flow_csv:
+        print(f"   ⚠️  No Flow.csv found in {reports_dir}")
+        return []
+    
+    flow_path = flow_csv[0]
+    df = pd.read_csv(flow_path)
+    
+    # Convert to the format expected by dashboard API
+    flow_records = []
+    for _, row in df.iterrows():
+        # Skip empty rows
+        if pd.isna(row['seg_id']):
+            continue
+            
+        flow_record = {
+            "segment_id": str(row['seg_id']),
+            "segment_label": str(row['segment_label']),
+            "event_a": str(row['event_a']),
+            "event_b": str(row['event_b']),
+            "flow_type": str(row['flow_type']),
+            "overtaking_a": float(row['overtaking_a']) if pd.notna(row['overtaking_a']) else 0.0,
+            "pct_a": float(row['pct_a']) if pd.notna(row['pct_a']) else 0.0,
+            "overtaking_b": float(row['overtaking_b']) if pd.notna(row['overtaking_b']) else 0.0,
+            "pct_b": float(row['pct_b']) if pd.notna(row['pct_b']) else 0.0,
+            "copresence_a": float(row['copresence_a']) if pd.notna(row['copresence_a']) else 0.0,
+            "copresence_b": float(row['copresence_b']) if pd.notna(row['copresence_b']) else 0.0
         }
+        flow_records.append(flow_record)
     
-    # Load bins data
-    bins_df = pd.read_parquet(bins_path)
+    print(f"   ✅ Generated {len(flow_records)} event-pair flow records from Flow.csv")
     
-    # Filter to bins with valid rate data
-    bins_with_rate = bins_df[bins_df['rate'].notna()].copy()
-    
-    if len(bins_with_rate) == 0:
-        print(f"   ⚠️  No bins with rate data found in {bins_path}")
-        return {
-            "schema_version": "1.0.0",
-            "units": {"rate": "persons_per_second", "time": "ISO8601"},
-            "rows": [],
-            "summaries": []
-        }
-    
-    # Generate rows: one per bin with segment_id, t_start, t_end, rate
-    rows = []
-    for _, row in bins_with_rate.iterrows():
-        rows.append({
-            "segment_id": str(row['segment_id']),
-            "t_start": str(row['t_start']),
-            "t_end": str(row['t_end']),
-            "rate": float(row['rate'])
-        })
-    
-    # Generate summaries: aggregate stats per segment
-    summaries = []
-    for seg_id, group in bins_with_rate.groupby('segment_id'):
-        summaries.append({
-            "segment_id": str(seg_id),
-            "bins": int(len(group)),
-            "peak_rate": float(group['rate'].max()),
-            "avg_rate": float(group['rate'].mean()),
-            "active_start": str(group['t_start'].min()),
-            "active_end": str(group['t_end'].max())
-        })
-    
-    payload = {
-        "schema_version": "1.0.0",
-        "units": {"rate": "persons_per_second", "time": "ISO8601"},
-        "rows": rows,
-        "summaries": summaries
-    }
-    
-    print(f"   ✅ Generated {len(rows)} bin-level rate records across {len(summaries)} segments")
-    
-    return payload
+    return flow_records
 
 
 def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
@@ -679,9 +656,7 @@ def export_ui_artifacts(reports_dir: Path, run_id: str, environment: str = "loca
     print("\n4️⃣  Generating flow.json...")
     flow = generate_flow_json(reports_dir)
     (artifacts_dir / "flow.json").write_text(json.dumps(flow, indent=2))
-    num_segments = len(flow.get('summaries', []))
-    num_rows = len(flow.get('rows', []))
-    print(f"   ✅ flow.json: {num_segments} segments, {num_rows} bin-level records")
+    print(f"   ✅ flow.json: {len(flow)} event-pair records")
     
     # 5. Generate segments.geojson
     print("\n5️⃣  Generating segments.geojson...")

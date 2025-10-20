@@ -173,19 +173,32 @@ class StorageService:
         """
         Load UI artifact JSON from storage.
         
-        UI artifacts are stored in artifacts/{date}/ui/ directory structure.
+        UI artifacts are stored in artifacts/{run_id}/ui/ directory structure.
+        If date is None, uses the latest run_id from artifacts/latest.json.
         
         Args:
             filename: Name of the UI artifact file (e.g., "health.json", "flags.json")
-            date: Optional date string (YYYY-MM-DD), defaults to today
+            date: Optional date/run_id string, defaults to latest run_id from latest.json
             
         Returns:
             Parsed JSON data, or None if not found
         """
         if date is None:
-            date = datetime.now().strftime("%Y-%m-%d")
+            # Try to get the latest run_id from artifacts/latest.json
+            try:
+                latest_path = Path("artifacts/latest.json")
+                if latest_path.exists():
+                    latest_data = json.loads(latest_path.read_text())
+                    date = latest_data.get("run_id")
+                    logger.info(f"Using latest run_id from latest.json: {date}")
+                else:
+                    logger.warning("artifacts/latest.json not found, using today's date")
+                    date = datetime.now().strftime("%Y-%m-%d")
+            except Exception as e:
+                logger.warning(f"Could not read artifacts/latest.json: {e}, using today's date")
+                date = datetime.now().strftime("%Y-%m-%d")
         
-        # UI artifacts are stored in artifacts/{date}/ui/ path
+        # UI artifacts are stored in artifacts/{run_id}/ui/ path
         ui_artifact_path = f"artifacts/{date}/ui/{filename}"
         
         try:
@@ -288,7 +301,12 @@ class StorageService:
     def _load_from_local(self, file_path: str) -> Optional[str]:
         """Load file from local file system."""
         try:
-            full_path = Path(self.config.local_reports_dir) / file_path
+            # UI artifacts are in the root artifacts/ directory, not under reports/
+            if file_path.startswith("artifacts/"):
+                full_path = Path(file_path)
+            else:
+                full_path = Path(self.config.local_reports_dir) / file_path
+            
             if not full_path.exists():
                 logger.debug(f"File not found locally: {full_path}")
                 return None
