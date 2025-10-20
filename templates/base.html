@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Runflow{% endblock %} - Race Density & Flow Intelligence</title>
+    
+    <style>
+        /* Reset and Base Styles */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f8f9fa;
+        }
+        
+        /* Header */
+        header {
+            background: #2c3e50;
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+        
+        header .tagline {
+            font-size: 0.875rem;
+            opacity: 0.9;
+            color: #ecf0f1;
+        }
+        
+        /* Navigation */
+        nav {
+            background: #34495e;
+            padding: 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        nav ul {
+            list-style: none;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0;
+        }
+        
+        nav li {
+            margin: 0;
+        }
+        
+        nav a {
+            display: block;
+            padding: 0.875rem 1.5rem;
+            color: #ecf0f1;
+            text-decoration: none;
+            font-weight: 500;
+            transition: background 0.2s;
+            border-bottom: 3px solid transparent;
+        }
+        
+        nav a:hover {
+            background: #2c3e50;
+            border-bottom-color: #3498db;
+        }
+        
+        nav a.active {
+            background: #2c3e50;
+            border-bottom-color: #2ecc71;
+        }
+        
+        /* Main Content */
+        main {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+        
+        /* Page Header */
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .page-header h2 {
+            font-size: 2rem;
+            color: #2c3e50;
+        }
+        
+        /* Provenance Badge */
+        .provenance {
+            font-size: 0.875rem;
+            color: #666;
+            padding: 0.5rem 1rem;
+            background: #f0f0f0;
+            border-radius: 4px;
+            opacity: 0.9;
+        }
+        
+        /* Footer */
+        footer {
+            background: #2c3e50;
+            color: #ecf0f1;
+            text-align: center;
+            padding: 2rem;
+            margin-top: 4rem;
+            font-size: 0.875rem;
+        }
+        
+        footer a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        
+        footer a:hover {
+            text-decoration: underline;
+        }
+        
+        /* LOS Badge Styles */
+        .badge-los {
+            display: inline-block;
+            padding: 0.25rem 0.625rem;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            text-align: center;
+            min-width: 32px;
+        }
+        
+        /* LOS Colors from reporting.yml */
+        .badge-los.badge-A { background: #4CAF50; color: white; }
+        .badge-los.badge-B { background: #8BC34A; color: white; }
+        .badge-los.badge-C { background: #FFC107; color: #333; }
+        .badge-los.badge-D { background: #FF9800; color: white; }
+        .badge-los.badge-E { background: #FF5722; color: white; }
+        .badge-los.badge-F { background: #F44336; color: white; }
+        
+        /* Cards and KPI Tiles */
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 1.5rem;
+        }
+        
+        .kpi {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .kpi-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
+        }
+        
+        .kpi-label {
+            font-size: 0.875rem;
+            color: #7f8c8d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        th, td {
+            padding: 0.875rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        /* Placeholders */
+        .placeholder {
+            padding: 3rem;
+            text-align: center;
+            color: #95a5a6;
+            font-style: italic;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 2px dashed #ddd;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            main {
+                padding: 0 1rem;
+                margin: 1rem auto;
+            }
+            
+            nav ul {
+                flex-direction: column;
+            }
+            
+            .page-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+        }
+        
+        {% block extra_styles %}{% endblock %}
+    </style>
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <header>
+        <h1>Runflow</h1>
+        <div class="tagline">Race Density & Flow Intelligence</div>
+    </header>
+    
+    <nav>
+        <ul>
+            <li><a href="/" {% if request.url.path == "/" %}class="active"{% endif %}>Login</a></li>
+            <li><a href="/dashboard" {% if request.url.path == "/dashboard" %}class="active"{% endif %}>Dashboard</a></li>
+            <li><a href="/segments" {% if request.url.path == "/segments" %}class="active"{% endif %}>Segments</a></li>
+            <li><a href="/density" {% if request.url.path == "/density" %}class="active"{% endif %}>Density</a></li>
+            <li><a href="/flow" {% if request.url.path == "/flow" %}class="active"{% endif %}>Flow</a></li>
+            <li><a href="/reports" {% if request.url.path == "/reports" %}class="active"{% endif %}>Reports</a></li>
+            <li><a href="/health-check" {% if request.url.path == "/health-check" %}class="active"{% endif %}>Health</a></li>
+        </ul>
+    </nav>
+    
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    
+    <footer>
+        <p>&copy; 2025 Runflow - Race Density & Flow Intelligence System</p>
+        <p style="margin-top: 0.5rem;">
+            {% include "partials/_provenance.html" %}
+        </p>
+    </footer>
+    
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>
+

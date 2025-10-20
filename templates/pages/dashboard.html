@@ -1,0 +1,359 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Dashboard</h2>
+    <div style="display: flex; align-items: center; gap: 1rem;">
+        <button id="refresh-btn" style="padding: 0.5rem 1rem; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">
+            🔄 Refresh
+        </button>
+        {% if meta %}
+        <div class="provenance">
+            {% include "partials/_provenance.html" %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Data Missing Banner -->
+<div id="data-missing-banner" class="card" style="display: none; margin-bottom: 1.5rem;">
+    <div style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; border-radius: 4px; background: #fff3cd; border-left: 4px solid #ffc107;">
+        <span style="font-size: 1.25rem;">⚠️</span>
+        <div>
+            <div style="font-weight: 600; color: #856404;">Data Not Found</div>
+            <div id="data-missing-message" style="font-size: 0.875rem; color: #856404;">Data not found for one or more inputs (meta.json, metrics, or flags). Showing placeholders.</div>
+        </div>
+    </div>
+</div>
+
+<!-- Status Banner -->
+<div id="status-banner" class="card" style="display: none; margin-bottom: 1.5rem;">
+    <div id="status-content" style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; border-radius: 4px;">
+        <span id="status-icon" style="font-size: 1.25rem;">⚠️</span>
+        <div>
+            <div id="status-title" style="font-weight: 600; color: #e74c3c;">Action Required</div>
+            <div id="status-message" style="font-size: 0.875rem; color: #666;">High density or flagged segments detected</div>
+        </div>
+    </div>
+</div>
+
+<!-- Model Inputs Section -->
+<div class="card">
+    <h3 style="margin-bottom: 1.5rem; color: #2c3e50;">Model Inputs</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <div id="metric-total-runners" class="kpi">
+            <div class="kpi-value">—</div>
+            <div class="kpi-label">Total Participants</div>
+        </div>
+        <div id="metric-cohorts" class="kpi">
+            <div class="kpi-value">—</div>
+            <div class="kpi-label">Event Cohorts</div>
+        </div>
+        <div id="metric-segments" class="kpi">
+            <div class="kpi-value">—</div>
+            <div class="kpi-label">Course Segments</div>
+        </div>
+    </div>
+</div>
+
+<!-- Model Outputs Section -->
+<div class="card">
+    <h3 style="margin-bottom: 1.5rem; color: #2c3e50;">Model Outputs</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem;">
+        
+        <div class="kpi">
+            <div id="kpi-peak-density" class="kpi-value">—</div>
+            <div class="kpi-label">Peak Density (p/m²)</div>
+            <div id="kpi-peak-density-los" style="margin-top: 0.25rem;">
+                <span class="badge-los badge-A">—</span>
+            </div>
+        </div>
+        
+        <div class="kpi">
+            <div id="kpi-peak-rate" class="kpi-value">—</div>
+            <div class="kpi-label">Peak Rate (p/s)</div>
+        </div>
+        
+        <div class="kpi">
+            <div id="kpi-flagged-segments" class="kpi-value">—</div>
+            <div class="kpi-label">Segments with Flags</div>
+        </div>
+        
+        <div class="kpi">
+            <div id="kpi-flagged-bins" class="kpi-value">—</div>
+            <div class="kpi-label">Flagged Bins</div>
+        </div>
+        
+        <div class="kpi">
+            <div id="kpi-overtaking" class="kpi-value">—</div>
+            <div class="kpi-label">Overtaking Segments</div>
+        </div>
+        
+        <div class="kpi">
+            <div id="kpi-copresence" class="kpi-value">—</div>
+            <div class="kpi-label">Co-presence Segments</div>
+        </div>
+        
+    </div>
+</div>
+
+<!-- Last Updated -->
+<div style="text-align: center; margin-top: 2rem; color: #7f8c8d; font-size: 0.875rem;">
+    Last updated: <span id="last-updated">Loading...</span>
+</div>
+
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+    @media (max-width: 768px) {
+        main .kpi {
+            min-width: 150px;
+        }
+        
+        .page-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+    }
+    
+    #refresh-btn:hover {
+        background: #2980b9;
+    }
+    
+    #refresh-btn:active {
+        transform: translateY(1px);
+    }
+    
+    .status-normal {
+        background: #d5f4e6;
+        border-left: 4px solid #2ecc71;
+    }
+    
+    .status-action-required {
+        background: #fdf2f2;
+        border-left: 4px solid #e74c3c;
+    }
+    
+    /* LOS Badge Styles */
+    .badge-los {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: white;
+    }
+    
+    .badge-A { background-color: #2ecc71; }
+    .badge-B { background-color: #f39c12; }
+    .badge-C { background-color: #e67e22; }
+    .badge-D { background-color: #e74c3c; }
+    .badge-E { background-color: #9b59b6; }
+    .badge-F { background-color: #34495e; }
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- LOS Colors from SSOT -->
+<script>
+    const LOS_COLORS = {{ los_colors | tojson }};
+</script>
+
+<script>
+    // Dashboard data binding
+    let dashboardData = null;
+    
+    // Initialize dashboard when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        loadDashboardData();
+        
+        // Add refresh button handler
+        document.getElementById('refresh-btn').addEventListener('click', function() {
+            loadDashboardData();
+        });
+    });
+    
+    function loadDashboardData() {
+        // Show loading state
+        showLoadingState();
+        
+        fetch('/api/dashboard/summary')
+            .then(response => response.json())
+            .then(data => {
+                dashboardData = data;
+                updateDashboard(data);
+            })
+            .catch(error => {
+                console.error('Error loading dashboard data:', error);
+                showErrorState();
+            });
+    }
+    
+    function showLoadingState() {
+        // Show loading indicators
+        document.querySelectorAll('.kpi-value').forEach(el => {
+            el.textContent = '—';
+        });
+        document.getElementById('last-updated').textContent = 'Loading...';
+    }
+    
+    function showErrorState() {
+        // Show error indicators
+        document.querySelectorAll('.kpi-value').forEach(el => {
+            el.textContent = 'Error';
+        });
+        document.getElementById('last-updated').textContent = 'Error loading data';
+    }
+    
+    function updateDashboard(data) {
+        console.log('updateDashboard called with data:', data);
+        
+        // Update timestamp
+        document.getElementById('last-updated').textContent = formatTimestamp(data.timestamp);
+        
+        // Update data missing banner
+        updateDataMissingBanner(data);
+        
+        // Update status banner
+        updateStatusBanner(data);
+        
+        // Update model inputs
+        updateModelInputs(data);
+        
+        // Update model outputs
+        updateModelOutputs(data);
+    }
+    
+    function updateDataMissingBanner(data) {
+        const banner = document.getElementById('data-missing-banner');
+        const message = document.getElementById('data-missing-message');
+        
+        if (data.warnings && data.warnings.length > 0) {
+            banner.style.display = 'block';
+            const missingFiles = data.warnings.filter(w => w.startsWith('missing:')).map(w => w.replace('missing: ', ''));
+            if (missingFiles.length > 0) {
+                message.textContent = `Data not found for: ${missingFiles.join(', ')}. Showing placeholders.`;
+            } else {
+                message.textContent = 'Data loading issues detected. Showing placeholders.';
+            }
+        } else if (data.segments_total === 0 && data.total_runners === 0) {
+            banner.style.display = 'block';
+            message.textContent = 'No data available. Showing placeholders.';
+        } else {
+            banner.style.display = 'none';
+        }
+    }
+    
+    function updateStatusBanner(data) {
+        const banner = document.getElementById('status-banner');
+        const content = document.getElementById('status-content');
+        const icon = document.getElementById('status-icon');
+        const title = document.getElementById('status-title');
+        const message = document.getElementById('status-message');
+        
+        if (data.status === 'action_required') {
+            banner.style.display = 'block';
+            content.className = 'status-action-required';
+            icon.textContent = '⚠️';
+            title.textContent = 'Action Required';
+            title.style.color = '#e74c3c';
+            message.textContent = 'High density or flagged segments detected';
+        } else {
+            banner.style.display = 'block';
+            content.className = 'status-normal';
+            icon.textContent = '✅';
+            title.textContent = 'Normal Operations';
+            title.style.color = '#2ecc71';
+            message.textContent = 'All systems operating within normal parameters';
+        }
+    }
+    
+    function updateModelInputs(data) {
+        // Total runners
+        const totalRunnersEl = document.querySelector('#metric-total-runners .kpi-value');
+        if (totalRunnersEl) {
+            totalRunnersEl.textContent = data.total_runners.toLocaleString();
+        }
+        
+        // Cohorts
+        const cohortsEl = document.querySelector('#metric-cohorts .kpi-value');
+        if (cohortsEl) {
+            const cohorts = data.cohorts;
+            const cohortText = Object.entries(cohorts)
+                .map(([event, info]) => `${event}: ${info.count} @ ${info.start}`)
+                .join(' • ');
+            cohortsEl.textContent = cohortText || 'No data';
+        }
+        
+        // Segments
+        const segmentsEl = document.querySelector('#metric-segments .kpi-value');
+        if (segmentsEl) {
+            segmentsEl.textContent = data.segments_total;
+        }
+    }
+    
+    function updateModelOutputs(data) {
+        console.log('updateModelOutputs called with data:', data);
+        
+        // Peak density with LOS badge
+        const peakDensityEl = document.querySelector('#kpi-peak-density');
+        console.log('peakDensityEl found:', peakDensityEl);
+        if (peakDensityEl) {
+            peakDensityEl.textContent = data.peak_density.toFixed(3);
+            console.log('Set peak density to:', data.peak_density.toFixed(3));
+        }
+        
+        const losBadgeEl = document.querySelector('#kpi-peak-density-los .badge-los');
+        if (losBadgeEl) {
+            losBadgeEl.textContent = data.peak_density_los;
+            losBadgeEl.className = `badge-los badge-${data.peak_density_los}`;
+        }
+        
+        // Peak rate
+        const peakRateEl = document.querySelector('#kpi-peak-rate');
+        if (peakRateEl) {
+            peakRateEl.textContent = data.peak_rate.toFixed(2);
+        }
+        
+        // Flagged segments
+        const flaggedSegmentsEl = document.querySelector('#kpi-flagged-segments');
+        if (flaggedSegmentsEl) {
+            const flaggedSegmentsText = `${data.segments_flagged} / ${data.segments_total}`;
+            flaggedSegmentsEl.textContent = flaggedSegmentsText;
+        }
+        
+        // Flagged bins
+        const flaggedBinsEl = document.querySelector('#kpi-flagged-bins');
+        if (flaggedBinsEl) {
+            flaggedBinsEl.textContent = data.bins_flagged.toLocaleString();
+        }
+        
+        // Overtaking segments
+        const overtakingEl = document.querySelector('#kpi-overtaking');
+        if (overtakingEl) {
+            overtakingEl.textContent = data.segments_overtaking;
+        }
+        
+        // Co-presence segments
+        const copresenceEl = document.querySelector('#kpi-copresence');
+        if (copresenceEl) {
+            copresenceEl.textContent = data.segments_copresence;
+        }
+    }
+    
+    function formatTimestamp(timestamp) {
+        try {
+            const date = new Date(timestamp);
+            return date.toLocaleString();
+        } catch (e) {
+            return timestamp;
+        }
+    }
+</script>
+{% endblock %}
+

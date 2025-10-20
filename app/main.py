@@ -23,6 +23,13 @@ try:
     from .report import generate_combined_report, generate_combined_narrative
     from .map_api import router as map_router
     from .routes.reports import router as reports_router
+    from .routes.ui import router as ui_router
+    from .routes.api_segments import router as api_segments_router
+    from .routes.api_dashboard import router as api_dashboard_router
+    from .routes.api_health import router as api_health_router
+    from .routes.api_density import router as api_density_router
+    from .routes.api_flow import router as api_flow_router
+    from .routes.api_reports import router as api_reports_router
     # from .test_api import test_router  # Disabled for Cloud Run deployment
     from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 except ImportError:
@@ -35,6 +42,13 @@ except ImportError:
     from report import generate_combined_report, generate_combined_narrative
     from map_api import router as map_router
     from routes.reports import router as reports_router
+    from routes.ui import router as ui_router
+    from routes.api_segments import router as api_segments_router
+    from routes.api_dashboard import router as api_dashboard_router
+    from routes.api_health import router as api_health_router
+    from routes.api_density import router as api_density_router
+    from routes.api_flow import router as api_flow_router
+    from routes.api_reports import router as api_reports_router
     # from test_api import test_router  # Disabled for Cloud Run deployment
     from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
@@ -135,6 +149,13 @@ logging.getLogger().info("BOOT_ENV %s", BOOT_ENV)
 app.include_router(density_router)
 app.include_router(map_router)
 app.include_router(reports_router)
+app.include_router(ui_router)
+app.include_router(api_segments_router)
+app.include_router(api_dashboard_router)
+app.include_router(api_health_router)
+app.include_router(api_density_router)
+app.include_router(api_flow_router)
+app.include_router(api_reports_router)
 
 # CSV Data Endpoints for Reports Page
 @app.get("/data/runners.csv")

@@ -1,0 +1,18 @@
+{
+  "status": "Validated",
+  "run_hash_canonical": "5cfefbe90827cb736909e292caa228aad20d5f0d138da674631e8153ad7a2937",
+  "meta_run_hash": "5cfefbe90827cb736909e292caa228aad20d5f0d138da674631e8153ad7a2937",
+  "env": "local",
+  "summary": {
+    "segments": 15,
+    "los_counts": {
+      "A": 2,
+      "B": 0,
+      "C": 1,
+      "D": 3,
+      "E": 9,
+      "F": 0
+    }
+  },
+  "timestamp": "2025-10-19T00:28:53.168229Z"
+}

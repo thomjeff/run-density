@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+
+{% block title %}Density Analysis{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Density Analysis</h2>
+    {% if meta %}
+    <div class="provenance">
+        {% include "partials/_provenance.html" %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Density Legend -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Level of Service (LOS) Legend</h3>
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+        <span class="badge-los badge-A">A - Free Flow</span>
+        <span class="badge-los badge-B">B - Comfortable</span>
+        <span class="badge-los badge-C">C - Moderate</span>
+        <span class="badge-los badge-D">D - Dense</span>
+        <span class="badge-los badge-E">E - Very Dense</span>
+        <span class="badge-los badge-F">F - Extremely Dense</span>
+    </div>
+</div>
+
+<!-- Segment Density Table -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Segment Analysis</h3>
+    <table id="density-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Schema</th>
+                <th>Active Window</th>
+                <th>Peak Density</th>
+                <th>LOS</th>
+                <th>Peak Rate</th>
+                <th>Utilization</th>
+                <th>Flag</th>
+                <th>Worst Bin</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td colspan="10" class="placeholder">Loading density data...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- Segment Detail Panel (shows on row click) -->
+<div id="segment-detail" style="display: none;">
+    <div class="card">
+        <h3 id="detail-title">Segment Detail</h3>
+        
+        <!-- Segment Metrics -->
+        <div style="margin: 1.5rem 0; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+            <h4 style="margin-bottom: 0.75rem;">Key Metrics</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                <div>
+                    <strong>Peak Density:</strong> <span id="detail-peak-density">—</span>
+                </div>
+                <div>
+                    <strong>Level of Service:</strong> <span id="detail-los-badge">—</span>
+                </div>
+                <div>
+                    <strong>Peak Rate:</strong> <span id="detail-peak-rate">—</span>
+                </div>
+                <div>
+                    <strong>Active Window:</strong> <span id="detail-active">—</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Heatmap -->
+        <div id="heatmap-container" style="margin: 1.5rem 0;">
+            <h4 style="margin-bottom: 0.75rem;">Density Heatmap</h4>
+            <img id="heatmap-image" src="" alt="Density heatmap" style="max-width: 100%; border-radius: 4px;" />
+            <div id="heatmap-placeholder" class="placeholder">No heatmap data available for this segment.</div>
+        </div>
+        
+        <!-- Bin-Level Table -->
+        <div id="bin-table-container" style="margin: 1.5rem 0;">
+            <h4 style="margin-bottom: 0.75rem;">Bin-Level Details</h4>
+            <div id="bin-table-content" class="placeholder">No bin-level data available.</div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- LOS Colors from SSOT -->
+<script>
+    const LOS_COLORS = {{ los_colors | tojson }};
+</script>
+
+<script>
+    let densityData = [];
+    
+    // Load density data on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        loadDensityData();
+    });
+    
+    // Issue #286: Format worst bin label (segment · distance · time)
+    function formatWorstBinLabel(bin) {
+        if (!bin || typeof bin !== 'object') {
+            return '—';
+        }
+        
+        // Helper: Pick first available number from keys
+        function pickNumber(obj, keys) {
+            for (const k of keys) {
+                const v = obj[k];
+                if (typeof v === 'number' && !isNaN(v)) return v;
+                if (typeof v === 'string' && v.trim() && !isNaN(Number(v))) return Number(v);
+            }
+            return null;
+        }
+        
+        // Helper: Pick first available string from keys
+        function pickString(obj, keys) {
+            for (const k of keys) {
+                const v = obj[k];
+                if (typeof v === 'string' && v.trim()) return v.trim();
+            }
+            return null;
+        }
+        
+        // Helper: Convert ISO or HH:MM to HH:MM format
+        function hhmmFromISO(s) {
+            if (/^\d{2}:\d{2}$/.test(s)) return s;  // Already HH:MM
+            try {
+                const d = new Date(s);
+                if (isNaN(d.getTime())) return s;
+                const hh = String(d.getHours()).padStart(2, '0');
+                const mm = String(d.getMinutes()).padStart(2, '0');
+                return `${hh}:${mm}`;
+            } catch {
+                return s;
+            }
+        }
+        
+        // Get segment ID
+        const segment = pickString(bin, ['segment_id', 'seg_id', 'bin_id']) || '—';
+        
+        // Get distance in km (prefer km, else convert from meters)
+        let dStartKm = pickNumber(bin, ['d_start_km', 'dist_start_km', 'start_km']);
+        let dEndKm = pickNumber(bin, ['d_end_km', 'dist_end_km', 'end_km']);
+        if (dStartKm == null && dEndKm == null) {
+            const dStartM = pickNumber(bin, ['d_start_m', 'dist_start_m', 's0_m']);
+            const dEndM = pickNumber(bin, ['d_end_m', 'dist_end_m', 's1_m']);
+            if (dStartM != null) dStartKm = dStartM / 1000;
+            if (dEndM != null) dEndKm = dEndM / 1000;
+        }
+        const hasDistances = dStartKm != null && dEndKm != null;
+        const distLabel = hasDistances
+            ? `${dStartKm.toFixed(3)}–${dEndKm.toFixed(3)} km`
+            : '';
+        
+        // Get time window (prefer ISO, accept HH:MM)
+        const tStart = pickString(bin, ['t_start', 't0', 'start_t', 'time']);
+        const tEnd = pickString(bin, ['t_end', 't1', 'end_t']);
+        let timeLabel = '';
+        if (tStart && tEnd) {
+            timeLabel = `${hhmmFromISO(tStart)}–${hhmmFromISO(tEnd)}`;
+        } else if (tStart && tStart.includes('-')) {
+            // Handle time already formatted as "HH:MM-HH:MM" 
+            timeLabel = tStart.replace('-', '–');
+        }
+        
+        // Compose: "Worst Bin: SEGMENT DISTANCE · TIME"
+        let label = `Worst Bin: ${segment}`;
+        if (distLabel) label += ` ${distLabel}`;
+        if (timeLabel) label += ` · ${timeLabel}`;
+        
+        return label;
+    }
+    
+    function loadDensityData() {
+        fetch('/api/density/segments')
+            .then(response => response.json())
+            .then(data => {
+                densityData = data;
+                renderDensityTable(data);
+            })
+            .catch(error => {
+                console.error('Error loading density data:', error);
+                showDensityError();
+            });
+    }
+    
+    function renderDensityTable(segments) {
+        const tbody = document.querySelector('#density-table tbody');
+        tbody.innerHTML = '';
+        
+        if (!segments || segments.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="10" class="placeholder">No density data available</td></tr>';
+            return;
+        }
+        
+        segments.forEach(segment => {
+            const row = document.createElement('tr');
+            row.style.cursor = 'pointer';
+            row.addEventListener('click', () => showSegmentDetail(segment.seg_id));
+            
+            const losBadge = `<span class="badge-los badge-${segment.worst_los}">${segment.worst_los}</span>`;
+            const flaggedIcon = segment.flagged ? '⚠️' : '';
+            
+            // Issue #286: Format worst bin using new formatter
+            // Add segment_id to bin object for proper labeling
+            const worstBin = segment.worst_bin ? {...segment.worst_bin, segment_id: segment.seg_id} : null;
+            const worstBinLabel = formatWorstBinLabel(worstBin);
+            
+            row.innerHTML = `
+                <td>${segment.seg_id}</td>
+                <td>${segment.name}</td>
+                <td>${segment.schema}</td>
+                <td>${segment.active}</td>
+                <td>${segment.peak_density.toFixed(3)}</td>
+                <td>${losBadge}</td>
+                <td>${segment.peak_rate.toFixed(2)}</td>
+                <td>${segment.utilization ? segment.utilization.toFixed(3) : '—'}</td>
+                <td>${flaggedIcon}</td>
+                <td>${worstBinLabel}</td>
+            `;
+            
+            tbody.appendChild(row);
+        });
+    }
+    
+    function showDensityError() {
+        const tbody = document.querySelector('#density-table tbody');
+        tbody.innerHTML = '<tr><td colspan="10" class="placeholder">Error loading density data</td></tr>';
+    }
+    
+    function showSegmentDetail(seg_id) {
+        // Fetch detailed data
+        fetch(`/api/density/segment/${seg_id}`)
+            .then(response => response.json())
+            .then(detail => {
+                renderSegmentDetail(detail);
+            })
+            .catch(error => {
+                console.error('Error loading segment detail:', error);
+            });
+    }
+    
+    function renderSegmentDetail(detail) {
+        // Update title
+        document.getElementById('detail-title').textContent = `${detail.seg_id}: ${detail.name}`;
+        
+        // Update metrics with null checks
+        const peakDensity = detail.peak_density || 0;
+        document.getElementById('detail-peak-density').textContent = peakDensity.toFixed(3) + ' p/m²';
+        
+        const worstLos = detail.worst_los || 'Unknown';
+        const losBadge = `<span class="badge-los badge-${worstLos}">${worstLos}</span>`;
+        document.getElementById('detail-los-badge').innerHTML = losBadge;
+        
+        const peakRate = detail.peak_rate || 0;
+        document.getElementById('detail-peak-rate').textContent = peakRate.toFixed(2) + ' p/s';
+        document.getElementById('detail-active').textContent = detail.active || 'N/A';
+        
+        // Show heatmap or empty state
+        const heatmapImg = document.getElementById('heatmap-image');
+        const noBinData = document.getElementById('heatmap-placeholder');
+        
+        if (detail.heatmap_url) {
+            heatmapImg.style.display = 'block';
+            noBinData.style.display = 'none';
+            heatmapImg.src = detail.heatmap_url;
+        } else {
+            heatmapImg.style.display = 'none';
+            noBinData.style.display = 'block';
+        }
+        
+        // Show detail panel
+        document.getElementById('segment-detail').style.display = 'block';
+        
+        // Scroll to panel
+        document.getElementById('segment-detail').scrollIntoView({ behavior: 'smooth' });
+    }
+</script>
+{% endblock %}
+

@@ -1,0 +1,37 @@
+name: UI Artifacts QC
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ feature/rf-fe-002, main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  qc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run analytics (if not already produced)
+        run: |
+          # If artifacts/latest.json missing, generate once locally
+          if [ ! -f artifacts/latest.json ]; then
+            python e2e.py --local
+          fi
+
+      - name: Run UI artifact QA
+        run: |
+          pytest -q tests/test_ui_artifacts_qc.py
+

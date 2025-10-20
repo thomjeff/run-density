@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}Reports{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Generated Reports</h2>
+    {% if meta %}
+    <div class="provenance">
+        {% include "partials/_provenance.html" %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Reports List -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Available Reports</h3>
+    <div id="reports-list">
+        <p class="placeholder">Loading reports...</p>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Load reports on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        loadReports();
+    });
+    
+    function loadReports() {
+        fetch('/api/reports/list')
+            .then(response => response.json())
+            .then(data => {
+                renderReportsList(data);
+            })
+            .catch(error => {
+                console.error('Error loading reports:', error);
+                showReportsError();
+            });
+    }
+    
+    function renderReportsList(reports) {
+        const container = document.getElementById('reports-list');
+        container.innerHTML = '';
+        
+        if (!reports || reports.length === 0) {
+            container.innerHTML = '<p class="placeholder">No reports available</p>';
+            return;
+        }
+        
+        // Group by type
+        const densityReports = reports.filter(r => r.name.includes('Density'));
+        const flowReports = reports.filter(r => r.name.includes('Flow'));
+        const dataFiles = reports.filter(r => r.type === 'data_file');
+        const otherReports = reports.filter(r => !r.name.includes('Density') && !r.name.includes('Flow') && r.type !== 'data_file');
+        
+        let html = '';
+        
+        // Density Reports
+        if (densityReports.length > 0) {
+            html += '<h4 style="margin-top: 1rem; margin-bottom: 0.5rem;">Density Reports</h4>';
+            html += '<ul style="list-style: none; padding: 0;">';
+            densityReports.forEach(report => {
+                html += renderReportItem(report);
+            });
+            html += '</ul>';
+        }
+        
+        // Flow Reports
+        if (flowReports.length > 0) {
+            html += '<h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Flow Reports</h4>';
+            html += '<ul style="list-style: none; padding: 0;">';
+            flowReports.forEach(report => {
+                html += renderReportItem(report);
+            });
+            html += '</ul>';
+        }
+        
+        // Data Files
+        if (dataFiles.length > 0) {
+            html += '<h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Data Files</h4>';
+            html += '<ul style="list-style: none; padding: 0;">';
+            dataFiles.forEach(report => {
+                html += renderDataFileItem(report);
+            });
+            html += '</ul>';
+        }
+        
+        // Other Reports
+        if (otherReports.length > 0) {
+            html += '<h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Other Reports</h4>';
+            html += '<ul style="list-style: none; padding: 0;">';
+            otherReports.forEach(report => {
+                html += renderReportItem(report);
+            });
+            html += '</ul>';
+        }
+        
+        container.innerHTML = html;
+    }
+    
+    function renderReportItem(report) {
+        const size = formatFileSize(report.size);
+        const mtime = report.mtime ? new Date(report.mtime * 1000).toLocaleString() : 'N/A';
+        
+        return `
+            <li style="padding: 0.75rem; border-bottom: 1px solid #ecf0f1; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-weight: 600;">${report.name}</div>
+                    <div style="font-size: 0.875rem; color: #7f8c8d;">${size} • ${mtime}</div>
+                </div>
+                <a href="/api/reports/download?path=${encodeURIComponent(report.path)}" 
+                   class="button"
+                   download="${report.name}"
+                   style="padding: 0.5rem 1rem; background: #3498db; color: white; text-decoration: none; border-radius: 4px; font-size: 0.875rem;">
+                    Download
+                </a>
+            </li>
+        `;
+    }
+    
+    function renderDataFileItem(report) {
+        const size = formatFileSize(report.size);
+        const mtime = report.mtime ? new Date(report.mtime * 1000).toLocaleString() : 'N/A';
+        
+        return `
+            <li style="padding: 0.75rem; border-bottom: 1px solid #ecf0f1; display: flex; justify-content: space-between; align-items: center;">
+                <div style="flex: 1;">
+                    <div style="font-weight: 600;">${report.name}</div>
+                    <div style="font-size: 0.875rem; color: #7f8c8d; margin-bottom: 0.25rem;">${size} • ${mtime}</div>
+                    <div style="font-size: 0.8rem; color: #95a5a6; font-style: italic;">${report.description || 'Data file'}</div>
+                </div>
+                <a href="/api/reports/download?path=${encodeURIComponent(report.path)}" 
+                   class="button"
+                   download="${report.name}"
+                   style="padding: 0.5rem 1rem; background: #3498db; color: white; text-decoration: none; border-radius: 4px; font-size: 0.875rem; margin-left: 1rem;">
+                    Download
+                </a>
+            </li>
+        `;
+    }
+    
+    function formatFileSize(bytes) {
+        if (!bytes) return 'N/A';
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+    
+    function showReportsError() {
+        const container = document.getElementById('reports-list');
+        container.innerHTML = '<p class="placeholder">Error loading reports</p>';
+    }
+</script>
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .button:hover {
+        background: #2980b9;
+    }
+</style>
+{% endblock %}

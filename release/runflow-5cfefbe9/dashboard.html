@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Runflow – Race-Crew Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    body { font: 14px system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 16px; background: #f5f5f5; }
+    .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.08); padding: 16px; }
+    .span-3 { grid-column: span 3; } .span-4 { grid-column: span 4; } .span-6{ grid-column: span 6; } .span-12 { grid-column: span 12; }
+    @media print { body { margin: 8mm; background: #fff; } .card { box-shadow: none; page-break-inside: avoid; } }
+    .badge { display:inline-block; padding:4px 8px; border-radius:8px; background:#f5f5f5; }
+    .table { width:100%; border-collapse: collapse; } .table th,.table td{ padding:6px; border-bottom:1px solid #eee; text-align:left; }
+    .legend { display:flex; gap:10px; align-items:center; flex-wrap: wrap; margin-top:8px; }
+    .swatch { width:14px; height:14px; border-radius:3px; display:inline-block; vertical-align:middle; border:1px solid #ddd; }
+    h3 { margin:0 0 12px 0; font-size:18px; font-weight:600; }
+    h4 { margin:0 0 8px 0; font-size:14px; font-weight:600; color:#666; }
+  </style>
+</head>
+<body>
+  <div style="text-align:center; margin-bottom:24px;">
+  <h1 style="margin:0; font-size:28px; font-weight:600;">Runflow – Race-Crew Dashboard</h1>
+  <div style="color:#666; font-size:14px; margin-top:4px;">Fredericton Marathon Operational Intelligence</div>
+</div>
+  <div class="grid">
+
+    <!-- Tiles row -->
+    <div class="card span-3"><h4>Participants</h4>
+  <div>Total: <b>—</b></div>
+  <div>Full: — • Half: — • 10K: —</div>
+</div>
+
+<div class="card span-3"><h4>Start Times</h4>
+  <div>Full: 07:00 • 10K: 07:20 • Half: 07:40</div>
+</div>
+
+<div class="card span-3"><h4>Flags</h4>
+  <div>Co-presence: 20 • Overtaking: 16</div>
+</div>
+
+<div class="card span-3"><h4>LOS (A–F)</h4>
+  <div>
+    
+      <span class="swatch" style="background: #4CAF50"></span> A: 2&nbsp;&nbsp;
+    
+      <span class="swatch" style="background: #8BC34A"></span> B: 0&nbsp;&nbsp;
+    
+      <span class="swatch" style="background: #FFC107"></span> C: 1&nbsp;&nbsp;
+    
+      <span class="swatch" style="background: #FF9800"></span> D: 3&nbsp;&nbsp;
+    
+      <span class="swatch" style="background: #FF5722"></span> E: 9&nbsp;&nbsp;
+    
+      <span class="swatch" style="background: #F44336"></span> F: 0&nbsp;&nbsp;
+    
+  </div>
+</div>
+
+    <!-- Charts -->
+    <div class="card span-6">
+      <h3>LOS Distribution</h3>
+      <img src="charts/los_distribution.svg" alt="LOS distribution by segments" style="width:100%; height:auto;"/>
+      <div class="legend">
+        
+          <span><span class="swatch" style="background: #4CAF50"></span> <b>A</b> – Free flow</span>
+        
+          <span><span class="swatch" style="background: #8BC34A"></span> <b>B</b> – Comfortable</span>
+        
+          <span><span class="swatch" style="background: #FFC107"></span> <b>C</b> – Moderate</span>
+        
+          <span><span class="swatch" style="background: #FF9800"></span> <b>D</b> – Dense</span>
+        
+          <span><span class="swatch" style="background: #FF5722"></span> <b>E</b> – Very dense</span>
+        
+          <span><span class="swatch" style="background: #F44336"></span> <b>F</b> – Extremely dense</span>
+        
+      </div>
+    </div>
+
+    <div class="card span-6">
+      <h3>Start Times</h3>
+      <img src="charts/start_timeline.svg" alt="Event start times timeline" style="width:100%; height:auto;"/>
+    </div>
+
+    <!-- Top 10 -->
+    <div class="card span-12">
+      <h3>Top 10 Segments by Risk</h3>
+      <table class="table">
+        <thead><tr><th>Seg ID</th><th>Label</th><th>LOS</th><th>Flag</th><th>Link</th></tr></thead>
+        <tbody>
+        
+          <tr>
+            <td><code>F1</code></td>
+            <td>Friel to Station Rd.</td>
+            <td><span style="color:#FF5722; font-weight:600;">E</span></td>
+            <td>⚑</td>
+            <td><a href="../map/output/map.html?focus=F1" target="_blank">Open on Map →</a></td>
+          </tr>
+        
+          <tr>
+            <td><code>K1</code></td>
+            <td>Bridge/Mill to Station Rd</td>
+            <td><span style="color:#FF5722; font-weight:600;">E</span></td>
+            <td>⚑</td>
+            <td><a href="../map/output/map.html?focus=K1" target="_blank">Open on Map →</a></td>
+          </tr>
+        
+          <tr>
+            <td><code>J1</code></td>
+            <td>Bridge/Mill to Half Turn (Outbound)</td>
+            <td><span style="color:#FF5722; font-weight:600;">E</span></td>
+            <td>⚑</td>
+            <td><a href="../map/output/map.html?focus=J1" target="_blank">Open on Map →</a></td>
+          </tr>
+        
+          <tr>
+            <td><code>J4</code></td>
+            <td>Half Turn to Bridge/Mill</td>
+            <td><span style="color:#FF5722; font-weight:600;">E</span></td>
+            <td>⚑</td>
+            <td><a href="../map/output/map.html?focus=J4" target="_blank">Open on Map →</a></td>
+          </tr>
+        
+          <tr>
+            <td><code>L1</code></td>
+            <td>Trail/Aberdeen to/from Station Rd</td>
+            <td><span style="color:#FF5722; font-weight:600;">E</span></td>
+            <td>⚑</td>
+            <td><a href="../map/output/map.html?focus=L1" target="_blank">Open on Map →</a></td>
+          </tr>
+        
+          <tr>
+            <td><code>H1</code></td>
+            <td>Trail/Aberdeen to/from Station Rd</td>
+            <td><span style="color:#FF5722; font-weight:600;">E</span></td>
+            <td>⚑</td>
+            <td><a href="../map/output/map.html?focus=H1" target="_blank">Open on Map →</a></td>
+          </tr>
+        
+          <tr>
+            <td><code>B2</code></td>
+            <td>10K Turn to Friel</td>
+            <td><span style="color:#FF5722; font-weight:600;">E</span></td>
+            <td>⚑</td>
+            <td><a href="../map/output/map.html?focus=B2" target="_blank">Open on Map →</a></td>
+          </tr>
+        
+          <tr>
+            <td><code>A3</code></td>
+            <td>WSB mid-point to Friel</td>
+            <td><span style="color:#FF5722; font-weight:600;">E</span></td>
+            <td>⚑</td>
+            <td><a href="../map/output/map.html?focus=A3" target="_blank">Open on Map →</a></td>
+          </tr>
+        
+          <tr>
+            <td><code>M1</code></td>
+            <td>Trail/Aberdeen to Finish (Full to Loop)</td>
+            <td><span style="color:#FF5722; font-weight:600;">E</span></td>
+            <td>⚑</td>
+            <td><a href="../map/output/map.html?focus=M1" target="_blank">Open on Map →</a></td>
+          </tr>
+        
+          <tr>
+            <td><code>J5</code></td>
+            <td>Half Turn to Bridge/Mill (Slow Half)</td>
+            <td><span style="color:#FF9800; font-weight:600;">D</span></td>
+            <td>⚑</td>
+            <td><a href="../map/output/map.html?focus=J5" target="_blank">Open on Map →</a></td>
+          </tr>
+        
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- Provenance -->
+  <div style="position:fixed;bottom:10px;left:10px;opacity:.95; background:#fff; padding:8px 12px; border-radius:6px; box-shadow:0 2px 6px rgba(0,0,0,0.1);">
+    <div class="provenance" style="font:14px system-ui, sans-serif; opacity:0.9">
+  ✅ Validated • Runflow 2025-10-19T00:28:47.336900+00:00 • Hash 5cfefbe9 • Env local
+</div>
+  </div>
+
+  <div style="margin-top:32px; padding-top:16px; border-top:1px solid #e0e0e0; text-align:center; color:#999; font-size:12px;">
+  Generated by Runflow Analytics
+</div>
+</body>
+</html>

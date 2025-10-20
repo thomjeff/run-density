@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}Flow Analysis{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Temporal Flow Analysis</h2>
+    {% if meta %}
+    <div class="provenance">
+        {% include "partials/_provenance.html" %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Flow Metrics Table -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Segment Flow Metrics</h3>
+    <p style="margin-bottom: 1rem; color: #7f8c8d; font-size: 0.875rem;">
+        Values are sums across all event pairs per segment from temporal flow analysis.
+    </p>
+    <div style="overflow-x: auto;">
+        <table id="flow-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>NAME</th>
+                    <th>EVENT A</th>
+                    <th>EVENT B</th>
+                    <th>FLOW TYPE</th>
+                    <th>OVERTAKING A</th>
+                    <th>PCT A</th>
+                    <th>OVERTAKING B</th>
+                    <th>PCT B</th>
+                    <th>CO-PRESENCE A</th>
+                    <th>CO-PRESENCE B</th>
+                </tr>
+            </thead>
+            <tbody id="flow-tbody">
+                <tr>
+                    <td colspan="11" class="placeholder">Loading flow data...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    let flowData = {};
+    
+    // Load flow data on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        loadFlowData();
+    });
+    
+    function loadFlowData() {
+        fetch('/api/flow/segments')
+            .then(response => response.json())
+            .then(data => {
+                flowData = data;
+                renderFlowTable(data);
+            })
+            .catch(error => {
+                console.error('Error loading flow data:', error);
+                showFlowError();
+            });
+    }
+    
+    function renderFlowTable(flow) {
+        const tbody = document.getElementById('flow-tbody');
+        tbody.innerHTML = '';
+        
+        const segments = Object.values(flow);
+        
+        if (!segments || segments.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="11" class="placeholder">No flow data available</td></tr>';
+            return;
+        }
+        
+        // Sort by id
+        segments.sort((a, b) => a.id.localeCompare(b.id));
+        
+        segments.forEach(segment => {
+            const row = document.createElement('tr');
+            
+            row.innerHTML = `
+                <td>${segment.id}</td>
+                <td>${segment.name}</td>
+                <td>${segment.event_a}</td>
+                <td>${segment.event_b}</td>
+                <td>${segment.flow_type || 'overtake'}</td>
+                <td>${segment.overtaking_a.toFixed(0)}</td>
+                <td>${segment.pct_a.toFixed(1)}%</td>
+                <td>${segment.overtaking_b.toFixed(0)}</td>
+                <td>${segment.pct_b.toFixed(1)}%</td>
+                <td>${segment.copresence_a.toFixed(0)}</td>
+                <td>${segment.copresence_b.toFixed(0)}</td>
+            `;
+            
+            tbody.appendChild(row);
+        });
+        
+        // Add summary row
+        const totalRow = document.createElement('tr');
+        totalRow.style.fontWeight = '600';
+        totalRow.style.background = '#f8f9fa';
+        
+        const totals = {
+            overtaking_a: 0,
+            overtaking_b: 0,
+            copresence_a: 0,
+            copresence_b: 0
+        };
+        
+        segments.forEach(seg => {
+            totals.overtaking_a += seg.overtaking_a;
+            totals.overtaking_b += seg.overtaking_b;
+            totals.copresence_a += seg.copresence_a;
+            totals.copresence_b += seg.copresence_b;
+        });
+        
+        totalRow.innerHTML = `
+            <td>TOTAL</td>
+            <td>${segments.length} segments</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>${totals.overtaking_a.toFixed(0)}</td>
+            <td>—</td>
+            <td>${totals.overtaking_b.toFixed(0)}</td>
+            <td>—</td>
+            <td>${totals.copresence_a.toFixed(0)}</td>
+            <td>${totals.copresence_b.toFixed(0)}</td>
+        `;
+        
+        tbody.appendChild(totalRow);
+    }
+    
+    function showFlowError() {
+        const tbody = document.getElementById('flow-tbody');
+        tbody.innerHTML = '<tr><td colspan="11" class="placeholder">Error loading flow data</td></tr>';
+    }
+</script>
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+    #flow-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    #flow-table th,
+    #flow-table td {
+        padding: 0.75rem;
+        text-align: left;
+        border-bottom: 1px solid #ecf0f1;
+    }
+    
+    #flow-table th {
+        background: #f8f9fa;
+        font-weight: 600;
+        color: #2c3e50;
+    }
+    
+    #flow-table tbody tr:hover {
+        background: #f8f9fa;
+    }
+</style>
+{% endblock %}
