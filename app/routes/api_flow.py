@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from typing import Dict, Any, List
 import logging
 from pathlib import Path
+import json
 
 from app.storage import create_storage_from_env
 from app.storage_service import StorageService
@@ -38,46 +39,44 @@ async def get_flow_segments():
         Each row represents a segment-event_a-event_b combination.
     """
     try:
-        # Load Flow CSV data from Cloud Storage
+        # Load Flow CSV data using storage service (environment-aware)
         import pandas as pd
-        import tempfile
-        import os
         
-        # Download Flow CSV from Cloud Storage
+        # Get latest run_id from artifacts/latest.json
+        latest_path = Path("artifacts/latest.json")
+        if not latest_path.exists():
+            logger.warning("artifacts/latest.json not found")
+            return JSONResponse(content=[])
+        
         try:
-            # Find the latest Flow CSV file in Cloud Storage
-            flow_csv_files = []
-            # List files in the reports directory
-            import subprocess
-            result = subprocess.run(['gsutil', 'ls', 'gs://run-density-reports/reports/*/'], 
-                                  capture_output=True, text=True)
-            if result.returncode == 0:
-                for line in result.stdout.strip().split('\n'):
-                    if line.endswith('/'):
-                        date_dir = line.split('/')[-2]
-                        # Check if Flow CSV exists in this date directory
-                        flow_csv_path = f"gs://run-density-reports/reports/{date_dir}/*-Flow.csv"
-                        flow_result = subprocess.run(['gsutil', 'ls', flow_csv_path], 
-                                                    capture_output=True, text=True)
-                        if flow_result.returncode == 0 and flow_result.stdout.strip():
-                            flow_csv_files.extend(flow_result.stdout.strip().split('\n'))
+            latest_data = json.loads(latest_path.read_text())
+            run_id = latest_data.get("run_id")
+            if not run_id:
+                logger.warning("No run_id found in latest.json")
+                return JSONResponse(content=[])
+        except Exception as e:
+            logger.error(f"Failed to read latest.json: {e}")
+            return JSONResponse(content=[])
+        
+        # Find Flow CSV file using storage service
+        try:
+            # Look for Flow CSV files in the reports directory for this run_id
+            reports_dir = Path("reports") / run_id
+            flow_csv_files = list(reports_dir.glob("*-Flow.csv"))
             
             if not flow_csv_files:
-                logger.warning("No Flow CSV files found in Cloud Storage")
+                logger.warning(f"No Flow CSV files found in {reports_dir}")
                 return JSONResponse(content=[])
             
-            # Use the latest Flow CSV
-            latest_flow_csv = max(flow_csv_files, key=lambda f: f.split('/')[-1])
+            # Use the latest Flow CSV (by modification time)
+            latest_flow_csv = max(flow_csv_files, key=lambda f: f.stat().st_mtime)
             logger.info(f"Using Flow CSV: {latest_flow_csv}")
             
-            # Download to temporary file
-            with tempfile.NamedTemporaryFile(mode='w+', suffix='.csv', delete=False) as tmp_file:
-                subprocess.run(['gsutil', 'cp', latest_flow_csv, tmp_file.name], check=True)
-                df = pd.read_csv(tmp_file.name)
-                os.unlink(tmp_file.name)
+            # Read the CSV file
+            df = pd.read_csv(latest_flow_csv)
         
         except Exception as e:
-            logger.error(f"Failed to load Flow CSV from Cloud Storage: {e}")
+            logger.error(f"Failed to load Flow CSV: {e}")
             return JSONResponse(content=[])
         
         # Convert to the format expected by the frontend
