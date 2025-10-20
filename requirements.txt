@@ -1,40 +1,10 @@
-# Web Runtime Dependencies for Run-Density (RF-FE-002)
-# FastAPI multi-page web UI per Issue #279
-# Baseline: v1.6.42 | Architecture: Option 3 - Hybrid Approach
+# Composite Requirements for Local Development
+# This file includes all dependencies for local development.
+# For deployment/CI, use the split files:
+#   - requirements-core.txt (Cloud Run deployment)
+#   - requirements-frontend.txt (Map/validation generation)
+#   - requirements-dev.txt (Testing)
 
-# FastAPI Web Server
-fastapi>=0.104.0
-starlette>=0.27.0
-uvicorn>=0.24.0
-gunicorn>=21.2.0
-jinja2>=3.1.0
-python-multipart>=0.0.6
-
-# Data Models & Validation
-pydantic>=2.5.0
-typing-extensions>=4.8.0
-
-# Configuration
-pyyaml>=6.0
-
-# Cloud Storage (GCS adapter for local = cloud parity)
-google-cloud-storage>=2.10.0
-google-auth>=2.23.0
-
-# Analytics Runtime (density/flow calculations)
-pandas>=2.0.0
-numpy>=1.24.0
-
-# HTTP Client (for health checks)
-httpx>=0.24.0
-
-# Bin Dataset Support (Issue #198)
-pyarrow>=10.0.0
-shapely>=2.0.0
-
-# NOTE: Heavy dependencies removed from web runtime:
-# - folium (static map generation → Leaflet client-side)
-# - geopandas (bin geometries → may need to add back if /api/map/bins required)
-# - matplotlib (charts → pre-generated PNGs or CSS)
-# - markdown (reports → Jinja templates)
-# - pypandoc (PDF generation → deferred)
+-r requirements-core.txt
+-r requirements-frontend.txt
+-r requirements-dev.txt

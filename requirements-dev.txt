@@ -1,0 +1,5 @@
+# Development/Testing Dependencies
+# Used by: Local development, CI testing
+
+pytest>=8.0
+

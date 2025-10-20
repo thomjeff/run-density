@@ -1,0 +1,203 @@
+{
+  "title": "flow_expected_results data dictionary",
+  "about": "Human-readable definitions for columns in flow_expected_results.csv. This file is descriptive only and is NOT used for strict schema validation.",
+  "fields": [
+    {
+      "name": "seg_id",
+      "dtype": "object",
+      "description": "Unique internal segment identifier used across the course network."
+    },
+    {
+      "name": "segment_label",
+      "dtype": "object",
+      "description": "Human-readable segment name, e.g., 'Friel to 10K Turn' or 'Start to Queen/Regent'."
+    },
+    {
+      "name": "event_a",
+      "dtype": "object",
+      "description": "Event or race type corresponding to side A (e.g., Full, Half) in a comparison with event_b."
+    },
+    {
+      "name": "event_b",
+      "dtype": "object",
+      "description": "Event or race type corresponding to side B (e.g., 10K) in a comparison with event_a."
+    },
+    {
+      "name": "total_a",
+      "dtype": "int64",
+      "description": "Total number of participants from event A (matches participant count in runners.csv for that event)."
+    },
+    {
+      "name": "total_b",
+      "dtype": "int64",
+      "description": "Total number of participants from event B."
+    },
+    {
+      "name": "flow_type",
+      "dtype": "object",
+      "description": "Indicates flow relationship type between event A and event B.",
+      "enum_definitions": {
+        "co-flow": "Both events move in the same direction along the segment.",
+        "counter-flow": "Events move in opposite directions along the same segment.",
+        "shared": "Events overlap in space and/or time with mixed directions.",
+        "divergent": "Events split into separate routes after this segment.",
+        "convergent": "Events merge onto the same route, increasing density."
+      }
+    },
+    {
+      "name": "from_km_a",
+      "dtype": "float64",
+      "description": "Start kilometer mark of this segment for event_a, expressed as the actual distance from the official start line of event A (not normalized or scaled)."
+    },
+    {
+      "name": "to_km_a",
+      "dtype": "float64",
+      "description": "End kilometer mark of this segment for event_a, expressed as the actual course distance for event A. Represents the true on-course position, not a normalized segment fraction."
+    },
+    {
+      "name": "from_km_b",
+      "dtype": "float64",
+      "description": "Start kilometer mark of this segment for event_b, measured from the official start line of event B. This is the real race distance point, not a normalized or relative value."
+    },
+    {
+      "name": "to_km_b",
+      "dtype": "float64",
+      "description": "End kilometer mark of this segment for event_b, measured as the actual cumulative distance of event B\u2019s course. Represents the physical location along the race route."
+    },
+    {
+      "name": "width_m",
+      "dtype": "float64",
+      "description": "Average width of the course at this segment (in meters)."
+    },
+    {
+      "name": "overtaking_a",
+      "dtype": "int64",
+      "description": "Total number of overtaking events initiated by participants of event A in this segment. This is an event count, not a unique-runner count \u2014 the same runner may appear in multiple overtaking events if they overtake more than one participant within the segment."
+    },
+    {
+      "name": "overtaking_b",
+      "dtype": "int64",
+      "description": "Total number of overtaking events initiated by participants of event B. This represents total events rather than unique runners; a single participant can contribute multiple times if they perform multiple overtakes."
+    },
+    {
+      "name": "sample_a",
+      "dtype": "object",
+      "description": "Preview list of up to three runner IDs from event A who initiated overtakes on this segment. The '(... (10 total))' marker indicates that at least 10 distinct overtakers existed, but only the first three are displayed. This value is capped for readability; actual distinct overtakers may exceed the displayed total."
+    },
+    {
+      "name": "sample_b",
+      "dtype": "object",
+      "description": "Preview list of up to three runner IDs from event B who initiated overtakes on this segment. The '(... (10 total))' marker indicates that at least 10 distinct overtakers existed, but only the first three are displayed. This is a truncated display sample, not a comprehensive list."
+    },
+    {
+      "name": "pct_a",
+      "dtype": "float64",
+      "description": "Proportion of total overtaking events by event A relative to all overtaking events in this segment (values are proportions on a 0\u20131 scale)."
+    },
+    {
+      "name": "pct_b",
+      "dtype": "float64",
+      "description": "Proportion of total overtaking events by event B relative to all overtaking events in this segment (values are proportions on a 0\u20131 scale)."
+    },
+    {
+      "name": "copresence_a",
+      "dtype": "float64",
+      "description": "Percentage of time event A participants shared spatial proximity with other participants (same direction) (values are proportions on a 0\u20131 scale)."
+    },
+    {
+      "name": "copresence_b",
+      "dtype": "float64",
+      "description": "Percentage of time event B participants shared spatial proximity with other participants (same direction) (values are proportions on a 0\u20131 scale)."
+    },
+    {
+      "name": "unique_encounters",
+      "dtype": "int64",
+      "description": "Number of unique participant-to-participant encounters across both events on this segment."
+    },
+    {
+      "name": "participants_involved",
+      "dtype": "int64",
+      "description": "Count of distinct participants involved in any overtaking or copresence interactions on this segment."
+    },
+    {
+      "name": "overtaking_load_a",
+      "dtype": "float64",
+      "description": "Relative load (overtakings per meter per minute) for event A, normalized to segment length/time."
+    },
+    {
+      "name": "overtaking_load_b",
+      "dtype": "float64",
+      "description": "Relative load for event B."
+    },
+    {
+      "name": "max_overtaking_load_a",
+      "dtype": "int64",
+      "description": "Maximum concurrent overtaking events for event A at peak density."
+    },
+    {
+      "name": "max_overtaking_load_b",
+      "dtype": "int64",
+      "description": "Maximum concurrent overtaking events for event B."
+    },
+    {
+      "name": "spatial_zone_exists",
+      "dtype": "bool",
+      "description": "True if the segment has an overlapping spatial zone between A and B."
+    },
+    {
+      "name": "temporal_overlap_exists",
+      "dtype": "bool",
+      "description": "True if the overlapping spatial zone also overlaps in time (runners present simultaneously)."
+    },
+    {
+      "name": "true_pass_exists",
+      "dtype": "bool",
+      "description": "True if a confirmed overtaking event occurred (both spatial and temporal criteria met)."
+    },
+    {
+      "name": "has_convergence_policy",
+      "dtype": "bool",
+      "description": "True if the segment is governed by a convergence policy (e.g., merge or split section)."
+    },
+    {
+      "name": "has_convergence",
+      "dtype": "bool",
+      "description": "True if actual participant flow convergence occurred in this segment."
+    },
+    {
+      "name": "convergence_zone_start",
+      "dtype": "float64",
+      "description": "Normalized position (0.0\u20131.0) within the segment where convergence begins, expressed as a fraction of total segment length. For example, 0.25 means 25% into the segment."
+    },
+    {
+      "name": "convergence_zone_end",
+      "dtype": "float64",
+      "description": "Normalized position (0.0\u20131.0) within the segment where convergence ends, expressed as a fraction of total segment length. For example, 0.60 means convergence ends 60% of the way through the segment."
+    },
+    {
+      "name": "no_pass_reason_code",
+      "dtype": "object",
+      "description": "Reason overtaking was not detected or was suppressed for this segment. Common values include: 'SPATIAL_ONLY_NO_TEMPORAL', 'TEMPORAL_ONLY_NO_SPATIAL', 'NO_COPRESENCE', 'NO_SPEED_DIFFERENTIAL', 'MANUAL_SUPPRESSION', 'INSUFFICIENT_DATA'."
+    },
+    {
+      "name": "conflict_length_m",
+      "dtype": "float64",
+      "description": "Distance (in meters) over which overlapping flow or conflict was detected (float, meters)."
+    },
+    {
+      "name": "data_source",
+      "dtype": "object",
+      "description": "The files used to create the flow report (as found in the /data folder)."
+    },
+    {
+      "name": "start_times",
+      "dtype": "object",
+      "description": "Start times associated with the events contributing to the flow segment."
+    },
+    {
+      "name": "min_overlap_duration",
+      "dtype": "int64",
+      "description": "Minimum time (seconds) two events overlap spatially within this segment."
+    }
+  ]
+}

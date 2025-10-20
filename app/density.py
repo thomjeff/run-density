@@ -14,6 +14,7 @@ Version: 1.6.0
 
 import pandas as pd
 import numpy as np
+import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Any, Protocol
 import logging
@@ -1024,23 +1025,32 @@ class DensityAnalyzer:
         logging.debug(f"Segment {segment.segment_id}: Calculating density for {concurrent_runners} concurrent runners")
         if density_cfg:
             # Use physical segment dimensions from segments_new.csv
-            # Calculate physical segment length as the maximum span of all events
-            max_km = 0.0
-            min_km = float('inf')
+            # Issue #251 FIX: Use longest single event's range, not min/max across all events
+            # The old min/max logic concatenated disjoint event ranges, creating invalid bin extents
+            event_ranges = []
             
             for event in segment.events:
                 if event == "Full" and density_cfg.get("full_from_km") is not None:
-                    min_km = min(min_km, density_cfg["full_from_km"])
-                    max_km = max(max_km, density_cfg["full_to_km"])
+                    from_km = density_cfg["full_from_km"]
+                    to_km = density_cfg["full_to_km"]
+                    event_ranges.append((from_km, to_km, to_km - from_km, event))
                 elif event == "Half" and density_cfg.get("half_from_km") is not None:
-                    min_km = min(min_km, density_cfg["half_from_km"])
-                    max_km = max(max_km, density_cfg["half_to_km"])
+                    from_km = density_cfg["half_from_km"]
+                    to_km = density_cfg["half_to_km"]
+                    event_ranges.append((from_km, to_km, to_km - from_km, event))
                 elif event == "10K" and density_cfg.get("tenk_from_km") is not None:
-                    min_km = min(min_km, density_cfg["tenk_from_km"])
-                    max_km = max(max_km, density_cfg["tenk_to_km"])
+                    from_km = density_cfg["tenk_from_km"]
+                    to_km = density_cfg["tenk_to_km"]
+                    event_ranges.append((from_km, to_km, to_km - from_km, event))
             
-            if min_km == float('inf'):
+            # Use the longest event's range (not min/max which concatenates)
+            if event_ranges:
+                # Sort by length descending, take longest
+                event_ranges.sort(key=lambda x: x[2], reverse=True)
+                min_km, max_km, length, chosen_event = event_ranges[0][0], event_ranges[0][1], event_ranges[0][2], event_ranges[0][3]
+            else:
                 min_km = 0.0
+                max_km = 0.0
             
             physical_length_m = (max_km - min_km) * 1000
             physical_area_m2 = physical_length_m * segment.width_m
@@ -1643,22 +1653,32 @@ def analyze_density_segments(pace_data: pd.DataFrame,
     
     for seg_id, d in density_cfg.items():
         # Calculate physical segment dimensions from all events
-        max_km = 0.0
-        min_km = float('inf')
+        # Issue #251 FIX: Use longest single event's range, not min/max across all events
+        event_ranges = []
         
         for event in d["events"]:
             if event == "Full" and d.get("full_from_km") is not None:
-                min_km = min(min_km, d["full_from_km"])
-                max_km = max(max_km, d["full_to_km"])
+                from_km = d["full_from_km"]
+                to_km = d["full_to_km"]
+                event_ranges.append((from_km, to_km, to_km - from_km, event))
             elif event == "Half" and d.get("half_from_km") is not None:
-                min_km = min(min_km, d["half_from_km"])
-                max_km = max(max_km, d["half_to_km"])
+                from_km = d["half_from_km"]
+                to_km = d["half_to_km"]
+                event_ranges.append((from_km, to_km, to_km - from_km, event))
             elif event == "10K" and d.get("tenk_from_km") is not None:
-                min_km = min(min_km, d["tenk_from_km"])
-                max_km = max(max_km, d["tenk_to_km"])
+                from_km = d["tenk_from_km"]
+                to_km = d["tenk_to_km"]
+                event_ranges.append((from_km, to_km, to_km - from_km, event))
         
-        if min_km == float('inf'):
+        # Use the longest event's range
+        if event_ranges:
+            event_ranges.sort(key=lambda x: x[2], reverse=True)
+            min_km, max_km = event_ranges[0][0], event_ranges[0][1]
+            chosen_event = event_ranges[0][3]
+            logger.info(f"Segment {seg_id}: Using {chosen_event} range {min_km:.2f}-{max_km:.2f} km (length: {max_km-min_km:.2f} km)")
+        else:
             min_km = 0.0
+            max_km = 0.0
         
         # Create segment metadata from segments_new.csv
         segment = SegmentMeta(
@@ -1693,7 +1713,7 @@ def analyze_density_segments(pace_data: pd.DataFrame,
             try:
                 import yaml
                 
-                with open("data/density_rulebook.yml", 'r') as f:
+                with open("config/density_rulebook.yml", 'r') as f:
                     rulebook = yaml.safe_load(f)
                 
                 # Convert summary to dict first
@@ -1716,6 +1736,14 @@ def analyze_density_segments(pace_data: pd.DataFrame,
                 summary_dict["flow_rate"] = None
                 summary_dict["fired_actions"] = []
             
+            # Calculate segment length from segment boundaries (Issue #248 fix)
+            length_km = max_km - min_km
+            length_m = length_km * 1000.0
+            
+            # Calculate expected spatial bin count
+            bin_km = config.step_km
+            spatial_bin_count = int(math.ceil(length_km / bin_km)) if length_km > 0 else 0
+            
             results["segments"][segment.segment_id] = {
                 "summary": summary_dict,
                 "time_series": density_results,
@@ -1724,7 +1752,16 @@ def analyze_density_segments(pace_data: pd.DataFrame,
                 "seg_label": d["seg_label"],
                 "flow_type": d["flow_type"],
                 "per_event": per_event_summaries,
-                "v2_context": v2_context if 'v2_context' in locals() else None
+                "v2_context": v2_context if 'v2_context' in locals() else None,
+                # Issue #248: Add segment dimensions for accurate bin generation
+                "start_km": min_km,
+                "end_km": max_km,
+                "length_m": length_m,
+                "length_km": length_km,
+                "spatial_bin_count": spatial_bin_count,
+                "bin_km": bin_km,
+                "width_m": d["width_m"],
+                "segment_type": d.get("segment_type", "road")
             }
             results["summary"]["processed_segments"] += 1
         else:

@@ -1,0 +1,20 @@
+<div class="card span-3"><h4>Participants</h4>
+  <div>Total: <b>{{ participants.total if participants.total else '—' }}</b></div>
+  <div>Full: {{ participants.full if participants.full else '—' }} • Half: {{ participants.half if participants.half else '—' }} • 10K: {{ participants.tenk if participants.tenk else '—' }}</div>
+</div>
+
+<div class="card span-3"><h4>Start Times</h4>
+  <div>Full: {{ starts.full }} • 10K: {{ starts.tenk }} • Half: {{ starts.half }}</div>
+</div>
+
+<div class="card span-3"><h4>Flags</h4>
+  <div>Co-presence: {{ flags.copres }} • Overtaking: {{ flags.overtake }}</div>
+</div>
+
+<div class="card span-3"><h4>LOS (A–F)</h4>
+  <div>
+    {% for k in los_order %}
+      <span class="swatch" style="background: {{ los_colors[k] }}"></span> {{ k }}: {{ los_counts[k] or 0 }}&nbsp;&nbsp;
+    {% endfor %}
+  </div>
+</div>

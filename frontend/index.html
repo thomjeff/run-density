@@ -59,6 +59,40 @@
             </div>
         </section>
 
+        <!-- Issue #237: Operational Intelligence Widget -->
+        <section class="card" id="operationalIntelligenceWidget" style="display: none;">
+            <h3 class="h3">Operational Intelligence</h3>
+            <p class="muted">Flagged bins requiring attention based on LOS and utilization thresholds.</p>
+            <div class="kpis">
+                <div class="kpi">
+                    <div class="kpi__label">Total Flagged Bins</div>
+                    <div class="kpi__value" id="oiFlaggedBins">—</div>
+                    <div class="kpi__hint">Requiring attention</div>
+                </div>
+                <div class="kpi kpi--alert">
+                    <div class="kpi__label">🚨 Critical</div>
+                    <div class="kpi__value" id="oiCritical">—</div>
+                    <div class="kpi__hint">High LOS + Utilization</div>
+                </div>
+                <div class="kpi kpi--warning">
+                    <div class="kpi__label">⚡ Caution</div>
+                    <div class="kpi__value" id="oiCaution">—</div>
+                    <div class="kpi__hint">High LOS only</div>
+                </div>
+                <div class="kpi">
+                    <div class="kpi__label">👁️ Watch</div>
+                    <div class="kpi__value" id="oiWatch">—</div>
+                    <div class="kpi__hint">High utilization only</div>
+                </div>
+            </div>
+            <div style="margin-top: 12px;">
+                <div style="font-size: 13px; color: #666;">
+                    <strong>Worst LOS:</strong> <span id="oiWorstLOS">—</span> | 
+                    <strong>Peak Density:</strong> <span id="oiPeakDensity">—</span> p/m²
+                </div>
+            </div>
+        </section>
+
         <!-- Executive summary table (static skeleton; bind later) -->
         <section class="card">
             <div class="card__head">
@@ -197,11 +231,64 @@
             }
         }
 
+        // Issue #237: Load operational intelligence data
+        async function loadOperationalIntelligence() {
+            try {
+                const response = await fetch('/api/tooltips');
+                if (!response.ok) throw new Error('Failed to load operational intelligence');
+                const data = await response.json();
+                
+                if (data.ok && data.tooltips && data.tooltips.length > 0) {
+                    // Show the widget
+                    document.getElementById('operationalIntelligenceWidget').style.display = 'block';
+                    
+                    // Count severity levels
+                    let critical = 0, caution = 0, watch = 0;
+                    let worstLOS = 'A';
+                    let maxDensity = 0;
+                    
+                    data.tooltips.forEach(tooltip => {
+                        if (tooltip.severity === 'CRITICAL') critical++;
+                        else if (tooltip.severity === 'CAUTION') caution++;
+                        else if (tooltip.severity === 'WATCH') watch++;
+                        
+                        // Track worst LOS
+                        const losRank = {'A': 0, 'B': 1, 'C': 2, 'D': 3, 'E': 4, 'F': 5};
+                        if (losRank[tooltip.los] > losRank[worstLOS]) {
+                            worstLOS = tooltip.los;
+                        }
+                        
+                        // Track peak density
+                        if (tooltip.density_peak > maxDensity) {
+                            maxDensity = tooltip.density_peak;
+                        }
+                    });
+                    
+                    // Update widget
+                    const totalFlagged = critical + caution + watch;
+                    document.getElementById('oiFlaggedBins').textContent = totalFlagged;
+                    document.getElementById('oiCritical').textContent = critical;
+                    document.getElementById('oiCaution').textContent = caution;
+                    document.getElementById('oiWatch').textContent = watch;
+                    document.getElementById('oiWorstLOS').textContent = worstLOS;
+                    document.getElementById('oiPeakDensity').textContent = maxDensity.toFixed(4);
+                    
+                    console.log(`✅ Operational intelligence widget populated: ${totalFlagged} flagged bins`);
+                } else {
+                    console.log('⚠️ No operational intelligence data available');
+                }
+                
+            } catch (error) {
+                console.warn('Could not load operational intelligence:', error);
+            }
+        }
+
         // Initialize page
         function init() {
             checkSessionExpiry();
             loadSummaryData();
             loadSegmentsData();
+            loadOperationalIntelligence();  // Issue #237
         }
 
         // Run on page load

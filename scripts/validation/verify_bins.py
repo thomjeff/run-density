@@ -9,7 +9,7 @@ import argparse, os, sys, gzip, json, re, glob
 from datetime import datetime
 from pathlib import Path
 
-REQUIRED_PROPS = ["bin_id","segment_id","start_km","end_km","t_start","t_end","density","flow","los_class","bin_size_km"]
+REQUIRED_PROPS = ["bin_id","segment_id","start_km","end_km","t_start","t_end","density","rate","los_class","bin_size_km"]
 
 def find_latest_daily_dir(reports_dir: Path) -> Path:
     if not reports_dir.exists():

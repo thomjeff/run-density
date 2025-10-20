@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>tmpcs1estp0</title>
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<h1 id="improved-per-event-density-analysis-report">Improved Per-Event
+Density Analysis Report</h1>
+<p><strong>Generated:</strong> 2025-09-13 15:57:11</p>
+<p><strong>Analysis Period:</strong> 2025-09-13</p>
+<p><strong>Time Bin Size:</strong> 30 seconds</p>
+<p><strong>Total Segments:</strong> 22</p>
+<p><strong>Processed Segments:</strong> 22</p>
+<p><strong>Skipped Segments:</strong> 0</p>
+<h2 id="quick-reference">Quick Reference</h2>
+<p><strong>Units:</strong> - Areal density = persons per square meter
+(p/m²) - Linear density = persons per meter of course width (p/m) - Flow
+= persons per minute per meter (p/min/m)</p>
+<p><strong>Terminology:</strong> - <strong>gte</strong> =
+greater-than-or-equal-to; thresholds are applied inclusively -
+<strong>LOS</strong> = Level of Service (A=Free Flow, B=Comfortable,
+C=Moderate, D=Dense, E=Very Dense, F=Extremely Dense)</p>
+<p><strong>Color Coding:</strong> 🟢 Green (A-B), 🟡 Yellow (C-D), 🔴
+Red (E-F)</p>
+<h2 id="executive-summary">Executive Summary</h2>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 20%" />
+<col style="width: 40%" />
+<col style="width: 14%" />
+</colgroup>
+<thead>
+<tr>
+<th>Segment</th>
+<th>Label</th>
+<th>Key Takeaway</th>
+<th>LOS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A1</td>
+<td>Start to Queen/Regent</td>
+<td>High release flow - monitor for surges</td>
+<td>🟢 A</td>
+</tr>
+<tr>
+<td>A2</td>
+<td>Queen/Regent to WSB mid-point</td>
+<td>Low density (0.00 p/m²) - comfortable flow</td>
+<td>🟢 A</td>
+</tr>
+<tr>
+<td>A3</td>
+<td>WSB mid-point to Friel</td>
+<td>Low density (0.00 p/m²) - comfortable flow</td>
+<td>🟢 A</td>
+</tr>
+<tr>
+<td>B1</td>
+<td>Friel to 10K Turn</td>
+<td>Low density (0.00 p/m²) - comfortable flow</td>
+<td>🟢 A</td>
+</tr>
+<tr>
+<td>B2</td>
+<td>10K Turn to Friel</td>
+<td>Low density (0.00 p/m²) - comfortable flow</td>
+<td>🟢 A</td>
+</tr>
+<tr>
+<td>B3</td>
+<td>10K Turn to Friel</td>
+<td>Low density (0.00 p/m²) - comfortable flow</td>
+<td>🟢 A</td>
+</tr>
+<tr>
+<td>D1</td>
+<td>10K Turn to Full Turn Blake (Out)</td>
+<td>Low density (0.00 p/m²) - comfortable flow</td>
+<td>🟢 A</td>
+</tr>
+<tr>
+<td>D2</td>
+<td>Full Turn Blake to 10K Turn (Return)</td>
+<td>Low density (0.00 p/m²) - comfortable flow</td>
+<td>🟢 A</td>
+</tr>
+<tr>
+<td>F1</td>
+<td>Friel to Station Rd.</td>
+<td>⚠️ Supply &gt; Capacity - risk of congestion</td>
+<td>🟢 A</td>
+</tr>
+<tr>
+<td>G1</td>
+<td>Full Loop around QS to Trail/Aberdeen</td>
+<td>Low density (0.00 p/m²) - comfortable flow</td>
+<td>🟢 A</td>
+</tr>
+<tr>
+<td>H1</td>
+<td>Trail/Aberdeen to/from Station Rd</td>
+<td>Low density (0.00 p/m²) - comfortable flow</td>
+<td>🟢 A</td>
+</tr>
+<tr>
+<td>I1</td>
+<td>Station Rd to Bridge/Mill</td>
+<td>Low density (0.00 p/m²) - comfortable flow</td>
+<td>🟢 A</td>
+</tr>
+<tr>
+<td>J1</td>
+<td>Bridge/Mill to Half Turn (Outbound)</td>
+<td>Low density (0.00 p/m²) - comfortable flow</td>
+<td>🟢 A</td>
+</tr>
+<tr>
+<td>J2</td>
+<td>Half Turn to Full Turn (Out)</td>
+<td>Low density (0.00 p/m²) - comfortable flow</td>
+<td>🟢 A</td>
+</tr>
+<tr>
+<td>J3</td>
+<td>Full Turn to Half Turn (Return)</td>
+<td>Low density (0.00 p/m²) - comfortable flow</td>
+<td>🟢 A</td>
+</tr>
+<tr>
+<td>J4</td>
+<td>Half Turn to Bridge/Mill</td>
+<td>Low density (0.00 p/m²) - comfortable flow</td>
+<td>🟢 A</td>
+</tr>
+<tr>
+<td>J5</td>
+<td>Half Turn to Bridge/Mill (Slow Half)</td>
+<td>Low density (0.00 p/m²) - comfortable flow</td>
+<td>🟢 A</td>
+</tr>
+<tr>
+<td>K1</td>
+<td>Bridge/Mill to Station Rd</td>
+<td>Low density (0.00 p/m²) - comfortable flow</td>
+<td>🟢 A</td>
+</tr>
+<tr>
+<td>L1</td>
+<td>Trail/Aberdeen to/from Station Rd</td>
+<td>Low density (0.00 p/m²) - comfortable flow</td>
+<td>🟢 A</td>
+</tr>
+<tr>
+<td>L2</td>
+<td>Station Rd to Trail/Aberdeen</td>
+<td>Low density (0.00 p/m²) - comfortable flow</td>
+<td>🟢 A</td>
+</tr>
+<tr>
+<td>M1</td>
+<td>Trail/Aberdeen to Finish (Full to Loop)</td>
+<td>Low density (0.00 p/m²) - comfortable flow</td>
+<td>🟢 A</td>
+</tr>
+<tr>
+<td>M2</td>
+<td>Trail/Aberdeen to Finish</td>
+<td>Low density (0.00 p/m²) - comfortable flow</td>
+<td>🟢 A</td>
+</tr>
+</tbody>
+</table>
+<p><em>Full details in per-segment sections below.</em></p>
+<h2 id="methodology">Methodology</h2>
+<p><strong>Units</strong>: Density thresholds use <em>runners/m²</em>
+(areal density). Flow thresholds use <em>runners/min/m</em> (throughput
+per meter of width).</p>
+<p><strong>Notes:</strong> - <code>gte</code> means
+greater-than-or-equal; used in trigger conditions (e.g., density_gte,
+flow_gte). - Start (A1) uses the start_corral schema; other segments use
+on-course schemas. - Effective width must reflect any reserved emergency
+lane at A1.</p>
+<h2 id="event-start-times">Event Start Times</h2>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Start Time</th>
+<th>Total Participants</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Full</td>
+<td>07:00:00</td>
+<td>368</td>
+</tr>
+<tr>
+<td>10K</td>
+<td>07:20:00</td>
+<td>618</td>
+</tr>
+<tr>
+<td>Half</td>
+<td>07:40:00</td>
+<td>912</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td>-</td>
+<td><strong>1,898</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="segment-a1-start-to-queenregent">Segment A1 — Start to
+Queen/Regent</h3>
+<h4 id="metrics">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.20</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>Flow Rate</td>
+<td>182</td>
+<td>p/min/m</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (Start Corral)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<div class="line-block">Note: LOS here uses start-corral thresholds, not
+Fruin. Flow-rate governs safety. |</div>
+<h3 id="key-takeaways">Key Takeaways</h3>
+<p>✅ <strong>Stable</strong>: Density and flow within acceptable
+ranges.</p>
+<h3 id="operational-implications">Operational Implications</h3>
+<p>• Start corral release; managed pulses and lane discipline. • At LOS
+A (Free Flow - Excellent conditions, no restrictions needed). • Flow of
+182 p/min/m is within acceptable range.</p>
+<h3 id="operational-notes">Operational Notes</h3>
+<p><strong>Access:</strong> • Maintain clear emergency lane as planned
+(effective width reflects this).</p>
+<p><strong>Medical:</strong> • SJA roving team staged within 400 m
+during start window.</p>
+<p><strong>Traffic:</strong> • Marshal at funnel entry to maintain
+cadence and signage compliance.</p>
+<p>📖 Definitions:</p>
+<p>• Density = persons per square meter (p/m²). • Linear Density =
+persons per meter (p/m). • Flow Rate = persons per minute per meter
+(p/min/m). • Flow Supply = total persons per minute through segment. •
+Flow Capacity = maximum theoretical flow rate. • Flow Utilization =
+percentage of capacity being used. • <code>gte</code> =
+greater-than-or-equal-to (thresholds are inclusive).</p>
+<hr />
+<h3 id="segment-a2-queenregent-to-wsb-mid-point">Segment A2 —
+Queen/Regent to WSB mid-point</h3>
+<h4 id="metrics-1">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.20</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (On Course Open)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="key-takeaways-1">Key Takeaways</h3>
+<p>✅ <strong>Stable</strong>: Density and flow within acceptable
+ranges.</p>
+<h3 id="operational-implications-1">Operational Implications</h3>
+<p>• Unidirectional running flow. • At LOS A (Free Flow - Excellent
+conditions, no restrictions needed).</p>
+<hr />
+<h3 id="segment-a3-wsb-mid-point-to-friel">Segment A3 — WSB mid-point to
+Friel</h3>
+<h4 id="metrics-2">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.19</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (On Course Open)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="key-takeaways-2">Key Takeaways</h3>
+<p>✅ <strong>Stable</strong>: Density and flow within acceptable
+ranges.</p>
+<h3 id="operational-implications-2">Operational Implications</h3>
+<p>• Unidirectional running flow. • At LOS A (Free Flow - Excellent
+conditions, no restrictions needed).</p>
+<hr />
+<h3 id="segment-b1-friel-to-10k-turn">Segment B1 — Friel to 10K
+Turn</h3>
+<h4 id="metrics-3">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.30</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (On Course Open)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="key-takeaways-3">Key Takeaways</h3>
+<p>✅ <strong>Stable</strong>: Density and flow within acceptable
+ranges.</p>
+<h3 id="operational-implications-3">Operational Implications</h3>
+<p>• Unidirectional running flow. • At LOS A (Free Flow - Excellent
+conditions, no restrictions needed).</p>
+<hr />
+<h3 id="segment-b2-10k-turn-to-friel">Segment B2 — 10K Turn to
+Friel</h3>
+<h4 id="metrics-4">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.03</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (On Course Open)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="key-takeaways-4">Key Takeaways</h3>
+<p>✅ <strong>Stable</strong>: Density and flow within acceptable
+ranges.</p>
+<h3 id="operational-implications-4">Operational Implications</h3>
+<p>• Unidirectional running flow. • At LOS A (Free Flow - Excellent
+conditions, no restrictions needed).</p>
+<hr />
+<h3 id="segment-b3-10k-turn-to-friel">Segment B3 — 10K Turn to
+Friel</h3>
+<h4 id="metrics-5">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.20</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (On Course Open)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="key-takeaways-5">Key Takeaways</h3>
+<p>✅ <strong>Stable</strong>: Density and flow within acceptable
+ranges.</p>
+<h3 id="operational-implications-5">Operational Implications</h3>
+<p>• Unidirectional running flow. • At LOS A (Free Flow - Excellent
+conditions, no restrictions needed).</p>
+<hr />
+<h3 id="segment-d1-10k-turn-to-full-turn-blake-out">Segment D1 — 10K
+Turn to Full Turn Blake (Out)</h3>
+<h4 id="metrics-6">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.05</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (On Course Open)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="key-takeaways-6">Key Takeaways</h3>
+<p>✅ <strong>Stable</strong>: Density and flow within acceptable
+ranges.</p>
+<h3 id="operational-implications-6">Operational Implications</h3>
+<p>• Unidirectional running flow. • At LOS A (Free Flow - Excellent
+conditions, no restrictions needed).</p>
+<hr />
+<h3 id="segment-d2-full-turn-blake-to-10k-turn-return">Segment D2 — Full
+Turn Blake to 10K Turn (Return)</h3>
+<h4 id="metrics-7">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.04</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (On Course Open)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="key-takeaways-7">Key Takeaways</h3>
+<p>✅ <strong>Stable</strong>: Density and flow within acceptable
+ranges.</p>
+<h3 id="operational-implications-7">Operational Implications</h3>
+<p>• Unidirectional running flow. • At LOS A (Free Flow - Excellent
+conditions, no restrictions needed).</p>
+<hr />
+<h3 id="segment-f1-friel-to-station-rd.">Segment F1 — Friel to Station
+Rd.</h3>
+<h4 id="metrics-8">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.03</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>Linear Density</td>
+<td>0.10</td>
+<td>p/m</td>
+</tr>
+<tr>
+<td>Flow Rate</td>
+<td>555</td>
+<td>p/min/m</td>
+</tr>
+<tr>
+<td>Flow (Supply)</td>
+<td>1666</td>
+<td>p/min</td>
+</tr>
+<tr>
+<td>Flow (Capacity)</td>
+<td>180</td>
+<td>p/min</td>
+</tr>
+<tr>
+<td>Flow Utilization</td>
+<td>308.5%</td>
+<td>—</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (On Course Narrow)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<div class="line-block">Note: LOS uses Fruin thresholds (linear
+density). |</div>
+<h3 id="key-takeaways-8">Key Takeaways</h3>
+<p>⚠️ <strong>Overload</strong>: Flow utilization exceeds 200% -
+consider flow management.</p>
+<h3 id="operational-implications-8">Operational Implications</h3>
+<p>• Narrow segment with potential bottlenecks. • At LOS A (Free Flow -
+Excellent conditions, no restrictions needed). • Flow of 555 p/min/m
+exceeds critical threshold (400 p/min/m). • <strong>Flow
+Overload</strong>: Supply (1666 p/min) exceeds capacity (180 p/min) by
+309%. • Consider implementing flow metering or temporary holds
+upstream.</p>
+<h3 id="mitigations-fired">Mitigations Fired</h3>
+<p>• Create short hold at upstream feeder • Establish overtake lane if
+feasible</p>
+<hr />
+<h3 id="segment-g1-full-loop-around-qs-to-trailaberdeen">Segment G1 —
+Full Loop around QS to Trail/Aberdeen</h3>
+<h4 id="metrics-9">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.02</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (On Course Open)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="key-takeaways-9">Key Takeaways</h3>
+<p>✅ <strong>Stable</strong>: Density and flow within acceptable
+ranges.</p>
+<h3 id="operational-implications-9">Operational Implications</h3>
+<p>• Unidirectional running flow. • At LOS A (Free Flow - Excellent
+conditions, no restrictions needed).</p>
+<hr />
+<h3 id="segment-h1-trailaberdeen-tofrom-station-rd">Segment H1 —
+Trail/Aberdeen to/from Station Rd</h3>
+<h4 id="metrics-10">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.03</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>Linear Density</td>
+<td>0.05</td>
+<td>p/m</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (On Course Narrow)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<div class="line-block">Note: LOS uses Fruin thresholds (linear
+density). |</div>
+<h3 id="key-takeaways-10">Key Takeaways</h3>
+<p>✅ <strong>Stable</strong>: Density and flow within acceptable
+ranges.</p>
+<h3 id="operational-implications-10">Operational Implications</h3>
+<p>• Narrow segment with potential bottlenecks. • At LOS A (Free Flow -
+Excellent conditions, no restrictions needed).</p>
+<hr />
+<h3 id="segment-i1-station-rd-to-bridgemill">Segment I1 — Station Rd to
+Bridge/Mill</h3>
+<h4 id="metrics-11">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.02</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>Linear Density</td>
+<td>0.05</td>
+<td>p/m</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (On Course Narrow)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<div class="line-block">Note: LOS uses Fruin thresholds (linear
+density). |</div>
+<h3 id="key-takeaways-11">Key Takeaways</h3>
+<p>✅ <strong>Stable</strong>: Density and flow within acceptable
+ranges.</p>
+<h3 id="operational-implications-11">Operational Implications</h3>
+<p>• Narrow segment with potential bottlenecks. • At LOS A (Free Flow -
+Excellent conditions, no restrictions needed).</p>
+<hr />
+<h3 id="segment-j1-bridgemill-to-half-turn-outbound">Segment J1 —
+Bridge/Mill to Half Turn (Outbound)</h3>
+<h4 id="metrics-12">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.02</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>Linear Density</td>
+<td>0.03</td>
+<td>p/m</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (On Course Narrow)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<div class="line-block">Note: LOS uses Fruin thresholds (linear
+density). |</div>
+<h3 id="key-takeaways-12">Key Takeaways</h3>
+<p>✅ <strong>Stable</strong>: Density and flow within acceptable
+ranges.</p>
+<h3 id="operational-implications-12">Operational Implications</h3>
+<p>• Narrow segment with potential bottlenecks. • At LOS A (Free Flow -
+Excellent conditions, no restrictions needed).</p>
+<hr />
+<h3 id="segment-j2-half-turn-to-full-turn-out">Segment J2 — Half Turn to
+Full Turn (Out)</h3>
+<h4 id="metrics-13">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.03</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (On Course Open)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="key-takeaways-13">Key Takeaways</h3>
+<p>✅ <strong>Stable</strong>: Density and flow within acceptable
+ranges.</p>
+<h3 id="operational-implications-13">Operational Implications</h3>
+<p>• Unidirectional running flow. • At LOS A (Free Flow - Excellent
+conditions, no restrictions needed).</p>
+<hr />
+<h3 id="segment-j3-full-turn-to-half-turn-return">Segment J3 — Full Turn
+to Half Turn (Return)</h3>
+<h4 id="metrics-14">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.03</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (On Course Open)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="key-takeaways-14">Key Takeaways</h3>
+<p>✅ <strong>Stable</strong>: Density and flow within acceptable
+ranges.</p>
+<h3 id="operational-implications-14">Operational Implications</h3>
+<p>• Unidirectional running flow. • At LOS A (Free Flow - Excellent
+conditions, no restrictions needed).</p>
+<hr />
+<h3 id="segment-j4-half-turn-to-bridgemill">Segment J4 — Half Turn to
+Bridge/Mill</h3>
+<h4 id="metrics-15">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.02</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>Linear Density</td>
+<td>0.02</td>
+<td>p/m</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (On Course Narrow)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<div class="line-block">Note: LOS uses Fruin thresholds (linear
+density). |</div>
+<h3 id="key-takeaways-15">Key Takeaways</h3>
+<p>✅ <strong>Stable</strong>: Density and flow within acceptable
+ranges.</p>
+<h3 id="operational-implications-15">Operational Implications</h3>
+<p>• Narrow segment with potential bottlenecks. • At LOS A (Free Flow -
+Excellent conditions, no restrictions needed).</p>
+<hr />
+<h3 id="segment-j5-half-turn-to-bridgemill-slow-half">Segment J5 — Half
+Turn to Bridge/Mill (Slow Half)</h3>
+<h4 id="metrics-16">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.02</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>Linear Density</td>
+<td>0.02</td>
+<td>p/m</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (On Course Narrow)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<div class="line-block">Note: LOS uses Fruin thresholds (linear
+density). |</div>
+<h3 id="key-takeaways-16">Key Takeaways</h3>
+<p>✅ <strong>Stable</strong>: Density and flow within acceptable
+ranges.</p>
+<h3 id="operational-implications-16">Operational Implications</h3>
+<p>• Narrow segment with potential bottlenecks. • At LOS A (Free Flow -
+Excellent conditions, no restrictions needed).</p>
+<hr />
+<h3 id="segment-k1-bridgemill-to-station-rd">Segment K1 — Bridge/Mill to
+Station Rd</h3>
+<h4 id="metrics-17">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.01</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>Linear Density</td>
+<td>0.02</td>
+<td>p/m</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (On Course Narrow)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<div class="line-block">Note: LOS uses Fruin thresholds (linear
+density). |</div>
+<h3 id="key-takeaways-17">Key Takeaways</h3>
+<p>✅ <strong>Stable</strong>: Density and flow within acceptable
+ranges.</p>
+<h3 id="operational-implications-17">Operational Implications</h3>
+<p>• Narrow segment with potential bottlenecks. • At LOS A (Free Flow -
+Excellent conditions, no restrictions needed).</p>
+<hr />
+<h3 id="segment-l1-trailaberdeen-tofrom-station-rd">Segment L1 —
+Trail/Aberdeen to/from Station Rd</h3>
+<h4 id="metrics-18">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.04</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>Linear Density</td>
+<td>0.05</td>
+<td>p/m</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (On Course Narrow)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<div class="line-block">Note: LOS uses Fruin thresholds (linear
+density). |</div>
+<h3 id="key-takeaways-18">Key Takeaways</h3>
+<p>✅ <strong>Stable</strong>: Density and flow within acceptable
+ranges.</p>
+<h3 id="operational-implications-18">Operational Implications</h3>
+<p>• Narrow segment with potential bottlenecks. • At LOS A (Free Flow -
+Excellent conditions, no restrictions needed).</p>
+<hr />
+<h3 id="segment-l2-station-rd-to-trailaberdeen">Segment L2 — Station Rd
+to Trail/Aberdeen</h3>
+<h4 id="metrics-19">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.01</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>Linear Density</td>
+<td>0.02</td>
+<td>p/m</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (On Course Narrow)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<div class="line-block">Note: LOS uses Fruin thresholds (linear
+density). |</div>
+<h3 id="key-takeaways-19">Key Takeaways</h3>
+<p>✅ <strong>Stable</strong>: Density and flow within acceptable
+ranges.</p>
+<h3 id="operational-implications-19">Operational Implications</h3>
+<p>• Narrow segment with potential bottlenecks. • At LOS A (Free Flow -
+Excellent conditions, no restrictions needed).</p>
+<hr />
+<h3 id="segment-m1-trailaberdeen-to-finish-full-to-loop">Segment M1 —
+Trail/Aberdeen to Finish (Full to Loop)</h3>
+<h4 id="metrics-20">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.01</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (On Course Open)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="key-takeaways-20">Key Takeaways</h3>
+<p>✅ <strong>Stable</strong>: Density and flow within acceptable
+ranges.</p>
+<h3 id="operational-implications-20">Operational Implications</h3>
+<p>• Unidirectional running flow. • At LOS A (Free Flow - Excellent
+conditions, no restrictions needed).</p>
+<hr />
+<h3 id="segment-m2-trailaberdeen-to-finish">Segment M2 — Trail/Aberdeen
+to Finish</h3>
+<h4 id="metrics-21">Metrics</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Density</td>
+<td>0.02</td>
+<td>p/m²</td>
+</tr>
+<tr>
+<td>LOS</td>
+<td>🟢 A (On Course Open)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="key-takeaways-21">Key Takeaways</h3>
+<p>✅ <strong>Stable</strong>: Density and flow within acceptable
+ranges.</p>
+<h3 id="operational-implications-21">Operational Implications</h3>
+<p>• Unidirectional running flow. • At LOS A (Free Flow - Excellent
+conditions, no restrictions needed).</p>
+<hr />
+<h2 id="appendix">Appendix</h2>
+<h3 id="detailed-definitions">Detailed Definitions</h3>
+<ul>
+<li><strong>gte</strong>: Greater than or equal to (used in trigger
+conditions like density_gte, flow_gte)</li>
+<li><strong>TOT</strong>: Time Over Threshold (seconds above E/F LOS
+thresholds)</li>
+<li><strong>LOS</strong>: Level of Service (A=Free Flow, B=Comfortable,
+C=Moderate, D=Dense, E=Very Dense, F=Extremely Dense)</li>
+<li><strong>Experienced Density</strong>: What runners actually
+experience (includes co-present runners from other events)</li>
+<li><strong>Self Density</strong>: Only that event’s runners (not shown
+in this report)</li>
+<li><strong>Active Window</strong>: Time period when the event has
+runners present in the segment</li>
+<li><strong>Ops Box</strong>: Operational guidance for race marshals and
+organizers</li>
+<li><strong>Triggered Actions</strong>: Safety alerts and operational
+responses when density/flow thresholds are exceeded</li>
+</ul>
+<h3 id="level-of-service-thresholds">Level of Service Thresholds</h3>
+<table>
+<colgroup>
+<col style="width: 7%" />
+<col style="width: 38%" />
+<col style="width: 36%" />
+<col style="width: 18%" />
+</colgroup>
+<thead>
+<tr>
+<th>LOS</th>
+<th>Areal Density (runners/m²)</th>
+<th>Crowd Density (runners/m)</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td>0.00 - 0.36</td>
+<td>0.00 - 0.20</td>
+<td>Free Flow</td>
+</tr>
+<tr>
+<td>B</td>
+<td>0.36 - 0.54</td>
+<td>0.20 - 0.40</td>
+<td>Comfortable</td>
+</tr>
+<tr>
+<td>C</td>
+<td>0.54 - 0.72</td>
+<td>0.40 - 0.60</td>
+<td>Moderate</td>
+</tr>
+<tr>
+<td>D</td>
+<td>0.72 - 1.08</td>
+<td>0.60 - 0.80</td>
+<td>Dense</td>
+</tr>
+<tr>
+<td>E</td>
+<td>1.08 - 1.63</td>
+<td>0.80 - 1.00</td>
+<td>Very Dense</td>
+</tr>
+<tr>
+<td>F</td>
+<td>1.63+</td>
+<td>1.00+</td>
+<td>Extremely Dense</td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

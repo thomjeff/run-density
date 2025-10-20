@@ -1,51 +1,9 @@
-# macOS
-.DS_Store
-
-# Python
+frontend/validation/output/
+frontend/map/output/
+frontend/dashboard/output/
+frontend/reports/output/
+frontend/e2e/__pycache__/
+frontend/release/__pycache__/
+release/
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-*.pdb
-*.egg-info/
-*.egg
-*.coverage
-.coverage.*
-.pytest_cache/
-
-# Virtual environments
-.venv/
-env/
-venv/
-
-# IDE/editor junk
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Local configs
-.python-version
-
-# Logs & temp
-*.log
-*.tmp
-*.bak
-
-# Build / dist
-dist/
-build/
-*.egg-info/
-peaks.csv
-peaks_crowd.csv
-/reports
-/chats
-
-# Cursor session files (removed to preserve session context)
-# cursor/
-
-# E2E test artifacts
-e2e_tests/
-
-# Work directory (ephemeral validation artifacts)
-/work/

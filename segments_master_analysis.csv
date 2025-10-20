@@ -1,0 +1,23 @@
+segment_id,segment_label,segment_type,width_m,start_km_abs,end_km_abs,length_km,n_events,n_unique_ranges
+A1,Start to Queen/Regent,on_course_open,5.0,0.0,0.9,0.9,3,1
+A2,Queen/Regent to WSB mid-point,on_course_open,5.0,0.9,1.8,0.9,3,1
+A3,WSB mid-point to Friel,on_course_open,5.0,1.8,2.7,0.9000000000000001,3,1
+B1,Friel to 10K Turn,on_course_open,1.5,2.7,4.25,1.5499999999999998,2,1
+B2,10K Turn to Friel,on_course_open,1.5,4.25,5.8,1.5499999999999998,2,2
+B3,10K Turn to Friel,on_course_open,1.5,4.25,5.8,1.5499999999999998,2,2
+D1,10K Turn to Full Turn Blake (Out),on_course_open,1.5,4.25,9.52,5.27,1,1
+D2,Full Turn Blake to 10K Turn (Return),on_course_open,1.5,9.52,14.8,5.280000000000001,1,1
+F1,Friel to Station Rd.,on_course_open,3.0,5.8,8.1,2.3,3,3
+G1,Full Loop around QS to Trail/Aberdeen,on_course_open,3.0,20.55,21.65,1.0999999999999979,1,1
+H1,Trail/Aberdeen to/from Station Rd,on_course_open,1.5,8.1,9.75,1.6500000000000004,3,3
+I1,Station Rd to Bridge/Mill,on_course_open,3.0,5.0,10.75,5.75,2,2
+J1,Bridge/Mill to Half Turn (Outbound),on_course_open,1.5,10.75,13.43,2.6799999999999997,2,2
+J2,Half Turn to Full Turn (Out),on_course_open,1.5,31.64,33.11,1.4699999999999989,1,1
+J3,Full Turn to Half Turn (Return),on_course_open,1.5,33.11,34.34,1.230000000000004,1,1
+J4,Half Turn to Bridge/Mill,on_course_open,1.5,13.43,16.02,2.59,2,2
+J5,Half Turn to Bridge/Mill (Slow Half),on_course_open,1.5,10.75,13.43,2.6799999999999997,2,2
+K1,Bridge/Mill to Station Rd,on_course_open,3.0,16.02,19.47,3.4499999999999993,2,2
+L1,Trail/Aberdeen to/from Station Rd,on_course_open,1.5,8.1,9.75,1.6500000000000004,3,3
+L2,Station Rd to Trail/Aberdeen,on_course_open,1.5,40.57,41.95,1.3800000000000026,1,1
+M1,Trail/Aberdeen to Finish (Full to Loop),on_course_open,3.0,9.75,10.0,0.25,3,3
+M2,Trail/Aberdeen to Finish,on_course_open,3.0,41.95,42.2,0.25,1,1
