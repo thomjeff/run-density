@@ -17,6 +17,7 @@ from pathlib import Path
 import json
 
 from app.storage import create_storage_from_env, load_latest_run_id
+from app.storage_service import StorageService
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ router = APIRouter()
 
 # Initialize storage
 storage = create_storage_from_env()
+storage_service = StorageService()
 
 
 def load_density_metrics_from_bins():
@@ -134,33 +136,35 @@ async def get_density_segments():
         - utilization, flagged, worst_bin, watch, mitigation
     """
     try:
-        # Load segment metrics from artifacts
+        # Load segment metrics from UI artifacts using storage service
         segment_metrics = {}
         try:
-            run_id = load_latest_run_id(storage)
-            if storage.exists("segment_metrics.json"):
-                raw_data = storage.read_json("segment_metrics.json")
+            raw_data = storage_service.load_ui_artifact("segment_metrics.json")
+            if raw_data:
                 # Handle different formats: direct dict vs {'items': [...]}
                 if isinstance(raw_data, dict) and 'items' in raw_data:
                     # Convert items list to dict format expected by API
                     segment_metrics = {item['segment_id']: item for item in raw_data['items']}
+                elif isinstance(raw_data, list):
+                    # Array format from new artifact exporter
+                    segment_metrics = {item['segment_id']: item for item in raw_data}
                 else:
                     # Direct dict format (from artifact exporter)
                     segment_metrics = raw_data
+                logger.info(f"Loaded {len(segment_metrics)} segment metrics from storage service")
             else:
-                logger.warning("segment_metrics.json not found")
+                logger.warning("segment_metrics.json not found in storage service")
         except Exception as e:
-            logger.warning(f"Could not load segment metrics: {e}")
+            logger.warning(f"Could not load segment metrics from storage service: {e}")
         
-        # Load segments geojson for labels
+        # Load segments geojson for labels using storage service
         segments_geojson = {}
         try:
-            if storage.exists("segments.geojson"):
-                segments_geojson = storage.read_json("segments.geojson")
-            else:
-                logger.warning("segments.geojson not found")
+            segments_geojson = storage_service.load_ui_artifact("segments.geojson")
+            if not segments_geojson:
+                logger.warning("segments.geojson not found in storage service")
         except Exception as e:
-            logger.warning(f"Could not load segments geojson: {e}")
+            logger.warning(f"Could not load segments geojson from storage service: {e}")
         
         # Build label lookup from geojson
         label_lookup = {}
