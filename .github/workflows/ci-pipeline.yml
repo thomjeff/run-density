@@ -130,6 +130,7 @@ jobs:
     if: github.event_name != 'pull_request'
     permissions:
       contents: read
+      id-token: write   # WIF required for GCS access
     
     steps:
     - name: Checkout code
