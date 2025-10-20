@@ -52,6 +52,10 @@ jobs:
       - name: Build density report
         run: python frontend/reports/scripts/build_density_report.py
       
+      # Phase 4.5: Generate UI artifacts (JSON files for APIs)
+      - name: Generate UI artifacts
+        run: python analytics/export_frontend_artifacts.py
+      
       # Phase 5: Bundle release
       - name: Create release bundle
         run: python frontend/release/build_bundle.py
@@ -78,6 +82,34 @@ jobs:
             frontend/reports/output/density.html
             frontend/reports/output/mini_maps/
             frontend/reports/output/sparklines/
+      
+      - name: Upload UI artifacts (JSON)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runflow-ui-artifacts
+          path: |
+            artifacts/*/ui/
+      
+      # Upload JSON artifacts to Cloud Storage for API access
+      - name: Setup gcloud
+        if: always()
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+      
+      - name: Upload artifacts to Cloud Storage
+        if: always()
+        run: |
+          # Find the latest artifacts directory
+          LATEST_ARTIFACTS=$(ls -t artifacts/ | head -1)
+          echo "Uploading artifacts from: artifacts/$LATEST_ARTIFACTS/ui/"
+          
+          # Upload to Cloud Storage
+          gsutil -m cp -r "artifacts/$LATEST_ARTIFACTS/ui/*" gs://run-density-reports/artifacts/$LATEST_ARTIFACTS/ui/
+          
+          echo "✅ Uploaded UI artifacts to Cloud Storage"
       
       # GitHub Pages deployment (optional, controlled by workflow_dispatch)
       # Uncomment when ready to enable Pages:
