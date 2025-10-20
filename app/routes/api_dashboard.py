@@ -18,6 +18,9 @@ from datetime import datetime
 from app.storage import create_storage_from_env, load_meta, load_segment_metrics, load_flags, DATASET
 from app.common.config import load_rulebook, load_reporting
 
+# Issue #283: Import SSOT for flagging logic parity
+from app import flagging as ssot_flagging
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -69,19 +72,41 @@ def load_runners_data() -> Dict[str, Any]:
 
 def load_bins_flagged_count() -> int:
     """
-    Load bins data and count flagged bins.
+    Load bins data and count flagged bins using SSOT (Issue #283 fix).
     
     Returns:
         int: Number of flagged bins
     """
     try:
-        # Try to read bins.parquet from reports directory
         import pandas as pd
-        bins_df = pd.read_parquet("reports/2025-10-19/bins.parquet")
+        from pathlib import Path
         
-        # Count bins with flag_severity != 'none'
-        flagged_bins = len(bins_df[bins_df['flag_severity'] != 'none'])
-        return flagged_bins
+        # Find the latest reports directory (date-based)
+        reports_base = Path("reports")
+        if not reports_base.exists():
+            logger.warning("No reports directory found")
+            return 0
+        
+        # Get latest date directory
+        date_dirs = [d for d in reports_base.iterdir() if d.is_dir() and d.name.startswith("2025-")]
+        if not date_dirs:
+            logger.warning("No date directories found in reports")
+            return 0
+        
+        latest_dir = max(date_dirs, key=lambda d: d.name)
+        bins_path = latest_dir / "bins.parquet"
+        
+        if not bins_path.exists():
+            logger.warning(f"bins.parquet not found at {bins_path}")
+            return 0
+        
+        # Load bins and use SSOT for flagging count
+        bins_df = pd.read_parquet(bins_path)
+        bin_flags = ssot_flagging.compute_bin_flags(bins_df)
+        
+        flagged_count = len(bin_flags)
+        logger.info(f"SSOT flagged bins count: {flagged_count} from {bins_path}")
+        return flagged_count
         
     except Exception as e:
         logger.error(f"Error loading bins data: {e}")
