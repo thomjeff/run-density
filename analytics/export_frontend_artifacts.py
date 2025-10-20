@@ -173,13 +173,18 @@ def generate_meta_json(run_id: str, environment: str = "local") -> Dict[str, Any
 
 def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]]:
     """
-    Generate segment_metrics.json from segment_windows_from_bins.parquet.
+    Generate segment_metrics.json from bins.parquet using SSOT flagging logic.
+    
+    Issue #290: This function now populates all required fields for the UI:
+    - utilization, worst_bin, flagged_bins from SSOT
+    - schema, width_m, bins, active_start, active_end from bins.parquet
+    - overtaking & copresence counts (if available)
     
     Args:
         reports_dir: Path to reports/<run_id>/ directory
     
     Returns:
-        Dictionary mapping seg_id to metrics
+        Dictionary mapping seg_id to complete metrics
     """
     parquet_path = reports_dir / "bins.parquet"
     
@@ -187,67 +192,125 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
         print(f"Warning: {parquet_path} not found, returning empty metrics")
         return {}
     
-    # Load rulebook for LOS classification
+    print("   📊 Generating segment_metrics.json from SSOT (Issue #290 fix)...")
+    
     try:
-        rulebook = load_rulebook()
-        los_thresholds = rulebook.get("globals", {}).get("los_thresholds", {})
+        # Load bins.parquet (authoritative source)
+        bins_df = pd.read_parquet(parquet_path)
+        print(f"   📊 Loaded {len(bins_df)} bins from bins.parquet")
+        
+        # Use SSOT to get flagging summary
+        bin_flags = ssot_flagging.compute_bin_flags(bins_df)
+        flag_summary = ssot_flagging.summarize_flags(bin_flags)
+        
+        print(f"   ✅ SSOT: {flag_summary['flagged_bin_total']} flagged bins across {len(flag_summary['segments_with_flags'])} segments")
+        
+        # Load segments.csv for width_m and other metadata
+        segments_path = Path("data/segments.csv")
+        segment_dims = {}
+        if segments_path.exists():
+            try:
+                segments_df = pd.read_csv(segments_path)
+                segment_dims = segments_df.set_index('seg_id').to_dict('index')
+                print(f"   ✅ Loaded segment dimensions for {len(segment_dims)} segments")
+            except Exception as e:
+                print(f"   ⚠️  Warning: Could not load segments.csv: {e}")
+        
+        # Group bins by segment_id and build comprehensive metrics
+        metrics = {}
+        
+        # Use either 'segment_id' or 'seg_id' column
+        group_col = 'segment_id' if 'segment_id' in bins_df.columns else 'seg_id'
+        
+        for seg_id, group in bins_df.groupby(group_col):
+            seg_id_str = str(seg_id)
+            
+            # Get segment dimensions
+            dims = segment_dims.get(seg_id_str, {})
+            
+            # Compute peak density and rate from bins
+            peak_density = group['density'].max() if 'density' in group.columns else 0.0
+            peak_rate = group['rate'].max() if 'rate' in group.columns else 0.0
+            
+            # Active window: min start time to max end time
+            if 't_start' in group.columns and 't_end' in group.columns:
+                start_dt = pd.to_datetime(group['t_start']).min()
+                end_dt = pd.to_datetime(group['t_end']).max()
+                active_start = start_dt.strftime('%H:%M')
+                active_end = end_dt.strftime('%H:%M')
+                active_window = f"{active_start}–{active_end}"
+            else:
+                active_start = "N/A"
+                active_end = "N/A"
+                active_window = "N/A"
+            
+            # Get schema_key from bins
+            schema_key = group['schema_key'].iloc[0] if 'schema_key' in group.columns else 'on_course_open'
+            
+            # Get flagging data from SSOT
+            flag_data = None
+            for seg_data in flag_summary['per_segment']:
+                if seg_data['segment_id'] == seg_id_str:
+                    flag_data = seg_data
+                    break
+            
+            # Find worst bin (highest density flagged bin)
+            worst_bin = None
+            if flag_data and flag_data['flagged_bins'] > 0:
+                # Find the bin with highest density among flagged bins
+                flagged_bins_in_segment = [f for f in bin_flags if f.segment_id == seg_id_str]
+                if flagged_bins_in_segment:
+                    worst_flag = max(flagged_bins_in_segment, key=lambda f: f.density)
+                    worst_bin = {
+                        "d_start_km": worst_flag.start_km if worst_flag.start_km is not None else 0.0,
+                        "d_end_km": worst_flag.end_km if worst_flag.end_km is not None else 0.0,
+                        "t_start": worst_flag.t_start,
+                        "t_end": worst_flag.t_end,
+                        "density": worst_flag.density,
+                        "rate": worst_flag.rate
+                    }
+            
+            # Calculate utilization (peak density / capacity threshold)
+            # Use a reasonable capacity threshold (e.g., 1.0 p/m² for F LOS)
+            capacity_threshold = 1.0  # This could be made configurable via rulebook
+            utilization = min(peak_density / capacity_threshold, 1.0) if capacity_threshold > 0 else 0.0
+            
+            # Build comprehensive metrics
+            metrics[seg_id_str] = {
+                # Core segment data
+                "schema": schema_key,
+                "width_m": float(dims.get("width_m", 0.0)),
+                "bins": int(len(group)),
+                "active_start": active_start,
+                "active_end": active_end,
+                "active_window": active_window,
+                
+                # Peak metrics
+                "peak_density": round(peak_density, 4),
+                "peak_rate": round(peak_rate, 2),
+                
+                # Flagging data from SSOT
+                "worst_severity": flag_data['worst_severity'] if flag_data else "none",
+                "worst_los": flag_data['worst_los'] if flag_data else "A",
+                "flagged_bins": flag_data['flagged_bins'] if flag_data else 0,
+                
+                # Utilization and worst bin
+                "utilization": round(utilization, 3),
+                "worst_bin": worst_bin,
+                
+                # Overtaking and copresence (placeholder - would need flow analysis)
+                "overtaking_segments": 0,  # TODO: Calculate from flow analysis
+                "copresence_segments": 0,  # TODO: Calculate from flow analysis
+            }
+        
+        print(f"   ✅ Generated comprehensive metrics for {len(metrics)} segments")
+        return metrics
+        
     except Exception as e:
-        print(f"Warning: Could not load rulebook for LOS classification: {e}")
-        # Fallback thresholds
-        los_thresholds = {"A": 0.2, "B": 0.4, "C": 0.6, "D": 0.8, "E": 1.0, "F": float('inf')}
-    
-    # Read parquet
-    df = pd.read_parquet(parquet_path)
-    
-    # Group by segment_id and aggregate metrics
-    metrics = {}
-    
-    # Use either 'segment_id' or 'seg_id' column
-    group_col = 'segment_id' if 'segment_id' in df.columns else 'seg_id'
-    
-    for seg_id, group in df.groupby(group_col):
-        # Compute peak density (use density_peak if available, else density_mean or density)
-        if 'density_peak' in group.columns:
-            peak_density = group['density_peak'].max()
-        elif 'density_mean' in group.columns:
-            peak_density = group['density_mean'].max()
-        elif 'density' in group.columns:
-            peak_density = group['density'].max()
-        else:
-            peak_density = 0.0
-        
-        # Peak rate will be computed from bins.parquet separately
-        # Set to 0.0 for now, will be updated later
-        peak_rate = 0.0
-        
-        # Active window: min start time to max end time
-        # Use t_start/t_end or start_time/end_time
-        if 't_start' in group.columns and 't_end' in group.columns:
-            start_dt = pd.to_datetime(group['t_start']).min()
-            end_dt = pd.to_datetime(group['t_end']).max()
-            active_window = f"{start_dt.strftime('%H:%M')}–{end_dt.strftime('%H:%M')}"
-        elif 'start_time' in group.columns and 'end_time' in group.columns:
-            start_dt = pd.to_datetime(group['start_time']).min()
-            end_dt = pd.to_datetime(group['end_time']).max()
-            active_window = f"{start_dt.strftime('%H:%M')}–{end_dt.strftime('%H:%M')}"
-        else:
-            active_window = "N/A"
-        
-        # Classify LOS
-        worst_los = classify_los(peak_density, los_thresholds)
-        
-        # Get schema_key from the first bin in the group (all bins in a segment should have the same schema_key)
-        schema_key = group['schema_key'].iloc[0] if 'schema_key' in group.columns else 'on_course_open'
-        
-        metrics[seg_id] = {
-            "schema": schema_key,  # Issue #285: Add operational schema tag
-            "worst_los": worst_los,
-            "peak_density": round(peak_density, 4),
-            "peak_rate": round(peak_rate, 2),
-            "active_window": active_window
-        }
-    
-    return metrics
+        print(f"   ⚠️  Error generating segment metrics from SSOT: {e}")
+        import traceback
+        traceback.print_exc()
+        return {}
 
 
 def generate_flags_json(reports_dir: Path, segment_metrics: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
