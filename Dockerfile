@@ -14,6 +14,7 @@ COPY app ./app
 COPY data ./data
 COPY config ./config
 COPY frontend ./frontend
+COPY templates ./templates
 COPY tests ./tests
 
 EXPOSE 8080
