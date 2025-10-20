@@ -38,38 +38,71 @@ async def get_flow_segments():
         Each row represents a segment-event_a-event_b combination.
     """
     try:
-        # Load flow data from UI artifacts using storage service
-        flow_data = storage_service.load_ui_artifact("flow.json")
+        # Load Flow CSV data from Cloud Storage
+        import pandas as pd
+        import tempfile
+        import os
         
-        if not flow_data:
-            logger.warning("flow.json not found in storage service")
+        # Download Flow CSV from Cloud Storage
+        try:
+            # Find the latest Flow CSV file in Cloud Storage
+            flow_csv_files = []
+            # List files in the reports directory
+            import subprocess
+            result = subprocess.run(['gsutil', 'ls', 'gs://run-density-reports/reports/*/'], 
+                                  capture_output=True, text=True)
+            if result.returncode == 0:
+                for line in result.stdout.strip().split('\n'):
+                    if line.endswith('/'):
+                        date_dir = line.split('/')[-2]
+                        # Check if Flow CSV exists in this date directory
+                        flow_csv_path = f"gs://run-density-reports/reports/{date_dir}/*-Flow.csv"
+                        flow_result = subprocess.run(['gsutil', 'ls', flow_csv_path], 
+                                                    capture_output=True, text=True)
+                        if flow_result.returncode == 0 and flow_result.stdout.strip():
+                            flow_csv_files.extend(flow_result.stdout.strip().split('\n'))
+            
+            if not flow_csv_files:
+                logger.warning("No Flow CSV files found in Cloud Storage")
+                return JSONResponse(content=[])
+            
+            # Use the latest Flow CSV
+            latest_flow_csv = max(flow_csv_files, key=lambda f: f.split('/')[-1])
+            logger.info(f"Using Flow CSV: {latest_flow_csv}")
+            
+            # Download to temporary file
+            with tempfile.NamedTemporaryFile(mode='w+', suffix='.csv', delete=False) as tmp_file:
+                subprocess.run(['gsutil', 'cp', latest_flow_csv, tmp_file.name], check=True)
+                df = pd.read_csv(tmp_file.name)
+                os.unlink(tmp_file.name)
+        
+        except Exception as e:
+            logger.error(f"Failed to load Flow CSV from Cloud Storage: {e}")
             return JSONResponse(content=[])
-        
-        logger.info(f"Loaded {len(flow_data)} flow records from storage service")
         
         # Convert to the format expected by the frontend
         flow_records = []
-        for item in flow_data:
-            # Skip empty items
-            if not item.get('seg_id'):
+        for _, row in df.iterrows():
+            # Skip empty rows
+            if pd.isna(row['seg_id']):
                 continue
                 
             flow_record = {
-                "id": str(item['seg_id']),
-                "name": str(item.get('segment_label', item['seg_id'])),
-                "event_a": str(item.get('event_a', '')),
-                "event_b": str(item.get('event_b', '')),
-                "flow_type": str(item.get('flow_type', '')),
-                "overtaking_a": float(item.get('overtaking_a', 0.0)),
-                "pct_a": float(item.get('pct_a', 0.0)),
-                "overtaking_b": float(item.get('overtaking_b', 0.0)),
-                "pct_b": float(item.get('pct_b', 0.0)),
-                "copresence_a": float(item.get('copresence_a', 0.0)),
-                "copresence_b": float(item.get('copresence_b', 0.0))
+                "id": str(row['seg_id']),
+                "name": str(row['segment_label']),
+                "event_a": str(row['event_a']),
+                "event_b": str(row['event_b']),
+                "flow_type": str(row['flow_type']),
+                "overtaking_a": float(row['overtaking_a']) if pd.notna(row['overtaking_a']) else 0.0,
+                "pct_a": float(row['pct_a']) if pd.notna(row['pct_a']) else 0.0,
+                "overtaking_b": float(row['overtaking_b']) if pd.notna(row['overtaking_b']) else 0.0,
+                "pct_b": float(row['pct_b']) if pd.notna(row['pct_b']) else 0.0,
+                "copresence_a": float(row['copresence_a']) if pd.notna(row['copresence_a']) else 0.0,
+                "copresence_b": float(row['copresence_b']) if pd.notna(row['copresence_b']) else 0.0
             }
             flow_records.append(flow_record)
         
-        logger.info(f"Loaded {len(flow_records)} flow records from storage service")
+        logger.info(f"Loaded {len(flow_records)} flow records from Cloud Storage")
         
         response = JSONResponse(content=flow_records)
         response.headers["Cache-Control"] = "public, max-age=60"
