@@ -43,7 +43,7 @@ def load_density_metrics_from_bins():
         
         with open(latest_path) as f:
             latest = json.load(f)
-        run_id = latest.get("run_id")
+        run_id = latest.get("run_id") or latest.get("latest_run_id")
         if not run_id:
             return {}
         
@@ -138,8 +138,15 @@ async def get_density_segments():
         segment_metrics = {}
         try:
             run_id = load_latest_run_id(storage)
-            if run_id and storage.exists("segment_metrics.json"):
-                segment_metrics = storage.read_json("segment_metrics.json")
+            if storage.exists("segment_metrics.json"):
+                raw_data = storage.read_json("segment_metrics.json")
+                # Handle different formats: direct dict vs {'items': [...]}
+                if isinstance(raw_data, dict) and 'items' in raw_data:
+                    # Convert items list to dict format expected by API
+                    segment_metrics = {item['segment_id']: item for item in raw_data['items']}
+                else:
+                    # Direct dict format (from artifact exporter)
+                    segment_metrics = raw_data
             else:
                 logger.warning("segment_metrics.json not found")
         except Exception as e:
@@ -148,7 +155,7 @@ async def get_density_segments():
         # Load segments geojson for labels
         segments_geojson = {}
         try:
-            if run_id and storage.exists("segments.geojson"):
+            if storage.exists("segments.geojson"):
                 segments_geojson = storage.read_json("segments.geojson")
             else:
                 logger.warning("segments.geojson not found")
@@ -190,10 +197,9 @@ async def get_density_segments():
         for seg_id, metrics in segment_metrics.items():
             label_info = label_lookup.get(seg_id, {})
             
-            # Build schema string (e.g., "0.9 km × 5.0 m")
-            length = label_info.get("length_km", 0.0)
-            width = label_info.get("width_m", 0.0)
-            schema = f"{length:.1f} km × {width:.1f} m" if length > 0 else "N/A"
+            # Issue #285: Use density schema instead of geometry metadata
+            # Try to load schema_density.json, fallback to geometry if not available
+            schema = _get_density_schema_display()
             
             # Events list
             events = label_info.get("events", [])
@@ -266,8 +272,15 @@ async def get_density_segment_detail(seg_id: str):
         segment_metrics = {}
         try:
             run_id = load_latest_run_id(storage)
-            if run_id and storage.exists("segment_metrics.json"):
-                segment_metrics = storage.read_json("segment_metrics.json")
+            if storage.exists("segment_metrics.json"):
+                raw_data = storage.read_json("segment_metrics.json")
+                # Handle different formats: direct dict vs {'items': [...]}
+                if isinstance(raw_data, dict) and 'items' in raw_data:
+                    # Convert items list to dict format expected by API
+                    segment_metrics = {item['segment_id']: item for item in raw_data['items']}
+                else:
+                    # Direct dict format (from artifact exporter)
+                    segment_metrics = raw_data
         except Exception as e:
             logger.warning(f"Could not load segment metrics: {e}")
         
@@ -284,7 +297,7 @@ async def get_density_segment_detail(seg_id: str):
         events = []
         
         try:
-            if run_id and storage.exists("segments.geojson"):
+            if storage.exists("segments.geojson"):
                 segments_geojson = storage.read_json("segments.geojson")
                 for feature in segments_geojson.get("features", []):
                     props = feature.get("properties", {})
@@ -317,7 +330,7 @@ async def get_density_segment_detail(seg_id: str):
         detail = {
             "seg_id": seg_id,
             "name": label,
-            "schema": f"{length_km:.1f} km × {width_m:.1f} m" if length_km > 0 else "N/A",
+            "schema": _get_density_schema_display(),
             "active": metrics.get("active_window", "N/A"),
             "peak_density": metrics.get("peak_density", 0.0),
             "worst_los": metrics.get("worst_los", "Unknown"),
@@ -338,4 +351,53 @@ async def get_density_segment_detail(seg_id: str):
     except Exception as e:
         logger.error(f"Error getting segment detail for {seg_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to load segment detail: {str(e)}")
+
+
+def _get_density_schema_display() -> str:
+    """
+    Get the density schema display string for the UI.
+    
+    Issue #285: Returns canonical density schema information instead of geometry metadata.
+    
+    Returns:
+        String describing the density data schema
+    """
+    try:
+        # Try to load the latest schema_density.json
+        artifacts_dir = Path("artifacts")
+        if not artifacts_dir.exists():
+            return "Density Schema (legacy)"
+            
+        # Find the most recent run directory
+        run_dirs = [d for d in artifacts_dir.iterdir() if d.is_dir() and d.name != "latest.json"]
+        if not run_dirs:
+            return "Density Schema (legacy)"
+            
+        # Get the most recent run
+        latest_run = max(run_dirs, key=lambda d: d.name)
+        schema_path = latest_run / "ui" / "schema_density.json"
+        
+        if not schema_path.exists():
+            return "Density Schema (legacy)"
+            
+        # Load and parse the schema
+        with open(schema_path, 'r') as f:
+            schema_data = json.load(f)
+            
+        # Extract key field information for display
+        fields = schema_data.get("fields", [])
+        field_names = [f["name"] for f in fields if f.get("required", False)]
+        
+        # Create a concise display string
+        if field_names:
+            core_fields = ", ".join(field_names[:4])  # Show first 4 required fields
+            if len(field_names) > 4:
+                core_fields += f" (+{len(field_names)-4} more)"
+            return f"Density Schema: {core_fields}"
+        else:
+            return "Density Schema: bin-level data"
+            
+    except Exception as e:
+        logger.warning(f"Could not load density schema: {e}")
+        return "Density Schema (legacy)"
 

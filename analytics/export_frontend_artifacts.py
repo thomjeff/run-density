@@ -420,7 +420,7 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
                     "length_km": float(dims.get("full_length", dims.get("half_length", dims.get("10K_length", 0.0)))),
                     "width_m": float(dims.get("width_m", 0.0)),
                     "direction": dims.get("direction", "uni"),
-                    "events": [event for event in ["Full", "Half", "10K"] if dims.get(event.lower(), False)]
+                    "events": [event for event in ["Full", "Half", "10K"] if dims.get(event.lower() if event != "10K" else "10K", "") == "y"]
                 }
             }
         
@@ -525,6 +525,12 @@ def export_ui_artifacts(reports_dir: Path, run_id: str, environment: str = "loca
     (artifacts_dir / "segments.geojson").write_text(json.dumps(segments_geojson, indent=2))
     print(f"   ✅ segments.geojson: {len(segments_geojson['features'])} features")
     
+    # 6. Generate schema_density.json (Issue #285)
+    print("\n6️⃣  Generating schema_density.json...")
+    schema_density = generate_density_schema_json(meta.get('dataset_version', 'unknown'))
+    (artifacts_dir / "schema_density.json").write_text(json.dumps(schema_density, indent=2))
+    print(f"   ✅ schema_density.json: schema_version={schema_density.get('schema_version')}")
+    
     print(f"\n{'='*60}")
     print(f"✅ All artifacts exported to: {artifacts_dir}")
     print(f"{'='*60}\n")
@@ -589,6 +595,93 @@ def main():
     update_latest_pointer(run_id)
     
     print("\n🎉 Export complete!")
+
+
+def generate_density_schema_json(dataset_version: str = "unknown") -> Dict[str, Any]:
+    """
+    Generate the canonical density schema definition for UI display.
+    
+    Issue #285: This provides the authoritative schema for the Density page
+    instead of using geometry metadata from segments.geojson.
+    
+    Args:
+        dataset_version: Version identifier for traceability
+        
+    Returns:
+        Dict containing the density schema definition
+    """
+    import hashlib
+    
+    # Generate a simple hash for rulebook identification
+    rulebook_hash = hashlib.sha256(dataset_version.encode()).hexdigest()[:16]
+    
+    return {
+        "schema_version": "1.0.0",
+        "rulebook_hash": f"sha256:{rulebook_hash}",
+        "dataset_version": dataset_version,
+        "units": {
+            "density": "persons_per_m2",
+            "rate": "persons_per_second", 
+            "los": "A-F",
+            "severity": "NONE|WATCH|ALERT|CRITICAL",
+            "time": "ISO8601"
+        },
+        "fields": [
+            {
+                "name": "segment_id",
+                "type": "string",
+                "required": True,
+                "description": "Canonical segment identifier (A1, B2, ...)."
+            },
+            {
+                "name": "t_start", 
+                "type": "timestamp",
+                "required": True,
+                "description": "Bin start time (ISO 8601)."
+            },
+            {
+                "name": "t_end",
+                "type": "timestamp", 
+                "required": True,
+                "description": "Bin end time (ISO 8601)."
+            },
+            {
+                "name": "density",
+                "type": "number",
+                "required": True,
+                "description": "Persons per square meter (p/m²)."
+            },
+            {
+                "name": "rate",
+                "type": "number",
+                "required": True,
+                "description": "Persons per second (p/s)."
+            },
+            {
+                "name": "los",
+                "type": "string",
+                "required": True,
+                "description": "Level of Service classification (A–F)."
+            },
+            {
+                "name": "severity",
+                "type": "string",
+                "required": False,
+                "description": "Flag severity for the bin (NONE/WATCH/ALERT/CRITICAL)."
+            },
+            {
+                "name": "flag_reason",
+                "type": "string",
+                "required": False,
+                "description": "Reason code when flagged (e.g., DENSITY_WATCH, RATE_ALERT)."
+            }
+        ],
+        "aliases": {
+            "seg_id": ["segmentId", "segId"],
+            "flow": ["pax_per_sec", "rate_per_sec"],
+            "pax_per_m2": ["dens"]
+        }
+    }
 
 
 if __name__ == "__main__":
