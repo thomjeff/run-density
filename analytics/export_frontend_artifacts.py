@@ -245,28 +245,79 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
 
 def generate_flags_json(reports_dir: Path, segment_metrics: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Generate flags.json from segment metrics based on LOS thresholds.
+    Generate flags.json from tooltips.json (canonical source per ChatGPT recommendation).
+    
+    This derives segment-level flags from bin-level operational intelligence,
+    treating tooltips.json as the source of truth for what requires attention.
     
     Args:
         reports_dir: Path to reports/<run_id>/ directory
-        segment_metrics: Dictionary of segment metrics
+        segment_metrics: Dictionary of segment metrics (for fallback)
     
     Returns:
-        Array of flag objects (per ChatGPT QA requirement)
+        Array of flag objects with worst severity per segment
     """
-    # Load reporting config for flag threshold
-    try:
-        reporting = load_reporting()
-        flag_los_threshold = reporting.get("reporting", {}).get("flag_los_threshold", "D")
-    except Exception:
-        flag_los_threshold = "D"
-    
-    # Flag segments with LOS >= threshold
     flagged_segments = []
     
-    # LOS order for comparison
+    # Try to load tooltips.json first (canonical source)
+    tooltips_path = reports_dir / "tooltips.json"
+    if tooltips_path.exists():
+        try:
+            tooltips_data = json.loads(tooltips_path.read_text())
+            tooltips = tooltips_data.get("tooltips", [])
+            
+            # Group by segment and find worst severity
+            segment_flags = {}
+            severity_rank = {"CRITICAL": 3, "CAUTION": 2, "WATCH": 1, "none": 0}
+            
+            for tip in tooltips:
+                seg_id = tip.get("segment_id")
+                severity = tip.get("severity", "none")
+                
+                if seg_id and severity != "none":
+                    if seg_id not in segment_flags:
+                        segment_flags[seg_id] = {
+                            "severity": severity,
+                            "severity_rank": severity_rank.get(severity, 0),
+                            "los": tip.get("los", "A"),
+                            "peak_density": tip.get("density_peak", 0.0),
+                            "bin_count": 1
+                        }
+                    else:
+                        # Update to worst severity
+                        if severity_rank.get(severity, 0) > segment_flags[seg_id]["severity_rank"]:
+                            segment_flags[seg_id]["severity"] = severity
+                            segment_flags[seg_id]["severity_rank"] = severity_rank.get(severity, 0)
+                            segment_flags[seg_id]["los"] = tip.get("los", "A")
+                            segment_flags[seg_id]["peak_density"] = max(
+                                segment_flags[seg_id]["peak_density"], 
+                                tip.get("density_peak", 0.0)
+                            )
+                        segment_flags[seg_id]["bin_count"] += 1
+            
+            # Convert to flags array
+            for seg_id, flag_data in segment_flags.items():
+                flagged_segments.append({
+                    "seg_id": seg_id,
+                    "type": "density",
+                    "severity": flag_data["severity"],
+                    "worst_los": flag_data["los"],
+                    "peak_density": flag_data["peak_density"],
+                    "flagged_bin_count": flag_data["bin_count"],
+                    "note": f"{flag_data['severity']}: {flag_data['bin_count']} bins flagged"
+                })
+            
+            print(f"   📊 Derived flags from tooltips.json: {len(segment_flags)} segments")
+            return flagged_segments
+            
+        except Exception as e:
+            print(f"   ⚠️ Could not parse tooltips.json: {e}, falling back to LOS threshold")
+    
+    # Fallback: Use LOS threshold approach (legacy)
+    print(f"   ⚠️ Tooltips.json not found, using legacy LOS threshold approach")
+    flag_los_threshold = "D"
     los_order = ["A", "B", "C", "D", "E", "F"]
-    threshold_idx = los_order.index(flag_los_threshold) if flag_los_threshold in los_order else 3
+    threshold_idx = los_order.index(flag_los_threshold)
     
     for seg_id, metrics in segment_metrics.items():
         worst_los = metrics.get("worst_los", "A")
@@ -276,37 +327,12 @@ def generate_flags_json(reports_dir: Path, segment_metrics: Dict[str, Dict[str, 
             flagged_segments.append({
                 "seg_id": seg_id,
                 "type": "density",
-                "bin": f"{metrics['active_window']}",
                 "severity": worst_los,
+                "worst_los": worst_los,
                 "peak_density": metrics["peak_density"],
                 "note": f"Peak {metrics['peak_density']:.3f} p/m²"
             })
     
-    # Count flagged bins (approximate from parquet if available)
-    bins_flagged = 0
-    parquet_path = reports_dir / "bins.parquet"
-    if parquet_path.exists():
-        try:
-            df_bins = pd.read_parquet(parquet_path)
-            if 'density' in df_bins.columns:
-                # Count bins above threshold
-                rulebook = load_rulebook()
-                los_thresholds = rulebook.get("globals", {}).get("los_thresholds", {})
-                
-                # Get threshold value from nested dict
-                threshold_info = los_thresholds.get(flag_los_threshold, {"min": 0.6})
-                if isinstance(threshold_info, dict):
-                    threshold_density = threshold_info.get("min", 0.6)
-                else:
-                    threshold_density = threshold_info
-                
-                bins_flagged = len(df_bins[df_bins['density'] >= threshold_density])
-        except Exception as e:
-            print(f"Warning: Could not count flagged bins: {e}")
-    
-    # Return array of flag objects (per ChatGPT QA requirement)
-    # Note: total_bins_flagged is added as metadata to each flag if needed,
-    # or can be computed by aggregating all flags
     return flagged_segments
 
 
