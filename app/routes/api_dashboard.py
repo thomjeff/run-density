@@ -16,6 +16,7 @@ import logging
 from datetime import datetime
 
 from app.storage import create_storage_from_env, load_meta, load_segment_metrics, load_flags, DATASET
+from app.storage_service import StorageService
 from app.common.config import load_rulebook, load_reporting
 
 # Issue #283: Import SSOT for flagging logic parity
@@ -29,6 +30,7 @@ router = APIRouter()
 
 # Initialize storage
 storage = create_storage_from_env()
+storage_service = StorageService()
 
 
 def load_runners_data() -> Dict[str, Any]:
@@ -222,22 +224,20 @@ async def get_dashboard_summary():
         # Track missing files for warnings
         warnings = []
         
-        # Load meta data
-        if not storage.exists(DATASET["meta"]):
+        # Load meta data from UI artifacts
+        meta = storage_service.load_ui_artifact("meta.json")
+        if meta is None:
             warnings.append("missing: meta.json")
             meta = {}
-        else:
-            meta = load_meta(storage)
         
         timestamp = meta.get("run_timestamp", datetime.now().isoformat() + "Z")
         environment = meta.get("environment", "local")
         
-        # Load segment metrics
-        if not storage.exists(DATASET["metrics"]):
+        # Load segment metrics from UI artifacts
+        segment_metrics = storage_service.load_ui_artifact("segment_metrics.json")
+        if segment_metrics is None:
             warnings.append("missing: segment_metrics.json")
             segment_metrics = {}
-        else:
-            segment_metrics = load_segment_metrics(storage)
         
         segments_total = len(segment_metrics)
         
@@ -253,12 +253,11 @@ async def get_dashboard_summary():
         # Calculate peak density LOS
         peak_density_los = calculate_peak_density_los(peak_density)
         
-        # Load flags data
-        if not storage.exists(DATASET["flags"]):
+        # Load flags data from UI artifacts
+        flags = storage_service.load_ui_artifact("flags.json")
+        if flags is None:
             warnings.append("missing: flags.json")
             flags = []
-        else:
-            flags = load_flags(storage)
         
         # Handle both old dict format and new array format
         if isinstance(flags, dict):
@@ -282,13 +281,23 @@ async def get_dashboard_summary():
         total_runners = runners_data["total_runners"]
         cohorts = runners_data["cohorts"]
         
-        # Load flow data
-        if not storage.exists(DATASET["flow"]):
+        # Load flow data from UI artifacts
+        flow_data = storage_service.load_ui_artifact("flow.json")
+        if flow_data is None:
             warnings.append("missing: flow.json")
-        
-        flow_data = load_flow_data()
-        segments_overtaking = flow_data["segments_overtaking"]
-        segments_copresence = flow_data["segments_copresence"]
+            segments_overtaking = 0
+            segments_copresence = 0
+        else:
+            # Calculate overtaking and co-presence from flow data
+            segments_overtaking = 0
+            segments_copresence = 0
+            
+            if isinstance(flow_data, list):
+                for item in flow_data:
+                    if item.get("overtaking_a", 0) > 0 or item.get("overtaking_b", 0) > 0:
+                        segments_overtaking += 1
+                    if item.get("copresence_a", 0) > 0 or item.get("copresence_b", 0) > 0:
+                        segments_copresence += 1
         
         # Determine status
         status = "normal"
