@@ -1,5 +1,6 @@
 {
   "A1": {
+    "schema": "start_corral",
     "worst_los": "D",
     "peak_density": 0.755,
     "peak_rate": 11.307,
@@ -8,6 +9,7 @@
     "peak_rate_km": "0.0-0.2"
   },
   "A2": {
+    "schema": "on_course_open",
     "worst_los": "B",
     "peak_density": 0.469,
     "peak_rate": 6.613,
@@ -16,6 +18,7 @@
     "peak_rate_km": "0.0-0.2"
   },
   "A3": {
+    "schema": "on_course_open",
     "worst_los": "A",
     "peak_density": 0.291,
     "peak_rate": 4.454,
@@ -24,6 +27,7 @@
     "peak_rate_km": "0.0-0.2"
   },
   "B1": {
+    "schema": "on_course_narrow",
     "worst_los": "D",
     "peak_density": 0.72,
     "peak_rate": 3.047,
@@ -32,6 +36,7 @@
     "peak_rate_km": "0.0-0.2"
   },
   "B2": {
+    "schema": "on_course_narrow",
     "worst_los": "B",
     "peak_density": 0.4833,
     "peak_rate": 2.065,
@@ -40,6 +45,7 @@
     "peak_rate_km": "0.2-0.4"
   },
   "B3": {
+    "schema": "on_course_narrow",
     "worst_los": "B",
     "peak_density": 0.4833,
     "peak_rate": 2.065,
@@ -48,6 +54,7 @@
     "peak_rate_km": "0.2-0.4"
   },
   "D1": {
+    "schema": "on_course_narrow",
     "worst_los": "A",
     "peak_density": 0.2333,
     "peak_rate": 1.192,
@@ -56,6 +63,7 @@
     "peak_rate_km": "0.4-0.6"
   },
   "D2": {
+    "schema": "on_course_narrow",
     "worst_los": "A",
     "peak_density": 0.1433,
     "peak_rate": 0.699,
@@ -64,6 +72,7 @@
     "peak_rate_km": "0.2-0.4"
   },
   "F1": {
+    "schema": "on_course_open",
     "worst_los": "C",
     "peak_density": 0.56,
     "peak_rate": 4.985,
@@ -72,6 +81,7 @@
     "peak_rate_km": "0.2-0.4"
   },
   "G1": {
+    "schema": "on_course_open",
     "worst_los": "A",
     "peak_density": 0.0417,
     "peak_rate": 0.371,
@@ -80,6 +90,7 @@
     "peak_rate_km": "0.8-1.0"
   },
   "H1": {
+    "schema": "on_course_narrow",
     "worst_los": "A",
     "peak_density": 0.3267,
     "peak_rate": 1.381,
@@ -88,6 +99,7 @@
     "peak_rate_km": "0.0-0.2"
   },
   "I1": {
+    "schema": "on_course_open",
     "worst_los": "A",
     "peak_density": 0.2667,
     "peak_rate": 2.352,
@@ -96,6 +108,7 @@
     "peak_rate_km": "0.2-0.4"
   },
   "J1": {
+    "schema": "on_course_narrow",
     "worst_los": "A",
     "peak_density": 0.2667,
     "peak_rate": 1.209,
@@ -104,6 +117,7 @@
     "peak_rate_km": "0.8-1.0"
   },
   "J2": {
+    "schema": "on_course_narrow",
     "worst_los": "A",
     "peak_density": 0.05,
     "peak_rate": 0.251,
@@ -112,6 +126,7 @@
     "peak_rate_km": "0.2-0.4"
   },
   "J3": {
+    "schema": "on_course_narrow",
     "worst_los": "A",
     "peak_density": 0.04,
     "peak_rate": 0.21,
@@ -120,6 +135,7 @@
     "peak_rate_km": "0.2-0.4"
   },
   "J4": {
+    "schema": "on_course_narrow",
     "worst_los": "A",
     "peak_density": 0.2233,
     "peak_rate": 0.992,
@@ -128,6 +144,7 @@
     "peak_rate_km": "0.2-0.4"
   },
   "J5": {
+    "schema": "on_course_narrow",
     "worst_los": "A",
     "peak_density": 0.2667,
     "peak_rate": 1.209,
@@ -136,6 +153,7 @@
     "peak_rate_km": "0.8-1.0"
   },
   "K1": {
+    "schema": "on_course_open",
     "worst_los": "A",
     "peak_density": 0.1017,
     "peak_rate": 0.914,
@@ -144,6 +162,7 @@
     "peak_rate_km": "0.4-0.6"
   },
   "L1": {
+    "schema": "on_course_narrow",
     "worst_los": "A",
     "peak_density": 0.3267,
     "peak_rate": 1.381,
@@ -152,6 +171,7 @@
     "peak_rate_km": "0.0-0.2"
   },
   "L2": {
+    "schema": "on_course_narrow",
     "worst_los": "A",
     "peak_density": 0.0,
     "peak_rate": 0.0,
@@ -160,6 +180,7 @@
     "peak_rate_km": "0.0-0.2"
   },
   "M1": {
+    "schema": "on_course_open",
     "worst_los": "A",
     "peak_density": 0.1417,
     "peak_rate": 1.195,
@@ -168,6 +189,7 @@
     "peak_rate_km": "0.0-0.2"
   },
   "M2": {
+    "schema": "on_course_open",
     "worst_los": "A",
     "peak_density": 0.0,
     "peak_rate": 0.0,

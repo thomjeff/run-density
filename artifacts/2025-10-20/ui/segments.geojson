@@ -1618,7 +1618,8 @@
           "Full",
           "Half",
           "10K"
-        ]
+        ],
+        "schema": "start_corral"
       }
     },
     {
@@ -3238,7 +3239,8 @@
           "Full",
           "Half",
           "10K"
-        ]
+        ],
+        "schema": "on_course_open"
       }
     },
     {
@@ -4858,7 +4860,8 @@
           "Full",
           "Half",
           "10K"
-        ]
+        ],
+        "schema": "on_course_open"
       }
     },
     {
@@ -7437,7 +7440,8 @@
         "events": [
           "Full",
           "10K"
-        ]
+        ],
+        "schema": "on_course_narrow"
       }
     },
     {
@@ -10016,7 +10020,8 @@
         "events": [
           "Full",
           "10K"
-        ]
+        ],
+        "schema": "on_course_narrow"
       }
     },
     {
@@ -12595,7 +12600,8 @@
         "events": [
           "Full",
           "10K"
-        ]
+        ],
+        "schema": "on_course_narrow"
       }
     },
     {
@@ -21253,7 +21259,8 @@
         "direction": "bi",
         "events": [
           "Full"
-        ]
+        ],
+        "schema": "on_course_narrow"
       }
     },
     {
@@ -29911,7 +29918,8 @@
         "direction": "bi",
         "events": [
           "Full"
-        ]
+        ],
+        "schema": "on_course_narrow"
       }
     },
     {
@@ -33771,7 +33779,8 @@
           "Full",
           "Half",
           "10K"
-        ]
+        ],
+        "schema": "on_course_open"
       }
     },
     {
@@ -35709,7 +35718,8 @@
         "direction": "uni",
         "events": [
           "Full"
-        ]
+        ],
+        "schema": "on_course_open"
       }
     },
     {
@@ -38609,7 +38619,8 @@
           "Full",
           "Half",
           "10K"
-        ]
+        ],
+        "schema": "on_course_narrow"
       }
     },
     {
@@ -47908,7 +47919,8 @@
         "events": [
           "Full",
           "Half"
-        ]
+        ],
+        "schema": "on_course_open"
       }
     },
     {
@@ -52407,7 +52419,8 @@
         "events": [
           "Full",
           "Half"
-        ]
+        ],
+        "schema": "on_course_narrow"
       }
     },
     {
@@ -54985,7 +54998,8 @@
         "direction": "uni",
         "events": [
           "Full"
-        ]
+        ],
+        "schema": "on_course_narrow"
       }
     },
     {
@@ -57243,7 +57257,8 @@
         "direction": "uni",
         "events": [
           "Full"
-        ]
+        ],
+        "schema": "on_course_narrow"
       }
     },
     {
@@ -61422,7 +61437,8 @@
         "events": [
           "Full",
           "Half"
-        ]
+        ],
+        "schema": "on_course_narrow"
       }
     },
     {
@@ -65921,7 +65937,8 @@
         "events": [
           "Full",
           "Half"
-        ]
+        ],
+        "schema": "on_course_narrow"
       }
     },
     {
@@ -71700,7 +71717,8 @@
         "events": [
           "Full",
           "Half"
-        ]
+        ],
+        "schema": "on_course_open"
       }
     },
     {
@@ -74600,7 +74618,8 @@
           "Full",
           "Half",
           "10K"
-        ]
+        ],
+        "schema": "on_course_narrow"
       }
     },
     {
@@ -76858,7 +76877,8 @@
         "direction": "uni",
         "events": [
           "Full"
-        ]
+        ],
+        "schema": "on_course_narrow"
       }
     },
     {
@@ -77518,7 +77538,8 @@
           "Full",
           "Half",
           "10K"
-        ]
+        ],
+        "schema": "on_course_open"
       }
     },
     {
@@ -78176,7 +78197,8 @@
         "direction": "uni",
         "events": [
           "Full"
-        ]
+        ],
+        "schema": "on_course_open"
       }
     }
   ]

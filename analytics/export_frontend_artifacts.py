@@ -181,7 +181,7 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
     Returns:
         Dictionary mapping seg_id to metrics
     """
-    parquet_path = reports_dir / "segment_windows_from_bins.parquet"
+    parquet_path = reports_dir / "bins.parquet"
     
     if not parquet_path.exists():
         print(f"Warning: {parquet_path} not found, returning empty metrics")
@@ -236,7 +236,11 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
         # Classify LOS
         worst_los = classify_los(peak_density, los_thresholds)
         
+        # Get schema_key from the first bin in the group (all bins in a segment should have the same schema_key)
+        schema_key = group['schema_key'].iloc[0] if 'schema_key' in group.columns else 'on_course_open'
+        
         metrics[seg_id] = {
+            "schema": schema_key,  # Issue #285: Add operational schema tag
             "worst_los": worst_los,
             "peak_density": round(peak_density, 4),
             "peak_rate": round(peak_rate, 2),
@@ -311,9 +315,12 @@ def generate_flags_json(reports_dir: Path, segment_metrics: Dict[str, Dict[str, 
         return []
 
 
-def generate_flow_json(reports_dir: Path) -> Dict[str, Dict[str, Any]]:
+def generate_flow_metrics_legacy(reports_dir: Path) -> Dict[str, Dict[str, Any]]:
     """
-    Generate flow.json from Flow.csv.
+    Generate flow metrics (overtaking/copresence) from Flow.csv.
+    
+    LEGACY: This generates event-overlap metrics, not time-series rate data.
+    Kept for backwards compatibility but should be phased out.
     
     Per ChatGPT QA requirement: flow.json values are SUMS per segment from Flow CSV.
     The CSV has multiple rows per segment (one per event pair), so we sum them.
@@ -364,6 +371,79 @@ def generate_flow_json(reports_dir: Path) -> Dict[str, Dict[str, Any]]:
     return flow_metrics
 
 
+def generate_flow_json(reports_dir: Path) -> Dict[str, Any]:
+    """
+    Generate authoritative flow.json with time-series rate data from bins.parquet.
+    
+    Issue #287: Emit complete per-segment time series of rate (p/s) for entire active window.
+    Source of truth: bins.parquet (same bins that drive the density report).
+    
+    Args:
+        reports_dir: Path to reports/<run_id>/ directory
+    
+    Returns:
+        Dictionary with schema_version, units, rows (bin-level time series), and summaries (segment aggregates)
+    """
+    bins_path = reports_dir / "bins.parquet"
+    
+    if not bins_path.exists():
+        print(f"   ⚠️  bins.parquet not found at {bins_path}")
+        return {
+            "schema_version": "1.0.0",
+            "units": {"rate": "persons_per_second", "time": "ISO8601"},
+            "rows": [],
+            "summaries": []
+        }
+    
+    # Load bins data
+    bins_df = pd.read_parquet(bins_path)
+    
+    # Filter to bins with valid rate data
+    bins_with_rate = bins_df[bins_df['rate'].notna()].copy()
+    
+    if len(bins_with_rate) == 0:
+        print(f"   ⚠️  No bins with rate data found in {bins_path}")
+        return {
+            "schema_version": "1.0.0",
+            "units": {"rate": "persons_per_second", "time": "ISO8601"},
+            "rows": [],
+            "summaries": []
+        }
+    
+    # Generate rows: one per bin with segment_id, t_start, t_end, rate
+    rows = []
+    for _, row in bins_with_rate.iterrows():
+        rows.append({
+            "segment_id": str(row['segment_id']),
+            "t_start": str(row['t_start']),
+            "t_end": str(row['t_end']),
+            "rate": float(row['rate'])
+        })
+    
+    # Generate summaries: aggregate stats per segment
+    summaries = []
+    for seg_id, group in bins_with_rate.groupby('segment_id'):
+        summaries.append({
+            "segment_id": str(seg_id),
+            "bins": int(len(group)),
+            "peak_rate": float(group['rate'].max()),
+            "avg_rate": float(group['rate'].mean()),
+            "active_start": str(group['t_start'].min()),
+            "active_end": str(group['t_end'].max())
+        })
+    
+    payload = {
+        "schema_version": "1.0.0",
+        "units": {"rate": "persons_per_second", "time": "ISO8601"},
+        "rows": rows,
+        "summaries": summaries
+    }
+    
+    print(f"   ✅ Generated {len(rows)} bin-level rate records across {len(summaries)} segments")
+    
+    return payload
+
+
 def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
     """
     Generate segments.geojson from bins.geojson.gz by aggregating bins into segment polylines.
@@ -393,6 +473,24 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
         df_dims = pd.read_csv(dimensions_path)
         segment_dims = df_dims.set_index('seg_id').to_dict('index')
     
+    # Load schema_key from bins.parquet (Issue #285)
+    schema_keys = {}
+    bins_parquet_path = reports_dir / "bins.parquet"
+    if bins_parquet_path.exists():
+        try:
+            bins_df = pd.read_parquet(bins_parquet_path)
+            if 'schema_key' in bins_df.columns:
+                # Get schema_key for each segment from the first bin
+                for seg_id, group in bins_df.groupby('segment_id'):
+                    schema_keys[seg_id] = group['schema_key'].iloc[0]
+                print(f"   ✅ Loaded schema keys for {len(schema_keys)} segments from bins.parquet")
+            else:
+                print(f"   ⚠️  schema_key column not found in bins.parquet")
+        except Exception as e:
+            print(f"   ⚠️  Could not load schema keys from bins.parquet: {e}")
+    else:
+        print(f"   ⚠️  bins.parquet not found at {bins_parquet_path}")
+    
     # Group bins by seg_id and create simplified polylines
     segments_features = {}
     
@@ -420,7 +518,8 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
                     "length_km": float(dims.get("full_length", dims.get("half_length", dims.get("10K_length", 0.0)))),
                     "width_m": float(dims.get("width_m", 0.0)),
                     "direction": dims.get("direction", "uni"),
-                    "events": [event for event in ["Full", "Half", "10K"] if dims.get(event.lower() if event != "10K" else "10K", "") == "y"]
+                    "events": [event for event in ["Full", "Half", "10K"] if dims.get(event.lower() if event != "10K" else "10K", "") == "y"],
+                    "schema": schema_keys.get(seg_id, "on_course_open")  # Issue #285: Add operational schema tag from bins.parquet
                 }
             }
         
@@ -517,7 +616,9 @@ def export_ui_artifacts(reports_dir: Path, run_id: str, environment: str = "loca
     print("\n4️⃣  Generating flow.json...")
     flow = generate_flow_json(reports_dir)
     (artifacts_dir / "flow.json").write_text(json.dumps(flow, indent=2))
-    print(f"   ✅ flow.json: {len(flow)} segments with flow metrics")
+    num_segments = len(flow.get('summaries', []))
+    num_rows = len(flow.get('rows', []))
+    print(f"   ✅ flow.json: {num_segments} segments, {num_rows} bin-level records")
     
     # 5. Generate segments.geojson
     print("\n5️⃣  Generating segments.geojson...")
@@ -530,6 +631,12 @@ def export_ui_artifacts(reports_dir: Path, run_id: str, environment: str = "loca
     schema_density = generate_density_schema_json(meta.get('dataset_version', 'unknown'))
     (artifacts_dir / "schema_density.json").write_text(json.dumps(schema_density, indent=2))
     print(f"   ✅ schema_density.json: schema_version={schema_density.get('schema_version')}")
+    
+    # 7. Generate health.json (Issue #288)
+    print("\n7️⃣  Generating health.json...")
+    health = generate_health_json(artifacts_dir, run_id, environment)
+    (artifacts_dir / "health.json").write_text(json.dumps(health, indent=2))
+    print(f"   ✅ health.json: platform={health['environment']['platform']}, version={health['environment']['version']}")
     
     print(f"\n{'='*60}")
     print(f"✅ All artifacts exported to: {artifacts_dir}")
@@ -681,6 +788,107 @@ def generate_density_schema_json(dataset_version: str = "unknown") -> Dict[str, 
             "flow": ["pax_per_sec", "rate_per_sec"],
             "pax_per_m2": ["dens"]
         }
+    }
+
+
+def generate_health_json(artifacts_dir: Path, run_id: str, environment: str = "local") -> Dict[str, Any]:
+    """
+    Generate system health data for the Health Check page.
+    
+    Issue #288: This provides system/runtime health information instead of
+    operational metrics. The Health page should render from this data exclusively.
+    
+    Args:
+        artifacts_dir: Path to artifacts/<run_id>/ui/ directory
+        run_id: Run identifier (e.g., "2025-10-19-1655")
+        environment: Environment name ("local", "cloud", etc.)
+        
+    Returns:
+        Dict containing system health information
+    """
+    import hashlib
+    import os
+    
+    # Get current timestamp
+    now = datetime.now(timezone.utc)
+    
+    # Determine platform
+    platform = "Cloud Run" if environment == "cloud" else "Local"
+    
+    # Get version from app version or fallback
+    try:
+        from app.version import __version__
+        version = __version__
+    except ImportError:
+        version = "unknown"
+    
+    # Generate data root path
+    data_root = f"/app/data/race-{run_id}" if environment == "cloud" else f"./data"
+    
+    # Check file presence and modification times
+    files = []
+    file_names = ["segments.geojson", "segment_metrics.json", "flags.json", "meta.json", "flow.json", "schema_density.json"]
+    
+    for file_name in file_names:
+        file_path = artifacts_dir / file_name
+        present = file_path.exists()
+        modified = None
+        
+        if present:
+            try:
+                # Get modification time
+                mtime = file_path.stat().st_mtime
+                modified = datetime.fromtimestamp(mtime, timezone.utc).isoformat()
+            except OSError:
+                modified = None
+        
+        files.append({
+            "name": file_name,
+            "present": present,
+            "modified": modified
+        })
+    
+    # Generate config hashes
+    hashes = {}
+    
+    # Rulebook hash
+    try:
+        rulebook_path = Path("config/density_rulebook.yml")
+        if rulebook_path.exists():
+            rulebook_content = rulebook_path.read_text(encoding="utf-8")
+            hashes["rulebook"] = hashlib.sha256(rulebook_content.encode()).hexdigest()[:16]
+    except Exception:
+        hashes["rulebook"] = "unknown"
+    
+    # Reporting hash  
+    try:
+        reporting_path = Path("config/reporting.yml")
+        if reporting_path.exists():
+            reporting_content = reporting_path.read_text(encoding="utf-8")
+            hashes["reporting"] = hashlib.sha256(reporting_content.encode()).hexdigest()[:16]
+    except Exception:
+        hashes["reporting"] = "unknown"
+    
+    # Endpoint status (optional - can be null in service context)
+    endpoints = [
+        {"path": "/api/segments", "status": "up", "latency_ms": None},
+        {"path": "/api/density", "status": "up", "latency_ms": None},
+        {"path": "/api/flow", "status": "up", "latency_ms": None},
+        {"path": "/api/reports", "status": "up", "latency_ms": None},
+        {"path": "/api/health", "status": "up", "latency_ms": None}
+    ]
+    
+    return {
+        "schema_version": "1.0.0",
+        "environment": {
+            "platform": platform,
+            "version": version,
+            "data_root": data_root,
+            "last_updated": now.isoformat()
+        },
+        "files": files,
+        "hashes": hashes,
+        "endpoints": endpoints
     }
 
 

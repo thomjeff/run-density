@@ -190,6 +190,45 @@ def main(argv: List[str]) -> int:
         if not validate_schema_density_json(schema_path):
             return 1
         
+        # Validate segment_metrics.json has schema field
+        print("\n🔍 Validating segment_metrics.json schema field...")
+        segment_metrics_path = latest_dir / "ui" / "segment_metrics.json"
+        if segment_metrics_path.exists():
+            with open(segment_metrics_path, 'r', encoding='utf-8') as f:
+                segment_metrics = json.load(f)
+            
+            # Handle both dict and list formats
+            if isinstance(segment_metrics, dict):
+                rows = list(segment_metrics.values())
+            else:
+                rows = segment_metrics
+            
+            if not isinstance(rows, list) or not rows:
+                err("segment_metrics.json must be a non-empty array")
+                return 1
+            
+            # Check for schema field in each segment
+            missing_schema = []
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                if not row.get("schema"):
+                    missing_schema.append(row.get("segment_id", "unknown"))
+            
+            if missing_schema:
+                err(f"schema missing for segments: {missing_schema[:10]}")
+                return 1
+            
+            info(f"✅ segment_metrics.json schema field validation passed")
+            info(f"   Segments with schema: {len(rows)}")
+        else:
+            err("segment_metrics.json not found")
+            return 1
+            
+    except Exception as e:
+        err(f"Failed to validate segment_metrics.json: {e}")
+        return 1
+
         info("🎉 All schema contract validations passed!")
         return 0
         

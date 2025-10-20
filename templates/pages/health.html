@@ -5,29 +5,50 @@
 {% block content %}
 <div class="page-header">
     <h2>System Health</h2>
-    {% if meta %}
-    <div class="provenance">
-        {% include "partials/_provenance.html" %}
-    </div>
-    {% endif %}
 </div>
+
+<!-- Loading State -->
+<div id="loading-state" class="card">
+    <div style="text-align: center; padding: 2rem;">
+        <div class="spinner"></div>
+        <p>Loading system health data...</p>
+    </div>
+</div>
+
+<!-- Error State -->
+<div id="error-state" class="card" style="display: none;">
+    <div style="text-align: center; padding: 2rem;">
+        <h3 style="color: #e74c3c; margin-bottom: 1rem;">Health data unavailable</h3>
+        <p style="color: #7f8c8d; margin-bottom: 1rem;">Unable to load system health information for this run.</p>
+        <button onclick="loadHealthData()" class="btn btn-primary">Retry</button>
+    </div>
+</div>
+
+<!-- Health Data Content -->
+<div id="health-content" style="display: none;">
 
 <!-- Environment Status -->
 <div class="card">
     <h3 style="margin-bottom: 1rem;">Environment</h3>
-    <div style="display: flex; align-items: center; gap: 1rem;">
+    <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
         <span id="env-pill" style="padding: 0.5rem 1rem; background: #2ecc71; color: white; border-radius: 20px; font-weight: 600;">
-            {{ meta.environment|upper if meta else "UNKNOWN" }}
+            Loading...
         </span>
         <span style="color: #7f8c8d; font-size: 0.875rem;">
-            Last updated: {{ meta.run_timestamp if meta else "N/A" }}
+            <strong>Version:</strong> <span id="version">Loading...</span>
+        </span>
+        <span style="color: #7f8c8d; font-size: 0.875rem;">
+            <strong>Data Root:</strong> <span id="data-root">Loading...</span>
+        </span>
+        <span style="color: #7f8c8d; font-size: 0.875rem;">
+            <strong>Last Updated:</strong> <span id="last-updated">Loading...</span>
         </span>
     </div>
 </div>
 
 <!-- File Presence Checks -->
 <div class="card">
-    <h3 style="margin-bottom: 1rem;">Data Files</h3>
+    <h3 style="margin-bottom: 1rem;">File Presence</h3>
     <table id="file-status-table">
         <thead>
             <tr>
@@ -38,7 +59,7 @@
         </thead>
         <tbody id="file-status-tbody">
             <tr>
-                <td colspan="3" class="placeholder">Loading data status...</td>
+                <td colspan="3" class="placeholder">Loading file status...</td>
             </tr>
         </tbody>
     </table>
@@ -46,16 +67,16 @@
 
 <!-- Configuration Hashes -->
 <div class="card">
-    <h3 style="margin-bottom: 1rem;">Configuration</h3>
+    <h3 style="margin-bottom: 1rem;">Integrity Hashes</h3>
     <table>
         <tbody>
             <tr>
                 <td><strong>Rulebook Hash</strong></td>
-                <td id="rulebook-hash">{{ meta.rulebook_hash[:16] if meta and meta.rulebook_hash else "N/A" }}...</td>
+                <td id="rulebook-hash" style="font-family: monospace;">Loading...</td>
             </tr>
             <tr>
                 <td><strong>Reporting Hash</strong></td>
-                <td id="reporting-hash">{{ meta.reporting_hash[:16] if meta and meta.reporting_hash else "N/A" }}...</td>
+                <td id="reporting-hash" style="font-family: monospace;">Loading...</td>
             </tr>
         </tbody>
     </table>
@@ -69,84 +90,119 @@
             <tr>
                 <th>Endpoint</th>
                 <th>Status</th>
+                <th>Latency</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="endpoint-status-tbody">
             <tr>
-                <td>GET /health</td>
-                <td id="status-health" class="placeholder">Checking...</td>
-            </tr>
-            <tr>
-                <td>GET /api/segments</td>
-                <td id="status-api-segments" class="placeholder">Checking...</td>
-            </tr>
-            <tr>
-                <td>GET /api/summary</td>
-                <td id="status-api-summary" class="placeholder">Checking...</td>
+                <td colspan="3" class="placeholder">Loading endpoint status...</td>
             </tr>
         </tbody>
     </table>
+</div>
+
 </div>
 
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
-    // Load data health status
+    // Load system health data
     document.addEventListener('DOMContentLoaded', function() {
-        loadDataHealth();
+        loadHealthData();
     });
     
-    function loadDataHealth() {
+    function loadHealthData() {
+        // Show loading state
+        document.getElementById('loading-state').style.display = 'block';
+        document.getElementById('error-state').style.display = 'none';
+        document.getElementById('health-content').style.display = 'none';
+        
         fetch('/api/health/data')
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
             .then(data => {
-                updateFileStatusTable(data);
+                updateHealthDisplay(data);
+                document.getElementById('loading-state').style.display = 'none';
+                document.getElementById('health-content').style.display = 'block';
             })
             .catch(error => {
-                console.error('Error loading data health:', error);
+                console.error('Error loading health data:', error);
                 showHealthError();
             });
     }
     
-    function updateFileStatusTable(data) {
+    function updateHealthDisplay(data) {
+        // Update environment section
+        const env = data.environment;
+        document.getElementById('env-pill').textContent = env.platform;
+        document.getElementById('version').textContent = env.version;
+        document.getElementById('data-root').textContent = env.data_root;
+        document.getElementById('last-updated').textContent = formatTimestamp(env.last_updated);
+        
+        // Update file status table
+        updateFileStatusTable(data.files);
+        
+        // Update integrity hashes
+        document.getElementById('rulebook-hash').textContent = data.hashes.rulebook || 'N/A';
+        document.getElementById('reporting-hash').textContent = data.hashes.reporting || 'N/A';
+        
+        // Update endpoint status table
+        updateEndpointStatusTable(data.endpoints);
+    }
+    
+    function updateFileStatusTable(files) {
         const tbody = document.getElementById('file-status-tbody');
         tbody.innerHTML = '';
         
-        // Filter out storage metadata
-        const fileData = Object.entries(data).filter(([key, value]) => key !== '_storage');
-        
-        fileData.forEach(([filename, info]) => {
+        files.forEach(file => {
             const row = document.createElement('tr');
             
-            const statusClass = info.exists ? 'status-ok' : 'status-error';
-            const statusText = info.exists ? '✅ Found' : '❌ Missing';
-            const mtimeText = info.mtime && info.mtime !== 'error' ? formatTimestamp(info.mtime) : '—';
+            const statusClass = file.present ? 'status-ok' : 'status-error';
+            const statusText = file.present ? '✅ Present' : '❌ Missing';
+            const mtimeText = file.modified ? formatTimestamp(file.modified) : '—';
             
             row.innerHTML = `
-                <td>${filename}</td>
+                <td>${file.name}</td>
                 <td class="${statusClass}">${statusText}</td>
                 <td>${mtimeText}</td>
             `;
             
             tbody.appendChild(row);
         });
+    }
+    
+    function updateEndpointStatusTable(endpoints) {
+        const tbody = document.getElementById('endpoint-status-tbody');
+        tbody.innerHTML = '';
         
-        // Add storage info if available
-        if (data._storage) {
-            const storageRow = document.createElement('tr');
-            storageRow.innerHTML = `
-                <td><strong>Storage Mode</strong></td>
-                <td class="status-ok">${data._storage.mode}</td>
-                <td>${data._storage.root || data._storage.bucket || '—'}</td>
+        endpoints.forEach(endpoint => {
+            const row = document.createElement('tr');
+            
+            const statusClass = endpoint.status === 'up' ? 'status-ok' : 
+                              endpoint.status === 'down' ? 'status-error' : 'status-unknown';
+            const statusText = endpoint.status === 'up' ? '🟢 Up' : 
+                             endpoint.status === 'down' ? '🔴 Down' : '🟡 Unknown';
+            const latencyText = endpoint.latency_ms ? `${endpoint.latency_ms}ms` : '—';
+            
+            row.innerHTML = `
+                <td>${endpoint.path}</td>
+                <td class="${statusClass}">${statusText}</td>
+                <td>${latencyText}</td>
             `;
-            tbody.appendChild(storageRow);
-        }
+            
+            tbody.appendChild(row);
+        });
     }
     
     function showHealthError() {
-        const tbody = document.getElementById('file-status-tbody');
-        tbody.innerHTML = '<tr><td colspan="3" class="placeholder">Error loading data status</td></tr>';
+        document.getElementById('loading-state').style.display = 'none';
+        document.getElementById('error-state').style.display = 'block';
+        document.getElementById('health-content').style.display = 'none';
     }
     
     function formatTimestamp(timestamp) {
@@ -179,6 +235,45 @@
     .status-error {
         color: #e74c3c;
         font-weight: 600;
+    }
+    
+    .status-unknown {
+        color: #f39c12;
+        font-weight: 600;
+    }
+    
+    .spinner {
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #3498db;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1rem;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    .btn {
+        padding: 0.5rem 1rem;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: 600;
+        text-decoration: none;
+        display: inline-block;
+    }
+    
+    .btn-primary {
+        background-color: #3498db;
+        color: white;
+    }
+    
+    .btn-primary:hover {
+        background-color: #2980b9;
     }
 </style>
 {% endblock %}

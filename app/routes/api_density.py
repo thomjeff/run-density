@@ -197,9 +197,8 @@ async def get_density_segments():
         for seg_id, metrics in segment_metrics.items():
             label_info = label_lookup.get(seg_id, {})
             
-            # Issue #285: Use density schema instead of geometry metadata
-            # Try to load schema_density.json, fallback to geometry if not available
-            schema = _get_density_schema_display()
+            # Issue #285: Use operational schema tag instead of geometry metadata
+            schema = _get_segment_operational_schema(seg_id, segment_metrics)
             
             # Events list
             events = label_info.get("events", [])
@@ -210,15 +209,6 @@ async def get_density_segments():
             utilization = bin_metrics.get("utilization", 0.0)
             worst_bin = bin_metrics.get("worst_bin")
             bin_detail = bin_metrics.get("bin_detail", {})
-            
-            # Format worst_bin for display
-            worst_bin_display = "N/A"
-            if worst_bin:
-                time_str = worst_bin.get('time', '')
-                if time_str:
-                    worst_bin_display = f"Bin {worst_bin.get('bin_id', 'N/A')} {time_str} ({worst_bin.get('density', 0.0):.3f})"
-                else:
-                    worst_bin_display = f"Bin {worst_bin.get('bin_id', 'N/A')} ({worst_bin.get('density', 0.0):.3f})"
             
             # Format bin_detail for display
             bin_detail_display = "absent"
@@ -235,7 +225,7 @@ async def get_density_segments():
                 "peak_rate": metrics.get("peak_rate", 0.0),
                 "utilization": utilization,
                 "flagged": seg_id in flagged_seg_ids,
-                "worst_bin": worst_bin_display,
+                "worst_bin": worst_bin,  # Issue #286: Send raw object for frontend formatting
                 "watch": metrics.get("worst_los") in ["D", "E", "F"],
                 "mitigation": "Monitor" if seg_id in flagged_seg_ids else "None",
                 "events": events_str,
@@ -330,7 +320,7 @@ async def get_density_segment_detail(seg_id: str):
         detail = {
             "seg_id": seg_id,
             "name": label,
-            "schema": _get_density_schema_display(),
+            "schema": _get_segment_operational_schema(seg_id, segment_metrics),
             "active": metrics.get("active_window", "N/A"),
             "peak_density": metrics.get("peak_density", 0.0),
             "worst_los": metrics.get("worst_los", "Unknown"),
@@ -353,51 +343,28 @@ async def get_density_segment_detail(seg_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to load segment detail: {str(e)}")
 
 
-def _get_density_schema_display() -> str:
+def _get_segment_operational_schema(seg_id: str, segment_metrics: Dict[str, Dict[str, Any]]) -> str:
     """
-    Get the density schema display string for the UI.
+    Get the operational schema tag for a specific segment.
     
-    Issue #285: Returns canonical density schema information instead of geometry metadata.
+    Issue #285: Returns operational schema tag (e.g., start_corral, on_course_open, on_course_narrow)
+    instead of density data schema.
     
+    Args:
+        seg_id: Segment identifier
+        segment_metrics: Dictionary of segment metrics
+        
     Returns:
-        String describing the density data schema
+        String with operational schema tag
     """
     try:
-        # Try to load the latest schema_density.json
-        artifacts_dir = Path("artifacts")
-        if not artifacts_dir.exists():
-            return "Density Schema (legacy)"
-            
-        # Find the most recent run directory
-        run_dirs = [d for d in artifacts_dir.iterdir() if d.is_dir() and d.name != "latest.json"]
-        if not run_dirs:
-            return "Density Schema (legacy)"
-            
-        # Get the most recent run
-        latest_run = max(run_dirs, key=lambda d: d.name)
-        schema_path = latest_run / "ui" / "schema_density.json"
-        
-        if not schema_path.exists():
-            return "Density Schema (legacy)"
-            
-        # Load and parse the schema
-        with open(schema_path, 'r') as f:
-            schema_data = json.load(f)
-            
-        # Extract key field information for display
-        fields = schema_data.get("fields", [])
-        field_names = [f["name"] for f in fields if f.get("required", False)]
-        
-        # Create a concise display string
-        if field_names:
-            core_fields = ", ".join(field_names[:4])  # Show first 4 required fields
-            if len(field_names) > 4:
-                core_fields += f" (+{len(field_names)-4} more)"
-            return f"Density Schema: {core_fields}"
+        if seg_id in segment_metrics:
+            schema_tag = segment_metrics[seg_id].get("schema", "on_course_open")
+            return schema_tag
         else:
-            return "Density Schema: bin-level data"
+            return "on_course_open"  # Default fallback
             
     except Exception as e:
-        logger.warning(f"Could not load density schema: {e}")
-        return "Density Schema (legacy)"
+        logger.warning(f"Could not get operational schema for {seg_id}: {e}")
+        return "on_course_open"
 

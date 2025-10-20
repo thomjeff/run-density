@@ -106,6 +106,81 @@
         loadDensityData();
     });
     
+    // Issue #286: Format worst bin label (segment · distance · time)
+    function formatWorstBinLabel(bin) {
+        if (!bin || typeof bin !== 'object') {
+            return '—';
+        }
+        
+        // Helper: Pick first available number from keys
+        function pickNumber(obj, keys) {
+            for (const k of keys) {
+                const v = obj[k];
+                if (typeof v === 'number' && !isNaN(v)) return v;
+                if (typeof v === 'string' && v.trim() && !isNaN(Number(v))) return Number(v);
+            }
+            return null;
+        }
+        
+        // Helper: Pick first available string from keys
+        function pickString(obj, keys) {
+            for (const k of keys) {
+                const v = obj[k];
+                if (typeof v === 'string' && v.trim()) return v.trim();
+            }
+            return null;
+        }
+        
+        // Helper: Convert ISO or HH:MM to HH:MM format
+        function hhmmFromISO(s) {
+            if (/^\d{2}:\d{2}$/.test(s)) return s;  // Already HH:MM
+            try {
+                const d = new Date(s);
+                if (isNaN(d.getTime())) return s;
+                const hh = String(d.getHours()).padStart(2, '0');
+                const mm = String(d.getMinutes()).padStart(2, '0');
+                return `${hh}:${mm}`;
+            } catch {
+                return s;
+            }
+        }
+        
+        // Get segment ID
+        const segment = pickString(bin, ['segment_id', 'seg_id', 'bin_id']) || '—';
+        
+        // Get distance in km (prefer km, else convert from meters)
+        let dStartKm = pickNumber(bin, ['d_start_km', 'dist_start_km', 'start_km']);
+        let dEndKm = pickNumber(bin, ['d_end_km', 'dist_end_km', 'end_km']);
+        if (dStartKm == null && dEndKm == null) {
+            const dStartM = pickNumber(bin, ['d_start_m', 'dist_start_m', 's0_m']);
+            const dEndM = pickNumber(bin, ['d_end_m', 'dist_end_m', 's1_m']);
+            if (dStartM != null) dStartKm = dStartM / 1000;
+            if (dEndM != null) dEndKm = dEndM / 1000;
+        }
+        const hasDistances = dStartKm != null && dEndKm != null;
+        const distLabel = hasDistances
+            ? `${dStartKm.toFixed(3)}–${dEndKm.toFixed(3)} km`
+            : '';
+        
+        // Get time window (prefer ISO, accept HH:MM)
+        const tStart = pickString(bin, ['t_start', 't0', 'start_t', 'time']);
+        const tEnd = pickString(bin, ['t_end', 't1', 'end_t']);
+        let timeLabel = '';
+        if (tStart && tEnd) {
+            timeLabel = `${hhmmFromISO(tStart)}–${hhmmFromISO(tEnd)}`;
+        } else if (tStart && tStart.includes('-')) {
+            // Handle time already formatted as "HH:MM-HH:MM" 
+            timeLabel = tStart.replace('-', '–');
+        }
+        
+        // Compose: "Worst Bin: SEGMENT DISTANCE · TIME"
+        let label = `Worst Bin: ${segment}`;
+        if (distLabel) label += ` ${distLabel}`;
+        if (timeLabel) label += ` · ${timeLabel}`;
+        
+        return label;
+    }
+    
     function loadDensityData() {
         fetch('/api/density/segments')
             .then(response => response.json())
@@ -136,6 +211,11 @@
             const losBadge = `<span class="badge-los badge-${segment.worst_los}">${segment.worst_los}</span>`;
             const flaggedIcon = segment.flagged ? '⚠️' : '';
             
+            // Issue #286: Format worst bin using new formatter
+            // Add segment_id to bin object for proper labeling
+            const worstBin = segment.worst_bin ? {...segment.worst_bin, segment_id: segment.seg_id} : null;
+            const worstBinLabel = formatWorstBinLabel(worstBin);
+            
             row.innerHTML = `
                 <td>${segment.seg_id}</td>
                 <td>${segment.name}</td>
@@ -146,7 +226,7 @@
                 <td>${segment.peak_rate.toFixed(2)}</td>
                 <td>${segment.utilization ? segment.utilization.toFixed(3) : '—'}</td>
                 <td>${flaggedIcon}</td>
-                <td>${segment.worst_bin || '—'}</td>
+                <td>${worstBinLabel}</td>
             `;
             
             tbody.appendChild(row);

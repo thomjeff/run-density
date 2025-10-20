@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from typing import Dict, Any, List
 import logging
+from pathlib import Path
 
 from app.storage import create_storage_from_env
 
@@ -28,45 +29,57 @@ storage = create_storage_from_env()
 @router.get("/api/flow/segments")
 async def get_flow_segments():
     """
-    Get flow analysis data for all segments.
+    Get flow analysis data for all segments from Flow CSV.
     
     Returns:
-        Dictionary mapping seg_id to flow metrics:
-        - overtaking_a/b: Sum of overtaking events
-        - copresence_a/b: Sum of co-presence events
+        Array of flow records with event pairs (29 rows total).
+        Each row represents a segment-event_a-event_b combination.
     """
     try:
-        # Load flow.json
-        flow_data = {}
-        if storage.exists("flow.json"):
-            flow_data = storage.read_json("flow.json")
-        else:
-            logger.warning("flow.json not found")
+        # Load Flow CSV data (the source of truth for flow analysis)
+        import pandas as pd
+        import os
         
-        # Load segment labels from geojson
-        segment_labels = {}
-        if storage.exists("segments.geojson"):
-            segments_geojson = storage.read_json("segments.geojson")
-            for feature in segments_geojson.get("features", []):
-                props = feature.get("properties", {})
-                seg_id = props.get("seg_id")
-                if seg_id:
-                    segment_labels[seg_id] = props.get("label", seg_id)
+        # Find the latest Flow CSV file
+        reports_dir = Path("reports")
+        flow_csv_files = list(reports_dir.glob("**/*-Flow.csv"))
         
-        # Build enriched flow data with labels
-        enriched_flow = {}
-        for seg_id, metrics in flow_data.items():
-            enriched_flow[seg_id] = {
-                "seg_id": seg_id,
-                "name": segment_labels.get(seg_id, seg_id),
-                "overtaking_a": metrics.get("overtaking_a", 0.0),
-                "overtaking_b": metrics.get("overtaking_b", 0.0),
-                "copresence_a": metrics.get("copresence_a", 0.0),
-                "copresence_b": metrics.get("copresence_b", 0.0),
-                "flow_type": "overtake"  # From CSV if needed
+        if not flow_csv_files:
+            logger.warning("No Flow CSV files found")
+            return JSONResponse(content=[])
+        
+        # Use the latest Flow CSV
+        latest_flow_csv = max(flow_csv_files, key=lambda f: f.stat().st_mtime)
+        logger.info(f"Using Flow CSV: {latest_flow_csv}")
+        
+        # Read Flow CSV
+        df = pd.read_csv(latest_flow_csv)
+        
+        # Convert to the format expected by the frontend
+        flow_records = []
+        for _, row in df.iterrows():
+            # Skip empty rows
+            if pd.isna(row['seg_id']):
+                continue
+                
+            flow_record = {
+                "id": str(row['seg_id']),
+                "name": str(row['segment_label']),
+                "event_a": str(row['event_a']),
+                "event_b": str(row['event_b']),
+                "flow_type": str(row['flow_type']),
+                "overtaking_a": float(row['overtaking_a']) if pd.notna(row['overtaking_a']) else 0.0,
+                "pct_a": float(row['pct_a']) if pd.notna(row['pct_a']) else 0.0,
+                "overtaking_b": float(row['overtaking_b']) if pd.notna(row['overtaking_b']) else 0.0,
+                "pct_b": float(row['pct_b']) if pd.notna(row['pct_b']) else 0.0,
+                "copresence_a": float(row['copresence_a']) if pd.notna(row['copresence_a']) else 0.0,
+                "copresence_b": float(row['copresence_b']) if pd.notna(row['copresence_b']) else 0.0
             }
+            flow_records.append(flow_record)
         
-        response = JSONResponse(content=enriched_flow)
+        logger.info(f"Loaded {len(flow_records)} flow records from Flow CSV")
+        
+        response = JSONResponse(content=flow_records)
         response.headers["Cache-Control"] = "public, max-age=60"
         return response
         
