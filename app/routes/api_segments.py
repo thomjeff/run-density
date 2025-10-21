@@ -14,7 +14,7 @@ from typing import Dict, Any, List
 import json
 import logging
 
-from app.storage import create_storage_from_env
+from app.storage_service import get_storage_service
 from app.common.config import load_reporting
 
 # Configure logging
@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 # Create router
 router = APIRouter()
 
-# Initialize storage
-storage = create_storage_from_env()
+# Initialize storage service
+storage = get_storage_service()
 
 
 def enrich_segment_features(segments_geojson: Dict[str, Any], 
@@ -105,29 +105,30 @@ async def get_segments_geojson():
         - Logs warnings for missing data
     """
     try:
-        # Read segments.geojson
-        if not storage.exists("segments.geojson"):
-            logger.warning("segments.geojson not found in storage")
+        # Get latest run_id to locate UI artifacts
+        run_id = storage.get_latest_run_id()
+        artifacts_path = f"artifacts/{run_id}/ui"
+        
+        # Read segments.geojson from UI artifacts
+        segments_geojson = storage.read_geojson(f"{artifacts_path}/segments.geojson")
+        if segments_geojson is None:
+            logger.warning(f"segments.geojson not found in {artifacts_path}")
             return JSONResponse(
                 content={"type": "FeatureCollection", "features": []},
                 headers={"Cache-Control": "public, max-age=60"}
             )
         
-        segments_geojson = storage.read_json("segments.geojson")
-        
-        # Read segment_metrics.json
-        segment_metrics = {}
-        if storage.exists("segment_metrics.json"):
-            segment_metrics = storage.read_json("segment_metrics.json")
-        else:
-            logger.warning("segment_metrics.json not found in storage")
+        # Read segment_metrics.json from UI artifacts
+        segment_metrics = storage.read_json(f"{artifacts_path}/segment_metrics.json")
+        if segment_metrics is None:
+            logger.warning(f"segment_metrics.json not found in {artifacts_path}")
+            segment_metrics = {}
         
         # Load flags to mark flagged segments
         flagged_seg_ids = set()
-        flags_path = "flags.json"
-        if storage.exists(flags_path):
+        flags = storage.read_json(f"{artifacts_path}/flags.json")
+        if flags:
             try:
-                flags = storage.read_json(flags_path)
                 # Handle both dict and array formats
                 if isinstance(flags, list):
                     flagged_seg_ids = {f.get("seg_id") for f in flags if f.get("seg_id")}
@@ -169,17 +170,21 @@ async def get_segments_summary():
         Summary statistics about segments and metrics
     """
     try:
-        # Read segments.geojson
-        if not storage.exists("segments.geojson"):
+        # Get latest run_id to locate UI artifacts
+        run_id = storage.get_latest_run_id()
+        artifacts_path = f"artifacts/{run_id}/ui"
+        
+        # Read segments.geojson from UI artifacts
+        segments_geojson = storage.read_geojson(f"{artifacts_path}/segments.geojson")
+        if segments_geojson is None:
             return JSONResponse(content={"error": "segments.geojson not found"})
         
-        segments_geojson = storage.read_json("segments.geojson")
         features = segments_geojson.get("features", [])
         
-        # Read segment_metrics.json
-        segment_metrics = {}
-        if storage.exists("segment_metrics.json"):
-            segment_metrics = storage.read_json("segment_metrics.json")
+        # Read segment_metrics.json from UI artifacts
+        segment_metrics = storage.read_json(f"{artifacts_path}/segment_metrics.json")
+        if segment_metrics is None:
+            segment_metrics = {}
         
         # Calculate summary stats
         total_segments = len(features)
@@ -195,8 +200,8 @@ async def get_segments_summary():
         
         # Count flagged segments (if flags exist)
         flagged_count = 0
-        if storage.exists("flags.json"):
-            flags = storage.read_json("flags.json")
+        flags = storage.read_json(f"{artifacts_path}/flags.json")
+        if flags:
             # Handle both dict and array formats
             if isinstance(flags, dict):
                 flagged_count = len(flags.get("flagged_segments", []))

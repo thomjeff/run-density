@@ -18,6 +18,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List
+import pandas as pd
 from dataclasses import dataclass
 
 # Google Cloud Storage imports
@@ -412,6 +413,160 @@ class StorageService:
         fallback = datetime.now().strftime("%Y-%m-%d")
         logger.info(f"Using fallback run_id: {fallback}")
         return fallback
+    
+    def read_parquet(self, file_path: str) -> Optional[pd.DataFrame]:
+        """
+        Read parquet file from GCS or local filesystem.
+        
+        Args:
+            file_path: Path like "reports/2025-10-21/bins.parquet"
+        
+        Returns:
+            DataFrame or None if file not found/error
+        """
+        try:
+            if self.config.use_cloud_storage:
+                # Normalize GCS path (strip "reports/" prefix if present)
+                if file_path.startswith("reports/"):
+                    gcs_path = file_path[len("reports/"):]
+                else:
+                    gcs_path = file_path
+                
+                bucket = self._client.bucket(self.config.bucket_name)
+                blob = bucket.blob(gcs_path)
+                data = blob.download_as_bytes()
+                from io import BytesIO
+                return pd.read_parquet(BytesIO(data))
+            else:
+                return pd.read_parquet(file_path)
+        except Exception as e:
+            logger.warning(f"Could not read parquet {file_path}: {e}")
+            return None
+    
+    def read_csv(self, file_path: str) -> Optional[pd.DataFrame]:
+        """
+        Read CSV file from GCS or local filesystem.
+        
+        Args:
+            file_path: Path like "reports/2025-10-21/Flow.csv"
+        
+        Returns:
+            DataFrame or None if file not found/error
+        """
+        try:
+            if self.config.use_cloud_storage:
+                # Normalize GCS path (strip "reports/" prefix if present)
+                if file_path.startswith("reports/"):
+                    gcs_path = file_path[len("reports/"):]
+                else:
+                    gcs_path = file_path
+                
+                bucket = self._client.bucket(self.config.bucket_name)
+                blob = bucket.blob(gcs_path)
+                content = blob.download_as_text()
+                from io import StringIO
+                return pd.read_csv(StringIO(content))
+            else:
+                return pd.read_csv(file_path)
+        except Exception as e:
+            logger.warning(f"Could not read CSV {file_path}: {e}")
+            return None
+    
+    def read_json(self, file_path: str) -> Optional[dict]:
+        """
+        Read JSON file from GCS or local filesystem.
+        
+        Args:
+            file_path: Path like "artifacts/2025-10-21/ui/flow.json"
+        
+        Returns:
+            Dict or None if file not found/error
+        """
+        try:
+            if self.config.use_cloud_storage:
+                # Normalize GCS path (strip "reports/" or "artifacts/" prefix if present)
+                if file_path.startswith("reports/"):
+                    gcs_path = file_path[len("reports/"):]
+                elif file_path.startswith("artifacts/"):
+                    # artifacts/ is already in GCS path structure, keep as-is
+                    gcs_path = file_path
+                else:
+                    gcs_path = file_path
+                
+                bucket = self._client.bucket(self.config.bucket_name)
+                blob = bucket.blob(gcs_path)
+                content = blob.download_as_text()
+                return json.loads(content)
+            else:
+                with open(file_path, "r") as f:
+                    return json.load(f)
+        except Exception as e:
+            logger.warning(f"Could not read JSON {file_path}: {e}")
+            return None
+    
+    def read_geojson(self, file_path: str) -> Optional[dict]:
+        """
+        Read GeoJSON file from GCS or local filesystem.
+        
+        Args:
+            file_path: Path like "artifacts/2025-10-21/ui/segments.geojson"
+        
+        Returns:
+            Dict or None if file not found/error
+        """
+        # GeoJSON is just JSON with geo features
+        return self.read_json(file_path)
+    
+    def list_files(self, directory: str, suffix: str = "") -> List[str]:
+        """
+        List files in a directory from GCS or local filesystem.
+        
+        Args:
+            directory: Directory path like "reports/2025-10-21" or "2025-10-21"
+            suffix: Optional suffix filter like "-Flow.csv"
+        
+        Returns:
+            List of file paths (relative to directory)
+        """
+        try:
+            if self.config.use_cloud_storage:
+                # Normalize GCS path (strip "reports/" prefix if present)
+                if directory.startswith("reports/"):
+                    gcs_dir = directory[len("reports/"):]
+                else:
+                    gcs_dir = directory
+                
+                # Ensure directory ends with /
+                if not gcs_dir.endswith("/"):
+                    gcs_dir += "/"
+                
+                bucket = self._client.bucket(self.config.bucket_name)
+                blobs = bucket.list_blobs(prefix=gcs_dir)
+                
+                files = []
+                for blob in blobs:
+                    # Get filename relative to directory
+                    filename = blob.name[len(gcs_dir):]
+                    if filename and suffix and filename.endswith(suffix):
+                        files.append(filename)
+                    elif filename and not suffix:
+                        files.append(filename)
+                
+                return sorted(files)
+            else:
+                dir_path = Path(directory)
+                if not dir_path.exists():
+                    return []
+                
+                if suffix:
+                    files = [f.name for f in dir_path.glob(f"*{suffix}")]
+                else:
+                    files = [f.name for f in dir_path.iterdir() if f.is_file()]
+                
+                return sorted(files)
+        except Exception as e:
+            logger.warning(f"Could not list files in {directory}: {e}")
+            return []
 
 # Global storage service instance
 _storage_service = None
