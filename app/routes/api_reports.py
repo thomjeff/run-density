@@ -162,9 +162,17 @@ async def download_report(path: str = Query(..., description="Report file path")
                 elif path.startswith("reports/"):
                     # For report files, read from GCS using StorageService
                     content = storage_service._load_from_gcs(path)
+                    if content is None:
+                        raise HTTPException(status_code=404, detail="File not found")
+                    # Convert string content to bytes
+                    content = content.encode('utf-8')
                 else:
                     # For paths without reports/ prefix, add it
                     content = storage_service._load_from_gcs(f"reports/{path}")
+                    if content is None:
+                        raise HTTPException(status_code=404, detail="File not found")
+                    # Convert string content to bytes
+                    content = content.encode('utf-8')
                 
                 filename = Path(path).name
                 
