@@ -63,6 +63,12 @@ jobs:
           SHA:        ${{ github.sha }}
         run: |
           set -euo pipefail
+          
+          # Debug: Verify e2e.py and analytics are present in build context
+          echo "=== Verifying build context files ==="
+          ls -la e2e.py || echo "❌ e2e.py not found in build context"
+          ls -la analytics/ || echo "❌ analytics/ not found in build context"
+          
           DOMAIN="${REGION}-docker.pkg.dev"
           IMAGE="${DOMAIN}/${PROJECT_ID}/${REPO}/${SERVICE}:${SHA}"
           echo "Building IMAGE=${IMAGE}"
