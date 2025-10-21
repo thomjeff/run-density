@@ -117,7 +117,8 @@ async def download_report(path: str = Query(..., description="Report file path")
             raise HTTPException(status_code=400, detail="Invalid file path")
         
         # Get latest run_id for validation
-        run_id = load_latest_run_id(storage)
+        storage_service = get_storage_service()
+        run_id = storage_service.get_latest_run_id()
         if not run_id:
             raise HTTPException(status_code=404, detail="No reports available")
         
