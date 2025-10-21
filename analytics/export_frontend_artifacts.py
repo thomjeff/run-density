@@ -173,18 +173,13 @@ def generate_meta_json(run_id: str, environment: str = "local") -> Dict[str, Any
 
 def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]]:
     """
-    Generate segment_metrics.json from bins.parquet using SSOT flagging logic.
-    
-    Issue #290: This function now populates all required fields for the UI:
-    - utilization, worst_bin, flagged_bins from SSOT
-    - schema, width_m, bins, active_start, active_end from bins.parquet
-    - overtaking & copresence counts (if available)
+    Generate segment_metrics.json from segment_windows_from_bins.parquet.
     
     Args:
         reports_dir: Path to reports/<run_id>/ directory
     
     Returns:
-        Dictionary mapping seg_id to complete metrics
+        Dictionary mapping seg_id to metrics
     """
     parquet_path = reports_dir / "bins.parquet"
     
@@ -192,125 +187,67 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
         print(f"Warning: {parquet_path} not found, returning empty metrics")
         return {}
     
-    print("   📊 Generating segment_metrics.json from SSOT (Issue #290 fix)...")
-    
+    # Load rulebook for LOS classification
     try:
-        # Load bins.parquet (authoritative source)
-        bins_df = pd.read_parquet(parquet_path)
-        print(f"   📊 Loaded {len(bins_df)} bins from bins.parquet")
-        
-        # Use SSOT to get flagging summary
-        bin_flags = ssot_flagging.compute_bin_flags(bins_df)
-        flag_summary = ssot_flagging.summarize_flags(bin_flags)
-        
-        print(f"   ✅ SSOT: {flag_summary['flagged_bin_total']} flagged bins across {len(flag_summary['segments_with_flags'])} segments")
-        
-        # Load segments.csv for width_m and other metadata
-        segments_path = Path("data/segments.csv")
-        segment_dims = {}
-        if segments_path.exists():
-            try:
-                segments_df = pd.read_csv(segments_path)
-                segment_dims = segments_df.set_index('seg_id').to_dict('index')
-                print(f"   ✅ Loaded segment dimensions for {len(segment_dims)} segments")
-            except Exception as e:
-                print(f"   ⚠️  Warning: Could not load segments.csv: {e}")
-        
-        # Group bins by segment_id and build comprehensive metrics
-        metrics = {}
-        
-        # Use either 'segment_id' or 'seg_id' column
-        group_col = 'segment_id' if 'segment_id' in bins_df.columns else 'seg_id'
-        
-        for seg_id, group in bins_df.groupby(group_col):
-            seg_id_str = str(seg_id)
-            
-            # Get segment dimensions
-            dims = segment_dims.get(seg_id_str, {})
-            
-            # Compute peak density and rate from bins
-            peak_density = group['density'].max() if 'density' in group.columns else 0.0
-            peak_rate = group['rate'].max() if 'rate' in group.columns else 0.0
-            
-            # Active window: min start time to max end time
-            if 't_start' in group.columns and 't_end' in group.columns:
-                start_dt = pd.to_datetime(group['t_start']).min()
-                end_dt = pd.to_datetime(group['t_end']).max()
-                active_start = start_dt.strftime('%H:%M')
-                active_end = end_dt.strftime('%H:%M')
-                active_window = f"{active_start}–{active_end}"
-            else:
-                active_start = "N/A"
-                active_end = "N/A"
-                active_window = "N/A"
-            
-            # Get schema_key from bins
-            schema_key = group['schema_key'].iloc[0] if 'schema_key' in group.columns else 'on_course_open'
-            
-            # Get flagging data from SSOT
-            flag_data = None
-            for seg_data in flag_summary['per_segment']:
-                if seg_data['segment_id'] == seg_id_str:
-                    flag_data = seg_data
-                    break
-            
-            # Find worst bin (highest density flagged bin)
-            worst_bin = None
-            if flag_data and flag_data['flagged_bins'] > 0:
-                # Find the bin with highest density among flagged bins
-                flagged_bins_in_segment = [f for f in bin_flags if f.segment_id == seg_id_str]
-                if flagged_bins_in_segment:
-                    worst_flag = max(flagged_bins_in_segment, key=lambda f: f.density)
-                    worst_bin = {
-                        "d_start_km": worst_flag.start_km if worst_flag.start_km is not None else 0.0,
-                        "d_end_km": worst_flag.end_km if worst_flag.end_km is not None else 0.0,
-                        "t_start": worst_flag.t_start,
-                        "t_end": worst_flag.t_end,
-                        "density": worst_flag.density,
-                        "rate": worst_flag.rate
-                    }
-            
-            # Calculate utilization (peak density / capacity threshold)
-            # Use a reasonable capacity threshold (e.g., 1.0 p/m² for F LOS)
-            capacity_threshold = 1.0  # This could be made configurable via rulebook
-            utilization = min(peak_density / capacity_threshold, 1.0) if capacity_threshold > 0 else 0.0
-            
-            # Build comprehensive metrics
-            metrics[seg_id_str] = {
-                # Core segment data
-                "schema": schema_key,
-                "width_m": float(dims.get("width_m", 0.0)),
-                "bins": int(len(group)),
-                "active_start": active_start,
-                "active_end": active_end,
-                "active_window": active_window,
-                
-                # Peak metrics
-                "peak_density": round(peak_density, 4),
-                "peak_rate": round(peak_rate, 2),
-                
-                # Flagging data from SSOT
-                "worst_severity": flag_data['worst_severity'] if flag_data else "none",
-                "worst_los": flag_data['worst_los'] if flag_data else "A",
-                "flagged_bins": flag_data['flagged_bins'] if flag_data else 0,
-                
-                # Utilization and worst bin
-                "utilization": round(utilization, 3),
-                "worst_bin": worst_bin,
-                
-                # Overtaking and copresence (placeholder - would need flow analysis)
-                "overtaking_segments": 0,  # TODO: Calculate from flow analysis
-                "copresence_segments": 0,  # TODO: Calculate from flow analysis
-            }
-        
-        print(f"   ✅ Generated comprehensive metrics for {len(metrics)} segments")
-        return metrics
-        
+        rulebook = load_rulebook()
+        los_thresholds = rulebook.get("globals", {}).get("los_thresholds", {})
     except Exception as e:
-        print(f"   ⚠️  Error generating segment metrics from SSOT: {e}")
-        import traceback
-        traceback.print_exc()
-        return {}
+        print(f"Warning: Could not load rulebook for LOS classification: {e}")
+        # Fallback thresholds
+        los_thresholds = {"A": 0.2, "B": 0.4, "C": 0.6, "D": 0.8, "E": 1.0, "F": float('inf')}
+    
+    # Read parquet
+    df = pd.read_parquet(parquet_path)
+    
+    # Group by segment_id and aggregate metrics
+    metrics = {}
+    
+    # Use either 'segment_id' or 'seg_id' column
+    group_col = 'segment_id' if 'segment_id' in df.columns else 'seg_id'
+    
+    for seg_id, group in df.groupby(group_col):
+        # Compute peak density (use density_peak if available, else density_mean or density)
+        if 'density_peak' in group.columns:
+            peak_density = group['density_peak'].max()
+        elif 'density_mean' in group.columns:
+            peak_density = group['density_mean'].max()
+        elif 'density' in group.columns:
+            peak_density = group['density'].max()
+        else:
+            peak_density = 0.0
+        
+        # Peak rate will be computed from bins.parquet separately
+        # Set to 0.0 for now, will be updated later
+        peak_rate = 0.0
+        
+        # Active window: min start time to max end time
+        # Use t_start/t_end or start_time/end_time
+        if 't_start' in group.columns and 't_end' in group.columns:
+            start_dt = pd.to_datetime(group['t_start']).min()
+            end_dt = pd.to_datetime(group['t_end']).max()
+            active_window = f"{start_dt.strftime('%H:%M')}–{end_dt.strftime('%H:%M')}"
+        elif 'start_time' in group.columns and 'end_time' in group.columns:
+            start_dt = pd.to_datetime(group['start_time']).min()
+            end_dt = pd.to_datetime(group['end_time']).max()
+            active_window = f"{start_dt.strftime('%H:%M')}–{end_dt.strftime('%H:%M')}"
+        else:
+            active_window = "N/A"
+        
+        # Classify LOS
+        worst_los = classify_los(peak_density, los_thresholds)
+        
+        # Get schema_key from the first bin in the group (all bins in a segment should have the same schema_key)
+        schema_key = group['schema_key'].iloc[0] if 'schema_key' in group.columns else 'on_course_open'
+        
+        metrics[seg_id] = {
+            "schema": schema_key,  # Issue #285: Add operational schema tag
+            "worst_los": worst_los,
+            "peak_density": round(peak_density, 4),
+            "peak_rate": round(peak_rate, 2),
+            "active_window": active_window
+        }
+    
+    return metrics
 
 
 def generate_flags_json(reports_dir: Path, segment_metrics: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -434,54 +371,77 @@ def generate_flow_metrics_legacy(reports_dir: Path) -> Dict[str, Dict[str, Any]]
     return flow_metrics
 
 
-def generate_flow_json(reports_dir: Path) -> List[Dict[str, Any]]:
+def generate_flow_json(reports_dir: Path) -> Dict[str, Any]:
     """
-    Generate flow.json with event-pair overtaking/copresence data from Flow.csv.
+    Generate authoritative flow.json with time-series rate data from bins.parquet.
     
-    Issue #290: Dashboard API expects event-pair format with overtaking_a, overtaking_b,
-    copresence_a, copresence_b fields, not time-series rate data.
+    Issue #287: Emit complete per-segment time series of rate (p/s) for entire active window.
+    Source of truth: bins.parquet (same bins that drive the density report).
     
     Args:
         reports_dir: Path to reports/<run_id>/ directory
     
     Returns:
-        List of event-pair objects with overtaking/copresence data
+        Dictionary with schema_version, units, rows (bin-level time series), and summaries (segment aggregates)
     """
-    # Find Flow.csv file (use the latest one)
-    flow_csv = sorted(list(reports_dir.glob("*-Flow.csv")), reverse=True)
+    bins_path = reports_dir / "bins.parquet"
     
-    if not flow_csv:
-        print(f"   ⚠️  No Flow.csv found in {reports_dir}")
-        return []
-    
-    flow_path = flow_csv[0]
-    df = pd.read_csv(flow_path)
-    
-    # Convert to the format expected by dashboard API
-    flow_records = []
-    for _, row in df.iterrows():
-        # Skip empty rows
-        if pd.isna(row['seg_id']):
-            continue
-            
-        flow_record = {
-            "segment_id": str(row['seg_id']),
-            "segment_label": str(row['segment_label']),
-            "event_a": str(row['event_a']),
-            "event_b": str(row['event_b']),
-            "flow_type": str(row['flow_type']),
-            "overtaking_a": float(row['overtaking_a']) if pd.notna(row['overtaking_a']) else 0.0,
-            "pct_a": float(row['pct_a']) if pd.notna(row['pct_a']) else 0.0,
-            "overtaking_b": float(row['overtaking_b']) if pd.notna(row['overtaking_b']) else 0.0,
-            "pct_b": float(row['pct_b']) if pd.notna(row['pct_b']) else 0.0,
-            "copresence_a": float(row['copresence_a']) if pd.notna(row['copresence_a']) else 0.0,
-            "copresence_b": float(row['copresence_b']) if pd.notna(row['copresence_b']) else 0.0
+    if not bins_path.exists():
+        print(f"   ⚠️  bins.parquet not found at {bins_path}")
+        return {
+            "schema_version": "1.0.0",
+            "units": {"rate": "persons_per_second", "time": "ISO8601"},
+            "rows": [],
+            "summaries": []
         }
-        flow_records.append(flow_record)
     
-    print(f"   ✅ Generated {len(flow_records)} event-pair flow records from Flow.csv")
+    # Load bins data
+    bins_df = pd.read_parquet(bins_path)
     
-    return flow_records
+    # Filter to bins with valid rate data
+    bins_with_rate = bins_df[bins_df['rate'].notna()].copy()
+    
+    if len(bins_with_rate) == 0:
+        print(f"   ⚠️  No bins with rate data found in {bins_path}")
+        return {
+            "schema_version": "1.0.0",
+            "units": {"rate": "persons_per_second", "time": "ISO8601"},
+            "rows": [],
+            "summaries": []
+        }
+    
+    # Generate rows: one per bin with segment_id, t_start, t_end, rate
+    rows = []
+    for _, row in bins_with_rate.iterrows():
+        rows.append({
+            "segment_id": str(row['segment_id']),
+            "t_start": str(row['t_start']),
+            "t_end": str(row['t_end']),
+            "rate": float(row['rate'])
+        })
+    
+    # Generate summaries: aggregate stats per segment
+    summaries = []
+    for seg_id, group in bins_with_rate.groupby('segment_id'):
+        summaries.append({
+            "segment_id": str(seg_id),
+            "bins": int(len(group)),
+            "peak_rate": float(group['rate'].max()),
+            "avg_rate": float(group['rate'].mean()),
+            "active_start": str(group['t_start'].min()),
+            "active_end": str(group['t_end'].max())
+        })
+    
+    payload = {
+        "schema_version": "1.0.0",
+        "units": {"rate": "persons_per_second", "time": "ISO8601"},
+        "rows": rows,
+        "summaries": summaries
+    }
+    
+    print(f"   ✅ Generated {len(rows)} bin-level rate records across {len(summaries)} segments")
+    
+    return payload
 
 
 def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
@@ -656,7 +616,9 @@ def export_ui_artifacts(reports_dir: Path, run_id: str, environment: str = "loca
     print("\n4️⃣  Generating flow.json...")
     flow = generate_flow_json(reports_dir)
     (artifacts_dir / "flow.json").write_text(json.dumps(flow, indent=2))
-    print(f"   ✅ flow.json: {len(flow)} event-pair records")
+    num_segments = len(flow.get('summaries', []))
+    num_rows = len(flow.get('rows', []))
+    print(f"   ✅ flow.json: {num_segments} segments, {num_rows} bin-level records")
     
     # 5. Generate segments.geojson
     print("\n5️⃣  Generating segments.geojson...")
@@ -688,23 +650,37 @@ def update_latest_pointer(run_id: str) -> None:
     Update artifacts/latest.json to point to the most recent run.
     
     Args:
-        run_id: Run identifier (e.g., "2025-10-19-1655")
+        run_id: Run identifier (e.g., "2025-10-19-1655" or "2025-10-19")
     """
     artifacts_dir = Path("artifacts")
     artifacts_dir.mkdir(exist_ok=True)
     
-    # Parse timestamp from run_id
+    # Parse timestamp from run_id or use current time
+    # Note: Not all run_ids include HHMM (e.g., directory names are date-only)
+    # Python string slicing never raises exceptions, so we need explicit length check
     try:
         dt_str = run_id.replace("-", "")
+        
+        # Validate minimum length for date (YYYYMMDD = 8 chars)
+        if len(dt_str) < 8:
+            raise ValueError(f"run_id too short to contain valid date: {run_id}")
+        
         year = dt_str[0:4]
         month = dt_str[4:6]
         day = dt_str[6:8]
-        hour = dt_str[8:10]
-        minute = dt_str[10:12]
         
-        ts = f"{year}-{month}-{day}T{hour}:{minute}:00Z"
+        # Check if run_id includes time component (at least 12 chars: YYYYMMDDHHMM)
+        if len(dt_str) >= 12:
+            hour = dt_str[8:10]
+            minute = dt_str[10:12]
+            ts = f"{year}-{month}-{day}T{hour}:{minute}:00Z"
+        else:
+            # Date-only format: use current UTC time for hour/minute
+            now = datetime.now(timezone.utc)
+            ts = f"{year}-{month}-{day}T{now.hour:02d}:{now.minute:02d}:00Z"
     except Exception:
-        ts = datetime.now(timezone.utc).isoformat()
+        # Fallback to current UTC time in ISO-8601 format
+        ts = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     
     pointer = {
         "run_id": run_id,
