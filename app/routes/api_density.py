@@ -16,7 +16,8 @@ import pandas as pd
 from pathlib import Path
 import json
 
-from app.storage import create_storage_from_env, load_latest_run_id
+from app.storage import create_storage_from_env
+from app.storage_service import get_storage_service
 from app.storage_service import StorageService
 
 # Configure logging
@@ -259,7 +260,8 @@ async def get_density_segment_detail(seg_id: str):
         # Load segment metrics from artifacts
         segment_metrics = {}
         try:
-            run_id = load_latest_run_id(storage)
+            storage_service = get_storage_service()
+            run_id = storage_service.get_latest_run_id()
             if storage.exists("segment_metrics.json"):
                 raw_data = storage.read_json("segment_metrics.json")
                 # Handle different formats: direct dict vs {'items': [...]}
