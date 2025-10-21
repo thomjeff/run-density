@@ -287,22 +287,27 @@ class StorageService:
             logger.error(f"Failed to save file locally {file_path}: {e}")
             raise
     
-    def _load_from_gcs(self, file_path: str) -> Optional[str]:
+    def _load_from_gcs(self, path: str) -> Optional[str]:
         """Load file from Google Cloud Storage."""
         try:
+            # Normalize path
+            if path.startswith("reports/"):
+                gcs_path = path[len("reports/"):]
+            else:
+                gcs_path = path
+
             bucket = self._client.bucket(self.config.bucket_name)
-            blob = bucket.blob(file_path)
+            blob = bucket.blob(gcs_path)
+
             if not blob.exists():
-                logger.debug(f"File not found in GCS: {file_path}")
+                logger.warning(f"[GCS] Blob not found: {gcs_path}")
                 return None
-            content = blob.download_as_text()
-            logger.debug(f"Loaded file from GCS: {file_path}")
-            return content
-        except NotFound:
-            logger.debug(f"File not found in GCS: {file_path}")
-            return None
-        except GoogleCloudError as e:
-            logger.error(f"Failed to load file from GCS {file_path}: {e}")
+
+            logger.info(f"[GCS] Downloading blob: {gcs_path}")
+            return blob.download_as_text()
+
+        except Exception as e:
+            logger.error(f"[GCS] Failed to load {path}: {e}")
             return None
     
     def _load_from_local(self, file_path: str) -> Optional[str]:

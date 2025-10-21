@@ -101,7 +101,7 @@ async def get_reports_list():
 
 
 @router.get("/api/reports/download")
-async def download_report(path: str = Query(..., description="Report file path")):
+def download_report(path: str = Query(..., description="Report file path")):
     """
     Download a specific report file.
     
@@ -111,83 +111,46 @@ async def download_report(path: str = Query(..., description="Report file path")
     Returns:
         File download
     """
+    logger.info(f"[Download] Requested path: {path}")
+
+    storage_service = get_storage_service()
+    run_id = storage_service.get_latest_run_id()
+
+    # Allow only: reports/<run_id>/* or data/*
+    if not (path.startswith(f"reports/{run_id}") or path.startswith("data/")):
+        logger.warning(f"[Download] Access denied for path: {path}")
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Case A: Read from local data folder
+    if path.startswith("data/"):
+        try:
+            content = open(path, "r", encoding="utf-8").read()
+            logger.info(f"[Download] Loaded local data file: {path}")
+        except Exception as e:
+            logger.error(f"[Download] Failed to read local file {path}: {e}")
+            raise HTTPException(status_code=404, detail="File not found")
+
+    # Case B: Read from GCS (Cloud Run)
+    else:
+        content = storage_service._load_from_gcs(path)
+        if content is None:
+            logger.warning(f"[Download] GCS file not found or unreadable: {path}")
+            raise HTTPException(status_code=404, detail="File not found")
+
+    # Safe encoding
     try:
-        # Security: validate path is under reports/ or data/ and doesn't traverse
-        if ".." in path or path.startswith("/"):
-            raise HTTPException(status_code=400, detail="Invalid file path")
-        
-        # Get latest run_id for validation
-        storage_service = get_storage_service()
-        run_id = storage_service.get_latest_run_id()
-        if not run_id:
-            raise HTTPException(status_code=404, detail="No reports available")
-        
-        # Normalize path for validation only
-        normalized_path = path
-        if path.startswith("reports/"):
-            normalized_path = path[len("reports/"):]
-        
-        # Validate against normalized path
-        if not (normalized_path.startswith(run_id) or normalized_path.startswith("data/")):
-            raise HTTPException(status_code=403, detail=f"Access denied: file path must start with 'reports/{run_id}' or 'data/'")
-        
-        # For local mode, serve directly
-        if storage.mode == "local":
-            # Handle both reports/ and data/ files
-            if path.startswith("data/"):
-                file_path = Path(path)  # data/runners.csv -> data/runners.csv
-            elif path.startswith("reports/"):
-                file_path = Path(path)  # reports/2025-10-21/file.md -> reports/2025-10-21/file.md
-            else:
-                file_path = Path("reports") / path  # 2025-10-21/file.md -> reports/2025-10-21/file.md
-            
-            if not file_path.exists():
-                raise HTTPException(status_code=404, detail="File not found")
-            
-            return FileResponse(
-                path=file_path,
-                filename=file_path.name,
-                media_type="application/octet-stream"
-            )
-        else:
-            # For GCS mode, use StorageService
-            try:
-                # Handle both reports/ and data/ files
-                if path.startswith("data/"):
-                    # For data files, read directly from local filesystem (baked into Docker image)
-                    file_path = Path(path)
-                    if not file_path.exists():
-                        raise HTTPException(status_code=404, detail="File not found")
-                    content = file_path.read_bytes()
-                elif path.startswith("reports/"):
-                    # For report files, read from GCS using StorageService
-                    content = storage_service._load_from_gcs(path)
-                    if content is None:
-                        raise HTTPException(status_code=404, detail="File not found")
-                    # Convert string content to bytes
-                    content = content.encode('utf-8')
-                else:
-                    # For paths without reports/ prefix, add it
-                    content = storage_service._load_from_gcs(f"reports/{path}")
-                    if content is None:
-                        raise HTTPException(status_code=404, detail="File not found")
-                    # Convert string content to bytes
-                    content = content.encode('utf-8')
-                
-                filename = Path(path).name
-                
-                return StreamingResponse(
-                    iter([content]),
-                    media_type="application/octet-stream",
-                    headers={"Content-Disposition": f"attachment; filename={filename}"}
-                )
-            except Exception as e:
-                logger.error(f"Error downloading from GCS: {e}")
-                raise HTTPException(status_code=500, detail="Download failed")
-        
-    except HTTPException:
-        raise
+        content_bytes = content.encode("utf-8")
     except Exception as e:
-        logger.error(f"Error downloading report {path}: {e}")
-        raise HTTPException(status_code=500, detail=f"Download failed: {str(e)}")
+        logger.error(f"[Download] Failed to encode content: {e}")
+        raise HTTPException(status_code=500, detail="Encoding error")
+
+    filename = path.split("/")[-1]
+    logger.info(f"[Download] Sending file: {filename}")
+    
+    from io import BytesIO
+    return StreamingResponse(
+        BytesIO(content_bytes),
+        media_type="text/markdown",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
