@@ -14,7 +14,8 @@ from typing import List, Dict, Any
 from pathlib import Path
 import logging
 
-from app.storage import create_storage_from_env, load_latest_run_id, list_reports
+from app.storage import create_storage_from_env, list_reports
+from app.storage_service import get_storage_service
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -35,8 +36,10 @@ async def get_reports_list():
         Array of file objects with name, path, mtime, size
     """
     try:
-        # Get latest run_id
-        run_id = load_latest_run_id(storage)
+        # Get latest run_id via StorageService (GCS-aware)
+        storage_service = get_storage_service()
+        run_id = storage_service.get_latest_run_id()
+        
         if not run_id:
             logger.warning("No latest run_id found")
             return JSONResponse(content=[])
