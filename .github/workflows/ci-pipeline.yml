@@ -216,8 +216,6 @@ jobs:
     
     - name: Validate Dashboard Data (Main Only)
       if: github.ref == 'refs/heads/main'
-      env:
-        CLOUD_RUN_URL: ${{ secrets.CLOUD_RUN_URL }}
       run: |
         echo "=== Validating Dashboard Data Artifacts ==="
         python -c "
@@ -225,8 +223,7 @@ jobs:
         import httpx
         
         # Fetch dashboard summary from deployed service
-        import os
-        base_url = os.environ.get('CLOUD_RUN_URL', '${{ secrets.CLOUD_RUN_URL }}')
+        base_url = 'https://run-density-ln4r3sfkha-uc.a.run.app'
         response = httpx.get(f'{base_url}/api/dashboard/summary', timeout=30.0)
         response.raise_for_status()
         data = response.json()
