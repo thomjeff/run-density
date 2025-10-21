@@ -43,12 +43,14 @@ async def run_e2e():
         logger.info(f"Environment: {environment}")
         
         # Run e2e.py (without --cloud flag, so it generates locally)
+        # In Cloud Run, e2e.py is at /app/e2e.py (from Dockerfile COPY)
         logger.info("Running python e2e.py...")
         result = subprocess.run(
-            ["python", "e2e.py"],
+            ["python", "/app/e2e.py"],
             capture_output=True,
             text=True,
-            timeout=600  # 10 minute timeout
+            timeout=600,  # 10 minute timeout
+            cwd="/app"  # Ensure working directory is /app
         )
         
         if result.returncode != 0:
@@ -324,4 +326,5 @@ async def get_e2e_status():
     except Exception as e:
         logger.error(f"Error getting E2E status: {e}")
         raise HTTPException(status_code=500, detail=f"Status check error: {str(e)}")
+
 
