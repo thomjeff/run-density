@@ -217,15 +217,17 @@ def create_storage_from_env() -> Storage:
     Resolves artifacts/<run_id>/ui/ from artifacts/latest.json pointer.
     
     Environment Variables:
-        RUNFLOW_ENV: "local" or "cloud"
+        K_SERVICE or GOOGLE_CLOUD_PROJECT: Auto-detected for Cloud Run
         DATA_ROOT: Root directory for local mode (default: resolved from artifacts/latest.json)
-        GCS_BUCKET: Bucket name for cloud mode
-        GCS_PREFIX: Optional prefix for GCS paths
+        GCS_BUCKET: Bucket name for cloud mode (default: run-density-reports)
+        GCS_PREFIX: Optional prefix for GCS paths (default: artifacts)
     
     Returns:
         Storage: Configured storage instance
     """
-    env = os.getenv("RUNFLOW_ENV", "local")
+    # Auto-detect Cloud Run environment (same as storage_service.py)
+    is_cloud = bool(os.getenv('K_SERVICE') or os.getenv('GOOGLE_CLOUD_PROJECT'))
+    env = "cloud" if is_cloud else "local"
     
     if env == "local":
         root = os.getenv("DATA_ROOT")
@@ -249,10 +251,9 @@ def create_storage_from_env() -> Storage:
         
         return Storage(mode="local", root=root)
     else:
-        bucket = os.getenv("GCS_BUCKET")
-        prefix = os.getenv("GCS_PREFIX", "")
-        if not bucket:
-            raise ValueError("GCS_BUCKET environment variable required for cloud mode")
+        # Cloud Run mode - use GCS with defaults
+        bucket = os.getenv("GCS_BUCKET", "run-density-reports")
+        prefix = os.getenv("GCS_PREFIX", "artifacts")
         return Storage(mode="gcs", bucket=bucket, prefix=prefix)
 
 

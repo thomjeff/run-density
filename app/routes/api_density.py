@@ -38,13 +38,20 @@ def load_density_metrics_from_bins():
         Dict with segment_id -> {utilization, worst_bin, bin_detail}
     """
     try:
-        # Get latest run_id
-        latest_path = Path("artifacts/latest.json")
-        if not latest_path.exists():
+        # Get latest run_id from artifacts/latest.json via StorageService (GCS-aware)
+        from app.storage_service import get_storage_service
+        storage = get_storage_service()
+        
+        if storage.config.use_cloud_storage:
+            content = storage._load_from_gcs("artifacts/latest.json")
+        else:
+            latest_path = Path("artifacts/latest.json")
+            content = latest_path.read_text() if latest_path.exists() else None
+        
+        if not content:
             return {}
         
-        with open(latest_path) as f:
-            latest = json.load(f)
+        latest = json.loads(content)
         run_id = latest.get("run_id") or latest.get("latest_run_id")
         if not run_id:
             return {}
