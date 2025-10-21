@@ -186,9 +186,15 @@ class StorageService:
         if date is None:
             # Try to get the latest run_id from artifacts/latest.json
             try:
-                latest_path = Path("artifacts/latest.json")
-                if latest_path.exists():
-                    latest_data = json.loads(latest_path.read_text())
+                # Read latest.json from appropriate storage (local or GCS)
+                if self.config.use_cloud_storage:
+                    content = self._load_from_gcs("artifacts/latest.json")
+                else:
+                    latest_path = Path("artifacts/latest.json")
+                    content = latest_path.read_text() if latest_path.exists() else None
+                
+                if content:
+                    latest_data = json.loads(content)
                     date = latest_data.get("run_id")
                     logger.info(f"Using latest run_id from latest.json: {date}")
                 else:
