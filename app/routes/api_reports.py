@@ -155,8 +155,10 @@ async def download_report(path: str = Query(..., description="Report file path")
                 # Handle both reports/ and data/ files
                 if path.startswith("data/"):
                     content = storage.read_bytes(path)  # data/runners.csv
+                elif path.startswith("reports/"):
+                    content = storage.read_bytes(path)  # reports/2025-10-21/file.md
                 else:
-                    content = storage.read_bytes(f"reports/{path}")  # reports/2025-10-19/file.md
+                    content = storage.read_bytes(f"reports/{path}")  # reports/2025-10-21/file.md
                 
                 filename = Path(path).name
                 
