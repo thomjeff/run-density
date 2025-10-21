@@ -14,7 +14,7 @@ from typing import List, Dict, Any
 from pathlib import Path
 import logging
 
-from app.storage import create_storage_from_env, list_reports
+from app.storage import create_storage_from_env
 from app.storage_service import get_storage_service
 
 # Configure logging
@@ -44,24 +44,49 @@ async def get_reports_list():
             logger.warning("No latest run_id found")
             return JSONResponse(content=[])
         
-        # List reports
-        reports = list_reports(storage, run_id)
+        # List report files from GCS using StorageService
+        from pathlib import Path as PathLib
+        reports = []
+        file_list = storage_service.list_files(f"reports/{run_id}")
         
-        # Add core data files from data/ directory
+        for filename in file_list:
+            # Get file extension for description
+            ext = PathLib(filename).suffix
+            description = ""
+            if ext == ".md":
+                description = "Markdown report"
+            elif ext == ".csv":
+                description = "CSV data export"
+            elif ext == ".parquet":
+                description = "Parquet data export"
+            elif ext == ".gz":
+                description = "Compressed GeoJSON"
+            
+            reports.append({
+                "name": filename,
+                "path": f"reports/{run_id}/{filename}",
+                "description": description,
+                "type": "report"
+            })
+        
+        # Add core data files from local data/ directory (baked into Docker image)
+        from pathlib import Path
         core_data_files = [
             {"name": "runners.csv", "path": "data/runners.csv", "description": "Runner data with start times and event assignments"},
             {"name": "segments.csv", "path": "data/segments.csv", "description": "Course segment definitions and characteristics"},
             {"name": "flow_expected_results.csv", "path": "data/flow_expected_results.csv", "description": "Expected results for validation"}
         ]
         
-        # Check if core data files exist and add them
+        # Check if core data files exist locally and add them
         for data_file in core_data_files:
-            if storage.exists(data_file["path"]):
+            file_path = Path(data_file["path"])
+            if file_path.exists():
+                stat = file_path.stat()
                 reports.append({
                     "name": data_file["name"],
                     "path": data_file["path"],
-                    "mtime": storage.mtime(data_file["path"]),
-                    "size": storage.size(data_file["path"]),
+                    "mtime": stat.st_mtime,
+                    "size": stat.st_size,
                     "description": data_file["description"],
                     "type": "data_file"
                 })

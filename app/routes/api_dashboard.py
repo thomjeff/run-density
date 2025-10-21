@@ -41,26 +41,27 @@ def load_runners_data() -> Dict[str, Any]:
         Dict with total_runners and cohorts data
     """
     try:
-        if not storage.exists(DATASET["runners"]):
-            logger.warning("runners.csv not found in storage")
-            return {"total_runners": 0, "cohorts": {}}
+        # Read runners.csv directly from local filesystem (Docker image includes data/)
+        import pandas as pd
+        from app.constants import DEFAULT_START_TIMES
+        df = pd.read_csv("data/runners.csv")
         
-        # Read CSV data
-        csv_content = storage.read_text(DATASET["runners"])
-        lines = csv_content.strip().split('\n')
+        # Count runners by event
+        cohorts = {}
+        for event in df['event'].unique():
+            event_runners = df[df['event'] == event]
+            # Get start time from constants (in minutes, convert to HH:MM format)
+            start_minutes = DEFAULT_START_TIMES.get(event, 0)
+            hours = start_minutes // 60
+            minutes = start_minutes % 60
+            start_time = f"{hours:02d}:{minutes:02d}"
+            
+            cohorts[event] = {
+                "start": start_time,
+                "count": len(event_runners)
+            }
         
-        if len(lines) < 2:
-            return {"total_runners": 0, "cohorts": {}}
-        
-        # Parse CSV (assuming: event,start_time,count or similar structure)
-        # For now, use mock data structure - will be updated when real data available
-        cohorts = {
-            "Full": {"start": "07:00", "count": 368},
-            "10K": {"start": "07:20", "count": 618}, 
-            "Half": {"start": "07:40", "count": 912}
-        }
-        
-        total_runners = sum(cohort["count"] for cohort in cohorts.values())
+        total_runners = len(df)
         
         return {
             "total_runners": total_runners,
@@ -68,7 +69,7 @@ def load_runners_data() -> Dict[str, Any]:
         }
         
     except Exception as e:
-        logger.error(f"Error loading runners data: {e}")
+        logger.warning(f"Could not read runners.csv: {e}")
         return {"total_runners": 0, "cohorts": {}}
 
 
@@ -275,8 +276,9 @@ async def get_dashboard_summary():
             segments_flagged = 0
             bins_flagged = 0
         
-        # Load runners data
-        if not storage.exists(DATASET["runners"]):
+        # Load runners data (from local data/ directory)
+        from pathlib import Path
+        if not Path("data/runners.csv").exists():
             warnings.append("missing: runners.csv")
         
         runners_data = load_runners_data()
