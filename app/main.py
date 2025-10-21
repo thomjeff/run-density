@@ -122,7 +122,7 @@ class FlowAuditRequest(BaseModel):
     conflictLengthM: float = DEFAULT_CONFLICT_LENGTH_METERS
     outputDir: str = "reports"
 
-app = FastAPI(title="run-density", version="v1.6.42")
+app = FastAPI(title="run-density", version="v1.6.43")
 APP_VERSION = os.getenv("APP_VERSION", app.version)
 GIT_SHA = os.getenv("GIT_SHA", "local")
 BUILD_AT = os.getenv("BUILD_AT", datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z")

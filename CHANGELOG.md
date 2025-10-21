@@ -1,5 +1,110 @@
 # Changelog
 
+## [v1.6.43] - 2025-10-21
+
+### CRITICAL BUG FIX: Report Downloads in Cloud Run and Local Environments
+
+**Context**: This was an emergency hotfix session conducted directly on the main branch due to the critical nature of the download failures affecting core user functionality.
+
+#### The Problem
+- **Symptom**: Report downloads failing in both local and Cloud Run environments
+- **Local Error**: `{"detail":"Access denied"}` - 403 Forbidden
+- **Cloud Run Error**: `AttributeError: 'NoneType' object has no attribute 'encode'` - resulted in 0-byte downloads
+- **Impact**: Users unable to download any report files (`.md`, `.csv`) from the Reports UI page
+
+#### Root Causes Identified
+
+**1. Path Validation Mismatch**
+- Browser requests included `reports/` prefix (e.g., `reports/2025-10-21/file.md`)
+- Validation logic expected paths without prefix (e.g., `2025-10-21/file.md`)
+- Result: Legitimate requests rejected with "Access denied"
+
+**2. Double Path Prefix Bug (Local)**
+- File path construction created `reports/reports/2025-10-21/file.md` when path already contained `reports/`
+- Result: File not found errors after fixing validation
+
+**3. GCS Path Construction Bug (Cloud Run)**
+- Similar double-prefix issue for GCS paths
+- Result: GCS blob lookups failing
+
+**4. NoneType Handling Bug (Cloud Run)**
+- `StorageService._load_from_gcs()` returned `None` when files not found
+- `None` passed directly to `StreamingResponse` causing `AttributeError` during encoding
+- Result: 0-byte downloads and cryptic error messages
+
+**5. Environment Detection Gap**
+- Download endpoint didn't differentiate between local filesystem and GCS reads for report files
+- Cloud Run environment needed explicit GCS read logic
+- Result: Cloud Run trying to read from ephemeral local filesystem
+
+#### The Fix (5 Commits)
+
+**Commit 1**: `1f4b961` - Initial path validation normalization
+- Strip `reports/` prefix before validation to handle browser-encoded URLs
+
+**Commit 2**: `b72d3ed` - Switch to StorageService
+- Replace legacy `storage.py` with `StorageService` for consistency
+
+**Commit 3**: `c58ee1e` - Fix NoneType error
+- Add explicit `None` checks before encoding content
+
+**Commit 4**: `25196a6` - Comprehensive ChatGPT fix
+- Complete rewrite of `download_report()` endpoint with:
+  - Robust GCS path normalization in `_load_from_gcs()`
+  - Explicit `None` content checks with proper 404 responses
+  - Safe UTF-8 encoding with error handling
+  - `BytesIO` for `StreamingResponse` compatibility
+  - Descriptive logging at every step
+
+**Commit 5**: `9939807` - Environment-aware file reads
+- Add local filesystem support for report files when not in Cloud Run
+- Use `storage_service.config.use_cloud_storage` to differentiate environments
+- Handle both local (`open()`) and GCS (`_load_from_gcs()`) reads
+
+#### Files Modified
+- `app/storage_service.py`:
+  - Enhanced `_load_from_gcs()` with path normalization and logging
+  - Added support for `reports/` prefix stripping
+- `app/routes/api_reports.py`:
+  - Complete rewrite of `download_report()` endpoint
+  - Environment-aware file reading (local vs GCS)
+  - Robust error handling and logging
+  - Safe content encoding
+
+#### Testing & Validation
+- ✅ Local environment: Report downloads working (`.md`, `.csv`)
+- ✅ Cloud Run environment: Report downloads working (confirmed via browser and curl)
+- ✅ Path validation: Correctly handles browser-encoded URLs with `reports/` prefix
+- ✅ Error handling: Proper 404 responses for missing files
+- ✅ Logging: Comprehensive logs for debugging future issues
+
+#### Architectural Insights
+This fix highlighted the critical importance of:
+1. **Environment-aware storage access** - local filesystem vs GCS must be explicit
+2. **Defensive `None` handling** - never pass `None` to response encoders
+3. **Path normalization** - consistent path handling across environments
+4. **Comprehensive logging** - essential for debugging cloud-only issues
+
+#### ChatGPT Consultation
+This fix was developed with extensive architectural guidance from ChatGPT, which provided:
+- Root cause analysis of the NoneType error
+- Comprehensive patch for the download endpoint
+- Best practices for GCS path normalization
+- Environment detection patterns
+
+#### Known Limitations
+- Fix was applied directly to main branch (emergency hotfix)
+- No unit tests added (future improvement opportunity)
+- Legacy `storage.py` still exists (scheduled for deprecation)
+
+#### Future Improvements
+- [ ] Add unit tests for download endpoint
+- [ ] Deprecate legacy `storage.py` module
+- [ ] Consolidate storage access patterns across all routes
+- [ ] Add integration tests for GCS file operations
+
+---
+
 ## [Unreleased] - feat/236-operational-intelligence-reports
 
 ### Issue #239 - CRITICAL BUG FIX: Runner Mapping in bins_accumulator
