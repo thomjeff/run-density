@@ -150,15 +150,21 @@ async def download_report(path: str = Query(..., description="Report file path")
                 media_type="application/octet-stream"
             )
         else:
-            # For GCS mode, stream from bucket
+            # For GCS mode, use StorageService
             try:
                 # Handle both reports/ and data/ files
                 if path.startswith("data/"):
-                    content = storage.read_bytes(path)  # data/runners.csv
+                    # For data files, read directly from local filesystem (baked into Docker image)
+                    file_path = Path(path)
+                    if not file_path.exists():
+                        raise HTTPException(status_code=404, detail="File not found")
+                    content = file_path.read_bytes()
                 elif path.startswith("reports/"):
-                    content = storage.read_bytes(path)  # reports/2025-10-21/file.md
+                    # For report files, read from GCS using StorageService
+                    content = storage_service._load_from_gcs(path)
                 else:
-                    content = storage.read_bytes(f"reports/{path}")  # reports/2025-10-21/file.md
+                    # For paths without reports/ prefix, add it
+                    content = storage_service._load_from_gcs(f"reports/{path}")
                 
                 filename = Path(path).name
                 
