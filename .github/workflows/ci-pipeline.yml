@@ -180,6 +180,15 @@ jobs:
           echo "❌ UI artifacts directory not found: artifacts/$REPORT_DATE/ui"
           exit 1
         fi
+        
+        # Upload latest.json pointer file (Issue #293)
+        if [ -f "artifacts/latest.json" ]; then
+          echo "Uploading latest.json pointer to Cloud Storage..."
+          gsutil cp artifacts/latest.json gs://run-density-reports/artifacts/latest.json
+          echo "✅ latest.json uploaded to Cloud Storage"
+        else
+          echo "⚠️ Warning: artifacts/latest.json not found"
+        fi
     
     - name: Validate Dashboard Data (Main Only)
       if: github.ref == 'refs/heads/main'
