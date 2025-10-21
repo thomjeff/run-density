@@ -230,12 +230,19 @@ def main():
         try:
             from analytics.export_frontend_artifacts import export_ui_artifacts, update_latest_pointer
             from pathlib import Path
+            import re
             
             # Find the latest report directory
             reports_dir = Path("reports")
             if reports_dir.exists():
-                # Get the most recent report directory
-                run_dirs = sorted([d for d in reports_dir.iterdir() if d.is_dir()], reverse=True)
+                # Get the most recent date-based report directory (YYYY-MM-DD format only)
+                # Filter out non-date directories like 'ui' to avoid picking wrong source
+                date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+                run_dirs = sorted(
+                    [d for d in reports_dir.iterdir() 
+                     if d.is_dir() and date_pattern.match(d.name)],
+                    reverse=True
+                )
                 if run_dirs:
                     latest_run_dir = run_dirs[0]
                     run_id = latest_run_dir.name
