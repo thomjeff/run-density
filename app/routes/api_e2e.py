@@ -42,6 +42,15 @@ async def run_e2e():
         
         logger.info(f"Environment: {environment}")
         
+        # Debug: List files in /app to verify e2e.py was copied
+        try:
+            app_files = os.listdir("/app")
+            logger.info(f"Files in /app: {sorted(app_files)[:20]}")  # First 20 files
+            e2e_exists = "e2e.py" in app_files
+            logger.info(f"e2e.py exists in /app: {e2e_exists}")
+        except Exception as e:
+            logger.warning(f"Could not list /app directory: {e}")
+        
         # Run e2e.py (without --cloud flag, so it generates locally)
         # In Cloud Run, e2e.py is at /app/e2e.py (from Dockerfile COPY)
         logger.info("Running python e2e.py...")
