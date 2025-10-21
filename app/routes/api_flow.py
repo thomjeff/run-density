@@ -51,22 +51,25 @@ async def get_flow_segments():
             logger.warning("Could not determine latest run_id")
             return JSONResponse(content=[])
         
-        # Find Flow CSV file using storage service
+        # Find Flow CSV file using storage service (GCS-aware)
         try:
-            # Look for Flow CSV files in the reports directory for this run_id
-            reports_dir = Path("reports") / run_id
-            flow_csv_files = list(reports_dir.glob("*-Flow.csv"))
+            # List Flow CSV files in the reports directory for this run_id
+            flow_csv_files = storage.list_files(f"reports/{run_id}", suffix="-Flow.csv")
             
             if not flow_csv_files:
-                logger.warning(f"No Flow CSV files found in {reports_dir}")
+                logger.warning(f"No Flow CSV files found in reports/{run_id}")
                 return JSONResponse(content=[])
             
-            # Use the latest Flow CSV (by modification time)
-            latest_flow_csv = max(flow_csv_files, key=lambda f: f.stat().st_mtime)
+            # Use the latest Flow CSV (last in sorted list = most recent timestamp)
+            latest_flow_csv = flow_csv_files[-1]
             logger.info(f"Using Flow CSV: {latest_flow_csv}")
             
-            # Read the CSV file
-            df = pd.read_csv(latest_flow_csv)
+            # Read the CSV file (GCS-aware)
+            df = storage.read_csv(f"reports/{run_id}/{latest_flow_csv}")
+            
+            if df is None:
+                logger.error(f"Failed to read Flow CSV: {latest_flow_csv}")
+                return JSONResponse(content=[])
         
         except Exception as e:
             logger.error(f"Failed to load Flow CSV: {e}")

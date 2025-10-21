@@ -46,13 +46,10 @@ def load_density_metrics_from_bins():
         if not run_id:
             return {}
         
-        # Load bins.parquet
-        bins_path = Path(f"reports/{run_id}/bins.parquet")
-        if not bins_path.exists():
-            logger.warning(f"bins.parquet not found at {bins_path}")
+        # Load bins.parquet (GCS-aware via StorageService)
+        bins_df = storage.read_parquet(f"reports/{run_id}/bins.parquet")
+        if bins_df is None:
             return {}
-        
-        bins_df = pd.read_parquet(bins_path)
         
         # Normalize column names
         if "seg_id" in bins_df.columns and "segment_id" not in bins_df.columns:
