@@ -136,8 +136,10 @@ async def download_report(path: str = Query(..., description="Report file path")
             # Handle both reports/ and data/ files
             if path.startswith("data/"):
                 file_path = Path(path)  # data/runners.csv -> data/runners.csv
+            elif path.startswith("reports/"):
+                file_path = Path(path)  # reports/2025-10-21/file.md -> reports/2025-10-21/file.md
             else:
-                file_path = Path("reports") / path  # 2025-10-19/file.md -> reports/2025-10-19/file.md
+                file_path = Path("reports") / path  # 2025-10-21/file.md -> reports/2025-10-21/file.md
             
             if not file_path.exists():
                 raise HTTPException(status_code=404, detail="File not found")
