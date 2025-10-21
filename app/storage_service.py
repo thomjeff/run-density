@@ -380,6 +380,38 @@ class StorageService:
         except Exception as e:
             logger.error(f"Failed to check file existence locally {file_path}: {e}")
             return False
+    
+    def get_latest_run_id(self) -> Optional[str]:
+        """
+        Get latest run_id from artifacts/latest.json (environment-aware).
+        
+        Reads from GCS in Cloud Run, local filesystem in development.
+        Falls back to today's date if latest.json not found.
+        
+        Returns:
+            Run ID string (e.g., "2025-10-21") or today's date as fallback
+        """
+        try:
+            if self.config.use_cloud_storage:
+                content = self._load_from_gcs("artifacts/latest.json")
+            else:
+                latest_path = Path("artifacts/latest.json")
+                content = latest_path.read_text() if latest_path.exists() else None
+            
+            if content:
+                latest_data = json.loads(content)
+                run_id = latest_data.get("run_id")
+                if run_id:
+                    logger.info(f"Loaded latest run_id: {run_id}")
+                    return run_id
+        except Exception as e:
+            logger.warning(f"Could not load latest run_id: {e}")
+        
+        # Fallback to today's date
+        from datetime import datetime
+        fallback = datetime.now().strftime("%Y-%m-%d")
+        logger.info(f"Using fallback run_id: {fallback}")
+        return fallback
 
 # Global storage service instance
 _storage_service = None

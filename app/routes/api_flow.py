@@ -43,26 +43,12 @@ async def get_flow_segments():
         import pandas as pd
         from app.storage_service import get_storage_service
         
-        # Get latest run_id from artifacts/latest.json via StorageService
+        # Get latest run_id via StorageService (GCS-aware)
         storage = get_storage_service()
-        try:
-            if storage.config.use_cloud_storage:
-                content = storage._load_from_gcs("artifacts/latest.json")
-            else:
-                latest_path = Path("artifacts/latest.json")
-                content = latest_path.read_text() if latest_path.exists() else None
-            
-            if not content:
-                logger.warning("artifacts/latest.json not found")
-                return JSONResponse(content=[])
-            
-            latest_data = json.loads(content)
-            run_id = latest_data.get("run_id")
-            if not run_id:
-                logger.warning("No run_id found in latest.json")
-                return JSONResponse(content=[])
-        except Exception as e:
-            logger.error(f"Failed to read latest.json: {e}")
+        run_id = storage.get_latest_run_id()
+        
+        if not run_id:
+            logger.warning("Could not determine latest run_id")
             return JSONResponse(content=[])
         
         # Find Flow CSV file using storage service
