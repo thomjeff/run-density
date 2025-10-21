@@ -1,8 +1,18 @@
 """
 API Routes for E2E Report Generation
 
-Provides endpoint to trigger E2E report generation within the current environment.
-Useful for Cloud Run to generate reports and upload to GCS.
+🚧 INTERNAL / EXPERIMENTAL
+
+The `/api/e2e/run` endpoint was added as a prototype to trigger report generation inside 
+the Cloud Run container (e.g. when SSH isn't available). 
+
+However, it is **NOT used in CI** due to deadlock risks under single-threaded gunicorn.
+
+In the future, this route (or a replacement) could support:
+✅ Triggering a new analysis with a custom runners.csv
+✅ Allowing users to define event times or filter criteria
+
+Until then, this module is considered *experimental* and not production-critical.
 """
 
 from fastapi import APIRouter, HTTPException
@@ -23,7 +33,12 @@ router = APIRouter()
 @router.post("/api/e2e/run")
 async def run_e2e():
     """
+    🚧 Experimental - Not used in CI
+    
     Trigger E2E report generation in the current environment.
+    
+    Originally created to trigger `e2e.py` inside Cloud Run. 
+    Causes deadlocks in single-worker deployments and has been deprecated from CI use.
     
     This endpoint:
     1. Runs the E2E pipeline locally (within Cloud Run or local server)
