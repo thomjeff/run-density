@@ -122,9 +122,14 @@ async def download_report(path: str = Query(..., description="Report file path")
         if not run_id:
             raise HTTPException(status_code=404, detail="No reports available")
         
-        # Validate path starts with run_id (for reports) or is a data file
-        if not (path.startswith(run_id) or path.startswith("data/")):
-            raise HTTPException(status_code=403, detail="Access denied")
+        # Normalize path for validation only
+        normalized_path = path
+        if path.startswith("reports/"):
+            normalized_path = path[len("reports/"):]
+        
+        # Validate against normalized path
+        if not (normalized_path.startswith(run_id) or normalized_path.startswith("data/")):
+            raise HTTPException(status_code=403, detail=f"Access denied: file path must start with 'reports/{run_id}' or 'data/'")
         
         # For local mode, serve directly
         if storage.mode == "local":
