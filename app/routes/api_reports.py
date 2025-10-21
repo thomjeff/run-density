@@ -130,12 +130,28 @@ def download_report(path: str = Query(..., description="Report file path")):
             logger.error(f"[Download] Failed to read local file {path}: {e}")
             raise HTTPException(status_code=404, detail="File not found")
 
-    # Case B: Read from GCS (Cloud Run)
+    # Case B: Read report files (local or GCS)
     else:
-        content = storage_service._load_from_gcs(path)
-        if content is None:
-            logger.warning(f"[Download] GCS file not found or unreadable: {path}")
-            raise HTTPException(status_code=404, detail="File not found")
+        # Check if we're in local mode or Cloud Run mode
+        if storage_service.config.use_cloud_storage:
+            # Cloud Run: Read from GCS
+            content = storage_service._load_from_gcs(path)
+            if content is None:
+                logger.warning(f"[Download] GCS file not found or unreadable: {path}")
+                raise HTTPException(status_code=404, detail="File not found")
+        else:
+            # Local: Read from local filesystem
+            try:
+                if path.startswith("reports/"):
+                    file_path = path  # reports/2025-10-21/file.md
+                else:
+                    file_path = f"reports/{path}"  # 2025-10-21/file.md -> reports/2025-10-21/file.md
+                
+                content = open(file_path, "r", encoding="utf-8").read()
+                logger.info(f"[Download] Loaded local report file: {file_path}")
+            except Exception as e:
+                logger.error(f"[Download] Failed to read local report file {file_path}: {e}")
+                raise HTTPException(status_code=404, detail="File not found")
 
     # Safe encoding
     try:
