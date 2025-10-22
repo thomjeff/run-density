@@ -194,6 +194,11 @@ async def get_density_segments():
         # Build segments list
         segments_list = []
         for seg_id, metrics in segment_metrics.items():
+            # Issue #308: Validate that metrics is a dictionary before calling .get()
+            if not isinstance(metrics, dict):
+                logger.warning(f"⚠️ Skipping invalid segment {seg_id}: {type(metrics).__name__}")
+                continue
+                
             label_info = label_lookup.get(seg_id, {})
             
             # Issue #285: Use operational schema tag instead of geometry metadata
@@ -359,8 +364,14 @@ def _get_segment_operational_schema(seg_id: str, segment_metrics: Dict[str, Dict
     """
     try:
         if seg_id in segment_metrics:
-            schema_tag = segment_metrics[seg_id].get("schema", "on_course_open")
-            return schema_tag
+            metrics = segment_metrics[seg_id]
+            # Issue #308: Validate that metrics is a dictionary before calling .get()
+            if isinstance(metrics, dict):
+                schema_tag = metrics.get("schema", "on_course_open")
+                return schema_tag
+            else:
+                logger.warning(f"⚠️ Invalid metrics type for segment {seg_id}: {type(metrics).__name__}")
+                return "on_course_open"  # Default fallback
         else:
             return "on_course_open"  # Default fallback
             

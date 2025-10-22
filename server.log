@@ -1,0 +1,35 @@
+INFO:app.storage_service:Detected local environment - using file system storage
+INFO:app.storage_service:Detected local environment - using file system storage
+INFO:app.storage_service:Detected local environment - using file system storage
+INFO:app.storage_service:Detected local environment - using file system storage
+INFO:app.storage_service:Detected local environment - using file system storage
+INFO:root:BOOT_ENV {'cwd': '/Users/jthompson/Documents/GitHub/run-density', 'enable_bin_dataset': False, 'output_dir': 'reports', 'bin_max_features': '', 'bin_dt_s': '', 'raw_enable_bin_dataset': None, 'all_env_vars_with_BIN': {}, 'all_env_vars_with_ENABLE': {}}
+INFO:     Started server process [62863]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)
+INFO:app.storage_service:Loaded latest run_id: 2025-10-21
+INFO:     127.0.0.1:63804 - "GET /api/reports/download?path=reports%2F2025-10-21%2F2025-10-21-0651-Density.md HTTP/1.1" 403 Forbidden
+INFO:app.storage_service:Loaded latest run_id: 2025-10-21
+INFO:     127.0.0.1:63804 - "GET /api/reports/download?path=reports%2F2025-10-21%2F2025-10-21-0651-Density.md HTTP/1.1" 403 Forbidden
+INFO:app.storage_service:Loaded latest run_id: 2025-10-21
+INFO:     127.0.0.1:63804 - "GET /api/reports/download?path=reports%2F2025-10-21%2F2025-10-21-0651-Density.md HTTP/1.1" 403 Forbidden
+INFO:app.storage_service:Loaded latest run_id: 2025-10-21
+INFO:     127.0.0.1:63804 - "GET /api/reports/download?path=reports%2F2025-10-21%2F2025-10-21-0651-Density.md HTTP/1.1" 403 Forbidden
+INFO:app.storage_service:Loaded latest run_id: 2025-10-21
+INFO:     127.0.0.1:63804 - "GET /api/reports/download?path=reports%2F2025-10-21%2F2025-10-21-0651-Density.md HTTP/1.1" 403 Forbidden
+INFO:     127.0.0.1:63870 - "GET /reports HTTP/1.1" 200 OK
+INFO:app.storage_service:Loaded latest run_id: 2025-10-21
+INFO:     127.0.0.1:63870 - "GET /api/reports/list HTTP/1.1" 200 OK
+INFO:app.storage_service:Loaded latest run_id: 2025-10-21
+INFO:     127.0.0.1:63882 - "GET /api/reports/download?path=reports%2F2025-10-21%2F2025-10-21-0651-Density.md HTTP/1.1" 403 Forbidden
+INFO:app.storage_service:Loaded latest run_id: 2025-10-21
+INFO:     127.0.0.1:63882 - "GET /api/reports/download?path=reports%2F2025-10-21%2F2025-10-21-0651-Density.md HTTP/1.1" 403 Forbidden
+INFO:app.storage_service:Loaded latest run_id: 2025-10-21
+INFO:     127.0.0.1:63882 - "GET /api/reports/download?path=reports%2F2025-10-21%2F2025-10-21-0651-Density.md HTTP/1.1" 403 Forbidden
+INFO:app.storage_service:Loaded latest run_id: 2025-10-21
+INFO:     127.0.0.1:63902 - "GET /api/reports/download?path=reports%2F2025-10-21%2F2025-10-21-0651-Density.md HTTP/1.1" 403 Forbidden
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [62863]

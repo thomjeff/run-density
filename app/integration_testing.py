@@ -288,5 +288,67 @@ def main():
     sys.exit(0 if success else 1)
 
 
+# ----------------------------------------------------------------------
+# QA Validation Test for Issue #304
+# Ensures overtaking and co-presence metrics are exported correctly
+# ----------------------------------------------------------------------
+
+def test_overtaking_and_copresence_metrics_exist_and_are_int():
+    """
+    Validates that overtaking_segments and co_presence_segments
+    exist in segment_metrics.json and contain integer values.
+    This test enforces regression protection for Issue #304.
+    
+    Note: Metrics are stored in segment_metrics.json at the top level
+    alongside per-segment data, not in latest.json (metadata-only).
+    """
+    import os
+    import json
+    from pathlib import Path
+    
+    # Determine artifact directory (supports Local + Cloud)
+    artifact_dir = os.environ.get("RUNFLOW_ARTIFACT_DIR", "./artifacts")
+    
+    # Find latest run_id from latest.json
+    latest_path = Path(artifact_dir) / "latest.json"
+    if latest_path.exists():
+        with open(latest_path, "r", encoding="utf-8") as f:
+            latest_data = json.load(f)
+            run_id = latest_data.get("run_id")
+    else:
+        # Fallback to finding most recent directory
+        artifacts_path = Path(artifact_dir)
+        date_dirs = sorted([d for d in artifacts_path.iterdir() if d.is_dir() and d.name.startswith("2025-")])
+        if date_dirs:
+            run_id = date_dirs[-1].name
+        else:
+            raise FileNotFoundError(f"No run directories found in {artifact_dir}")
+    
+    # Load segment_metrics.json
+    metrics_path = Path(artifact_dir) / run_id / "ui" / "segment_metrics.json"
+    assert metrics_path.exists(), f"segment_metrics.json not found at {metrics_path}"
+    
+    with open(metrics_path, "r", encoding="utf-8") as f:
+        metrics = json.load(f)
+
+    # --- Required keys must exist ---
+    assert "overtaking_segments" in metrics, "Missing 'overtaking_segments' key in segment_metrics.json"
+    assert "co_presence_segments" in metrics, "Missing 'co_presence_segments' key in segment_metrics.json"
+
+    # --- Values must be integers ---
+    overtaking_val = metrics["overtaking_segments"]
+    copresence_val = metrics["co_presence_segments"]
+
+    assert isinstance(overtaking_val, int), f"Expected int for overtaking_segments, got {type(overtaking_val)}"
+    assert isinstance(copresence_val, int), f"Expected int for co_presence_segments, got {type(copresence_val)}"
+
+    # --- Values should be non-negative ---
+    assert overtaking_val >= 0, "overtaking_segments should be >= 0"
+    assert copresence_val >= 0, "co_presence_segments should be >= 0"
+
+    # Optional sanity log
+    print(f"[QA] overtaking_segments={overtaking_val}, co_presence_segments={copresence_val}")
+
+
 if __name__ == "__main__":
     main()

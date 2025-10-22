@@ -285,23 +285,18 @@ async def get_dashboard_summary():
         total_runners = runners_data["total_runners"]
         cohorts = runners_data["cohorts"]
         
-        # Load flow data from UI artifacts
-        flow_data = storage_service.load_ui_artifact("flow.json")
-        if flow_data is None:
-            warnings.append("missing: flow.json")
-            segments_overtaking = 0
-            segments_copresence = 0
+        # Issue #304: Load flow metrics from segment_metrics.json
+        # Summary-level metrics are now in segment_metrics.json alongside per-segment data
+        segments_overtaking = 0
+        segments_copresence = 0
+        
+        # Extract from segment_metrics if available
+        if segment_metrics:
+            segments_overtaking = segment_metrics.get("overtaking_segments", 0)
+            segments_copresence = segment_metrics.get("co_presence_segments", 0)
+            logger.info(f"Loaded flow metrics from segment_metrics.json: overtaking={segments_overtaking}, co-presence={segments_copresence}")
         else:
-            # Calculate overtaking and co-presence from flow data
-            segments_overtaking = 0
-            segments_copresence = 0
-            
-            if isinstance(flow_data, list):
-                for item in flow_data:
-                    if item.get("overtaking_a", 0) > 0 or item.get("overtaking_b", 0) > 0:
-                        segments_overtaking += 1
-                    if item.get("copresence_a", 0) > 0 or item.get("copresence_b", 0) > 0:
-                        segments_copresence += 1
+            logger.warning("segment_metrics.json not available, flow metrics will be zero")
         
         # Determine status
         status = "normal"

@@ -3,10 +3,53 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Runflow — JSON Health</title>
+<title>Runflow — System Health</title>
 <link rel="stylesheet" href="css/main.css"/>
 <style>
   .ok{color:#10b981}.bad{color:#ef4444}.dot{font-weight:700}
+  .status-indicator.healthy { color: #10b981; }
+  .status-indicator.degraded { color: #f59e0b; }
+  .status-indicator.critical { color: #ef4444; }
+  .endpoint-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .endpoint-status.up { color: #10b981; }
+  .endpoint-status.down { color: #ef4444; }
+  .endpoint-status.error { color: #ef4444; }
+  .health-dashboard {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .health-sections {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+  }
+  .health-section {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 6px;
+  }
+  .system-info {
+    margin-bottom: 1rem;
+  }
+  .info-item {
+    margin-bottom: 0.5rem;
+  }
+  .endpoint-grid {
+    display: flex;
+    flex-direction: column;
+  }
+  @media (max-width: 768px) {
+    .health-sections {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>
 </head>
 <body>
@@ -60,85 +103,159 @@
 </nav>
 
 <main class="container">
-  <section class="card">
-    <h2 class="h2">System Health Check</h2>
-    <div style="margin-bottom:20px;padding:12px;background:#f8f9fa;border-radius:6px;font-size:0.95rem">
-      <div><strong>Environment:</strong> <span id="environment">Detecting...</span></div>
-      <div><strong>Version:</strong> <span id="version">Loading...</span></div>
-      <div><strong>Last Check:</strong> <span id="lastCheck">—</span></div>
-    </div>
-    <h3 class="h3">API Endpoints</h3>
-    <ul id="list" class="muted" style="line-height:2.2;font-size:1.1rem">
-      <li><span class="dot">•</span> <code>data/summary.json</code> <span id="s1">…</span></li>
-      <li><span class="dot">•</span> <code>data/segments.json</code> <span id="s2">…</span></li>
-      <li><span class="dot">•</span> <code>data/reports.json</code> <span id="s3">…</span></li>
-    </ul>
-    <div style="display:flex;gap:8px;margin-top:12px">
-      <button class="btn btn--primary btn--small" id="run">Run Check</button>
-      <span class="muted" id="ts">—</span>
-    </div>
-  </section>
+  <div class="health-dashboard">
+    <section class="card">
+      <h2 class="h2">System Health Status</h2>
+      <div class="status-overview" style="margin-bottom:20px;padding:12px;background:#f8f9fa;border-radius:6px;font-size:0.95rem">
+        <div class="overall-status" id="overall-status">
+          <span class="status-indicator">🔄 Checking...</span>
+        </div>
+      </div>
+      
+      <div class="health-sections">
+        <!-- System Information -->
+        <div class="health-section">
+          <h3 class="h3">System Information</h3>
+          <div class="system-info" id="version-info">
+            <div class="info-item">
+              <strong>Version:</strong> <span id="version">Loading...</span>
+            </div>
+            <div class="info-item">
+              <strong>Environment:</strong> <span id="environment">Detecting...</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- API Endpoints Status -->
+        <div class="health-section">
+          <h3 class="h3">API Endpoints</h3>
+          <div class="endpoint-grid" id="endpoint-status">
+            <!-- Populated by JavaScript -->
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
 </main>
 
 <footer class="footer"><div class="container">&copy; 2025 Runflow</div></footer>
 
 <script>
-async function ping(url){
-  try{
-    const r = await fetch(url,{cache:'no-store'});
-    if(!r.ok) return {ok:false, msg:`HTTP ${r.status}`};
-    const j = await r.json();
-    return {ok:true, msg:`OK (${Object.keys(j).length} keys)`};
-  }catch(e){ return {ok:false, msg:e.message} }
-}
-// Load environment and version info
-async function loadSystemInfo() {
+// Real-time health monitoring using existing API endpoints
+async function testEndpoint(url) {
   try {
-    // Get version from health endpoint
-    const healthResponse = await fetch('/health');
-    if (healthResponse.ok) {
-      const healthData = await healthResponse.json();
-      document.getElementById('version').textContent = healthData.version || 'Unknown';
-    }
-    
-    // Detect environment based on URL
+    const response = await fetch(url, { cache: 'no-store' });
+    const data = await response.json();
+    return {
+      status: response.ok ? 'up' : 'down',
+      statusCode: response.status,
+      data: data
+    };
+  } catch (error) {
+    return {
+      status: 'error',
+      error: error.message
+    };
+  }
+}
+
+// Load health data on page load
+async function loadHealthData() {
+  const healthChecks = {
+    basic: await testEndpoint('/health'),
+    ready: await testEndpoint('/ready'), 
+    dashboard: await testEndpoint('/api/dashboard/summary'),
+    segments: await testEndpoint('/api/segments/summary'),
+    density: await testEndpoint('/api/density/segments'),
+    flow: await testEndpoint('/api/flow/segments'),
+    reports: await testEndpoint('/api/reports/list'),
+    environment: await testEndpoint('/api/debug/env')
+  };
+  
+  renderHealthDashboard(healthChecks);
+}
+
+function determineOverallStatus(checks) {
+  const criticalEndpoints = ['basic', 'ready', 'dashboard'];
+  const criticalDown = criticalEndpoints.some(ep => checks[ep].status !== 'up');
+  
+  if (criticalDown) {
+    return { class: 'critical', icon: '❌', text: 'Critical Issues' };
+  }
+  
+  const allUp = Object.values(checks).every(check => check.status === 'up');
+  if (allUp) {
+    return { class: 'healthy', icon: '✅', text: 'All Systems Operational' };
+  }
+  
+  return { class: 'degraded', icon: '⚠️', text: 'Some Issues Detected' };
+}
+
+function renderHealthDashboard(checks) {
+  // Update overall status
+  const overallStatus = determineOverallStatus(checks);
+  document.getElementById('overall-status').innerHTML = `
+    <span class="status-indicator ${overallStatus.class}">${overallStatus.icon} ${overallStatus.text}</span>
+  `;
+  
+  // Version info from /health endpoint
+  if (checks.basic.status === 'up' && checks.basic.data) {
+    document.getElementById('version').textContent = checks.basic.data.version || 'Unknown';
+  }
+  
+  // Environment info from /api/debug/env
+  if (checks.environment.status === 'up' && checks.environment.data) {
+    const env = checks.environment.data;
+    document.getElementById('environment').textContent = 
+      env.enable_bin_dataset ? 'Cloud Run' : 'Local Development';
+  } else {
+    // Fallback to URL-based detection
     const hostname = window.location.hostname;
     let environment = 'Local Development';
     if (hostname.includes('run.app') || hostname.includes('cloudrun')) {
       environment = 'Cloud Run Production';
     }
     document.getElementById('environment').textContent = environment;
-  } catch (error) {
-    console.warn('Failed to load system info:', error);
-    document.getElementById('version').textContent = 'Unknown';
-    document.getElementById('environment').textContent = 'Unknown';
   }
-}
-
-async function run(){
-  document.getElementById('ts').textContent = 'Checking…';
-  document.getElementById('lastCheck').textContent = 'Running...';
   
-  const [a,b,c] = await Promise.all([
-    ping('/api/summary'),
-    ping('/api/segments'),
-    ping('/api/reports')
-  ]);
-  const paint=(el,res)=>{el.textContent = res.msg; el.className = res.ok?'ok':'bad'};
-  paint(document.getElementById('s1'),a);
-  paint(document.getElementById('s2'),b);
-  paint(document.getElementById('s3'),c);
-  const allOk = a.ok && b.ok && c.ok;
-  const timestamp = (new Date()).toLocaleString();
-  document.getElementById('ts').textContent = timestamp + (allOk?' — All good':' — Issues found');
-  document.getElementById('lastCheck').textContent = timestamp;
+  // Render endpoint status
+  renderEndpointStatus(checks);
 }
 
-document.getElementById('run').addEventListener('click', run);
+function renderEndpointStatus(checks) {
+  const endpointGrid = document.getElementById('endpoint-status');
+  
+  const endpoints = [
+    { key: 'basic', name: '/health', description: 'Basic health check' },
+    { key: 'ready', name: '/ready', description: 'Service readiness' },
+    { key: 'dashboard', name: '/api/dashboard/summary', description: 'System metrics' },
+    { key: 'segments', name: '/api/segments/summary', description: 'Segment data' },
+    { key: 'density', name: '/api/density/segments', description: 'Density analysis' },
+    { key: 'flow', name: '/api/flow/segments', description: 'Flow analysis' },
+    { key: 'reports', name: '/api/reports/list', description: 'Report generation' },
+    { key: 'environment', name: '/api/debug/env', description: 'Environment info' }
+  ];
+  
+  endpointGrid.innerHTML = endpoints.map(endpoint => {
+    const check = checks[endpoint.key];
+    const statusClass = check.status === 'up' ? 'up' : (check.status === 'down' ? 'down' : 'error');
+    const statusText = check.status === 'up' ? 'Up' : (check.status === 'down' ? `Down (${check.statusCode})` : 'Error');
+    const errorText = check.error ? ` - ${check.error}` : '';
+    
+    return `
+      <div class="endpoint-item">
+        <div>
+          <code>${endpoint.name}</code>
+          <div style="font-size: 0.8rem; color: #666; margin-top: 0.2rem;">${endpoint.description}</div>
+        </div>
+        <div class="endpoint-status ${statusClass}">${statusText}${errorText}</div>
+      </div>
+    `;
+  }).join('');
+}
 
-// Initialize
-loadSystemInfo();
-run();
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', loadHealthData);
 </script>
 </body>
 </html>

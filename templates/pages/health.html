@@ -27,18 +27,12 @@
 <!-- Health Data Content -->
 <div id="health-content" style="display: none;">
 
-<!-- Environment Status -->
+<!-- System Information -->
 <div class="card">
-    <h3 style="margin-bottom: 1rem;">Environment</h3>
+    <h3 style="margin-bottom: 1rem;">System Information</h3>
     <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
-        <span id="env-pill" style="padding: 0.5rem 1rem; background: #2ecc71; color: white; border-radius: 20px; font-weight: 600;">
-            Loading...
-        </span>
         <span style="color: #7f8c8d; font-size: 0.875rem;">
             <strong>Version:</strong> <span id="version">Loading...</span>
-        </span>
-        <span style="color: #7f8c8d; font-size: 0.875rem;">
-            <strong>Data Root:</strong> <span id="data-root">Loading...</span>
         </span>
         <span style="color: #7f8c8d; font-size: 0.875rem;">
             <strong>Last Updated:</strong> <span id="last-updated">Loading...</span>
@@ -46,41 +40,6 @@
     </div>
 </div>
 
-<!-- File Presence Checks -->
-<div class="card">
-    <h3 style="margin-bottom: 1rem;">File Presence</h3>
-    <table id="file-status-table">
-        <thead>
-            <tr>
-                <th>File</th>
-                <th>Status</th>
-                <th>Modified</th>
-            </tr>
-        </thead>
-        <tbody id="file-status-tbody">
-            <tr>
-                <td colspan="3" class="placeholder">Loading file status...</td>
-            </tr>
-        </tbody>
-    </table>
-</div>
-
-<!-- Configuration Hashes -->
-<div class="card">
-    <h3 style="margin-bottom: 1rem;">Integrity Hashes</h3>
-    <table>
-        <tbody>
-            <tr>
-                <td><strong>Rulebook Hash</strong></td>
-                <td id="rulebook-hash" style="font-family: monospace;">Loading...</td>
-            </tr>
-            <tr>
-                <td><strong>Reporting Hash</strong></td>
-                <td id="reporting-hash" style="font-family: monospace;">Loading...</td>
-            </tr>
-        </tbody>
-    </table>
-</div>
 
 <!-- API Endpoint Checks -->
 <div class="card">
@@ -107,96 +66,129 @@
 
 {% block extra_scripts %}
 <script>
-    // Load system health data
+    // Real-time health monitoring using existing API endpoints
     document.addEventListener('DOMContentLoaded', function() {
         loadHealthData();
     });
     
-    function loadHealthData() {
+    async function testEndpoint(url) {
+        try {
+            const response = await fetch(url, { cache: 'no-store' });
+            const data = await response.json();
+            return {
+                status: response.ok ? 'up' : 'down',
+                statusCode: response.status,
+                data: data
+            };
+        } catch (error) {
+            return {
+                status: 'error',
+                error: error.message
+            };
+        }
+    }
+    
+    async function loadHealthData() {
         // Show loading state
         document.getElementById('loading-state').style.display = 'block';
         document.getElementById('error-state').style.display = 'none';
         document.getElementById('health-content').style.display = 'none';
         
-        fetch('/api/health/data')
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                updateHealthDisplay(data);
-                document.getElementById('loading-state').style.display = 'none';
-                document.getElementById('health-content').style.display = 'block';
-            })
-            .catch(error => {
-                console.error('Error loading health data:', error);
-                showHealthError();
-            });
+        try {
+            // Test all API endpoints in parallel
+            const healthChecks = {
+                basic: await testEndpoint('/health'),
+                ready: await testEndpoint('/ready'), 
+                dashboard: await testEndpoint('/api/dashboard/summary'),
+                segments: await testEndpoint('/api/segments/summary'),
+                density: await testEndpoint('/api/density/segments'),
+                flow: await testEndpoint('/api/flow/segments'),
+                reports: await testEndpoint('/api/reports/list')
+            };
+            
+            updateHealthDisplay(healthChecks);
+            document.getElementById('loading-state').style.display = 'none';
+            document.getElementById('health-content').style.display = 'block';
+        } catch (error) {
+            console.error('Error loading health data:', error);
+            showHealthError();
+        }
     }
     
-    function updateHealthDisplay(data) {
-        // Update environment section
-        const env = data.environment;
-        document.getElementById('env-pill').textContent = env.platform;
-        document.getElementById('version').textContent = env.version;
-        document.getElementById('data-root').textContent = env.data_root;
-        document.getElementById('last-updated').textContent = formatTimestamp(env.last_updated);
+    function updateHealthDisplay(healthChecks) {
+        // Update system information with real-time data
+        if (healthChecks.basic.status === 'up' && healthChecks.basic.data) {
+            document.getElementById('version').textContent = healthChecks.basic.data.version || 'Unknown';
+        }
         
-        // Update file status table
-        updateFileStatusTable(data.files);
+        document.getElementById('last-updated').textContent = new Date().toLocaleString();
         
-        // Update integrity hashes
-        document.getElementById('rulebook-hash').textContent = data.hashes.rulebook || 'N/A';
-        document.getElementById('reporting-hash').textContent = data.hashes.reporting || 'N/A';
+        // Update endpoint status table with real-time results
+        updateEndpointStatusTable(healthChecks);
         
-        // Update endpoint status table
-        updateEndpointStatusTable(data.endpoints);
+        // Update overall status
+        updateOverallStatus(healthChecks);
     }
     
-    function updateFileStatusTable(files) {
-        const tbody = document.getElementById('file-status-tbody');
-        tbody.innerHTML = '';
-        
-        files.forEach(file => {
-            const row = document.createElement('tr');
-            
-            const statusClass = file.present ? 'status-ok' : 'status-error';
-            const statusText = file.present ? '✅ Present' : '❌ Missing';
-            const mtimeText = file.modified ? formatTimestamp(file.modified) : '—';
-            
-            row.innerHTML = `
-                <td>${file.name}</td>
-                <td class="${statusClass}">${statusText}</td>
-                <td>${mtimeText}</td>
-            `;
-            
-            tbody.appendChild(row);
-        });
-    }
     
-    function updateEndpointStatusTable(endpoints) {
+    function updateEndpointStatusTable(healthChecks) {
         const tbody = document.getElementById('endpoint-status-tbody');
         tbody.innerHTML = '';
         
+        const endpoints = [
+            { key: 'basic', name: '/health', description: 'Basic health check' },
+            { key: 'ready', name: '/ready', description: 'Service readiness' },
+            { key: 'dashboard', name: '/api/dashboard/summary', description: 'System metrics' },
+            { key: 'segments', name: '/api/segments/summary', description: 'Segment data' },
+            { key: 'density', name: '/api/density/segments', description: 'Density analysis' },
+            { key: 'flow', name: '/api/flow/segments', description: 'Flow analysis' },
+            { key: 'reports', name: '/api/reports/list', description: 'Report generation' }
+        ];
+        
         endpoints.forEach(endpoint => {
+            const check = healthChecks[endpoint.key];
             const row = document.createElement('tr');
             
-            const statusClass = endpoint.status === 'up' ? 'status-ok' : 
-                              endpoint.status === 'down' ? 'status-error' : 'status-unknown';
-            const statusText = endpoint.status === 'up' ? '🟢 Up' : 
-                             endpoint.status === 'down' ? '🔴 Down' : '🟡 Unknown';
-            const latencyText = endpoint.latency_ms ? `${endpoint.latency_ms}ms` : '—';
+            const statusClass = check.status === 'up' ? 'status-ok' : 
+                              check.status === 'down' ? 'status-error' : 'status-unknown';
+            const statusText = check.status === 'up' ? '🟢 Up' : 
+                             check.status === 'down' ? `🔴 Down (${check.statusCode})` : '🟡 Error';
+            const errorText = check.error ? ` - ${check.error}` : '';
             
             row.innerHTML = `
-                <td>${endpoint.path}</td>
-                <td class="${statusClass}">${statusText}</td>
-                <td>${latencyText}</td>
+                <td>${endpoint.name}</td>
+                <td class="${statusClass}">${statusText}${errorText}</td>
+                <td>—</td>
             `;
             
             tbody.appendChild(row);
         });
+    }
+    
+    function updateOverallStatus(healthChecks) {
+        const criticalEndpoints = ['basic', 'ready', 'dashboard'];
+        const criticalDown = criticalEndpoints.some(ep => healthChecks[ep].status !== 'up');
+        
+        let statusClass, statusText;
+        if (criticalDown) {
+            statusClass = 'status-error';
+            statusText = '❌ Critical Issues';
+        } else {
+            const allUp = Object.values(healthChecks).every(check => check.status === 'up');
+            if (allUp) {
+                statusClass = 'status-ok';
+                statusText = '✅ All Systems Operational';
+            } else {
+                statusClass = 'status-unknown';
+                statusText = '⚠️ Some Issues Detected';
+            }
+        }
+        
+        // Update the page header with overall status
+        const header = document.querySelector('.page-header h2');
+        if (header) {
+            header.innerHTML = `System Health <span class="${statusClass}" style="font-size: 0.8em; margin-left: 1rem;">${statusText}</span>`;
+        }
     }
     
     function showHealthError() {

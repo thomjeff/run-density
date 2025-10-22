@@ -46,6 +46,7 @@ async def get_reports_list():
         
         # List report files from GCS using StorageService
         from pathlib import Path as PathLib
+        import os
         reports = []
         file_list = storage_service.list_files(f"reports/{run_id}")
         
@@ -62,9 +63,56 @@ async def get_reports_list():
             elif ext == ".gz":
                 description = "Compressed GeoJSON"
             
+            # Get file metadata (size and modification time)
+            file_path = f"reports/{run_id}/{filename}"
+            mtime = None
+            size = None
+            
+            try:
+                if storage_service.config.use_cloud_storage:
+                    # GCS: Get metadata from blob
+                    try:
+                        # Normalize path for GCS (remove reports/ prefix if present)
+                        gcs_path = file_path
+                        if file_path.startswith("reports/"):
+                            gcs_path = file_path[len("reports/"):]
+                        
+                        bucket = storage_service._client.bucket(storage_service.config.bucket_name)
+                        blob = bucket.blob(gcs_path)
+                        
+                        if blob.exists():
+                            # Get blob metadata
+                            blob.reload()  # Ensure we have latest metadata
+                            mtime = blob.time_created.timestamp() if blob.time_created else None
+                            size = blob.size if blob.size else None
+                        else:
+                            logger.warning(f"GCS blob not found: {gcs_path}")
+                            mtime = None
+                            size = None
+                    except Exception as gcs_error:
+                        logger.warning(f"Could not get GCS metadata for {file_path}: {gcs_error}")
+                        mtime = None
+                        size = None
+                else:
+                    # Local filesystem - get actual file stats
+                    if os.path.exists(file_path):
+                        stat = os.stat(file_path)
+                        mtime = stat.st_mtime
+                        size = stat.st_size
+                    else:
+                        logger.warning(f"Local file not found: {file_path}")
+                        mtime = None
+                        size = None
+            except Exception as e:
+                logger.warning(f"Could not get metadata for {file_path}: {e}")
+                mtime = None
+                size = None
+            
             reports.append({
                 "name": filename,
-                "path": f"reports/{run_id}/{filename}",
+                "path": file_path,
+                "mtime": mtime,
+                "size": size,
                 "description": description,
                 "type": "report"
             })
