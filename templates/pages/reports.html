@@ -94,12 +94,12 @@
         
         // Render Reports Section
         if (relevantReports.length > 0) {
-            let reportsHtml = '<table style="width: 100%; border-collapse: collapse;">';
+            let reportsHtml = '<table style="width: 100%; border-collapse: collapse; table-layout: fixed;">';
             reportsHtml += '<thead><tr>';
-            reportsHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600;">File</th>';
-            reportsHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600;">Size</th>';
-            reportsHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600;">Modified</th>';
-            reportsHtml += '<th style="text-align: center; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600;">Action</th>';
+            reportsHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600; width: 45%;">File</th>';
+            reportsHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600; width: 12%;">Size</th>';
+            reportsHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600; width: 28%;">Modified</th>';
+            reportsHtml += '<th style="text-align: center; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600; width: 15%;">Action</th>';
             reportsHtml += '</tr></thead><tbody>';
             
             relevantReports.forEach(report => {
@@ -114,12 +114,12 @@
         
         // Render Data Files Section
         if (dataFiles.length > 0) {
-            let dataFilesHtml = '<table style="width: 100%; border-collapse: collapse;">';
+            let dataFilesHtml = '<table style="width: 100%; border-collapse: collapse; table-layout: fixed;">';
             dataFilesHtml += '<thead><tr>';
-            dataFilesHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600;">File</th>';
-            dataFilesHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600;">Size</th>';
-            dataFilesHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600;">Modified</th>';
-            dataFilesHtml += '<th style="text-align: center; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600;">Action</th>';
+            dataFilesHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600; width: 45%;">File</th>';
+            dataFilesHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600; width: 12%;">Size</th>';
+            dataFilesHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600; width: 28%;">Modified</th>';
+            dataFilesHtml += '<th style="text-align: center; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600; width: 15%;">Action</th>';
             dataFilesHtml += '</tr></thead><tbody>';
             
             dataFiles.forEach(file => {
@@ -139,13 +139,13 @@
         
         return `
             <tr style="border-bottom: 1px solid #e0e0e0;">
-                <td style="padding: 0.875rem 1rem;">
+                <td style="padding: 0.75rem;">
                     <div style="font-weight: 600; color: #2c3e50;">${report.name}</div>
                     <div style="font-size: 0.875rem; color: #7f8c8d; margin-top: 0.25rem;">${report.description || 'Report file'}</div>
                 </td>
-                <td style="padding: 0.875rem 1rem; color: #666;">${size}</td>
-                <td style="padding: 0.875rem 1rem; color: #666;">${mtime}</td>
-                <td style="padding: 0.875rem 1rem; text-align: center;">
+                <td style="padding: 0.75rem; color: #666;">${size}</td>
+                <td style="padding: 0.75rem; color: #666;">${mtime}</td>
+                <td style="padding: 0.75rem; text-align: center;">
                     <a href="/api/reports/download?path=${encodeURIComponent(report.path)}" 
                        class="button"
                        download="${report.name}"
@@ -163,13 +163,13 @@
         
         return `
             <tr style="border-bottom: 1px solid #e0e0e0;">
-                <td style="padding: 0.875rem 1rem;">
+                <td style="padding: 0.75rem;">
                     <div style="font-weight: 600; color: #2c3e50;">${file.name}</div>
                     <div style="font-size: 0.875rem; color: #7f8c8d; margin-top: 0.25rem;">${file.description || 'Data file'}</div>
                 </td>
-                <td style="padding: 0.875rem 1rem; color: #666;">${size}</td>
-                <td style="padding: 0.875rem 1rem; color: #666;">${mtime}</td>
-                <td style="padding: 0.875rem 1rem; text-align: center;">
+                <td style="padding: 0.75rem; color: #666;">${size}</td>
+                <td style="padding: 0.75rem; color: #666;">${mtime}</td>
+                <td style="padding: 0.75rem; text-align: center;">
                     <a href="/api/reports/download?path=${encodeURIComponent(file.path)}" 
                        class="button"
                        download="${file.name}"
