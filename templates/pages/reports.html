@@ -9,11 +9,25 @@
     {% endif %}
 </div>
 
-<!-- Reports List -->
+<!-- Reports Section -->
 <div class="card">
-    <h3 style="margin-bottom: 1rem;">Available Reports</h3>
+    <h3 style="margin-bottom: 1rem;">Reports</h3>
+    <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
+        Generated Density and Flow analysis reports, sorted by most recent first.
+    </p>
     <div id="reports-list">
         <p class="placeholder">Loading reports...</p>
+    </div>
+</div>
+
+<!-- Data Files Section -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Data Files</h3>
+    <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
+        Input data files used for analysis and validation.
+    </p>
+    <div id="data-files-list">
+        <p class="placeholder">Loading data files...</p>
     </div>
 </div>
 
@@ -39,103 +53,131 @@
     }
     
     function renderReportsList(reports) {
-        const container = document.getElementById('reports-list');
-        container.innerHTML = '';
+        const reportsContainer = document.getElementById('reports-list');
+        const dataFilesContainer = document.getElementById('data-files-list');
         
         if (!reports || reports.length === 0) {
-            container.innerHTML = '<p class="placeholder">No reports available</p>';
+            reportsContainer.innerHTML = '<p class="placeholder">No reports available</p>';
+            dataFilesContainer.innerHTML = '<p class="placeholder">No data files available</p>';
             return;
         }
         
-        // Group by type
-        const densityReports = reports.filter(r => r.name.includes('Density'));
-        const flowReports = reports.filter(r => r.name.includes('Flow'));
+        // Filter and categorize files
+        const relevantReports = reports.filter(r => {
+            // Include only Density and Flow reports (.md and .csv files)
+            const isRelevantReport = (r.name.includes('Density') || r.name.includes('Flow')) && 
+                                   (r.name.endsWith('.md') || r.name.endsWith('.csv'));
+            
+            // Exclude technical files
+            const isTechnicalFile = r.name.includes('bins.') || 
+                                  r.name.includes('map_data_') || 
+                                  r.name.includes('segment_windows_') ||
+                                  r.name.includes('segments_legacy_') ||
+                                  r.name.endsWith('.parquet') ||
+                                  r.name.endsWith('.geojson') ||
+                                  r.name.endsWith('.json');
+            
+            return isRelevantReport && !isTechnicalFile;
+        });
+        
         const dataFiles = reports.filter(r => r.type === 'data_file');
-        const otherReports = reports.filter(r => !r.name.includes('Density') && !r.name.includes('Flow') && r.type !== 'data_file');
         
-        let html = '';
+        // Sort by modification time (newest first)
+        const sortByNewest = (a, b) => {
+            const timeA = a.mtime || 0;
+            const timeB = b.mtime || 0;
+            return timeB - timeA; // Descending order (newest first)
+        };
         
-        // Density Reports
-        if (densityReports.length > 0) {
-            html += '<h4 style="margin-top: 1rem; margin-bottom: 0.5rem;">Density Reports</h4>';
-            html += '<ul style="list-style: none; padding: 0;">';
-            densityReports.forEach(report => {
-                html += renderReportItem(report);
+        relevantReports.sort(sortByNewest);
+        dataFiles.sort(sortByNewest);
+        
+        // Render Reports Section
+        if (relevantReports.length > 0) {
+            let reportsHtml = '<table style="width: 100%; border-collapse: collapse;">';
+            reportsHtml += '<thead><tr>';
+            reportsHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600;">File</th>';
+            reportsHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600;">Size</th>';
+            reportsHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600;">Modified</th>';
+            reportsHtml += '<th style="text-align: center; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600;">Action</th>';
+            reportsHtml += '</tr></thead><tbody>';
+            
+            relevantReports.forEach(report => {
+                reportsHtml += renderReportTableRow(report);
             });
-            html += '</ul>';
+            
+            reportsHtml += '</tbody></table>';
+            reportsContainer.innerHTML = reportsHtml;
+        } else {
+            reportsContainer.innerHTML = '<p class="placeholder">No reports available</p>';
         }
         
-        // Flow Reports
-        if (flowReports.length > 0) {
-            html += '<h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Flow Reports</h4>';
-            html += '<ul style="list-style: none; padding: 0;">';
-            flowReports.forEach(report => {
-                html += renderReportItem(report);
-            });
-            html += '</ul>';
-        }
-        
-        // Data Files
+        // Render Data Files Section
         if (dataFiles.length > 0) {
-            html += '<h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Data Files</h4>';
-            html += '<ul style="list-style: none; padding: 0;">';
-            dataFiles.forEach(report => {
-                html += renderDataFileItem(report);
+            let dataFilesHtml = '<table style="width: 100%; border-collapse: collapse;">';
+            dataFilesHtml += '<thead><tr>';
+            dataFilesHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600;">File</th>';
+            dataFilesHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600;">Size</th>';
+            dataFilesHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600;">Modified</th>';
+            dataFilesHtml += '<th style="text-align: center; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600;">Action</th>';
+            dataFilesHtml += '</tr></thead><tbody>';
+            
+            dataFiles.forEach(file => {
+                dataFilesHtml += renderDataFileTableRow(file);
             });
-            html += '</ul>';
+            
+            dataFilesHtml += '</tbody></table>';
+            dataFilesContainer.innerHTML = dataFilesHtml;
+        } else {
+            dataFilesContainer.innerHTML = '<p class="placeholder">No data files available</p>';
         }
-        
-        // Other Reports
-        if (otherReports.length > 0) {
-            html += '<h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Other Reports</h4>';
-            html += '<ul style="list-style: none; padding: 0;">';
-            otherReports.forEach(report => {
-                html += renderReportItem(report);
-            });
-            html += '</ul>';
-        }
-        
-        container.innerHTML = html;
     }
     
-    function renderReportItem(report) {
+    function renderReportTableRow(report) {
         const size = formatFileSize(report.size);
         const mtime = report.mtime ? new Date(report.mtime * 1000).toLocaleString() : 'N/A';
         
         return `
-            <li style="padding: 0.75rem; border-bottom: 1px solid #ecf0f1; display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <div style="font-weight: 600;">${report.name}</div>
-                    <div style="font-size: 0.875rem; color: #7f8c8d;">${size} • ${mtime}</div>
-                </div>
-                <a href="/api/reports/download?path=${encodeURIComponent(report.path)}" 
-                   class="button"
-                   download="${report.name}"
-                   style="padding: 0.5rem 1rem; background: #3498db; color: white; text-decoration: none; border-radius: 4px; font-size: 0.875rem;">
-                    Download
-                </a>
-            </li>
+            <tr style="border-bottom: 1px solid #e0e0e0;">
+                <td style="padding: 0.875rem 1rem;">
+                    <div style="font-weight: 600; color: #2c3e50;">${report.name}</div>
+                    <div style="font-size: 0.875rem; color: #7f8c8d; margin-top: 0.25rem;">${report.description || 'Report file'}</div>
+                </td>
+                <td style="padding: 0.875rem 1rem; color: #666;">${size}</td>
+                <td style="padding: 0.875rem 1rem; color: #666;">${mtime}</td>
+                <td style="padding: 0.875rem 1rem; text-align: center;">
+                    <a href="/api/reports/download?path=${encodeURIComponent(report.path)}" 
+                       class="button"
+                       download="${report.name}"
+                       style="padding: 0.5rem 1rem; background: #3498db; color: white; text-decoration: none; border-radius: 4px; font-size: 0.875rem;">
+                        Download
+                    </a>
+                </td>
+            </tr>
         `;
     }
     
-    function renderDataFileItem(report) {
-        const size = formatFileSize(report.size);
-        const mtime = report.mtime ? new Date(report.mtime * 1000).toLocaleString() : 'N/A';
+    function renderDataFileTableRow(file) {
+        const size = formatFileSize(file.size);
+        const mtime = file.mtime ? new Date(file.mtime * 1000).toLocaleString() : 'N/A';
         
         return `
-            <li style="padding: 0.75rem; border-bottom: 1px solid #ecf0f1; display: flex; justify-content: space-between; align-items: center;">
-                <div style="flex: 1;">
-                    <div style="font-weight: 600;">${report.name}</div>
-                    <div style="font-size: 0.875rem; color: #7f8c8d; margin-bottom: 0.25rem;">${size} • ${mtime}</div>
-                    <div style="font-size: 0.8rem; color: #95a5a6; font-style: italic;">${report.description || 'Data file'}</div>
-                </div>
-                <a href="/api/reports/download?path=${encodeURIComponent(report.path)}" 
-                   class="button"
-                   download="${report.name}"
-                   style="padding: 0.5rem 1rem; background: #3498db; color: white; text-decoration: none; border-radius: 4px; font-size: 0.875rem; margin-left: 1rem;">
-                    Download
-                </a>
-            </li>
+            <tr style="border-bottom: 1px solid #e0e0e0;">
+                <td style="padding: 0.875rem 1rem;">
+                    <div style="font-weight: 600; color: #2c3e50;">${file.name}</div>
+                    <div style="font-size: 0.875rem; color: #7f8c8d; margin-top: 0.25rem;">${file.description || 'Data file'}</div>
+                </td>
+                <td style="padding: 0.875rem 1rem; color: #666;">${size}</td>
+                <td style="padding: 0.875rem 1rem; color: #666;">${mtime}</td>
+                <td style="padding: 0.875rem 1rem; text-align: center;">
+                    <a href="/api/reports/download?path=${encodeURIComponent(file.path)}" 
+                       class="button"
+                       download="${file.name}"
+                       style="padding: 0.5rem 1rem; background: #3498db; color: white; text-decoration: none; border-radius: 4px; font-size: 0.875rem;">
+                        Download
+                    </a>
+                </td>
+            </tr>
         `;
     }
     
@@ -147,8 +189,10 @@
     }
     
     function showReportsError() {
-        const container = document.getElementById('reports-list');
-        container.innerHTML = '<p class="placeholder">Error loading reports</p>';
+        const reportsContainer = document.getElementById('reports-list');
+        const dataFilesContainer = document.getElementById('data-files-list');
+        reportsContainer.innerHTML = '<p class="placeholder">Error loading reports</p>';
+        dataFilesContainer.innerHTML = '<p class="placeholder">Error loading data files</p>';
     }
 </script>
 {% endblock %}
