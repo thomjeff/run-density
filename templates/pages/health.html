@@ -130,12 +130,14 @@
         
         if (healthChecks.environment.status === 'up' && healthChecks.environment.data) {
             const env = healthChecks.environment.data;
-            document.getElementById('env-pill').textContent = env.enable_bin_dataset ? 'Cloud Run' : 'Local';
+            // Primary detection: use enable_bin_dataset flag from environment
+            document.getElementById('env-pill').textContent = env.enable_bin_dataset ? 'Cloud Run' : 'Local Development';
             document.getElementById('data-root').textContent = env.output_dir || './data';
         } else {
             // Fallback to URL-based detection
             const hostname = window.location.hostname;
-            document.getElementById('env-pill').textContent = hostname.includes('run.app') ? 'Cloud Run' : 'Local';
+            const isCloudRun = hostname.includes('run.app') || hostname.includes('cloudrun') || hostname.includes('googleusercontent.com');
+            document.getElementById('env-pill').textContent = isCloudRun ? 'Cloud Run Production' : 'Local Development';
             document.getElementById('data-root').textContent = './data';
         }
         
