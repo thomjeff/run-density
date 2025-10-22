@@ -27,18 +27,12 @@
 <!-- Health Data Content -->
 <div id="health-content" style="display: none;">
 
-<!-- Environment Status -->
+<!-- System Information -->
 <div class="card">
-    <h3 style="margin-bottom: 1rem;">Environment</h3>
+    <h3 style="margin-bottom: 1rem;">System Information</h3>
     <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
-        <span id="env-pill" style="padding: 0.5rem 1rem; background: #2ecc71; color: white; border-radius: 20px; font-weight: 600;">
-            Loading...
-        </span>
         <span style="color: #7f8c8d; font-size: 0.875rem;">
             <strong>Version:</strong> <span id="version">Loading...</span>
-        </span>
-        <span style="color: #7f8c8d; font-size: 0.875rem;">
-            <strong>Data Root:</strong> <span id="data-root">Loading...</span>
         </span>
         <span style="color: #7f8c8d; font-size: 0.875rem;">
             <strong>Last Updated:</strong> <span id="last-updated">Loading...</span>
@@ -109,8 +103,7 @@
                 segments: await testEndpoint('/api/segments/summary'),
                 density: await testEndpoint('/api/density/segments'),
                 flow: await testEndpoint('/api/flow/segments'),
-                reports: await testEndpoint('/api/reports/list'),
-                environment: await testEndpoint('/api/debug/env')
+                reports: await testEndpoint('/api/reports/list')
             };
             
             updateHealthDisplay(healthChecks);
@@ -123,22 +116,9 @@
     }
     
     function updateHealthDisplay(healthChecks) {
-        // Update environment section with real-time data
+        // Update system information with real-time data
         if (healthChecks.basic.status === 'up' && healthChecks.basic.data) {
             document.getElementById('version').textContent = healthChecks.basic.data.version || 'Unknown';
-        }
-        
-        if (healthChecks.environment.status === 'up' && healthChecks.environment.data) {
-            const env = healthChecks.environment.data;
-            // Primary detection: use enable_bin_dataset flag from environment
-            document.getElementById('env-pill').textContent = env.enable_bin_dataset ? 'Cloud Run' : 'Local Development';
-            document.getElementById('data-root').textContent = env.output_dir || './data';
-        } else {
-            // Fallback to URL-based detection
-            const hostname = window.location.hostname;
-            const isCloudRun = hostname.includes('run.app') || hostname.includes('cloudrun') || hostname.includes('googleusercontent.com');
-            document.getElementById('env-pill').textContent = isCloudRun ? 'Cloud Run Production' : 'Local Development';
-            document.getElementById('data-root').textContent = './data';
         }
         
         document.getElementById('last-updated').textContent = new Date().toLocaleString();
@@ -162,8 +142,7 @@
             { key: 'segments', name: '/api/segments/summary', description: 'Segment data' },
             { key: 'density', name: '/api/density/segments', description: 'Density analysis' },
             { key: 'flow', name: '/api/flow/segments', description: 'Flow analysis' },
-            { key: 'reports', name: '/api/reports/list', description: 'Report generation' },
-            { key: 'environment', name: '/api/debug/env', description: 'Environment info' }
+            { key: 'reports', name: '/api/reports/list', description: 'Report generation' }
         ];
         
         endpoints.forEach(endpoint => {
