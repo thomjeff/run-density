@@ -70,17 +70,39 @@ async def get_reports_list():
             
             try:
                 if storage_service.config.use_cloud_storage:
-                    # For GCS, we need to get metadata from the blob
-                    # For now, we'll use a placeholder approach
-                    # TODO: Implement proper GCS metadata retrieval
-                    mtime = None
-                    size = None
+                    # GCS: Get metadata from blob
+                    try:
+                        # Normalize path for GCS (remove reports/ prefix if present)
+                        gcs_path = file_path
+                        if file_path.startswith("reports/"):
+                            gcs_path = file_path[len("reports/"):]
+                        
+                        bucket = storage_service._client.bucket(storage_service.config.bucket_name)
+                        blob = bucket.blob(gcs_path)
+                        
+                        if blob.exists():
+                            # Get blob metadata
+                            blob.reload()  # Ensure we have latest metadata
+                            mtime = blob.time_created.timestamp() if blob.time_created else None
+                            size = blob.size if blob.size else None
+                        else:
+                            logger.warning(f"GCS blob not found: {gcs_path}")
+                            mtime = None
+                            size = None
+                    except Exception as gcs_error:
+                        logger.warning(f"Could not get GCS metadata for {file_path}: {gcs_error}")
+                        mtime = None
+                        size = None
                 else:
                     # Local filesystem - get actual file stats
                     if os.path.exists(file_path):
                         stat = os.stat(file_path)
                         mtime = stat.st_mtime
                         size = stat.st_size
+                    else:
+                        logger.warning(f"Local file not found: {file_path}")
+                        mtime = None
+                        size = None
             except Exception as e:
                 logger.warning(f"Could not get metadata for {file_path}: {e}")
                 mtime = None
