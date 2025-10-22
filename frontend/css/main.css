@@ -125,3 +125,50 @@ body {
   .kpis {grid-template-columns:1fr}
   .card {padding:16px}
 }
+
+/* Dashboard Metric Typography — Unified for All Tiles */
+.metric-value,
+.value,
+.tile-value,
+.kpi-value {
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--ink);
+  text-align: center;
+}
+
+/* Harmonized Event Card Styling — Issue #305-C Extended */
+.event-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0;
+}
+
+.event-card .kpi-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: center;
+}
+
+.event-card .kpi-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.1;
+  text-align: center;
+  margin: 4px 0;
+}
+
+.event-card .kpi-subtext {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-align: center;
+}

@@ -6,14 +6,6 @@
 <div class="page-header">
     <h2>Dashboard</h2>
     <div style="display: flex; align-items: center; gap: 1rem;">
-        <button id="refresh-btn" style="padding: 0.5rem 1rem; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">
-            🔄 Refresh
-        </button>
-        {% if meta %}
-        <div class="provenance">
-            {% include "partials/_provenance.html" %}
-        </div>
-        {% endif %}
     </div>
 </div>
 
@@ -28,28 +20,26 @@
     </div>
 </div>
 
-<!-- Status Banner -->
-<div id="status-banner" class="card" style="display: none; margin-bottom: 1.5rem;">
-    <div id="status-content" style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; border-radius: 4px;">
-        <span id="status-icon" style="font-size: 1.25rem;">⚠️</span>
-        <div>
-            <div id="status-title" style="font-weight: 600; color: #e74c3c;">Action Required</div>
-            <div id="status-message" style="font-size: 0.875rem; color: #666;">High density or flagged segments detected</div>
-        </div>
-    </div>
-</div>
 
 <!-- Model Inputs Section -->
 <div class="card">
     <h3 style="margin-bottom: 1.5rem; color: #2c3e50;">Model Inputs</h3>
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-        <div id="metric-total-runners" class="kpi">
+        <!-- Event-specific tiles -->
+        <div id="event-full" class="kpi event-card">
+            <div class="kpi-label">FULL MARATHON</div>
             <div class="kpi-value">—</div>
-            <div class="kpi-label">Total Participants</div>
+            <div class="kpi-subtext">— PARTICIPANTS</div>
         </div>
-        <div id="metric-cohorts" class="kpi">
+        <div id="event-10k" class="kpi event-card">
+            <div class="kpi-label">10K</div>
             <div class="kpi-value">—</div>
-            <div class="kpi-label">Event Cohorts</div>
+            <div class="kpi-subtext">— PARTICIPANTS</div>
+        </div>
+        <div id="event-half" class="kpi event-card">
+            <div class="kpi-label">HALF MARATHON</div>
+            <div class="kpi-value">—</div>
+            <div class="kpi-subtext">— PARTICIPANTS</div>
         </div>
         <div id="metric-segments" class="kpi">
             <div class="kpi-value">—</div>
@@ -62,6 +52,17 @@
 <div class="card">
     <h3 style="margin-bottom: 1.5rem; color: #2c3e50;">Model Outputs</h3>
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem;">
+        
+        <div id="status-banner" class="kpi" style="display: none;">
+            <div id="status-icon" class="kpi-value" style="font-size: 1.5rem;">⚠️</div>
+            <div id="status-title" class="kpi-label">Action Required</div>
+            <div id="status-message" class="kpi-label">HIGH DENSITY OR FLAGGED SEGMENTS DETECTED</div>
+        </div>
+        
+        <div class="kpi">
+            <div id="metric-total-runners" class="kpi-value">—</div>
+            <div class="kpi-label">Total Participants</div>
+        </div>
         
         <div class="kpi">
             <div id="kpi-peak-density" class="kpi-value">—</div>
@@ -120,13 +121,6 @@
         }
     }
     
-    #refresh-btn:hover {
-        background: #2980b9;
-    }
-    
-    #refresh-btn:active {
-        transform: translateY(1px);
-    }
     
     .status-normal {
         background: #d5f4e6;
@@ -172,10 +166,6 @@
     document.addEventListener('DOMContentLoaded', function() {
         loadDashboardData();
         
-        // Add refresh button handler
-        document.getElementById('refresh-btn').addEventListener('click', function() {
-            loadDashboardData();
-        });
     });
     
     function loadDashboardData() {
@@ -251,43 +241,48 @@
     
     function updateStatusBanner(data) {
         const banner = document.getElementById('status-banner');
-        const content = document.getElementById('status-content');
         const icon = document.getElementById('status-icon');
         const title = document.getElementById('status-title');
         const message = document.getElementById('status-message');
         
         if (data.status === 'action_required') {
             banner.style.display = 'block';
-            content.className = 'status-action-required';
             icon.textContent = '⚠️';
-            title.textContent = 'Action Required';
+            title.textContent = 'ACTION REQUIRED';
             title.style.color = '#e74c3c';
-            message.textContent = 'High density or flagged segments detected';
+            message.textContent = 'HIGH DENSITY OR FLAGGED SEGMENTS DETECTED';
         } else {
             banner.style.display = 'block';
-            content.className = 'status-normal';
             icon.textContent = '✅';
-            title.textContent = 'Normal Operations';
+            title.textContent = 'NORMAL OPERATIONS';
             title.style.color = '#2ecc71';
-            message.textContent = 'All systems operating within normal parameters';
+            message.textContent = 'ALL SYSTEMS OPERATING WITHIN NORMAL PARAMETERS';
         }
     }
     
     function updateModelInputs(data) {
-        // Total runners
-        const totalRunnersEl = document.querySelector('#metric-total-runners .kpi-value');
-        if (totalRunnersEl) {
-            totalRunnersEl.textContent = data.total_runners.toLocaleString();
+        // Event-specific tiles
+        const cohorts = data.cohorts;
+        
+        // Full Marathon
+        const fullEl = document.querySelector('#event-full');
+        if (fullEl && cohorts.Full) {
+            fullEl.querySelector('.kpi-value').textContent = cohorts.Full.start;
+            fullEl.querySelector('.kpi-subtext').textContent = `${cohorts.Full.count} PARTICIPANTS`;
         }
         
-        // Cohorts
-        const cohortsEl = document.querySelector('#metric-cohorts .kpi-value');
-        if (cohortsEl) {
-            const cohorts = data.cohorts;
-            const cohortText = Object.entries(cohorts)
-                .map(([event, info]) => `${event}: ${info.count} @ ${info.start}`)
-                .join(' • ');
-            cohortsEl.textContent = cohortText || 'No data';
+        // 10K
+        const tenKEl = document.querySelector('#event-10k');
+        if (tenKEl && cohorts['10K']) {
+            tenKEl.querySelector('.kpi-value').textContent = cohorts['10K'].start;
+            tenKEl.querySelector('.kpi-subtext').textContent = `${cohorts['10K'].count} PARTICIPANTS`;
+        }
+        
+        // Half Marathon
+        const halfEl = document.querySelector('#event-half');
+        if (halfEl && cohorts.Half) {
+            halfEl.querySelector('.kpi-value').textContent = cohorts.Half.start;
+            halfEl.querySelector('.kpi-subtext').textContent = `${cohorts.Half.count} PARTICIPANTS`;
         }
         
         // Segments
@@ -299,6 +294,12 @@
     
     function updateModelOutputs(data) {
         console.log('updateModelOutputs called with data:', data);
+        
+        // Total runners (moved from Model Inputs)
+        const totalRunnersEl = document.querySelector('#metric-total-runners');
+        if (totalRunnersEl) {
+            totalRunnersEl.textContent = data.total_runners.toLocaleString();
+        }
         
         // Peak density with LOS badge
         const peakDensityEl = document.querySelector('#kpi-peak-density');

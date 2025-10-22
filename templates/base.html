@@ -162,9 +162,11 @@
         }
         
         .kpi-value {
-            font-size: 2.5rem;
-            font-weight: 700;
-            color: #2c3e50;
+            font-size: 2rem;
+            font-weight: 600;
+            line-height: 1.2;
+            color: #1f2937;
+            text-align: center;
             margin-bottom: 0.5rem;
         }
         
@@ -173,6 +175,43 @@
             color: #7f8c8d;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+        }
+        
+        /* Event Card Styling — Issue #305-C Extended */
+        .event-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.25rem;
+            padding: 0.5rem 0;
+        }
+        
+        .event-card .kpi-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #7f8c8d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-align: center;
+        }
+        
+        .event-card .kpi-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #2c3e50;
+            line-height: 1.1;
+            text-align: center;
+            margin: 4px 0;
+        }
+        
+        .event-card .kpi-subtext {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #7f8c8d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-align: center;
         }
         
         /* Tables */
@@ -262,9 +301,6 @@
     
     <footer>
         <p>&copy; 2025 Runflow - Race Density & Flow Intelligence System</p>
-        <p style="margin-top: 0.5rem;">
-            {% include "partials/_provenance.html" %}
-        </p>
     </footer>
     
     {% block extra_scripts %}{% endblock %}
