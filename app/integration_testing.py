@@ -288,5 +288,49 @@ def main():
     sys.exit(0 if success else 1)
 
 
+# ----------------------------------------------------------------------
+# QA Validation Test for Issue #304
+# Ensures overtaking and co-presence metrics are exported correctly
+# ----------------------------------------------------------------------
+
+def test_overtaking_and_copresence_metrics_exist_and_are_int():
+    """
+    Validates that overtaking_segments and co_presence_segments
+    exist in the exported summary JSON and contain integer values.
+    This test enforces regression protection for Issue #304.
+    """
+    import os
+    import json
+    
+    # Determine artifact directory (supports Local + Cloud)
+    artifact_dir = os.environ.get("RUNFLOW_ARTIFACT_DIR", "./artifacts")
+    summary_path = os.path.join(artifact_dir, "latest.json")
+
+    # Ensure file exists
+    assert os.path.exists(summary_path), f"Summary file not found at {summary_path}"
+
+    # Load summary JSON
+    with open(summary_path, "r", encoding="utf-8") as f:
+        summary = json.load(f)
+
+    # --- Required keys must exist ---
+    assert "overtaking_segments" in summary, "Missing 'overtaking_segments' key in summary export"
+    assert "co_presence_segments" in summary, "Missing 'co_presence_segments' key in summary export"
+
+    # --- Values must be integers ---
+    overtaking_val = summary["overtaking_segments"]
+    copresence_val = summary["co_presence_segments"]
+
+    assert isinstance(overtaking_val, int), f"Expected int for overtaking_segments, got {type(overtaking_val)}"
+    assert isinstance(copresence_val, int), f"Expected int for co_presence_segments, got {type(copresence_val)}"
+
+    # --- Values should be non-negative ---
+    assert overtaking_val >= 0, "overtaking_segments should be >= 0"
+    assert copresence_val >= 0, "co_presence_segments should be >= 0"
+
+    # Optional sanity log
+    print(f"[QA] overtaking_segments={overtaking_val}, co_presence_segments={copresence_val}")
+
+
 if __name__ == "__main__":
     main()

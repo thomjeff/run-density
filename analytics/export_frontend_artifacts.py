@@ -645,12 +645,62 @@ def export_ui_artifacts(reports_dir: Path, run_id: str, environment: str = "loca
     return artifacts_dir
 
 
-def update_latest_pointer(run_id: str) -> None:
+def calculate_flow_segment_counts(reports_root: Path, run_id: str) -> Tuple[int, int]:
+    """
+    Calculate overtaking and co-presence segment counts from Flow.csv.
+    
+    Issue #304: Counts unique segments with overtaking or co-presence activity.
+    
+    Args:
+        reports_root: Root directory containing reports
+        run_id: Run identifier
+        
+    Returns:
+        Tuple of (overtaking_segments_count, co_presence_segments_count)
+    """
+    try:
+        # Find the latest Flow.csv file
+        run_dir = reports_root / run_id
+        flow_files = sorted(run_dir.glob("*-Flow.csv"), reverse=True)
+        
+        if not flow_files:
+            print(f"⚠️  No Flow.csv found in {run_dir}, returning zero counts")
+            return (0, 0)
+        
+        flow_path = flow_files[0]  # Get most recent
+        print(f"📊 Reading flow data from {flow_path.name}")
+        
+        # Load Flow.csv
+        df = pd.read_csv(flow_path)
+        
+        # Count unique segments with overtaking (overtaking_a > 0 OR overtaking_b > 0)
+        overtaking_mask = (df['overtaking_a'] > 0) | (df['overtaking_b'] > 0)
+        overtaking_segments = df[overtaking_mask]['seg_id'].nunique()
+        
+        # Count unique segments with co-presence (copresence_a > 0 OR copresence_b > 0)
+        copresence_mask = (df['copresence_a'] > 0) | (df['copresence_b'] > 0)
+        co_presence_segments = df[copresence_mask]['seg_id'].nunique()
+        
+        print(f"   Overtaking segments: {overtaking_segments}")
+        print(f"   Co-presence segments: {co_presence_segments}")
+        
+        return (overtaking_segments, co_presence_segments)
+        
+    except Exception as e:
+        print(f"⚠️  Error calculating flow segment counts: {e}")
+        return (0, 0)
+
+
+def update_latest_pointer(run_id: str, overtaking_segments: int = 0, co_presence_segments: int = 0) -> None:
     """
     Update artifacts/latest.json to point to the most recent run.
     
+    Issue #304: Now includes overtaking and co-presence segment counts for dashboard tiles.
+    
     Args:
         run_id: Run identifier (e.g., "2025-10-19-1655" or "2025-10-19")
+        overtaking_segments: Count of segments with overtaking activity
+        co_presence_segments: Count of segments with co-presence interactions
     """
     artifacts_dir = Path("artifacts")
     artifacts_dir.mkdir(exist_ok=True)
@@ -684,13 +734,15 @@ def update_latest_pointer(run_id: str) -> None:
     
     pointer = {
         "run_id": run_id,
-        "ts": ts
+        "ts": ts,
+        "overtaking_segments": overtaking_segments,
+        "co_presence_segments": co_presence_segments
     }
     
     pointer_path = artifacts_dir / "latest.json"
     pointer_path.write_text(json.dumps(pointer, indent=2))
     
-    print(f"✅ Updated artifacts/latest.json → {run_id}")
+    print(f"✅ Updated artifacts/latest.json → {run_id} (overtaking: {overtaking_segments}, co-presence: {co_presence_segments})")
 
 
 def main():
@@ -703,7 +755,8 @@ def main():
         sys.exit(1)
     
     run_id = sys.argv[1]
-    reports_dir = Path("reports") / run_id
+    reports_root = Path("reports")
+    reports_dir = reports_root / run_id
     
     if not reports_dir.exists():
         print(f"Error: Reports directory not found: {reports_dir}")
@@ -712,8 +765,11 @@ def main():
     # Export artifacts
     artifacts_dir = export_ui_artifacts(reports_dir, run_id)
     
-    # Update pointer
-    update_latest_pointer(run_id)
+    # Issue #304: Calculate flow segment counts for dashboard tiles
+    overtaking_segments, co_presence_segments = calculate_flow_segment_counts(reports_root, run_id)
+    
+    # Update pointer with flow metrics
+    update_latest_pointer(run_id, overtaking_segments, co_presence_segments)
     
     print("\n🎉 Export complete!")
 

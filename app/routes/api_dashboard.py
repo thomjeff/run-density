@@ -285,23 +285,39 @@ async def get_dashboard_summary():
         total_runners = runners_data["total_runners"]
         cohorts = runners_data["cohorts"]
         
-        # Load flow data from UI artifacts
-        flow_data = storage_service.load_ui_artifact("flow.json")
-        if flow_data is None:
-            warnings.append("missing: flow.json")
-            segments_overtaking = 0
-            segments_copresence = 0
-        else:
-            # Calculate overtaking and co-presence from flow data
-            segments_overtaking = 0
-            segments_copresence = 0
+        # Issue #304: Load flow metrics from latest.json instead of flow.json
+        # latest.json now contains pre-calculated segment counts
+        segments_overtaking = 0
+        segments_copresence = 0
+        
+        try:
+            # Read latest.json from appropriate storage
+            if storage_service.config.use_cloud_storage:
+                from pathlib import Path as LocalPath
+                import json as local_json
+                latest_content = storage_service._load_from_gcs("artifacts/latest.json")
+                if latest_content:
+                    latest_data = local_json.loads(latest_content)
+                else:
+                    latest_data = {}
+            else:
+                from pathlib import Path as LocalPath
+                latest_path = LocalPath("artifacts/latest.json")
+                if latest_path.exists():
+                    latest_data = json.loads(latest_path.read_text())
+                else:
+                    latest_data = {}
+                    warnings.append("missing: artifacts/latest.json")
             
-            if isinstance(flow_data, list):
-                for item in flow_data:
-                    if item.get("overtaking_a", 0) > 0 or item.get("overtaking_b", 0) > 0:
-                        segments_overtaking += 1
-                    if item.get("copresence_a", 0) > 0 or item.get("copresence_b", 0) > 0:
-                        segments_copresence += 1
+            # Extract flow segment counts from latest.json
+            segments_overtaking = latest_data.get("overtaking_segments", 0)
+            segments_copresence = latest_data.get("co_presence_segments", 0)
+            
+            logger.info(f"Loaded flow metrics from latest.json: overtaking={segments_overtaking}, co-presence={segments_copresence}")
+            
+        except Exception as e:
+            logger.error(f"Error loading flow metrics from latest.json: {e}")
+            warnings.append(f"error: failed to load flow metrics from latest.json")
         
         # Determine status
         status = "normal"
