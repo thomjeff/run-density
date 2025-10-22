@@ -205,12 +205,15 @@
             timeLabel = tStart.replace('-', '–');
         }
         
-        // Compose: "Worst Bin: SEGMENT DISTANCE · TIME"
-        let label = `Worst Bin: ${segment}`;
-        if (distLabel) label += ` ${distLabel}`;
-        if (timeLabel) label += ` · ${timeLabel}`;
+        // Compose: "DISTANCE · TIME" (removed "Worst Bin: " and segment ID)
+        let label = '';
+        if (distLabel) label += distLabel;
+        if (timeLabel) {
+            if (label) label += ` · ${timeLabel}`;
+            else label = timeLabel;
+        }
         
-        return label;
+        return label || '—';
     }
     
     function loadDensityData() {
