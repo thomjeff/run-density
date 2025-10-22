@@ -41,6 +41,47 @@
     </div>
 </div>
 
+<!-- Flow Reference -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Flow Reference</h3>
+    <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
+        Definitions for key metrics in the temporal flow analysis.
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>Column</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Event A / Event B</strong></td>
+                <td>The two event cohorts being compared (e.g., Full vs Half Marathon). Each pair shows interactions between participants from these events along a segment.</td>
+            </tr>
+            <tr>
+                <td><strong>Flow Type</strong></td>
+                <td>Indicates the interaction pattern between the two events:<br>
+                • <em>Overtake</em>: Participants in one event pass another.<br>
+                • <em>Parallel</em>: Both events move in the same direction concurrently.<br>
+                • <em>Counterflow</em>: Participants move in opposite directions on the same path.</td>
+            </tr>
+            <tr>
+                <td><strong>Overtaking A / Overtaking B</strong></td>
+                <td>The number of overtake events detected where runners in Event A (or B) passed participants from the paired event within that segment.</td>
+            </tr>
+            <tr>
+                <td><strong>Pct A / Pct B</strong></td>
+                <td>The percentage of participants from Event A (or B) involved in overtaking interactions relative to their total count on that segment.</td>
+            </tr>
+            <tr>
+                <td><strong>Co-presence A / Co-presence B</strong></td>
+                <td>The number of times participants from Event A and Event B occupied the same segment simultaneously (a measure of concurrent use or congestion).</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
 {% endblock %}
 
 {% block extra_scripts %}
@@ -149,11 +190,12 @@
         border-collapse: collapse;
     }
     
+    /* Match base template styling for consistency with Segments table */
     #flow-table th,
     #flow-table td {
-        padding: 0.75rem;
+        padding: 0.875rem 1rem;  /* Match base template: px-4 py-3 equivalent */
         text-align: left;
-        border-bottom: 1px solid #ecf0f1;
+        border-bottom: 1px solid #e0e0e0;  /* Match base template border color */
     }
     
     #flow-table th {
