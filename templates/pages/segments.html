@@ -25,47 +25,6 @@
         color: #666;
     }
     
-    .los-legend {
-        position: absolute;
-        bottom: 10px;
-        left: 10px;
-        background: white;
-        padding: 0.75rem;
-        border-radius: 4px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-        z-index: 1000;
-        font-size: 0.875rem;
-    }
-    
-    .los-legend h4 {
-        margin: 0 0 0.5rem 0;
-        font-size: 0.875rem;
-        color: #2c3e50;
-    }
-    
-    .los-legend-items {
-        display: flex;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-    }
-    
-    .los-legend-item {
-        display: flex;
-        align-items: center;
-        gap: 0.25rem;
-    }
-    
-    .los-swatch {
-        width: 16px;
-        height: 16px;
-        border-radius: 2px;
-        border: 1px solid #ddd;
-    }
-    
-    .los-label {
-        font-size: 0.75rem;
-        color: #666;
-    }
     
     .segment-tooltip {
         font-size: 0.875rem;
@@ -99,36 +58,6 @@
         <div class="map-loading">Loading map data...</div>
     </div>
     
-    <!-- LOS Legend -->
-    <div class="los-legend">
-        <h4>Level of Service</h4>
-        <div class="los-legend-items">
-            <div class="los-legend-item">
-                <div class="los-swatch" style="background: #4CAF50;"></div>
-                <span class="los-label">A</span>
-            </div>
-            <div class="los-legend-item">
-                <div class="los-swatch" style="background: #8BC34A;"></div>
-                <span class="los-label">B</span>
-            </div>
-            <div class="los-legend-item">
-                <div class="los-swatch" style="background: #FFC107;"></div>
-                <span class="los-label">C</span>
-            </div>
-            <div class="los-legend-item">
-                <div class="los-swatch" style="background: #FF9800;"></div>
-                <span class="los-label">D</span>
-            </div>
-            <div class="los-legend-item">
-                <div class="los-swatch" style="background: #FF5722;"></div>
-                <span class="los-label">E</span>
-            </div>
-            <div class="los-legend-item">
-                <div class="los-swatch" style="background: #F44336;"></div>
-                <span class="los-label">F</span>
-            </div>
-        </div>
-    </div>
 </div>
 
 <!-- Segment Metadata Table -->
@@ -151,6 +80,53 @@
         <tbody>
             <tr>
                 <td colspan="9" class="placeholder">Loading segment data...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- Level of Service (LOS) Reference -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Level of Service (LOS) Reference</h3>
+    <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">Defined by areal density (ρ) in persons per square meter (p/m²).</p>
+    <table>
+        <thead>
+            <tr>
+                <th>LOS</th>
+                <th>Density Range (p/m²)</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><span class="badge-los badge-A">A</span></td>
+                <td>0.00 – 0.36</td>
+                <td>Free Flow</td>
+            </tr>
+            <tr>
+                <td><span class="badge-los badge-B">B</span></td>
+                <td>0.36 – 0.54</td>
+                <td>Comfortable</td>
+            </tr>
+            <tr>
+                <td><span class="badge-los badge-C">C</span></td>
+                <td>0.54 – 0.72</td>
+                <td>Moderate</td>
+            </tr>
+            <tr>
+                <td><span class="badge-los badge-D">D</span></td>
+                <td>0.72 – 1.08</td>
+                <td>Dense</td>
+            </tr>
+            <tr>
+                <td><span class="badge-los badge-E">E</span></td>
+                <td>1.08 – 1.63</td>
+                <td>Very Dense</td>
+            </tr>
+            <tr>
+                <td><span class="badge-los badge-F">F</span></td>
+                <td>1.63+</td>
+                <td>Extremely Dense</td>
             </tr>
         </tbody>
     </table>

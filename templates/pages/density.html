@@ -9,18 +9,6 @@
     {% endif %}
 </div>
 
-<!-- Density Legend -->
-<div class="card">
-    <h3 style="margin-bottom: 1rem;">Level of Service (LOS) Legend</h3>
-    <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
-        <span class="badge-los badge-A">A - Free Flow</span>
-        <span class="badge-los badge-B">B - Comfortable</span>
-        <span class="badge-los badge-C">C - Moderate</span>
-        <span class="badge-los badge-D">D - Dense</span>
-        <span class="badge-los badge-E">E - Very Dense</span>
-        <span class="badge-los badge-F">F - Extremely Dense</span>
-    </div>
-</div>
 
 <!-- Segment Density Table -->
 <div class="card">
@@ -43,6 +31,53 @@
         <tbody>
             <tr>
                 <td colspan="10" class="placeholder">Loading density data...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- Level of Service (LOS) Reference -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Level of Service (LOS) Reference</h3>
+    <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">Defined by areal density (ρ) in persons per square meter (p/m²).</p>
+    <table>
+        <thead>
+            <tr>
+                <th>LOS</th>
+                <th>Density Range (p/m²)</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><span class="badge-los badge-A">A</span></td>
+                <td>0.00 – 0.36</td>
+                <td>Free Flow</td>
+            </tr>
+            <tr>
+                <td><span class="badge-los badge-B">B</span></td>
+                <td>0.36 – 0.54</td>
+                <td>Comfortable</td>
+            </tr>
+            <tr>
+                <td><span class="badge-los badge-C">C</span></td>
+                <td>0.54 – 0.72</td>
+                <td>Moderate</td>
+            </tr>
+            <tr>
+                <td><span class="badge-los badge-D">D</span></td>
+                <td>0.72 – 1.08</td>
+                <td>Dense</td>
+            </tr>
+            <tr>
+                <td><span class="badge-los badge-E">E</span></td>
+                <td>1.08 – 1.63</td>
+                <td>Very Dense</td>
+            </tr>
+            <tr>
+                <td><span class="badge-los badge-F">F</span></td>
+                <td>1.63+</td>
+                <td>Extremely Dense</td>
             </tr>
         </tbody>
     </table>
