@@ -1,5 +1,120 @@
 # Changelog
 
+## [v1.6.44] - 2025-10-22
+
+### UI Bug Fixes & Enhancements: Comprehensive User Experience Improvements
+
+**Context**: This release implements 8 critical UI improvements and bug fixes across multiple pages, significantly enhancing user experience and fixing display issues that were affecting usability.
+
+#### Issues Resolved
+
+**#304 - Metrics Export Bug Fix**
+- **Problem**: Overtaking and co-presence metrics not exported to UI summary
+- **Solution**: Updated analytics/export_frontend_artifacts.py to export metrics to segment_metrics.json
+- **Impact**: Dashboard now displays correct metrics (overtaking=13, co-presence=13)
+
+**#305 - Dashboard UI Enhancements**
+- **Problem**: Inconsistent font sizing and layout issues on dashboard
+- **Solution**: 
+  - Unified typography consistency across all tiles using .kpi-value styling
+  - Structural enhancement: Three separate event tiles (Full, 10K, Half) under Model Inputs
+  - Layout optimization: Moved Total Participants to Model Outputs
+- **Impact**: Improved readability and better organization of dashboard information
+
+**#306 - Remove Deprecated UI Elements**
+- **Problem**: Deprecated environment banner and refresh button cluttering interface
+- **Solution**: Removed deprecated elements from base template
+- **Impact**: Cleaner, more professional interface
+
+**#307 - LOS Reference Panels**
+- **Problem**: Users lacked understanding of Level of Service (LOS) ratings
+- **Solution**: Added comprehensive LOS Reference panels to Segments and Density pages
+- **Impact**: Better user understanding of LOS ratings and their meanings
+
+**#308 - Segment Metrics Type Validation**
+- **Problem**: 'float' object has no attribute 'get' error in density API
+- **Solution**: Added type validation for segment metrics to prevent AttributeError
+- **Impact**: Eliminated backend crashes from malformed metrics data
+
+**#309 - Flow Table Layout Optimization**
+- **Problem**: Flow table had 11 columns causing word wrapping and overcrowding
+- **Solution**: 
+  - Merged A/B columns into unified A / B format (reduced to 7 columns)
+  - Added Flow Reference panel with comprehensive definitions
+  - Fixed font consistency to match other tables
+- **Impact**: Eliminated word wrapping, improved readability, better space efficiency
+
+**#310 - Reports Page Enhancement**
+- **Problem**: Reports page lacked metadata and had poor file organization
+- **Solution**: 
+  - Enhanced layout and metadata display
+  - Added file metadata (size, mtime) to reports list
+  - Implemented GCS metadata retrieval for Cloud Run
+- **Impact**: Better file management and organization
+
+**#311 - Health Page Real-Time Monitoring**
+- **Problem**: Basic health check provided limited operational visibility
+- **Solution**: 
+  - Added real-time API monitoring dashboard
+  - Improved environment detection (Cloud Run vs Local)
+  - Enhanced health metrics visibility
+- **Impact**: Better operational monitoring and system health visibility
+
+#### Technical Improvements
+
+**Backend Changes:**
+- `app/routes/api_reports.py` - File metadata & download improvements
+- `app/routes/api_dashboard.py` - Metrics source correction
+- `app/routes/api_density.py` - Type validation fix
+- `app/integration_testing.py` - New regression test
+- `analytics/export_frontend_artifacts.py` - Fixed metrics export
+
+**Frontend Changes:**
+- `templates/pages/health.html` - Real-time monitoring
+- `templates/pages/reports.html` - Enhanced layout & metadata
+- `templates/pages/density.html` - LOS reference panels
+- `templates/pages/segments.html` - LOS reference panels
+- `templates/pages/flow.html` - **MAJOR**: Merged A/B columns
+- `templates/pages/dashboard.html` - Three event tiles + layout
+- `templates/base.html` - Removed deprecated elements
+- `frontend/css/main.css` - Visual styling improvements
+
+#### Testing & Validation
+
+**E2E Tests Passed:**
+- Health Check: ✅ OK
+- Ready Check: ✅ OK
+- Density Report: ✅ OK
+- Map Manifest: ✅ OK (80 windows, 22 segments)
+- Map Bins: ✅ OK (243 bins returned)
+- Temporal Flow Report: ✅ OK
+
+**Production Verification:**
+- All endpoints responding correctly
+- All UI improvements functional
+- Metrics displaying correctly (Issue #304 fix confirmed)
+- No regressions in core functionality
+
+#### Impact Summary
+
+**User Experience:**
+- ✅ Improved readability - Flow table no longer wraps text
+- ✅ Better organization - Dashboard with clear event separation
+- ✅ Enhanced monitoring - Real-time health page updates
+- ✅ Consistent styling - Unified font and layout across all pages
+
+**Technical:**
+- ✅ Bug fixes - Critical API errors resolved
+- ✅ Data integrity - Metrics export working correctly
+- ✅ Performance - No regressions in core functionality
+- ✅ Maintainability - Cleaner, more consistent code
+
+**Files Modified:** 60 files (281,517 insertions, 457 deletions)
+**Commits:** 16 commits across 8 issues
+**Pull Request:** #313 - "UI Bug Fixes & Enhancements: Health Monitoring, Reports, Flow Table, and Dashboard Improvements"
+
+---
+
 ## [v1.6.43] - 2025-10-21
 
 ### CRITICAL BUG FIX: Report Downloads in Cloud Run and Local Environments
