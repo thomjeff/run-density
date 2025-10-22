@@ -21,20 +21,16 @@
                 <tr>
                     <th>ID</th>
                     <th>NAME</th>
-                    <th>EVENT A</th>
-                    <th>EVENT B</th>
+                    <th>EVENT A / B</th>
                     <th>FLOW TYPE</th>
-                    <th>OVERTAKING A</th>
-                    <th>PCT A</th>
-                    <th>OVERTAKING B</th>
-                    <th>PCT B</th>
-                    <th>CO-PRESENCE A</th>
-                    <th>CO-PRESENCE B</th>
+                    <th>OVERTAKING A / B</th>
+                    <th>PCT A / B</th>
+                    <th>CO-PRESENCE A / B</th>
                 </tr>
             </thead>
             <tbody id="flow-tbody">
                 <tr>
-                    <td colspan="11" class="placeholder">Loading flow data...</td>
+                    <td colspan="7" class="placeholder">Loading flow data...</td>
                 </tr>
             </tbody>
         </table>
@@ -113,7 +109,7 @@
         const segments = Object.values(flow);
         
         if (!segments || segments.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="11" class="placeholder">No flow data available</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="placeholder">No flow data available</td></tr>';
             return;
         }
         
@@ -123,18 +119,24 @@
         segments.forEach(segment => {
             const row = document.createElement('tr');
             
+            // Handle null/missing values with fallback to "—"
+            const eventA = segment.event_a || "—";
+            const eventB = segment.event_b || "—";
+            const overtakingA = segment.overtaking_a !== null && segment.overtaking_a !== undefined ? segment.overtaking_a.toFixed(0) : "—";
+            const overtakingB = segment.overtaking_b !== null && segment.overtaking_b !== undefined ? segment.overtaking_b.toFixed(0) : "—";
+            const pctA = segment.pct_a !== null && segment.pct_a !== undefined ? segment.pct_a.toFixed(1) + "%" : "—";
+            const pctB = segment.pct_b !== null && segment.pct_b !== undefined ? segment.pct_b.toFixed(1) + "%" : "—";
+            const copresenceA = segment.copresence_a !== null && segment.copresence_a !== undefined ? segment.copresence_a.toFixed(0) : "—";
+            const copresenceB = segment.copresence_b !== null && segment.copresence_b !== undefined ? segment.copresence_b.toFixed(0) : "—";
+            
             row.innerHTML = `
                 <td>${segment.id}</td>
                 <td>${segment.name}</td>
-                <td>${segment.event_a}</td>
-                <td>${segment.event_b}</td>
+                <td class="event-pair">${eventA} / ${eventB}</td>
                 <td>${segment.flow_type || 'overtake'}</td>
-                <td>${segment.overtaking_a.toFixed(0)}</td>
-                <td>${segment.pct_a.toFixed(1)}%</td>
-                <td>${segment.overtaking_b.toFixed(0)}</td>
-                <td>${segment.pct_b.toFixed(1)}%</td>
-                <td>${segment.copresence_a.toFixed(0)}</td>
-                <td>${segment.copresence_b.toFixed(0)}</td>
+                <td class="numeric-pair">${overtakingA} / ${overtakingB}</td>
+                <td class="numeric-pair">${pctA} / ${pctB}</td>
+                <td class="numeric-pair">${copresenceA} / ${copresenceB}</td>
             `;
             
             tbody.appendChild(row);
@@ -162,15 +164,11 @@
         totalRow.innerHTML = `
             <td>TOTAL</td>
             <td>${segments.length} segments</td>
+            <td class="event-pair">— / —</td>
             <td>—</td>
-            <td>—</td>
-            <td>—</td>
-            <td>${totals.overtaking_a.toFixed(0)}</td>
-            <td>—</td>
-            <td>${totals.overtaking_b.toFixed(0)}</td>
-            <td>—</td>
-            <td>${totals.copresence_a.toFixed(0)}</td>
-            <td>${totals.copresence_b.toFixed(0)}</td>
+            <td class="numeric-pair">${totals.overtaking_a.toFixed(0)} / ${totals.overtaking_b.toFixed(0)}</td>
+            <td class="numeric-pair">— / —</td>
+            <td class="numeric-pair">${totals.copresence_a.toFixed(0)} / ${totals.copresence_b.toFixed(0)}</td>
         `;
         
         tbody.appendChild(totalRow);
@@ -178,7 +176,7 @@
     
     function showFlowError() {
         const tbody = document.getElementById('flow-tbody');
-        tbody.innerHTML = '<tr><td colspan="11" class="placeholder">Error loading flow data</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="placeholder">Error loading flow data</td></tr>';
     }
 </script>
 {% endblock %}
@@ -206,6 +204,22 @@
     
     #flow-table tbody tr:hover {
         background: #f8f9fa;
+    }
+    
+    /* Styling for merged A/B columns */
+    td.numeric-pair {
+        font-family: monospace;
+        text-align: right;
+        white-space: nowrap;
+    }
+    
+    td.event-pair {
+        white-space: nowrap;
+    }
+    
+    td.numeric-pair span.separator {
+        color: #9ca3af; /* Tailwind gray-400 equivalent */
+        margin: 0 2px;
     }
 </style>
 {% endblock %}
