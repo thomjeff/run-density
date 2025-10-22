@@ -553,13 +553,15 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
     }
 
 
-def export_ui_artifacts(reports_dir: Path, run_id: str, environment: str = "local") -> Path:
+def export_ui_artifacts(reports_dir: Path, run_id: str, overtaking_segments: int = 0, co_presence_segments: int = 0, environment: str = "local") -> Path:
     """
     Export all UI artifacts from analytics outputs.
     
     Args:
         reports_dir: Path to reports/<run_id>/ directory
         run_id: Run identifier (e.g., "2025-10-19-1655")
+        overtaking_segments: Count of segments with overtaking activity (Issue #304)
+        co_presence_segments: Count of segments with co-presence activity (Issue #304)
         environment: Environment name ("local" or "cloud")
     
     Returns:
@@ -603,12 +605,33 @@ def export_ui_artifacts(reports_dir: Path, run_id: str, environment: str = "loca
     except Exception as e:
         print(f"   ⚠️  Warning: Could not compute peak_rate from bins.parquet: {e}")
     
-    (artifacts_dir / "segment_metrics.json").write_text(json.dumps(segment_metrics, indent=2))
-    print(f"   ✅ segment_metrics.json: {len(segment_metrics)} segments")
+    # Issue #304: Add summary-level metrics to segment_metrics.json
+    # Calculate overall peak metrics from per-segment data
+    peak_density_overall = max((seg.get("peak_density", 0.0) for seg in segment_metrics.values()), default=0.0)
+    peak_rate_overall = max((seg.get("peak_rate", 0.0) for seg in segment_metrics.values()), default=0.0)
     
-    # 3. Generate flags.json
+    # 3. Generate flags.json (needed for flagged_bins count)
     print("\n3️⃣  Generating flags.json...")
     flags = generate_flags_json(reports_dir, segment_metrics)
+    
+    # Count segments with flags and total flagged bins
+    segments_with_flags = len(flags)
+    flagged_bins = sum(flag.get("flagged_bins", 0) for flag in flags)
+    
+    # Add summary metrics at top level (Issue #304)
+    segment_metrics_with_summary = {
+        "peak_density": round(peak_density_overall, 4),
+        "peak_rate": round(peak_rate_overall, 2),
+        "segments_with_flags": segments_with_flags,
+        "flagged_bins": flagged_bins,
+        "overtaking_segments": overtaking_segments,
+        "co_presence_segments": co_presence_segments,
+        **segment_metrics  # Merge per-segment metrics
+    }
+    
+    (artifacts_dir / "segment_metrics.json").write_text(json.dumps(segment_metrics_with_summary, indent=2))
+    print(f"   ✅ segment_metrics.json: {len(segment_metrics)} segments + summary metrics")
+    
     (artifacts_dir / "flags.json").write_text(json.dumps(flags, indent=2))
     print(f"   ✅ flags.json: {len(flags)} flagged segments")
     
@@ -691,16 +714,15 @@ def calculate_flow_segment_counts(reports_root: Path, run_id: str) -> Tuple[int,
         return (0, 0)
 
 
-def update_latest_pointer(run_id: str, overtaking_segments: int = 0, co_presence_segments: int = 0) -> None:
+def update_latest_pointer(run_id: str) -> None:
     """
     Update artifacts/latest.json to point to the most recent run.
     
-    Issue #304: Now includes overtaking and co-presence segment counts for dashboard tiles.
+    This file is metadata-only (run_id, timestamp). Analytics metrics
+    are exported to segment_metrics.json per Issue #304.
     
     Args:
         run_id: Run identifier (e.g., "2025-10-19-1655" or "2025-10-19")
-        overtaking_segments: Count of segments with overtaking activity
-        co_presence_segments: Count of segments with co-presence interactions
     """
     artifacts_dir = Path("artifacts")
     artifacts_dir.mkdir(exist_ok=True)
@@ -732,17 +754,16 @@ def update_latest_pointer(run_id: str, overtaking_segments: int = 0, co_presence
         # Fallback to current UTC time in ISO-8601 format
         ts = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     
+    # Metadata-only pointer (Issue #304: analytics metrics go to segment_metrics.json)
     pointer = {
         "run_id": run_id,
-        "ts": ts,
-        "overtaking_segments": overtaking_segments,
-        "co_presence_segments": co_presence_segments
+        "ts": ts
     }
     
     pointer_path = artifacts_dir / "latest.json"
     pointer_path.write_text(json.dumps(pointer, indent=2))
     
-    print(f"✅ Updated artifacts/latest.json → {run_id} (overtaking: {overtaking_segments}, co-presence: {co_presence_segments})")
+    print(f"✅ Updated artifacts/latest.json → {run_id}")
 
 
 def main():
@@ -762,14 +783,14 @@ def main():
         print(f"Error: Reports directory not found: {reports_dir}")
         sys.exit(1)
     
-    # Export artifacts
-    artifacts_dir = export_ui_artifacts(reports_dir, run_id)
-    
     # Issue #304: Calculate flow segment counts for dashboard tiles
     overtaking_segments, co_presence_segments = calculate_flow_segment_counts(reports_root, run_id)
     
-    # Update pointer with flow metrics
-    update_latest_pointer(run_id, overtaking_segments, co_presence_segments)
+    # Export artifacts (including flow metrics in segment_metrics.json)
+    artifacts_dir = export_ui_artifacts(reports_dir, run_id, overtaking_segments, co_presence_segments)
+    
+    # Update pointer (metadata-only)
+    update_latest_pointer(run_id)
     
     print("\n🎉 Export complete!")
 
