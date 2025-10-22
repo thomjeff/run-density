@@ -46,6 +46,7 @@ async def get_reports_list():
         
         # List report files from GCS using StorageService
         from pathlib import Path as PathLib
+        import os
         reports = []
         file_list = storage_service.list_files(f"reports/{run_id}")
         
@@ -62,9 +63,34 @@ async def get_reports_list():
             elif ext == ".gz":
                 description = "Compressed GeoJSON"
             
+            # Get file metadata (size and modification time)
+            file_path = f"reports/{run_id}/{filename}"
+            mtime = None
+            size = None
+            
+            try:
+                if storage_service.config.use_cloud_storage:
+                    # For GCS, we need to get metadata from the blob
+                    # For now, we'll use a placeholder approach
+                    # TODO: Implement proper GCS metadata retrieval
+                    mtime = None
+                    size = None
+                else:
+                    # Local filesystem - get actual file stats
+                    if os.path.exists(file_path):
+                        stat = os.stat(file_path)
+                        mtime = stat.st_mtime
+                        size = stat.st_size
+            except Exception as e:
+                logger.warning(f"Could not get metadata for {file_path}: {e}")
+                mtime = None
+                size = None
+            
             reports.append({
                 "name": filename,
-                "path": f"reports/{run_id}/{filename}",
+                "path": file_path,
+                "mtime": mtime,
+                "size": size,
                 "description": description,
                 "type": "report"
             })
