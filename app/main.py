@@ -101,7 +101,7 @@ class DensityReportRequest(BaseModel):
     timeWindow: int = DEFAULT_TIME_WINDOW_SECONDS
     includePerEvent: bool = True
     outputDir: str = "reports"
-    enable_bin_dataset: bool = False
+    enable_bin_dataset: bool = True  # Issue #319: Enable by default (resource constraints resolved)
 
 class TemporalFlowReportRequest(BaseModel):
     paceCsv: str

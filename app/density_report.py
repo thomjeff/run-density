@@ -610,7 +610,7 @@ def generate_density_report(
     time_window_s: float = DEFAULT_TIME_WINDOW_SECONDS,
     include_per_event: bool = True,
     output_dir: str = "reports",
-    enable_bin_dataset: bool = False,
+    enable_bin_dataset: bool = True,  # Issue #319: Enable by default (resource constraints resolved)
     use_new_report_format: bool = True
 ) -> Dict[str, Any]:
     """
@@ -727,7 +727,12 @@ def generate_density_report(
     # Issue #198: Re-enable bin dataset generation with feature flag
     # Use API parameter if provided, otherwise fall back to environment variable
     enable_bins = enable_bin_dataset or os.getenv('ENABLE_BIN_DATASET', 'false').lower() == 'true'
+    
+    # Issue #319: Confirmation logging for bin dataset generation
+    logger.info(f"Bin dataset generation: enable_bin_dataset={enable_bin_dataset}, env_var={os.getenv('ENABLE_BIN_DATASET')}, effective={enable_bins}")
+    
     if enable_bins:
+        logger.info("✅ Bin dataset generation enabled (enable_bin_dataset=True)")
         try:
             from .constants import (DEFAULT_BIN_SIZE_KM, FALLBACK_BIN_SIZE_KM, BIN_MAX_FEATURES, 
                                    DEFAULT_BIN_TIME_WINDOW_SECONDS, MAX_BIN_GENERATION_TIME_SECONDS)
