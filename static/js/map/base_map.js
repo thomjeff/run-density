@@ -38,25 +38,25 @@ function initMap(containerId) {
     // Store reference to prevent double initialization
     window.existingMap = map;
     
-    // Primary tile layer - OpenStreetMap
-    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        maxZoom: 19
-    });
-    
-    // Fallback tile layer - Carto Light (minimal styling)
+    // Primary tile layer - Carto Light (minimal, grayscale-friendly styling)
     const cartoLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         attribution: '© OpenStreetMap contributors, © CARTO',
         maxZoom: 19
     });
     
-    // Add primary layer
-    osmLayer.addTo(map);
+    // Fallback tile layer - Carto Dark (for contrast)
+    const cartoDarkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap contributors, © CARTO',
+        maxZoom: 19
+    });
+    
+    // Add primary layer (light, minimal styling)
+    cartoLayer.addTo(map);
     
     // Store layer references for potential switching
     map._layers = {
-        osm: osmLayer,
-        carto: cartoLayer
+        carto: cartoLayer,
+        cartoDark: cartoDarkLayer
     };
     
     console.log(`Map initialized in container: ${containerId}`);
