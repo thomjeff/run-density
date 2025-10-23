@@ -168,6 +168,41 @@ async def flow(request: Request):
     )
 
 
+@router.get("/bins", response_class=HTMLResponse)
+async def bins(request: Request):
+    """
+    Bin-level details page with granular density and flow metrics.
+    
+    Returns:
+        HTML: Bin-level table with sorting, filtering, and pagination
+    """
+    meta = get_stub_meta()
+    
+    # Load LOS colors from SSOT
+    try:
+        reporting_config = load_reporting()
+        los_colors = reporting_config.get("reporting", {}).get("los_colors", {})
+    except Exception as e:
+        # Fallback to hardcoded colors if YAML loading fails
+        los_colors = {
+            "A": "#4CAF50",
+            "B": "#8BC34A", 
+            "C": "#FFC107",
+            "D": "#FF9800",
+            "E": "#FF5722",
+            "F": "#F44336"
+        }
+    
+    return templates.TemplateResponse(
+        "pages/bins.html",
+        {
+            "request": request, 
+            "meta": meta,
+            "los_colors": los_colors
+        }
+    )
+
+
 @router.get("/reports", response_class=HTMLResponse)
 async def reports(request: Request):
     """

@@ -30,6 +30,7 @@ try:
     from .routes.api_density import router as api_density_router
     from .routes.api_flow import router as api_flow_router
     from .routes.api_reports import router as api_reports_router
+    from .routes.api_bins import router as api_bins_router
     from .routes.api_e2e import router as api_e2e_router
     # from .test_api import test_router  # Disabled for Cloud Run deployment
     from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
@@ -50,6 +51,7 @@ except ImportError:
     from routes.api_density import router as api_density_router
     from routes.api_flow import router as api_flow_router
     from routes.api_reports import router as api_reports_router
+    from routes.api_bins import router as api_bins_router
     from routes.api_e2e import router as api_e2e_router
     # from test_api import test_router  # Disabled for Cloud Run deployment
     from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
@@ -158,6 +160,7 @@ app.include_router(api_health_router)
 app.include_router(api_density_router)
 app.include_router(api_flow_router)
 app.include_router(api_reports_router)
+app.include_router(api_bins_router)
 app.include_router(api_e2e_router)
 
 # CSV Data Endpoints for Reports Page

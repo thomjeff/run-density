@@ -1,0 +1,337 @@
+{% extends "base.html" %}
+
+{% block title %}Bin-Level Details{% endblock %}
+
+{% block extra_head %}
+<style>
+    .bins-loading {
+        text-align: center;
+        padding: 2rem;
+        color: #666;
+        font-style: italic;
+    }
+    
+    .bins-empty {
+        text-align: center;
+        padding: 3rem;
+        color: #666;
+    }
+    
+    .bins-empty h3 {
+        color: #999;
+        margin-bottom: 1rem;
+    }
+    
+    .bins-empty p {
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+    
+    .filter-controls {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+    }
+    
+    .filter-controls input {
+        padding: 0.5rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 0.9rem;
+    }
+    
+    .filter-controls input:focus {
+        outline: none;
+        border-color: #007bff;
+        box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    }
+    
+    .pagination-controls {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 1rem;
+        padding: 1rem 0;
+        border-top: 1px solid #eee;
+    }
+    
+    .pagination-info {
+        color: #666;
+        font-size: 0.9rem;
+    }
+    
+    .pagination-buttons {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .pagination-buttons button {
+        padding: 0.5rem 1rem;
+        border: 1px solid #ddd;
+        background: white;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.9rem;
+    }
+    
+    .pagination-buttons button:hover:not(:disabled) {
+        background: #f8f9fa;
+        border-color: #007bff;
+    }
+    
+    .pagination-buttons button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    
+    .pagination-buttons button.active {
+        background: #007bff;
+        color: white;
+        border-color: #007bff;
+    }
+    
+    /* Table styles */
+    #bins-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 1rem;
+    }
+    
+    #bins-table th {
+        background: #f8f9fa;
+        padding: 0.75rem;
+        text-align: left;
+        font-weight: 600;
+        border-bottom: 2px solid #dee2e6;
+        cursor: pointer;
+        user-select: none;
+        position: relative;
+    }
+    
+    #bins-table th:hover {
+        background: #e9ecef;
+    }
+    
+    #bins-table th.sortable::after {
+        content: ' ↕';
+        opacity: 0.5;
+        font-size: 0.8em;
+    }
+    
+    #bins-table th.sort-asc::after {
+        content: ' ↑';
+        opacity: 1;
+        color: #007bff;
+    }
+    
+    #bins-table th.sort-desc::after {
+        content: ' ↓';
+        opacity: 1;
+        color: #007bff;
+    }
+    
+    #bins-table td {
+        padding: 0.75rem;
+        border-bottom: 1px solid #dee2e6;
+        vertical-align: top;
+    }
+    
+    #bins-table tbody tr:hover {
+        background: #f8f9fa;
+    }
+    
+    #bins-table tbody tr.selected {
+        background: #e3f2fd;
+        border-left: 4px solid #2196f3;
+    }
+    
+    /* Column alignment */
+    #bins-table .text-right {
+        text-align: right;
+    }
+    
+    #bins-table .text-center {
+        text-align: center;
+    }
+    
+    /* LOS badge styles */
+    .badge-los {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: white;
+        min-width: 1.5rem;
+        text-align: center;
+    }
+    
+    .badge-los.badge-A { background-color: #4CAF50; }
+    .badge-los.badge-B { background-color: #8BC34A; }
+    .badge-los.badge-C { background-color: #FFC107; color: #333; }
+    .badge-los.badge-D { background-color: #FF9800; }
+    .badge-los.badge-E { background-color: #FF5722; }
+    .badge-los.badge-F { background-color: #F44336; }
+    
+    /* Responsive design */
+    @media (max-width: 768px) {
+        .filter-controls {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        
+        .pagination-controls {
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        #bins-table {
+            font-size: 0.85rem;
+        }
+        
+        #bins-table th,
+        #bins-table td {
+            padding: 0.5rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Bin-Level Details</h2>
+    <p style="color: #666; margin-top: 0.5rem; font-size: 0.9rem;">
+        Granular density and flow metrics for course segments. 
+        <span id="total-bins-count">Loading...</span> bins available.
+    </p>
+</div>
+
+<!-- Filter Controls -->
+<div class="card">
+    <div class="filter-controls">
+        <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+            <label for="segment-filter" style="font-weight: 500;">Filter by Segment:</label>
+            <input type="text" id="segment-filter" placeholder="e.g., A1, B2..." style="min-width: 120px;">
+            
+            <label for="los-filter" style="font-weight: 500;">Filter by LOS:</label>
+            <select id="los-filter" style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem;">
+                <option value="">All LOS</option>
+                <option value="A">A - Free Flow</option>
+                <option value="B">B - Comfortable</option>
+                <option value="C">C - Moderate</option>
+                <option value="D">D - Dense</option>
+                <option value="E">E - Very Dense</option>
+                <option value="F">F - Extremely Dense</option>
+            </select>
+            
+            <button id="clear-filters" style="padding: 0.5rem 1rem; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem;">
+                Clear Filters
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Bins Table -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Bin-Level Metrics</h3>
+    
+    <div id="bins-loading" class="bins-loading">
+        <div>Loading bin data...</div>
+    </div>
+    
+    <div id="bins-empty" class="bins-empty" style="display: none;">
+        <h3>No Bin Data Available</h3>
+        <p>No bin-level data found. This may indicate that density analysis has not been run yet, or there was an issue loading the data.</p>
+    </div>
+    
+    <div id="bins-content" style="display: none;">
+        <table id="bins-table">
+            <thead>
+                <tr>
+                    <th class="sortable" data-sort="segment_id">Segment ID</th>
+                    <th class="sortable text-right" data-sort="start_km">Start (km)</th>
+                    <th class="sortable text-right" data-sort="end_km">End (km)</th>
+                    <th class="sortable" data-sort="t_start">Time Start</th>
+                    <th class="sortable" data-sort="t_end">Time End</th>
+                    <th class="sortable text-right" data-sort="density">Density (p/m²)</th>
+                    <th class="sortable text-right" data-sort="rate">Rate (vph)</th>
+                    <th class="sortable text-center" data-sort="los_class">LOS</th>
+                </tr>
+            </thead>
+            <tbody id="bins-table-body">
+                <!-- Populated by JavaScript -->
+            </tbody>
+        </table>
+        
+        <!-- Pagination Controls -->
+        <div class="pagination-controls">
+            <div class="pagination-info">
+                <span id="pagination-info">Showing 0-0 of 0 bins</span>
+            </div>
+            <div class="pagination-buttons">
+                <button id="prev-page" disabled>Previous</button>
+                <span id="page-numbers"></span>
+                <button id="next-page" disabled>Next</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- LOS Reference -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Level of Service (LOS) Reference</h3>
+    <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
+        Defined by areal density (ρ) in persons per square meter (p/m²).
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>LOS</th>
+                <th>Density Range (p/m²)</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><span class="badge-los badge-A">A</span></td>
+                <td>0.00 – 0.36</td>
+                <td>Free Flow</td>
+            </tr>
+            <tr>
+                <td><span class="badge-los badge-B">B</span></td>
+                <td>0.36 – 0.54</td>
+                <td>Comfortable</td>
+            </tr>
+            <tr>
+                <td><span class="badge-los badge-C">C</span></td>
+                <td>0.54 – 0.72</td>
+                <td>Moderate</td>
+            </tr>
+            <tr>
+                <td><span class="badge-los badge-D">D</span></td>
+                <td>0.72 – 1.08</td>
+                <td>Dense</td>
+            </tr>
+            <tr>
+                <td><span class="badge-los badge-E">E</span></td>
+                <td>1.08 – 1.63</td>
+                <td>Very Dense</td>
+            </tr>
+            <tr>
+                <td><span class="badge-los badge-F">F</span></td>
+                <td>1.63+</td>
+                <td>Extremely Dense</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- External JavaScript module -->
+<script src="/static/js/bins.js"></script>
+{% endblock %}
