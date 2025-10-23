@@ -213,8 +213,11 @@
 <div class="card">
     <div class="filter-controls">
         <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
-            <label for="segment-filter" style="font-weight: 500;">Filter by Segment:</label>
-            <input type="text" id="segment-filter" placeholder="e.g., A1, B2..." style="min-width: 120px;">
+            <label for="segment-filter" style="font-weight: 500;">Showing:</label>
+            <select id="segment-filter" style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem; min-width: 250px;">
+                <option value="">All Segments</option>
+                <!-- Options will be populated by JavaScript -->
+            </select>
             
             <label for="los-filter" style="font-weight: 500;">Filter by LOS:</label>
             <select id="los-filter" style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem;">

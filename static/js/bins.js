@@ -65,7 +65,7 @@ function setupEventListeners() {
     
     // Filter inputs
     if (segmentFilter) {
-        segmentFilter.addEventListener('input', debounce(applyFilters, 300));
+        segmentFilter.addEventListener('change', applyFilters);
     }
     if (losFilter) {
         losFilter.addEventListener('change', applyFilters);
@@ -85,13 +85,52 @@ function setupEventListeners() {
 }
 
 /**
+ * Load segment names and populate the dropdown
+ * Shows all segments from the course definition
+ */
+async function loadSegmentNames() {
+    try {
+        const response = await fetch('/api/segments/geojson');
+        if (!response.ok) {
+            console.warn('Could not load segment names');
+            return;
+        }
+        
+        const data = await response.json();
+        if (data.features && segmentFilter) {
+            // Extract all segments with their names
+            const segments = data.features.map(f => ({
+                id: f.properties.seg_id,
+                name: f.properties.label
+            }));
+            
+            // Sort by segment ID
+            segments.sort((a, b) => a.id.localeCompare(b.id));
+            
+            // Populate dropdown
+            segments.forEach(segment => {
+                const option = document.createElement('option');
+                option.value = segment.id;
+                option.textContent = `${segment.id} - ${segment.name}`;
+                segmentFilter.appendChild(option);
+            });
+            
+            console.log(`Loaded ${segments.length} segment names for dropdown`);
+        }
+    } catch (error) {
+        console.error('Error loading segment names:', error);
+    }
+}
+
+/**
  * Load bins data from API
  */
 async function loadBinsData() {
     try {
         showLoadingState();
         
-        const response = await fetch('/api/bins');
+        // Load bins for default segment (A1) on initial load
+        const response = await fetch('/api/bins?segment_id=A1&limit=50000');
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
@@ -101,6 +140,9 @@ async function loadBinsData() {
         if (data.bins && data.bins.length > 0) {
             allBinsData = data.bins;
             filteredBinsData = [...allBinsData];
+            
+            // Load segment names for the dropdown (all segments, not just current bins)
+            await loadSegmentNames();
             
             // Update total count display
             if (totalBinsCount) {
@@ -126,6 +168,14 @@ function showLoadingState() {
     document.getElementById('bins-loading').style.display = 'block';
     document.getElementById('bins-empty').style.display = 'none';
     document.getElementById('bins-content').style.display = 'none';
+}
+
+/**
+ * Hide loading state
+ */
+function hideLoadingState() {
+    document.getElementById('bins-loading').style.display = 'none';
+    document.getElementById('bins-content').style.display = 'block';
 }
 
 /**
@@ -310,38 +360,91 @@ function sortTable(column) {
 }
 
 /**
+ * Load bins for a specific segment
+ */
+async function loadBinsForSegment(segmentId, losClass = null) {
+    try {
+        showLoadingState();
+        
+        let url = `/api/bins?segment_id=${segmentId}&limit=50000`;
+        if (losClass) {
+            url += `&los_class=${losClass}`;
+        }
+        
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.bins && data.bins.length > 0) {
+            allBinsData = data.bins;
+            filteredBinsData = [...allBinsData];
+            
+            // Update total count display
+            if (totalBinsCount) {
+                totalBinsCount.textContent = `${data.total_count.toLocaleString()} bins available`;
+            }
+            
+            // Reset to first page and render
+            currentPage = 1;
+            renderTable();
+            
+            console.log(`Loaded ${data.bins.length} bins for segment ${segmentId}`);
+        } else {
+            console.warn(`No bins found for segment ${segmentId}`);
+            allBinsData = [];
+            filteredBinsData = [];
+            renderTable();
+        }
+        
+        hideLoadingState();
+        
+    } catch (error) {
+        console.error('Error loading bins for segment:', error);
+        hideLoadingState();
+    }
+}
+
+/**
  * Apply filters to the data
  */
-function applyFilters() {
-    const segmentValue = segmentFilter ? segmentFilter.value.toLowerCase().trim() : '';
+async function applyFilters() {
+    const segmentValue = segmentFilter ? segmentFilter.value.trim() : '';
     const losValue = losFilter ? losFilter.value : '';
     
-    filteredBinsData = allBinsData.filter(bin => {
-        const segmentMatch = !segmentValue || bin.segment_id.toLowerCase().includes(segmentValue);
-        const losMatch = !losValue || bin.los_class === losValue;
+    console.log('Applying filters:', { segmentValue, losValue });
+    
+    // If segment changed, load new data from API
+    if (segmentValue && segmentValue !== '') {
+        await loadBinsForSegment(segmentValue, losValue);
+    } else {
+        // If no segment selected, filter existing data by LOS only
+        filteredBinsData = allBinsData.filter(bin => {
+            const losMatch = !losValue || bin.los_class === losValue;
+            return losMatch;
+        });
         
-        return segmentMatch && losMatch;
-    });
-    
-    // Reset to first page and re-render
-    currentPage = 1;
-    renderTable();
-    
-    console.log(`Applied filters: ${filteredBinsData.length} bins match criteria`);
+        // Reset to first page and re-render
+        currentPage = 1;
+        renderTable();
+        
+        console.log(`Applied LOS filter: ${filteredBinsData.length} bins match criteria (los: ${losValue || 'all'})`);
+    }
 }
 
 /**
  * Clear all filters
  */
-function clearFilters() {
+async function clearFilters() {
     if (segmentFilter) segmentFilter.value = '';
     if (losFilter) losFilter.value = '';
     
-    filteredBinsData = [...allBinsData];
-    currentPage = 1;
-    renderTable();
+    // Reload default segment (A1) data
+    await loadBinsForSegment('A1');
     
-    console.log('Cleared all filters');
+    console.log('Cleared all filters - reloaded A1 data');
 }
 
 /**
