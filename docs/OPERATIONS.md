@@ -532,6 +532,97 @@ gh release upload v1.6.43 \
 
 ---
 
+## Maintenance & Cleanup
+
+### Cloud Run Revision Management
+
+Cloud Run revisions accumulate indefinitely by default. Regular cleanup prevents clutter and improves console performance.
+
+**Tool**: `scripts/cleanup_cloud_run_revisions.sh`
+
+#### Usage
+
+```bash
+# Manual execution
+./scripts/cleanup_cloud_run_revisions.sh
+
+# Add to scheduled maintenance (monthly)
+```
+
+#### Configuration
+
+- **Service**: `run-density`
+- **Region**: `us-central1`
+- **Keep Count**: 5 revisions (1 active + 4 rollback options)
+
+#### What It Does
+
+1. Lists all revisions for the service
+2. Keeps the last 5 revisions (configurable)
+3. Deletes all older revisions
+4. Shows progress with counts
+5. Confirms final state
+
+#### Safety Features
+
+- Preview of what will be deleted
+- Progress tracking
+- Lists kept revisions at end
+- No impact on active deployment
+
+#### When to Run
+
+- **Monthly**: As part of regular maintenance
+- **After major releases**: Clean up test/rollback revisions
+- **When console is slow**: Too many revisions can impact performance
+
+### Reports Retention Policy
+
+**Established Practice**:
+- **Keep**: Current month + previous month
+- **Delete**: Reports older than 2 months
+- **Archive**: Important reports before deletion (if needed)
+
+**Frequency**: Monthly cleanup recommended
+
+**Rationale**: Reports can be regenerated from source data if needed. Keeping 2 months provides adequate history while managing disk usage.
+
+### Repository Maintenance Schedule
+
+#### Monthly Tasks
+1. ✅ **Delete old reports** (older than 2 months)
+2. ✅ **Clean Cloud Run revisions** (keep last 5-10)
+3. ✅ **Review branch list** (delete merged branches)
+4. ✅ **Check disk usage** (artifacts, cache, logs)
+
+#### Quarterly Tasks
+1. ✅ **Review archive directories** (consolidate if needed)
+2. ✅ **Update dependencies** (requirements.txt)
+3. ✅ **Review .gitignore** (add new patterns)
+4. ✅ **Audit permissions** (Cloud Run, GCS)
+
+#### Annual Tasks
+1. ✅ **Archive old releases** (keep last 12 months)
+2. ✅ **Review documentation** (update outdated info)
+3. ✅ **Clean test artifacts** (old test data)
+4. ✅ **Optimize storage** (GCS lifecycle policies)
+
+### Storage Management
+
+**Disk Usage Patterns**:
+- **`/reports`**: Can grow large with daily reports
+- **`/cache`**: Gitignored, safe to clear
+- **`/artifacts`**: Monthly JSON/GeoJSON artifacts
+- **`/archive`**: Historical files, review annually
+
+**Best Practices**:
+- Keep reports for current + previous month only
+- Clean Cloud Run revisions monthly
+- Archive before deleting important files
+- Use GCS lifecycle policies for Cloud Storage
+
+---
+
 ## Related Documentation
 
 - `@GUARDRAILS.md` - Development rules and workflows

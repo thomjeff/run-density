@@ -2,6 +2,37 @@
 
 ## [v1.6.44] - 2025-10-22
 
+### Repository Maintenance & Cleanup
+
+**Note**: In addition to UI bug fixes, this release includes comprehensive repository maintenance:
+
+**Frontend Cleanup:**
+- Archived 90+ legacy frontend development tools to `archive/frontend-tools/`
+- Deleted 15+ legacy HTML/CSS/JS files from pre-v1.6.42 architecture
+- Consolidated requirements files (deleted split files, updated Dockerfile)
+- Result: Cleaner `/frontend` directory with only essential files
+
+**Cloud Run Maintenance:**
+- Created `scripts/cleanup_cloud_run_revisions.sh` for automated revision pruning
+- Reduced Cloud Run revisions from 497 → 5 (99% reduction)
+- Kept only active + 4 most recent rollback candidates
+
+**Repository Cleanup:**
+- Deleted 800+ old reports from September 2025 (established 2-month retention policy)
+- Archived legacy test files and build tools
+- Cleaned up repository root (removed duplicates, outdated files)
+- Added maintenance schedule to OPERATIONS.md
+
+**Documentation Updates:**
+- Added "Maintenance & Cleanup" section to OPERATIONS.md
+- Documented Cloud Run revision management best practices
+- Established reports retention policy
+- Created comprehensive session summary
+
+**Total Impact**: Removed 1,400+ files, created reusable maintenance tools, improved repository organization.
+
+---
+
 ### UI Bug Fixes & Enhancements: Comprehensive User Experience Improvements
 
 **Context**: This release implements 8 critical UI improvements and bug fixes across multiple pages, significantly enhancing user experience and fixing display issues that were affecting usability.
