@@ -1,8 +1,9 @@
 name: Validate Data Contracts
 
+# DISABLED: Legacy workflow referencing archived frontend code
+# Will be refactored in future milestone
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   validate:

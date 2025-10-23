@@ -1,11 +1,9 @@
 name: UI Artifacts QC
 
+# DISABLED: Legacy workflow referencing archived frontend code
+# Will be refactored in future milestone
 on:
   workflow_dispatch:
-  push:
-    branches: [ feature/rf-fe-002, main ]
-  pull_request:
-    branches: [ main ]
 
 jobs:
   qc:
