@@ -687,37 +687,38 @@ def generate_density_report(
             "details": str(e)
         }
     
-    # Generate initial report WITHOUT operational intelligence (Issue #236/239 fix)
-    # Operational intelligence requires bins, which are generated later
-    report_content_initial = generate_markdown_report(
-        results, 
-        start_times, 
-        include_per_event,
-        include_operational_intelligence=False,  # Disable for now, will regenerate after bins
-        output_dir=output_dir
-    )
+    # Issue #319: Skip legacy report generation - only generate v2 report with bin-level details
+    # The v2 report will be generated after bin dataset creation (line ~950)
+    # NOTE: Legacy report generation removed to avoid duplicate reports in GCS
+    #       - Old approach: generated initial report (15KB) + v2 report (109KB) = 2 files
+    #       - New approach: only generate v2 report (109KB) = 1 file
     
-    # Save initial report
-    full_path, relative_path = get_report_paths("Density", "md", output_dir)
+    # # COMMENTED OUT - Legacy report generation (Issue #319)
+    # report_content_initial = generate_markdown_report(
+    #     results, 
+    #     start_times, 
+    #     include_per_event,
+    #     include_operational_intelligence=False,
+    #     output_dir=output_dir
+    # )
+    # full_path, relative_path = get_report_paths("Density", "md", output_dir)
+    # with open(full_path, 'w', encoding='utf-8') as f:
+    #     f.write(report_content_initial)
+    # print(f"📊 Density report (initial) saved to: {full_path}")
     
-    with open(full_path, 'w', encoding='utf-8') as f:
-        f.write(report_content_initial)
+    # Initialize variables for return statement (will be set by v2 report generation)
+    pdf_path = None  # PDF generation removed
+    full_path = None  # Will be set by v2 report generation at line ~961
     
-    print(f"📊 Density report (initial) saved to: {full_path}")
-    
-    # PDF generation removed - focus on core functionality
-    pdf_path = None
-    print("📄 PDF generation removed - using markdown reports only")
-    
-    # Also save to storage service for persistence
-    try:
-        storage_service = get_storage_service()
-        timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
-        storage_filename = f"{timestamp}-Density.md"
-        storage_path = storage_service.save_file(storage_filename, report_content_initial)
-        print(f"📊 Density report saved to storage: {storage_path}")
-    except Exception as e:
-        print(f"⚠️ Failed to save density report to storage: {e}")
+    # # COMMENTED OUT - Legacy report storage upload (Issue #319)
+    # try:
+    #     storage_service = get_storage_service()
+    #     timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+    #     storage_filename = f"{timestamp}-Density.md"
+    #     storage_path = storage_service.save_file(storage_filename, report_content_initial)
+    #     print(f"📊 Density report saved to storage: {storage_path}")
+    # except Exception as e:
+    #     print(f"⚠️ Failed to save density report to storage: {e}")
     
     # Generate and save map dataset using storage service
     map_data = generate_map_dataset(results, start_times)
