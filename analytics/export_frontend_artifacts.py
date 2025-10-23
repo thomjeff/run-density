@@ -524,8 +524,8 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
             }
         
         # Add bin centroid to segment's coordinate list
-        geom = feature.get("geometry", {})
-        if geom.get("type") == "Polygon":
+        geom = feature.get("geometry")
+        if geom and geom.get("type") == "Polygon":
             # Compute centroid (simple average of coordinates)
             coords = geom.get("coordinates", [[]])[0]
             if coords:
