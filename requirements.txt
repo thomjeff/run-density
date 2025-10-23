@@ -32,10 +32,10 @@ httpx>=0.24.0
 pyarrow>=10.0.0
 shapely>=2.0.0
 pyproj>=3.6.0
+geopandas>=0.14.0
 
 # NOTE: Heavy dependencies removed from web runtime:
 # - folium (static map generation → Leaflet client-side)
-# - geopandas (bin geometries → may need to add back if /api/map/bins required)
 # - matplotlib (charts → pre-generated PNGs or CSS)
 # - markdown (reports → Jinja templates)
-# - pypandoc (PDF generation → deferred)
+# - pypandas (PDF generation → deferred)
