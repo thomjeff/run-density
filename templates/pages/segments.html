@@ -55,10 +55,19 @@
 <!-- Map Container -->
 <div class="card">
     <h3 style="margin-bottom: 1rem;">Course Map</h3>
-    <div id="segments-map" aria-label="Course segments map">
+    <div id="segments-map" aria-label="Course segments map" style="position: relative;">
         <div class="map-loading">Loading map data...</div>
+        
+        <!-- Filter Controls Overlay -->
+        <div id="map-filter-controls" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(255, 255, 255, 0.95); padding: 0.75rem; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); display: none; max-width: 300px;">
+            <div style="display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-end;">
+                <button id="clear-filter-btn" onclick="clearMapFilter()" style="padding: 0.4rem 0.8rem; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem;">
+                    Clear Filter
+                </button>
+                <span id="filter-status" style="color: #495057; font-size: 0.85rem; text-align: right; line-height: 1.3;"></span>
+            </div>
+        </div>
     </div>
-    
 </div>
 
 <!-- Segment Metadata Table -->

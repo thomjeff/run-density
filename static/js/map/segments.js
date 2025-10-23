@@ -8,11 +8,12 @@
 
 // LOS colors from reporting.yml (SSOT)
 const losColors = {
-    'A': '#00B050',  // Green
-    'B': '#FFC000',  // Yellow  
-    'C': '#ED7D31',  // Orange
-    'D': '#C00000',  // Red
-    'E': '#808080'   // Grey
+    'A': '#4CAF50',  // Green - excellent
+    'B': '#8BC34A',  // Light green - good
+    'C': '#FFC107',  // Amber - acceptable
+    'D': '#FF9800',  // Orange - concerning
+    'E': '#FF5722',  // Red-orange - poor
+    'F': '#F44336'   // Red - unacceptable
 };
 
 /**
@@ -44,6 +45,38 @@ function convertCoordinateArray(coordinates) {
         }
         return coord;
     });
+}
+
+/**
+ * TEMP FIX (Sydney milestone):
+ * Deduplicate segment coordinates client-side to avoid visual jitter.
+ * Backend geometry simplification will be handled post-Sydney (#330 planned).
+ * 
+ * @param {Array} coords - Array of coordinate pairs
+ * @returns {Array} Deduplicated coordinates
+ */
+function cleanCoords(coords) {
+    const seen = new Set();
+    return coords.filter(([x, y]) => {
+        const key = `${x.toFixed(6)},${y.toFixed(6)}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+/**
+ * Clean duplicate coordinates from a GeoJSON feature
+ * @param {Object} feature - GeoJSON feature
+ * @returns {Object} Feature with cleaned coordinates
+ */
+function cleanFeature(feature) {
+    if (feature.geometry.type === "LineString") {
+        feature.geometry.coordinates = cleanCoords(feature.geometry.coordinates);
+    } else if (feature.geometry.type === "MultiLineString") {
+        feature.geometry.coordinates = feature.geometry.coordinates.map(cleanCoords);
+    }
+    return feature;
 }
 
 /**
@@ -150,10 +183,20 @@ async function renderSegments(map) {
         }
     });
     
-    // Convert coordinates to WGS84 lat/lng
+    // Clean and convert coordinates to WGS84 lat/lng
     data.features.forEach(feature => {
         if (feature.geometry && feature.geometry.coordinates) {
+            const originalCount = feature.geometry.coordinates.length;
+            // First clean duplicate coordinates
+            feature = cleanFeature(feature);
+            const cleanedCount = feature.geometry.coordinates.length;
+            // Then convert to WGS84
             feature.geometry.coordinates = convertCoordinateArray(feature.geometry.coordinates);
+            
+            // Log deduplication effect for segments with significant reduction
+            if (originalCount > cleanedCount && originalCount > 10) {
+                console.log(`🧹 Cleaned ${feature.properties.seg_id}: ${originalCount} → ${cleanedCount} coordinates (${((originalCount - cleanedCount) / originalCount * 100).toFixed(1)}% reduction)`);
+            }
         }
     });
     
@@ -209,6 +252,10 @@ async function renderSegments(map) {
     // Make segmentsLayer globally available for table interactions
     window.segmentsLayer = segmentsLayer;
     
+    // Make filtering functions globally available
+    window.filterMapToSegment = filterMapToSegment;
+    window.clearMapFilter = clearMapFilter;
+    
     // Fit map to segments bounds with padding
     if (data.features.length > 0) {
         const bounds = segmentsLayer.getBounds();
@@ -246,6 +293,144 @@ async function renderSegments(map) {
 }
 
 /**
+ * Filter map to show only the selected segment
+ * @param {string} segmentId - ID of the segment to show
+ */
+function filterMapToSegment(segmentId) {
+    if (!window.segmentsLayer) {
+        console.warn('Segments layer not available');
+        return;
+    }
+    
+    console.log(`🔍 Filtering map to show only segment: ${segmentId}`);
+    
+    // Hide all segments first
+    window.segmentsLayer.eachLayer(function(layer) {
+        layer.setStyle({ opacity: 0, fillOpacity: 0 });
+    });
+    
+    // Show only the selected segment
+    window.segmentsLayer.eachLayer(function(layer) {
+        const feature = layer.feature;
+        if (feature && feature.properties && feature.properties.seg_id === segmentId) {
+            // Restore original styling for the selected segment
+            const style = getSegmentStyle(feature);
+            layer.setStyle(style);
+            
+            // Fit map to this segment's bounds
+            const bounds = layer.getBounds();
+            if (bounds.isValid()) {
+                window.map.fitBounds(bounds, { 
+                    padding: [20, 20],
+                    maxZoom: 18
+                });
+                console.log(`✅ Focused map on segment ${segmentId}`);
+            }
+        }
+    });
+    
+    // Highlight the selected row in the table
+    highlightTableRow(segmentId);
+    
+    // Show clear filter button and update status
+    updateFilterUI(segmentId);
+}
+
+/**
+ * Clear map filter to show all segments
+ */
+function clearMapFilter() {
+    if (!window.segmentsLayer) {
+        console.warn('Segments layer not available');
+        return;
+    }
+    
+    console.log('🔄 Clearing map filter - showing all segments');
+    
+    // Show all segments with original styling
+    window.segmentsLayer.eachLayer(function(layer) {
+        const feature = layer.feature;
+        if (feature) {
+            const style = getSegmentStyle(feature);
+            layer.setStyle(style);
+        }
+    });
+    
+    // Fit map to all segments bounds
+    if (window.segmentsLayer.getBounds().isValid()) {
+        window.map.fitBounds(window.segmentsLayer.getBounds(), { 
+            padding: [20, 20],
+            maxZoom: 16
+        });
+    }
+    
+    // Clear table row highlighting
+    clearTableRowHighlight();
+    
+    // Hide clear filter button and update status
+    updateFilterUI(null);
+}
+
+/**
+ * Highlight a specific row in the table
+ * @param {string} segmentId - ID of the segment to highlight
+ */
+function highlightTableRow(segmentId) {
+    // Clear any existing highlights
+    clearTableRowHighlight();
+    
+    // Find and highlight the target row
+    const rows = document.querySelectorAll('#segments-table tbody tr');
+    rows.forEach(row => {
+        const firstCell = row.querySelector('td');
+        if (firstCell && firstCell.textContent.trim() === segmentId) {
+            row.classList.add('selected-row');
+            row.style.backgroundColor = '#e3f2fd';
+            row.style.cursor = 'pointer';
+            console.log(`✅ Highlighted table row for segment ${segmentId}`);
+        }
+    });
+}
+
+/**
+ * Clear table row highlighting
+ */
+function clearTableRowHighlight() {
+    const rows = document.querySelectorAll('#segments-table tbody tr');
+    rows.forEach(row => {
+        row.classList.remove('selected-row');
+        row.style.backgroundColor = '';
+        row.style.cursor = 'pointer';
+    });
+}
+
+/**
+ * Update the filter UI (button visibility and status text)
+ * @param {string|null} segmentId - ID of the filtered segment, or null if no filter
+ */
+function updateFilterUI(segmentId) {
+    const filterControls = document.getElementById('map-filter-controls');
+    const clearBtn = document.getElementById('clear-filter-btn');
+    const statusSpan = document.getElementById('filter-status');
+    
+    if (segmentId) {
+        // Show filter controls overlay and update status
+        if (filterControls) {
+            filterControls.style.display = 'block';
+        }
+        if (statusSpan) {
+            statusSpan.textContent = `Showing only segment ${segmentId}`;
+            statusSpan.style.color = '#007bff';
+        }
+    } else {
+        // Hide filter controls overlay
+        if (filterControls) {
+            filterControls.style.display = 'none';
+        }
+    }
+}
+
+/**
  * Update the segments table with data
  * @param {Array} features - GeoJSON features array
  */
@@ -274,10 +459,30 @@ function updateTable(features) {
             <td>${props.peak_rate ? props.peak_rate.toFixed(2) : 'N/A'}</td>
         `;
         
-        // Add click handler to focus on map
+        // Add click handler for table-to-map filtering
         row.addEventListener('click', function() {
-            if (window.focusOnSegment) {
-                window.focusOnSegment(props.seg_id);
+            const segmentId = props.seg_id;
+            
+            // Check if this row is already selected
+            if (row.classList.contains('selected-row')) {
+                // If already selected, clear the filter
+                clearMapFilter();
+            } else {
+                // If not selected, filter map to this segment
+                filterMapToSegment(segmentId);
+            }
+        });
+        
+        // Add hover effects
+        row.addEventListener('mouseenter', function() {
+            if (!row.classList.contains('selected-row')) {
+                row.style.backgroundColor = '#f5f5f5';
+            }
+        });
+        
+        row.addEventListener('mouseleave', function() {
+            if (!row.classList.contains('selected-row')) {
+                row.style.backgroundColor = '';
             }
         });
         
