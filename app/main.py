@@ -192,6 +192,11 @@ try:
 except Exception as e:
     print(f"Warning: Could not mount frontend directory: {e}")
 
+try:
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+except Exception as e:
+    print(f"Warning: Could not mount static directory: {e}")
+
 @app.get("/")
 async def root():
     return {
