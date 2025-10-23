@@ -113,7 +113,7 @@ function createTooltipContent(properties) {
     const props = properties || {};
     
     return `
-        <div style="font-family: Arial, sans-serif; font-size: 12px;">
+        <div style="font-family: Arial, sans-serif; font-size: 14px;">
             <strong>${props.seg_id || 'Unknown'} — ${props.label || 'Unnamed'}</strong><br>
             ${props.length_km || 'N/A'} km · ${props.width_m || 'N/A'} m · ${props.direction || 'N/A'}<br>
             Events: ${props.events ? props.events.join(', ') : 'N/A'}<br>
