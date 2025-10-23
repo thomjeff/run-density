@@ -14,6 +14,7 @@ COPY app ./app
 COPY data ./data
 COPY config ./config
 COPY frontend ./frontend
+COPY static ./static
 COPY templates ./templates
 COPY tests ./tests
 COPY e2e.py ./
