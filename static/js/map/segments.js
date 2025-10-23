@@ -23,9 +23,10 @@ const losColors = {
  */
 function convertCoordinates(x, y) {
     // Convert Web Mercator (EPSG:3857) to WGS84 (EPSG:4326)
-    // Web Mercator coordinates are in meters from the origin
-    const lng = (x / 20037508.34) * 180;
-    const lat = (Math.atan(Math.sinh(Math.PI * (1 - 2 * y / 20037508.34))) * 180) / Math.PI;
+    // Using the correct Earth radius constant
+    const R = 6378137.0;
+    const lng = (x / R) * 180 / Math.PI;
+    const lat = (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) * 180 / Math.PI;
     
     console.log(`Converting Web Mercator: ${x}, ${y} -> WGS84: ${lng}, ${lat}`);
     return [lng, lat];
