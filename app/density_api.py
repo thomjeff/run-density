@@ -154,7 +154,7 @@ async def get_segment_density(
     """
     try:
         # Load data
-        segments_df = pd.read_csv('data/flow.csv')
+        segments_df = pd.read_csv('data/segments.csv')
         pace_data = pd.read_csv('data/runners.csv')
         
         start_times = {
