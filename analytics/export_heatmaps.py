@@ -198,11 +198,39 @@ def generate_segment_heatmap(
         ax.set_yticks(range(len(distances)))
         ax.set_yticklabels([f'{d:.1f}' for d in distances])
         
-        # Format x-axis to show clean HH:MM times (Epic #279 mock-ups)
-        import matplotlib.dates as mdates
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-        ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
-        plt.xticks(rotation=30)
+        # Clean up x-axis labels to show HH:MM format (Epic #279 mock-ups)
+        # Convert timestamps to clean HH:MM format
+        clean_times = []
+        for time_str in times:
+            try:
+                # Handle different timestamp formats
+                if 'T' in time_str:
+                    # ISO format: 2025-10-24T07:42:00Z
+                    dt = datetime.fromisoformat(time_str.replace('Z', '+00:00'))
+                    clean_time = dt.strftime('%H:%M')
+                elif ':' in time_str and len(time_str) > 5:
+                    # Extract time part: 07:42:00
+                    time_part = time_str.split(' ')[-1] if ' ' in time_str else time_str
+                    if len(time_part) >= 5:
+                        clean_time = time_part[:5]  # HH:MM
+                    else:
+                        clean_time = time_str
+                else:
+                    clean_time = time_str
+                clean_times.append(clean_time)
+            except:
+                clean_times.append(time_str)
+        
+        # Set clean time labels with smart spacing
+        n_ticks = min(8, len(times))  # Max 8 ticks to avoid clutter
+        if len(times) > 1:
+            step = max(1, len(times) // n_ticks)
+            tick_indices = range(0, len(times), step)
+            ax.set_xticks(tick_indices)
+            ax.set_xticklabels([clean_times[i] for i in tick_indices], rotation=30, ha='right')
+        else:
+            ax.set_xticks([0])
+            ax.set_xticklabels(clean_times, rotation=30, ha='right')
         
         # Add grid like in mock-ups
         ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
