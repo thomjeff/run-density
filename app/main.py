@@ -150,7 +150,7 @@ BOOT_ENV = {
 logging.getLogger().info("BOOT_ENV %s", BOOT_ENV)
 
 # Include API routers
-app.include_router(density_router)
+# app.include_router(density_router)  # Disabled - conflicts with api_density_router
 app.include_router(map_router)
 app.include_router(reports_router)
 app.include_router(ui_router)
