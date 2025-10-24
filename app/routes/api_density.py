@@ -273,8 +273,11 @@ async def get_density_segment_detail(seg_id: str):
                 if isinstance(raw_data, dict) and 'items' in raw_data:
                     # Convert items list to dict format expected by API
                     segment_metrics = {item['segment_id']: item for item in raw_data['items']}
+                elif isinstance(raw_data, dict):
+                    # Direct dict format (from artifact exporter) - filter out summary fields
+                    segment_metrics = {k: v for k, v in raw_data.items() if k not in ['peak_density', 'peak_rate', 'segments_with_flags', 'flagged_bins', 'overtaking_segments', 'co_presence_segments']}
                 else:
-                    # Direct dict format (from artifact exporter)
+                    # Fallback
                     segment_metrics = raw_data
         except Exception as e:
             logger.warning(f"Could not load segment metrics: {e}")
@@ -318,9 +321,23 @@ async def get_density_segment_detail(seg_id: str):
         except Exception as e:
             logger.warning(f"Could not load flags: {e}")
         
-        # Check for heatmap (if we add heatmap export later)
+        # Check for heatmap and caption
         heatmap_url = None
-        # Future: check if artifacts/<run_id>/ui/heatmaps/<seg_id>.png exists
+        caption = None
+        
+        try:
+            from app.storage import get_heatmap_url
+            heatmap_url = get_heatmap_url(storage, seg_id)
+        except Exception as e:
+            logger.warning(f"Could not get heatmap URL for {seg_id}: {e}")
+        
+        try:
+            if storage.exists("captions.json"):
+                captions = storage.read_json("captions.json")
+                if seg_id in captions:
+                    caption = captions[seg_id].get("summary")
+        except Exception as e:
+            logger.warning(f"Could not load captions for {seg_id}: {e}")
         
         detail = {
             "seg_id": seg_id,
@@ -336,6 +353,7 @@ async def get_density_segment_detail(seg_id: str):
             "length_km": length_km,
             "width_m": width_m,
             "heatmap_url": heatmap_url,
+            "caption": caption,
             "bin_detail": "absent" if not heatmap_url else "available"
         }
         

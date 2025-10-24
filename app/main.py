@@ -200,6 +200,11 @@ try:
 except Exception as e:
     print(f"Warning: Could not mount static directory: {e}")
 
+try:
+    app.mount("/artifacts", StaticFiles(directory="artifacts"), name="artifacts")
+except Exception as e:
+    print(f"Warning: Could not mount artifacts directory: {e}")
+
 @app.get("/")
 async def root():
     return {

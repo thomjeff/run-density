@@ -391,3 +391,20 @@ def heatmap_exists(storage: Storage, segment_id: str) -> bool:
     except Exception:
         return False
 
+
+def get_heatmap_url(storage: Storage, segment_id: str) -> Optional[str]:
+    """Get heatmap URL for a segment, returns None if not found."""
+    try:
+        if not heatmap_exists(storage, segment_id):
+            return None
+        
+        path = get_heatmap_path(segment_id)
+        if storage.mode == "local":
+            # Return full path including artifacts root
+            return f"/{storage.root}/{path}"
+        else:
+            # For GCS, return signed URL
+            return storage.get_signed_url(path)
+    except Exception:
+        return None
+
