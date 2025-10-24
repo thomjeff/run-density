@@ -74,7 +74,7 @@ def load_flagging_config() -> FlaggingConfig:
             min_los_flag=flagging_config.get("min_los_flag", "C"),
             utilization_pctile=flagging_config.get("utilization_pctile", 95),
             require_min_bin_len_m=flagging_config.get("require_min_bin_len_m", 10.0),
-            density_field="density_peak"
+            density_field="density"  # Use actual column name from bins.parquet
         )
     except FileNotFoundError as e:
         logger.warning(f"reporting.yml not found, using defaults: {e}")
@@ -140,6 +140,10 @@ def load_bins_data(input_path: str) -> pd.DataFrame:
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
             raise ValueError(f"Missing required columns: {missing_columns}")
+        
+        # Add bin_len_m column if missing (required for filtering)
+        if "bin_len_m" not in df.columns:
+            df["bin_len_m"] = (df["end_km"] - df["start_km"]) * 1000  # Convert km to meters
         
         return df
         
