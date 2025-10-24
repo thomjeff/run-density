@@ -143,8 +143,11 @@ async def get_density_segments():
                 elif isinstance(raw_data, list):
                     # Array format from new artifact exporter
                     segment_metrics = {item['segment_id']: item for item in raw_data}
+                elif isinstance(raw_data, dict):
+                    # Direct dict format (from artifact exporter) - filter out summary fields
+                    segment_metrics = {k: v for k, v in raw_data.items() if k not in ['peak_density', 'peak_rate', 'segments_with_flags', 'flagged_bins', 'overtaking_segments', 'co_presence_segments']}
                 else:
-                    # Direct dict format (from artifact exporter)
+                    # Fallback
                     segment_metrics = raw_data
                 logger.info(f"Loaded {len(segment_metrics)} segment metrics from storage service")
             else:
