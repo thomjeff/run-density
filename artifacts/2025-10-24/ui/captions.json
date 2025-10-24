@@ -125,20 +125,6 @@
     "clearance_time": null,
     "notes": []
   },
-  "G1": {
-    "seg_id": "G1",
-    "label": "",
-    "summary": "Segment G1 \u2014 . Peak density of 0.04 p/m\u00b2 (A) occurs at 2025-10-24T09:00:00Z around 0.8 km.",
-    "peak": {
-      "density_p_m2": 0.04166666666666667,
-      "time": "2025-10-24T09:00:00Z",
-      "km_range": "0.8 km",
-      "los": "A"
-    },
-    "waves": [],
-    "clearance_time": null,
-    "notes": []
-  },
   "H1": {
     "seg_id": "H1",
     "label": "",
@@ -174,34 +160,6 @@
     "peak": {
       "density_p_m2": 0.26666666666666666,
       "time": "2025-10-24T08:42:00Z",
-      "km_range": "0.2 km",
-      "los": "A"
-    },
-    "waves": [],
-    "clearance_time": null,
-    "notes": []
-  },
-  "J2": {
-    "seg_id": "J2",
-    "label": "",
-    "summary": "Segment J2 \u2014 . Peak density of 0.05 p/m\u00b2 (A) occurs at 2025-10-24T09:38:00Z around 0.2 km.",
-    "peak": {
-      "density_p_m2": 0.05,
-      "time": "2025-10-24T09:38:00Z",
-      "km_range": "0.2 km",
-      "los": "A"
-    },
-    "waves": [],
-    "clearance_time": null,
-    "notes": []
-  },
-  "J3": {
-    "seg_id": "J3",
-    "label": "",
-    "summary": "Segment J3 \u2014 . Peak density of 0.04 p/m\u00b2 (A) occurs at 2025-10-24T09:38:00Z around 0.2 km.",
-    "peak": {
-      "density_p_m2": 0.04,
-      "time": "2025-10-24T09:38:00Z",
       "km_range": "0.2 km",
       "los": "A"
     },
@@ -265,20 +223,6 @@
     "clearance_time": null,
     "notes": []
   },
-  "L2": {
-    "seg_id": "L2",
-    "label": "",
-    "summary": "Segment L2 \u2014 . Peak density of 0.00 p/m\u00b2 (A) occurs at 2025-10-24T07:00:00Z around 0.0 km.",
-    "peak": {
-      "density_p_m2": 0.0,
-      "time": "2025-10-24T07:00:00Z",
-      "km_range": "0.0 km",
-      "los": "A"
-    },
-    "waves": [],
-    "clearance_time": null,
-    "notes": []
-  },
   "M1": {
     "seg_id": "M1",
     "label": "",
@@ -286,20 +230,6 @@
     "peak": {
       "density_p_m2": 0.14166666666666666,
       "time": "2025-10-24T08:18:00Z",
-      "km_range": "0.0 km",
-      "los": "A"
-    },
-    "waves": [],
-    "clearance_time": null,
-    "notes": []
-  },
-  "M2": {
-    "seg_id": "M2",
-    "label": "",
-    "summary": "Segment M2 \u2014 . Peak density of 0.00 p/m\u00b2 (A) occurs at 2025-10-24T07:00:00Z around 0.0 km.",
-    "peak": {
-      "density_p_m2": 0.0,
-      "time": "2025-10-24T07:00:00Z",
       "km_range": "0.0 km",
       "los": "A"
     },

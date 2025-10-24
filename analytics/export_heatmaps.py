@@ -58,13 +58,13 @@ def create_los_colormap(los_colors: Dict[str, str]) -> mcolors.LinearSegmentedCo
 
 def load_bin_data(reports_dir: Path) -> pd.DataFrame:
     """
-    Load bin data from bin.parquet (canonical SSOT).
+    Load bin data from bin.parquet (canonical SSOT) and apply filtering.
     
     Args:
         reports_dir: Path to reports/<run_id>/ directory
         
     Returns:
-        DataFrame with bin-level data
+        DataFrame with filtered bin-level data (flagged bins only)
     """
     bins_path = reports_dir / "bins.parquet"
     
@@ -75,7 +75,15 @@ def load_bin_data(reports_dir: Path) -> pd.DataFrame:
     df = pd.read_parquet(bins_path)
     print(f"   📊 Loaded {len(df)} bins from parquet")
     
-    return df
+    # Apply same filtering logic as bin_summary.py (Issue #280 alignment)
+    if 'flag_severity' in df.columns:
+        # Filter to flagged bins only (same as bin_summary.py)
+        filtered_bins = df[df['flag_severity'] != 'none'].copy()
+        print(f"   📊 Filtered to {len(filtered_bins)} flagged bins (removed {len(df) - len(filtered_bins)} unflagged)")
+        return filtered_bins
+    else:
+        print(f"   ⚠️  flag_severity column not found, using all bins (no filtering)")
+        return df
 
 
 def generate_segment_heatmap(
