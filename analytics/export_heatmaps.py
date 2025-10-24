@@ -161,8 +161,12 @@ def generate_segment_heatmap(
         # Set NaN values to white (no data) to match Epic #279 mock-ups
         los_cmap.set_bad(color="white")
         
-        # Use LOS colormap for density visualization
-        im = ax.imshow(matrix_transposed, cmap=los_cmap, aspect='auto', origin='lower', vmin=0, vmax=2.0)
+        # Enhanced contrast for better visual separation (Epic #279 mock-ups)
+        from matplotlib.colors import PowerNorm
+        norm = PowerNorm(gamma=0.5, vmin=0, vmax=2.0)
+        
+        # Use LOS colormap with enhanced contrast for density visualization
+        im = ax.imshow(matrix_transposed, cmap=los_cmap, norm=norm, aspect='auto', origin='lower')
         
         # Set labels to match Epic #279 mock-ups
         ax.set_xlabel('Time of day (HH:MM)')
