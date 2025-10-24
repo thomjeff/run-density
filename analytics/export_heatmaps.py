@@ -198,6 +198,12 @@ def generate_segment_heatmap(
         ax.set_yticks(range(len(distances)))
         ax.set_yticklabels([f'{d:.1f}' for d in distances])
         
+        # Format x-axis to show clean HH:MM times (Epic #279 mock-ups)
+        import matplotlib.dates as mdates
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+        ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
+        plt.xticks(rotation=30)
+        
         # Add grid like in mock-ups
         ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
         
