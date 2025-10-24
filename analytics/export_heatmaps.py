@@ -347,10 +347,14 @@ def export_heatmaps_and_captions(
     print("\n7️⃣  Generating heatmaps...")
     heatmaps_generated = 0
     
+    # Create heatmaps directory in artifacts
+    heatmaps_dir = Path("artifacts") / run_id / "ui" / "heatmaps"
+    heatmaps_dir.mkdir(parents=True, exist_ok=True)
+    
     for seg_id in segments:
         try:
-            # Create output path using storage abstraction
-            heatmap_path = f"heatmaps/{seg_id}.png"
+            # Create output path in artifacts directory
+            heatmap_path = heatmaps_dir / f"{seg_id}.png"
             
             # Generate heatmap
             if generate_segment_heatmap(seg_id, bins_df, los_colors, Path(heatmap_path)):
@@ -382,9 +386,9 @@ def export_heatmaps_and_captions(
             print(f"   ⚠️  {seg_id}: Error generating caption: {e}")
             continue
     
-    # Save captions.json
+    # Save captions.json in artifacts directory
     if captions:
-        captions_path = "captions.json"
+        captions_path = Path("artifacts") / run_id / "ui" / "captions.json"
         try:
             with open(captions_path, 'w') as f:
                 json.dump(captions, f, indent=2)
