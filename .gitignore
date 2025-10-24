@@ -7,4 +7,5 @@ frontend/release/__pycache__/
 release/
 __pycache__/
 *.pyc
-server.log
+server.log.DS_Store
+**/.DS_Store
