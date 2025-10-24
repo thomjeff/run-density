@@ -865,6 +865,15 @@ def generate_density_report(
                 geojson_path, parquet_path = save_bin_artifacts(bin_data.get("geojson", {}), daily_folder_path)
                 serialization_time = int((time.monotonic() - geojson_start) * 1000)
                 
+                # Generate bin_summary.json artifact (Issue #329)
+                try:
+                    from .bin_summary import generate_bin_summary_artifact
+                    bin_summary_path = generate_bin_summary_artifact(daily_folder_path)
+                    logger.info(f"Generated bin_summary.json: {bin_summary_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to generate bin_summary.json: {e}")
+                    # Non-blocking - bin_summary is supplementary
+                
                 elapsed = time.monotonic() - start_time
                 final_features = len(bin_data.get("geojson", {}).get("features", []))
                 

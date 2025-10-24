@@ -15,7 +15,7 @@ from datetime import datetime
 
 # Configuration
 CLOUD_RUN_URL = "https://run-density-ln4r3sfkha-uc.a.run.app"
-LOCAL_URL = "http://localhost:8080"
+LOCAL_URL = "http://localhost:8081"
 DEFAULT_START_TIMES = {'Full': 420, '10K': 440, 'Half': 460}
 
 def parse_arguments():
@@ -126,11 +126,11 @@ def test_map_manifest(base_url):
 
 def test_map_bins(base_url):
     """Test map bins endpoint (Issue #249) - Optional test"""
-    print("🔍 Testing /api/map/bins...")
+    print("🔍 Testing /map/bins...")
     # Use wide bbox to capture all bins
     bbox = "-7500000,5700000,-7300000,5800000"
     response = requests.get(
-        f'{base_url}/api/map/bins?window_idx=0&bbox={bbox}&severity=any', 
+        f'{base_url}/map/bins?window_idx=0&bbox={bbox}&severity=any', 
         timeout=30
     )
     

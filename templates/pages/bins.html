@@ -255,10 +255,8 @@
             <thead>
                 <tr>
                     <th class="sortable" data-sort="segment_id">Segment ID</th>
-                    <th class="sortable text-right" data-sort="start_km">Start (km)</th>
-                    <th class="sortable text-right" data-sort="end_km">End (km)</th>
-                    <th class="sortable" data-sort="t_start">Time Start</th>
-                    <th class="sortable" data-sort="t_end">Time End</th>
+                    <th class="sortable text-center" data-sort="start_km">KM (START/END)</th>
+                    <th class="sortable text-center" data-sort="t_start">TIME (START/END)</th>
                     <th class="sortable text-right" data-sort="density">Density (p/m²)</th>
                     <th class="sortable text-right" data-sort="rate">Rate (vph)</th>
                     <th class="sortable text-center" data-sort="los_class">LOS</th>
@@ -336,5 +334,5 @@
 
 {% block extra_scripts %}
 <!-- External JavaScript module -->
-<script src="/static/js/bins.js?v=2025-10-23"></script>
+    <script src="/static/js/bins.js?v=2025-10-24"></script>
 {% endblock %}

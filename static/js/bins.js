@@ -252,10 +252,8 @@ function createTableRow(bin, rowIndex) {
     
     row.innerHTML = `
         <td>${bin.segment_id}</td>
-        <td class="text-right">${bin.start_km.toFixed(2)}</td>
-        <td class="text-right">${bin.end_km.toFixed(2)}</td>
-        <td>${bin.t_start}</td>
-        <td>${bin.t_end}</td>
+        <td class="text-center">${bin.start_km.toFixed(2)} / ${bin.end_km.toFixed(2)}</td>
+        <td class="text-center">${bin.t_start} / ${bin.t_end}</td>
         <td class="text-right">${bin.density.toFixed(2)}</td>
         <td class="text-right">${bin.rate.toFixed(2)}</td>
         <td class="text-center">
@@ -339,6 +337,16 @@ function sortTable(column) {
         if (['start_km', 'end_km', 'density', 'rate'].includes(column)) {
             aVal = parseFloat(aVal) || 0;
             bVal = parseFloat(bVal) || 0;
+        }
+        
+        // Handle combined columns - use start values for sorting
+        if (column === 'start_km') {
+            aVal = parseFloat(a.start_km) || 0;
+            bVal = parseFloat(b.start_km) || 0;
+        }
+        if (column === 't_start') {
+            aVal = a.t_start;
+            bVal = b.t_start;
         }
         
         // Handle string columns

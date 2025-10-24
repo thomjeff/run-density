@@ -47,42 +47,46 @@ def format_time_for_display(iso_string: str) -> str:
 
 def load_bins_data() -> List[Dict[str, Any]]:
     """
-    Load bin-level data from bins.parquet via StorageService.
+    Load bin-level data from bin_summary.json artifact.
     
     Returns:
-        List of bin records with formatted data for frontend display
+        List of flagged bin records with formatted data for frontend display
         
     Raises:
         HTTPException: If data cannot be loaded
     """
     try:
+        import json
+        
         # Get the latest run ID and construct the path
         run_id = storage.get_latest_run_id()
-        bins_path = f"reports/{run_id}/bins.parquet"
+        bin_summary_path = f"reports/{run_id}/bin_summary.json"
         
-        # Load bins.parquet from storage service
-        bins_df = storage.read_parquet(bins_path)
+        # Load bin_summary.json from storage service
+        bin_summary_data = storage.read_json(bin_summary_path)
         
-        if bins_df is None or bins_df.empty:
-            logger.warning("bins.parquet is empty or not found")
+        if not bin_summary_data or "segments" not in bin_summary_data:
+            logger.warning("bin_summary.json is empty or not found")
             return []
         
-        # Convert to list of dictionaries with formatted data
+        # Extract all flagged bins from all segments
         bins_data = []
-        for _, row in bins_df.iterrows():
-            bin_record = {
-                "segment_id": str(row.get("segment_id", "")),
-                "start_km": float(row.get("start_km", 0.0)),
-                "end_km": float(row.get("end_km", 0.0)),
-                "t_start": format_time_for_display(str(row.get("t_start", ""))),
-                "t_end": format_time_for_display(str(row.get("t_end", ""))),
-                "density": float(row.get("density", 0.0)),
-                "rate": float(row.get("rate", 0.0)),
-                "los_class": str(row.get("los_class", "Unknown"))
-            }
-            bins_data.append(bin_record)
+        for segment_id, segment_data in bin_summary_data["segments"].items():
+            for bin_data in segment_data.get("bins", []):
+                bin_record = {
+                    "segment_id": segment_id,
+                    "start_km": float(bin_data.get("start_km", 0.0)),
+                    "end_km": float(bin_data.get("end_km", 0.0)),
+                    "t_start": bin_data.get("start_time", ""),
+                    "t_end": bin_data.get("end_time", ""),
+                    "density": float(bin_data.get("density", 0.0)),
+                    "rate": float(bin_data.get("rate", 0.0)),
+                    "los_class": str(bin_data.get("los", "Unknown")),
+                    "flag": bin_data.get("flag", "flagged")
+                }
+                bins_data.append(bin_record)
         
-        logger.info(f"Loaded {len(bins_data)} bin records from bins.parquet")
+        logger.info(f"Loaded {len(bins_data)} flagged bin records from bin_summary.json")
         return bins_data
         
     except Exception as e:
