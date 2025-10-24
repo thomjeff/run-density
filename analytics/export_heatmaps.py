@@ -130,8 +130,8 @@ def generate_segment_heatmap(
         
         print(f"   📊 {seg_id}: Creating {len(times)}×{len(distances)} matrix")
         
-        # Create density matrix
-        matrix = np.zeros((len(times), len(distances)))
+        # Create density matrix with NaN for missing data (white in mock-ups)
+        matrix = np.full((len(times), len(distances)), np.nan)
         for _, row in segment_bins.iterrows():
             try:
                 # Get time field (handle both field names)
@@ -157,6 +157,9 @@ def generate_segment_heatmap(
         
         # Create LOS-compliant colormap from rulebook
         los_cmap = create_los_colormap(los_colors)
+        
+        # Set NaN values to white (no data) to match Epic #279 mock-ups
+        los_cmap.set_bad(color="white")
         
         # Use LOS colormap for density visualization
         im = ax.imshow(matrix_transposed, cmap=los_cmap, aspect='auto', origin='lower', vmin=0, vmax=2.0)
