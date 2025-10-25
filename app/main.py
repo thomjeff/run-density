@@ -1387,3 +1387,4 @@ async def serve_reports_json():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8081)
+# Service account configuration update
