@@ -207,6 +207,29 @@ class Storage:
         base = f"{self.prefix}/{prefix}" if self.prefix else prefix
         return [b.name for b in self._gcs.list_blobs(self.bucket, prefix=base)]
 
+    def get_heatmap_blob_path(self, seg_id: str) -> str:
+        """
+        Resolve the full blob path for a segment heatmap file.
+        Works in both local and GCS environments.
+        """
+        import os
+        from pathlib import Path
+
+        base_path = "ui/heatmaps"
+        run_id = os.getenv("RUN_ID", "current")
+        prefix = os.getenv("GCS_PREFIX", f"artifacts/{run_id}/ui")
+
+        # Backward compatibility shim: handle flat layouts without "artifacts/" prefix
+        if self.mode == "gcs" and not prefix.startswith("artifacts/"):
+            prefix = f"artifacts/{run_id}/ui"
+
+        if self.mode == "local":
+            return str(Path(self.root) / base_path / f"{seg_id}.png")
+        elif self.mode == "gcs":
+            return f"{prefix}/heatmaps/{seg_id}.png"
+        else:
+            return f"ui/heatmaps/{seg_id}.png"
+
 
 # ===== Helper Functions =====
 
@@ -377,29 +400,6 @@ def load_bin_details_csv(storage: Storage, segment_id: str) -> Optional[str]:
     except Exception as e:
         print(f"⚠️  Could not load bin_details/{segment_id}.csv: {e}")
         return None
-
-    def get_heatmap_blob_path(self, seg_id: str) -> str:
-        """
-        Resolve the full blob path for a segment heatmap file.
-        Works in both local and GCS environments.
-        """
-        import os
-        from pathlib import Path
-
-        base_path = "ui/heatmaps"
-        run_id = os.getenv("RUN_ID", "current")
-        prefix = os.getenv("GCS_PREFIX", f"artifacts/{run_id}/ui")
-
-        # Backward compatibility shim: handle flat layouts without "artifacts/" prefix
-        if self.mode == "gcs" and not prefix.startswith("artifacts/"):
-            prefix = f"artifacts/{run_id}/ui"
-
-        if self.mode == "local":
-            return str(Path(self.root) / base_path / f"{seg_id}.png")
-        elif self.mode == "gcs":
-            return f"{prefix}/heatmaps/{seg_id}.png"
-        else:
-            return f"ui/heatmaps/{seg_id}.png"
 
 
 def get_heatmap_path(segment_id: str) -> str:
