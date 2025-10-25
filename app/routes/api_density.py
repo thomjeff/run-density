@@ -265,32 +265,37 @@ async def get_density_segment_detail(seg_id: str):
         Detailed segment record with heatmap availability
     """
     try:
-        # Load segment metrics from artifacts
+        # Load segment metrics from artifacts using storage service (same as segments API)
         segment_metrics = {}
         try:
             storage_service = get_storage_service()
-            run_id = storage_service.get_latest_run_id()
-            if storage.exists("segment_metrics.json"):
-                raw_data = storage.read_json("segment_metrics.json")
+            raw_data = storage_service.load_ui_artifact("segment_metrics.json")
+            if raw_data:
                 # Handle different formats: direct dict vs {'items': [...]}
                 if isinstance(raw_data, dict) and 'items' in raw_data:
                     # Convert items list to dict format expected by API
                     segment_metrics = {item['segment_id']: item for item in raw_data['items']}
+                elif isinstance(raw_data, list):
+                    # Array format from new artifact exporter
+                    segment_metrics = {item['segment_id']: item for item in raw_data}
                 elif isinstance(raw_data, dict):
                     # Direct dict format (from artifact exporter) - filter out summary fields
                     segment_metrics = {k: v for k, v in raw_data.items() if k not in ['peak_density', 'peak_rate', 'segments_with_flags', 'flagged_bins', 'overtaking_segments', 'co_presence_segments']}
                 else:
                     # Fallback
                     segment_metrics = raw_data
+                logger.info(f"Loaded {len(segment_metrics)} segment metrics from storage service")
+            else:
+                logger.warning("segment_metrics.json not found in storage service")
         except Exception as e:
-            logger.warning(f"Could not load segment metrics: {e}")
+            logger.warning(f"Could not load segment metrics from storage service: {e}")
         
         if seg_id not in segment_metrics:
             raise HTTPException(status_code=404, detail=f"Segment {seg_id} not found")
         
         metrics = segment_metrics[seg_id]
         
-        # Load segments geojson for label
+        # Load segments geojson for label using storage service
         label = seg_id
         length_km = 0.0
         width_m = 0.0
@@ -298,8 +303,8 @@ async def get_density_segment_detail(seg_id: str):
         events = []
         
         try:
-            if storage.exists("segments.geojson"):
-                segments_geojson = storage.read_json("segments.geojson")
+            segments_geojson = storage_service.load_ui_artifact("segments.geojson")
+            if segments_geojson:
                 for feature in segments_geojson.get("features", []):
                     props = feature.get("properties", {})
                     if props.get("seg_id") == seg_id:
@@ -312,11 +317,11 @@ async def get_density_segment_detail(seg_id: str):
         except Exception as e:
             logger.warning(f"Could not load segments geojson: {e}")
         
-        # Check if flagged
+        # Check if flagged using storage service
         is_flagged = False
         try:
-            if run_id and storage.exists("flags.json"):
-                flags = storage.read_json("flags.json")
+            flags = storage_service.load_ui_artifact("flags.json")
+            if flags:
                 if isinstance(flags, list):
                     is_flagged = any(f.get("seg_id") == seg_id for f in flags)
                 elif isinstance(flags, dict):
@@ -335,10 +340,9 @@ async def get_density_segment_detail(seg_id: str):
             logger.warning(f"Could not get heatmap URL for {seg_id}: {e}")
         
         try:
-            if storage.exists("captions.json"):
-                captions = storage.read_json("captions.json")
-                if seg_id in captions:
-                    caption = captions[seg_id].get("summary")
+            captions = storage_service.load_ui_artifact("captions.json")
+            if captions and seg_id in captions:
+                caption = captions[seg_id].get("summary")
         except Exception as e:
             logger.warning(f"Could not load captions for {seg_id}: {e}")
         
