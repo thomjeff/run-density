@@ -215,7 +215,7 @@ class Storage:
         return [b.name for b in self._gcs.list_blobs(self.bucket, prefix=base)]
 
     def get_heatmap_signed_url(self, segment_id: str, expiry_seconds=3600):
-        """Generate signed URL for heatmap using impersonated credentials."""
+        """Generate signed URL for heatmap using service account key."""
         if self.mode == "local":
             # For local mode, return the local path
             run_id = os.getenv("RUN_ID")
@@ -224,23 +224,25 @@ class Storage:
                     latest_data = self.read_json("latest.json")
                     run_id = latest_data.get("run_id", "2025-10-25")
                 except Exception as e:
-                    logging.warning(f"Could not load latest.json for run_id: {e}")
-                    run_id = "2025-10-25"
+                        logging.warning(f"Could not load latest.json for run_id: {e}")
+                        run_id = "2025-10-25"
             return f"/artifacts/{run_id}/ui/heatmaps/{segment_id}.png"
         
-        # For GCS mode, use impersonated credentials for signing
-        creds, project = google.auth.default()
-        
-        # Cloud Run metadata creds can't sign; impersonate to get a signer.
-        if not hasattr(creds, "sign_bytes"):
-            target_sa = creds.service_account_email
-            creds = impersonated_credentials.Credentials(
-                source_credentials=creds,
-                target_principal=target_sa,
-                target_scopes=["https://www.googleapis.com/auth/cloud-platform"],
-                lifetime=300,
-            )
-            logging.info("Using impersonated credentials for signed URL generation")
+        # For GCS mode, use service account key for signing
+        try:
+            # Try to use the service account key file
+            key_file = "/tmp/run-density-web-key.json"
+            if os.path.exists(key_file):
+                from google.oauth2 import service_account
+                creds = service_account.Credentials.from_service_account_file(key_file)
+                logging.info("Using service account key file for signed URL generation")
+            else:
+                # Fallback to default credentials
+                creds, project = google.auth.default()
+                logging.info("Using default credentials for signed URL generation")
+        except Exception as e:
+            logging.warning(f"Could not load service account key: {e}")
+            creds, project = google.auth.default()
         
         client = storage.Client(credentials=creds, project=project)
         bucket = client.bucket(self.bucket)

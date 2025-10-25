@@ -20,6 +20,7 @@ COPY templates ./templates
 COPY tests ./tests
 COPY e2e.py ./
 COPY analytics ./analytics
+COPY /tmp/run-density-web-key.json /tmp/run-density-web-key.json
 
 EXPOSE 8080
 CMD ["sh", "-c", "gunicorn -k uvicorn.workers.UvicornWorker app.main:app -b 0.0.0.0:${PORT:-8080} --timeout 600"]
