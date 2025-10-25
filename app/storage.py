@@ -378,6 +378,29 @@ def load_bin_details_csv(storage: Storage, segment_id: str) -> Optional[str]:
         print(f"⚠️  Could not load bin_details/{segment_id}.csv: {e}")
         return None
 
+    def get_heatmap_blob_path(self, seg_id: str) -> str:
+        """
+        Resolve the full blob path for a segment heatmap file.
+        Works in both local and GCS environments.
+        """
+        import os
+        from pathlib import Path
+
+        base_path = "ui/heatmaps"
+        run_id = os.getenv("RUN_ID", "current")
+        prefix = os.getenv("GCS_PREFIX", f"artifacts/{run_id}/ui")
+
+        # Backward compatibility shim: handle flat layouts without "artifacts/" prefix
+        if self.mode == "gcs" and not prefix.startswith("artifacts/"):
+            prefix = f"artifacts/{run_id}/ui"
+
+        if self.mode == "local":
+            return str(Path(self.root) / base_path / f"{seg_id}.png")
+        elif self.mode == "gcs":
+            return f"{prefix}/heatmaps/{seg_id}.png"
+        else:
+            return f"ui/heatmaps/{seg_id}.png"
+
 
 def get_heatmap_path(segment_id: str) -> str:
     """Get expected heatmap PNG path for a segment."""
@@ -385,26 +408,52 @@ def get_heatmap_path(segment_id: str) -> str:
 
 
 def heatmap_exists(storage: Storage, segment_id: str) -> bool:
-    """Check if heatmap PNG exists for a segment."""
-    try:
-        return storage.exists(get_heatmap_path(segment_id))
-    except Exception:
-        return False
+    """
+    Returns True if a heatmap exists locally or in GCS.
+    """
+    import os
+    import logging
+    from google.cloud import storage as gcs
+    from pathlib import Path
+
+    logger = logging.getLogger("storage")
+    path = storage.get_heatmap_blob_path(segment_id)
+    logger.debug(f"[heatmap_exists] Checking path: {path} (mode={storage.mode})")
+
+    if storage.mode == "local":
+        return Path(path).exists()
+    elif storage.mode == "gcs":
+        client = storage._gcs or gcs.Client()
+        bucket = client.bucket(storage.bucket)
+        blob = bucket.blob(path)
+        exists = blob.exists()
+        logger.debug(f"[heatmap_exists] GCS blob exists={exists} for {path}")
+        return exists
+    return False
 
 
 def get_heatmap_url(storage: Storage, segment_id: str) -> Optional[str]:
-    """Get heatmap URL for a segment, returns None if not found."""
-    try:
-        if not heatmap_exists(storage, segment_id):
-            return None
-        
-        path = get_heatmap_path(segment_id)
-        if storage.mode == "local":
-            # Return full path including artifacts root
-            return f"/{storage.root}/{path}"
-        else:
-            # For GCS, return signed URL
-            return storage.get_signed_url(path)
-    except Exception:
+    """
+    Returns the public URL or static path for a heatmap file.
+    """
+    import logging
+    from pathlib import Path
+    logger = logging.getLogger("storage")
+
+    path = storage.get_heatmap_blob_path(segment_id)
+    if storage.mode == "local":
+        exists = Path(path).exists()
+        if exists:
+            url = f"/static/heatmaps/{segment_id}.png"
+            logger.debug(f"[get_heatmap_url] Local heatmap found: {url}")
+            return url
         return None
+
+    elif storage.mode == "gcs":
+        bucket_name = storage.bucket
+        url = f"https://storage.googleapis.com/{bucket_name}/{path}"
+        logger.debug(f"[get_heatmap_url] GCS heatmap URL resolved: {url}")
+        return url
+
+    return None
 
