@@ -216,7 +216,13 @@ class Storage:
         from pathlib import Path
 
         base_path = "ui/heatmaps"
-        run_id = os.getenv("RUN_ID", "current")
+        
+        # Get run_id from latest.json or environment variable
+        if self.mode == "gcs":
+            run_id = load_latest_run_id(self) or os.getenv("RUN_ID", "current")
+        else:
+            run_id = os.getenv("RUN_ID", "current")
+            
         prefix = os.getenv("GCS_PREFIX", f"artifacts/{run_id}/ui")
 
         # Backward compatibility shim: handle flat layouts without "artifacts/" prefix
