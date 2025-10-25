@@ -230,6 +230,49 @@ class Storage:
         else:
             return f"ui/heatmaps/{seg_id}.png"
 
+    def get_heatmap_url(self, segment_id: str) -> Optional[str]:
+        """Return the URL for a heatmap image (local or GCS)."""
+        import logging
+        logger = logging.getLogger("storage")
+        
+        try:
+            if self.mode == "local":
+                path = f"/static/heatmaps/{segment_id}.png"
+                logger.debug(f"[Local] Heatmap URL for {segment_id}: {path}")
+                return path
+
+            elif self.mode == "gcs":
+                blob_path = self.get_heatmap_blob_path(segment_id)
+                if not self.heatmap_exists(segment_id):
+                    logger.warning(f"[GCS] No heatmap blob found for {segment_id} at {blob_path}")
+                    return None
+
+                # Attempt to create a signed URL for private buckets
+                from google.cloud import storage as gcs_storage
+                import datetime
+                client = gcs_storage.Client()
+                bucket = client.bucket(self.bucket)
+                blob = bucket.blob(blob_path)
+                try:
+                    url = blob.generate_signed_url(
+                        expiration=datetime.timedelta(hours=1),
+                        method="GET",
+                    )
+                    logger.debug(f"[GCS] Generated signed URL for {segment_id}: {url}")
+                    return url
+                except Exception as e:
+                    # Fall back to public URL if signing fails
+                    public_url = f"https://storage.googleapis.com/{self.bucket}/{blob_path}"
+                    logger.warning(f"[GCS] Failed to sign URL for {segment_id}, falling back to public: {e}")
+                    return public_url
+
+            else:
+                logger.error(f"Unknown storage mode: {self.mode}")
+                return None
+        except Exception as e:
+            logger.error(f"Error getting heatmap URL for {segment_id}: {e}")
+            return None
+
 
 # ===== Helper Functions =====
 
@@ -436,24 +479,5 @@ def get_heatmap_url(storage: Storage, segment_id: str) -> Optional[str]:
     """
     Returns the public URL or static path for a heatmap file.
     """
-    import logging
-    from pathlib import Path
-    logger = logging.getLogger("storage")
-
-    path = storage.get_heatmap_blob_path(segment_id)
-    if storage.mode == "local":
-        exists = Path(path).exists()
-        if exists:
-            url = f"/static/heatmaps/{segment_id}.png"
-            logger.debug(f"[get_heatmap_url] Local heatmap found: {url}")
-            return url
-        return None
-
-    elif storage.mode == "gcs":
-        bucket_name = storage.bucket
-        url = f"https://storage.googleapis.com/{bucket_name}/{path}"
-        logger.debug(f"[get_heatmap_url] GCS heatmap URL resolved: {url}")
-        return url
-
-    return None
+    return storage.get_heatmap_url(segment_id)
 
