@@ -16,7 +16,10 @@ from datetime import datetime
 from dataclasses import dataclass
 import os
 import pandas as pd
+import logging
 from .segments_from_bins import write_segments_from_bins
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class AnalysisContext:
@@ -74,12 +77,12 @@ except ImportError:
 
 try:
     from .density import analyze_density_segments, DensityConfig
-    from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS
+    from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, BIN_SCHEMA_VERSION
     from .report_utils import get_report_paths
     from .density_template_engine import DensityTemplateEngine, create_template_context
 except ImportError:
     from density import analyze_density_segments, DensityConfig
-    from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS
+    from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, BIN_SCHEMA_VERSION
     from report_utils import get_report_paths
     from density_template_engine import DensityTemplateEngine, create_template_context
 import pandas as pd
@@ -970,6 +973,25 @@ def generate_density_report(
                 # Update full_path to the timestamped version
                 full_path = timestamped_path
                 print(f"📊 New density report saved to: {full_path}")
+                
+                # Upload density.md to GCS if enabled
+                gcs_upload_enabled = os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}
+                if gcs_upload_enabled:
+                    try:
+                        storage_service = get_storage_service()
+                        # Read the generated report content
+                        with open(timestamped_path, 'r', encoding='utf-8') as f:
+                            report_content = f.read()
+                        
+                        # Upload to GCS using reports/ path
+                        gcs_path = storage_service.save_file(
+                            filename=os.path.basename(timestamped_path),
+                            content=report_content,
+                            date=None  # Use current date
+                        )
+                        print(f"☁️ Density report uploaded to GCS: {gcs_path}")
+                    except Exception as e:
+                        print(f"⚠️ Failed to upload density.md to GCS: {e}")
             else:
                 print("📊 Regenerating density report with operational intelligence...")
                 report_content_final = generate_markdown_report(
@@ -985,6 +1007,21 @@ def generate_density_report(
                     f.write(report_content_final)
                 
                 print(f"📊 Density report (with operational intelligence) saved to: {full_path}")
+                
+                # Upload density.md to GCS if enabled
+                gcs_upload_enabled = os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}
+                if gcs_upload_enabled:
+                    try:
+                        storage_service = get_storage_service()
+                        # Upload to GCS using reports/ path
+                        gcs_path = storage_service.save_file(
+                            filename=os.path.basename(full_path),
+                            content=report_content_final,
+                            date=None  # Use current date
+                        )
+                        print(f"☁️ Density report uploaded to GCS: {gcs_path}")
+                    except Exception as e:
+                        print(f"⚠️ Failed to upload density.md to GCS: {e}")
             
             # Generate tooltips.json if operational intelligence was added
             if '_operational_intelligence' in results:
@@ -2077,6 +2114,27 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
             from .utilization import add_utilization_percentile
             from .schema_resolver import resolve_schema
             import pandas as pd
+            
+            # Create segments_dict for schema resolution
+            segments_dict = {}
+            try:
+                from .io.loader import load_segments
+                segments_df = load_segments("data/segments.csv")
+                for _, row in segments_df.iterrows():
+                    segments_dict[row['seg_id']] = {
+                        'seg_label': row.get('seg_label', row['seg_id']),
+                        'width_m': row.get('width_m', 3.0),
+                        'flow_type': row.get('flow_type', 'none')
+                    }
+            except Exception as e:
+                logger.warning(f"Could not load segments CSV for flagging: {e}, using defaults")
+                # Create minimal segments_dict from available segments
+                for seg_id in segments.keys():
+                    segments_dict[seg_id] = {
+                        'seg_label': seg_id,
+                        'width_m': 5.0,
+                        'flow_type': 'none'
+                    }
             
             # Convert features to DataFrame for vectorized processing
             flag_rows = []
