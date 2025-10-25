@@ -200,8 +200,15 @@ try:
 except Exception as e:
     print(f"Warning: Could not mount static directory: {e}")
 
-# Note: Heatmaps are served via signed URLs from GCS, not as static files
-# No need to mount artifacts directory in Cloud Run
+# Mount artifacts directory for local development only
+# In Cloud Run, heatmaps are served via signed URLs from GCS
+if os.path.exists("artifacts"):
+    try:
+        app.mount("/artifacts", StaticFiles(directory="artifacts"), name="artifacts")
+    except Exception as e:
+        print(f"Warning: Could not mount artifacts directory: {e}")
+else:
+    print("Info: Artifacts directory not found - using GCS storage mode")
 
 @app.get("/")
 async def root():
