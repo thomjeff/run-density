@@ -16,6 +16,9 @@ import os
 import time
 from datetime import timedelta
 import logging
+from google.cloud import storage
+import google.auth
+from google.auth import impersonated_credentials
 
 # Single source of truth for dataset paths
 # These paths are relative to the ARTIFACTS_ROOT resolved from latest.json
@@ -210,76 +213,55 @@ class Storage:
         base = f"{self.prefix}/{prefix}" if self.prefix else prefix
         return [b.name for b in self._gcs.list_blobs(self.bucket, prefix=base)]
 
-    def get_heatmap_blob_path(self, segment_id: str) -> str:
-        """Return blob path for a given segment's heatmap."""
+    def get_heatmap_signed_url(self, segment_id: str, expiry_seconds=3600):
+        """Generate signed URL for heatmap using impersonated credentials."""
         if self.mode == "local":
-            return f"heatmaps/{segment_id}.png"
-        else:
-            # For GCS mode, use the prefix and run_id
+            # For local mode, return the local path
             run_id = os.getenv("RUN_ID")
             if not run_id:
-                # Get run_id from latest.json if not set in environment
                 try:
                     latest_data = self.read_json("latest.json")
-                    run_id = latest_data.get("run_id", "current")
+                    run_id = latest_data.get("run_id", "2025-10-25")
                 except Exception as e:
                     logging.warning(f"Could not load latest.json for run_id: {e}")
-                    run_id = "current"
-            return f"artifacts/{run_id}/ui/heatmaps/{segment_id}.png"
-
-    def heatmap_exists(self, segment_id: str) -> bool:
-        """Check if the heatmap file exists in storage."""
-        if self.mode == "local":
-            return os.path.exists(os.path.join(self.root, "heatmaps", f"{segment_id}.png"))
-        if self.mode == "gcs":
-            blob_path = self.get_heatmap_blob_path(segment_id)
-            return self.client.bucket(self.bucket).blob(blob_path).exists()
-        return False
-
-    def get_heatmap_url(self, segment_id: str) -> Optional[str]:
-        """Return signed or local URL to the heatmap PNG."""
-        try:
-            if self.mode == "local":
-                if not self.heatmap_exists(segment_id):
-                    return None
-                # Use artifacts path for local mode
-                run_id = os.getenv("RUN_ID")
-                if not run_id:
-                    # Get run_id from latest.json if not set in environment
-                    try:
-                        latest_data = self.read_json("latest.json")
-                        run_id = latest_data.get("run_id", "2025-10-25")
-                    except Exception as e:
-                        logging.warning(f"Could not load latest.json for run_id: {e}")
-                        run_id = "2025-10-25"
-                return f"/artifacts/{run_id}/ui/heatmaps/{segment_id}.png"
-
-            if self.mode == "gcs":
-                blob_path = self.get_heatmap_blob_path(segment_id)
-                blob = self.client.bucket(self.bucket).blob(blob_path)
-                if not blob.exists():
-                    logging.warning(f"[heatmap] Missing GCS blob: {blob_path}")
-                    return None
-
-                # Check if public heatmaps are enabled
-                if os.getenv("PUBLIC_HEATMAPS", "false").lower() == "true":
-                    # Use direct URL (public object or IAM-accessible)
-                    public_url = f"https://storage.googleapis.com/{self.bucket}/{blob_path}"
-                    logging.info(f"[heatmap] Public URL generated for {segment_id}")
-                    return public_url
-
-                # Signed URL path (works only if TokenCreator role exists)
-                signed_url = blob.generate_signed_url(
-                    expiration=timedelta(hours=6),
-                    version="v4",
-                    method="GET",
-                    virtual_hosted_style=True,
-                )
-                logging.info(f"[heatmap] Signed URL generated for {segment_id}")
-                return signed_url
-        except Exception as e:
-            logging.error(f"[heatmap-url] Error creating URL for {segment_id}: {e}")
-            return None
+                    run_id = "2025-10-25"
+            return f"/artifacts/{run_id}/ui/heatmaps/{segment_id}.png"
+        
+        # For GCS mode, use impersonated credentials for signing
+        creds, project = google.auth.default()
+        
+        # Cloud Run metadata creds can't sign; impersonate to get a signer.
+        if not hasattr(creds, "sign_bytes"):
+            target_sa = creds.service_account_email
+            creds = impersonated_credentials.Credentials(
+                source_credentials=creds,
+                target_principal=target_sa,
+                target_scopes=["https://www.googleapis.com/auth/cloud-platform"],
+                lifetime=300,
+            )
+            logging.info("Using impersonated credentials for signed URL generation")
+        
+        client = storage.Client(credentials=creds, project=project)
+        bucket = client.bucket(self.bucket)
+        
+        # Get run_id for blob path
+        run_id = os.getenv("RUN_ID")
+        if not run_id:
+            try:
+                latest_data = self.read_json("latest.json")
+                run_id = latest_data.get("run_id", "current")
+            except Exception as e:
+                logging.warning(f"Could not load latest.json for run_id: {e}")
+                run_id = "current"
+        
+        blob_path = f"artifacts/{run_id}/ui/heatmaps/{segment_id}.png"
+        blob = bucket.blob(blob_path)
+        
+        return blob.generate_signed_url(
+            version="v4",
+            expiration=datetime.timedelta(seconds=expiry_seconds),
+            method="GET",
+        )
 
 
 # ===== Helper Functions =====
