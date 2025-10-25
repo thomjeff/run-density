@@ -241,6 +241,8 @@ class Storage:
                 sa_key_json = base64.b64decode(sa_key_b64).decode('utf-8')
                 sa_key_dict = json.loads(sa_key_json)
                 creds = service_account.Credentials.from_service_account_info(sa_key_dict)
+                # Get project from the service account key
+                project = sa_key_dict.get('project_id', 'run-density')
                 logging.info("Using base64 encoded service account key for signed URL generation")
             else:
                 # Fallback to default credentials
