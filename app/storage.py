@@ -261,10 +261,10 @@ class Storage:
                     logging.warning(f"[heatmap] Missing GCS blob: {blob_path}")
                     return None
 
-                # 24-hour signed URL for private access
-                signed_url = blob.generate_signed_url(expiration=timedelta(hours=24))
-                logging.info(f"[heatmap] Signed URL generated for {segment_id}")
-                return signed_url
+                # Use public URL format for now (temporary solution)
+                public_url = f"https://storage.googleapis.com/{self.bucket}/{blob_path}"
+                logging.info(f"[heatmap] Public URL generated for {segment_id}")
+                return public_url
         except Exception as e:
             logging.error(f"[heatmap-url] Error creating URL for {segment_id}: {e}")
             return None
