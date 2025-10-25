@@ -34,8 +34,13 @@ shapely>=2.0.0
 pyproj>=3.6.0
 geopandas>=0.14.0
 
+# Visualization libraries used only at export time (offline)
+# Required for analytics/export_heatmaps.py (heatmap generation)
+# Issue #280: Density Heatmaps & Captions from bin_summary.json
+matplotlib>=3.8.0
+pillow>=10.0.0
+
 # NOTE: Heavy dependencies removed from web runtime:
 # - folium (static map generation → Leaflet client-side)
-# - matplotlib (charts → pre-generated PNGs or CSS)
 # - markdown (reports → Jinja templates)
 # - pypandas (PDF generation → deferred)
