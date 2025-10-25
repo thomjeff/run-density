@@ -200,10 +200,8 @@ try:
 except Exception as e:
     print(f"Warning: Could not mount static directory: {e}")
 
-try:
-    app.mount("/artifacts", StaticFiles(directory="artifacts"), name="artifacts")
-except Exception as e:
-    print(f"Warning: Could not mount artifacts directory: {e}")
+# Note: Heatmaps are served via signed URLs from GCS, not as static files
+# No need to mount artifacts directory in Cloud Run
 
 @app.get("/")
 async def root():
