@@ -195,6 +195,10 @@ jobs:
           echo "Generating UI artifacts from reports..."
           python analytics/export_frontend_artifacts.py $REPORT_DATE
           
+          # Generate heatmaps and captions (Issue #280)
+          echo "Generating heatmaps and captions..."
+          python analytics/export_heatmaps.py $REPORT_DATE
+          
           # Upload UI artifacts to GCS
           if [ -d "artifacts/$REPORT_DATE/ui" ]; then
             echo "Uploading UI artifacts to GCS..."
