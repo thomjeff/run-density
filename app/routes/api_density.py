@@ -327,6 +327,7 @@ async def get_density_segment_detail(seg_id: str):
             from app.storage import create_storage_from_env
             # Use environment-aware storage for heatmap URL generation
             storage = create_storage_from_env()
+            logger.info(f"Storage mode: {storage.mode}, bucket: {storage.bucket}")
             heatmap_url = storage.get_heatmap_signed_url(seg_id)
             logger.info(f"Heatmap URL for {seg_id}: {heatmap_url}")
         except Exception as e:
