@@ -286,6 +286,7 @@ gh run view <run-id> --log 2>&1 | grep -E "(ERROR|FAIL)"
 - **Resources**: 3GB RAM / 2 CPU (default config - verify before starting work)
 - **Timeout**: 600 seconds
 - **Verify Config**: Always check actual resources with `gcloud run services describe run-density --region=us-central1 --format="table(spec.template.spec.containers[0].resources.limits)"`
+- **Revision**: You MUST verify the latest revision - or the one you're expecting - is serving 100% of the inbound traffic. 
 
 ### API Endpoints
 - `GET /health` - Health check
