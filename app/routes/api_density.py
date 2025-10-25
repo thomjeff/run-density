@@ -338,6 +338,7 @@ async def get_density_segment_detail(seg_id: str):
             # Create Storage object for heatmap URL generation
             storage = Storage(mode="gcs", bucket="run-density-reports", prefix="artifacts/2025-10-25/ui")
             heatmap_url = get_heatmap_url(storage, seg_id)
+            logger.info(f"Heatmap URL for {seg_id}: {heatmap_url}")
         except Exception as e:
             logger.warning(f"Could not get heatmap URL for {seg_id}: {e}")
         
