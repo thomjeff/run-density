@@ -261,10 +261,22 @@ class Storage:
                     logging.warning(f"[heatmap] Missing GCS blob: {blob_path}")
                     return None
 
-                # Use public URL format for now (temporary solution)
-                public_url = f"https://storage.googleapis.com/{self.bucket}/{blob_path}"
-                logging.info(f"[heatmap] Public URL generated for {segment_id}")
-                return public_url
+                # Check if public heatmaps are enabled
+                if os.getenv("PUBLIC_HEATMAPS", "false").lower() == "true":
+                    # Use direct URL (public object or IAM-accessible)
+                    public_url = f"https://storage.googleapis.com/{self.bucket}/{blob_path}"
+                    logging.info(f"[heatmap] Public URL generated for {segment_id}")
+                    return public_url
+
+                # Signed URL path (works only if TokenCreator role exists)
+                signed_url = blob.generate_signed_url(
+                    expiration=timedelta(hours=6),
+                    version="v4",
+                    method="GET",
+                    virtual_hosted_style=True,
+                )
+                logging.info(f"[heatmap] Signed URL generated for {segment_id}")
+                return signed_url
         except Exception as e:
             logging.error(f"[heatmap-url] Error creating URL for {segment_id}: {e}")
             return None

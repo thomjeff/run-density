@@ -77,12 +77,13 @@ class StorageService:
         
         try:
             self._client = storage.Client(project=self.config.project_id)
-            # Test bucket access
-            bucket = self._client.bucket(self.config.bucket_name)
-            if not bucket.exists():
-                logger.warning(f"Bucket {self.config.bucket_name} does not exist. Creating...")
-                bucket.create()
-            logger.info(f"Initialized Cloud Storage client for bucket: {self.config.bucket_name}")
+            # Skip bucket existence check to avoid startup failures
+            try:
+                _ = self._client.get_bucket(self.config.bucket_name)
+                logger.info(f"Initialized Cloud Storage client for bucket: {self.config.bucket_name}")
+            except Exception as e:
+                logger.warning(f"Skipping bucket check: {e}")
+                logger.info(f"Initialized Cloud Storage client for bucket: {self.config.bucket_name}")
         except Exception as e:
             logger.error(f"Failed to initialize Cloud Storage client: {e}")
             raise
