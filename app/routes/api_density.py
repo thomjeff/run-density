@@ -335,7 +335,7 @@ async def get_density_segment_detail(seg_id: str):
         
         try:
             from app.storage import get_heatmap_url
-            heatmap_url = get_heatmap_url(storage, seg_id)
+            heatmap_url = get_heatmap_url(storage_service, seg_id)
         except Exception as e:
             logger.warning(f"Could not get heatmap URL for {seg_id}: {e}")
         
