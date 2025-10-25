@@ -1,5 +1,63 @@
 # Changelog
 
+## [v1.6.46] - 2025-10-25
+
+### CRITICAL FIX: Heatmap Display in Cloud Run Production
+
+**Issue #332 Complete**: GCS Signed URL Generation for Heatmap Display
+
+#### The Problem
+- **Symptom**: Heatmaps not displaying in production Cloud Run environment
+- **Root Cause**: API returning public URLs for private GCS bucket → 403 Forbidden errors
+- **Impact**: Users unable to view heatmap visualizations for race segments
+
+#### The Solution
+- **Service Account Configuration**: Created dedicated `run-density-web` service account with signing capabilities
+- **Base64 Key Management**: Service account key encoded as environment variable for secure access
+- **Signed URL Generation**: 24-hour signed URLs with proper authentication parameters
+- **Environment-Aware Storage**: Unified storage service handling both local and GCS modes
+
+#### Technical Implementation
+- **Storage Class Refactor**: Complete rewrite of `app/storage.py` for proper GCS signed URL generation
+- **API Integration**: Updated `app/routes/api_density.py` to use new storage methods
+- **Service Account Setup**: 
+  - Created `run-density-web@run-density.iam.gserviceaccount.com`
+  - Granted `roles/storage.objectViewer` and `roles/iam.serviceAccountTokenCreator`
+  - Attached to Cloud Run service for signing operations
+- **Credential Management**: Base64 encoded service account key passed as environment variable
+
+#### Files Modified
+- `app/storage.py` - Complete refactor for GCS signed URL generation
+- `app/routes/api_density.py` - Updated to use new storage methods
+- `app/storage_service.py` - Enhanced bucket existence check handling
+- `docs/ISSUE_332_ANALYSIS.md` - Comprehensive root cause analysis and lessons learned
+
+#### Verification Results
+- **A1 Segment**: ✅ `https://storage.googleapis.com/run-density-reports/artifacts/2025-10-25/ui/heatmaps/A1.png?X-Goog-Algorithm=GOOG4-RSA-SHA256&...`
+- **B2 Segment**: ✅ Valid signed URL with authentication parameters
+- **F1 Segment**: ✅ Working heatmap display in production UI
+- **L1 Segment**: ✅ All segments now displaying correctly
+
+#### Lessons Learned
+- **Authentication ≠ Signing**: Default Cloud Run credentials can't create signed URLs
+- **Service Account Keys**: Required for cryptographic signing operations
+- **Variable Scope**: Must handle all code paths in exception handling
+- **Traffic Routing**: New Cloud Run revisions don't automatically get traffic
+
+#### Documentation Added
+- **Issue #332 Analysis**: Complete documentation of why this "simple" task took 8+ hours
+- **Root Cause Analysis**: 6 failed approaches before successful solution
+- **Prevention Strategies**: Code review and testing checklists for future GCS implementations
+- **Working Solution**: Complete implementation guide with code examples
+
+#### Impact
+- **User Experience**: Heatmaps now display correctly in production environment
+- **Security**: Service account key properly managed via environment variables
+- **Maintainability**: Comprehensive documentation prevents future similar issues
+- **Performance**: No impact on existing functionality, only heatmap URL generation
+
+---
+
 ## [v1.6.45] - 2025-10-24
 
 ### New Features: Race-Crew Web UI Enhancements

@@ -7,21 +7,23 @@
 This service models runner density on shared course segments using a density engine and temporal flow analysis.  
 It provides comprehensive reporting capabilities with both Markdown and CSV outputs, and is containerized and deployed to Google Cloud Run.
 
-**Current Version: v1.6.12** - Negative convergence points algorithm fix and enhanced accuracy
+**Current Version: v1.6.46** - Heatmap display fix and GCS signed URL generation
 
 ## Key Features
 - **Density Analysis**: Spatial concentration analysis with areal and crowd density calculations
 - **Temporal Flow Analysis**: Convergence and overtaking analysis between different race events
+- **Heatmap Visualizations**: Interactive PNG heatmaps for race segments with GCS integration
 - **Comprehensive Reporting**: Auto-generated Markdown and CSV reports with detailed analytics
 - **RESTful API**: Full FastAPI integration with configurable parameters
 - **CLI Tools**: Command-line scripts for report generation and analysis
+- **Web UI**: Interactive dashboard with segment details, heatmaps, and operational intelligence
 
 ## Quick Start (Local Development)
 
 Create and activate a Python virtual environment:
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv test_env
+source test_env/bin/activate
 pip install -U pip
 pip install -r requirements.txt
 ```
@@ -33,14 +35,32 @@ make run-local
 
 Health checks:
 ```bash
-curl -fsS http://localhost:8080/health | jq .
-curl -fsS http://localhost:8080/ready | jq .
+curl -fsS http://localhost:8081/health | jq .
+curl -fsS http://localhost:8081/ready | jq .
 ```
 
 Smoke test locally:
 ```bash
 make smoke-local
 ```
+
+## Web UI Features
+
+### Interactive Dashboard
+- **Segment Overview**: All 22 race segments with density metrics and LOS ratings
+- **Heatmap Visualizations**: PNG heatmaps for each segment showing density patterns
+- **Operational Intelligence**: Bin-level details with filtering and sorting capabilities
+- **Real-time Monitoring**: Health checks and API status monitoring
+
+### Heatmap Display
+- **GCS Integration**: Secure signed URLs for private bucket access
+- **Environment-Aware**: Works in both local development and Cloud Run production
+- **Interactive Segments**: Click on segments to view detailed heatmap visualizations
+- **Auto-Captions**: Text summaries for each heatmap generated automatically
+
+### Access the Web UI
+- **Local**: http://localhost:8081/frontend/
+- **Production**: https://run-density-131075166528.us-central1.run.app/frontend/
 
 ## Report Generation
 
