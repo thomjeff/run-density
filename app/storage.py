@@ -230,12 +230,17 @@ class Storage:
         
         # For GCS mode, use service account key for signing
         try:
-            # Try to use the service account key file
-            key_file = "/tmp/run-density-web-key.json"
-            if os.path.exists(key_file):
-                from google.oauth2 import service_account
-                creds = service_account.Credentials.from_service_account_file(key_file)
-                logging.info("Using service account key file for signed URL generation")
+            # Try to use the base64 encoded service account key from environment
+            import base64
+            import json
+            from google.oauth2 import service_account
+            
+            sa_key_b64 = os.getenv("SERVICE_ACCOUNT_KEY_B64")
+            if sa_key_b64:
+                sa_key_json = base64.b64decode(sa_key_b64).decode('utf-8')
+                sa_key_dict = json.loads(sa_key_json)
+                creds = service_account.Credentials.from_service_account_info(sa_key_dict)
+                logging.info("Using base64 encoded service account key for signed URL generation")
             else:
                 # Fallback to default credentials
                 creds, project = google.auth.default()
