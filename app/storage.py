@@ -236,6 +236,7 @@ class Storage:
             from google.oauth2 import service_account
             
             sa_key_b64 = os.getenv("SERVICE_ACCOUNT_KEY_B64")
+            logging.info(f"SERVICE_ACCOUNT_KEY_B64 environment variable exists: {bool(sa_key_b64)}")
             if sa_key_b64:
                 sa_key_json = base64.b64decode(sa_key_b64).decode('utf-8')
                 sa_key_dict = json.loads(sa_key_json)
