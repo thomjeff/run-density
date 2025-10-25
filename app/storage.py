@@ -216,7 +216,15 @@ class Storage:
             return f"heatmaps/{segment_id}.png"
         else:
             # For GCS mode, use the prefix and run_id
-            run_id = os.getenv("RUN_ID", "current")
+            run_id = os.getenv("RUN_ID")
+            if not run_id:
+                # Get run_id from latest.json if not set in environment
+                try:
+                    latest_data = self.read_json("latest.json")
+                    run_id = latest_data.get("run_id", "current")
+                except Exception as e:
+                    logging.warning(f"Could not load latest.json for run_id: {e}")
+                    run_id = "current"
             return f"artifacts/{run_id}/ui/heatmaps/{segment_id}.png"
 
     def heatmap_exists(self, segment_id: str) -> bool:
@@ -235,7 +243,15 @@ class Storage:
                 if not self.heatmap_exists(segment_id):
                     return None
                 # Use artifacts path for local mode
-                run_id = os.getenv("RUN_ID", "2025-10-25")  # Default to current run
+                run_id = os.getenv("RUN_ID")
+                if not run_id:
+                    # Get run_id from latest.json if not set in environment
+                    try:
+                        latest_data = self.read_json("latest.json")
+                        run_id = latest_data.get("run_id", "2025-10-25")
+                    except Exception as e:
+                        logging.warning(f"Could not load latest.json for run_id: {e}")
+                        run_id = "2025-10-25"
                 return f"/artifacts/{run_id}/ui/heatmaps/{segment_id}.png"
 
             if self.mode == "gcs":
