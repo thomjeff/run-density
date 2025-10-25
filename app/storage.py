@@ -243,7 +243,7 @@ class Storage:
 
             elif self.mode == "gcs":
                 blob_path = self.get_heatmap_blob_path(segment_id)
-                if not self.heatmap_exists(segment_id):
+                if not heatmap_exists(self, segment_id):
                     logger.warning(f"[GCS] No heatmap blob found for {segment_id} at {blob_path}")
                     return None
 
