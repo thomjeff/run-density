@@ -150,7 +150,7 @@ BOOT_ENV = {
 logging.getLogger().info("BOOT_ENV %s", BOOT_ENV)
 
 # Include API routers
-app.include_router(density_router)
+# app.include_router(density_router)  # Disabled - conflicts with api_density_router
 app.include_router(map_router)
 app.include_router(reports_router)
 app.include_router(ui_router)
@@ -199,6 +199,11 @@ try:
     app.mount("/static", StaticFiles(directory="static"), name="static")
 except Exception as e:
     print(f"Warning: Could not mount static directory: {e}")
+
+try:
+    app.mount("/artifacts", StaticFiles(directory="artifacts"), name="artifacts")
+except Exception as e:
+    print(f"Warning: Could not mount artifacts directory: {e}")
 
 @app.get("/")
 async def root():

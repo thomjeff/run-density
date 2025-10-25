@@ -1,5 +1,57 @@
 # Changelog
 
+## [v1.6.45] - 2025-10-24
+
+### New Features: Race-Crew Web UI Enhancements
+
+**Issues #318 & #329 Complete**: Bin-Level Details Table and Operational Intelligence Artifact
+
+#### Issue #318 - Bin-Level Details Table ✅
+- **Interactive Table**: New `/bins` page with sortable, filterable bin-level metrics
+- **Data Integration**: Seamless integration with `bin_summary.json` operational intelligence artifact
+- **UI/UX Features**:
+  - Combined KM and Time columns for better space efficiency
+  - LOS color badges matching `reporting.yml` configuration
+  - Segment dropdown filter with all course segments
+  - Client-side pagination (50 bins per page)
+  - Real-time filtering by segment ID and LOS class
+- **Technical Implementation**:
+  - `templates/pages/bins.html` - Flask page template
+  - `static/js/bins.js` - Interactive table with sorting, filtering, pagination
+  - `app/routes/api_bins.py` - API endpoint serving bin data
+  - `app/routes/ui.py` - Route registration for `/bins`
+- **Testing**: Validated in both local and Cloud Run environments
+
+#### Issue #329 - Bin Summary Module ✅
+- **Operational Intelligence**: New `app/bin_summary.py` module for standardized filtering
+- **Artifact Generation**: Automatic `bin_summary.json` creation during density report generation
+- **Perfect Parity**: Achieved exact match with density report filtering logic (1,875 flagged bins)
+- **Architecture**: Uses `density` column (not `density_peak`) for consistency with existing reports
+- **Integration**: Seamlessly integrated into density report generation pipeline
+- **Data Quality**: Comprehensive filtering based on LOS thresholds and utilization percentiles
+
+#### Technical Improvements
+- **Data Consistency**: Unified filtering logic across UI, reports, and future heatmaps
+- **Performance**: Optimized data loading with environment-aware storage service
+- **Maintainability**: Reusable operational intelligence module for all downstream tools
+- **Testing**: Comprehensive validation with perfect parity between UI and reports
+
+#### Files Added/Modified
+- `app/bin_summary.py` - New operational intelligence module
+- `templates/pages/bins.html` - Bin-level details page
+- `static/js/bins.js` - Interactive table functionality
+- `app/routes/api_bins.py` - Bin data API endpoint
+- `app/routes/ui.py` - UI route registration
+- `app/density_report.py` - Integration with bin summary generation
+
+#### Impact
+- **User Experience**: Granular bin-level analysis with intuitive filtering and sorting
+- **Data Quality**: Standardized operational intelligence across all tools
+- **Scalability**: Foundation for future heatmap visualizations (Issue #280)
+- **Maintainability**: Single source of truth for bin filtering logic
+
+---
+
 ## [v1.6.44] - 2025-10-22
 
 ### Repository Maintenance & Cleanup

@@ -154,7 +154,7 @@ async def get_segment_density(
     """
     try:
         # Load data
-        segments_df = pd.read_csv('data/flow.csv')
+        segments_df = pd.read_csv('data/segments.csv')
         pace_data = pd.read_csv('data/runners.csv')
         
         start_times = {
@@ -180,7 +180,7 @@ async def get_segment_density(
             width_provider_instance = StaticWidthProvider(segments_df)
         
         # Filter to specific segment
-        segment_df = segments_df[segments_df['segment_id'] == segment_id]
+        segment_df = segments_df[segments_df['seg_id'] == segment_id]
         if segment_df.empty:
             return DensityAnalysisResponse(
                 success=False,
