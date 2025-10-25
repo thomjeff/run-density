@@ -264,29 +264,19 @@ async def get_density_segment_detail(seg_id: str):
     Returns:
         Detailed segment record with heatmap availability
     """
+    logger.info(f"=== UPDATED CODE LOADED === Processing segment detail for {seg_id}")
     try:
         # Load segment metrics from artifacts using storage service (same as segments API)
         segment_metrics = {}
+        storage_service = get_storage_service()
         try:
-            storage_service = get_storage_service()
             raw_data = storage_service.load_ui_artifact("segment_metrics.json")
-            if raw_data:
-                # Handle different formats: direct dict vs {'items': [...]}
-                if isinstance(raw_data, dict) and 'items' in raw_data:
-                    # Convert items list to dict format expected by API
-                    segment_metrics = {item['segment_id']: item for item in raw_data['items']}
-                elif isinstance(raw_data, list):
-                    # Array format from new artifact exporter
-                    segment_metrics = {item['segment_id']: item for item in raw_data}
-                elif isinstance(raw_data, dict):
-                    # Direct dict format (from artifact exporter) - filter out summary fields
-                    segment_metrics = {k: v for k, v in raw_data.items() if k not in ['peak_density', 'peak_rate', 'segments_with_flags', 'flagged_bins', 'overtaking_segments', 'co_presence_segments']}
-                else:
-                    # Fallback
-                    segment_metrics = raw_data
+            if raw_data and isinstance(raw_data, dict):
+                # Direct dict format: keys are segment IDs, values are metrics
+                segment_metrics = raw_data
                 logger.info(f"Loaded {len(segment_metrics)} segment metrics from storage service")
             else:
-                logger.warning("segment_metrics.json not found in storage service")
+                logger.warning("segment_metrics.json not found or invalid format")
         except Exception as e:
             logger.warning(f"Could not load segment metrics from storage service: {e}")
         
@@ -334,14 +324,11 @@ async def get_density_segment_detail(seg_id: str):
         caption = None
         
         try:
-            from app.storage import get_heatmap_url, heatmap_exists, Storage
-            # Create Storage object for heatmap URL generation
-            storage = Storage(mode="gcs", bucket="run-density-reports", prefix="artifacts/2025-10-25/ui")
-            heatmap_url = get_heatmap_url(storage, seg_id)
-            logger.debug(f"[api_density] Heatmap URL for {seg_id}: {heatmap_url}")
-            
-            if not heatmap_url:
-                logger.warning(f"[api_density] No heatmap found for {seg_id}. Checked: {storage.get_heatmap_blob_path(seg_id)}")
+            from app.storage import create_storage_from_env
+            # Use environment-aware storage for heatmap URL generation
+            storage = create_storage_from_env()
+            heatmap_url = storage.get_heatmap_url(seg_id)
+            logger.info(f"Heatmap URL for {seg_id}: {heatmap_url}")
         except Exception as e:
             logger.warning(f"Could not get heatmap URL for {seg_id}: {e}")
         
