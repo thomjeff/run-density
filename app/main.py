@@ -913,96 +913,6 @@ async def get_summary_data():
         raise HTTPException(status_code=500, detail=f"Failed to generate summary data: {str(e)}")
 
 
-@app.get("/api/segments.geojson")
-async def get_segments_geojson(
-    paceCsv: str = Query(..., description="Path to pace data CSV"),
-    segmentsCsv: str = Query(..., description="Path to segments data CSV"),
-    startTimes: str = Query(..., description="JSON string of start times"),
-    binSizeKm: Optional[float] = Query(None, description="Bin size in kilometers")
-):
-    """Generate segments.geojson for frontend map using real course data."""
-    try:
-        import pandas as pd
-        import xml.etree.ElementTree as ET
-        import json
-        
-        # Parse start times
-        start_times = json.loads(startTimes)
-        
-        # Load segments.csv to get segment definitions
-        segments_df = pd.read_csv(segmentsCsv)
-        
-        # Load GPX data for coordinates
-        def load_gpx_coordinates(gpx_file):
-            tree = ET.parse(gpx_file)
-            root = tree.getroot()
-            coordinates = []
-            
-            # Find all track points
-            for trkpt in root.findall('.//{http://www.topografix.com/GPX/1/1}trkpt'):
-                lat = float(trkpt.get('lat'))
-                lon = float(trkpt.get('lon'))
-                coordinates.append([lon, lat])  # GeoJSON format is [lng, lat]
-            
-            return coordinates
-        
-        # Load full course coordinates
-        full_coords = load_gpx_coordinates('data/Full.gpx')
-        
-        # Create GeoJSON FeatureCollection
-        features = []
-        for _, row in segments_df.iterrows():
-            # Calculate segment coordinates based on distance
-            start_km = row['full_from_km']
-            end_km = row['full_to_km']
-            
-            # Convert km to approximate coordinate index (rough estimation)
-            total_coords = len(full_coords)
-            start_idx = int((start_km / 42.2) * total_coords)  # 42.2km is approximate marathon distance
-            end_idx = int((end_km / 42.2) * total_coords)
-            
-            # Ensure indices are within bounds
-            start_idx = max(0, min(start_idx, total_coords - 1))
-            end_idx = max(start_idx + 1, min(end_idx, total_coords - 1))
-            
-            # Extract segment coordinates
-            segment_coords = full_coords[start_idx:end_idx + 1]
-            
-            # Create GeoJSON feature
-            feature = {
-                "type": "Feature",
-                "properties": {
-                    "id": row['seg_id'],
-                    "label": row['seg_label'],
-                    "schema": "course_segment",
-                    "los": "A",
-                    "status": "STABLE",
-                    "metrics": {
-                        "areal_density": 0.2,
-                        "linear_density": 0.15,
-                        "flow_rate": 100,
-                        "flow_supply": 500,
-                        "flow_capacity": 600
-                    },
-                    "notes": [row['notes']] if pd.notna(row['notes']) else []
-                },
-                "geometry": {
-                    "type": "LineString",
-                    "coordinates": segment_coords
-                }
-            }
-            features.append(feature)
-        
-        # Return GeoJSON FeatureCollection
-        geojson_data = {
-            "type": "FeatureCollection",
-            "features": features
-        }
-        
-        return JSONResponse(content=geojson_data)
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate segments data: {str(e)}")
 
 
 @app.get("/api/reports")
@@ -1347,7 +1257,7 @@ async def get_segments():
 @app.get("/frontend/data/segments.json")
 async def serve_segments_json():
     """Serve segments.json for frontend."""
-    return await get_segments_data()
+    return await get_segments()
 
 
 @app.get("/api/tooltips")
