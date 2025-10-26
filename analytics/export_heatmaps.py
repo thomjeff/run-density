@@ -58,13 +58,13 @@ def create_los_colormap(los_colors: Dict[str, str]) -> mcolors.LinearSegmentedCo
 
 def load_bin_data(reports_dir: Path) -> pd.DataFrame:
     """
-    Load bin data from bin.parquet (canonical SSOT) without filtering.
+    Load bin data from bin.parquet (canonical SSOT) and apply filtering.
     
     Args:
         reports_dir: Path to reports/<run_id>/ directory
         
     Returns:
-        DataFrame with all bin-level data (no filtering applied)
+        DataFrame with filtered bin-level data (flagged bins only)
     """
     bins_path = reports_dir / "bins.parquet"
     
@@ -75,11 +75,15 @@ def load_bin_data(reports_dir: Path) -> pd.DataFrame:
     df = pd.read_parquet(bins_path)
     print(f"   📊 Loaded {len(df)} bins from parquet")
     
-    # Issue #355: Show ALL bins in heatmaps (not just flagged bins)
-    # This restores the original behavior where all 19,440 bins are displayed
-    # This reduces whitespace and shows the full data distribution
-    print(f"   📊 Using all {len(df)} bins for heatmap generation (no filtering)")
-    return df
+    # Filter to flagged bins only (Issue #280 alignment)
+    # This creates more whitespace by only showing operationally significant bins
+    if 'flag_severity' in df.columns:
+        filtered_bins = df[df['flag_severity'] != 'none'].copy()
+        print(f"   📊 Filtered to {len(filtered_bins)} flagged bins (removed {len(df) - len(filtered_bins)} unflagged)")
+        return filtered_bins
+    else:
+        print(f"   ⚠️  flag_severity column not found, using all bins (no filtering)")
+        return df
 
 
 def generate_segment_heatmap(
