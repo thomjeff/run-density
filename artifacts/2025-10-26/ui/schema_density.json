@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0.0",
+  "rulebook_hash": "sha256:d64064ae03d6224a",
+  "dataset_version": "90f303f",
+  "units": {
+    "density": "persons_per_m2",
+    "rate": "persons_per_second",
+    "los": "A-F",
+    "severity": "NONE|WATCH|ALERT|CRITICAL",
+    "time": "ISO8601"
+  },
+  "fields": [
+    {
+      "name": "segment_id",
+      "type": "string",
+      "required": true,
+      "description": "Canonical segment identifier (A1, B2, ...)."
+    },
+    {
+      "name": "t_start",
+      "type": "timestamp",
+      "required": true,
+      "description": "Bin start time (ISO 8601)."
+    },
+    {
+      "name": "t_end",
+      "type": "timestamp",
+      "required": true,
+      "description": "Bin end time (ISO 8601)."
+    },
+    {
+      "name": "density",
+      "type": "number",
+      "required": true,
+      "description": "Persons per square meter (p/m\u00b2)."
+    },
+    {
+      "name": "rate",
+      "type": "number",
+      "required": true,
+      "description": "Persons per second (p/s)."
+    },
+    {
+      "name": "los",
+      "type": "string",
+      "required": true,
+      "description": "Level of Service classification (A\u2013F)."
+    },
+    {
+      "name": "severity",
+      "type": "string",
+      "required": false,
+      "description": "Flag severity for the bin (NONE/WATCH/ALERT/CRITICAL)."
+    },
+    {
+      "name": "flag_reason",
+      "type": "string",
+      "required": false,
+      "description": "Reason code when flagged (e.g., DENSITY_WATCH, RATE_ALERT)."
+    }
+  ],
+  "aliases": {
+    "seg_id": [
+      "segmentId",
+      "segId"
+    ],
+    "flow": [
+      "pax_per_sec",
+      "rate_per_sec"
+    ],
+    "pax_per_m2": [
+      "dens"
+    ]
+  }
+}
