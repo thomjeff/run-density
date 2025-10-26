@@ -22,7 +22,36 @@ This directory contains files that have been identified as:
 └── README.md              # This file
 ```
 
-## Deferred Deprecations (Marked but Not Removed)
+## Phase 3 Updates (2025-10-26)
+
+### Core Module Relocation
+
+**Issue #344 - Phase 3: Directory Refactor and Core Isolation**
+
+The following files have been **relocated** (not deprecated) to the new `/core/` package structure:
+
+| Original Location | New Location | Status |
+|------------------|--------------|--------|
+| `app/density.py` | `core/density/compute.py` | ✅ Relocated + dataclasses extracted |
+| `app/bin_summary.py` | `core/bin/summary.py` | ✅ Relocated |
+| `app/bin_geometries.py` | `core/bin/geometry.py` | ✅ Relocated |
+| `app/flow.py` | `core/flow/flow.py` | ✅ Relocated |
+| `app/gpx_processor.py` | `core/gpx/processor.py` | ✅ Relocated |
+
+**Important**: These files are **NOT deprecated** - they have been moved to improve code organization. The original files now contain adapter shims to maintain backward compatibility.
+
+### Adapter Shims
+
+All original files contain import shims:
+```python
+# DEPRECATED – logic moved to core/density/compute.py
+from core.density.compute import *
+from core.density.models import *
+```
+
+This ensures zero breaking changes while enabling the new modular structure.
+
+---
 
 | File                               | Status       | Notes                                                |
 |------------------------------------|--------------|------------------------------------------------------|
