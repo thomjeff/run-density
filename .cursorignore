@@ -1,0 +1,71 @@
+# Cursor Ignore File
+# Excludes files from Cursor's analysis to improve performance
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environment
+test_env/
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+server.log
+
+# Project-specific
+artifacts/
+archive/
+reports/
+.env
+*.backup
+
+# Large data files
+*.parquet
+*.geojson.gz
+*.geojson
+
+# Generated files
+bins.parquet
+*.zip
+
+# CI/CD
+.github/
+
+# Frontend build artifacts
+node_modules/
+static/js/*.min.js
+
+# Lock files
+package-lock.json
+yarn.lock
+poetry.lock
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
