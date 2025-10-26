@@ -1,12 +1,19 @@
 """
 New Flagging Logic for Issue #246 - New Density Report
 
-DEPRECATED: This module is being replaced by app/rulebook.py (Issue #254).
-New code should use rulebook.evaluate_flags() directly for consistency.
+DEPRECATED: This module is marked as deprecated and scheduled for replacement in Phase 2.
+Please use `flagging.py` or `rulebook.py` as the primary entry point.
 
 This module now acts as a thin wrapper around rulebook.py to maintain
 backward compatibility during the transition.
 """
+
+import warnings
+warnings.warn(
+    "This module is marked as deprecated and scheduled for replacement in Phase 2. "
+    "Please use `flagging.py` or `rulebook.py` as the primary entry point.",
+    DeprecationWarning
+)
 
 from __future__ import annotations
 import logging

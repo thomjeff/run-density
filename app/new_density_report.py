@@ -1,6 +1,9 @@
 """
 New Density Report Generator for Issue #246
 
+DEPRECATED: This module is marked as deprecated and scheduled for replacement in Phase 2.
+Please use `density_report.py` as the primary entry point.
+
 Implements the new density report structure as specified in Issue #246.
 Replaces the legacy density report with the new format.
 
@@ -11,6 +14,13 @@ Key Features:
 - Complete flagged segments list (no truncation)
 - New report structure per Issue #246 spec
 """
+
+import warnings
+warnings.warn(
+    "This module is marked as deprecated and scheduled for replacement in Phase 2. "
+    "Please use `density_report.py` as the primary entry point.",
+    DeprecationWarning
+)
 
 from __future__ import annotations
 import os

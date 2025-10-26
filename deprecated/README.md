@@ -22,6 +22,18 @@ This directory contains files that have been identified as:
 └── README.md              # This file
 ```
 
+## Deferred Deprecations (Marked but Not Removed)
+
+| File                               | Status       | Notes                                                |
+|------------------------------------|--------------|------------------------------------------------------|
+| app/new_density_report.py          | Deprecated   | Still used by density_report.py                     |
+| app/new_flagging.py                | Deprecated   | Still imported by save_bins.py                      |
+| app/new_density_template_engine.py | Deprecated   | Only imported by new_density_report.py              |
+
+**Note**: These files are marked as deprecated with warnings but remain in the active codebase because they are still imported by other modules. They will be removed in Phase 2 when their dependencies are migrated to the primary modules.
+
+---
+
 ## Files Moved Here
 
 ### Batch 1: Legacy UI + Geo Files
