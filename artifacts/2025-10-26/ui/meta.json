@@ -1,7 +1,7 @@
 {
   "run_id": "2025-10-26",
-  "run_timestamp": "2025-10-26T19:34:00Z",
+  "run_timestamp": "2025-10-26T20:02:00Z",
   "environment": "local",
-  "dataset_version": "b306211",
+  "dataset_version": "fe57062",
   "rulebook_hash": "sha256:5daafdbf0851ef39"
 }
