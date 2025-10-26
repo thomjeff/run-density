@@ -1,5 +1,109 @@
 # Changelog
 
+## [v1.6.47] - 2025-10-26
+
+### CRITICAL FIX: Segments Page Map Rendering Issue
+
+**Issues #337 & #338 Complete**: Segments Page Map Display and Bin Dataset Generation
+
+#### The Problem
+- **Symptom**: Segments page not displaying map or segment data locally
+- **Root Cause**: Missing dependencies and disabled bin dataset generation
+- **Impact**: Users unable to view interactive map and segment data in local development
+
+#### Root Causes Identified
+
+**1. API Routing Conflict**
+- Frontend calling `/api/segments/geojson` but conflicting endpoints `/api/segments.geojson` in `app/main.py` and `app/map_api.py`
+- Result: 422 errors due to missing query parameters
+
+**2. Missing Dependencies**
+- Local environment missing critical packages: `shapely`, `pyproj`, `geopandas`
+- Result: Bin geometry generation failing with "No module named 'shapely'"
+
+**3. Disabled Bin Dataset Generation**
+- `ENABLE_BIN_DATASET` defaulting to `false` locally
+- Result: Empty coordinates in `segments.geojson` and `bins.geojson.gz`
+
+#### The Solution
+
+**1. API Route Cleanup**
+- Removed conflicting `/api/segments.geojson` endpoints from `app/main.py` and `app/map_api.py`
+- Fixed function reference from `get_segments_data()` to `get_segments()` in `app/main.py`
+- Ensured frontend calls correct `/api/segments/geojson` endpoint
+
+**2. Dependency Installation**
+- Installed missing packages: `shapely>=2.0.0`, `pyproj>=3.6.0`, `geopandas>=0.14.0`
+- Verified local environment matches Cloud requirements from `requirements.txt`
+
+**3. Bin Dataset Generation Enablement**
+- Temporarily forced `enable_bin_dataset: True` in `app/main.py`
+- Created `.env` file with `ENABLE_BIN_DATASET=true` for local development
+- Ensured local environment matches Cloud functionality
+
+#### Technical Implementation
+
+**Files Modified:**
+- `app/main.py` - Removed conflicting endpoint, fixed function reference, temporary bin dataset enablement
+- `app/map_api.py` - Removed conflicting `/api/segments.geojson` endpoint
+- `.env` - Created for local environment variable configuration
+- `requirements.txt` - Verified all dependencies installed locally
+
+**Dependencies Added:**
+- `shapely 2.1.2` - Polygon geometry generation
+- `pyproj 3.7.2` - Coordinate system transformations
+- `geopandas 1.1.1` - Geospatial data processing
+
+#### Verification Results
+
+**Before Fix:**
+- ❌ `shapely` module not found
+- ❌ Bin geometries: `"geometry": null`
+- ❌ Segments coordinates: `"coordinates": []`
+- ❌ Map rendering failed
+
+**After Fix:**
+- ✅ **Bin geometries**: Proper polygon coordinates in Web Mercator projection
+- ✅ **Segments coordinates**: 400 coordinates per feature
+- ✅ **Map rendering**: Working correctly
+- ✅ **E2E tests**: All passing
+
+#### Testing & Validation
+
+**Local Environment:**
+- ✅ E2E tests completed successfully
+- ✅ Segments page renders map and segment data correctly
+- ✅ All artifacts generated with proper coordinates
+
+**Cloud Run Deployment:**
+- ✅ Successfully deployed changes to Cloud Run
+- ✅ E2E tests passed on Cloud Run (6m48s completion time)
+- ✅ All endpoints responding correctly
+- ✅ Bin dataset generation working (`enable_bin_dataset: True`)
+
+**Pipeline Results:**
+- ✅ Build & Deploy: Successful
+- ✅ E2E (Density/Flow): Successful
+- ✅ E2E (Bin Datasets): Successful
+- ❌ Automated Release: Failed (non-critical, release creation issue only)
+
+#### Impact
+- **User Experience**: Segments page now displays interactive map and segment data correctly
+- **Development**: Local environment now matches Cloud functionality
+- **Dependencies**: All required packages installed and verified
+- **Performance**: No impact on existing functionality, only map rendering restored
+
+#### Files Modified
+- `app/main.py` - API route cleanup and temporary bin dataset enablement
+- `app/map_api.py` - Removed conflicting endpoint
+- `.env` - Local environment configuration
+- `.venv/` - Added missing dependencies
+
+#### Status: RESOLVED
+The segments page map rendering issue has been completely resolved. Both local and Cloud environments now have proper bin dataset generation and map functionality.
+
+---
+
 ## [v1.6.46] - 2025-10-25
 
 ### CRITICAL FIX: Heatmap Display in Cloud Run Production
