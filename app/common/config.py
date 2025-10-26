@@ -13,6 +13,9 @@ from typing import Dict, Any
 from pathlib import Path
 import yaml
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 CONFIG_DIR = Path("config")
 
@@ -38,14 +41,23 @@ def load_rulebook() -> Dict[str, Any]:
     """
     path = CONFIG_DIR / "density_rulebook.yml"
     
+    # Debug logging for Issue #354
+    logger.info(f"Loading rulebook from: {path.absolute()}")
+    logger.info(f"Current working directory: {os.getcwd()}")
+    logger.info(f"Config directory exists: {CONFIG_DIR.exists()}")
+    logger.info(f"Rulebook file exists: {path.exists()}")
+    
     if not path.exists():
+        logger.error(f"density_rulebook.yml not found at {path.absolute()}")
         raise FileNotFoundError(
             f"density_rulebook.yml not found at {path}. "
             f"Ensure config/ directory exists with required YAML files."
         )
     
     with path.open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        rulebook = yaml.safe_load(f)
+        logger.info(f"Successfully loaded rulebook with version: {rulebook.get('version', 'unknown')}")
+        return rulebook
 
 
 def load_reporting() -> Dict[str, Any]:
