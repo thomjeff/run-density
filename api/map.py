@@ -132,8 +132,8 @@ async def get_map_manifest():
         
         # Issue #254: Add rulebook version for consistency tracking
         try:
-            from . import rulebook
-            rb_version = rulebook.version()
+            from app.rulebook import version
+            rb_version = version()
         except Exception:
             rb_version = "unknown"
         
