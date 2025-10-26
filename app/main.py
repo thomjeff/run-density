@@ -139,7 +139,7 @@ except ImportError:
 
 BOOT_ENV = {
     "cwd": str(pathlib.Path.cwd()),
-    "enable_bin_dataset": env_bool("ENABLE_BIN_DATASET", False),
+    "enable_bin_dataset": True,  # TEMPORARY FIX: Force enable bin dataset generation
     "output_dir": env_str("OUTPUT_DIR", "reports"),
     "bin_max_features": env_str("BIN_MAX_FEATURES"),
     "bin_dt_s": env_str("DEFAULT_BIN_TIME_WINDOW_SECONDS"),
