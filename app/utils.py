@@ -7,35 +7,7 @@ Common functions used across multiple modules to avoid code duplication.
 from __future__ import annotations
 from typing import Dict, Optional
 import pandas as pd
-import json
-import logging
-from fastapi import HTTPException
-
 from .constants import SECONDS_PER_MINUTE
-
-logger = logging.getLogger(__name__)
-
-
-def parse_config_safely(config_str: Optional[str]) -> Dict:
-    """
-    Safely parse JSON configuration string, replacing unsafe eval() usage.
-    
-    Args:
-        config_str: JSON string with configuration overrides, or None/empty
-        
-    Returns:
-        dict: Parsed configuration dictionary
-        
-    Raises:
-        HTTPException: If JSON parsing fails (status 400)
-    """
-    if not config_str:
-        return {}
-    try:
-        return json.loads(config_str)
-    except json.JSONDecodeError:
-        logger.warning("Malformed config input: %s", config_str)
-        raise HTTPException(status_code=400, detail="Invalid config format. Expected valid JSON.")
 
 
 def load_pace_csv(url_or_path: str) -> pd.DataFrame:

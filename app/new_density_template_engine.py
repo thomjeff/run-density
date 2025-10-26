@@ -1,6 +1,9 @@
 """
 New Density Template Engine for Issue #246
 
+DEPRECATED: This module is marked as deprecated and scheduled for replacement in Phase 2.
+Please use `density_template_engine.py` as the primary entry point.
+
 Implements the new report structure as specified in Issue #246:
 1. Title & Metadata
 2. Executive Summary
@@ -14,6 +17,13 @@ Implements the new report structure as specified in Issue #246:
 10. Mitigations
 11. Appendix
 """
+
+import warnings
+warnings.warn(
+    "This module is marked as deprecated and scheduled for replacement in Phase 2. "
+    "Please use `density_template_engine.py` as the primary entry point.",
+    DeprecationWarning
+)
 
 from __future__ import annotations
 import os

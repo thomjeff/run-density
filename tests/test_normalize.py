@@ -200,3 +200,4 @@ class TestNormalizeIntegration:
         assert segment == 'UNKNOWN'
         assert checkpoint == 'NONE'
         assert cursor == -1
+

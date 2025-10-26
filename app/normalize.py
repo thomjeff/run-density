@@ -144,3 +144,4 @@ def normalize_cursor_index(request: dict, default: Optional[int] = None) -> Opti
         return int(val) if val is not None else default
     
     return default
+

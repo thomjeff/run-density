@@ -23,7 +23,6 @@ from .density import (
     StaticWidthProvider,
     DynamicWidthProvider
 )
-from .utils import parse_config_safely
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -164,8 +163,8 @@ async def get_segment_density(
             'Full': datetime.strptime('09:00:00', '%H:%M:%S').replace(year=2024, month=1, day=1)
         }
         
-        # Get configuration from query parameters (safely)
-        config_data = parse_config_safely(config)
+        # Get configuration from query parameters
+        config_data = eval(config) if config else {}
         
         density_config = DensityConfig(
             bin_seconds=config_data.get('bin_seconds', 30),
@@ -251,8 +250,8 @@ async def get_density_summary(
             'Full': datetime.strptime('09:00:00', '%H:%M:%S').replace(year=2024, month=1, day=1)
         }
         
-        # Get configuration from query parameters (safely)
-        config_data = parse_config_safely(config)
+        # Get configuration from query parameters
+        config_data = eval(config) if config else {}
         
         density_config = DensityConfig(
             bin_seconds=config_data.get('bin_seconds', 30),
