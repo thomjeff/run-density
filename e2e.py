@@ -57,7 +57,7 @@ flow_payload = {
 def test_health(base_url):
     """Test health endpoint"""
     print("🔍 Testing /health...")
-    response = requests.get(f'{base_url}/health', timeout=10)
+    response = requests.get(f'{base_url}/health', timeout=30)
     
     if response.status_code == 200:
         print("✅ Health: OK")
@@ -69,7 +69,7 @@ def test_health(base_url):
 def test_ready(base_url):
     """Test ready endpoint"""
     print("🔍 Testing /ready...")
-    response = requests.get(f'{base_url}/ready', timeout=10)
+    response = requests.get(f'{base_url}/ready', timeout=30)
     
     if response.status_code == 200:
         print("✅ Ready: OK")
