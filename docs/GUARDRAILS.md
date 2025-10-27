@@ -1,222 +1,156 @@
+
 # Guardrails for AI-Assisted Development
 
-⚠️ **CRITICAL**: This document contains NON-NEGOTIABLE RULES for AI pair programming assistants (Cursor, ChatGPT, etc.). These rules have been established through hard-learned lessons and MUST be followed without exception.
+**Version:** 1.1  (replaces /archive/guardrails.md)
+**Last Updated:** 2025-10-27  
+**Applies to:** Cursor, ChatGPT w/ Code Interpreter, GitHub Copilot (read-only), VSCode AI Agents (custom plugins)  
 
-## **📋 MANDATORY DOCUMENT REFERENCES**
+⚠️ **CRITICAL**: This document contains NON-NEGOTIABLE RULES for AI pair programming assistants. These rules were established through hard-learned lessons and MUST be followed without exception.
+
+---
+
+## 📋 MANDATORY DOCUMENT REFERENCES
 
 Before starting ANY work, you **MUST** reference these documents:
-- `@GUARDRAILS.md` (this file) - Critical rules and workflows
-- `@ARCHITECTURE.md` - System design and core concepts
-- `@VARIABLE_NAMING_REFERENCE.md` - Authoritative variable names and field mappings
-- `@OPERATIONS.md` - Deployment, monitoring, and version management
 
-## **✅ MANDATORY RULE CONFIRMATION**
+- `@GUARDRAILS.md` – This document
+- `@ARCHITECTURE.md` – System design and core concepts
+- `@VARIABLE_NAMING_REFERENCE.md` – Authoritative variable names and field mappings
+- `@OPERATIONS.md` – Deployment, monitoring, and version control
 
-You **MUST** explicitly confirm understanding of these CRITICAL RULES before proceeding:
+---
+
+## ✅ MANDATORY RULE CONFIRMATION
+
+Before any code or tests are written, confirm the following:
 
 ```
 ✅ CONFIRMING CRITICAL RULES:
-1. NO HARDCODED VALUES - will use app/constants.py and dynamic calculations
-2. PERMANENT CODE ONLY - will modify existing modules, not create temp scripts
-3. CORRECT START TIMES - will use {'Full': 420, '10K': 440, 'Half': 460}
-4. API TESTING - will test through main.py endpoints, not direct module calls
-5. MINIMAL CHANGES - will make only necessary changes and test frequently
-6. NO ENDLESS LOOPS - will take action after 3 analysis attempts, not repeat analysis
-7. TYPO CHECKING - will verify variable names and data flow integrity
-8. VARIABLE NAMING - will use correct field names (seg_label not segment_label, from_km not 10K_from_km)
-9. TODO PERMISSION - will ask for permission before creating todo lists when user asks for thoughts
-10. COMPLETE GITHUB ISSUE READING - will read ENTIRE GitHub issues including ALL comments, no shortcuts
+1. NO HARDCODED VALUES – Use app/constants.py and config files only
+2. PERMANENT CODE ONLY – No temp scripts or isolated experiments
+3. START TIME CONSTANTS – Use constants.START_TIMES from app/constants.py
+4. API TESTING ONLY – Always test via app/main.py endpoints
+5. MINIMAL CHANGES – Make small, testable commits
+6. NO ENDLESS LOOPS – Stop after 3 failed analysis attempts and ask
+7. STRICT TYPOS – Match variable names exactly to references
+8. NAMING CONVENTIONS – Use field names from VARIABLE_NAMING_REFERENCE.md
+9. TODO PERMISSION – Ask before creating task lists or suggestions
+10. GITHUB CONTEXT – Read entire GitHub issue + all comments
+11. CLARITY FIRST – STOP and ask if any instruction is unclear
 ```
 
-## **📁 CRITICAL FILE REFERENCES**
+---
 
-### Data Files
-- **ALWAYS use**: `data/runners.csv`, `data/segments.csv`, `data/flow_expected_results.csv`
-- **NEVER use**: `data/segments_old.csv`, `data/your_pace_data.csv` (archived)
+## 📁 CRITICAL FILE REFERENCES
 
-### Configuration Files  
-- **ALWAYS use**: `config/density_rulebook.yml`, `config/reporting.yml`
-- **ALWAYS use**: `app/constants.py` for all configuration values
-- **NEVER hardcode**: start times, tolerance values, conflict lengths, thresholds
+### ✅ Always Use:
+- `data/runners.csv`
+- `data/segments.csv`
+- `data/flow_expected_results.csv`
+- `config/density_rulebook.yml`
+- `config/reporting.yml`
+- `app/constants.py`
+
+### ❌ Never Use:
+- `data/segments_old.csv`
+- `data/your_pace_data.csv` (archived)
 
 ### Directory Structure
 ```
-/app          - Application code
-/config       - YAML configuration files (density_rulebook.yml, reporting.yml)
-/data         - CSV input files only (runners.csv, segments.csv, flow_expected_results.csv)
-/docs         - Documentation
-/frontend     - HTML/CSS/JS frontend files
-/tests        - Test suites
-/reports      - Generated reports (gitignored)
-/cache        - Analysis cache (gitignored)
-/archive      - Historical files
+/app          – Core application code
+/config       – YAML configuration
+/data         – Input CSVs only
+/docs         – Internal documentation
+/frontend     – Static files
+/tests        – Unit and integration tests
+/reports      – Auto-generated results
+/cache        – Git-ignored analysis cache
+/archive      – Historical snapshots
 ```
 
-## **🐍 MANDATORY ENVIRONMENT SETUP**
+---
 
-### Virtual Environment Activation
+## 🐍 PYTHON ENVIRONMENT
 
-**CRITICAL**: Before running ANY Python commands, activate the virtual environment:
-
+### Activate Before All Python Work:
 ```bash
-# ALWAYS run this first for Python work
 source test_env/bin/activate
-
-# THEN run your commands
-python e2e.py --local
 ```
 
-**Why this is critical:**
-- Prevents `ModuleNotFoundError` (system Python lacks dependencies)
-- Ensures correct package versions
-- Maintains consistency with production
-- Avoids wasted debugging time
-
-**Signs you forgot to activate:**
-- `ModuleNotFoundError: No module named 'fastapi'`
-- `ModuleNotFoundError: No module named 'pandas'`
-- Any import errors when running Python
-
-**Remember**: Virtual environment activation does NOT persist between terminal sessions!
-
-### When to Deactivate
-
-**CRITICAL**: Deactivate the virtual environment for non-Python work:
-
+### Deactivate for Git or CLI:
 ```bash
-# For Python/E2E work
-source test_env/bin/activate
-python e2e.py --local
-
-# For GitHub CLI, git, system commands
 deactivate
-gh issue create --title "Example"
-git commit -m "message"
 ```
 
-**Why deactivate:**
-- GitHub CLI works better outside venv
-- System commands have full access
-- Prevents unexpected command failures
-- Cleaner separation of concerns
+Signs you forgot:
+- `ModuleNotFoundError: No module named 'pandas'`
+- Commands fail or misbehave
 
-## **🧪 MANDATORY TESTING SEQUENCE**
+---
 
-After ANY code changes, you **MUST**:
+## 🧪 TESTING GUARDRAILS
 
-1. **ACTIVATE VIRTUAL ENVIRONMENT FIRST**: `source test_env/bin/activate`
-2. **USE AUTOMATED TEST SCRIPTS ONLY**: `python e2e.py --local`
-3. **NEVER manually construct curl commands** - wastes time, causes errors
-4. **NEVER guess API parameters** - use automated scripts
-5. **MAINTAIN TESTING CONSISTENCY** - same methodology for local & Cloud Run
-6. **FOR LOCAL**: `python e2e.py --local` (full E2E)
-7. **FOR CLOUD RUN**: `TEST_CLOUD_RUN=true python e2e.py --cloud`
-8. **FOR CI PIPELINE**: Automatically uses resource constraints
-9. Generate actual reports (MD + CSV), not just JSON
-10. Verify no hardcoded values introduced
-11. Test through API endpoints, not direct module calls
-12. Validate report content quality and readability
+1. Activate venv
+2. Use: `python e2e.py --local` for local testing
+3. Do NOT test via curl or isolated modules
+4. Validate output reports (CSV + MD)
+5. Check constants are used, not hardcoded values
 
-### Testing Methodology
-
+### For Unit Testing:
 ```bash
-# Local E2E (full testing)
-source test_env/bin/activate
-python e2e.py --local
-
-# Cloud Run E2E (production validation)
-source test_env/bin/activate
-TEST_CLOUD_RUN=true python e2e.py --cloud
-
-# Unit tests
 pytest tests/test_*.py
-
-# QA regression (Issue #243 fix verification)
-python tests/qa_regression_baseline.py
 ```
 
-### **🚫 PROHIBITED TESTING ACTIONS**
-- **NEVER** manually construct curl commands for API testing
-- **NEVER** guess API endpoint parameters or request formats
-- **NEVER** waste time looking up API calls when automated scripts exist
-- **NEVER** modify code to "fix" API calls instead of using proper testing
-- **NEVER** use different methodologies for local vs Cloud Run
-- **NEVER** compare results from different testing approaches
+### For Cloud Run Validation:
+```bash
+TEST_CLOUD_RUN=true python e2e.py --cloud
+```
 
-## **📋 MANDATORY GITHUB ISSUE READING**
+---
 
-When reading GitHub issues, you **MUST**:
+## 🔍 GITHUB ISSUES
 
-1. **Read the ENTIRE issue** - Title, description, acceptance criteria, all sections
-2. **Read ALL comments** - Use `gh issue view <number> --comments` for complete context
-3. **No shortcuts or skimming** - Every comment contains important details
-4. **GitHub is source of truth** - Issues persist across Cursor sessions
-5. **Complete context required** - Missing comments leads to incomplete implementation
+You MUST:
+- Read full title, description, and **all** comments
+- Use `gh issue view <number> --comments`
+- Never summarize or skip subthreads
+- GitHub is the source of truth - issues persist across Cursor sessions.
+- Complete context is required - missing context leads to failed outcomes. Why critical:
+  - Comments contain implementation strategies
+  - ChatGPT answers provide specific technical details
+  - User feedback and decisions documented
+  - Incomplete reading causes rework
 
-**Command**: `gh issue view <issue-number> --comments`
+---
 
-**Why critical:**
-- Comments contain implementation strategies
-- ChatGPT answers provide specific technical details
-- User feedback and decisions documented
-- Incomplete reading causes rework
+## 🚫 PROHIBITED ACTIONS
 
-## **🚫 PROHIBITED GITHUB ACTIONS**
+- Developing in `main` - all dev/hotfix/bugfix must be done in branch
+- Pushing to `main` directly
+- Force pushing any branch
+- Skipping E2E tests for logic-affecting changes
+- Hardcoding thresholds, timing, or config logic
+- Mixing time units (e.g., min/km with sec/km)
+- Guessing API formats or variable names
+- Creating unrequested todos
+- Leaving ambiguity unresolved
 
-### Git Commands
-- **NEVER** push directly to main - always use PRs
-- **NEVER** force push to main/master
-- **NEVER** skip hooks (--no-verify, --no-gpg-sign)
-- **NEVER** commit unless explicitly asked
-- **NEVER** update git config
+---
 
-### GitHub CLI Commands
-- **NEVER** use complex multi-line strings in `gh issue comment`
-- **NEVER** include unescaped quotes, backticks, special chars
-- **NEVER** use complex JSON/code blocks in single-line commands
-- **ALWAYS** use simple comment bodies or write to files first
-- **IF** complex formatting needed, use `gh issue comment --body-file`
+## 🔁 MERGE AND RELEASE PROCESS
 
-## **🚫 PROHIBITED CODING PRACTICES**
+Follow this sequence:
 
-### Time Calculations
-- **NEVER** mix time units without explicit conversion (minutes vs seconds)
-- **NEVER** convert only one event's start time (convert ALL consistently)
-- **ALWAYS** convert: `start_a = start_times.get(event_a, 0) * 60.0`
-- **ALWAYS** verify time calculations with unit tests
-- **NEVER** assume time values are in same units without checking
-
-### Hardcoded Values
-- **NEVER** hardcode start times, thresholds, lengths, tolerances
-- **ALWAYS** use `app/constants.py` for configuration
-- **ALWAYS** use config files (`config/density_rulebook.yml`, `config/reporting.yml`)
-- **NEVER** use placeholder values like `random.randint(0, 5)` in production code
-
-### Variable Naming
-- **ALWAYS** use correct field names per `@VARIABLE_NAMING_REFERENCE.md`
-- **Examples**: `seg_label` not `segment_label`, `from_km` not `10K_from_km`
-- **NEVER** guess variable names - check the reference doc
-
-## **🚀 9-STEP MERGE/TEST PROCESS**
-
-For ALL releases and merges, follow this complete process:
-
-1. **Verify Dev Branch Health** - Check git status and recent commits
-2. **Run Final E2E Tests on Dev Branch** - `python e2e.py --local` must pass
-   - **Exception**: Skip for non-application changes (docs, validation-only features, CI configs)
-   - **Rationale**: E2E tests validate core application behavior; changes isolated to separate systems don't require full E2E
-3. **Create Pull Request** - Comprehensive description + testing results
-   - **Note**: PR creation/merge automatically triggers CI/CD pipeline (Build, Deploy, E2E)
-   - **Alternative**: For non-application changes, can merge directly to main (triggers CI automatically)
-4. **Wait for User Review/Approval** - User reviews and merges via GitHub UI (or merge directly if authorized)
-5. **Verify Merge to Main** - `git checkout main && git pull`
-6. **Monitor CI/CD Pipeline** - All 4 stages must pass (Build, E2E Cloud Run, Bin Datasets, Release)
-   - **Automated E2E**: CI runs full E2E tests on Cloud Run automatically
-   - **Skip Manual E2E**: Local E2E tests (Step 2, 7) are redundant if CI passes
-7. **Run E2E Tests on Main Locally** - `python e2e.py --local` (validates next dev baseline)
-   - **Optional**: Skip if CI E2E tests passed and change doesn't affect application code
-   - **Purpose**: Ensures next dev branch starts from healthy main baseline
-8. **Verify Production Health** - All endpoints responding correctly
+1. ✅ Confirm local branch health
+2. ✅ Run: `python e2e.py --local`
+3. ✅ Create PR with testing proof
+4. ✅ Wait for user to review and merge manually
+5. ✅ CI runs all Cloud Run tests: monitor workflow logs and Cloud Run logs during execution.
+6. ✅ Confirm CI workflow completed without errors. All 4 stages must pass (Build, E2E, Bin Datasets, Release). CI runs the full E2E tests on Cloud Run automatically
+7. ✅ Wait for the user to review the deployed code with manual testing via UI.
+8. ✅ Tag release and upload:
+   - `Flow.csv`
+   - `Density.md`
 
 **When to Skip E2E Tests:**
 - **Documentation-only changes** (README, GUARDRAILS, docs/)
@@ -224,49 +158,7 @@ For ALL releases and merges, follow this complete process:
 - **CI/CD configuration** (.github/workflows/ - validated by CI itself)
 - **Non-code assets** (frontend/assets/, archive/)
 
-**When E2E Tests Are Required:**
-- Changes to `app/` directory (core application logic)
-- Changes to `data/` files (inputs that affect analysis)
-- Changes to `config/` files (rulebook, reporting configuration)
-- API endpoint modifications (`app/main.py`, `app/routes/`)
-- Dependency updates (`requirements.txt` affecting main app)
-
-**Note**: Step 7 ensures next dev branch starts from healthy main.
-**Note**: Cloud Run E2E tests run automatically in CI (Step 6, stage 2). Manual Cloud Run testing is redundant.
-**Note**: PR merge to main automatically triggers CI/CD pipeline. No manual deployment needed.
-
-## **🔄 AUTOMATED CI/CD PIPELINE**
-
-### Pipeline Triggers
-- **Push to main**: Automatically deploys to Cloud Run
-- **Pull requests**: Runs validation tests only
-- **Manual dispatch**: Can trigger via GitHub Actions
-
-### Pipeline Stages
-1. **Build & Deploy**: Docker → Artifact Registry → Cloud Run
-2. **E2E Tests**: Density/Flow reports, Bin datasets validation
-3. **Version Check**: Validates app version consistency
-4. **Automated Release**: Creates release if version is new
-
-### CI E2E Testing Scope
-
-**What CI Tests:**
-- Health endpoints (`/health`, `/ready`)
-- Density reports (`/api/density-report`)
-- Temporal flow reports (`/api/temporal-flow-report`)
-- Bin dataset quality validation
-
-**What CI Skips** (resource constraints):
-- Heavy temporal flow analysis
-- Large dataset processing
-- Full flow audit
-
-### Critical Warnings
-- **Cloud Run auto-deploys** - Every main push goes to production
-- **Pipeline failures block releases** - Fix CI before creating releases
-- **Version consistency required** - App version must match git tags
-
-### Monitoring Commands
+**Monitoring Commands:**
 ```bash
 # Check recent runs
 gh run list --limit 5
@@ -278,36 +170,20 @@ gh run view <run-id>
 gh run view <run-id> --log 2>&1 | grep -E "(ERROR|FAIL)"
 ```
 
-## **🎯 PRODUCTION ENVIRONMENT**
+---
 
-### Cloud Run Service
-- **URL**: https://run-density-ln4r3sfkha-uc.a.run.app
-- **Region**: us-central1
-- **Resources**: 3GB RAM / 2 CPU (default config - verify before starting work)
-- **Timeout**: 600 seconds
-- **Verify Config**: Always check actual resources with `gcloud run services describe run-density --region=us-central1 --format="table(spec.template.spec.containers[0].resources.limits)"`
-- **Revision**: You MUST verify the latest revision - or the one you're expecting - is serving 100% of the inbound traffic. 
+## ☁️ CLOUD RUN CONFIG (PROD)
 
-### API Endpoints
-- `GET /health` - Health check
-- `GET /ready` - Readiness check
-- `POST /api/density-report` - Generate density analysis
-- `POST /api/temporal-flow-report` - Generate flow analysis
-- `GET /api/segments` - Segment data with operational intelligence
-- `GET /api/tooltips` - Operational intelligence tooltips
+- **URL**: https://run-density-...a.run.app
+- **Timeout**: 600s
+- **Resources**: 3GB / 2CPU (verify using Google CLI as resources might have changed)
+- **Check**: `gcloud run services describe ...`
 
-### Testing Against Production
-```bash
-source test_env/bin/activate
-TEST_CLOUD_RUN=true python e2e.py --cloud
-```
+---
 
-**NEVER** manually construct curl commands - always use automated test scripts!
+## 🐛 COMMON FAILURE PATTERNS
 
-## **🐛 COMMON DEBUGGING PATTERNS**
-
-### When Algorithms Return Zero Values
-
+### Zeroes in Reports?
 1. **Check time unit consistency**
    - Start times: minutes → seconds (`* 60.0`)
    - Pace: minutes/km → seconds/km (`* 60.0`)
@@ -323,25 +199,25 @@ TEST_CLOUD_RUN=true python e2e.py --cloud
    - Compare with working reference code
    - Test with known good data first
 
-### When Tests Fail in CI
-
+### CI Fails?
 1. **Check /config directory** - Ensure Dockerfile copies it
-2. **Verify resource constraints** - CI has 1GB RAM / 1 CPU limits
+2. **Verify resource constraints** - CI has required resources 3GB RAM / 2 CPU is recommended.
 3. **Check schema changes** - Update validation scripts (e.g., `scripts/validation/verify_bins.py`)
 4. **Review deployment logs** - `gh run view <run-id> --log`
 
-## **📎 MANDATORY RELEASE ASSETS**
+---
 
-For EVERY release, attach these files:
-- **Flow.md** - Latest temporal flow analysis report
-- **Flow.csv** - Latest temporal flow data  
-- **Density.md** - Latest density analysis report
+## 📎 RELEASE CHECKLIST
 
-**Command**: `gh release upload <version> Flow.md Flow.csv Density.md`
+Every release needs:
+- ✅ `Flow.csv`, `Density.md` attached
+- ✅ Cloud Run validated
+- ✅ Version consistency with Git tag
+- ✅ Confirmation from CI logs
 
-**Note**: E2E results captured in GitHub Actions logs, not separate files.
+---
 
-## **✅ SUCCESS CRITERIA**
+## 🎯 SUCCESS CRITERIA
 
 Work is complete ONLY when:
 - ✅ All code uses constants.py, no hardcoded values
@@ -353,28 +229,26 @@ Work is complete ONLY when:
 - ✅ Production deployment verified (Cloud Run + local)
 - ✅ Release assets attached (if version bumped)
 
-## **🚨 CRITICAL REMINDERS**
-
-### For Cursor/AI Assistants
-- You cannot persist memory between conversations
-- Always reference these documents at session start
-- GitHub issues are your persistent data store
-- Test frequently, commit at milestones
-- Ask for clarification rather than guessing
-
-### Common Violations (NEVER DO THESE)
-1. ❌ Hardcoding values instead of using constants
-2. ❌ Creating temporary scripts instead of permanent code
-3. ❌ Manually testing APIs instead of using e2e.py
-4. ❌ Pushing to main without PR review
-5. ❌ Skipping E2E tests after changes
-6. ❌ Guessing production URLs instead of using documented values
-7. ❌ Using inconsistent testing methodologies (local vs cloud)
-8. ❌ Incomplete GitHub issue reading (missing comments)
-9. ❌ Forgetting to activate virtual environment
-10. ❌ Mixing time units without conversion
-
 ---
 
-**Remember**: These guardrails exist because they've been violated before, causing significant debugging overhead. Follow them strictly to maintain code quality and development velocity.
+## 🚨 REMINDERS FOR AI AGENTS
 
+- No session memory: re-check guardrails every time
+- Never guess — ask for clarity to user or ChatGPT as Senior Architect and QA Analyst
+- Always test via documented endpoints
+- Stop after ambiguity or repeated failures
+
+**Common mistakes made by prior AI agents:**
+Never do these things:
+1. Hardcoding values instead of using constants
+2. Creating temporary scripts instead of permanent code
+3. Manually testing APIs instead of using e2e.py
+4. Pushing to main without PR review
+5. Skipping E2E tests after changes
+6. Guessing production URLs instead of using documented values
+7. Using inconsistent testing methodologies (local vs cloud)
+8. Incomplete GitHub issue reading (missing comments)
+9. Forgetting to activate the virtual environment before running e2e.py tests.
+10. Mixing time units without conversion
+
+**Remember**: These guardrails exist because they've been violated before, causing significant debugging overhead. Follow them strictly to maintain code quality and development velocity.
