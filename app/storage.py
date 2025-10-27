@@ -269,7 +269,7 @@ class Storage:
         run_id = os.getenv("RUN_ID")
         if not run_id:
             try:
-                latest_data = self.read_json("artifacts/latest.json")
+                latest_data = self.read_json("latest.json")
                 run_id = latest_data.get("run_id")
             except Exception as e:
                 logging.warning(f"Could not load latest.json for run_id: {e}")
