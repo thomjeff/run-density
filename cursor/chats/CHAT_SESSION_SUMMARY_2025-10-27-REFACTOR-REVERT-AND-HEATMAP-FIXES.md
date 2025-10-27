@@ -307,6 +307,7 @@ Heatmap visual issues were caused by:
 2. Filtering logic falling back to all bins
 3. Silent failures (no errors, just wrong output)
 4. Multiple potential causes (filtering, generation, serving)
+5. Silent revert to 2025-10-25 maps that displayed correct changes then, but were no longer being generated correctly in code.
 
 ## 🎯 **NEXT STEPS RECOMMENDATIONS**
 

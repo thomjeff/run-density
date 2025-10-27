@@ -201,3 +201,10 @@ class TestNormalizeIntegration:
         assert checkpoint == 'NONE'
         assert cursor == -1
 
+
+
+
+
+
+
+
