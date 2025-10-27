@@ -75,7 +75,10 @@ def enrich_segment_features(segments_geojson: Dict[str, Any],
             "peak_density": segment_metrics_data.get("peak_density", 0.0),
             "peak_rate": segment_metrics_data.get("peak_rate", 0.0),
             "active": segment_metrics_data.get("active_window", "Unknown"),
-            "is_flagged": seg_id in flagged_seg_ids  # Mark if segment is flagged
+            "is_flagged": seg_id in flagged_seg_ids,  # Mark if segment is flagged
+            
+            # Issue #373: Add description from source GeoJSON
+            "description": properties.get("description", "No description available")
         }
         
         # Create enriched feature

@@ -519,7 +519,8 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
                     "width_m": float(dims.get("width_m", 0.0)),
                     "direction": dims.get("direction", "uni"),
                     "events": [event for event in ["Full", "Half", "10K"] if dims.get(event.lower() if event != "10K" else "10K", "") == "y"],
-                    "schema": schema_keys.get(seg_id, "on_course_open")  # Issue #285: Add operational schema tag from bins.parquet
+                    "schema": schema_keys.get(seg_id, "on_course_open"),  # Issue #285: Add operational schema tag from bins.parquet
+                    "description": dims.get("description", "No description available")  # Issue #373: Add segment description
                 }
             }
         
