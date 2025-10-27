@@ -8,11 +8,17 @@ Epic: RF-FE-002 | Issue: #279 | Step: 4
 Architecture: Option 3 - Hybrid Approach
 """
 
+import logging
+from pathlib import Path
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app.common.config import load_reporting
+
+# Setup logger
+logger = logging.getLogger(__name__)
 
 # Initialize templates
 templates = Jinja2Templates(directory="templates")
@@ -135,6 +141,8 @@ async def density(request: Request):
     Returns:
         HTML: Density metrics with heatmap and bin-level data
     """
+    from app.storage_service import get_storage_service
+    
     meta = get_stub_meta()
     
     # Load LOS colors from SSOT
@@ -147,9 +155,36 @@ async def density(request: Request):
             "D": "#FF9800", "E": "#FF5722", "F": "#F44336"
         }
     
+    # Get current run_id for error messages (Issue #361)
+    run_id = None
+    try:
+        storage_service = get_storage_service()
+        # Try to get the latest run_id from artifacts/latest.json
+        try:
+            latest_path = Path("artifacts/latest.json")
+            if latest_path.exists():
+                import json
+                latest_data = json.loads(latest_path.read_text())
+                run_id = latest_data.get("run_id")
+        except Exception as e:
+            logger.warning(f"Could not load run_id from artifacts/latest.json: {e}")
+        
+        # If local method failed and in cloud mode, try storage service
+        if not run_id and storage_service.config.use_cloud_storage:
+            try:
+                content = storage_service._load_from_gcs("artifacts/latest.json")
+                if content:
+                    import json
+                    latest_data = json.loads(content)
+                    run_id = latest_data.get("run_id")
+            except Exception as e:
+                logger.warning(f"Could not load run_id from GCS: {e}")
+    except Exception as e:
+        logger.warning(f"Could not determine run_id: {e}")
+    
     return templates.TemplateResponse(
         "pages/density.html",
-        {"request": request, "meta": meta, "los_colors": los_colors}
+        {"request": request, "meta": meta, "los_colors": los_colors, "run_id": run_id}
     )
 
 

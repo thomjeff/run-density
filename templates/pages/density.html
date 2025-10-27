@@ -234,7 +234,9 @@
         tbody.innerHTML = '';
         
         if (!segments || segments.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="10" class="placeholder">No density data available</td></tr>';
+            // Issue #361: Show informative message with run_id when artifacts are missing
+            const runId = '{{ run_id if run_id else "latest run" }}';
+            tbody.innerHTML = `<tr><td colspan="10" class="placeholder">⚠️ No density data available for latest run ID: ${runId}. Check logs.</td></tr>`;
             return;
         }
         
@@ -269,8 +271,10 @@
     }
     
     function showDensityError() {
+        // Issue #361: Show informative message with run_id when artifacts are missing
         const tbody = document.querySelector('#density-table tbody');
-        tbody.innerHTML = '<tr><td colspan="10" class="placeholder">Error loading density data</td></tr>';
+        const runId = '{{ run_id if run_id else "latest run" }}';
+        tbody.innerHTML = `<tr><td colspan="10" class="placeholder">⚠️ Error loading density data for run ID: ${runId}. Check logs.</td></tr>`;
     }
     
     function showSegmentDetail(seg_id) {
