@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 New Density Template Engine for Issue #246
 
@@ -24,8 +26,6 @@ warnings.warn(
     "Please use `density_template_engine.py` as the primary entry point.",
     DeprecationWarning
 )
-
-from __future__ import annotations
 import os
 from typing import Dict, List, Any, Optional
 from datetime import datetime

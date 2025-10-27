@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 New Flagging Logic for Issue #246 - New Density Report
 
@@ -14,8 +16,6 @@ warnings.warn(
     "Please use `flagging.py` or `rulebook.py` as the primary entry point.",
     DeprecationWarning
 )
-
-from __future__ import annotations
 import logging
 from typing import Dict, Optional, Tuple, List
 from dataclasses import dataclass

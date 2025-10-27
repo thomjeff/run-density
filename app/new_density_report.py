@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 New Density Report Generator for Issue #246
 
@@ -21,8 +23,6 @@ warnings.warn(
     "Please use `density_report.py` as the primary entry point.",
     DeprecationWarning
 )
-
-from __future__ import annotations
 import os
 import time
 import json
