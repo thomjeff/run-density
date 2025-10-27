@@ -455,8 +455,7 @@ function updateTable(features) {
             <td>${props.direction || 'N/A'}</td>
             <td>${props.events ? props.events.join(', ') : 'N/A'}</td>
             <td><span class="badge-los badge-${props.worst_los || 'E'}">${props.worst_los || 'E'}</span></td>
-            <td>${props.peak_density ? props.peak_density.toFixed(2) : 'N/A'}</td>
-            <td>${props.peak_rate ? props.peak_rate.toFixed(2) : 'N/A'}</td>
+            <td style="max-width: 400px; word-wrap: break-word;">${props.description || 'No description available'}</td>
         `;
         
         // Add click handler for table-to-map filtering
