@@ -225,12 +225,18 @@ class Storage:
                     latest_path = Path("artifacts/latest.json")
                     if latest_path.exists():
                         latest_data = json.loads(latest_path.read_text())
-                        run_id = latest_data.get("run_id", "2025-10-25")
+                        run_id = latest_data.get("run_id")
                     else:
-                        run_id = "2025-10-25"
+                        logging.warning("artifacts/latest.json not found for run_id")
+                        run_id = None
                 except Exception as e:
                         logging.warning(f"Could not load latest.json for run_id: {e}")
-                        run_id = "2025-10-25"
+                        run_id = None
+            
+            # Issue #361: Do not fall back to hardcoded date - return None if run_id unavailable
+            if not run_id:
+                logging.warning("No run_id available - cannot generate heatmap URL. Artifacts missing for current run.")
+                return None
             return f"/artifacts/{run_id}/ui/heatmaps/{segment_id}.png"
         
         # For GCS mode, use service account key for signing
@@ -263,11 +269,16 @@ class Storage:
         run_id = os.getenv("RUN_ID")
         if not run_id:
             try:
-                latest_data = self.read_json("latest.json")
-                run_id = latest_data.get("run_id", "current")
+                latest_data = self.read_json("artifacts/latest.json")
+                run_id = latest_data.get("run_id")
             except Exception as e:
                 logging.warning(f"Could not load latest.json for run_id: {e}")
-                run_id = "current"
+                run_id = None
+        
+        # Issue #361: Do not fall back to hardcoded date - return None if run_id unavailable
+        if not run_id:
+            logging.warning("No run_id available - cannot generate heatmap URL. Artifacts missing for current run.")
+            return None
         
         blob_path = f"artifacts/{run_id}/ui/heatmaps/{segment_id}.png"
         blob = bucket.blob(blob_path)
