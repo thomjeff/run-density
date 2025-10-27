@@ -83,21 +83,6 @@ async def generate_heatmaps(request: Dict[str, Any]):
     logger.info(f"Received heatmap generation request for run_id: {run_id}, force: {force}")
     
     try:
-        # Check if heatmaps already exist (unless force=True)
-        if not force:
-            storage = get_storage_service()
-            existing_files = storage.list_files(date=run_id, pattern="*.png")
-            # Filter for heatmap files
-            heatmap_files = [f for f in existing_files if "/heatmaps/" in f]
-            if heatmap_files:
-                logger.info(f"Heatmaps already exist for run_id: {run_id} ({len(heatmap_files)} files)")
-                return JSONResponse(content={
-                    "status": "skipped",
-                    "message": f"Heatmaps already exist for {run_id}",
-                    "heatmap_count": len(heatmap_files),
-                    "run_id": run_id
-                })
-        
         # Generate heatmaps
         heatmaps_generated, segments = generate_heatmaps_for_run(run_id)
         
