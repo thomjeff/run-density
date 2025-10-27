@@ -221,8 +221,13 @@ class Storage:
             run_id = os.getenv("RUN_ID")
             if not run_id:
                 try:
-                    latest_data = self.read_json("latest.json")
-                    run_id = latest_data.get("run_id", "2025-10-25")
+                    # Read latest.json from project root, not from storage root
+                    latest_path = Path("artifacts/latest.json")
+                    if latest_path.exists():
+                        latest_data = json.loads(latest_path.read_text())
+                        run_id = latest_data.get("run_id", "2025-10-25")
+                    else:
+                        run_id = "2025-10-25"
                 except Exception as e:
                         logging.warning(f"Could not load latest.json for run_id: {e}")
                         run_id = "2025-10-25"
@@ -232,7 +237,6 @@ class Storage:
         try:
             # Try to use the base64 encoded service account key from environment
             import base64
-            import json
             from google.oauth2 import service_account
             
             sa_key_b64 = os.getenv("SERVICE_ACCOUNT_KEY_B64")
