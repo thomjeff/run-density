@@ -32,6 +32,7 @@ try:
     from .routes.api_reports import router as api_reports_router
     from .routes.api_bins import router as api_bins_router
     from .routes.api_e2e import router as api_e2e_router
+    from .routes.api_heatmaps import router as api_heatmaps_router
     # from .test_api import test_router  # Disabled for Cloud Run deployment
     from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 except ImportError:
@@ -53,6 +54,7 @@ except ImportError:
     from routes.api_reports import router as api_reports_router
     from routes.api_bins import router as api_bins_router
     from routes.api_e2e import router as api_e2e_router
+    from routes.api_heatmaps import router as api_heatmaps_router
     # from test_api import test_router  # Disabled for Cloud Run deployment
     from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
@@ -162,6 +164,7 @@ app.include_router(api_flow_router)
 app.include_router(api_reports_router)
 app.include_router(api_bins_router)
 app.include_router(api_e2e_router)
+app.include_router(api_heatmaps_router, prefix="/api/generate", tags=["heatmaps"])
 
 # CSV Data Endpoints for Reports Page
 @app.get("/data/runners.csv")
