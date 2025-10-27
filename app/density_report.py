@@ -979,14 +979,11 @@ def generate_density_report(
                 if gcs_upload_enabled:
                     try:
                         storage_service = get_storage_service()
-                        # Read the generated report content
-                        with open(timestamped_path, 'r', encoding='utf-8') as f:
-                            report_content = f.read()
-                        
-                        # Upload to GCS using reports/ path
+                        # Upload to GCS using report_content_final (already available)
+                        # Issue #379: Fix - use content already in memory instead of reading from disk
                         gcs_path = storage_service.save_file(
                             filename=os.path.basename(timestamped_path),
-                            content=report_content,
+                            content=report_content_final,
                             date=None  # Use current date
                         )
                         print(f"☁️ Density report uploaded to GCS: {gcs_path}")
