@@ -11,7 +11,7 @@
     "peak_density": 0.755,
     "peak_rate": 11.307,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T07:42:00Z",
+    "peak_rate_time": "2025-10-27T07:42:00Z",
     "peak_rate_km": "0.0-0.2"
   },
   "A2": {
@@ -20,7 +20,7 @@
     "peak_density": 0.469,
     "peak_rate": 6.613,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T07:48:00Z",
+    "peak_rate_time": "2025-10-27T07:48:00Z",
     "peak_rate_km": "0.0-0.2"
   },
   "A3": {
@@ -29,7 +29,7 @@
     "peak_density": 0.291,
     "peak_rate": 4.454,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T07:52:00Z",
+    "peak_rate_time": "2025-10-27T07:52:00Z",
     "peak_rate_km": "0.0-0.2"
   },
   "B1": {
@@ -38,7 +38,7 @@
     "peak_density": 0.72,
     "peak_rate": 3.047,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T07:38:00Z",
+    "peak_rate_time": "2025-10-27T07:38:00Z",
     "peak_rate_km": "0.0-0.2"
   },
   "B2": {
@@ -47,7 +47,7 @@
     "peak_density": 0.4833,
     "peak_rate": 2.065,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T07:48:00Z",
+    "peak_rate_time": "2025-10-27T07:48:00Z",
     "peak_rate_km": "0.2-0.4"
   },
   "B3": {
@@ -56,7 +56,7 @@
     "peak_density": 0.4833,
     "peak_rate": 2.065,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T07:48:00Z",
+    "peak_rate_time": "2025-10-27T07:48:00Z",
     "peak_rate_km": "0.2-0.4"
   },
   "D1": {
@@ -65,7 +65,7 @@
     "peak_density": 0.2333,
     "peak_rate": 1.192,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T07:24:00Z",
+    "peak_rate_time": "2025-10-27T07:24:00Z",
     "peak_rate_km": "0.4-0.6"
   },
   "D2": {
@@ -74,7 +74,7 @@
     "peak_density": 0.1433,
     "peak_rate": 0.699,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T07:48:00Z",
+    "peak_rate_time": "2025-10-27T07:48:00Z",
     "peak_rate_km": "0.2-0.4"
   },
   "F1": {
@@ -83,7 +83,7 @@
     "peak_density": 0.56,
     "peak_rate": 4.985,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T07:58:00Z",
+    "peak_rate_time": "2025-10-27T07:58:00Z",
     "peak_rate_km": "0.2-0.4"
   },
   "G1": {
@@ -92,7 +92,7 @@
     "peak_density": 0.0417,
     "peak_rate": 0.371,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T09:02:00Z",
+    "peak_rate_time": "2025-10-27T09:02:00Z",
     "peak_rate_km": "0.8-1.0"
   },
   "H1": {
@@ -101,7 +101,7 @@
     "peak_density": 0.3267,
     "peak_rate": 1.381,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T08:10:00Z",
+    "peak_rate_time": "2025-10-27T08:10:00Z",
     "peak_rate_km": "0.0-0.2"
   },
   "I1": {
@@ -110,7 +110,7 @@
     "peak_density": 0.2667,
     "peak_rate": 2.352,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T08:12:00Z",
+    "peak_rate_time": "2025-10-27T08:12:00Z",
     "peak_rate_km": "0.2-0.4"
   },
   "J1": {
@@ -119,7 +119,7 @@
     "peak_density": 0.2667,
     "peak_rate": 1.209,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T08:46:00Z",
+    "peak_rate_time": "2025-10-27T08:46:00Z",
     "peak_rate_km": "0.8-1.0"
   },
   "J2": {
@@ -128,7 +128,7 @@
     "peak_density": 0.05,
     "peak_rate": 0.251,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T09:40:00Z",
+    "peak_rate_time": "2025-10-27T09:40:00Z",
     "peak_rate_km": "0.2-0.4"
   },
   "J3": {
@@ -137,7 +137,7 @@
     "peak_density": 0.04,
     "peak_rate": 0.21,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T09:40:00Z",
+    "peak_rate_time": "2025-10-27T09:40:00Z",
     "peak_rate_km": "0.2-0.4"
   },
   "J4": {
@@ -146,7 +146,7 @@
     "peak_density": 0.2233,
     "peak_rate": 0.992,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T08:58:00Z",
+    "peak_rate_time": "2025-10-27T08:58:00Z",
     "peak_rate_km": "0.2-0.4"
   },
   "J5": {
@@ -155,7 +155,7 @@
     "peak_density": 0.2667,
     "peak_rate": 1.209,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T08:46:00Z",
+    "peak_rate_time": "2025-10-27T08:46:00Z",
     "peak_rate_km": "0.8-1.0"
   },
   "K1": {
@@ -164,7 +164,7 @@
     "peak_density": 0.1017,
     "peak_rate": 0.914,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T09:14:00Z",
+    "peak_rate_time": "2025-10-27T09:14:00Z",
     "peak_rate_km": "0.4-0.6"
   },
   "L1": {
@@ -173,7 +173,7 @@
     "peak_density": 0.3267,
     "peak_rate": 1.381,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T08:10:00Z",
+    "peak_rate_time": "2025-10-27T08:10:00Z",
     "peak_rate_km": "0.0-0.2"
   },
   "L2": {
@@ -182,7 +182,7 @@
     "peak_density": 0.0,
     "peak_rate": 0.0,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T07:02:00Z",
+    "peak_rate_time": "2025-10-27T07:02:00Z",
     "peak_rate_km": "0.0-0.2"
   },
   "M1": {
@@ -191,7 +191,7 @@
     "peak_density": 0.1417,
     "peak_rate": 1.195,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T08:20:00Z",
+    "peak_rate_time": "2025-10-27T08:20:00Z",
     "peak_rate_km": "0.0-0.2"
   },
   "M2": {
@@ -200,7 +200,7 @@
     "peak_density": 0.0,
     "peak_rate": 0.0,
     "active_window": "07:00\u201309:40",
-    "peak_rate_time": "2025-10-26T07:02:00Z",
+    "peak_rate_time": "2025-10-27T07:02:00Z",
     "peak_rate_km": "0.0-0.2"
   }
 }
