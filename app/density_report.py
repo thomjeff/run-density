@@ -1043,7 +1043,7 @@ def generate_density_report(
             
             # Generate heatmaps automatically after density report (Issue #365 completion)
             try:
-                from .heatmap_generator import generate_heatmaps_and_captions
+                from .heatmap_generator import generate_heatmaps_for_run
                 from .storage_service import get_storage_service
                 
                 # Extract run_id from daily_folder_path (e.g., "reports/2025-10-27" -> "2025-10-27")
@@ -1052,7 +1052,7 @@ def generate_density_report(
                     print(f"🔥 Generating heatmaps for run_id: {run_id}")
                     
                     # Generate heatmaps locally
-                    heatmaps_generated, segments = generate_heatmaps_and_captions(run_id, force_regenerate=False)
+                    heatmaps_generated, segments = generate_heatmaps_for_run(run_id)
                     print(f"🔥 Generated {heatmaps_generated} heatmaps for {run_id}")
                     
                     # Upload to GCS if enabled
