@@ -22,6 +22,7 @@ import subprocess
 import os
 from pathlib import Path
 import json
+from typing import Tuple
 
 # Configure logging
 logger = logging.getLogger(__name__)
