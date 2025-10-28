@@ -39,77 +39,7 @@ from app.constants import (
 from app.utils import load_pace_csv, arrival_time_sec, load_segments_csv
 
 
-def _get_event_distance_range(segment: pd.Series, event: str) -> Tuple[float, float]:
-    """
-    Extract distance range for a specific event from segment data.
-    
-    Args:
-        segment: Segment data row
-        event: Event name ('Full', 'Half', '10K')
-        
-    Returns:
-        Tuple of (from_km, to_km) for the event
-    """
-    if event == "Full":
-        return segment.get("full_from_km", 0), segment.get("full_to_km", 0)
-    elif event == "Half":
-        return segment.get("half_from_km", 0), segment.get("half_to_km", 0)
-    elif event == "10K":
-        return segment.get("10K_from_km", 0), segment.get("10K_to_km", 0)
-    else:
-        return 0, 0
-
-
-def _get_segment_events(segment: pd.Series) -> List[str]:
-    """
-    Extract list of events present in a segment.
-    
-    Args:
-        segment: Segment data row
-        
-    Returns:
-        List of event names present in the segment
-    """
-    events = []
-    if segment.get('full') == 'y':
-        events.append('Full')
-    if segment.get('half') == 'y':
-        events.append('Half')
-    if segment.get('10K') == 'y':
-        events.append('10K')
-    return events
-
-
-def _create_converted_segment(segment: pd.Series, event_a: str, event_b: str) -> Dict[str, Any]:
-    """
-    Create a converted segment with event-specific distance ranges.
-    
-    Args:
-        segment: Original segment data row
-        event_a: First event name
-        event_b: Second event name
-        
-    Returns:
-        Dictionary with converted segment data
-    """
-    from_km_a, to_km_a = _get_event_distance_range(segment, event_a)
-    from_km_b, to_km_b = _get_event_distance_range(segment, event_b)
-    
-    return {
-        "seg_id": segment['seg_id'],
-        "segment_label": segment.get("seg_label", ""),
-        "eventa": event_a,
-        "eventb": event_b,
-        "from_km_a": from_km_a,
-        "to_km_a": to_km_a,
-        "from_km_b": from_km_b,
-        "to_km_b": to_km_b,
-        "direction": segment.get("direction", ""),
-        "width_m": segment.get("width_m", 0),
-        "overtake_flag": segment.get("overtake_flag", ""),
-        "flow_type": segment.get("flow_type", ""),
-        "length_km": segment.get("length_km", 0)
-    }
+def _log_flow_segment_stats(seg_id, event_a, event_b, path, counters):
     """
     Log structured flow segment statistics for debugging.
     
@@ -1208,55 +1138,6 @@ def calculate_overtaking_loads(
     
     return loads_a, loads_b, avg_load_a, avg_load_b, max_load_a, max_load_b
 
-def _log_flow_segment_stats(seg_id, event_a, event_b, path, counters):
-    """
-    Log structured flow segment statistics for debugging.
-    
-    Args:
-        seg_id: Segment identifier
-        event_a: First event name
-        event_b: Second event name
-        path: Analysis path identifier
-        counters: Dictionary of counter values
-    """
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.debug(f"Flow stats [{path}] {seg_id} {event_a}vs{event_b}: {counters}")
-
-
-def _generate_flow_type_analysis(segment: Dict[str, Any], flow_type: str) -> List[str]:
-    """
-    Generate flow type specific analysis text.
-    
-    Args:
-        segment: Segment data dictionary
-        flow_type: Type of flow ('merge', 'diverge', 'overtake', etc.)
-        
-    Returns:
-        List of analysis text lines
-    """
-    analysis_lines = []
-    
-    if flow_type == "merge":
-        analysis_lines.append(f"🔄 MERGE ANALYSIS:")
-        analysis_lines.append(f"   • {segment['event_a']} runners in merge zone: {segment['overtaking_a']}/{segment['total_a']} ({segment['overtaking_a']/segment['total_a']*100:.1f}%)")
-        analysis_lines.append(f"   • {segment['event_b']} runners in merge zone: {segment['overtaking_b']}/{segment['total_b']} ({segment['overtaking_b']/segment['total_b']*100:.1f}%)")
-    elif flow_type == "diverge":
-        analysis_lines.append(f"↗️ DIVERGE ANALYSIS:")
-        analysis_lines.append(f"   • {segment['event_a']} runners in diverge zone: {segment['overtaking_a']}/{segment['total_a']} ({segment['overtaking_a']/segment['total_a']*100:.1f}%)")
-        analysis_lines.append(f"   • {segment['event_b']} runners in diverge zone: {segment['overtaking_b']}/{segment['total_b']} ({segment['overtaking_b']/segment['total_b']*100:.1f}%)")
-    else:  # overtake (default)
-        analysis_lines.append(f"👥 OVERTAKE ANALYSIS:")
-        analysis_lines.append(f"   • {segment['event_a']} runners overtaking: {segment['overtaking_a']}/{segment['total_a']} ({segment['overtaking_a']/segment['total_a']*100:.1f}%)")
-        analysis_lines.append(f"   • {segment['event_b']} runners overtaking: {segment['overtaking_b']}/{segment['total_b']} ({segment['overtaking_b']/segment['total_b']*100:.1f}%)")
-    
-    # Common analysis for all flow types
-    analysis_lines.append(f"   • Unique Encounters (pairs): {segment.get('unique_encounters', 0)}")
-    analysis_lines.append(f"   • Participants Involved (union): {segment.get('participants_involved', 0)}")
-    
-    return analysis_lines
-
-
 def _detect_temporal_overlap_and_passes(a_times: List[Tuple[str, float, float]], 
                                        b_times: List[Tuple[str, float, float]], 
                                        min_overlap_duration: float) -> Tuple[Dict[str, int], Dict[str, int]]:
@@ -1950,19 +1831,56 @@ def convert_segments_new_to_flow_format(segments_df: pd.DataFrame) -> pd.DataFra
     for _, segment in segments_df.iterrows():
         seg_id = segment['seg_id']
         
-        # Get events that are present using utility function
-        events = _get_segment_events(segment)
+        # Get events that are present (y)
+        events = []
+        if segment.get('full') == 'y':
+            events.append('Full')
+        if segment.get('half') == 'y':
+            events.append('Half')
+        if segment.get('10K') == 'y':
+            events.append('10K')
         
         # Generate all possible event pairs
         for i, event_a in enumerate(events):
             for event_b in events[i+1:]:
-                # Create converted segment using utility function
-                converted_segment = _create_converted_segment(segment, event_a, event_b)
-                # Add additional fields not handled by utility function
-                converted_segment.update({
+                # Get distance ranges for each event
+                if event_a == "Full":
+                    from_km_a = segment.get("full_from_km", 0)
+                    to_km_a = segment.get("full_to_km", 0)
+                elif event_a == "Half":
+                    from_km_a = segment.get("half_from_km", 0)
+                    to_km_a = segment.get("half_to_km", 0)
+                elif event_a == "10K":
+                    from_km_a = segment.get("10K_from_km", 0)
+                    to_km_a = segment.get("10K_to_km", 0)
+                
+                if event_b == "Full":
+                    from_km_b = segment.get("full_from_km", 0)
+                    to_km_b = segment.get("full_to_km", 0)
+                elif event_b == "Half":
+                    from_km_b = segment.get("half_from_km", 0)
+                    to_km_b = segment.get("half_to_km", 0)
+                elif event_b == "10K":
+                    from_km_b = segment.get("10K_from_km", 0)
+                    to_km_b = segment.get("10K_to_km", 0)
+                
+                # Create converted segment
+                converted_segment = {
+                    "seg_id": seg_id,
+                    "segment_label": segment.get("seg_label", ""),
+                    "eventa": event_a,
+                    "eventb": event_b,
+                    "from_km_a": from_km_a,
+                    "to_km_a": to_km_a,
+                    "from_km_b": from_km_b,
+                    "to_km_b": to_km_b,
+                    "direction": segment.get("direction", ""),
+                    "width_m": segment.get("width_m", 0),
+                    "overtake_flag": segment.get("overtake_flag", ""),
+                    "flow_type": segment.get("flow_type", "none"),
                     "prior_segment_id": segment.get("prior_segment_id", ""),
                     "notes": segment.get("notes", "")
-                })
+                }
                 converted_segments.append(converted_segment)
     
     return pd.DataFrame(converted_segments)
@@ -2475,9 +2393,25 @@ def generate_temporal_flow_narrative(results: Dict[str, Any]) -> str:
             event_b = segment.get('event_b', 'B')
             narrative.append(f"🎯 Convergence Point: fraction={s_cp:.2f} (A), km={cp_km:.1f} ({event_a}), {cp_km_b:.1f} ({event_b})")
             
-            # Flow type specific reporting using utility function
-            flow_analysis = _generate_flow_type_analysis(segment, flow_type)
-            narrative.extend(flow_analysis)
+            # Flow type specific reporting
+            if flow_type == "merge":
+                narrative.append(f"🔄 MERGE ANALYSIS:")
+                narrative.append(f"   • {segment['event_a']} runners in merge zone: {segment['overtaking_a']}/{segment['total_a']} ({segment['overtaking_a']/segment['total_a']*100:.1f}%)")
+                narrative.append(f"   • {segment['event_b']} runners in merge zone: {segment['overtaking_b']}/{segment['total_b']} ({segment['overtaking_b']/segment['total_b']*100:.1f}%)")
+                narrative.append(f"   • Unique Encounters (pairs): {segment.get('unique_encounters', 0)}")
+                narrative.append(f"   • Participants Involved (union): {segment.get('participants_involved', 0)}")
+            elif flow_type == "diverge":
+                narrative.append(f"↗️ DIVERGE ANALYSIS:")
+                narrative.append(f"   • {segment['event_a']} runners in diverge zone: {segment['overtaking_a']}/{segment['total_a']} ({segment['overtaking_a']/segment['total_a']*100:.1f}%)")
+                narrative.append(f"   • {segment['event_b']} runners in diverge zone: {segment['overtaking_b']}/{segment['total_b']} ({segment['overtaking_b']/segment['total_b']*100:.1f}%)")
+                narrative.append(f"   • Unique Encounters (pairs): {segment.get('unique_encounters', 0)}")
+                narrative.append(f"   • Participants Involved (union): {segment.get('participants_involved', 0)}")
+            else:  # overtake (default)
+                narrative.append(f"👥 OVERTAKE ANALYSIS:")
+                narrative.append(f"   • {segment['event_a']} runners overtaking: {segment['overtaking_a']}/{segment['total_a']} ({segment['overtaking_a']/segment['total_a']*100:.1f}%)")
+                narrative.append(f"   • {segment['event_b']} runners overtaking: {segment['overtaking_b']}/{segment['total_b']} ({segment['overtaking_b']/segment['total_b']*100:.1f}%)")
+                narrative.append(f"   • Unique Encounters (pairs): {segment.get('unique_encounters', 0)}")
+                narrative.append(f"   • Participants Involved (union): {segment.get('participants_involved', 0)}")
             
             narrative.append(f"🏃‍♂️ Sample {segment['event_a']}: {format_bib_range(segment['sample_a'])}")
             narrative.append(f"🏃‍♂️ Sample {segment['event_b']}: {format_bib_range(segment['sample_b'])}")

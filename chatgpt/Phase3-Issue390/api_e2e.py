@@ -30,18 +30,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _detect_environment() -> Tuple[bool, str]:
-    """
-    Detect the current environment (Cloud Run vs Local).
-    
-    Returns:
-        Tuple of (is_cloud: bool, environment_name: str)
-    """
-    is_cloud = bool(os.getenv('K_SERVICE') or os.getenv('GOOGLE_CLOUD_PROJECT'))
-    environment = "Cloud Run" if is_cloud else "Local"
-    return is_cloud, environment
-
-
 @router.post("/api/e2e/run")
 async def run_e2e():
     """
@@ -63,8 +51,9 @@ async def run_e2e():
     try:
         logger.info("=== Starting E2E report generation ===")
         
-        # Detect environment using utility function
-        is_cloud, environment = _detect_environment()
+        # Detect environment
+        is_cloud = bool(os.getenv('K_SERVICE') or os.getenv('GOOGLE_CLOUD_PROJECT'))
+        environment = "Cloud Run" if is_cloud else "Local"
         
         logger.info(f"Environment: {environment}")
         
@@ -191,8 +180,7 @@ async def upload_e2e_results():
     """
     try:
         # Check if we're in Cloud Run
-        # Detect environment using utility function
-        is_cloud, environment = _detect_environment()
+        is_cloud = bool(os.getenv('K_SERVICE') or os.getenv('GOOGLE_CLOUD_PROJECT'))
         if not is_cloud:
             return JSONResponse(content={
                 "status": "skipped",
@@ -306,8 +294,8 @@ async def get_e2e_status():
         Current state of reports and artifacts (local and GCS)
     """
     try:
-        # Detect environment using utility function
-        is_cloud, environment = _detect_environment()
+        is_cloud = bool(os.getenv('K_SERVICE') or os.getenv('GOOGLE_CLOUD_PROJECT'))
+        environment = "Cloud Run" if is_cloud else "Local"
         
         reports_dir = Path("reports")
         artifacts_dir = Path("artifacts")

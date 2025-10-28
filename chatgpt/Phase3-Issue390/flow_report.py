@@ -45,20 +45,6 @@ def get_app_version():
 APP_VERSION = get_app_version()
 
 
-def _get_environment_info() -> str:
-    """
-    Get environment information for report generation.
-    
-    Returns:
-        String describing the current environment
-    """
-    import os
-    if os.environ.get('TEST_CLOUD_RUN', 'false').lower() == 'true':
-        return "**Environment:** https://run-density-ln4r3sfkha-uc.a.run.app (Cloud Run Production)"
-    else:
-        return "**Environment:** http://localhost:8080 (Local Development)"
-
-
 def generate_temporal_flow_report(
     pace_csv: str,
     segments_csv: str,
@@ -167,8 +153,12 @@ def generate_markdown_report(
     content.append(f"**Version:** {version}")
     content.append("")
     
-    # Add environment information using utility function
-    content.append(_get_environment_info())
+    # Add environment information
+    import os
+    if os.environ.get('TEST_CLOUD_RUN', 'false').lower() == 'true':
+        content.append("**Environment:** https://run-density-ln4r3sfkha-uc.a.run.app (Cloud Run Production)")
+    else:
+        content.append("**Environment:** http://localhost:8080 (Local Development)")
     content.append("")
     
     content.append(f"**Analysis Period:** {results.get('timestamp', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))}")
