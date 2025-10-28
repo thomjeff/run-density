@@ -15,7 +15,7 @@ import logging
 from pathlib import Path
 import json
 
-from app.storage import create_storage_from_env
+from app.storage_service import get_storage_service
 from app.storage_service import StorageService
 
 # Configure logging
@@ -24,8 +24,7 @@ logger = logging.getLogger(__name__)
 # Create router
 router = APIRouter()
 
-# Initialize storage
-storage = create_storage_from_env()
+# Initialize storage service
 storage_service = StorageService()
 
 
