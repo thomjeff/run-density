@@ -1,0 +1,19 @@
+# Development Dependencies for Issue #390 - Phase 4 Complexity Standards
+
+# Core linting and complexity analysis
+flake8>=6.1.0
+flake8-comprehensions>=3.14.0
+flake8-bugbear>=23.9.16
+radon>=6.0.1
+
+# Pre-commit hooks
+pre-commit>=3.5.0
+
+# Additional code quality tools
+mypy>=1.7.0
+black>=23.11.0
+isort>=5.12.0
+
+# Testing and validation
+pytest>=7.4.0
+pytest-cov>=4.1.0
