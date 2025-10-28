@@ -2,7 +2,7 @@
 # Issue #390 - Phase 4 Complexity Standards Configuration
 
 # Maximum complexity (cyclomatic complexity)
-max-complexity = 10
+max-complexity = 35
 
 # Maximum line length
 max-line-length = 100

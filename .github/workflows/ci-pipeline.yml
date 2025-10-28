@@ -39,7 +39,7 @@ jobs:
           echo "Running Flake8..."
           flake8 app/ core/
           echo "Running Radon (Cyclomatic Complexity)..."
-          radon cc app/ core/ -nc -a
+          radon cc app/ core/ -nc -a --min C
           echo "Running Custom Function Length Check..."
           python scripts/check_function_length.py
           echo "Running Custom Nesting Depth Check..."
