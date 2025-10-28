@@ -32,6 +32,25 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# Import pattern validation and logging
+def _validate_import_patterns():
+    """Validate that all imports are properly resolved at module level."""
+    try:
+        # Test critical imports
+        from .storage_service import get_storage_service
+        from .density import analyze_density_segments, DensityConfig
+        from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, BIN_SCHEMA_VERSION
+        from .report_utils import get_report_paths
+        from .density_template_engine import DensityTemplateEngine, create_template_context
+        logger.info("✅ All critical imports resolved successfully at module level")
+        return True
+    except ImportError as e:
+        logger.error(f"❌ Critical import failed: {e}")
+        return False
+
+# Validate imports on module load
+_validate_import_patterns()
+
 @dataclass
 class AnalysisContext:
     """Structured context for bin dataset generation per ChatGPT specification."""
