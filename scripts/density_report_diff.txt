@@ -1,0 +1,21 @@
+--- /var/folders/2j/58sb97550hb1tglbsyfm3h2m0000gn/T/tmp0g3pvs08/baseline.md+++ /var/folders/2j/58sb97550hb1tglbsyfm3h2m0000gn/T/tmp0g3pvs08/different.md@@ -1,8 +1,8 @@ # Density Analysis Report
+ 
+ ## Executive Summary
+-- Peak Density: 0.755 p/m²
+-- Peak Rate: 11.31 p/s
++- Peak Density: 0.756 p/m²
++- Peak Rate: 11.32 p/s
+ - Segments with Flags: 17 / 28
+ - Flagged Bins: 1,875
+ - Total Participants: 1,898
+@@ -18,9 +18,9 @@ - Total Segments Analyzed: 28
+ 
+ ### Segment A1: Start to Queen/Regent
+-- Peak Density: 0.755 p/m²
++- Peak Density: 0.756 p/m²
+ - Level of Service: D
+-- Peak Rate: 11.31 p/s
++- Peak Rate: 11.32 p/s
+ - Flagged: Yes
+ 
+ ### Segment A2: Queen/Regent to WSB mid-point

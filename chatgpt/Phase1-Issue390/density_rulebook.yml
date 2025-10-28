@@ -1,0 +1,116 @@
+# Density_Rulebook_v2.2.yml
+# Version: 2.2
+# Purpose: YAML-only operational rulebook for Fredericton Marathon.
+# Notes:
+# - All density values are in runners/m² (areal density).
+# - All flow values are in runners/min/m (throughput per meter of width).
+# - Version 2.2: Unified flagging policy (merged from reporting.yml)
+
+meta:
+  version: 2.2
+  units:
+    density: "runners/m²"
+    flow: "runners/min/m"
+  notes:
+    - "LOS classification uses inclusive upper bounds (<=)."
+    - "Utilization percentile computed per time window, course-wide."
+    - "Severity rules combine density + utilization + rate triggers."
+
+globals:
+  # Canonical LOS bands (p/m²). Inclusive upper bounds (<=).
+  los_thresholds:
+    A: { min: 0.0, max: 0.36, label: "Free flow" }
+    B: { min: 0.36, max: 0.54, label: "Comfortable" }
+    C: { min: 0.54, max: 0.72, label: "Moderate" }
+    D: { min: 0.72, max: 1.08, label: "Dense" }
+    E: { min: 1.08, max: 1.63, label: "Very dense" }
+    F: { min: 1.63, max: 999.0, label: "Extremely dense" }
+  
+  # Operational policy (tuned to ~10% flagging rate, matching operational baseline)
+  policy:
+    density_watch_at: "C"           # Start flagging at LOS C (0.54 p/m²)
+    density_critical_at: "E"        # Critical threshold at LOS E (1.08 p/m²)
+    utilization_pctile: 90          # Top 10% utilization → watch trigger (was 95 = 5%)
+    utilization_cohort: "window"    # Percentile cohort: "window" | "window_schema" | "window_segment"
+    
+    # Severity rules (descending precedence)
+    # Combined logic: density + utilization + rate
+    # CRITICAL: (LOS ≥ C AND util ≥ P90) OR rate critical
+    # CAUTION:  LOS ≥ C ONLY OR (LOS ≥ C AND rate watch)
+    # WATCH:    util ≥ P90 ONLY OR rate watch ONLY
+    # NONE:     else
+
+schemas:
+  start_corral:
+    # Start-corral specific LOS thresholds (more tolerant than Fruin)
+    los_thresholds:
+      A: { min: 0.0, max: 0.5, label: "Free flow" }
+      B: { min: 0.5, max: 0.8, label: "Comfortable" }
+      C: { min: 0.8, max: 1.2, label: "Moderate" }
+      D: { min: 1.2, max: 1.6, label: "Dense" }
+      E: { min: 1.6, max: 2.0, label: "Very dense" }
+      F: { min: 2.0, max: 999.0, label: "Extremely dense" }
+    flow_ref:
+      warn: 500      # runners/min/m
+      critical: 600  # runners/min/m
+    drivers:
+      - "Start corral release; managed pulses and lane discipline."
+    mitigations:
+      - "Hold next wave 30–60s when crowding or high throughput persists."
+      - "Shorten pulse or narrow gate temporarily to reduce instantaneous release."
+    ops_box:
+      access: ["Maintain clear emergency lane as planned (effective width reflects this)."]
+      medical: ["SJA roving team staged within 400 m during start window."]
+      traffic: ["Marshal at funnel entry to maintain cadence and signage compliance."]
+
+  on_course_open:
+    drivers:
+      - "Unidirectional running flow."
+    mitigations:
+      - "Monitor; deploy roving marshal if persistent E/F."
+
+  on_course_narrow:
+    flow_ref:
+      warn: 300      # runners/min/m
+      critical: 400  # runners/min/m
+    drivers:
+      - "Narrow segment with potential bottlenecks."
+    mitigations:
+      - "Monitor flow rates; consider temporary widening if feasible."
+      - "Deploy additional marshals at critical points."
+
+binding:
+  # Prefer explicit segment_id if available; otherwise rely on segment_type
+  - when: { segment_id: "A1" }
+    use_schema: start_corral
+    flow_enabled: true
+  - when: { segment_type: [funnel, merge, bridge, finish] }
+    use_schema: on_course_narrow
+    flow_enabled: true
+  - when: { segment_type: [road, trail, turn] }
+    use_schema: on_course_open
+
+triggers:
+  # Start corral — flow-driven
+  - when: { schema: start_corral, flow_gte: "critical" }
+    actions:
+      - "Insert extra 15–30s between pulses"
+      - "Reduce wave size by 10–20% temporarily"
+
+  # On-course narrow — density-driven
+  - when: { schema: on_course_narrow, density_gte: "E" }
+    actions:
+      - "Deploy additional marshals"
+      - "Consider temporary lane adjustments"
+
+  # On-course narrow — flow-driven
+  - when: { schema: on_course_narrow, flow_gte: "critical" }
+    actions:
+      - "Create short hold at upstream feeder"
+      - "Establish overtake lane if feasible"
+
+overrides:
+  - match: { segment_id: "A1" }
+    notes: ["Start corral requires special flow management"]
+  - match: { segment_id: "F1" }
+    notes: ["Merge point - monitor flow convergence"]
