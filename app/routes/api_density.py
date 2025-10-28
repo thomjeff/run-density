@@ -178,17 +178,20 @@ async def get_density_segments():
                     "events": props.get("events", [])
                 }
         
-        # Load flags
+        # Load flags using storage_service (consistent with other data loading)
         flagged_seg_ids = set()
-        if storage.exists("flags.json"):
-            try:
-                flags = storage.read_json("flags.json")
+        try:
+            flags = storage_service.load_ui_artifact("flags.json")
+            if flags:
                 if isinstance(flags, list):
                     flagged_seg_ids = {f.get("seg_id") for f in flags if f.get("seg_id")}
                 elif isinstance(flags, dict):
                     flagged_seg_ids = {f.get("seg_id") for f in flags.get("flagged_segments", []) if f.get("seg_id")}
-            except Exception as e:
-                logger.warning(f"Could not read flags: {e}")
+                logger.info(f"Loaded {len(flagged_seg_ids)} flagged segments from flags.json")
+            else:
+                logger.warning("flags.json not found in storage service")
+        except Exception as e:
+            logger.warning(f"Could not load flags: {e}")
         
         # Load density metrics from bins.parquet
         density_metrics = load_density_metrics_from_bins()
