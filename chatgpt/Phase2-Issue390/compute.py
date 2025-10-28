@@ -60,43 +60,21 @@ def get_event_intervals(event: str, density_cfg: Dict[str, Any]) -> Optional[Tup
     return None
 
 
-def _get_los_thresholds(rulebook: Dict[str, Any], schema_name: str) -> Dict[str, Dict[str, float]]:
-    """
-    Extract LOS thresholds from rulebook configuration.
-    
-    Args:
-        rulebook: Rulebook configuration dictionary
-        schema_name: Schema name to use for threshold lookup
-        
-    Returns:
-        Dictionary mapping LOS letters to min/max threshold ranges
-        
-    Raises:
-        ValueError: If no valid thresholds found
-    """
-    if "schemas" not in rulebook:
-        # Legacy v1.x rulebook structure - not supported for LOS classification
-        raise ValueError("Legacy v1.x rulebook structure not supported for LOS classification")
-    
-    # v2.0 rulebook - use schema-specific or global LOS thresholds
-    schemas = rulebook.get("schemas", {})
-    schema_config = schemas.get(schema_name, {})
-    los_thresholds = schema_config.get("los_thresholds", 
-                                     rulebook.get("globals", {}).get("los_thresholds", {}))
-    
-    if not los_thresholds:
-        raise ValueError(f"No LOS thresholds found for schema '{schema_name}'")
-    
-    return los_thresholds
-
-
 def classify_density(value, rulebook, schema_name="on_course_open"):
     """
     Returns LOS letter (A-F) based on density value and schema.
     Uses the rulebook thresholds verbatim (units must match computed metric).
     """
-    try:
-        los_thresholds = _get_los_thresholds(rulebook, schema_name)
+    # Handle v2.0 rulebook structure
+    if "schemas" in rulebook:
+        # v2.0 rulebook - use schema-specific or global LOS thresholds
+        schemas = rulebook.get("schemas", {})
+        schema_config = schemas.get(schema_name, {})
+        los_thresholds = schema_config.get("los_thresholds", 
+                                         rulebook.get("globals", {}).get("los_thresholds", {}))
+        
+        if not los_thresholds:
+            return "F"  # Default to worst case
         
         # Map density to LOS letter
         for letter in ["A", "B", "C", "D", "E", "F"]:
@@ -105,14 +83,20 @@ def classify_density(value, rulebook, schema_name="on_course_open"):
             mx = rng.get("max", float("inf"))
             if value >= mn and value < mx:
                 return letter
-        return "F"  # Default to worst case if no range matches
-        
-    except ValueError as e:
-        logger.warning(f"LOS classification failed: {e}, defaulting to 'F'")
         return "F"
-    except Exception as e:
-        logger.error(f"Unexpected error in LOS classification: {e}")
-        return "F"
+    else:
+        # Legacy v1.x rulebook structure
+        th = rulebook["templates"]["thresholds"]
+        high = float(th.get("high_density", 0.5))
+        med  = float(th.get("medium_density", 0.2))
+        low  = float(th.get("low_density", 0.1))
+        if value >= high:
+            return "high_density"
+        if value >= med:
+            return "medium_density"
+        if value >= low:
+            return "low_density"
+        return None
 
 
 def build_segment_context(seg, metrics, rulebook):

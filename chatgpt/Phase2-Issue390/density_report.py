@@ -1042,17 +1042,13 @@ def generate_density_report(
                             date=None  # Use current date
                         )
                         print(f"☁️ Density report uploaded to GCS: {gcs_path}")
-                    except (OSError, IOError) as e:
-                        logger.error(f"Failed to upload density.md to GCS - file system error: {e}")
-                    except (ValueError, TypeError) as e:
-                        logger.error(f"Failed to upload density.md to GCS - invalid parameters: {e}")
                     except Exception as e:
-                        logger.error(f"Failed to upload density.md to GCS - unexpected error: {e}")
-                        logger.debug(f"GCS upload error details: {type(e).__name__}: {e}", exc_info=True)
+                        print(f"⚠️ Failed to upload density.md to GCS: {e}")
             
             # Generate tooltips.json if operational intelligence was added
             if '_operational_intelligence' in results:
                 try:
+                    
                     oi_data = results['_operational_intelligence']
                     bins_flagged = oi_data['bins_flagged']
                     flagged = get_flagged_bins(bins_flagged)
@@ -1062,54 +1058,39 @@ def generate_density_report(
                         tooltips_path = os.path.join(daily_folder_path, "tooltips.json") if 'daily_folder_path' in locals() else os.path.join(output_dir, "tooltips.json")
                         if generate_tooltips_json(flagged, oi_data['config'], tooltips_path):
                             print(f"🗺️ Tooltips JSON saved to: {tooltips_path}")
-                except (KeyError, TypeError) as e:
-                    logger.error(f"Invalid operational intelligence data structure: {e}")
-                except (OSError, IOError) as e:
-                    logger.error(f"Failed to write tooltips.json to {tooltips_path}: {e}")
                 except Exception as e:
-                    logger.error(f"Unexpected error generating tooltips.json: {e}")
-                    logger.debug(f"Tooltips generation error details: {type(e).__name__}: {e}", exc_info=True)
+                    logger.warning(f"Could not generate tooltips.json: {e}")
             
             # Generate heatmaps automatically after density report (Issue #365 completion)
             try:
+                
                 # Extract run_id from daily_folder_path (e.g., "reports/2025-10-27" -> "2025-10-27")
-                if 'daily_folder_path' not in locals():
-                    logger.warning("daily_folder_path not available for heatmap generation")
-                    return
+                if 'daily_folder_path' in locals():
+                    run_id = os.path.basename(daily_folder_path)
+                    print(f"🔥 Generating heatmaps for run_id: {run_id}")
                     
-                run_id = os.path.basename(daily_folder_path)
-                print(f"🔥 Generating heatmaps for run_id: {run_id}")
-                
-                # Generate heatmaps locally
-                heatmaps_generated, segments = generate_heatmaps_for_run(run_id)
-                print(f"🔥 Generated {heatmaps_generated} heatmaps for {run_id}")
-                
-                # Upload to GCS if enabled
-                gcs_upload_enabled = os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}
-                if gcs_upload_enabled:
-                    try:
-                        heatmaps_dir = Path("artifacts") / run_id / "ui" / "heatmaps"
-                        if not heatmaps_dir.exists():
-                            logger.warning(f"Heatmaps directory not found: {heatmaps_dir}")
-                            return
+                    # Generate heatmaps locally
+                    heatmaps_generated, segments = generate_heatmaps_for_run(run_id)
+                    print(f"🔥 Generated {heatmaps_generated} heatmaps for {run_id}")
+                    
+                    # Upload to GCS if enabled
+                    gcs_upload_enabled = os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}
+                    if gcs_upload_enabled:
+                        try:
                             
-                        png_files = list(heatmaps_dir.glob("*.png"))
-                        uploaded_count = 0
-                        for png_file in png_files:
-                            gcs_dest = f"artifacts/{run_id}/ui/heatmaps/{png_file.name}"
-                            if upload_binary_to_gcs(png_file, gcs_dest):
-                                uploaded_count += 1
-                        print(f"☁️ Uploaded {uploaded_count} heatmaps to GCS for {run_id}")
-                    except (OSError, IOError) as e:
-                        logger.error(f"Failed to access heatmaps directory {heatmaps_dir}: {e}")
-                    except Exception as e:
-                        logger.error(f"Failed to upload heatmaps to GCS: {e}")
-                        logger.debug(f"Heatmap upload error details: {type(e).__name__}: {e}", exc_info=True)
-            except (KeyError, ValueError) as e:
-                logger.error(f"Invalid run_id or heatmap generation parameters: {e}")
+                            heatmaps_dir = Path("artifacts") / run_id / "ui" / "heatmaps"
+                            if heatmaps_dir.exists():
+                                png_files = list(heatmaps_dir.glob("*.png"))
+                                uploaded_count = 0
+                                for png_file in png_files:
+                                    gcs_dest = f"artifacts/{run_id}/ui/heatmaps/{png_file.name}"
+                                    if upload_binary_to_gcs(png_file, gcs_dest):
+                                        uploaded_count += 1
+                                print(f"☁️ Uploaded {uploaded_count} heatmaps to GCS for {run_id}")
+                        except Exception as e:
+                            print(f"⚠️ Failed to upload heatmaps to GCS: {e}")
             except Exception as e:
-                logger.error(f"Unexpected error generating heatmaps: {e}")
-                logger.debug(f"Heatmap generation error details: {type(e).__name__}: {e}", exc_info=True)
+                logger.warning(f"Could not generate heatmaps: {e}")
         except Exception as e:
             logger.warning(f"Could not regenerate report with operational intelligence: {e}")
     

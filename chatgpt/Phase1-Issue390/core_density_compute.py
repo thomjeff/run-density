@@ -28,75 +28,21 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def get_event_intervals(event: str, density_cfg: Dict[str, Any]) -> Optional[Tuple[float, float]]:
-    """
-    Retrieves the (from_km, to_km) interval for a given event from the density configuration.
-    
-    Args:
-        event: Event type ("Full", "Half", "10K")
-        density_cfg: Density configuration dictionary containing event-specific parameters
-        
-    Returns:
-        Tuple of (from_km, to_km) if event configuration exists, None otherwise
-        
-    Supported event types:
-        - "Full": Uses full_from_km and full_to_km
-        - "Half": Uses half_from_km and half_to_km  
-        - "10K": Uses tenk_from_km and tenk_to_km
-    """
-    if event == "Full" and density_cfg.get("full_from_km") is not None:
-        return (density_cfg["full_from_km"], density_cfg["full_to_km"])
-    elif event == "Half" and density_cfg.get("half_from_km") is not None:
-        return (density_cfg["half_from_km"], density_cfg["half_to_km"])
-    elif event == "10K" and density_cfg.get("tenk_from_km") is not None:
-        return (density_cfg["tenk_from_km"], density_cfg["tenk_to_km"])
-    
-    # Log warning for unrecognized events or missing configuration
-    if event not in ["Full", "Half", "10K"]:
-        logger.warning(f"Unrecognized event type: {event}")
-    elif density_cfg.get(f"{event.lower()}_from_km" if event == "10K" else f"{event.lower()}_from_km") is None:
-        logger.debug(f"No interval configuration found for event: {event}")
-    
-    return None
-
-
-def _get_los_thresholds(rulebook: Dict[str, Any], schema_name: str) -> Dict[str, Dict[str, float]]:
-    """
-    Extract LOS thresholds from rulebook configuration.
-    
-    Args:
-        rulebook: Rulebook configuration dictionary
-        schema_name: Schema name to use for threshold lookup
-        
-    Returns:
-        Dictionary mapping LOS letters to min/max threshold ranges
-        
-    Raises:
-        ValueError: If no valid thresholds found
-    """
-    if "schemas" not in rulebook:
-        # Legacy v1.x rulebook structure - not supported for LOS classification
-        raise ValueError("Legacy v1.x rulebook structure not supported for LOS classification")
-    
-    # v2.0 rulebook - use schema-specific or global LOS thresholds
-    schemas = rulebook.get("schemas", {})
-    schema_config = schemas.get(schema_name, {})
-    los_thresholds = schema_config.get("los_thresholds", 
-                                     rulebook.get("globals", {}).get("los_thresholds", {}))
-    
-    if not los_thresholds:
-        raise ValueError(f"No LOS thresholds found for schema '{schema_name}'")
-    
-    return los_thresholds
-
-
 def classify_density(value, rulebook, schema_name="on_course_open"):
     """
     Returns LOS letter (A-F) based on density value and schema.
     Uses the rulebook thresholds verbatim (units must match computed metric).
     """
-    try:
-        los_thresholds = _get_los_thresholds(rulebook, schema_name)
+    # Handle v2.0 rulebook structure
+    if "schemas" in rulebook:
+        # v2.0 rulebook - use schema-specific or global LOS thresholds
+        schemas = rulebook.get("schemas", {})
+        schema_config = schemas.get(schema_name, {})
+        los_thresholds = schema_config.get("los_thresholds", 
+                                         rulebook.get("globals", {}).get("los_thresholds", {}))
+        
+        if not los_thresholds:
+            return "F"  # Default to worst case
         
         # Map density to LOS letter
         for letter in ["A", "B", "C", "D", "E", "F"]:
@@ -105,14 +51,20 @@ def classify_density(value, rulebook, schema_name="on_course_open"):
             mx = rng.get("max", float("inf"))
             if value >= mn and value < mx:
                 return letter
-        return "F"  # Default to worst case if no range matches
-        
-    except ValueError as e:
-        logger.warning(f"LOS classification failed: {e}, defaulting to 'F'")
         return "F"
-    except Exception as e:
-        logger.error(f"Unexpected error in LOS classification: {e}")
-        return "F"
+    else:
+        # Legacy v1.x rulebook structure
+        th = rulebook["templates"]["thresholds"]
+        high = float(th.get("high_density", 0.5))
+        med  = float(th.get("medium_density", 0.2))
+        low  = float(th.get("low_density", 0.1))
+        if value >= high:
+            return "high_density"
+        if value >= med:
+            return "medium_density"
+        if value >= low:
+            return "low_density"
+        return None
 
 
 def build_segment_context(seg, metrics, rulebook):
@@ -416,9 +368,12 @@ class DensityAnalyzer:
         intervals = []
         if density_cfg:
             for event in segment.events:
-                interval = get_event_intervals(event, density_cfg)
-                if interval:
-                    intervals.append(interval)
+                if event == "Full" and density_cfg.get("full_from_km") is not None:
+                    intervals.append((density_cfg["full_from_km"], density_cfg["full_to_km"]))
+                elif event == "Half" and density_cfg.get("half_from_km") is not None:
+                    intervals.append((density_cfg["half_from_km"], density_cfg["half_to_km"]))
+                elif event == "10K" and density_cfg.get("tenk_from_km") is not None:
+                    intervals.append((density_cfg["tenk_from_km"], density_cfg["tenk_to_km"]))
         
         if not intervals:
             return 0
@@ -532,9 +487,12 @@ class DensityAnalyzer:
         # Get event-specific intervals for distance binning
         intervals_km = []
         for event in segment.events:
-            interval = get_event_intervals(event, density_cfg)
-            if interval:
-                intervals_km.append(interval)
+            if event == "Full" and density_cfg.get("full_from_km") is not None:
+                intervals_km.append((density_cfg["full_from_km"], density_cfg["full_to_km"]))
+            elif event == "Half" and density_cfg.get("half_from_km") is not None:
+                intervals_km.append((density_cfg["half_from_km"], density_cfg["half_to_km"]))
+            elif event == "10K" and density_cfg.get("tenk_from_km") is not None:
+                intervals_km.append((density_cfg["tenk_from_km"], density_cfg["tenk_to_km"]))
         
         # Create distance bins
         distance_bins = self.make_distance_bins(intervals_km, self.config.step_km)
@@ -888,11 +846,17 @@ class DensityAnalyzer:
             
             # Check each event's specific cumulative distance range
             for event in segment.events:
-                interval = get_event_intervals(event, density_cfg)
-                if not interval:
+                if event == "Full" and density_cfg.get("full_from_km") is not None:
+                    from_km = density_cfg["full_from_km"]
+                    to_km = density_cfg["full_to_km"]
+                elif event == "Half" and density_cfg.get("half_from_km") is not None:
+                    from_km = density_cfg["half_from_km"]
+                    to_km = density_cfg["half_to_km"]
+                elif event == "10K" and density_cfg.get("tenk_from_km") is not None:
+                    from_km = density_cfg["tenk_from_km"]
+                    to_km = density_cfg["tenk_to_km"]
+                else:
                     continue  # Skip events without km ranges
-                
-                from_km, to_km = interval
                 
                 # Filter to this event's runners
                 event_mask = event_ids[started_mask] == event
@@ -948,9 +912,17 @@ class DensityAnalyzer:
             event_ranges = []
             
             for event in segment.events:
-                interval = get_event_intervals(event, density_cfg)
-                if interval:
-                    from_km, to_km = interval
+                if event == "Full" and density_cfg.get("full_from_km") is not None:
+                    from_km = density_cfg["full_from_km"]
+                    to_km = density_cfg["full_to_km"]
+                    event_ranges.append((from_km, to_km, to_km - from_km, event))
+                elif event == "Half" and density_cfg.get("half_from_km") is not None:
+                    from_km = density_cfg["half_from_km"]
+                    to_km = density_cfg["half_to_km"]
+                    event_ranges.append((from_km, to_km, to_km - from_km, event))
+                elif event == "10K" and density_cfg.get("tenk_from_km") is not None:
+                    from_km = density_cfg["tenk_from_km"]
+                    to_km = density_cfg["tenk_to_km"]
                     event_ranges.append((from_km, to_km, to_km - from_km, event))
             
             # Use the longest event's range (not min/max which concatenates)
@@ -1010,11 +982,15 @@ class DensityAnalyzer:
         min_km = float('inf')
         
         for event in segment.events:
-            interval = get_event_intervals(event, density_cfg)
-            if interval:
-                from_km, to_km = interval
-                min_km = min(min_km, from_km)
-                max_km = max(max_km, to_km)
+            if event == "Full" and density_cfg.get("full_from_km") is not None:
+                min_km = min(min_km, density_cfg["full_from_km"])
+                max_km = max(max_km, density_cfg["full_to_km"])
+            elif event == "Half" and density_cfg.get("half_from_km") is not None:
+                min_km = min(min_km, density_cfg["half_from_km"])
+                max_km = max(max_km, density_cfg["half_to_km"])
+            elif event == "10K" and density_cfg.get("tenk_from_km") is not None:
+                min_km = min(min_km, density_cfg["tenk_from_km"])
+                max_km = max(max_km, density_cfg["tenk_to_km"])
         
         if min_km == float('inf'):
             return 0.0, 0.0, {}
@@ -1563,9 +1539,17 @@ def analyze_density_segments(pace_data: pd.DataFrame,
         event_ranges = []
         
         for event in d["events"]:
-            interval = get_event_intervals(event, d)
-            if interval:
-                from_km, to_km = interval
+            if event == "Full" and d.get("full_from_km") is not None:
+                from_km = d["full_from_km"]
+                to_km = d["full_to_km"]
+                event_ranges.append((from_km, to_km, to_km - from_km, event))
+            elif event == "Half" and d.get("half_from_km") is not None:
+                from_km = d["half_from_km"]
+                to_km = d["half_to_km"]
+                event_ranges.append((from_km, to_km, to_km - from_km, event))
+            elif event == "10K" and d.get("tenk_from_km") is not None:
+                from_km = d["tenk_from_km"]
+                to_km = d["tenk_to_km"]
                 event_ranges.append((from_km, to_km, to_km - from_km, event))
         
         # Use the longest event's range

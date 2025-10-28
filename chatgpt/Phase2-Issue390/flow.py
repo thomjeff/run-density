@@ -1125,145 +1125,29 @@ def calculate_overtaking_loads(
     b_times = [(row["runner_id"], *times_at_bounds(row, start_b, boundary_start_b, boundary_end_b))
                for _, row in df_b_pass.iterrows()]
 
-def _detect_temporal_overlap_and_passes(a_times: List[Tuple[str, float, float]], 
-                                       b_times: List[Tuple[str, float, float]], 
-                                       min_overlap_duration: float) -> Tuple[Dict[str, int], Dict[str, int]]:
-    """
-    Detect temporal overlap and directional passes between two sets of runners.
-    
-    Args:
-        a_times: List of (runner_id, start_time, end_time) tuples for event A
-        b_times: List of (runner_id, start_time, end_time) tuples for event B
-        min_overlap_duration: Minimum overlap duration to consider
-        
-    Returns:
-        Tuple of (loads_a, loads_b) dictionaries mapping runner_id to pass count
-    """
+    # --- Detect temporal overlap + directional pass ---
     loads_a, loads_b = {}, {}
-    
     for a_id, as_, ae_ in a_times:
         loads_a.setdefault(a_id, 0)
         for b_id, bs_, be_ in b_times:
             loads_b.setdefault(b_id, 0)
-            
-            # Calculate temporal overlap
             overlap_start = max(as_, bs_)
-            overlap_end = min(ae_, be_)
+            overlap_end   = min(ae_, be_)
             if (overlap_end - overlap_start) < min_overlap_duration:
                 continue
-                
-            # Detect directional passes
             a_passes_b = (as_ > bs_) and (ae_ < be_)
             b_passes_a = (bs_ > as_) and (be_ < ae_)
-            
             if a_passes_b:
                 loads_a[a_id] += 1
             elif b_passes_a:
                 loads_b[b_id] += 1
-    
-    return loads_a, loads_b
 
-
-def calculate_convergence_zone_overlaps_with_binning(
-    df_a: pd.DataFrame,
-    df_b: pd.DataFrame,
-    event_a: str,
-    event_b: str,
-    start_times: Dict[str, float],
-    cp_km: float,
-    from_km_a: float,
-    to_km_a: float,
-    from_km_b: float,
-    to_km_b: float,
-    min_overlap_duration: float = DEFAULT_MIN_OVERLAP_DURATION,
-    conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
-    overlap_duration_minutes: float = 0.0,
-) -> Tuple[int, int, int, int, List[str], List[str], int, int]:
-    """
-    Calculate overtaking with binning for long segments.
-    Uses unified selector for consistent path selection across Main Analysis and Flow Runner.
-    """
-    
-    # Import unified selector modules
-    from app.normalization import normalize
-    from app.selector import choose_path
-    from app.telemetry import pub_decision_log
-    from app.config_algo_consistency import FLAGS
-    
-    # Create segment key for unified selector
-    segment_key = f"{event_a}_vs_{event_b}"  # Will be enhanced with segment ID later
-    
-    if FLAGS.ENABLE_BIN_SELECTOR_UNIFICATION:
-        # Use unified selector logic (normalization hoisted out of inner loops)
-        # Normalize inputs once per segment to prevent threshold drift
-        norm_inputs = normalize(conflict_length_m, "m", overlap_duration_minutes * 60, "s")
-        
-        # Use unified selector to choose calculation path
-        chosen_path = choose_path(segment_key, norm_inputs)
-        
-        # Map unified path to legacy binning flags
-        use_time_bins = overlap_duration_minutes > TEMPORAL_BINNING_THRESHOLD_MINUTES
-        use_distance_bins = chosen_path == "BINNED"
-    else:
-        # Use legacy binning logic
-        use_time_bins = overlap_duration_minutes > TEMPORAL_BINNING_THRESHOLD_MINUTES
-        use_distance_bins = conflict_length_m > SPATIAL_BINNING_THRESHOLD_METERS
-        chosen_path = "BINNED" if (use_time_bins or use_distance_bins) else "ORIGINAL"
-        norm_inputs = None
-    
-    # Debug logging for M1 (sampled to avoid hot-loop overhead)
-    if event_a == "Half" and event_b == "10K" and hash(segment_key) % 100 == 0:  # 1% sampling
-        print(f"🔍 BINNING DECISION DEBUG:")
-        print(f"  Segment key: {segment_key}")
-        if norm_inputs is not None:
-            print(f"  Normalized conflict length: {norm_inputs.conflict_len_m:.3f} m")
-            print(f"  Normalized overlap duration: {norm_inputs.overlap_dur_s:.3f} s")
-        else:
-            print(f"  Raw conflict length: {conflict_length_m:.3f} m")
-            print(f"  Raw overlap duration: {overlap_duration_minutes:.3f} min")
-        print(f"  Chosen path: {chosen_path}")
-        print(f"  Legacy time bins: {use_time_bins}")
-        print(f"  Legacy distance bins: {use_distance_bins}")
-        print(f"  Will use: {chosen_path} calculation")
-    
-    # Calculate results using chosen path
-    if use_time_bins or use_distance_bins:
-        # Log binning decision for transparency
-        logging.info(f"BINNING APPLIED: time_bins={use_time_bins}, distance_bins={use_distance_bins} "
-                    f"(window={overlap_duration_minutes:.1f}min, zone={conflict_length_m:.0f}m)")
-        
-        results = calculate_convergence_zone_overlaps_binned(
-            df_a, df_b, event_a, event_b, start_times,
-            cp_km, from_km_a, to_km_a, from_km_b, to_km_b,
-            min_overlap_duration, conflict_length_m,
-            use_time_bins, use_distance_bins, overlap_duration_minutes
-        )
-    else:
-        # Use original method for short segments
-        logging.debug(f"BINNING NOT APPLIED: time_bins={use_time_bins}, distance_bins={use_distance_bins} "
-                     f"(window={overlap_duration_minutes:.1f}min, zone={conflict_length_m:.0f}m)")
-        
-        results = calculate_convergence_zone_overlaps_original(
-            df_a, df_b, event_a, event_b, start_times,
-            cp_km, from_km_a, to_km_a, from_km_b, to_km_b,
-            min_overlap_duration, conflict_length_m
-        )
-    
-    # Extract results for telemetry
-    overtakes_a, overtakes_b, copresence_a, copresence_b, bibs_a, bibs_b, unique_encounters, participants_involved = results
-    
-    # Add telemetry logging for algorithm consistency verification (sampled)
-    if event_a == "Half" and event_b == "10K" and hash(segment_key) % 100 == 0:  # 1% sampling
-        if norm_inputs is not None:
-            telemetry_log = pub_decision_log(
-                segment_key, chosen_path, norm_inputs.conflict_len_m, norm_inputs.overlap_dur_s,
-                (overtakes_a, overtakes_b), (overtakes_a, overtakes_b)  # Using same for strict/raw for now
-            )
-            print(f"🔍 {telemetry_log}")
-        else:
-            print(f"🔍 LEGACY BINNING: {chosen_path} -> {overtakes_a}/{overtakes_b}")
-    
-    return results
+    vals_a, vals_b = list(loads_a.values()), list(loads_b.values())
+    avg_a = sum(vals_a) / len(vals_a) if vals_a else 0.0
+    avg_b = sum(vals_b) / len(vals_b) if vals_b else 0.0
+    max_a = max(vals_a) if vals_a else 0
+    max_b = max(vals_b) if vals_b else 0
+    return loads_a, loads_b, avg_a, avg_b, max_a, max_b
 
 
 def calculate_convergence_zone_overlaps_original(
