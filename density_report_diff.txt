@@ -1,0 +1,8 @@
+--- reports/2025-10-28/2025-10-28-1538-Density.md+++ reports/2025-10-28/2025-10-28-1659-Density.md@@ -1,7 +1,7 @@ # Fredericton Marathon — Density Report
+ **Schema:** 1.0.0
+ **Method:** segments_from_bins
+-**Date:** 2025-10-28 15:38:26
++**Date:** 2025-10-28 16:59:48
+ **Inputs:** bins.parquet, segments.parquet, segment_windows_from_bins.parquet
+ **App:** v1.6.42
+ 

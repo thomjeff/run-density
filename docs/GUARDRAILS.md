@@ -1,8 +1,8 @@
 
 # Guardrails for AI-Assisted Development
 
-**Version:** 1.1  (replaces /archive/guardrails.md)
-**Last Updated:** 2025-10-27  
+**Version:** 1.2  (replaces /archive/guardrails.md)
+**Last Updated:** 2025-10-28  
 **Applies to:** Cursor, ChatGPT w/ Code Interpreter, GitHub Copilot (read-only), VSCode AI Agents (custom plugins)  
 
 ⚠️ **CRITICAL**: This document contains NON-NEGOTIABLE RULES for AI pair programming assistants. These rules were established through hard-learned lessons and MUST be followed without exception.
@@ -104,6 +104,102 @@ pytest tests/test_*.py
 ### For Cloud Run Validation:
 ```bash
 TEST_CLOUD_RUN=true python e2e.py --cloud
+```
+
+---
+
+## 📏 COMPLEXITY STANDARDS (Issue #390 - Phase 4)
+
+**CRITICAL**: All code MUST comply with these complexity standards to prevent fragile execution patterns.
+
+### ✅ Mandatory Complexity Rules
+
+```
+✅ COMPLEXITY STANDARDS CONFIRMATION:
+1. NESTING DEPTH ≤ 4 – Prevent hard-to-read deep blocks
+2. CYCLOMATIC COMPLEXITY ≤ 10 – Encourage simple, testable functions  
+3. FUNCTION LENGTH ≤ 50 lines – Encourage decomposition
+4. CONDITIONAL CHAINS ≤ 5 if/elif – Flag logic that could be abstracted
+5. SPECIFIC EXCEPTIONS – Avoid masking failures with bare except:
+6. EARLY RETURNS – Use guard clauses to reduce nesting
+7. SINGLE RESPONSIBILITY – One function, one purpose
+8. UTILITY FUNCTIONS – Extract repeated patterns (see Phases 1-3 examples)
+```
+
+### 📊 Complexity Metrics Enforcement
+
+**Tool-Based Enforcement:**
+- **Radon**: Cyclomatic complexity analysis
+- **Flake8**: Code style and complexity checks
+- **Pre-commit hooks**: Local enforcement before commits
+- **CI Gates**: Block merges when complexity exceeds thresholds
+
+**Example Violations and Fixes:**
+
+❌ **VIOLATION - Deep Nesting:**
+```python
+def process_data(data):
+    if data:
+        if data.get('type'):
+            if data['type'] == 'important':
+                if data.get('value'):
+                    if data['value'] > 0:
+                        return data['value'] * 2
+    return 0
+```
+
+✅ **FIXED - Guard Clauses:**
+```python
+def process_data(data):
+    if not data or not data.get('type'):
+        return 0
+    if data['type'] != 'important':
+        return 0
+    if not data.get('value') or data['value'] <= 0:
+        return 0
+    return data['value'] * 2
+```
+
+❌ **VIOLATION - Bare Exception:**
+```python
+try:
+    risky_operation()
+except:
+    pass  # Silent failure
+```
+
+✅ **FIXED - Specific Exception:**
+```python
+try:
+    risky_operation()
+except (ValueError, TypeError) as e:
+    logger.error(f"Operation failed: {e}")
+    raise
+```
+
+### 🔧 Complexity Tools Setup
+
+**Pre-commit Configuration:**
+```yaml
+repos:
+  - repo: https://github.com/pre-commit/mirrors-flake8
+    rev: v6.1.0
+    hooks:
+      - id: flake8
+  - repo: local
+    hooks:
+      - id: radon-check
+        name: Cyclomatic Complexity
+        entry: radon cc . -nc -a
+        language: system
+        types: [python]
+```
+
+**CI Complexity Gates:**
+```bash
+# Block merges when complexity exceeds thresholds
+radon cc . -nc -a
+flake8 .
 ```
 
 ---
