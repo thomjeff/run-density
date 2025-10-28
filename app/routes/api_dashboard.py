@@ -15,7 +15,7 @@ import json
 import logging
 from datetime import datetime
 
-from app.storage import create_storage_from_env, load_meta, load_segment_metrics, load_flags, DATASET
+from app.storage_service import get_storage_service
 from app.storage_service import StorageService
 from app.common.config import load_rulebook, load_reporting
 
@@ -28,8 +28,7 @@ logger = logging.getLogger(__name__)
 # Create router
 router = APIRouter()
 
-# Initialize storage
-storage = create_storage_from_env()
+# Initialize storage service
 storage_service = StorageService()
 
 
@@ -124,11 +123,13 @@ def load_flow_data() -> Dict[str, int]:
         Dict with segments_overtaking and segments_copresence counts
     """
     try:
-        if not storage.exists(DATASET["flow"]):
+        # Use StorageService to load flow data
+        storage = get_storage_service()
+        flow_data = storage.load_ui_artifact("flow.json")
+        
+        if not flow_data:
             logger.warning("flow.json not found in storage")
             return {"segments_overtaking": 0, "segments_copresence": 0}
-        
-        flow_data = storage.read_json(DATASET["flow"])
         
         # Count segments with overtaking and co-presence
         segments_overtaking = 0

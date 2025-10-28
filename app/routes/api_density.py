@@ -16,7 +16,6 @@ import pandas as pd
 from pathlib import Path
 import json
 
-from app.storage import create_storage_from_env
 from app.storage_service import get_storage_service
 from app.storage_service import StorageService
 
@@ -26,8 +25,7 @@ logger = logging.getLogger(__name__)
 # Create router
 router = APIRouter()
 
-# Initialize storage
-storage = create_storage_from_env()
+# Initialize storage service
 storage_service = StorageService()
 
 
@@ -327,9 +325,8 @@ async def get_density_segment_detail(seg_id: str):
         caption = None
         
         try:
-            from app.storage import create_storage_from_env
-            # Use environment-aware storage for heatmap URL generation
-            storage = create_storage_from_env()
+            # Use StorageService for heatmap URL generation
+            storage = get_storage_service()
             logger.info(f"Storage mode: {storage.mode}, bucket: {storage.bucket}")
             heatmap_url = storage.get_heatmap_signed_url(seg_id)
             logger.info(f"Heatmap URL for {seg_id}: {heatmap_url}")

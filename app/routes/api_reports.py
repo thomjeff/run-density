@@ -14,7 +14,6 @@ from typing import List, Dict, Any
 from pathlib import Path
 import logging
 
-from app.storage import create_storage_from_env
 from app.storage_service import get_storage_service
 
 # Configure logging
@@ -22,9 +21,6 @@ logger = logging.getLogger(__name__)
 
 # Create router
 router = APIRouter()
-
-# Initialize storage
-storage = create_storage_from_env()
 
 
 @router.get("/api/reports/list")

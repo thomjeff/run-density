@@ -8,7 +8,7 @@ Architecture:
 - Input: bin.parquet (canonical SSOT from density.py)
 - Output: heatmaps/*.png + captions.json
 - Colors: density_rulebook.yml LOS palette
-- Storage: app/storage.py abstraction
+- Storage: app/storage_service.py abstraction
 
 Author: Cursor AI Assistant (per Senior Architect guidance)
 Epic: RF-FE-002 | Issue: #280
@@ -28,7 +28,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.common.config import load_rulebook, load_reporting
-from app.storage import Storage
+from app.storage_service import get_storage_service
 
 
 def create_los_colormap(los_colors: Dict[str, str]) -> mcolors.LinearSegmentedColormap:
@@ -352,7 +352,7 @@ def load_segments_metadata() -> Dict[str, Dict[str, Any]]:
 def export_heatmaps_and_captions(
     run_id: str, 
     reports_dir: Path, 
-    storage: Storage
+    storage
 ) -> Tuple[int, int]:
     """
     Generate heatmaps and captions for all segments.
@@ -470,8 +470,8 @@ def main():
         print(f"Error: Reports directory not found: {reports_dir}")
         sys.exit(1)
     
-    # Create storage abstraction
-    storage = Storage(mode="local")
+    # Create storage abstraction using modern StorageService
+    storage = get_storage_service()
     
     # Generate heatmaps and captions
     heatmaps_generated, captions_generated = export_heatmaps_and_captions(
