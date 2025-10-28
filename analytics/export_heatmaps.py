@@ -352,7 +352,7 @@ def load_segments_metadata() -> Dict[str, Dict[str, Any]]:
 def export_heatmaps_and_captions(
     run_id: str, 
     reports_dir: Path, 
-    storage: Storage
+    storage
 ) -> Tuple[int, int]:
     """
     Generate heatmaps and captions for all segments.
