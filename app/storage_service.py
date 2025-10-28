@@ -574,6 +574,71 @@ class StorageService:
             logger.warning(f"Could not list files in {directory}: {e}")
             return []
 
+    def get_heatmap_signed_url(self, segment_id: str, expiry_seconds=3600) -> Optional[str]:
+        """Generate signed URL for heatmap using service account key."""
+        if self.config.environment == "local":
+            # For local mode, return the local path
+            run_id = self.get_latest_run_id()
+            if not run_id:
+                logging.warning("No run_id available - cannot generate heatmap URL. Artifacts missing for current run.")
+                return None
+            return f"/artifacts/{run_id}/ui/heatmaps/{segment_id}.png"
+        
+        # For GCS mode, use service account key for signing
+        try:
+            # Try to use the base64 encoded service account key from environment
+            import base64
+            from google.oauth2 import service_account
+            import datetime
+            
+            sa_key_b64 = os.getenv("SERVICE_ACCOUNT_KEY_B64")
+            logging.info(f"SERVICE_ACCOUNT_KEY_B64 environment variable exists: {bool(sa_key_b64)}")
+            if sa_key_b64:
+                sa_key_json = base64.b64decode(sa_key_b64).decode('utf-8')
+                sa_key_dict = json.loads(sa_key_json)
+                creds = service_account.Credentials.from_service_account_info(sa_key_dict)
+                # Get project from the service account key
+                project = sa_key_dict.get('project_id', 'run-density')
+                logging.info("Using base64 encoded service account key for signed URL generation")
+            else:
+                # Fallback to default credentials
+                import google.auth
+                creds, project = google.auth.default()
+                logging.info("Using default credentials for signed URL generation")
+        except Exception as e:
+            logging.warning(f"Could not load service account key: {e}")
+            import google.auth
+            creds, project = google.auth.default()
+        
+        client = storage.Client(credentials=creds, project=project)
+        bucket = client.bucket(self.config.bucket_name)
+        
+        # Get run_id for blob path
+        run_id = self.get_latest_run_id()
+        if not run_id:
+            logging.warning("No run_id available - cannot generate heatmap URL. Artifacts missing for current run.")
+            return None
+        
+        blob_path = f"artifacts/{run_id}/ui/heatmaps/{segment_id}.png"
+        blob = bucket.blob(blob_path)
+        
+        return blob.generate_signed_url(
+            version="v4",
+            expiration=datetime.timedelta(seconds=expiry_seconds),
+            method="GET",
+        )
+
+    @property
+    def mode(self) -> str:
+        """Return the storage mode for compatibility with legacy code."""
+        return self.config.environment
+    
+    @property
+    def bucket(self) -> str:
+        """Return the bucket name for compatibility with legacy code."""
+        return self.config.bucket_name
+
+
 # Global storage service instance
 _storage_service = None
 
