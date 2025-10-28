@@ -169,7 +169,7 @@ def run_heatmaps_if_local(reports_dir, run_id):
     print("   Generating heatmaps...")
     try:
         from analytics.export_heatmaps import export_heatmaps_and_captions
-        from app.storage import Storage
+        from app.storage_service import get_storage_service
         
         # Determine reports directory for this run
         run_reports_dir = Path(reports_dir) / run_id
@@ -178,8 +178,8 @@ def run_heatmaps_if_local(reports_dir, run_id):
             print(f"   ⚠️ Reports directory not found: {run_reports_dir}")
             return
         
-        # Create storage abstraction
-        storage = Storage(mode="local")
+        # Create storage abstraction using modern StorageService
+        storage = get_storage_service()
         
         # Generate heatmaps
         heatmaps_generated, captions_generated = export_heatmaps_and_captions(
