@@ -576,7 +576,7 @@ class StorageService:
 
     def get_heatmap_signed_url(self, segment_id: str, expiry_seconds=3600) -> Optional[str]:
         """Generate signed URL for heatmap using service account key."""
-        if self.config.environment == "local":
+        if not self.config.use_cloud_storage:
             # For local mode, return the local path
             run_id = self.get_latest_run_id()
             if not run_id:
@@ -631,7 +631,7 @@ class StorageService:
     @property
     def mode(self) -> str:
         """Return the storage mode for compatibility with legacy code."""
-        return self.config.environment
+        return "cloud" if self.config.use_cloud_storage else "local"
     
     @property
     def bucket(self) -> str:
