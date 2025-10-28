@@ -1055,6 +1055,8 @@ def calculate_overtaking_loads(
     # Basic guards
     if df_a.empty or df_b.empty:
         return {}, {}, 0.0, 0.0, 0, 0
+    if cp_km is None:
+        return {}, {}, 0.0, 0.0, 0, 0
     len_a = to_km_a - from_km_a
     len_b = to_km_b - from_km_b
     if len_a <= 0 or len_b <= 0:
@@ -1124,6 +1126,17 @@ def calculate_overtaking_loads(
                for _, row in df_a_pass.iterrows()]
     b_times = [(row["runner_id"], *times_at_bounds(row, start_b, boundary_start_b, boundary_end_b))
                for _, row in df_b_pass.iterrows()]
+
+    # Detect temporal overlap and passes
+    loads_a, loads_b = _detect_temporal_overlap_and_passes(a_times, b_times, min_overlap_duration)
+    
+    # Calculate statistics
+    avg_load_a = sum(loads_a.values()) / len(loads_a) if loads_a else 0.0
+    avg_load_b = sum(loads_b.values()) / len(loads_b) if loads_b else 0.0
+    max_load_a = max(loads_a.values()) if loads_a else 0
+    max_load_b = max(loads_b.values()) if loads_b else 0
+    
+    return loads_a, loads_b, avg_load_a, avg_load_b, max_load_a, max_load_b
 
 def _detect_temporal_overlap_and_passes(a_times: List[Tuple[str, float, float]], 
                                        b_times: List[Tuple[str, float, float]], 
@@ -2236,10 +2249,19 @@ def analyze_temporal_flow_segments(
                 segment_result["convergence_point_fraction"] = None
             
             # Calculate overtaking loads for runner experience analysis
-            overtaking_loads_a, overtaking_loads_b, avg_load_a, avg_load_b, max_load_a, max_load_b = calculate_overtaking_loads(
-                df_a, df_b, event_a, event_b, start_times, cp_km, 
-                from_km_a, to_km_a, from_km_b, to_km_b, dynamic_conflict_length_m
-            )
+            try:
+                result = calculate_overtaking_loads(
+                    df_a, df_b, event_a, event_b, start_times, cp_km, 
+                    from_km_a, to_km_a, from_km_b, to_km_b, dynamic_conflict_length_m
+                )
+                if result is None:
+                    print(f"Warning: calculate_overtaking_loads returned None for segment {seg_id}")
+                    overtaking_loads_a, overtaking_loads_b, avg_load_a, avg_load_b, max_load_a, max_load_b = {}, {}, 0.0, 0.0, 0, 0
+                else:
+                    overtaking_loads_a, overtaking_loads_b, avg_load_a, avg_load_b, max_load_a, max_load_b = result
+            except Exception as e:
+                print(f"Error in calculate_overtaking_loads for segment {seg_id}: {e}")
+                overtaking_loads_a, overtaking_loads_b, avg_load_a, avg_load_b, max_load_a, max_load_b = {}, {}, 0.0, 0.0, 0, 0
             
             segment_result.update({
                 "overtaking_a": overtakes_a,
