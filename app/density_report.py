@@ -18,8 +18,38 @@ import os
 import pandas as pd
 import logging
 from .segments_from_bins import write_segments_from_bins
+from .constants import HOTSPOT_SEGMENTS
+from .save_bins import save_bin_artifacts
+from .report_utils import get_date_folder_path
+from .bin_summary import generate_bin_summary_artifact
+from .gcs_uploader import upload_bin_artifacts
+from .canonical_density_report import generate_tooltips_json
+from .bin_intelligence import get_flagged_bins
+from .heatmap_generator import generate_heatmaps_for_run
+from .routes.api_heatmaps import upload_binary_to_gcs
+from .geo_utils import generate_bins_geojson
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Import pattern validation and logging
+def _validate_import_patterns():
+    """Validate that all imports are properly resolved at module level."""
+    try:
+        # Test critical imports
+        from .storage_service import get_storage_service
+        from .density import analyze_density_segments, DensityConfig
+        from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, BIN_SCHEMA_VERSION
+        from .report_utils import get_report_paths
+        from .density_template_engine import DensityTemplateEngine, create_template_context
+        logger.info("✅ All critical imports resolved successfully at module level")
+        return True
+    except ImportError as e:
+        logger.error(f"❌ Critical import failed: {e}")
+        return False
+
+# Validate imports on module load
+_validate_import_patterns()
 
 @dataclass
 class AnalysisContext:
@@ -45,7 +75,6 @@ def check_time_budget(start_time: float, budget_s: int = 60) -> None:
 
 def is_hotspot(seg_id: str, peak_los: str = None) -> bool:
     """Determine if segment is a hotspot requiring preserved resolution per ChatGPT specification."""
-    from .constants import HOTSPOT_SEGMENTS
     
     # Static hotspot list (fastest to implement)
     if seg_id in HOTSPOT_SEGMENTS:
@@ -859,10 +888,8 @@ def generate_density_report(
                 # Save artifacts with performance monitoring
                 geojson_start = time.monotonic()
                 # Use the new defensive saver from save_bins.py
-                from .save_bins import save_bin_artifacts
                 # Pass the geojson part of bin_data, not the entire bin_data dict
                 # Use daily folder path like other reports
-                from .report_utils import get_date_folder_path
                 daily_folder_path, _ = get_date_folder_path(output_dir)
                 os.makedirs(daily_folder_path, exist_ok=True)
                 geojson_path, parquet_path = save_bin_artifacts(bin_data.get("geojson", {}), daily_folder_path)
@@ -870,7 +897,6 @@ def generate_density_report(
                 
                 # Generate bin_summary.json artifact (Issue #329)
                 try:
-                    from .bin_summary import generate_bin_summary_artifact
                     bin_summary_path = generate_bin_summary_artifact(daily_folder_path)
                     logger.info(f"Generated bin_summary.json: {bin_summary_path}")
                 except Exception as e:
@@ -934,7 +960,6 @@ def generate_density_report(
                 gcs_upload_enabled = os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}
                 if gcs_upload_enabled:
                     try:
-                        from .gcs_uploader import upload_bin_artifacts
                         bucket_name = os.getenv("GCS_BUCKET", "run-density-reports")
                         upload_success = upload_bin_artifacts(daily_folder_path, bucket_name)
                         if upload_success:
@@ -1023,8 +1048,6 @@ def generate_density_report(
             # Generate tooltips.json if operational intelligence was added
             if '_operational_intelligence' in results:
                 try:
-                    from .canonical_density_report import generate_tooltips_json
-                    from .bin_intelligence import get_flagged_bins
                     
                     oi_data = results['_operational_intelligence']
                     bins_flagged = oi_data['bins_flagged']
@@ -1040,7 +1063,6 @@ def generate_density_report(
             
             # Generate heatmaps automatically after density report (Issue #365 completion)
             try:
-                from .heatmap_generator import generate_heatmaps_for_run
                 
                 # Extract run_id from daily_folder_path (e.g., "reports/2025-10-27" -> "2025-10-27")
                 if 'daily_folder_path' in locals():
@@ -1055,8 +1077,6 @@ def generate_density_report(
                     gcs_upload_enabled = os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}
                     if gcs_upload_enabled:
                         try:
-                            from .routes.api_heatmaps import upload_binary_to_gcs
-                            from pathlib import Path
                             
                             heatmaps_dir = Path("artifacts") / run_id / "ui" / "heatmaps"
                             if heatmaps_dir.exists():
@@ -2908,7 +2928,6 @@ def generate_bins_geojson_with_temporal_windows(all_bins_data, start_times: Dict
     logger = logging.getLogger(__name__)
     
     try:
-        from .geo_utils import generate_bins_geojson
         
         # Start with existing GeoJSON generation
         base_geojson = generate_bins_geojson(all_bins_data)
@@ -2999,7 +3018,6 @@ def generate_bins_geojson_with_temporal_windows(all_bins_data, start_times: Dict
     except Exception as e:
         logger.error(f"Error generating bins GeoJSON with temporal windows: {e}")
         # Fallback to basic generation
-        from .geo_utils import generate_bins_geojson
         return generate_bins_geojson(all_bins_data) or {"type": "FeatureCollection", "features": []}
 
 
