@@ -28,6 +28,38 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def get_event_intervals(event: str, density_cfg: Dict[str, Any]) -> Optional[Tuple[float, float]]:
+    """
+    Retrieves the (from_km, to_km) interval for a given event from the density configuration.
+    
+    Args:
+        event: Event type ("Full", "Half", "10K")
+        density_cfg: Density configuration dictionary containing event-specific parameters
+        
+    Returns:
+        Tuple of (from_km, to_km) if event configuration exists, None otherwise
+        
+    Supported event types:
+        - "Full": Uses full_from_km and full_to_km
+        - "Half": Uses half_from_km and half_to_km  
+        - "10K": Uses tenk_from_km and tenk_to_km
+    """
+    if event == "Full" and density_cfg.get("full_from_km") is not None:
+        return (density_cfg["full_from_km"], density_cfg["full_to_km"])
+    elif event == "Half" and density_cfg.get("half_from_km") is not None:
+        return (density_cfg["half_from_km"], density_cfg["half_to_km"])
+    elif event == "10K" and density_cfg.get("tenk_from_km") is not None:
+        return (density_cfg["tenk_from_km"], density_cfg["tenk_to_km"])
+    
+    # Log warning for unrecognized events or missing configuration
+    if event not in ["Full", "Half", "10K"]:
+        logger.warning(f"Unrecognized event type: {event}")
+    elif density_cfg.get(f"{event.lower()}_from_km" if event == "10K" else f"{event.lower()}_from_km") is None:
+        logger.debug(f"No interval configuration found for event: {event}")
+    
+    return None
+
+
 def classify_density(value, rulebook, schema_name="on_course_open"):
     """
     Returns LOS letter (A-F) based on density value and schema.
@@ -368,12 +400,9 @@ class DensityAnalyzer:
         intervals = []
         if density_cfg:
             for event in segment.events:
-                if event == "Full" and density_cfg.get("full_from_km") is not None:
-                    intervals.append((density_cfg["full_from_km"], density_cfg["full_to_km"]))
-                elif event == "Half" and density_cfg.get("half_from_km") is not None:
-                    intervals.append((density_cfg["half_from_km"], density_cfg["half_to_km"]))
-                elif event == "10K" and density_cfg.get("tenk_from_km") is not None:
-                    intervals.append((density_cfg["tenk_from_km"], density_cfg["tenk_to_km"]))
+                interval = get_event_intervals(event, density_cfg)
+                if interval:
+                    intervals.append(interval)
         
         if not intervals:
             return 0
@@ -487,12 +516,9 @@ class DensityAnalyzer:
         # Get event-specific intervals for distance binning
         intervals_km = []
         for event in segment.events:
-            if event == "Full" and density_cfg.get("full_from_km") is not None:
-                intervals_km.append((density_cfg["full_from_km"], density_cfg["full_to_km"]))
-            elif event == "Half" and density_cfg.get("half_from_km") is not None:
-                intervals_km.append((density_cfg["half_from_km"], density_cfg["half_to_km"]))
-            elif event == "10K" and density_cfg.get("tenk_from_km") is not None:
-                intervals_km.append((density_cfg["tenk_from_km"], density_cfg["tenk_to_km"]))
+            interval = get_event_intervals(event, density_cfg)
+            if interval:
+                intervals_km.append(interval)
         
         # Create distance bins
         distance_bins = self.make_distance_bins(intervals_km, self.config.step_km)
@@ -846,17 +872,11 @@ class DensityAnalyzer:
             
             # Check each event's specific cumulative distance range
             for event in segment.events:
-                if event == "Full" and density_cfg.get("full_from_km") is not None:
-                    from_km = density_cfg["full_from_km"]
-                    to_km = density_cfg["full_to_km"]
-                elif event == "Half" and density_cfg.get("half_from_km") is not None:
-                    from_km = density_cfg["half_from_km"]
-                    to_km = density_cfg["half_to_km"]
-                elif event == "10K" and density_cfg.get("tenk_from_km") is not None:
-                    from_km = density_cfg["tenk_from_km"]
-                    to_km = density_cfg["tenk_to_km"]
-                else:
+                interval = get_event_intervals(event, density_cfg)
+                if not interval:
                     continue  # Skip events without km ranges
+                
+                from_km, to_km = interval
                 
                 # Filter to this event's runners
                 event_mask = event_ids[started_mask] == event
@@ -912,17 +932,9 @@ class DensityAnalyzer:
             event_ranges = []
             
             for event in segment.events:
-                if event == "Full" and density_cfg.get("full_from_km") is not None:
-                    from_km = density_cfg["full_from_km"]
-                    to_km = density_cfg["full_to_km"]
-                    event_ranges.append((from_km, to_km, to_km - from_km, event))
-                elif event == "Half" and density_cfg.get("half_from_km") is not None:
-                    from_km = density_cfg["half_from_km"]
-                    to_km = density_cfg["half_to_km"]
-                    event_ranges.append((from_km, to_km, to_km - from_km, event))
-                elif event == "10K" and density_cfg.get("tenk_from_km") is not None:
-                    from_km = density_cfg["tenk_from_km"]
-                    to_km = density_cfg["tenk_to_km"]
+                interval = get_event_intervals(event, density_cfg)
+                if interval:
+                    from_km, to_km = interval
                     event_ranges.append((from_km, to_km, to_km - from_km, event))
             
             # Use the longest event's range (not min/max which concatenates)
@@ -982,15 +994,11 @@ class DensityAnalyzer:
         min_km = float('inf')
         
         for event in segment.events:
-            if event == "Full" and density_cfg.get("full_from_km") is not None:
-                min_km = min(min_km, density_cfg["full_from_km"])
-                max_km = max(max_km, density_cfg["full_to_km"])
-            elif event == "Half" and density_cfg.get("half_from_km") is not None:
-                min_km = min(min_km, density_cfg["half_from_km"])
-                max_km = max(max_km, density_cfg["half_to_km"])
-            elif event == "10K" and density_cfg.get("tenk_from_km") is not None:
-                min_km = min(min_km, density_cfg["tenk_from_km"])
-                max_km = max(max_km, density_cfg["tenk_to_km"])
+            interval = get_event_intervals(event, density_cfg)
+            if interval:
+                from_km, to_km = interval
+                min_km = min(min_km, from_km)
+                max_km = max(max_km, to_km)
         
         if min_km == float('inf'):
             return 0.0, 0.0, {}
@@ -1539,17 +1547,9 @@ def analyze_density_segments(pace_data: pd.DataFrame,
         event_ranges = []
         
         for event in d["events"]:
-            if event == "Full" and d.get("full_from_km") is not None:
-                from_km = d["full_from_km"]
-                to_km = d["full_to_km"]
-                event_ranges.append((from_km, to_km, to_km - from_km, event))
-            elif event == "Half" and d.get("half_from_km") is not None:
-                from_km = d["half_from_km"]
-                to_km = d["half_to_km"]
-                event_ranges.append((from_km, to_km, to_km - from_km, event))
-            elif event == "10K" and d.get("tenk_from_km") is not None:
-                from_km = d["tenk_from_km"]
-                to_km = d["tenk_to_km"]
+            interval = get_event_intervals(event, d)
+            if interval:
+                from_km, to_km = interval
                 event_ranges.append((from_km, to_km, to_km - from_km, event))
         
         # Use the longest event's range
