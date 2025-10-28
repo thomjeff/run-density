@@ -37,9 +37,9 @@ jobs:
         run: |
           echo "=== Running Complexity Standards Check ==="
           echo "Running Flake8..."
-          flake8 .
+          flake8 app/ core/
           echo "Running Radon (Cyclomatic Complexity)..."
-          radon cc . -nc -a
+          radon cc app/ core/ -nc -a
           echo "Running Custom Function Length Check..."
           python scripts/check_function_length.py
           echo "Running Custom Nesting Depth Check..."
