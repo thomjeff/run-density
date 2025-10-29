@@ -38,14 +38,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install flake8 flake8-bugbear
 
-      - name: Run Bare Exception Check
+      - name: Run Complexity Checks (B001 + C901)
         run: |
           echo "=== Running Complexity Standards Check ==="
-          echo "Checking for bare exception handlers (B001)..."
+          echo "Checking for bare exception handlers (B001)...";
+          echo "Checking for complexity violations (C901, threshold=15)...";
           echo ""
           echo "This check is non-blocking - pipeline will continue regardless of results"
           echo ""
-          flake8 app/ core/ --select=B001 --exclude=tests/*
+          # Check B001 (bare exceptions) and C901 (complexity > 15)
+          # Note: C901 threshold is enforced via .flake8 config or radon
+          flake8 app/ core/ --max-complexity=15 --select=B001,C901 --exclude=tests/*
           echo ""
           echo "✅ Complexity check completed"
 
