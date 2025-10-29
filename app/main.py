@@ -5,7 +5,7 @@ Main FastAPI Application - v1.5.0 Architecture Split
 from __future__ import annotations
 import os
 import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Tuple
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import Response, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -743,114 +743,172 @@ async def check_pdf_status():
         })
 
 
+def _find_latest_density_report_file(storage) -> Optional[Tuple[str, str]]:
+    """Find the latest density report file from the last 7 days."""
+    from datetime import timedelta
+    from app.storage_service import get_storage_service
+    
+    all_files = []
+    
+    # Try to list files from the last few days to find the latest report
+    for days_back in range(7):  # Check last 7 days
+        check_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+        
+        # Check the reports folder structure (reports/YYYY-MM-DD/)
+        reports_date_path = f"reports/{check_date}"
+        files = storage._list_gcs_files(reports_date_path, "Density.md") if storage.config.use_cloud_storage else storage._list_local_files(reports_date_path, "Density.md")
+        for file in files:
+            all_files.append((check_date, file))
+    
+    if not all_files:
+        return None
+    
+    # Sort by date and filename to get the latest
+    return max(all_files, key=lambda x: (x[0], x[1]))
+
+
+def _load_density_report_content(storage, latest_date: str, latest_filename: str) -> Optional[str]:
+    """Load the latest density report content from storage."""
+    content = storage._load_from_gcs(f"reports/{latest_date}/{latest_filename}") if storage.config.use_cloud_storage else storage._load_from_local(f"reports/{latest_date}/{latest_filename}")
+    return content
+
+
+def _parse_report_header(lines: List[str]) -> Tuple[int, int]:
+    """Parse header info to extract total_segments and processed_segments."""
+    total_segments = 0
+    processed_segments = 0
+    
+    for line in lines:
+        if line.startswith('**Total Segments:**'):
+            total_segments = int(line.split('**Total Segments:**')[1].strip())
+        elif line.startswith('**Processed Segments:**'):
+            processed_segments = int(line.split('**Processed Segments:**')[1].strip())
+    
+    return total_segments, processed_segments
+
+
+def _parse_segment_metrics_from_line(
+    line: str,
+    current_segment: Optional[str],
+    peak_areal_density: float,
+    peak_flow_rate: float
+) -> Tuple[float, float]:
+    """Extract density and flow rate values from a line if present."""
+    if not current_segment or '|' not in line:
+        return peak_areal_density, peak_flow_rate
+    
+    parts = [p.strip() for p in line.split('|')]
+    if len(parts) < 3:
+        return peak_areal_density, peak_flow_rate
+    
+    # Look for density values in metrics tables
+    if '| Density |' in line:
+        try:
+            density = float(parts[2])
+            peak_areal_density = max(peak_areal_density, density)
+        except ValueError:
+            pass
+    
+    # Look for flow rate values
+    if '| Flow Rate |' in line:
+        try:
+            flow_rate = float(parts[2])
+            peak_flow_rate = max(peak_flow_rate, flow_rate)
+        except ValueError:
+            pass
+    
+    return peak_areal_density, peak_flow_rate
+
+
+def _update_los_counts_and_critical(
+    line: str,
+    los_counts: Dict[str, int],
+    critical_segments: int
+) -> Tuple[Dict[str, int], int]:
+    """Update LOS counts and critical segment count based on line content."""
+    # Count critical segments from LOS indicators
+    if '🟡' in line:
+        los_counts['C'] = los_counts.get('C', 0) + 1
+        los_counts['D'] = los_counts.get('D', 0) + 1
+    
+    if '🔴' in line:
+        los_counts['E'] = los_counts.get('E', 0) + 1
+        los_counts['F'] = los_counts.get('F', 0) + 1
+        critical_segments += 1
+    
+    # Count supply > capacity warnings
+    if 'Supply > Capacity' in line or 'risk of congestion' in line:
+        critical_segments += 1
+    
+    return los_counts, critical_segments
+
+
+def _calculate_overall_los(los_counts: Dict[str, int]) -> str:
+    """Calculate overall LOS (most common) from LOS counts."""
+    if los_counts:
+        return max(los_counts.items(), key=lambda x: x[1])[0]
+    return 'A'
+
+
+def _extract_current_segment(line: str) -> Optional[str]:
+    """Extract current segment ID from segment header line."""
+    if line.startswith('### Segment ') and '—' in line:
+        return line.split('—')[0].replace('### Segment ', '').strip()
+    return None
+
+
 def parse_latest_density_report():
     """Parse the latest density report to extract summary data without running new analysis."""
-    import os
-    import re
-    from pathlib import Path
-    from datetime import datetime
     from app.storage_service import get_storage_service
     
     # Use unified storage service that works in both local and Cloud Run
     storage = get_storage_service()
     
-    # Find the latest density report
     try:
-        # Get all available dates by listing files and extracting dates
-        all_files = []
-        
-        # Try to list files from the last few days to find the latest report
-        from datetime import timedelta
-        for days_back in range(7):  # Check last 7 days
-            check_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
-            
-            # Check the reports folder structure (reports/YYYY-MM-DD/)
-            # We need to construct the full path for the reports folder
-            reports_date_path = f"reports/{check_date}"
-            files = storage._list_gcs_files(reports_date_path, "Density.md") if storage.config.use_cloud_storage else storage._list_local_files(reports_date_path, "Density.md")
-            for file in files:
-                all_files.append((check_date, file))
-        
-        if not all_files:
+        # Find the latest density report file
+        latest_file_info = _find_latest_density_report_file(storage)
+        if not latest_file_info:
             return None
         
-        # Sort by date and filename to get the latest
-        latest_date, latest_filename = max(all_files, key=lambda x: (x[0], x[1]))
+        latest_date, latest_filename = latest_file_info
         
-        # Load the latest density report content from the reports folder
-        content = storage._load_from_gcs(f"reports/{latest_date}/{latest_filename}") if storage.config.use_cloud_storage else storage._load_from_local(f"reports/{latest_date}/{latest_filename}")
+        # Load the latest density report content
+        content = _load_density_report_content(storage, latest_date, latest_filename)
         if not content:
             return None
         
         # Parse the report content
         lines = content.split('\n')
         
-        # Extract basic info
-        total_segments = 0
-        processed_segments = 0
-        peak_areal_density = 0.0
-        peak_flow_rate = 0.0
-        critical_segments = 0
-        overall_los = 'A'
-        
         # Parse header info
-        for line in lines:
-            if line.startswith('**Total Segments:**'):
-                total_segments = int(line.split('**Total Segments:**')[1].strip())
-            elif line.startswith('**Processed Segments:**'):
-                processed_segments = int(line.split('**Processed Segments:**')[1].strip())
+        total_segments, processed_segments = _parse_report_header(lines)
         
         # Parse individual segment sections to get actual density values
         current_segment = None
         los_counts = {}
+        peak_areal_density = 0.0
+        peak_flow_rate = 0.0
+        critical_segments = 0
         
-        for i, line in enumerate(lines):
+        for line in lines:
             # Look for segment headers like "### Segment A1 — Start to Queen/Regent"
-            if line.startswith('### Segment ') and '—' in line:
-                current_segment = line.split('—')[0].replace('### Segment ', '').strip()
+            segment_id = _extract_current_segment(line)
+            if segment_id:
+                current_segment = segment_id
                 continue
             
-            # Look for density values in metrics tables
-            if current_segment and '| Density |' in line:
-                # Extract density value from the same line
-                if '|' in line:
-                    parts = [p.strip() for p in line.split('|')]
-                    if len(parts) >= 3:  # | Density | 0.20 | p/m² |
-                        try:
-                            density = float(parts[2])
-                            peak_areal_density = max(peak_areal_density, density)
-                        except ValueError:
-                            pass
+            # Extract density and flow rate from metrics tables
+            peak_areal_density, peak_flow_rate = _parse_segment_metrics_from_line(
+                line, current_segment, peak_areal_density, peak_flow_rate
+            )
             
-            # Look for flow rate values
-            if current_segment and '| Flow Rate |' in line:
-                # Extract flow rate value from the same line
-                if '|' in line:
-                    parts = [p.strip() for p in line.split('|')]
-                    if len(parts) >= 3:  # | Flow Rate | 182 | p/min/m |
-                        try:
-                            flow_rate = float(parts[2])
-                            peak_flow_rate = max(peak_flow_rate, flow_rate)
-                        except ValueError:
-                            pass
-            
-            # Count critical segments from LOS indicators
-            if '🟡' in line or '🔴' in line:
-                if '🟡' in line:
-                    los_counts['C'] = los_counts.get('C', 0) + 1
-                    los_counts['D'] = los_counts.get('D', 0) + 1
-                if '🔴' in line:
-                    los_counts['E'] = los_counts.get('E', 0) + 1
-                    los_counts['F'] = los_counts.get('F', 0) + 1
-                    critical_segments += 1
-            
-            # Count supply > capacity warnings
-            if 'Supply > Capacity' in line or 'risk of congestion' in line:
-                critical_segments += 1
+            # Update LOS counts and critical segment count
+            los_counts, critical_segments = _update_los_counts_and_critical(
+                line, los_counts, critical_segments
+            )
         
         # Calculate overall LOS (most common)
-        if los_counts:
-            overall_los = max(los_counts.items(), key=lambda x: x[1])[0]
+        overall_los = _calculate_overall_los(los_counts)
         
         return {
             "total_segments": total_segments,
