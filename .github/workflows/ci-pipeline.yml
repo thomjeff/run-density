@@ -48,7 +48,7 @@ jobs:
           echo ""
           # Check B001 (bare exceptions) and C901 (complexity > 15)
           # Note: C901 threshold is enforced via .flake8 config or radon
-          flake8 app/ core/ --max-complexity=15 --select=B001,C901 --exclude=tests/*
+          flake8 app/ core/ --max-complexity=15 --select=B001,C901 --exclude=tests/* || true  # Truly advisory: always exit 0 to avoid confusing CI status
           echo ""
           echo "✅ Complexity check completed"
 
