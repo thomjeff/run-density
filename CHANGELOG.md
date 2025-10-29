@@ -1,5 +1,154 @@
 # Changelog
 
+## [v1.6.50] - 2025-10-29
+
+### Phase 4 Complexity Standards - Complete Refactoring
+
+**Issue #396, #397, #398, #399 Complete**: Comprehensive Code Complexity Reduction and CI Enforcement
+
+#### Overview
+Complete implementation of Phase 4 complexity standards, reducing code fragility through systematic refactoring and CI enforcement. All functions above complexity threshold 15 have been reduced to meet standards.
+
+#### The Problem
+- **High Complexity Functions**: Multiple functions with complexity 16-68 violated maintainability standards
+- **Bare Exception Handlers**: Untyped exception handling masked failures
+- **No CI Enforcement**: Complexity violations weren't caught before merge
+- **Code Fragility**: Complex functions were difficult to test, maintain, and debug
+
+#### The Solution
+
+**Phase 1 - Issue #397: Bare Exception Check**
+- Added B001 (bare `except:`) check to CI as Step 0
+- Non-blocking initial check to validate CI integration
+- Sequential execution before build/deploy stages
+
+**Phase 2 - Issue #398: Fix Violations**
+- Fixed 2 bare exception handlers:
+  - `app/heatmap_generator.py:229` - Added specific exception types
+  - `app/routes/api_density.py:80` - Added specific exception types
+- Improved error logging and handling
+
+**Phase 3.1 - Issue #399: Complexity Checks (Non-Blocking)**
+- Added C901 (cyclomatic complexity) checks to CI
+- Initial threshold: 15 (conservative to avoid blocking)
+- Non-blocking warnings for visibility
+
+**Phase 3.2 - Issue #399: Critical Complexity Refactor**
+- Refactored `generate_density_report` (complexity 68 → <15)
+  - Extracted `_generate_bin_dataset_with_retry`
+  - Extracted `_regenerate_report_with_intelligence`
+  - Extracted `_generate_and_upload_heatmaps`
+- Preserved all functionality including GCS uploads
+- Fixed import errors preventing Density.md generation
+
+**Phase 3.3 - Issue #399: Complete Complexity Refactoring**
+- Fixed **all 15 remaining complexity violations** (16-29 range)
+- Refactored 15 functions across multiple modules:
+  - **Complexity 28**: `_generate_bin_dataset_with_retry`, `emit_runner_audit`
+  - **Complexity 24**: `validate_segments_csv`
+  - **Complexity 23**: `render_segment_v2`, `get_segments`, `get_density_segment_detail`
+  - **Complexity 22**: `get_density_segments`
+  - **Complexity 20**: `upload_e2e_results`, `generate_segment_heatmap`
+  - **Complexity 19**: `get_reports_list`, `save_bin_artifacts`, `apply_new_flagging`
+  - **Complexity 18**: `_regenerate_report_with_intelligence`, `run_e2e`, `_scan_reports`
+  - **Complexity 17**: `save_bin_artifacts_legacy`
+  - **Complexity 16**: CLI block in `flow_validation.py`, `parse_latest_density_report`
+- Refactored `analyze_temporal_flow_segments` (complexity 35 → <15)
+- Refactored `render_segment` (complexity 35 → <15)
+- Refactored `generate_flow_audit_for_segment` (complexity 33 → <15)
+- Refactored `generate_bin_dataset` (complexity 31 → <15)
+- Refactored `build_runner_window_mapping` (complexity 30 → <15)
+- Refactored `generate_markdown_report` (complexity 25 → <15)
+
+**Hotfix - PR #406: Cloud Run Deployment Fix**
+- Fixed missing `Tuple` import in `app/routes/api_density.py`
+- Fixed missing `Optional` imports in `app/routes/api_reports.py` and `app/routes/api_e2e.py`
+- Resolved Cloud Run 503 errors preventing service startup
+
+#### Technical Implementation
+
+**Refactoring Approach**
+- Extract helper functions for each logical phase
+- Reduce main function complexity by separating concerns
+- Maintain functionality with no behavior changes
+- Each helper function is independently testable
+- Follow ChatGPT's refactoring playbook patterns
+
+**CI Integration**
+- Complexity check runs as Step 0 (before build/deploy)
+- Enforced threshold: 15 (blocking)
+- Checks: B001 (bare exceptions) + C901 (cyclomatic complexity)
+- Excludes test files from checks
+
+**Testing & Validation**
+- All E2E tests passing locally and on Cloud Run
+- Complexity check: **0 violations remaining**
+- All functionality preserved (no breaking changes)
+- UI testing checklist completed on Cloud Run
+- All API endpoints operational
+
+#### Files Modified
+
+**Refactored Core Modules:**
+- `app/density_report.py` - Major refactoring (68 → <15 for generate_density_report)
+- `core/flow/flow.py` - Refactored analyze_temporal_flow_segments (35 → <15)
+- `app/main.py` - Refactored parse_latest_density_report (27 → <15), get_segments (23 → <15)
+- `app/heatmap_generator.py` - Refactored generate_segment_heatmap (20 → <15)
+- `app/new_flagging.py` - Refactored apply_new_flagging (19 → <15)
+- `app/routes/api_density.py` - Refactored get_density_segment_detail (23 → <15), get_density_segments (22 → <15), fixed imports
+- `app/routes/api_e2e.py` - Refactored run_e2e (18 → <15), upload_e2e_results (20 → <15), fixed imports
+- `app/routes/api_reports.py` - Refactored get_reports_list (19 → <15), fixed imports
+- `app/routes/reports.py` - Refactored _scan_reports (18 → <15)
+- `app/save_bins.py` - Refactored save_bin_artifacts (19 → <15), save_bin_artifacts_legacy (17 → <15)
+- `app/validation/preflight.py` - Refactored validate_segments_csv (24 → <15)
+- `app/flow_validation.py` - Refactored CLI block (16 → <15)
+- `core/flow/flow.py` - Additional refactoring for emit_runner_audit (28 → <15), generate_flow_audit_for_segment (33 → <15)
+
+**CI/Workflow Updates:**
+- `.github/workflows/ci-pipeline.yml` - Added complexity check as Step 0, enforced threshold 15
+
+#### Impact
+
+**Code Quality**
+- **All complexity violations eliminated**: 0 functions above threshold 15
+- **Improved maintainability**: Functions now follow single responsibility principle
+- **Better testability**: Smaller functions are easier to unit test
+- **Reduced technical debt**: Systematic approach prevents future complexity growth
+
+**Developer Experience**
+- **CI Enforcement**: Violations caught before merge
+- **Clear Feedback**: Developers see complexity issues immediately
+- **Refactoring Patterns**: Established patterns for future complexity reduction
+- **Documentation**: GUARDRAILS.md updated with complexity standards
+
+**System Reliability**
+- **Reduced fragility**: Less complex code is less prone to bugs
+- **Faster debugging**: Smaller functions are easier to trace
+- **Preserved functionality**: All refactoring maintained existing behavior
+- **Cloud Run stability**: Fixed deployment issues causing 503 errors
+
+#### Pull Requests
+- **PR #402**: Issue #398 - Phase 2 - Fix B001 Violations
+- **PR #403**: Issue #399 Phase 3.1 - Add C901 Complexity Checks (Non-Blocking)
+- **PR #404**: Issue #399 Phase 3.2 - Refactor density complexity; restore Density.md and preserve GCS uploads
+- **PR #405**: Issue #399 Phase 3.3 Final - Fix all remaining complexity violations (16-29 range)
+- **PR #406**: Hotfix - Missing Tuple import causing Cloud Run deployment failure
+
+#### Metrics
+
+**Before Phase 4:**
+- Functions with complexity >15: **29+**
+- Functions with complexity >30: **5**
+- Critical complexity (68): **1**
+- Bare exceptions: **2**
+
+**After Phase 4:**
+- Functions with complexity >15: **0**
+- Functions with complexity >30: **0**
+- Critical complexity: **0**
+- Bare exceptions: **0**
+- CI enforcement: **Active (blocking)**
+
 ## [v1.6.48] - 2025-10-27
 
 ### Heatmap Generation Refactor & Artifact Fallback Improvements
