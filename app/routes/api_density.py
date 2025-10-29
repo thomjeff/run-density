@@ -255,6 +255,118 @@ async def get_density_segments():
         raise HTTPException(status_code=500, detail=f"Failed to load density data: {str(e)}")
 
 
+def _load_segment_metrics_from_storage(storage_service) -> Dict[str, Dict[str, Any]]:
+    """Load segment metrics from storage service."""
+    segment_metrics = {}
+    try:
+        raw_data = storage_service.load_ui_artifact("segment_metrics.json")
+        if raw_data and isinstance(raw_data, dict):
+            # Direct dict format: keys are segment IDs, values are metrics
+            segment_metrics = raw_data
+            logger.info(f"Loaded {len(segment_metrics)} segment metrics from storage service")
+        else:
+            logger.warning("segment_metrics.json not found or invalid format")
+    except Exception as e:
+        logger.warning(f"Could not load segment metrics from storage service: {e}")
+    return segment_metrics
+
+
+def _load_segment_metadata_from_geojson(storage_service, seg_id: str) -> Dict[str, Any]:
+    """Load segment metadata (label, length, width, direction, events) from geojson."""
+    metadata = {
+        "label": seg_id,
+        "length_km": 0.0,
+        "width_m": 0.0,
+        "direction": "",
+        "events": []
+    }
+    
+    try:
+        segments_geojson = storage_service.load_ui_artifact("segments.geojson")
+        if segments_geojson:
+            for feature in segments_geojson.get("features", []):
+                props = feature.get("properties", {})
+                if props.get("seg_id") == seg_id:
+                    metadata["label"] = props.get("label", seg_id)
+                    metadata["length_km"] = props.get("length_km", 0.0)
+                    metadata["width_m"] = props.get("width_m", 0.0)
+                    metadata["direction"] = props.get("direction", "")
+                    metadata["events"] = props.get("events", [])
+                    break
+    except Exception as e:
+        logger.warning(f"Could not load segments geojson: {e}")
+    
+    return metadata
+
+
+def _check_segment_flagged(storage_service, seg_id: str) -> bool:
+    """Check if segment is flagged using storage service."""
+    is_flagged = False
+    try:
+        flags = storage_service.load_ui_artifact("flags.json")
+        if flags:
+            if isinstance(flags, list):
+                is_flagged = any(f.get("seg_id") == seg_id for f in flags)
+            elif isinstance(flags, dict):
+                is_flagged = any(f.get("seg_id") == seg_id for f in flags.get("flagged_segments", []))
+    except Exception as e:
+        logger.warning(f"Could not load flags: {e}")
+    return is_flagged
+
+
+def _load_heatmap_and_caption(storage_service, seg_id: str) -> Tuple[Optional[str], Optional[str]]:
+    """Load heatmap URL and caption for segment."""
+    heatmap_url = None
+    caption = None
+    
+    try:
+        # Use StorageService for heatmap URL generation
+        storage = get_storage_service()
+        logger.info(f"Storage mode: {storage.mode}, bucket: {storage.bucket}")
+        heatmap_url = storage.get_heatmap_signed_url(seg_id)
+        logger.info(f"Heatmap URL for {seg_id}: {heatmap_url}")
+    except Exception as e:
+        logger.warning(f"Could not get heatmap URL for {seg_id}: {e}")
+    
+    try:
+        captions = storage_service.load_ui_artifact("captions.json")
+        if captions and seg_id in captions:
+            caption = captions[seg_id].get("summary")
+    except Exception as e:
+        logger.warning(f"Could not load captions for {seg_id}: {e}")
+    
+    return heatmap_url, caption
+
+
+def _build_segment_detail_response(
+    seg_id: str,
+    metrics: Dict[str, Any],
+    metadata: Dict[str, Any],
+    is_flagged: bool,
+    heatmap_url: Optional[str],
+    caption: Optional[str],
+    segment_metrics: Dict[str, Dict[str, Any]]
+) -> Dict[str, Any]:
+    """Build segment detail response dictionary."""
+    return {
+        "seg_id": seg_id,
+        "name": metadata["label"],
+        "schema": _get_segment_operational_schema(seg_id, segment_metrics),
+        "active": metrics.get("active_window", "N/A"),
+        "peak_density": metrics.get("peak_density", 0.0),
+        "worst_los": metrics.get("worst_los", "Unknown"),
+        "peak_rate": metrics.get("peak_rate", 0.0),
+        "flagged": is_flagged,
+        "events": ", ".join(metadata["events"]) if metadata["events"] else "N/A",
+        "direction": metadata["direction"],
+        "length_km": metadata["length_km"],
+        "width_m": metadata["width_m"],
+        "heatmap_url": heatmap_url,
+        "caption": caption,
+        "bin_detail": "absent" if not heatmap_url else "available"
+    }
+
+
 @router.get("/api/density/segment/{seg_id}")
 async def get_density_segment_detail(seg_id: str):
     """
@@ -268,96 +380,29 @@ async def get_density_segment_detail(seg_id: str):
     """
     logger.info(f"=== UPDATED CODE LOADED === Processing segment detail for {seg_id}")
     try:
-        # Load segment metrics from artifacts using storage service (same as segments API)
-        segment_metrics = {}
         storage_service = get_storage_service()
-        try:
-            raw_data = storage_service.load_ui_artifact("segment_metrics.json")
-            if raw_data and isinstance(raw_data, dict):
-                # Direct dict format: keys are segment IDs, values are metrics
-                segment_metrics = raw_data
-                logger.info(f"Loaded {len(segment_metrics)} segment metrics from storage service")
-            else:
-                logger.warning("segment_metrics.json not found or invalid format")
-        except Exception as e:
-            logger.warning(f"Could not load segment metrics from storage service: {e}")
         
+        # Load segment metrics
+        segment_metrics = _load_segment_metrics_from_storage(storage_service)
         if seg_id not in segment_metrics:
             raise HTTPException(status_code=404, detail=f"Segment {seg_id} not found")
         
         metrics = segment_metrics[seg_id]
         
-        # Load segments geojson for label using storage service
-        label = seg_id
-        length_km = 0.0
-        width_m = 0.0
-        direction = ""
-        events = []
+        # Load segment metadata from geojson
+        metadata = _load_segment_metadata_from_geojson(storage_service, seg_id)
         
-        try:
-            segments_geojson = storage_service.load_ui_artifact("segments.geojson")
-            if segments_geojson:
-                for feature in segments_geojson.get("features", []):
-                    props = feature.get("properties", {})
-                    if props.get("seg_id") == seg_id:
-                        label = props.get("label", seg_id)
-                        length_km = props.get("length_km", 0.0)
-                        width_m = props.get("width_m", 0.0)
-                        direction = props.get("direction", "")
-                        events = props.get("events", [])
-                        break
-        except Exception as e:
-            logger.warning(f"Could not load segments geojson: {e}")
+        # Check if flagged
+        is_flagged = _check_segment_flagged(storage_service, seg_id)
         
-        # Check if flagged using storage service
-        is_flagged = False
-        try:
-            flags = storage_service.load_ui_artifact("flags.json")
-            if flags:
-                if isinstance(flags, list):
-                    is_flagged = any(f.get("seg_id") == seg_id for f in flags)
-                elif isinstance(flags, dict):
-                    is_flagged = any(f.get("seg_id") == seg_id for f in flags.get("flagged_segments", []))
-        except Exception as e:
-            logger.warning(f"Could not load flags: {e}")
+        # Load heatmap and caption
+        heatmap_url, caption = _load_heatmap_and_caption(storage_service, seg_id)
         
-        # Check for heatmap and caption
-        heatmap_url = None
-        caption = None
-        
-        try:
-            # Use StorageService for heatmap URL generation
-            storage = get_storage_service()
-            logger.info(f"Storage mode: {storage.mode}, bucket: {storage.bucket}")
-            heatmap_url = storage.get_heatmap_signed_url(seg_id)
-            logger.info(f"Heatmap URL for {seg_id}: {heatmap_url}")
-        except Exception as e:
-            logger.warning(f"Could not get heatmap URL for {seg_id}: {e}")
-        
-        try:
-            captions = storage_service.load_ui_artifact("captions.json")
-            if captions and seg_id in captions:
-                caption = captions[seg_id].get("summary")
-        except Exception as e:
-            logger.warning(f"Could not load captions for {seg_id}: {e}")
-        
-        detail = {
-            "seg_id": seg_id,
-            "name": label,
-            "schema": _get_segment_operational_schema(seg_id, segment_metrics),
-            "active": metrics.get("active_window", "N/A"),
-            "peak_density": metrics.get("peak_density", 0.0),
-            "worst_los": metrics.get("worst_los", "Unknown"),
-            "peak_rate": metrics.get("peak_rate", 0.0),
-            "flagged": is_flagged,
-            "events": ", ".join(events) if events else "N/A",
-            "direction": direction,
-            "length_km": length_km,
-            "width_m": width_m,
-            "heatmap_url": heatmap_url,
-            "caption": caption,
-            "bin_detail": "absent" if not heatmap_url else "available"
-        }
+        # Build detail response
+        detail = _build_segment_detail_response(
+            seg_id, metrics, metadata, is_flagged, heatmap_url,
+            caption, segment_metrics
+        )
         
         return JSONResponse(content=detail)
         
