@@ -240,25 +240,8 @@ def generate_key_takeaway(segment_id: str, segment_data: Dict[str, Any], v2_cont
             return f"Low density ({density_str} p/m²) - comfortable flow"
 
 
-def render_segment_v2(md, ctx, rulebook):
-    """Render a segment using v2.0 rulebook structure with schema-specific formatting."""
-    # Get schema information
-    schema_name = ctx.get("schema_name", "on_course_open")
-    flow_rate = ctx.get("flow_rate")
-    flow_capacity = ctx.get("flow_capacity")
-    flow_utilization = ctx.get("flow_utilization")
-    fired_actions = ctx.get("fired_actions", [])
-    
-    # Get schema configuration
-    schemas = rulebook.get("schemas", {})
-    schema_config = schemas.get(schema_name, {})
-    
-    # Get LOS thresholds for this schema
-    los_thresholds = schema_config.get("los_thresholds", 
-                                     rulebook.get("globals", {}).get("los_thresholds", {}))
-    
-    # Determine LOS from areal density
-    areal_density = ctx.get("peak_areal_density", 0.0)
+def _determine_los_from_thresholds(areal_density: float, los_thresholds: Dict[str, Any]) -> str:
+    """Determine LOS letter from areal density using schema thresholds."""
     los_letter = "F"  # Default to worst case
     for letter in ["A", "B", "C", "D", "E", "F"]:
         rng = los_thresholds.get(letter, {})
@@ -267,11 +250,13 @@ def render_segment_v2(md, ctx, rulebook):
         if areal_density >= mn and areal_density < mx:
             los_letter = letter
             break
-    
-    # Render header with schema info (reduced heading size)
-    md.write(f"### Segment {ctx['segment_id']} — {ctx['seg_label']}\n\n")
-    
-    # Render metrics table (reduced heading size)
+    return los_letter
+
+
+def _render_metrics_table_v2(md, ctx, schema_name: str, areal_density: float, 
+                            flow_rate: Optional[float], flow_capacity: Optional[float],
+                            flow_utilization: Optional[float], los_letter: str) -> None:
+    """Render metrics table for v2.0 segment rendering."""
     md.write("#### Metrics\n\n")
     md.write("| Metric | Value | Units |\n")
     md.write("|--------|-------|-------|\n")
@@ -281,7 +266,6 @@ def render_segment_v2(md, ctx, rulebook):
     
     # For narrow/merge segments, show linear density
     if schema_name in ["on_course_narrow"]:
-        # Calculate linear density from areal density and width
         width_m = ctx.get("width_m", 3.0)  # Default width
         linear_density = areal_density * width_m
         md.write(f"| Linear Density | {linear_density:.2f} | p/m |\n")
@@ -301,13 +285,15 @@ def render_segment_v2(md, ctx, rulebook):
     los_display = format_los_with_color(los_letter)
     md.write(f"| LOS | {los_display} ({schema_name.replace('_', ' ').title()}) | — |\n")
     
-    # Add note about schema if start_corral
+    # Add note about schema
     if schema_name == "start_corral":
         md.write("\n| Note: LOS here uses start-corral thresholds, not Fruin. Flow-rate governs safety. |\n")
     elif schema_name == "on_course_narrow":
         md.write("\n| Note: LOS uses Fruin thresholds (linear density). |\n")
-    
-    # Add Key Takeaways line
+
+
+def _render_key_takeaways_v2(md, los_letter: str, flow_utilization: Optional[float]) -> None:
+    """Render key takeaways section for v2.0 segment rendering."""
     md.write("\n### Key Takeaways\n\n")
     
     # Determine status based on LOS and flow
@@ -320,12 +306,17 @@ def render_segment_v2(md, ctx, rulebook):
         md.write("⚠️ **Moderate**: Density approaching comfort limits - monitor closely.\n\n")
     else:  # E, F
         md.write("🔴 **Critical**: High density detected - immediate action required.\n\n")
-    
-    # Render operational implications
+
+
+def _render_operational_implications_v2(md, ctx, schema_config: Dict[str, Any],
+                                       schema_name: str, los_letter: str,
+                                       flow_rate: Optional[float],
+                                       flow_utilization: Optional[float],
+                                       flow_capacity: Optional[float]) -> None:
+    """Render operational implications section for v2.0 segment rendering."""
     md.write("### Operational Implications\n\n")
     
     # Get mitigations from schema
-    mitigations = schema_config.get("mitigations", [])
     drivers = schema_config.get("drivers", [])
     
     # Add driver context
@@ -357,7 +348,10 @@ def render_segment_v2(md, ctx, rulebook):
     if schema_name in ["on_course_narrow"] and flow_utilization and flow_utilization > 200:
         md.write(f"• **Flow Overload**: Supply ({flow_rate * ctx.get('width_m', 3.0):.0f} p/min) exceeds capacity ({flow_capacity:.0f} p/min) by {flow_utilization:.0f}%.\n")
         md.write("• Consider implementing flow metering or temporary holds upstream.\n")
-    
+
+
+def _render_mitigations_and_notes_v2(md, fired_actions: List[str], ops_box: Dict[str, Any]) -> None:
+    """Render mitigations fired and operational notes for v2.0 segment rendering."""
     # Add fired actions if any
     if fired_actions:
         md.write("\n### Mitigations Fired\n\n")
@@ -365,7 +359,6 @@ def render_segment_v2(md, ctx, rulebook):
             md.write(f"• {action}\n")
     
     # Add operational box if available
-    ops_box = schema_config.get("ops_box", {})
     if ops_box:
         md.write("\n### Operational Notes\n\n")
         for category, notes in ops_box.items():
@@ -374,8 +367,10 @@ def render_segment_v2(md, ctx, rulebook):
                 for note in notes:
                     md.write(f"• {note}\n")
                 md.write("\n")
-    
-    # Add definitions (only once per report)
+
+
+def _render_definitions_v2(md, flow_rate: Optional[float]) -> None:
+    """Render definitions section for v2.0 segment rendering (only once per report)."""
     if not hasattr(render_segment_v2, '_definitions_added'):
         md.write("\n📖 Definitions:\n\n")
         md.write("• Density = persons per square meter (p/m²).\n")
@@ -389,8 +384,163 @@ def render_segment_v2(md, ctx, rulebook):
         render_segment_v2._definitions_added = True
 
 
+def render_segment_v2(md, ctx, rulebook):
+    """Render a segment using v2.0 rulebook structure with schema-specific formatting."""
+    # Get schema information
+    schema_name = ctx.get("schema_name", "on_course_open")
+    flow_rate = ctx.get("flow_rate")
+    flow_capacity = ctx.get("flow_capacity")
+    flow_utilization = ctx.get("flow_utilization")
+    fired_actions = ctx.get("fired_actions", [])
+    
+    # Get schema configuration
+    schemas = rulebook.get("schemas", {})
+    schema_config = schemas.get(schema_name, {})
+    
+    # Get LOS thresholds for this schema
+    los_thresholds = schema_config.get("los_thresholds", 
+                                     rulebook.get("globals", {}).get("los_thresholds", {}))
+    
+    # Determine LOS from areal density
+    areal_density = ctx.get("peak_areal_density", 0.0)
+    los_letter = _determine_los_from_thresholds(areal_density, los_thresholds)
+    
+    # Render header with schema info
+    md.write(f"### Segment {ctx['segment_id']} — {ctx['seg_label']}\n\n")
+    
+    # Render metrics table
+    _render_metrics_table_v2(md, ctx, schema_name, areal_density, flow_rate, 
+                            flow_capacity, flow_utilization, los_letter)
+    
+    # Render key takeaways
+    _render_key_takeaways_v2(md, los_letter, flow_utilization)
+    
+    # Render operational implications
+    _render_operational_implications_v2(md, ctx, schema_config, schema_name, los_letter,
+                                         flow_rate, flow_utilization, flow_capacity)
+    
+    # Render mitigations and operational notes
+    ops_box = schema_config.get("ops_box", {})
+    _render_mitigations_and_notes_v2(md, fired_actions, ops_box)
+    
+    # Render definitions
+    _render_definitions_v2(md, flow_rate)
+
+
+def _render_v2_schema_content(md, ctx, schema):
+    """Render schema-based content for v2.0 rulebook (flow_type zone, drivers, mitigations, ops_box)."""
+    # Check for flow_type zone content first
+    flow_type = ctx.get("flow_type", "")
+    if flow_type:
+        flow_key = f"{flow_type}_zone"
+        flow_drivers = schema.get(flow_key, {})
+        if flow_drivers and "narrative_template" in flow_drivers:
+            md.write(flow_drivers["narrative_template"].format(**ctx) + "\n\n")
+    
+    # Then add general schema content
+    drivers = schema.get("drivers", [])
+    mitigations = schema.get("mitigations", [])
+    
+    if drivers:
+        md.write("### Density Analysis\n")
+        for driver in drivers:
+            md.write(f"- {driver}\n")
+        md.write("\n")
+    
+    if mitigations:
+        md.write("### Operational Implications\n")
+        for mitigation in mitigations:
+            md.write(f"- {mitigation}\n")
+        md.write("\n")
+    
+    # Check for operational guidance
+    ops_box = schema.get("ops_box", {})
+    if ops_box:
+        md.write("### Ops Box\n")
+        for category, items in ops_box.items():
+            if items:
+                md.write(f"- **{category.title()}:** {', '.join(items)}\n")
+        md.write("\n")
+
+
+def _collect_triggered_actions(triggers, ctx, schema_name):
+    """Collect all triggered actions from triggers (regular + high density)."""
+    triggered_actions = []
+    
+    # Process all triggers
+    for trigger in triggers:
+        if _trigger_matches(trigger, ctx, schema_name):
+            actions = trigger.get("actions", [])
+            if actions:
+                # Add trigger context to actions
+                when = trigger.get("when", {})
+                trigger_type = "Density" if "density_gte" in when else "Flow" if "flow_gte" in when else "General"
+                threshold = when.get("density_gte", when.get("flow_gte", "threshold"))
+                
+                for action in actions:
+                    triggered_actions.append(f"[{trigger_type} {threshold}] {action}")
+    
+    # Check for high density warnings (adapted from v1.x patches)
+    if ctx.get("is_high_density"):
+        # Look for high density triggers
+        for trigger in triggers:
+            when = trigger.get("when", {})
+            if (when.get("density_gte") in ["E", "F"] and _trigger_matches(trigger, ctx, schema_name)):
+                actions = trigger.get("actions", [])
+                if actions:
+                    for action in actions:
+                        triggered_actions.append(f"[High Density] {action}")
+    
+    return triggered_actions
+
+
+def _render_event_factors_v2(md, ctx, rulebook, segment_id):
+    """Render event-specific factors/overrides for v2.0 rulebook."""
+    event_type = ctx.get("event_type", "").lower()
+    if not event_type:
+        return
+    
+    # Look for event-specific overrides
+    overrides = rulebook.get("overrides", [])
+    for override in overrides:
+        if override.get("match", {}).get("segment_id") == segment_id:
+            notes = override.get("notes", [])
+            if notes:
+                md.write("_Event factors_: " + "; ".join(notes) + "\n\n")
+
+
+def _render_legacy_content(md, ctx, rulebook):
+    """Render segment using legacy v1.x rulebook structure."""
+    drivers = rulebook["templates"]["drivers"]
+    safety = rulebook["templates"]["safety"]
+    events = rulebook["templates"]["events"]
+
+    flow_key = f"{ctx.get('flow_type','')}_zone"
+    if flow_key in drivers:
+        md.write(drivers[flow_key]["narrative_template"].format(**ctx) + "\n\n")
+
+    dclass = ctx.get("density_class")
+    if dclass and dclass in drivers:
+        md.write(drivers[dclass]["narrative_template"].format(**ctx) + "\n\n")
+    else:
+        md.write(f"**Segment {ctx['segment_id']} ({ctx['segment_label']})** — density {ctx['density_value']}\n\n")
+
+    if ctx.get("is_high_density"):
+        if "high_density_warning" in safety:
+            md.write(safety["high_density_warning"].format(**ctx) + "\n")
+        if "flow_control_suggestion" in safety:
+            md.write(safety["flow_control_suggestion"].format(**ctx) + "\n")
+        md.write("\n")
+
+    et = (ctx.get("event_type") or "").lower()
+    if et in events:
+        factors = events[et].get("additional_factors", [])
+        if factors:
+            md.write("_Event factors_: " + "; ".join(factors) + "\n\n")
+
+
 def render_segment(md, ctx, rulebook):
-    """Render a segment using v2.0 rulebook structure."""
+    """Render a segment using v2.0 or legacy rulebook structure."""
     # Handle v2.0 rulebook structure
     if "schemas" in rulebook:
         # v2.0 rulebook - use schema-based rendering
@@ -404,83 +554,20 @@ def render_segment(md, ctx, rulebook):
         
         # Generate narrative based on schema
         if schema:
-            # Check for flow_type zone content first
-            flow_type = ctx.get("flow_type", "")
-            if flow_type:
-                flow_key = f"{flow_type}_zone"
-                flow_drivers = schema.get(flow_key, {})
-                if flow_drivers and "narrative_template" in flow_drivers:
-                    md.write(flow_drivers["narrative_template"].format(**ctx) + "\n\n")
-            
-            # Then add general schema content
-            drivers = schema.get("drivers", [])
-            mitigations = schema.get("mitigations", [])
-            
-            if drivers:
-                md.write("### Density Analysis\n")
-                for driver in drivers:
-                    md.write(f"- {driver}\n")
-                md.write("\n")
-            
-            if mitigations:
-                md.write("### Operational Implications\n")
-                for mitigation in mitigations:
-                    md.write(f"- {mitigation}\n")
-                md.write("\n")
-            
-            # Check for operational guidance
-            ops_box = schema.get("ops_box", {})
-            if ops_box:
-                md.write("### Ops Box\n")
-                for category, items in ops_box.items():
-                    if items:
-                        md.write(f"- **{category.title()}:** {', '.join(items)}\n")
-                md.write("\n")
+            _render_v2_schema_content(md, ctx, schema)
         
-        # Check triggers for this segment and show triggered actions
+        # Collect and display triggered actions
         triggers = rulebook.get("triggers", [])
-        triggered_actions = []
+        triggered_actions = _collect_triggered_actions(triggers, ctx, schema_name)
         
-        for trigger in triggers:
-            if _trigger_matches(trigger, ctx, schema_name):
-                actions = trigger.get("actions", [])
-                if actions:
-                    # Add trigger context to actions
-                    when = trigger.get("when", {})
-                    trigger_type = "Density" if "density_gte" in when else "Flow" if "flow_gte" in when else "General"
-                    threshold = when.get("density_gte", when.get("flow_gte", "threshold"))
-                    
-                    for action in actions:
-                        triggered_actions.append(f"[{trigger_type} {threshold}] {action}")
-        
-        # Check for high density warnings (adapted from v1.x patches)
-        if ctx.get("is_high_density"):
-            # Look for high density triggers
-            for trigger in triggers:
-                if (trigger.get("when", {}).get("density_gte") in ["E", "F"] and 
-                    _trigger_matches(trigger, ctx, schema_name)):
-                    actions = trigger.get("actions", [])
-                    if actions:
-                        for action in actions:
-                            triggered_actions.append(f"[High Density] {action}")
-        
-        # Display triggered actions if any
         if triggered_actions:
             md.write("### Triggered Actions\n")
             for action in triggered_actions:
                 md.write(f"- {action}\n")
             md.write("\n")
         
-        # Check for event-specific factors (adapted from v1.x patches)
-        event_type = ctx.get("event_type", "").lower()
-        if event_type:
-            # Look for event-specific overrides
-            overrides = rulebook.get("overrides", [])
-            for override in overrides:
-                if override.get("match", {}).get("segment_id") == segment_id:
-                    notes = override.get("notes", [])
-                    if notes:
-                        md.write("_Event factors_: " + "; ".join(notes) + "\n\n")
+        # Check for event-specific factors
+        _render_event_factors_v2(md, ctx, rulebook, segment_id)
         
         # Fallback if no schema found
         if not schema:
@@ -488,36 +575,7 @@ def render_segment(md, ctx, rulebook):
     
     else:
         # Legacy v1.x rulebook structure
-        drivers = rulebook["templates"]["drivers"]
-        safety  = rulebook["templates"]["safety"]
-        events  = rulebook["templates"]["events"]
-
-        flow_key = f"{ctx.get('flow_type','')}_zone"
-        if flow_key in drivers:
-            md.write(drivers[flow_key]["narrative_template"].format(**ctx) + "\n\n")
-
-        dclass = ctx.get("density_class")
-        if dclass and dclass in drivers:
-            md.write(drivers[dclass]["narrative_template"].format(**ctx) + "\n\n")
-        else:
-            # Linear vs Areal density label clarity
-            # Uncomment depending on computation:
-            # md.write(f"**Segment {ctx['segment_id']} ({ctx['segment_label']})** — linear density {ctx['density_value']} runners/m\n\n")
-            # md.write(f"**Segment {ctx['segment_id']} ({ctx['segment_label']})** — density {ctx['density_value']} runners/m²\n\n")
-            md.write(f"**Segment {ctx['segment_id']} ({ctx['segment_label']})** — density {ctx['density_value']}\n\n")
-
-        if ctx.get("is_high_density"):
-            if "high_density_warning" in safety:
-                md.write(safety["high_density_warning"].format(**ctx) + "\n")
-            if "flow_control_suggestion" in safety:
-                md.write(safety["flow_control_suggestion"].format(**ctx) + "\n")
-            md.write("\n")
-
-        et = (ctx.get("event_type") or "").lower()
-        if et in events:
-            factors = events[et].get("additional_factors", [])
-            if factors:
-                md.write("_Event factors_: " + "; ".join(factors) + "\n\n")
+        _render_legacy_content(md, ctx, rulebook)
 
 
 def render_methodology(md, rulebook):
@@ -634,33 +692,13 @@ def format_duration(seconds: int) -> str:
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
-def _generate_bin_dataset_with_retry(
-    results: Dict[str, Any],
-    start_times: Dict[str, float],
-    output_dir: str,
-    analysis_context: Any
-) -> Tuple[Optional[str], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
-    """
-    Generate bin dataset with retry logic and adaptive coarsening.
-    
-    Args:
-        results: Density analysis results
-        start_times: Start times mapping
-        output_dir: Output directory for artifacts
-        analysis_context: Analysis context object
-        
-    Returns:
-        Tuple of (daily_folder_path, bin_metadata_dict, bin_data_dict)
-        Returns (None, None, None) if bin generation fails
-    """
+def _initialize_bin_generation_params() -> Tuple[float, int]:
+    """Initialize bin generation parameters with Cloud Run optimization."""
     from .constants import (
-        DEFAULT_BIN_SIZE_KM, FALLBACK_BIN_SIZE_KM, BIN_MAX_FEATURES,
-        DEFAULT_BIN_TIME_WINDOW_SECONDS, MAX_BIN_GENERATION_TIME_SECONDS
+        DEFAULT_BIN_SIZE_KM, FALLBACK_BIN_SIZE_KM,
+        DEFAULT_BIN_TIME_WINDOW_SECONDS
     )
-    # Note: generate_bin_dataset is defined later in this same file
-    # We'll call it directly since we're in the same module
     
-    start_time = time.monotonic()
     bin_size_to_use = DEFAULT_BIN_SIZE_KM
     dt_seconds = DEFAULT_BIN_TIME_WINDOW_SECONDS
     
@@ -669,11 +707,13 @@ def _generate_bin_dataset_with_retry(
         bin_size_to_use = FALLBACK_BIN_SIZE_KM
         log_bins_event(action="cloud_run_optimization", bin_size_km=bin_size_to_use)
     
-    # Implement ChatGPT's temporal-first coarsening and auto-timeout reaction
-    strategy_step = 0
-    bins_status = "ok"
+    return bin_size_to_use, dt_seconds
+
+
+def _apply_temporal_first_coarsening(bin_size_to_use: float, dt_seconds: int) -> int:
+    """Apply temporal-first coarsening based on projected features."""
+    from .constants import BIN_MAX_FEATURES
     
-    # Pre-calculate projected features for temporal-first coarsening
     try:
         avg_segment_length_m = 2000
         n_segments = 22
@@ -688,8 +728,23 @@ def _generate_bin_dataset_with_retry(
     except Exception as e:
         logger.warning(f"Feature projection failed, proceeding with defaults: {e}")
     
-    # Generate bin dataset with potential coarsening
-    bin_data = None
+    return dt_seconds
+
+
+def _try_bin_generation_with_coarsening(
+    results: Dict[str, Any],
+    start_times: Dict[str, float],
+    bin_size_to_use: float,
+    dt_seconds: int,
+    analysis_context: Any,
+    start_time: float,
+    strategy_step: int
+) -> Tuple[Optional[Dict[str, Any]], str, int, float, int]:
+    """Try generating bin dataset with adaptive coarsening strategy."""
+    from .constants import MAX_BIN_GENERATION_TIME_SECONDS
+    
+    bins_status = "ok"
+    
     while strategy_step < 3:
         try:
             bin_data = generate_bin_dataset(
@@ -700,8 +755,6 @@ def _generate_bin_dataset_with_retry(
             elapsed = time.monotonic() - start_time
             
             if bin_data.get("ok", False):
-                features_count = len(bin_data.get("geojson", {}).get("features", []))
-                
                 # Auto-coarsen on timeout per ChatGPT specification
                 if elapsed > MAX_BIN_GENERATION_TIME_SECONDS:
                     log_bins_event(action="auto_coarsen_triggered", 
@@ -739,12 +792,19 @@ def _generate_bin_dataset_with_retry(
             else:
                 raise gen_e
     
-    # Check final result
-    if not bin_data or not bin_data.get("ok", False):
-        error_msg = bin_data.get('error', 'Unknown error') if bin_data else 'Bin data is None'
-        raise ValueError(f"Bin generation failed: {error_msg}")
-    
-    # Save artifacts
+    return bin_data, bins_status, strategy_step, bin_size_to_use, dt_seconds
+
+
+def _save_bin_artifacts_and_metadata(
+    bin_data: Dict[str, Any],
+    bin_size_to_use: float,
+    dt_seconds: int,
+    bins_status: str,
+    strategy_step: int,
+    output_dir: str,
+    start_time: float
+) -> Tuple[str, str, Dict[str, Any]]:
+    """Save bin artifacts and generate metadata."""
     bin_geojson = bin_data.get("geojson", {})
     md = bin_geojson.get("metadata", {})
     occ = md.get("occupied_bins")
@@ -791,7 +851,11 @@ def _generate_bin_dataset_with_retry(
                  total_ms=int(elapsed * 1000),
                  metadata=bin_metadata)
     
-    # SEGMENTS FROM BINS ROLL-UP (guarded)
+    return daily_folder_path, geojson_path, bin_metadata
+
+
+def _process_segments_from_bins(daily_folder_path: str) -> None:
+    """Process segments from bins roll-up if enabled."""
     if os.getenv("SEGMENTS_FROM_BINS", "true").lower() == "true":
         try:
             bins_parquet = os.path.join(daily_folder_path, "bins.parquet")
@@ -810,13 +874,10 @@ def _generate_bin_dataset_with_retry(
                 print(f"SEG_COMPARE_FAILED {e}")
         except Exception as e:
             print(f"SEG_ROLLUP_FAILED {e}")
-    
-    print(f"📦 Bin dataset saved: {geojson_path} | {parquet_path}")
-    print(f"📦 Generated {final_features} bin features in {elapsed:.1f}s (bin_size={bin_size_to_use}km, dt={dt_seconds}s)")
-    if bins_status != "ok":
-        print(f"⚠️  Bin status: {bins_status} (applied {strategy_step} optimization steps)")
-    
-    # Upload to GCS if enabled
+
+
+def _upload_bin_artifacts_to_gcs(daily_folder_path: str) -> None:
+    """Upload bin artifacts to GCS if enabled."""
     gcs_upload_enabled = os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}
     if gcs_upload_enabled:
         try:
@@ -828,8 +889,176 @@ def _generate_bin_dataset_with_retry(
                 print(f"⚠️ GCS upload failed, bin files remain in container: {daily_folder_path}")
         except Exception as e:
             print(f"⚠️ GCS upload error: {e}")
+
+
+def _generate_bin_dataset_with_retry(
+    results: Dict[str, Any],
+    start_times: Dict[str, float],
+    output_dir: str,
+    analysis_context: Any
+) -> Tuple[Optional[str], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    """
+    Generate bin dataset with retry logic and adaptive coarsening.
+    
+    Args:
+        results: Density analysis results
+        start_times: Start times mapping
+        output_dir: Output directory for artifacts
+        analysis_context: Analysis context object
+        
+    Returns:
+        Tuple of (daily_folder_path, bin_metadata_dict, bin_data_dict)
+        Returns (None, None, None) if bin generation fails
+    """
+    start_time = time.monotonic()
+    
+    # Initialize parameters with Cloud Run optimization
+    bin_size_to_use, dt_seconds = _initialize_bin_generation_params()
+    
+    # Apply temporal-first coarsening
+    dt_seconds = _apply_temporal_first_coarsening(bin_size_to_use, dt_seconds)
+    
+    # Generate bin dataset with adaptive coarsening
+    strategy_step = 0
+    bin_data, bins_status, strategy_step, bin_size_to_use, dt_seconds = _try_bin_generation_with_coarsening(
+        results, start_times, bin_size_to_use, dt_seconds,
+        analysis_context, start_time, strategy_step
+    )
+    
+    # Check final result
+    if not bin_data or not bin_data.get("ok", False):
+        error_msg = bin_data.get('error', 'Unknown error') if bin_data else 'Bin data is None'
+        raise ValueError(f"Bin generation failed: {error_msg}")
+    
+    # Save artifacts and generate metadata
+    daily_folder_path, geojson_path, bin_metadata = _save_bin_artifacts_and_metadata(
+        bin_data, bin_size_to_use, dt_seconds, bins_status,
+        strategy_step, output_dir, start_time
+    )
+    
+    # Process segments from bins
+    _process_segments_from_bins(daily_folder_path)
+    
+    # Print summary
+    elapsed = time.monotonic() - start_time
+    final_features = len(bin_data.get("geojson", {}).get("features", []))
+    parquet_path = os.path.join(daily_folder_path, "bins.parquet")
+    print(f"📦 Bin dataset saved: {geojson_path} | {parquet_path}")
+    print(f"📦 Generated {final_features} bin features in {elapsed:.1f}s (bin_size={bin_size_to_use}km, dt={dt_seconds}s)")
+    if bins_status != "ok":
+        print(f"⚠️  Bin status: {bins_status} (applied {strategy_step} optimization steps)")
+    
+    # Upload to GCS
+    _upload_bin_artifacts_to_gcs(daily_folder_path)
     
     return daily_folder_path, bin_metadata, bin_data
+
+
+def _generate_new_report_format(
+    daily_folder_path: str
+) -> Optional[str]:
+    """Generate new density report format (Issue #246)."""
+    print("📊 Generating new density report (Issue #246)...")
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+    timestamped_path = os.path.join(daily_folder_path, f"{timestamp}-Density.md")
+    
+    new_report_results = generate_new_density_report_issue246(
+        reports_dir=daily_folder_path,
+        output_path=timestamped_path,
+        app_version="1.6.42"
+    )
+    report_content_final = new_report_results['report_content']
+    print(f"📊 New density report saved to: {timestamped_path}")
+    
+    # Upload to GCS if enabled
+    if os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
+        try:
+            from .storage_service import get_storage_service
+            storage_service = get_storage_service()
+            gcs_path = storage_service.save_file(
+                filename=os.path.basename(timestamped_path),
+                content=report_content_final,
+                date=None
+            )
+            print(f"☁️ Density report uploaded to GCS: {gcs_path}")
+        except Exception as e:
+            print(f"⚠️ Failed to upload density.md to GCS: {e}")
+    
+    return timestamped_path
+
+
+def _generate_legacy_report_format(
+    results: Dict[str, Any],
+    start_times: Dict[str, float],
+    include_per_event: bool,
+    output_dir: str
+) -> str:
+    """Generate legacy density report format with operational intelligence."""
+    print("📊 Regenerating density report with operational intelligence...")
+    from .report_utils import get_report_paths
+    
+    # Note: generate_markdown_report is defined later in this same file
+    report_content_final = generate_markdown_report(
+        results,
+        start_times,
+        include_per_event,
+        include_operational_intelligence=True,
+        output_dir=output_dir
+    )
+    
+    # Get existing full_path from results or create new
+    full_path, _ = get_report_paths("Density", "md", output_dir)
+    with open(full_path, 'w', encoding='utf-8') as f:
+        f.write(report_content_final)
+    
+    print(f"📊 Density report (with operational intelligence) saved to: {full_path}")
+    
+    # Upload to GCS if enabled
+    if os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
+        try:
+            from .storage_service import get_storage_service
+            storage_service = get_storage_service()
+            gcs_path = storage_service.save_file(
+                filename=os.path.basename(full_path),
+                content=report_content_final,
+                date=None
+            )
+            print(f"☁️ Density report uploaded to GCS: {gcs_path}")
+        except (OSError, IOError) as e:
+            logger.error(f"Failed to upload density.md to GCS - file system error: {e}")
+        except (ValueError, TypeError) as e:
+            logger.error(f"Failed to upload density.md to GCS - invalid parameters: {e}")
+        except Exception as e:
+            logger.error(f"Failed to upload density.md to GCS - unexpected error: {e}")
+            logger.debug(f"GCS upload error details: {type(e).__name__}: {e}", exc_info=True)
+    
+    return full_path
+
+
+def _generate_tooltips_json(
+    results: Dict[str, Any],
+    daily_folder_path: str
+) -> None:
+    """Generate tooltips.json if operational intelligence was added."""
+    if '_operational_intelligence' not in results:
+        return
+    
+    try:
+        oi_data = results['_operational_intelligence']
+        bins_flagged = oi_data['bins_flagged']
+        flagged = get_flagged_bins(bins_flagged)
+        
+        if len(flagged) > 0:
+            tooltips_path = os.path.join(daily_folder_path, "tooltips.json")
+            if generate_tooltips_json(flagged, oi_data['config'], tooltips_path):
+                print(f"🗺️ Tooltips JSON saved to: {tooltips_path}")
+    except (KeyError, TypeError) as e:
+        logger.error(f"Invalid operational intelligence data structure: {e}")
+    except (OSError, IOError) as e:
+        logger.error(f"Failed to write tooltips.json: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error generating tooltips.json: {e}")
+        logger.debug(f"Tooltips generation error details: {type(e).__name__}: {e}", exc_info=True)
 
 
 def _regenerate_report_with_intelligence(
@@ -854,95 +1083,19 @@ def _regenerate_report_with_intelligence(
     Returns:
         Path to generated report file, or None if generation failed
     """
-    from .storage_service import get_storage_service
-    # Note: generate_new_density_report_issue246 is defined later in this same file (line 3101)
-    
     if not daily_folder_path:
         logger.warning("daily_folder_path not available for report regeneration")
         return None
     
     if use_new_report_format:
-        print("📊 Generating new density report (Issue #246)...")
-        timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
-        timestamped_path = os.path.join(daily_folder_path, f"{timestamp}-Density.md")
-        
-        new_report_results = generate_new_density_report_issue246(
-            reports_dir=daily_folder_path,
-            output_path=timestamped_path,
-            app_version="1.6.42"
-        )
-        report_content_final = new_report_results['report_content']
-        full_path = timestamped_path
-        print(f"📊 New density report saved to: {full_path}")
-        
-        # Upload to GCS if enabled
-        if os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
-            try:
-                storage_service = get_storage_service()
-                gcs_path = storage_service.save_file(
-                    filename=os.path.basename(timestamped_path),
-                    content=report_content_final,
-                    date=None
-                )
-                print(f"☁️ Density report uploaded to GCS: {gcs_path}")
-            except Exception as e:
-                print(f"⚠️ Failed to upload density.md to GCS: {e}")
+        full_path = _generate_new_report_format(daily_folder_path)
     else:
-        print("📊 Regenerating density report with operational intelligence...")
-        from .report_utils import get_report_paths
-        
-        # Note: generate_markdown_report is defined later in this same file
-        report_content_final = generate_markdown_report(
-            results,
-            start_times,
-            include_per_event,
-            include_operational_intelligence=True,
-            output_dir=output_dir
+        full_path = _generate_legacy_report_format(
+            results, start_times, include_per_event, output_dir
         )
-        
-        # Get existing full_path from results or create new
-        full_path, _ = get_report_paths("Density", "md", output_dir)
-        with open(full_path, 'w', encoding='utf-8') as f:
-            f.write(report_content_final)
-        
-        print(f"📊 Density report (with operational intelligence) saved to: {full_path}")
-        
-        # Upload to GCS if enabled
-        if os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
-            try:
-                storage_service = get_storage_service()
-                gcs_path = storage_service.save_file(
-                    filename=os.path.basename(full_path),
-                    content=report_content_final,
-                    date=None
-                )
-                print(f"☁️ Density report uploaded to GCS: {gcs_path}")
-            except (OSError, IOError) as e:
-                logger.error(f"Failed to upload density.md to GCS - file system error: {e}")
-            except (ValueError, TypeError) as e:
-                logger.error(f"Failed to upload density.md to GCS - invalid parameters: {e}")
-            except Exception as e:
-                logger.error(f"Failed to upload density.md to GCS - unexpected error: {e}")
-                logger.debug(f"GCS upload error details: {type(e).__name__}: {e}", exc_info=True)
     
     # Generate tooltips.json if operational intelligence was added
-    if '_operational_intelligence' in results:
-        try:
-            oi_data = results['_operational_intelligence']
-            bins_flagged = oi_data['bins_flagged']
-            flagged = get_flagged_bins(bins_flagged)
-            
-            if len(flagged) > 0:
-                tooltips_path = os.path.join(daily_folder_path, "tooltips.json")
-                if generate_tooltips_json(flagged, oi_data['config'], tooltips_path):
-                    print(f"🗺️ Tooltips JSON saved to: {tooltips_path}")
-        except (KeyError, TypeError) as e:
-            logger.error(f"Invalid operational intelligence data structure: {e}")
-        except (OSError, IOError) as e:
-            logger.error(f"Failed to write tooltips.json: {e}")
-        except Exception as e:
-            logger.error(f"Unexpected error generating tooltips.json: {e}")
-            logger.debug(f"Tooltips generation error details: {type(e).__name__}: {e}", exc_info=True)
+    _generate_tooltips_json(results, daily_folder_path)
     
     return full_path
 
@@ -1263,45 +1416,15 @@ def generate_operational_intelligence_summary(stats: Dict[str, Any], segment_sum
     return content
 
 
-def generate_markdown_report(
-    results: Dict[str, Any], 
-    start_times: Dict[str, float], 
-    include_per_event: bool = True,
-    include_operational_intelligence: bool = True,
-    output_dir: str = "reports"
-) -> str:
-    """Generate markdown content for the density report with optional operational intelligence."""
-    
-    # Event start times for ordering
-    event_order = sorted(start_times.items(), key=lambda x: x[1])
-    
-    # Calculate total runners per event
-    event_totals = {}
-    for event, _ in event_order:
-        event_totals[event] = sum(
-            getattr(seg.get("per_event", {}).get(event), "n_event_runners", 0)
-            for seg in results.get("segments", {}).values()
-        )
-    
-    # Build report content
-    content = []
-    
-    # Header with standardized format (Issue #182)
-    content.append("# Improved Per-Event Density Analysis Report")
-    content.append("")
-    content.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    content.append("")
-    content.append(f"**Analysis Engine:** density")
-    content.append("")
-    
-    # Add version information using version module
+def _get_app_version() -> str:
+    """Get application version from version module or fallback to main.py."""
     try:
         from .version import get_current_version
-        version = get_current_version()
+        return get_current_version()
     except ImportError:
         try:
             from version import get_current_version
-            version = get_current_version()
+            return get_current_version()
         except ImportError:
             # Fallback to extracting from main.py
             import re
@@ -1309,14 +1432,26 @@ def generate_markdown_report(
                 with open('app/main.py', 'r') as f:
                     content_text = f.read()
                     match = re.search(r'version="(v\d+\.\d+\.\d+)"', content_text)
-                    version = match.group(1) if match else "unknown"
+                    return match.group(1) if match else "unknown"
             except Exception:
-                version = "unknown"
-    content.append(f"**Version:** {version}")
+                return "unknown"
+
+
+def _generate_report_header(results: Dict[str, Any]) -> List[str]:
+    """Generate report header with version, environment, and analysis metadata."""
+    import os
+    content = []
+    
+    content.append("# Improved Per-Event Density Analysis Report")
+    content.append("")
+    content.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    content.append("")
+    content.append(f"**Analysis Engine:** density")
+    content.append("")
+    content.append(f"**Version:** {_get_app_version()}")
     content.append("")
     
-    # Add environment information
-    import os
+    # Environment information
     if os.environ.get('TEST_CLOUD_RUN', 'false').lower() == 'true':
         content.append("**Environment:** https://run-density-ln4r3sfkha-uc.a.run.app (Cloud Run Production)")
     else:
@@ -1327,6 +1462,7 @@ def generate_markdown_report(
     content.append("")
     content.append(f"**Time Bin Size:** {results.get('time_window_s', 30)} seconds")
     content.append("")
+    
     summary = results.get("summary", {})
     content.append(f"**Total Segments:** {summary.get('total_segments', 0)}")
     content.append("")
@@ -1335,7 +1471,12 @@ def generate_markdown_report(
     content.append(f"**Skipped Segments:** {summary.get('skipped_segments', 0)}")
     content.append("")
     
-    # Legends & Definitions (for quick reference)
+    return content
+
+
+def _generate_quick_reference_section() -> List[str]:
+    """Generate quick reference section with units and terminology."""
+    content = []
     content.append("## Quick Reference")
     content.append("")
     content.append("**Units:**")
@@ -1349,58 +1490,67 @@ def generate_markdown_report(
     content.append("")
     content.append("**Color Coding:** 🟢 Green (A-B), 🟡 Yellow (C-D), 🔴 Red (E-F)")
     content.append("")
+    return content
+
+
+def _generate_operational_intelligence_content(
+    results: Dict[str, Any],
+    output_dir: str
+) -> List[str]:
+    """Generate operational intelligence executive summary if enabled."""
+    content = []
     
-    # Operational Intelligence Executive Summary (Issue #236)
-    if include_operational_intelligence:
+    try:
+        from .io_bins import load_bins
+        from .bin_intelligence import FlaggingConfig, apply_bin_flagging, summarize_segment_flags, get_flagging_statistics
+        
+        # Load configuration
+        import yaml
         try:
-            from .io_bins import load_bins
-            from .bin_intelligence import FlaggingConfig, apply_bin_flagging, summarize_segment_flags, get_flagging_statistics
+            with open("config/reporting.yml", "r") as f:
+                config = yaml.safe_load(f)
+        except FileNotFoundError:
+            config = None
+        
+        if config:
+            # Load bins
+            bins_df = load_bins(reports_dir=output_dir)
             
-            # Load configuration
-            import yaml
-            try:
-                with open("config/reporting.yml", "r") as f:
-                    config = yaml.safe_load(f)
-            except FileNotFoundError:
-                config = None
-            
-            if config:
-                # Load bins
-                bins_df = load_bins(reports_dir=output_dir)
+            if bins_df is not None and len(bins_df) > 0:
+                # Apply flagging
+                flagging_cfg = FlaggingConfig(
+                    min_los_flag=config['flagging']['min_los_flag'],
+                    utilization_pctile=config['flagging']['utilization_pctile'],
+                    require_min_bin_len_m=config['flagging']['require_min_bin_len_m'],
+                    density_field='density_peak'
+                )
                 
-                if bins_df is not None and len(bins_df) > 0:
-                    # Apply flagging
-                    flagging_cfg = FlaggingConfig(
-                        min_los_flag=config['flagging']['min_los_flag'],
-                        utilization_pctile=config['flagging']['utilization_pctile'],
-                        require_min_bin_len_m=config['flagging']['require_min_bin_len_m'],
-                        density_field='density_peak'
-                    )
-                    
-                    bins_flagged = apply_bin_flagging(bins_df, flagging_cfg, los_thresholds=config.get('los'))
-                    stats = get_flagging_statistics(bins_flagged)
-                    segment_summary = summarize_segment_flags(bins_flagged)
-                    
-                    # Generate operational intelligence sections
-                    content.extend(generate_operational_intelligence_summary(stats, segment_summary, config))
-                    content.append("")
-                    
-                    # Store for bin detail appendix later
-                    results['_operational_intelligence'] = {
-                        'bins_flagged': bins_flagged,
-                        'stats': stats,
-                        'segment_summary': segment_summary,
-                        'config': config
-                    }
-        except Exception as e:
-            logger.warning(f"Could not generate operational intelligence: {e}")
-            # Continue without operational intelligence
+                bins_flagged = apply_bin_flagging(bins_df, flagging_cfg, los_thresholds=config.get('los'))
+                stats = get_flagging_statistics(bins_flagged)
+                segment_summary = summarize_segment_flags(bins_flagged)
+                
+                # Generate operational intelligence sections
+                content.extend(generate_operational_intelligence_summary(stats, segment_summary, config))
+                content.append("")
+                
+                # Store for bin detail appendix later
+                results['_operational_intelligence'] = {
+                    'bins_flagged': bins_flagged,
+                    'stats': stats,
+                    'segment_summary': segment_summary,
+                    'config': config
+                }
+    except Exception as e:
+        logger.warning(f"Could not generate operational intelligence: {e}")
+        # Continue without operational intelligence
     
-    # Executive Summary Table (TL;DR for race directors)
-    summary_table = generate_summary_table(results.get("segments", {}))
-    content.extend(summary_table)
+    return content
+
+
+def _generate_methodology_section() -> List[str]:
+    """Generate methodology section using v2.0 rulebook or fallback."""
+    content = []
     
-    # Methodology section using v2.0 rulebook
     try:
         import yaml
         with open("config/density_rulebook.yml", "r") as f:
@@ -1421,9 +1571,16 @@ def generate_markdown_report(
         content.append("**Units**: Density thresholds use *runners/m²* (areal density).")
         content.append("")
     
-    # Note: Detailed definitions and LOS tables moved to Appendix
+    return content
+
+
+def _generate_event_start_times_table(
+    results: Dict[str, Any],
+    event_order: List[Tuple[str, float]]
+) -> List[str]:
+    """Generate event start times table with participant counts."""
+    content = []
     
-    # Event start times (showing actual participants in first segment as reference)
     content.append("## Event Start Times")
     content.append("")
     content.append("| Event | Start Time | Total Participants |")
@@ -1446,14 +1603,13 @@ def generate_markdown_report(
     content.append(f"| **Total** | - | **{total_runners:,}** |")
     content.append("")
     
-    # Process each segment
-    for segment_id, segment in results.get("segments", {}).items():
-        content.extend(generate_segment_section(segment_id, segment, event_order, include_per_event))
-        content.append("")
-        content.append("---")
-        content.append("")
+    return content
+
+
+def _generate_appendix_content(results: Dict[str, Any]) -> List[str]:
+    """Generate appendix with detailed definitions, LOS thresholds, and bin-level detail."""
+    content = []
     
-    # Appendix with detailed methodology and definitions
     content.append("## Appendix")
     content.append("")
     content.append("### Detailed Definitions")
@@ -1528,6 +1684,54 @@ def generate_markdown_report(
             
             content.append("---")
             content.append("")
+    
+    return content
+
+
+def generate_markdown_report(
+    results: Dict[str, Any], 
+    start_times: Dict[str, float], 
+    include_per_event: bool = True,
+    include_operational_intelligence: bool = True,
+    output_dir: str = "reports"
+) -> str:
+    """Generate markdown content for the density report with optional operational intelligence."""
+    
+    # Event start times for ordering
+    event_order = sorted(start_times.items(), key=lambda x: x[1])
+    
+    # Build report content
+    content = []
+    
+    # Header with standardized format (Issue #182)
+    content.extend(_generate_report_header(results))
+    
+    # Quick Reference section
+    content.extend(_generate_quick_reference_section())
+    
+    # Operational Intelligence Executive Summary (Issue #236)
+    if include_operational_intelligence:
+        content.extend(_generate_operational_intelligence_content(results, output_dir))
+    
+    # Executive Summary Table (TL;DR for race directors)
+    summary_table = generate_summary_table(results.get("segments", {}))
+    content.extend(summary_table)
+    
+    # Methodology section using v2.0 rulebook
+    content.extend(_generate_methodology_section())
+    
+    # Event start times (showing actual participants in first segment as reference)
+    content.extend(_generate_event_start_times_table(results, event_order))
+    
+    # Process each segment
+    for segment_id, segment in results.get("segments", {}).items():
+        content.extend(generate_segment_section(segment_id, segment, event_order, include_per_event))
+        content.append("")
+        content.append("---")
+        content.append("")
+    
+    # Appendix with detailed methodology and definitions
+    content.extend(_generate_appendix_content(results))
     
     return "\n".join(content)
 
@@ -2125,6 +2329,279 @@ def save_map_dataset_to_storage(map_data: Dict[str, Any], output_dir: str) -> st
         print(f"⚠️ Storage service failed, falling back to local: {e}")
         return save_map_dataset(map_data, output_dir)
 
+def _build_segment_catalog_from_results(results: Dict[str, Any], logger) -> dict:
+    """Build segment catalog from density analysis results."""
+    from .bins_accumulator import SegmentInfo
+    
+    segments = {}
+    if 'segments' in results and results['segments']:
+        # Use segments from density analysis results
+        results_segments = results['segments']
+        if isinstance(results_segments, dict):
+            # Real density analysis returns segments as a dict
+            for seg_id, seg_data in results_segments.items():
+                # Issue #248: Use actual segment length from density analysis
+                length_m = float(seg_data.get('length_m', 1000.0))
+                width_m = float(seg_data.get('width_m', 5.0))
+                coords = seg_data.get('coords', None)
+                
+                # Log if we're using default (indicates missing data)
+                if 'length_m' not in seg_data:
+                    logger.warning(f"Segment {seg_id}: length_m not in seg_data, using default {length_m}m")
+                
+                segments[seg_id] = SegmentInfo(seg_id, length_m, width_m, coords)
+        elif isinstance(results_segments, list):
+            # Fallback for list format
+            for seg in results_segments:
+                seg_id = seg.get('seg_id') or seg.get('id')
+                length_m = float(seg.get('length_m', 1000.0))
+                width_m = float(seg.get('width_m', 5.0))
+                coords = seg.get('coords', None)
+                segments[seg_id] = SegmentInfo(seg_id, length_m, width_m, coords)
+    else:
+        # Fallback: create segments from results data
+        logger.warning("No segment data in results, using fallback")
+        segments = {
+            "A1": SegmentInfo("A1", 1000.0, 5.0),
+            "B1": SegmentInfo("B1", 800.0, 4.0)
+        }
+    
+    return segments
+
+
+def _create_time_windows_for_bins(start_times: Dict[str, float], dt_seconds: int) -> list:
+    """Create time windows from start_times and analysis duration."""
+    from datetime import datetime, timezone, timedelta
+    from .bins_accumulator import make_time_windows
+    
+    base_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Find earliest start time and total duration
+    earliest_start_min = min(start_times.values())
+    latest_end_min = max(start_times.values()) + 120  # Add 2 hours for analysis duration
+    
+    t0_utc = base_date + timedelta(minutes=earliest_start_min)
+    total_duration_s = int((latest_end_min - earliest_start_min) * 60)
+    
+    return make_time_windows(t0=t0_utc, duration_s=total_duration_s, dt_seconds=dt_seconds)
+
+
+def _apply_flagging_to_bin_features(
+    geojson_features: list,
+    bin_features: list,
+    segments: dict,
+    time_windows: list,
+    logger
+) -> None:
+    """Apply unified flagging with utilization percentile to bin features."""
+    import time
+    flag_start = time.monotonic()
+    
+    try:
+        from . import rulebook
+        from .utilization import add_utilization_percentile
+        from .schema_resolver import resolve_schema
+        import pandas as pd
+        
+        # Create segments_dict for schema resolution
+        segments_dict = {}
+        try:
+            from .io.loader import load_segments
+            segments_df = load_segments("data/segments.csv")
+            for _, row in segments_df.iterrows():
+                segments_dict[row['seg_id']] = {
+                    'seg_label': row.get('seg_label', row['seg_id']),
+                    'width_m': row.get('width_m', 3.0),
+                    'flow_type': row.get('flow_type', 'none')
+                }
+        except Exception as e:
+            logger.warning(f"Could not load segments CSV for flagging: {e}, using defaults")
+            # Create minimal segments_dict from available segments
+            for seg_id in segments.keys():
+                segments_dict[seg_id] = {
+                    'seg_label': seg_id,
+                    'width_m': 5.0,
+                    'flow_type': 'none'
+                }
+        
+        # Convert features to DataFrame for vectorized processing
+        flag_rows = []
+        for idx, (feature, bin_feature) in enumerate(zip(geojson_features, bin_features)):
+            props = feature["properties"]
+            
+            # Compute window_idx by finding matching time window
+            window_idx = 0
+            for w_idx, (t_start, t_end, duration) in enumerate(time_windows):
+                if bin_feature.t_start == t_start and bin_feature.t_end == t_end:
+                    window_idx = w_idx
+                    break
+            
+            flag_rows.append({
+                "feature_idx": idx,
+                "segment_id": props["segment_id"],
+                "bin_id": props["bin_id"],
+                "start_km": props["start_km"],
+                "end_km": props["end_km"],
+                "t_start": props["t_start"],
+                "t_end": props["t_end"],
+                "density": props["density"],
+                "rate": props["rate"],  # p/s
+                "los_class": props["los_class"],
+                "bin_size_km": props["bin_size_km"],
+                # Add missing fields for flagging
+                "window_idx": window_idx,
+                "width_m": next((s.width_m for s in segments.values() if s.segment_id == props["segment_id"]), 5.0),
+                "schema_key": resolve_schema(props["segment_id"], segments_dict),
+            })
+        
+        flags_df = pd.DataFrame(flag_rows)
+        
+        # Compute utilization percentile per window (course-wide)
+        flags_df = add_utilization_percentile(flags_df, cohort="window")
+        
+        # Apply rulebook flagging to each bin
+        flag_results = []
+        for _, row in flags_df.iterrows():
+            result = rulebook.evaluate_flags(
+                density_pm2=row["density"],
+                rate_p_s=row["rate"],
+                width_m=row["width_m"],
+                schema_key=row["schema_key"],
+                util_percentile=row.get("util_percentile")
+            )
+            flag_results.append(result)
+        
+        # Add flag results back to GeoJSON features
+        for idx, (feature, result) in enumerate(zip(geojson_features, flag_results)):
+            props = feature["properties"]
+            props["flag_severity"] = result.severity
+            props["flag_reason"] = result.flag_reason
+            props["rate_per_m_per_min"] = result.rate_per_m_per_min
+            props["util_percent"] = result.util_percent
+            props["util_percentile"] = result.util_percentile
+            props["window_idx"] = flags_df.iloc[idx]["window_idx"]
+            props["schema_key"] = flags_df.iloc[idx]["schema_key"]
+            props["width_m"] = flags_df.iloc[idx]["width_m"]
+            # Update LOS from rulebook (may differ from bins_accumulator default)
+            props["los_class"] = result.los_class
+        
+        flag_time = int((time.monotonic() - flag_start) * 1000)
+        flagged_count = sum(1 for r in flag_results if r.severity != "none")
+        logger.info(f"✅ Flagging complete: {flagged_count}/{len(flag_results)} bins flagged ({flag_time}ms)")
+        
+    except Exception as flag_error:
+        logger.warning(f"⚠️ Flagging failed, bins will have no flags: {flag_error}")
+        # Continue without flags - bins will still have base properties
+
+
+def _add_geometries_to_bin_features(
+    geojson_features: list,
+    analysis_context: Optional[AnalysisContext],
+    logger
+) -> None:
+    """Add geometry backfill using bin_geometries.py."""
+    import time
+    geom_start = time.monotonic()
+    
+    try:
+        from .bin_geometries import generate_bin_polygon
+        from .gpx_processor import load_all_courses, generate_segment_coordinates
+        from .io.loader import load_segments
+        import pandas as pd
+        import json
+        
+        # Get segments_csv path from analysis_context
+        segments_csv_path = analysis_context.segments_csv_path if analysis_context else "data/segments.csv"
+        
+        # Load segment metadata for geometry
+        segments_df = load_segments(segments_csv_path)
+        
+        # Load GPX courses for centerlines
+        courses = load_all_courses("data")
+        
+        # Convert segments to dict format for GPX processor
+        segments_list = []
+        for _, segment in segments_df.iterrows():
+            segments_list.append({
+                "seg_id": segment['seg_id'],
+                "segment_label": segment.get('seg_label', segment['seg_id']),
+                "10K": segment.get('10K', 'n'),
+                "half": segment.get('half', 'n'),
+                "full": segment.get('full', 'n'),
+                "10K_from_km": segment.get('10K_from_km'),
+                "10K_to_km": segment.get('10K_to_km'),
+                "half_from_km": segment.get('half_from_km'),
+                "half_to_km": segment.get('half_to_km'),
+                "full_from_km": segment.get('full_from_km'),
+                "full_to_km": segment.get('full_to_km')
+            })
+        
+        # Generate segment centerlines from GPX
+        segments_with_coords = generate_segment_coordinates(courses, segments_list)
+        
+        # Build lookups
+        centerlines = {}  # segment_id -> centerline_coords (course-absolute)
+        segment_offsets = {}  # segment_id -> course_offset_km (to convert bin-relative to course-absolute)
+        widths = {}  # segment_id -> width_m
+        
+        for seg_coords in segments_with_coords:
+            seg_id = seg_coords['seg_id']
+            if seg_coords.get('line_coords') and not seg_coords.get('coord_issue'):
+                centerlines[seg_id] = seg_coords['line_coords']
+                # Store the course offset (from_km) to convert bin-relative km to course-absolute km
+                segment_offsets[seg_id] = seg_coords.get('from_km', 0.0)
+        
+        for _, seg in segments_df.iterrows():
+            widths[seg['seg_id']] = float(seg.get('width_m', 5.0))
+        
+        # Add geometry to each feature
+        geometries_added = 0
+        geometries_failed = 0
+        
+        for f in geojson_features:
+            seg_id = f["properties"]["segment_id"]
+            bin_start_km = f["properties"]["start_km"]  # Bin-relative km
+            bin_end_km = f["properties"]["end_km"]      # Bin-relative km
+            
+            # Get centerline, offset, and width
+            centerline = centerlines.get(seg_id)
+            segment_offset = segment_offsets.get(seg_id, 0.0)  # Course-absolute offset
+            width_m = widths.get(seg_id, 5.0)
+            
+            if centerline and segment_offset is not None:
+                # CRITICAL FIX: Bins use segment-relative km, but centerline is already sliced
+                # The centerline from gpx_processor is ALREADY sliced to segment boundaries
+                # So we should use bin-relative km directly (0.0 = start of centerline)
+                # The centerline itself spans the full segment length
+                
+                # Generate polygon geometry using bin-relative coordinates
+                # (centerline is already segment-specific, not full course)
+                polygon = generate_bin_polygon(
+                    segment_centerline_coords=centerline,
+                    bin_start_km=bin_start_km,  # Use bin-relative (centerline is segment-sliced)
+                    bin_end_km=bin_end_km,
+                    segment_width_m=width_m
+                )
+                
+                if polygon and polygon.is_valid:
+                    # Convert to GeoJSON geometry dict
+                    f["geometry"] = json.loads(json.dumps(polygon.__geo_interface__))
+                    geometries_added += 1
+                else:
+                    geometries_failed += 1
+                    # Leave as None
+            else:
+                geometries_failed += 1
+                # No centerline available, leave geometry as None
+        
+        geom_time = int((time.monotonic() - geom_start) * 1000)
+        logger.info(f"✅ Bin geometries generated: {geometries_added} successful, {geometries_failed} failed ({geom_time}ms)")
+        
+    except Exception as geom_error:
+        logger.warning(f"⚠️ Geometry generation failed, bins will have null geometry: {geom_error}")
+        # Continue without geometries - bins will still have properties
+
+
 def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float], bin_size_km: float = 0.1, 
                         analysis_context: Optional[AnalysisContext] = None, dt_seconds: int = 60) -> Dict[str, Any]:
     """
@@ -2158,53 +2635,11 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
         
         log_bins_event(action="start", bin_size_km=bin_size_km, dt_seconds=dt_seconds)
         
-        # 1) Build segment catalog from results
-        segments = {}
-        if 'segments' in results and results['segments']:
-            # Use segments from density analysis results
-            results_segments = results['segments']
-            if isinstance(results_segments, dict):
-                # Real density analysis returns segments as a dict
-                for seg_id, seg_data in results_segments.items():
-                    # Issue #248: Use actual segment length from density analysis
-                    length_m = float(seg_data.get('length_m', 1000.0))
-                    width_m = float(seg_data.get('width_m', 5.0))
-                    coords = seg_data.get('coords', None)
-                    
-                    # Log if we're using default (indicates missing data)
-                    if 'length_m' not in seg_data:
-                        logger.warning(f"Segment {seg_id}: length_m not in seg_data, using default {length_m}m")
-                    
-                    segments[seg_id] = SegmentInfo(seg_id, length_m, width_m, coords)
-            elif isinstance(results_segments, list):
-                # Fallback for list format
-                for seg in results_segments:
-                    seg_id = seg.get('seg_id') or seg.get('id')
-                    length_m = float(seg.get('length_m', 1000.0))
-                    width_m = float(seg.get('width_m', 5.0))
-                    coords = seg.get('coords', None)
-                    segments[seg_id] = SegmentInfo(seg_id, length_m, width_m, coords)
-        else:
-            # Fallback: create segments from results data
-            logger.warning("No segment data in results, using fallback")
-            segments = {
-                "A1": SegmentInfo("A1", 1000.0, 5.0),
-                "B1": SegmentInfo("B1", 800.0, 4.0)
-            }
+        # 1) Build segment catalog - extracted to helper function to reduce complexity
+        segments = _build_segment_catalog_from_results(results, logger)
         
-        # 2) Create time windows from start_times and analysis duration
-        # Convert start_times from minutes to datetime
-        from datetime import datetime, timezone, timedelta
-        base_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        
-        # Find earliest start time and total duration
-        earliest_start_min = min(start_times.values())
-        latest_end_min = max(start_times.values()) + 120  # Add 2 hours for analysis duration
-        
-        t0_utc = base_date + timedelta(minutes=earliest_start_min)
-        total_duration_s = int((latest_end_min - earliest_start_min) * 60)
-        
-        time_windows = make_time_windows(t0=t0_utc, duration_s=total_duration_s, dt_seconds=dt_seconds)
+        # 2) Create time windows - extracted to helper function to reduce complexity
+        time_windows = _create_time_windows_for_bins(start_times, dt_seconds)
         
         # 3) Build runner→segment/window mapping (adapter to your model)
         runners_by_segment_and_window = build_runner_window_mapping(results, time_windows, start_times)
@@ -2224,207 +2659,11 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
         # 5) Build geometries + GeoJSON
         geojson_features = to_geojson_features(bin_build.features)
         
-        # Issue #254: Apply unified flagging with utilization percentile
-        logger.info(f"🎯 Applying unified flagging policy to {len(geojson_features)} bins...")
-        flag_start = time.monotonic()
+        # Issue #254: Apply unified flagging - extracted to helper function to reduce complexity
+        _apply_flagging_to_bin_features(geojson_features, bin_build.features, segments, time_windows, logger)
         
-        try:
-            from . import rulebook
-            from .utilization import add_utilization_percentile
-            from .schema_resolver import resolve_schema
-            import pandas as pd
-            
-            # Create segments_dict for schema resolution
-            segments_dict = {}
-            try:
-                from .io.loader import load_segments
-                segments_df = load_segments("data/segments.csv")
-                for _, row in segments_df.iterrows():
-                    segments_dict[row['seg_id']] = {
-                        'seg_label': row.get('seg_label', row['seg_id']),
-                        'width_m': row.get('width_m', 3.0),
-                        'flow_type': row.get('flow_type', 'none')
-                    }
-            except Exception as e:
-                logger.warning(f"Could not load segments CSV for flagging: {e}, using defaults")
-                # Create minimal segments_dict from available segments
-                for seg_id in segments.keys():
-                    segments_dict[seg_id] = {
-                        'seg_label': seg_id,
-                        'width_m': 5.0,
-                        'flow_type': 'none'
-                    }
-            
-            # Convert features to DataFrame for vectorized processing
-            flag_rows = []
-            for idx, (feature, bin_feature) in enumerate(zip(geojson_features, bin_build.features)):
-                props = feature["properties"]
-                
-                # Compute window_idx by finding matching time window
-                window_idx = 0
-                for w_idx, (t_start, t_end, duration) in enumerate(time_windows):
-                    if bin_feature.t_start == t_start and bin_feature.t_end == t_end:
-                        window_idx = w_idx
-                        break
-                
-                flag_rows.append({
-                    "feature_idx": idx,
-                    "segment_id": props["segment_id"],
-                    "bin_id": props["bin_id"],
-                    "start_km": props["start_km"],
-                    "end_km": props["end_km"],
-                    "t_start": props["t_start"],
-                    "t_end": props["t_end"],
-                    "density": props["density"],
-                    "rate": props["rate"],  # p/s
-                    "los_class": props["los_class"],
-                    "bin_size_km": props["bin_size_km"],
-                    # Add missing fields for flagging
-                    "window_idx": window_idx,
-                    "width_m": next((s.width_m for s in segments if s.segment_id == props["segment_id"]), 5.0),
-                    "schema_key": resolve_schema(props["segment_id"], segments_dict),
-                })
-            
-            flags_df = pd.DataFrame(flag_rows)
-            
-            # Compute utilization percentile per window (course-wide)
-            flags_df = add_utilization_percentile(flags_df, cohort="window")
-            
-            # Apply rulebook flagging to each bin
-            flag_results = []
-            for _, row in flags_df.iterrows():
-                result = rulebook.evaluate_flags(
-                    density_pm2=row["density"],
-                    rate_p_s=row["rate"],
-                    width_m=row["width_m"],
-                    schema_key=row["schema_key"],
-                    util_percentile=row.get("util_percentile")
-                )
-                flag_results.append(result)
-            
-            # Add flag results back to GeoJSON features
-            for idx, (feature, result) in enumerate(zip(geojson_features, flag_results)):
-                props = feature["properties"]
-                props["flag_severity"] = result.severity
-                props["flag_reason"] = result.flag_reason
-                props["rate_per_m_per_min"] = result.rate_per_m_per_min
-                props["util_percent"] = result.util_percent
-                props["util_percentile"] = result.util_percentile
-                props["window_idx"] = flags_df.iloc[idx]["window_idx"]
-                props["schema_key"] = flags_df.iloc[idx]["schema_key"]
-                props["width_m"] = flags_df.iloc[idx]["width_m"]
-                # Update LOS from rulebook (may differ from bins_accumulator default)
-                props["los_class"] = result.los_class
-            
-            flag_time = int((time.monotonic() - flag_start) * 1000)
-            flagged_count = sum(1 for r in flag_results if r.severity != "none")
-            logger.info(f"✅ Flagging complete: {flagged_count}/{len(flag_results)} bins flagged ({flag_time}ms)")
-            
-        except Exception as flag_error:
-            logger.warning(f"⚠️ Flagging failed, bins will have no flags: {flag_error}")
-            # Continue without flags - bins will still have base properties
-        
-        # Issue #249: Add geometry backfill using bin_geometries.py
-        logger.info("🗺️ Generating bin polygon geometries...")
-        geom_start = time.monotonic()
-        
-        try:
-            from .bin_geometries import generate_bin_polygon
-            from .gpx_processor import load_all_courses, generate_segment_coordinates
-            from .io.loader import load_segments
-            import pandas as pd
-            
-            # Get segments_csv path from analysis_context
-            segments_csv_path = analysis_context.segments_csv_path if analysis_context else "data/segments.csv"
-            
-            # Load segment metadata for geometry
-            segments_df = load_segments(segments_csv_path)
-            
-            # Load GPX courses for centerlines
-            courses = load_all_courses("data")
-            
-            # Convert segments to dict format for GPX processor
-            segments_list = []
-            for _, segment in segments_df.iterrows():
-                segments_list.append({
-                    "seg_id": segment['seg_id'],
-                    "segment_label": segment.get('seg_label', segment['seg_id']),
-                    "10K": segment.get('10K', 'n'),
-                    "half": segment.get('half', 'n'),
-                    "full": segment.get('full', 'n'),
-                    "10K_from_km": segment.get('10K_from_km'),
-                    "10K_to_km": segment.get('10K_to_km'),
-                    "half_from_km": segment.get('half_from_km'),
-                    "half_to_km": segment.get('half_to_km'),
-                    "full_from_km": segment.get('full_from_km'),
-                    "full_to_km": segment.get('full_to_km')
-                })
-            
-            # Generate segment centerlines from GPX
-            segments_with_coords = generate_segment_coordinates(courses, segments_list)
-            
-            # Build lookups
-            centerlines = {}  # segment_id -> centerline_coords (course-absolute)
-            segment_offsets = {}  # segment_id -> course_offset_km (to convert bin-relative to course-absolute)
-            widths = {}  # segment_id -> width_m
-            
-            for seg_coords in segments_with_coords:
-                seg_id = seg_coords['seg_id']
-                if seg_coords.get('line_coords') and not seg_coords.get('coord_issue'):
-                    centerlines[seg_id] = seg_coords['line_coords']
-                    # Store the course offset (from_km) to convert bin-relative km to course-absolute km
-                    segment_offsets[seg_id] = seg_coords.get('from_km', 0.0)
-            
-            for _, seg in segments_df.iterrows():
-                widths[seg['seg_id']] = float(seg.get('width_m', 5.0))
-            
-            # Add geometry to each feature
-            geometries_added = 0
-            geometries_failed = 0
-            
-            for f in geojson_features:
-                seg_id = f["properties"]["segment_id"]
-                bin_start_km = f["properties"]["start_km"]  # Bin-relative km
-                bin_end_km = f["properties"]["end_km"]      # Bin-relative km
-                
-                # Get centerline, offset, and width
-                centerline = centerlines.get(seg_id)
-                segment_offset = segment_offsets.get(seg_id, 0.0)  # Course-absolute offset
-                width_m = widths.get(seg_id, 5.0)
-                
-                if centerline and segment_offset is not None:
-                    # CRITICAL FIX: Bins use segment-relative km, but centerline is already sliced
-                    # The centerline from gpx_processor is ALREADY sliced to segment boundaries
-                    # So we should use bin-relative km directly (0.0 = start of centerline)
-                    # The centerline itself spans the full segment length
-                    
-                    # Generate polygon geometry using bin-relative coordinates
-                    # (centerline is already segment-specific, not full course)
-                    polygon = generate_bin_polygon(
-                        segment_centerline_coords=centerline,
-                        bin_start_km=bin_start_km,  # Use bin-relative (centerline is segment-sliced)
-                        bin_end_km=bin_end_km,
-                        segment_width_m=width_m
-                    )
-                    
-                    if polygon and polygon.is_valid:
-                        # Convert to GeoJSON geometry dict
-                        import json
-                        f["geometry"] = json.loads(json.dumps(polygon.__geo_interface__))
-                        geometries_added += 1
-                    else:
-                        geometries_failed += 1
-                        # Leave as None
-                else:
-                    geometries_failed += 1
-                    # No centerline available, leave geometry as None
-            
-            geom_time = int((time.monotonic() - geom_start) * 1000)
-            logger.info(f"✅ Bin geometries generated: {geometries_added} successful, {geometries_failed} failed ({geom_time}ms)")
-            
-        except Exception as geom_error:
-            logger.warning(f"⚠️ Geometry generation failed, bins will have null geometry: {geom_error}")
-            # Continue without geometries - bins will still have properties
+        # Issue #249: Add geometry backfill - extracted to helper function to reduce complexity
+        _add_geometries_to_bin_features(geojson_features, analysis_context, logger)
         
         geojson = {"type": "FeatureCollection", "features": geojson_features, "metadata": bin_build.metadata}
         
@@ -2604,6 +2843,190 @@ def generate_bin_features_with_coarsening(segments: dict, time_windows: list, ru
     
     return bin_build
 
+def _build_segment_ranges_per_event(segments_config: pd.DataFrame) -> Dict[str, Dict[str, Tuple[float, float]]]:
+    """Build segment km ranges dictionary per event type."""
+    segment_ranges = {}
+    for _, seg_row in segments_config.iterrows():
+        seg_id = seg_row['seg_id']
+        segment_ranges[seg_id] = {
+            'Full': (seg_row['full_from_km'], seg_row['full_to_km']) if pd.notna(seg_row.get('full_from_km')) else None,
+            'Half': (seg_row['half_from_km'], seg_row['half_to_km']) if pd.notna(seg_row.get('half_from_km')) else None,
+            '10K': (seg_row['10K_from_km'], seg_row['10K_to_km']) if pd.notna(seg_row.get('10K_from_km')) else None,
+        }
+    return segment_ranges
+
+
+def _precompute_runner_data(pace_data: pd.DataFrame) -> pd.DataFrame:
+    """Precompute pace, start offset, and speed for all runners."""
+    import numpy as np
+    
+    pace_data = pace_data.copy()
+    pace_data['pace_sec_per_km'] = pace_data['pace'].values * 60.0
+    pace_data['start_offset_sec'] = pace_data.get('start_offset', pd.Series([0]*len(pace_data))).fillna(0).values.astype(float)
+    pace_data['speed_mps'] = np.where(pace_data['pace_sec_per_km'] > 0, 
+                                       1000.0 / pace_data['pace_sec_per_km'], 
+                                       0)
+    return pace_data
+
+
+def _calculate_window_duration_seconds(time_windows: list) -> int:
+    """Calculate window duration in seconds from time windows."""
+    if len(time_windows) >= 2:
+        (t0, t1, _) = time_windows[0]
+        (t2, t3, _) = time_windows[1]
+        return int((t2 - t0).total_seconds())
+    return 120  # Default fallback
+
+
+def _calculate_window_midpoint_seconds(t_start, t_end) -> float:
+    """Calculate time window midpoint in seconds from midnight."""
+    t_mid = t_start + (t_end - t_start) / 2
+    return t_mid.hour * 3600 + t_mid.minute * 60 + t_mid.second
+
+
+def _ensure_empty_mapping_entry(mapping: Dict, seg_id: str, w_idx: int) -> None:
+    """Ensure mapping has empty arrays for segment/window if not present."""
+    import numpy as np
+    
+    if seg_id not in mapping:
+        mapping[seg_id] = {}
+    if w_idx not in mapping[seg_id]:
+        mapping[seg_id][w_idx] = {
+            "pos_m": np.array([], dtype=np.float64),
+            "speed_mps": np.array([], dtype=np.float64)
+        }
+
+
+def _calculate_runner_positions_for_segment_window(
+    event_runners_copy: pd.DataFrame,
+    t_mid_sec: float,
+    from_km: float,
+    to_km: float
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Calculate runner positions and speeds for a specific segment/window.
+    
+    Returns:
+        Tuple of (pos_m array, speed_mps array) for runners in segment during window
+    """
+    import numpy as np
+    
+    runner_start_times = event_runners_copy['runner_start_time'].values
+    pace_sec_per_km = event_runners_copy['pace_sec_per_km'].values
+    
+    # Calculate when runners reach segment boundaries
+    time_at_seg_start = runner_start_times + pace_sec_per_km * from_km
+    time_at_seg_end = runner_start_times + pace_sec_per_km * to_km
+    
+    # Vectorized check: runner in segment during time window (±30s tolerance)
+    in_window_mask = (time_at_seg_start <= (t_mid_sec + 30)) & (time_at_seg_end >= (t_mid_sec - 30))
+    
+    # Filter to runners in window
+    valid_runners = event_runners_copy[in_window_mask]
+    if len(valid_runners) == 0:
+        return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
+    
+    # Vectorized position calculations
+    time_since_start = t_mid_sec - valid_runners['runner_start_time'].values
+    started_mask = time_since_start >= 0
+    
+    if not started_mask.any():
+        return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
+    
+    # Calculate runner positions (vectorized)
+    valid_pace = valid_runners['pace_sec_per_km'].values[started_mask]
+    runner_abs_km = np.where(valid_pace > 0, 
+                            time_since_start[started_mask] / valid_pace, 
+                            0)
+    
+    # Check if within segment range (vectorized)
+    in_segment_mask = (runner_abs_km >= from_km) & (runner_abs_km <= to_km)
+    
+    if not in_segment_mask.any():
+        return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
+    
+    # Position relative to segment start (meters)
+    pos_m = (runner_abs_km[in_segment_mask] - from_km) * 1000.0
+    speeds = valid_runners['speed_mps'].values[started_mask][in_segment_mask]
+    
+    return pos_m, speeds
+
+
+def _process_event_windows_and_segments(
+    event: str,
+    event_start_sec: float,
+    event_min: float,
+    earliest_start_min: float,
+    start_idx: int,
+    event_runners_copy: pd.DataFrame,
+    time_windows: list,
+    WINDOW_SECONDS: int,
+    segments_dict: Dict,
+    segment_ranges: Dict,
+    mapping: Dict
+) -> None:
+    """Process all windows and segments for a single event."""
+    import numpy as np
+    
+    for global_w_idx in range(start_idx, len(time_windows)):
+        (t_start, t_end, _) = time_windows[global_w_idx]
+        w_idx = global_w_idx  # Use global window index for mapping
+        
+        t_mid_sec = _calculate_window_midpoint_seconds(t_start, t_end)
+        
+        # Skip windows before this event starts
+        if t_mid_sec < (event_start_sec - WINDOW_SECONDS):
+            continue
+        
+        # Stop processing if we're way past when runners could be on course
+        max_runner_time = event_start_sec + event_runners_copy['start_offset_sec'].max() + (50 * 1000)  # ~50km at slow pace
+        if t_mid_sec > max_runner_time:
+            break
+        
+        # For each segment this event uses
+        for seg_id in segments_dict.keys():
+            if seg_id not in segment_ranges:
+                _ensure_empty_mapping_entry(mapping, seg_id, w_idx)
+                continue
+            
+            km_range = segment_ranges[seg_id].get(event)
+            if km_range is None:
+                continue
+            
+            from_km, to_km = km_range
+            if pd.isna(from_km) or pd.isna(to_km):
+                continue
+            
+            # Calculate runner positions for this segment/window
+            pos_m, speeds = _calculate_runner_positions_for_segment_window(
+                event_runners_copy, t_mid_sec, from_km, to_km
+            )
+            
+            if len(pos_m) > 0:
+                # Initialize segment/window in mapping if needed
+                if seg_id not in mapping:
+                    mapping[seg_id] = {}
+                
+                # Append or create arrays for this segment/window
+                if w_idx in mapping[seg_id]:
+                    # Append to existing (in case another event already added runners)
+                    mapping[seg_id][w_idx]["pos_m"] = np.concatenate([
+                        mapping[seg_id][w_idx]["pos_m"],
+                        pos_m
+                    ])
+                    mapping[seg_id][w_idx]["speed_mps"] = np.concatenate([
+                        mapping[seg_id][w_idx]["speed_mps"],
+                        speeds
+                    ])
+                else:
+                    mapping[seg_id][w_idx] = {
+                        "pos_m": pos_m,
+                        "speed_mps": speeds
+                    }
+            else:
+                _ensure_empty_mapping_entry(mapping, seg_id, w_idx)
+
+
 def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, start_times: Dict[str, float]) -> Dict[str, Dict[int, Dict[str, Any]]]:
     """
     Build runner→segment/window mapping adapter for bins_accumulator.
@@ -2636,41 +3059,15 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
         logger.warning(f"Could not load data for runner mapping: {e}")
         return mapping
     
-    # Build segment km ranges per event
-    segment_ranges = {}
-    for _, seg_row in segments_config.iterrows():
-        seg_id = seg_row['seg_id']
-        segment_ranges[seg_id] = {
-            'Full': (seg_row['full_from_km'], seg_row['full_to_km']) if pd.notna(seg_row.get('full_from_km')) else None,
-            'Half': (seg_row['half_from_km'], seg_row['half_to_km']) if pd.notna(seg_row.get('half_from_km')) else None,
-            '10K': (seg_row['10K_from_km'], seg_row['10K_to_km']) if pd.notna(seg_row.get('10K_from_km')) else None,
-        }
+    # Build segment ranges and precompute runner data
+    segment_ranges = _build_segment_ranges_per_event(segments_config)
+    pace_data = _precompute_runner_data(pace_data)
     
-    # Convert start times to seconds from midnight
-    start_times_sec = {event: float(mins) * 60.0 for event, mins in start_times.items()}
-    
-    # Vectorize runner calculations (same pattern as flow.py - Issue #239 performance fix)
-    # Convert to numpy arrays for vectorized operations instead of iterating
-    pace_data['pace_sec_per_km'] = pace_data['pace'].values * 60.0
-    pace_data['start_offset_sec'] = pace_data.get('start_offset', pd.Series([0]*len(pace_data))).fillna(0).values.astype(float)
-    
-    # Precompute speed for all runners
-    pace_data['speed_mps'] = np.where(pace_data['pace_sec_per_km'] > 0, 
-                                       1000.0 / pace_data['pace_sec_per_km'], 
-                                       0)
-    
-    # Issue #243 Fix: Loop through events first, then their relevant windows
-    # Keep global clock-time grid but map each event to correct indices
-    # Calculate WINDOW_SECONDS from the time_windows themselves
-    if len(time_windows) >= 2:
-        (t0, t1, _) = time_windows[0]
-        (t2, t3, _) = time_windows[1]
-        WINDOW_SECONDS = int((t2 - t0).total_seconds())
-    else:
-        WINDOW_SECONDS = 120  # Default fallback
-    
+    # Calculate window duration
+    WINDOW_SECONDS = _calculate_window_duration_seconds(time_windows)
     earliest_start_min = min(start_times.values())
     
+    # Issue #243 Fix: Loop through events first, then their relevant windows
     for event in ['Full', '10K', 'Half']:
         # Get event start time
         event_min = start_times.get(event)
@@ -2686,7 +3083,6 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
         event_mask = pace_data['event'] == event
         event_runners = pace_data[event_mask]
         
-        
         if len(event_runners) == 0:
             continue
         
@@ -2694,128 +3090,146 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
         event_runners_copy = event_runners.copy()
         event_runners_copy['runner_start_time'] = event_start_sec + event_runners_copy['start_offset_sec']
         
-        # Process only the windows relevant to this event (starting from start_idx)
-        for global_w_idx in range(start_idx, len(time_windows)):
-            (t_start, t_end, _) = time_windows[global_w_idx]
-            w_idx = global_w_idx  # Use global window index for mapping
-            
-            # Time window midpoint in seconds from midnight
-            t_mid = t_start + (t_end - t_start) / 2
-            t_mid_sec = t_mid.hour * 3600 + t_mid.minute * 60 + t_mid.second
-            
-            # Skip windows before this event starts
-            if t_mid_sec < (event_start_sec - WINDOW_SECONDS):
-                continue
-            
-            # Stop processing if we're way past when runners could be on course
-            # (this is an optimization - don't process windows after event is done)
-            max_runner_time = event_start_sec + event_runners_copy['start_offset_sec'].max() + (50 * 1000)  # ~50km at slow pace
-            if t_mid_sec > max_runner_time:
-                break
-            
-            # For each segment this event uses
-            for seg_id in segments_dict.keys():
-                if seg_id not in segment_ranges:
-                    if seg_id not in mapping:
-                        mapping[seg_id] = {}
-                    if w_idx not in mapping[seg_id]:
-                        mapping[seg_id][w_idx] = {
-                            "pos_m": np.array([], dtype=np.float64),
-                            "speed_mps": np.array([], dtype=np.float64)
-                        }
-                    continue
-                
-                km_range = segment_ranges[seg_id].get(event)
-                if km_range is None:
-                    continue
-                
-                from_km, to_km = km_range
-                if pd.isna(from_km) or pd.isna(to_km):
-                    continue
-                
-                # Vectorized calculations for all runners in this event
-                runner_start_times = event_runners_copy['runner_start_time'].values
-                pace_sec_per_km = event_runners_copy['pace_sec_per_km'].values
-                speed_mps = event_runners_copy['speed_mps'].values
-                
-                # Calculate when runners reach segment boundaries (anchored to EVENT start time)
-                time_at_seg_start = runner_start_times + pace_sec_per_km * from_km
-                time_at_seg_end = runner_start_times + pace_sec_per_km * to_km
-                
-                # Vectorized check: runner in segment during time window (±30s tolerance)
-                in_window_mask = (time_at_seg_start <= (t_mid_sec + 30)) & (time_at_seg_end >= (t_mid_sec - 30))
-                
-                
-                # Filter to runners in window
-                valid_runners = event_runners_copy[in_window_mask]
-                if len(valid_runners) == 0:
-                    if seg_id not in mapping:
-                        mapping[seg_id] = {}
-                    if w_idx not in mapping[seg_id]:
-                        mapping[seg_id][w_idx] = {
-                            "pos_m": np.array([], dtype=np.float64),
-                            "speed_mps": np.array([], dtype=np.float64)
-                        }
-                    continue
-                
-                # Vectorized position calculations
-                time_since_start = t_mid_sec - valid_runners['runner_start_time'].values
-                started_mask = time_since_start >= 0
-                
-                if not started_mask.any():
-                    if seg_id not in mapping:
-                        mapping[seg_id] = {}
-                    if w_idx not in mapping[seg_id]:
-                        mapping[seg_id][w_idx] = {
-                            "pos_m": np.array([], dtype=np.float64),
-                            "speed_mps": np.array([], dtype=np.float64)
-                        }
-                    continue
-                
-                # Calculate runner positions (vectorized)
-                valid_pace = valid_runners['pace_sec_per_km'].values[started_mask]
-                runner_abs_km = np.where(valid_pace > 0, 
-                                        time_since_start[started_mask] / valid_pace, 
-                                        0)
-                
-                # Check if within segment range (vectorized)
-                in_segment_mask = (runner_abs_km >= from_km) & (runner_abs_km <= to_km)
-                
-                if in_segment_mask.any():
-                    # Position relative to segment start (meters)
-                    pos_m = (runner_abs_km[in_segment_mask] - from_km) * 1000.0
-                    speeds = valid_runners['speed_mps'].values[started_mask][in_segment_mask]
-                    
-                    # Initialize segment/window in mapping if needed
-                    if seg_id not in mapping:
-                        mapping[seg_id] = {}
-                    
-                    # Append or create arrays for this segment/window
-                    if w_idx in mapping[seg_id]:
-                        # Append to existing (in case another event already added runners)
-                        mapping[seg_id][w_idx]["pos_m"] = np.concatenate([
-                            mapping[seg_id][w_idx]["pos_m"],
-                            pos_m
-                        ])
-                        mapping[seg_id][w_idx]["speed_mps"] = np.concatenate([
-                            mapping[seg_id][w_idx]["speed_mps"],
-                            speeds
-                        ])
-                    else:
-                        mapping[seg_id][w_idx] = {
-                            "pos_m": pos_m,
-                            "speed_mps": speeds
-                        }
-                else:
-                    if seg_id not in mapping:
-                        mapping[seg_id] = {}
-                    if w_idx not in mapping[seg_id]:
-                        mapping[seg_id][w_idx] = {
-                            "pos_m": np.array([], dtype=np.float64),
-                            "speed_mps": np.array([], dtype=np.float64)
-                        }
+        # Process all windows and segments for this event
+        _process_event_windows_and_segments(
+            event, event_start_sec, event_min, earliest_start_min,
+            start_idx, event_runners_copy, time_windows, WINDOW_SECONDS,
+            segments_dict, segment_ranges, mapping
+        )
     
     return mapping
+
+def _build_geojson_from_bin_data(bin_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Build GeoJSON data structure from bin_data."""
+    from .constants import BIN_SCHEMA_VERSION
+    
+    geojson_data = {
+        "type": "FeatureCollection",
+        "features": [],
+        "metadata": {
+            "schema_version": BIN_SCHEMA_VERSION,
+            "generated_at": datetime.now().isoformat(),
+            "total_bins": len(bin_data.get("geojson", {}).get("features", [])),
+            "analysis_type": "bins"
+        }
+    }
+    
+    # Copy features from bin_data if available
+    if "geojson" in bin_data and "features" in bin_data["geojson"]:
+        geojson_data["features"] = bin_data["geojson"]["features"]
+        geojson_data["metadata"]["total_bins"] = len(bin_data["geojson"]["features"])
+    
+    return geojson_data
+
+
+def _convert_geometry_to_wkb(geometry_coords: list, bin_id: str) -> bytes:
+    """Convert geometry coordinates to WKB format."""
+    try:
+        from shapely.geometry import LineString
+        from shapely import wkb
+        
+        if not geometry_coords or not isinstance(geometry_coords, list) or len(geometry_coords) == 0:
+            return b""
+        
+        # Handle different geometry types
+        if isinstance(geometry_coords[0][0], list):  # Polygon
+            # Convert polygon to linestring for simplicity
+            coords = geometry_coords[0] if geometry_coords else []
+        else:  # Already linestring format
+            coords = geometry_coords
+        
+        if len(coords) >= 2:
+            return wkb.dumps(LineString(coords), hex=False)
+        return b""
+    except Exception as geom_e:
+        logger.warning(f"Geometry conversion failed for bin {bin_id}: {geom_e}")
+        return b""
+
+
+def _build_parquet_row_from_feature(feature: Dict[str, Any]) -> Dict[str, Any]:
+    """Build Parquet row from GeoJSON feature."""
+    from .constants import BIN_SCHEMA_VERSION
+    
+    props = feature["properties"]
+    geometry_coords = feature.get("geometry", {}).get("coordinates", [])
+    geometry_wkb = _convert_geometry_to_wkb(geometry_coords, props.get('bin_id', 'unknown'))
+    
+    return {
+        "bin_id": str(props.get("bin_id", "")),
+        "segment_id": str(props.get("segment_id", "")),
+        "start_km": float(props.get("start_km", 0.0)),
+        "end_km": float(props.get("end_km", 0.0)),
+        "t_start": str(props.get("t_start", "")),
+        "t_end": str(props.get("t_end", "")),
+        "window_idx": int(props.get("window_idx", 0)),
+        "density": float(props.get("density", 0.0)),
+        "rate": float(props.get("rate", 0.0)),
+        "los_class": str(props.get("los_class", "A")),
+        # Issue #254: Unified flagging fields
+        "flag_severity": str(props.get("flag_severity", "none")),
+        "flag_reason": str(props.get("flag_reason") or ""),
+        "rate_per_m_per_min": float(props.get("rate_per_m_per_min") or 0.0),
+        "util_percent": float(props.get("util_percent") or 0.0),
+        "util_percentile": float(props.get("util_percentile") or 0.0),
+        "schema_key": str(props.get("schema_key", "on_course_open")),
+        "width_m": float(props.get("width_m", 5.0)),
+        # Original fields
+        "bin_size_km": 0.1,  # Use constant for now
+        "schema_version": BIN_SCHEMA_VERSION,
+        "geometry": geometry_wkb
+    }
+
+
+def _write_parquet_file(parquet_rows: list, parquet_path: str) -> None:
+    """Write Parquet file from rows."""
+    from .constants import BIN_SCHEMA_VERSION
+    
+    try:
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+        
+        if parquet_rows:
+            table = pa.Table.from_pylist(parquet_rows)
+            pq.write_table(table, parquet_path, compression='zstd')
+        else:
+            # Empty dataset
+            schema = pa.schema([
+                ('bin_id', pa.string()),
+                ('segment_id', pa.string()),
+                ('start_km', pa.float64()),
+                ('end_km', pa.float64()),
+                ('t_start', pa.string()),
+                ('t_end', pa.string()),
+                ('window_idx', pa.int64()),
+                ('density', pa.float64()),
+                ('rate', pa.float64()),
+                ('los_class', pa.string()),
+                # Issue #254: Unified flagging fields
+                ('flag_severity', pa.string()),
+                ('flag_reason', pa.string()),
+                ('rate_per_m_per_min', pa.float64()),
+                ('util_percent', pa.float64()),
+                ('util_percentile', pa.float64()),
+                ('schema_key', pa.string()),
+                ('width_m', pa.float64()),
+                # Original fields
+                ('bin_size_km', pa.float64()),
+                ('schema_version', pa.string()),
+                ('geometry', pa.binary())
+            ])
+            empty_table = pa.Table.from_arrays([[] for _ in schema], schema=schema)
+            pq.write_table(empty_table, parquet_path, compression='zstd')
+            
+    except ImportError:
+        # Fallback if pyarrow not available
+        import json
+        with open(parquet_path, 'w', encoding='utf-8') as f:
+            json.dump({
+                "error": "pyarrow not available",
+                "schema_version": BIN_SCHEMA_VERSION,
+                "note": "Install pyarrow for Parquet support"
+            }, f, indent=2)
+
 
 def save_bin_artifacts_legacy(bin_data: Dict[str, Any], output_dir: str) -> tuple[str, str]:
     """
@@ -2829,7 +3243,7 @@ def save_bin_artifacts_legacy(bin_data: Dict[str, Any], output_dir: str) -> tupl
         tuple: (geojson_path, parquet_path)
     """
     import json
-    from .constants import BIN_SCHEMA_VERSION, MAX_BIN_DATASET_SIZE_MB
+    from .constants import MAX_BIN_DATASET_SIZE_MB
     
     # Create reports directory with date
     date_str = datetime.now().strftime("%Y-%m-%d")
@@ -2845,22 +3259,8 @@ def save_bin_artifacts_legacy(bin_data: Dict[str, Any], output_dir: str) -> tupl
     parquet_path = os.path.join(reports_dir, parquet_filename)
     
     try:
-        # Prepare GeoJSON with ChatGPT's schema
-        geojson_data = {
-            "type": "FeatureCollection",
-            "features": [],
-            "metadata": {
-                "schema_version": BIN_SCHEMA_VERSION,
-                "generated_at": datetime.now().isoformat(),
-                "total_bins": len(bin_data.get("geojson", {}).get("features", [])),
-                "analysis_type": "bins"
-            }
-        }
-        
-        # Copy features from bin_data if available
-        if "geojson" in bin_data and "features" in bin_data["geojson"]:
-            geojson_data["features"] = bin_data["geojson"]["features"]
-            geojson_data["metadata"]["total_bins"] = len(bin_data["geojson"]["features"])
+        # Prepare GeoJSON data
+        geojson_data = _build_geojson_from_bin_data(bin_data)
         
         # Check file size before saving
         geojson_str = json.dumps(geojson_data, default=str)
@@ -2873,106 +3273,14 @@ def save_bin_artifacts_legacy(bin_data: Dict[str, Any], output_dir: str) -> tupl
         with open(geojson_path, 'w', encoding='utf-8') as f:
             f.write(geojson_str)
         
-        # Save real Parquet file per ChatGPT specification
-        try:
-            import pyarrow as pa
-            import pyarrow.parquet as pq
-            from shapely.geometry import LineString
-            from shapely import wkb
-            
-            def to_wkb(coords):
-                """Convert coordinates to WKB format."""
-                return wkb.dumps(LineString(coords), hex=False)
-            
-            # Prepare Parquet rows with ChatGPT's schema - fix coordinate handling
-            parquet_rows = []
-            for feature in geojson_data["features"]:
-                props = feature["properties"]
-                geometry_coords = feature.get("geometry", {}).get("coordinates", [])
-                
-                # Handle coordinate conversion safely
-                geometry_wkb = b""
-                try:
-                    if geometry_coords and isinstance(geometry_coords, list) and len(geometry_coords) > 0:
-                        # Handle different geometry types
-                        if isinstance(geometry_coords[0][0], list):  # Polygon
-                            # Convert polygon to linestring for simplicity
-                            coords = geometry_coords[0] if geometry_coords else []
-                        else:  # Already linestring format
-                            coords = geometry_coords
-                        
-                        if len(coords) >= 2:
-                            geometry_wkb = to_wkb(coords)
-                except Exception as geom_e:
-                    logger.warning(f"Geometry conversion failed for bin {props.get('bin_id', 'unknown')}: {geom_e}")
-                
-                row = {
-                    "bin_id": str(props.get("bin_id", "")),
-                    "segment_id": str(props.get("segment_id", "")),
-                    "start_km": float(props.get("start_km", 0.0)),
-                    "end_km": float(props.get("end_km", 0.0)),
-                    "t_start": str(props.get("t_start", "")),
-                    "t_end": str(props.get("t_end", "")),
-                    "window_idx": int(props.get("window_idx", 0)),
-                    "density": float(props.get("density", 0.0)),
-                    "rate": float(props.get("rate", 0.0)),
-                    "los_class": str(props.get("los_class", "A")),
-                    # Issue #254: Unified flagging fields
-                    "flag_severity": str(props.get("flag_severity", "none")),
-                    "flag_reason": str(props.get("flag_reason") or ""),
-                    "rate_per_m_per_min": float(props.get("rate_per_m_per_min") or 0.0),
-                    "util_percent": float(props.get("util_percent") or 0.0),
-                    "util_percentile": float(props.get("util_percentile") or 0.0),
-                    "schema_key": str(props.get("schema_key", "on_course_open")),
-                    "width_m": float(props.get("width_m", 5.0)),
-                    # Original fields
-                    "bin_size_km": 0.1,  # Use constant for now
-                    "schema_version": BIN_SCHEMA_VERSION,
-                    "geometry": geometry_wkb
-                }
-                parquet_rows.append(row)
-            
-            # Write Parquet with Arrow
-            if parquet_rows:
-                table = pa.Table.from_pylist(parquet_rows)
-                pq.write_table(table, parquet_path, compression='zstd')
-            else:
-                # Empty dataset
-                schema = pa.schema([
-                    ('bin_id', pa.string()),
-                    ('segment_id', pa.string()),
-                    ('start_km', pa.float64()),
-                    ('end_km', pa.float64()),
-                    ('t_start', pa.string()),
-                    ('t_end', pa.string()),
-                    ('window_idx', pa.int64()),
-                    ('density', pa.float64()),
-                    ('rate', pa.float64()),
-                    ('los_class', pa.string()),
-                    # Issue #254: Unified flagging fields
-                    ('flag_severity', pa.string()),
-                    ('flag_reason', pa.string()),
-                    ('rate_per_m_per_min', pa.float64()),
-                    ('util_percent', pa.float64()),
-                    ('util_percentile', pa.float64()),
-                    ('schema_key', pa.string()),
-                    ('width_m', pa.float64()),
-                    # Original fields
-                    ('bin_size_km', pa.float64()),
-                    ('schema_version', pa.string()),
-                    ('geometry', pa.binary())
-                ])
-                empty_table = pa.Table.from_arrays([[] for _ in schema], schema=schema)
-                pq.write_table(empty_table, parquet_path, compression='zstd')
-                
-        except ImportError:
-            # Fallback if pyarrow not available
-            with open(parquet_path, 'w', encoding='utf-8') as f:
-                json.dump({
-                    "error": "pyarrow not available",
-                    "schema_version": BIN_SCHEMA_VERSION,
-                    "note": "Install pyarrow for Parquet support"
-                }, f, indent=2)
+        # Build Parquet rows from features
+        parquet_rows = []
+        for feature in geojson_data["features"]:
+            row = _build_parquet_row_from_feature(feature)
+            parquet_rows.append(row)
+        
+        # Write Parquet file
+        _write_parquet_file(parquet_rows, parquet_path)
         
         return geojson_path, parquet_path
         

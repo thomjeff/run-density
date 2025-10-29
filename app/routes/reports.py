@@ -19,92 +19,102 @@ templates = Jinja2Templates(directory="app/templates")
 REPORTS_DIR = Path(os.getenv("RUNFLOW_REPORTS_DIR", "reports")).resolve()
 ALLOWED_EXTS = {".html", ".htm", ".md", ".pdf", ".csv"}
 
+def _determine_report_kind(file_name: str) -> str:
+    """Determine report kind (density, flow, other) from filename."""
+    lower = file_name.lower()
+    if "density" in lower:
+        return "density"
+    elif "flow" in lower:
+        return "flow"
+    else:
+        return "other"
+
+
+def _extract_timestamp_from_filename(file_name: str, check_date) -> datetime:
+    """Extract timestamp from filename, falling back to current time."""
+    try:
+        # Extract timestamp from filename like "2025-09-16-0115-Density.md"
+        if len(file_name) >= 19 and file_name[10] == '-':
+            time_str = file_name[10:15]  # "0115"
+            hour = int(time_str[:2])
+            minute = int(time_str[2:])
+            return datetime.combine(check_date, datetime.min.time().replace(hour=hour, minute=minute))
+        else:
+            return datetime.now()
+    except Exception:
+        return datetime.now()
+
+
+def _build_report_row(file_name: str, file_path: str, ts: datetime, is_cloud: bool) -> Dict:
+    """Build report row dictionary."""
+    return {
+        "name": file_name,
+        "kind": _determine_report_kind(file_name),
+        "ext": file_name.split('.')[-1].lower(),
+        "mtime": ts,
+        "rel": file_path,
+        "source": "cloud" if is_cloud else "local"
+    }
+
+
+def _scan_cloud_reports(storage_service, limit: int) -> List[Dict]:
+    """Scan reports from cloud storage."""
+    rows = []
+    from datetime import timedelta
+    
+    today = datetime.now().date()
+    for days_back in range(7):  # Check last 7 days
+        check_date = today - timedelta(days=days_back)
+        date_str = check_date.strftime("%Y-%m-%d")
+        
+        # List files for this date
+        files = storage_service.list_files(date=date_str)
+        
+        for file_path in files:
+            file_name = file_path.split('/')[-1]  # Get just the filename
+            if any(file_name.lower().endswith(ext) for ext in ALLOWED_EXTS):
+                ts = _extract_timestamp_from_filename(file_name, check_date)
+                row = _build_report_row(file_name, file_path, ts, storage_service.use_cloud_storage)
+                rows.append(row)
+    
+    return rows
+
+
+def _scan_local_reports(limit: int) -> List[Dict]:
+    """Scan reports from local file system."""
+    rows = []
+    
+    if not REPORTS_DIR.exists():
+        return []
+    
+    for p in REPORTS_DIR.rglob("*"):
+        if p.is_file() and p.suffix.lower() in ALLOWED_EXTS:
+            try:
+                ts = datetime.fromtimestamp(p.stat().st_mtime)
+            except Exception:
+                ts = None
+            
+            row = _build_report_row(p.name, str(p.relative_to(REPORTS_DIR)), ts or datetime.now(), False)
+            row["mtime"] = ts
+            rows.append(row)
+    
+    return rows
+
+
 def _scan_reports(limit: int = 20) -> List[Dict]:
     """Scan for reports using storage service (Cloud Storage or local file system)."""
     rows = []
     
     try:
         storage_service = get_storage_service()
-        
-        # Get all available dates by scanning the bucket/ directory structure
-        # For now, let's check the last few days
-        from datetime import datetime, timedelta
-        today = datetime.now().date()
-        
-        for days_back in range(7):  # Check last 7 days
-            check_date = today - timedelta(days=days_back)
-            date_str = check_date.strftime("%Y-%m-%d")
-            
-            # List files for this date
-            files = storage_service.list_files(date=date_str)
-            
-            for file_path in files:
-                file_name = file_path.split('/')[-1]  # Get just the filename
-                if any(file_name.lower().endswith(ext) for ext in ALLOWED_EXTS):
-                    lower = file_name.lower()
-                    if "density" in lower:
-                        kind = "density"
-                    elif "flow" in lower:
-                        kind = "flow"
-                    else:
-                        kind = "other"
-                    
-                    # Try to extract timestamp from filename or use current time
-                    try:
-                        # Extract timestamp from filename like "2025-09-16-0115-Density.md"
-                        if len(file_name) >= 19 and file_name[10] == '-':
-                            time_str = file_name[10:15]  # "0115"
-                            hour = int(time_str[:2])
-                            minute = int(time_str[2:])
-                            ts = datetime.combine(check_date, datetime.min.time().replace(hour=hour, minute=minute))
-                        else:
-                            ts = datetime.now()
-                    except Exception:
-                        ts = datetime.now()
-                    
-                    rows.append({
-                        "name": file_name,
-                        "kind": kind,
-                        "ext": file_name.split('.')[-1].lower(),
-                        "mtime": ts,
-                        "rel": file_path,
-                        "source": "cloud" if storage_service.use_cloud_storage else "local"
-                    })
-        
-        # Sort by modification time (newest first)
-        rows.sort(key=lambda r: (r["mtime"] or datetime.min), reverse=True)
-        return rows[:limit]
-        
+        rows = _scan_cloud_reports(storage_service, limit)
     except Exception as e:
         # Fallback to local file system
-        if not REPORTS_DIR.exists():
-            return []
-            
-        for p in REPORTS_DIR.rglob("*"):
-            if p.is_file() and p.suffix.lower() in ALLOWED_EXTS:
-                lower = p.name.lower()
-                if "density" in lower:
-                    kind = "density"
-                elif "flow" in lower:
-                    kind = "flow"
-                else:
-                    kind = "other"
-                try:
-                    ts = datetime.fromtimestamp(p.stat().st_mtime)
-                except Exception:
-                    ts = None
-                rows.append({
-                    "name": p.name,
-                    "kind": kind,
-                    "ext": p.suffix.lower(),
-                    "mtime": ts,
-                    "rel": str(p.relative_to(REPORTS_DIR)),
-                    "source": "local"
-                })
-        
-        # Sort by modification time (newest first)
-        rows.sort(key=lambda r: (r["mtime"] or datetime.min), reverse=True)
-        return rows[:limit]
+        rows = _scan_local_reports(limit)
+    
+    # Sort by modification time (newest first)
+    rows.sort(key=lambda r: (r["mtime"] or datetime.min), reverse=True)
+    return rows[:limit]
 
 def _latest(kind: str) -> Optional[Dict]:
     """Get the latest report of a specific kind from storage or local files."""

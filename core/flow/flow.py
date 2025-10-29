@@ -594,6 +594,326 @@ def generate_flow_audit_data(
     return audit_data
 
 
+def _read_runners_csv(path: str) -> List[Dict[str, Any]]:
+    """Read runners CSV and return sorted list of runner records."""
+    import csv
+    
+    rows = []
+    with open(path, newline="") as f:
+        reader = csv.DictReader(f)
+        for r in reader:
+            try:
+                rows.append({
+                    "runner_id": r["runner_id"],
+                    "entry_time": float(r["entry_time_sec"]),
+                    "exit_time":  float(r["exit_time_sec"]),
+                    "entry_km":   float(r.get("entry_km", "nan") or "nan"),
+                    "exit_km":    float(r.get("exit_km",  "nan") or "nan"),
+                    "pace_min_per_km": float(r.get("pace_min_per_km", "nan") or "nan"),
+                    "start_offset_sec": float(r.get("start_offset_sec", "nan") or "nan"),
+                })
+            except KeyError as e:
+                raise SystemExit(f"Missing required column {e} in {path}")
+    rows.sort(key=lambda x: x["entry_time"])
+    return rows
+
+
+def _shard_key_from_overlap_start(ts: float, window_granularity_sec: int = 60) -> str:
+    """Generate shard key from overlap start timestamp."""
+    m = int(ts // window_granularity_sec)
+    return f"min_{m:06d}"
+
+
+def _overlap_interval(a_entry: float, a_exit: float, b_entry: float, b_exit: float) -> Tuple[float, float, float]:
+    """Calculate overlap interval between two runner time windows."""
+    start = max(a_entry, b_entry)
+    end   = min(a_exit,  b_exit)
+    dwell = end - start
+    return start, end, dwell
+
+
+def _sign(x: float) -> int:
+    """Return sign of number: 1 if positive, -1 if negative, 0 if zero."""
+    if x > 0: return 1
+    if x < 0: return -1
+    return 0
+
+
+def _determine_pass_flags_and_reason(
+    order_flip: bool,
+    dwell: float,
+    directional_gain: float,
+    strict_min_dwell: int,
+    strict_margin: int
+) -> Tuple[bool, bool, str]:
+    """Determine pass flags and reason code for overlap pair."""
+    pass_raw = order_flip
+    pass_strict = (order_flip and dwell >= strict_min_dwell and directional_gain >= strict_margin)
+    
+    reason = ""
+    if not pass_strict:
+        if not order_flip:
+            reason = "NO_DIRECTIONAL_CHANGE"
+        elif dwell < strict_min_dwell:
+            reason = "DWELL_TOO_SHORT"
+        elif directional_gain < strict_margin:
+            reason = "MARGIN_TOO_SMALL"
+    
+    return pass_raw, pass_strict, reason
+
+
+def _build_overlap_row(
+    run_id: str,
+    executed_at_utc: str,
+    seg_id: str,
+    segment_label: str,
+    flow_type: str,
+    event_a_name: str,
+    event_b_name: str,
+    convergence_zone_start: float,
+    convergence_zone_end: float,
+    zone_width_m: float,
+    binning_applied: bool,
+    binning_mode: str,
+    runner_a: Dict[str, Any],
+    runner_b: Dict[str, Any],
+    overlap_start: float,
+    overlap_end: float,
+    dwell: float,
+    entry_delta: float,
+    exit_delta: float,
+    rel_entry: int,
+    rel_exit: int,
+    order_flip: bool,
+    directional_gain: float,
+    pass_raw: bool,
+    pass_strict: bool,
+    reason: str
+) -> Dict[str, Any]:
+    """Build overlap row dictionary for CSV output."""
+    return {
+        "run_id": run_id,
+        "executed_at_utc": executed_at_utc,
+        "seg_id": seg_id,
+        "segment_label": segment_label,
+        "flow_type": flow_type,
+        "event_a": event_a_name,
+        "event_b": event_b_name,
+        "pair_key": f"{runner_a['runner_id']}-{runner_b['runner_id']}",
+        "convergence_zone_start": convergence_zone_start,
+        "convergence_zone_end":   convergence_zone_end,
+        "zone_width_m": zone_width_m,
+        "binning_applied": binning_applied,
+        "binning_mode": binning_mode,
+        "runner_id_a": runner_a["runner_id"],
+        "entry_km_a": runner_a["entry_km"],
+        "exit_km_a":  runner_a["exit_km"],
+        "entry_time_sec_a": runner_a["entry_time"],
+        "exit_time_sec_a":  runner_a["exit_time"],
+        "runner_id_b": runner_b["runner_id"],
+        "entry_km_b": runner_b["entry_km"],
+        "exit_km_b":  runner_b["exit_km"],
+        "entry_time_sec_b": runner_b["entry_time"],
+        "exit_time_sec_b":  runner_b["exit_time"],
+        "overlap_start_time_sec": overlap_start,
+        "overlap_end_time_sec":   overlap_end,
+        "overlap_dwell_sec": dwell,
+        "entry_delta_sec": entry_delta,
+        "exit_delta_sec":  exit_delta,
+        "rel_order_entry": rel_entry,
+        "rel_order_exit":  rel_exit,
+        "order_flip_bool": order_flip,
+        "directional_gain_sec": directional_gain,
+        "pass_flag_raw": pass_raw,
+        "pass_flag_strict": pass_strict,
+        "reason_code": reason
+    }
+
+
+class _ShardWriter:
+    """Helper class to manage shard file writing with row capping."""
+    def __init__(self, audit_dir: str, seg_id: str, event_a_name: str, event_b_name: str, 
+                 pair_base_cols: List[str], row_cap_per_shard: int):
+        self.audit_dir = audit_dir
+        self.seg_id = seg_id
+        self.event_a_name = event_a_name
+        self.event_b_name = event_b_name
+        self.pair_base_cols = pair_base_cols
+        self.row_cap_per_shard = row_cap_per_shard
+        self.shard_writers = {}
+        self.shard_counts = {}
+        self.current_shard_part = {}
+    
+    def _open_shard(self, shard_key: str, part_idx: int) -> Tuple[str, Any, Any]:
+        """Open a new shard file and return path, file handle, and writer."""
+        import csv, os
+        
+        shard_name = f"{self.seg_id}_{self.event_a_name}-{self.event_b_name}_{shard_key}_p{part_idx}.csv"
+        shard_path = os.path.join(self.audit_dir, shard_name)
+        f = open(shard_path, "w", newline="")
+        w = csv.DictWriter(f, fieldnames=self.pair_base_cols)
+        w.writeheader()
+        return shard_path, f, w
+    
+    def write_pair(self, shard_key: str, row: Dict[str, Any]) -> str:
+        """Write pair to appropriate shard, creating new shard if needed."""
+        if shard_key not in self.shard_writers:
+            path, fh, wr = self._open_shard(shard_key, 1)
+            self.shard_writers[shard_key] = (path, fh, wr)
+            self.shard_counts[shard_key] = 0
+            self.current_shard_part[shard_key] = 1
+        
+        path, fh, wr = self.shard_writers[shard_key]
+        if self.shard_counts[shard_key] >= self.row_cap_per_shard:
+            fh.close()
+            self.current_shard_part[shard_key] += 1
+            path, fh, wr = self._open_shard(shard_key, self.current_shard_part[shard_key])
+            self.shard_writers[shard_key] = (path, fh, wr)
+            self.shard_counts[shard_key] = 0
+        
+        wr.writerow(row)
+        self.shard_counts[shard_key] += 1
+        return path
+    
+    def close_all(self) -> List[str]:
+        """Close all shard files and return list of paths."""
+        shard_paths = []
+        for key, (path, fh, wr) in self.shard_writers.items():
+            fh.close()
+            shard_paths.append(path)
+        return shard_paths
+
+
+def _process_two_pointer_sweep(
+    A: List[Dict[str, Any]],
+    B: List[Dict[str, Any]],
+    shard_writer: _ShardWriter,
+    run_id: str,
+    executed_at_utc: str,
+    seg_id: str,
+    segment_label: str,
+    flow_type: str,
+    event_a_name: str,
+    event_b_name: str,
+    convergence_zone_start: float,
+    convergence_zone_end: float,
+    zone_width_m: float,
+    binning_applied: bool,
+    binning_mode: str,
+    strict_min_dwell: int,
+    strict_margin: int,
+    topk: List[Tuple[float, Dict[str, Any]]],
+    topk_size: int = 2000
+) -> Tuple[int, int, int, int]:
+    """Process two-pointer sweep algorithm for temporal interval join."""
+    WINDOW_GRANULARITY_SEC = 60
+    j = 0
+    total_pairs = 0
+    overlapped_pairs = 0
+    strict_pass = 0
+    raw_pass = 0
+    
+    for a in A:
+        while j < len(B) and B[j]["exit_time"] < a["entry_time"]:
+            j += 1
+        k = j
+        while k < len(B) and B[k]["entry_time"] <= a["exit_time"]:
+            b = B[k]
+            total_pairs += 1
+            os_, oe_, dwell = _overlap_interval(a["entry_time"], a["exit_time"], b["entry_time"], b["exit_time"])
+            
+            if dwell > 0:
+                overlapped_pairs += 1
+                entry_delta = a["entry_time"] - b["entry_time"]
+                exit_delta  = a["exit_time"]  - b["exit_time"]
+                rel_entry   = _sign(entry_delta)
+                rel_exit    = _sign(exit_delta)
+                order_flip  = (rel_entry != rel_exit)
+                directional_gain = exit_delta - entry_delta
+                
+                pass_raw, pass_strict, reason = _determine_pass_flags_and_reason(
+                    order_flip, dwell, directional_gain, strict_min_dwell, strict_margin
+                )
+                
+                if pass_raw: raw_pass += 1
+                if pass_strict: strict_pass += 1
+                
+                shard_key = _shard_key_from_overlap_start(os_, WINDOW_GRANULARITY_SEC)
+                row = _build_overlap_row(
+                    run_id, executed_at_utc, seg_id, segment_label, flow_type,
+                    event_a_name, event_b_name, convergence_zone_start, convergence_zone_end,
+                    zone_width_m, binning_applied, binning_mode, a, b,
+                    os_, oe_, dwell, entry_delta, exit_delta, rel_entry, rel_exit,
+                    order_flip, directional_gain, pass_raw, pass_strict, reason
+                )
+                shard_writer.write_pair(shard_key, row)
+                
+                topk.append((dwell, row))
+                if len(topk) > topk_size:
+                    topk.sort(key=lambda x: x[0], reverse=True)
+                    topk[:] = topk[:topk_size]
+            k += 1
+    
+    return total_pairs, overlapped_pairs, raw_pass, strict_pass
+
+
+def _write_index_csv(
+    audit_dir: str,
+    seg_id: str,
+    event_a_name: str,
+    event_b_name: str,
+    run_id: str,
+    total_pairs: int,
+    overlapped_pairs: int,
+    raw_pass: int,
+    strict_pass: int,
+    shard_paths: List[str]
+) -> str:
+    """Write index CSV with audit summary statistics."""
+    import csv, os
+    
+    index_path = os.path.join(audit_dir, f"{seg_id}_{event_a_name}-{event_b_name}_index.csv")
+    with open(index_path, "w", newline="") as f:
+        idx_cols = ["run_id","seg_id","event_a","event_b","n_pairs_total","n_pairs_overlapped","n_pass_raw","n_pass_strict","shards"]
+        w = csv.DictWriter(f, fieldnames=idx_cols)
+        w.writeheader()
+        w.writerow({
+            "run_id": run_id,
+            "seg_id": seg_id,
+            "event_a": event_a_name,
+            "event_b": event_b_name,
+            "n_pairs_total": total_pairs,
+            "n_pairs_overlapped": overlapped_pairs,
+            "n_pass_raw": raw_pass,
+            "n_pass_strict": strict_pass,
+            "shards": ";".join(os.path.basename(p) for p in sorted(shard_paths))
+        })
+    
+    return index_path
+
+
+def _write_topk_csv(
+    audit_dir: str,
+    seg_id: str,
+    event_a_name: str,
+    event_b_name: str,
+    topk: List[Tuple[float, Dict[str, Any]]],
+    pair_base_cols: List[str]
+) -> str:
+    """Write TopK CSV with highest dwell time overlaps."""
+    import csv, os
+    
+    topk_path = os.path.join(audit_dir, f"{seg_id}_{event_a_name}-{event_b_name}_TopK.csv")
+    with open(topk_path, "w", newline="") as f:
+        cols = list(topk[0][1].keys()) if topk else pair_base_cols
+        w = csv.DictWriter(f, fieldnames=cols)
+        w.writeheader()
+        for _, row in sorted(topk, key=lambda x: x[0], reverse=True):
+            w.writerow(row)
+    
+    return topk_path
+
+
 def emit_runner_audit(
     event_a_csv: str,
     event_b_csv: str,
@@ -620,67 +940,19 @@ def emit_runner_audit(
     Outputs: small index CSV + one or more shard CSVs with pairwise overlaps
     Strategy: interval join using two-pointer sweep; shard by minute window and row cap
     """
-    import csv, os, math, pathlib, datetime
+    import os, pathlib, datetime
     
     TOPK_CSV_ROWS = 2000
-    WINDOW_GRANULARITY_SEC = 60
     
-    # Create audit subdirectory within the output directory
+    # Create audit subdirectory
     audit_dir = os.path.join(out_dir, "audit")
-    os.makedirs(audit_dir, exist_ok=True)
+    pathlib.Path(audit_dir).mkdir(parents=True, exist_ok=True)
+    pathlib.Path(out_dir).mkdir(parents=True, exist_ok=True)
     
-    def read_runners_csv(path):
-        rows = []
-        with open(path, newline="") as f:
-            reader = csv.DictReader(f)
-            for r in reader:
-                try:
-                    rows.append({
-                        "runner_id": r["runner_id"],
-                        "entry_time": float(r["entry_time_sec"]),
-                        "exit_time":  float(r["exit_time_sec"]),
-                        "entry_km":   float(r.get("entry_km", "nan") or "nan"),
-                        "exit_km":    float(r.get("exit_km",  "nan") or "nan"),
-                        "pace_min_per_km": float(r.get("pace_min_per_km", "nan") or "nan"),
-                        "start_offset_sec": float(r.get("start_offset_sec", "nan") or "nan"),
-                    })
-                except KeyError as e:
-                    raise SystemExit(f"Missing required column {e} in {path}")
-        rows.sort(key=lambda x: x["entry_time"])
-        return rows
-
-    def shard_key_from_overlap_start(ts):
-        m = int(ts // WINDOW_GRANULARITY_SEC)
-        return f"min_{m:06d}"
-
-    def ensure_dir(path):
-        pathlib.Path(path).mkdir(parents=True, exist_ok=True)
-
-    def overlap_interval(a_entry, a_exit, b_entry, b_exit):
-        start = max(a_entry, b_entry)
-        end   = min(a_exit,  b_exit)
-        dwell = end - start
-        return start, end, dwell
-
-    def sign(x):
-        if x > 0: return 1
-        if x < 0: return -1
-        return 0
-
-    ensure_dir(out_dir)
-    A = read_runners_csv(event_a_csv)
-    B = read_runners_csv(event_b_csv)
-
-    j = 0
-    total_pairs = 0
-    overlapped_pairs = 0
-    strict_pass = 0
-    raw_pass = 0
-
-    shard_writers = {}
-    shard_counts = {}
-    topk = []
-
+    # Read runner CSVs
+    A = _read_runners_csv(event_a_csv)
+    B = _read_runners_csv(event_b_csv)
+    
     executed_at_utc = datetime.datetime.utcnow().isoformat()+"Z"
     pair_base_cols = [
         "run_id","executed_at_utc","seg_id","segment_label","flow_type",
@@ -694,142 +966,27 @@ def emit_runner_audit(
         "order_flip_bool","directional_gain_sec",
         "pass_flag_raw","pass_flag_strict","reason_code"
     ]
-
-    def open_shard(shard_key, part_idx):
-        shard_name = f"{seg_id}_{event_a_name}-{event_b_name}_{shard_key}_p{part_idx}.csv"
-        shard_path = os.path.join(audit_dir, shard_name)
-        f = open(shard_path, "w", newline="")
-        w = csv.DictWriter(f, fieldnames=pair_base_cols)
-        w.writeheader()
-        return shard_path, f, w
-
-    current_shard_part = {}
-    def write_pair(shard_key, row):
-        if shard_key not in shard_writers:
-            path, fh, wr = open_shard(shard_key, 1)
-            shard_writers[shard_key] = (path, fh, wr)
-            shard_counts[shard_key] = 0
-            current_shard_part[shard_key] = 1
-
-        path, fh, wr = shard_writers[shard_key]
-        if shard_counts[shard_key] >= row_cap_per_shard:
-            fh.close()
-            current_shard_part[shard_key] += 1
-            path, fh, wr = open_shard(shard_key, current_shard_part[shard_key])
-            shard_writers[shard_key] = (path, fh, wr)
-            shard_counts[shard_key] = 0
-        wr.writerow(row)
-        shard_counts[shard_key] += 1
-        return path
-
-    # Two-pointer sweep algorithm for temporal interval join
-    for a in A:
-        while j < len(B) and B[j]["exit_time"] < a["entry_time"]:
-            j += 1
-        k = j
-        while k < len(B) and B[k]["entry_time"] <= a["exit_time"]:
-            b = B[k]
-            total_pairs += 1
-            os_, oe_, dwell = overlap_interval(a["entry_time"], a["exit_time"], b["entry_time"], b["exit_time"])
-            if dwell > 0:
-                overlapped_pairs += 1
-                entry_delta = a["entry_time"] - b["entry_time"]
-                exit_delta  = a["exit_time"]  - b["exit_time"]
-                rel_entry   = sign(entry_delta)
-                rel_exit    = sign(exit_delta)
-                order_flip  = (rel_entry != rel_exit)
-                directional_gain = exit_delta - entry_delta
-
-                pass_raw = order_flip
-                pass_strict = (order_flip and dwell >= strict_min_dwell and directional_gain >= strict_margin)
-                reason = ""
-                if not pass_strict:
-                    if not order_flip: reason = "NO_DIRECTIONAL_CHANGE"
-                    elif dwell < strict_min_dwell: reason = "DWELL_TOO_SHORT"
-                    elif directional_gain < strict_margin: reason = "MARGIN_TOO_SMALL"
-
-                if pass_raw: raw_pass += 1
-                if pass_strict: strict_pass += 1
-
-                shard_key = shard_key_from_overlap_start(os_)
-                row = {
-                    "run_id": run_id,
-                    "executed_at_utc": executed_at_utc,
-                    "seg_id": seg_id,
-                    "segment_label": segment_label,
-                    "flow_type": flow_type,
-                    "event_a": event_a_name,
-                    "event_b": event_b_name,
-                    "pair_key": f"{a['runner_id']}-{b['runner_id']}",
-                    "convergence_zone_start": convergence_zone_start,
-                    "convergence_zone_end":   convergence_zone_end,
-                    "zone_width_m": zone_width_m,
-                    "binning_applied": binning_applied,
-                    "binning_mode": binning_mode,
-                    "runner_id_a": a["runner_id"],
-                    "entry_km_a": a["entry_km"],
-                    "exit_km_a":  a["exit_km"],
-                    "entry_time_sec_a": a["entry_time"],
-                    "exit_time_sec_a":  a["exit_time"],
-                    "runner_id_b": b["runner_id"],
-                    "entry_km_b": b["entry_km"],
-                    "exit_km_b":  b["exit_km"],
-                    "entry_time_sec_b": b["entry_time"],
-                    "exit_time_sec_b":  b["exit_time"],
-                    "overlap_start_time_sec": os_,
-                    "overlap_end_time_sec":   oe_,
-                    "overlap_dwell_sec": dwell,
-                    "entry_delta_sec": entry_delta,
-                    "exit_delta_sec":  exit_delta,
-                    "rel_order_entry": rel_entry,
-                    "rel_order_exit":  rel_exit,
-                    "order_flip_bool": order_flip,
-                    "directional_gain_sec": directional_gain,
-                    "pass_flag_raw": pass_raw,
-                    "pass_flag_strict": pass_strict,
-                    "reason_code": reason
-                }
-                shard_path = write_pair(shard_key, row)
-
-                topk.append((dwell, row))
-                if len(topk) > TOPK_CSV_ROWS:
-                    topk.sort(key=lambda x: x[0], reverse=True)
-                    topk = topk[:TOPK_CSV_ROWS]
-            k += 1
-
+    
+    # Initialize shard writer
+    shard_writer = _ShardWriter(audit_dir, seg_id, event_a_name, event_b_name, pair_base_cols, row_cap_per_shard)
+    
+    # Process two-pointer sweep algorithm
+    topk = []
+    total_pairs, overlapped_pairs, raw_pass, strict_pass = _process_two_pointer_sweep(
+        A, B, shard_writer, run_id, executed_at_utc, seg_id, segment_label, flow_type,
+        event_a_name, event_b_name, convergence_zone_start, convergence_zone_end,
+        zone_width_m, binning_applied, binning_mode, strict_min_dwell, strict_margin,
+        topk, TOPK_CSV_ROWS
+    )
+    
     # Close all shard files
-    shard_paths = []
-    for key, (path, fh, wr) in shard_writers.items():
-        fh.close()
-        shard_paths.append(path)
-
-    # Write index CSV
-    index_path = os.path.join(audit_dir, f"{seg_id}_{event_a_name}-{event_b_name}_index.csv")
-    with open(index_path, "w", newline="") as f:
-        idx_cols = ["run_id","seg_id","event_a","event_b","n_pairs_total","n_pairs_overlapped","n_pass_raw","n_pass_strict","shards"]
-        w = csv.DictWriter(f, fieldnames=idx_cols)
-        w.writeheader()
-        w.writerow({
-            "run_id": run_id,
-            "seg_id": seg_id,
-            "event_a": event_a_name,
-            "event_b": event_b_name,
-            "n_pairs_total": total_pairs,
-            "n_pairs_overlapped": overlapped_pairs,
-            "n_pass_raw": raw_pass,
-            "n_pass_strict": strict_pass,
-            "shards": ";".join(os.path.basename(p) for p in sorted(shard_paths))
-        })
-
-    # Write TopK CSV
-    topk_path = os.path.join(audit_dir, f"{seg_id}_{event_a_name}-{event_b_name}_TopK.csv")
-    with open(topk_path, "w", newline="") as f:
-        cols = list(topk[0][1].keys()) if topk else pair_base_cols
-        w = csv.DictWriter(f, fieldnames=cols)
-        w.writeheader()
-        for _, row in sorted(topk, key=lambda x: x[0], reverse=True):
-            w.writerow(row)
-
+    shard_paths = shard_writer.close_all()
+    
+    # Write index and TopK CSVs
+    index_path = _write_index_csv(audit_dir, seg_id, event_a_name, event_b_name, run_id,
+                                 total_pairs, overlapped_pairs, raw_pass, strict_pass, shard_paths)
+    topk_path = _write_topk_csv(audit_dir, seg_id, event_a_name, event_b_name, topk, pair_base_cols)
+    
     return {
         "index_csv": index_path,
         "shard_csvs": shard_paths,
@@ -1968,6 +2125,411 @@ def convert_segments_new_to_flow_format(segments_df: pd.DataFrame) -> pd.DataFra
     return pd.DataFrame(converted_segments)
 
 
+def _calculate_dynamic_conflict_length(
+    segment_length_km: float,
+    from_km_a: float,
+    to_km_a: float
+) -> float:
+    """Calculate dynamic conflict length based on segment length."""
+    from app.constants import (
+        CONFLICT_LENGTH_LONG_SEGMENT_M,
+        CONFLICT_LENGTH_MEDIUM_SEGMENT_M,
+        CONFLICT_LENGTH_SHORT_SEGMENT_M,
+        SEGMENT_LENGTH_LONG_THRESHOLD_KM,
+        SEGMENT_LENGTH_MEDIUM_THRESHOLD_KM
+    )
+    
+    if segment_length_km > SEGMENT_LENGTH_LONG_THRESHOLD_KM:
+        return CONFLICT_LENGTH_LONG_SEGMENT_M
+    elif segment_length_km > SEGMENT_LENGTH_MEDIUM_THRESHOLD_KM:
+        return CONFLICT_LENGTH_MEDIUM_SEGMENT_M
+    else:
+        return CONFLICT_LENGTH_SHORT_SEGMENT_M
+
+
+def _calculate_effective_convergence_point(
+    cp_km: float,
+    from_km_a: float,
+    to_km_a: float
+) -> float:
+    """Calculate effective convergence point, using segment center if outside range."""
+    if from_km_a <= cp_km <= to_km_a:
+        return cp_km
+    else:
+        # Use segment center for segments with no intersection
+        return (from_km_a + to_km_a) / 2.0
+
+
+def _parse_overlap_duration_minutes(overlap_window_duration: Any) -> float:
+    """Parse overlap window duration string or numeric value to minutes."""
+    if isinstance(overlap_window_duration, str) and ':' in overlap_window_duration:
+        parts = overlap_window_duration.split(':')
+        if len(parts) == 2:  # MM:SS
+            minutes = int(parts[0])
+            seconds = int(parts[1])
+            return minutes + seconds / 60.0
+        elif len(parts) == 3:  # HH:MM:SS
+            hours = int(parts[0])
+            minutes = int(parts[1])
+            seconds = int(parts[2])
+            return hours * 60 + minutes + seconds / 60.0
+        else:
+            return 0.0
+    else:
+        return overlap_window_duration / 60.0 if isinstance(overlap_window_duration, (int, float)) else 0.0
+
+
+def _calculate_conflict_zone_boundaries(
+    cp_km: float,
+    from_km_a: float,
+    to_km_a: float,
+    from_km_b: float,
+    to_km_b: float,
+    dynamic_conflict_length_m: float
+) -> Tuple[float, float]:
+    """Calculate normalized conflict zone boundaries (0.0 to 1.0)."""
+    len_a = to_km_a - from_km_a
+    len_b = to_km_b - from_km_b
+    
+    if from_km_a <= cp_km <= to_km_a:
+        # Convergence point within Event A's range - use absolute approach
+        s_cp = (cp_km - from_km_a) / max(len_a, 1e-9)
+        s_cp, _ = clamp_normalized_fraction(s_cp, "convergence_point_")
+        
+        # Proportional tolerance: 5% of shorter segment, minimum 50m
+        min_segment_len = min(len_a, len_b)
+        proportional_tolerance_km = max(0.05, 0.05 * min_segment_len)
+        s_conflict_half = proportional_tolerance_km / max(min_segment_len, 1e-9)
+        
+        # Define normalized conflict zone boundaries
+        s_start = max(0.0, s_cp - s_conflict_half)
+        s_end = min(1.0, s_cp + s_conflict_half)
+        
+        # Ensure conflict zone has some width
+        if s_end <= s_start:
+            s_start = max(0.0, s_cp - 0.05)
+            s_end = min(1.0, s_cp + 0.05)
+        
+        return s_start, s_end
+    else:
+        # Convergence point outside Event A's range - use normalized approach
+        intersection_start = max(from_km_a, from_km_b)
+        intersection_end = min(to_km_a, to_km_b)
+        
+        if intersection_start < intersection_end:
+            # Use intersection boundaries
+            intersection_start_norm = (intersection_start - from_km_a) / len_a
+            intersection_end_norm = (intersection_end - from_km_a) / len_a
+            conflict_length_km = dynamic_conflict_length_m / 1000.0
+            conflict_half_km = conflict_length_km / 2.0 / len_a
+            conflict_start = max(0.0, intersection_start_norm - conflict_half_km)
+            conflict_end = min(1.0, intersection_end_norm + conflict_half_km)
+            return conflict_start, conflict_end
+        else:
+            # Use segment center
+            center_a_norm = 0.5
+            conflict_length_km = dynamic_conflict_length_m / 1000.0
+            conflict_half_km = conflict_length_km / 2.0 / len_a
+            conflict_start = max(0.0, center_a_norm - conflict_half_km)
+            conflict_end = min(1.0, center_a_norm + conflict_half_km)
+            return conflict_start, conflict_end
+
+
+def _apply_convergence_policy(
+    conflict_start: Optional[float],
+    conflict_end: Optional[float],
+    copresence_a: int,
+    copresence_b: int,
+    overtakes_a: int,
+    overtakes_b: int
+) -> Dict[str, Any]:
+    """Apply three-boolean convergence policy and return policy results."""
+    # 1. spatial_zone_exists: convergence zones are calculated and non-empty
+    spatial_zone_exists = conflict_start is not None and conflict_end is not None
+    
+    # 2. temporal_overlap_exists: any copresence detected
+    temporal_overlap_exists = copresence_a > 0 or copresence_b > 0
+    
+    # 3. true_pass_exists: any overtaking counts
+    true_pass_exists = overtakes_a > 0 or overtakes_b > 0
+    
+    # POLICY: has_convergence := spatial_zone_exists AND temporal_overlap_exists
+    has_convergence_policy = spatial_zone_exists and temporal_overlap_exists
+    
+    # Determine reason code when has_convergence=True but no true passes
+    no_pass_reason_code = None
+    if has_convergence_policy and not true_pass_exists:
+        no_pass_reason_code = "NO_DIRECTIONAL_CHANGE_OR_WINDOW_TOO_SHORT"
+    elif spatial_zone_exists and not temporal_overlap_exists:
+        no_pass_reason_code = "SPATIAL_ONLY_NO_TEMPORAL"
+    
+    return {
+        "spatial_zone_exists": spatial_zone_exists,
+        "temporal_overlap_exists": temporal_overlap_exists,
+        "true_pass_exists": true_pass_exists,
+        "has_convergence_policy": has_convergence_policy,
+        "no_pass_reason_code": no_pass_reason_code
+    }
+
+
+def _process_segment_with_convergence(
+    seg_id: str,
+    df_a: pd.DataFrame,
+    df_b: pd.DataFrame,
+    event_a: str,
+    event_b: str,
+    start_times: Dict[str, float],
+    cp_km: float,
+    from_km_a: float,
+    to_km_a: float,
+    from_km_b: float,
+    to_km_b: float,
+    min_overlap_duration: float,
+    overlap_window_duration: Any,
+    segment_start_time: float,
+    segment_result: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Process a segment that has convergence, calculating overlaps, conflict zones, and policy.
+    Returns updated segment_result dict with convergence data.
+    """
+    # Calculate dynamic conflict length
+    segment_length_km = to_km_a - from_km_a
+    dynamic_conflict_length_m = _calculate_dynamic_conflict_length(
+        segment_length_km, from_km_a, to_km_a
+    )
+    
+    # Calculate effective convergence point
+    effective_cp_km = _calculate_effective_convergence_point(cp_km, from_km_a, to_km_a)
+    
+    # Parse overlap duration
+    overlap_duration_minutes = _parse_overlap_duration_minutes(overlap_window_duration)
+    
+    # Calculate overlaps with binning
+    overtakes_a, overtakes_b, copresence_a, copresence_b, bibs_a, bibs_b, unique_encounters, participants_involved = calculate_convergence_zone_overlaps_with_binning(
+        df_a, df_b, event_a, event_b, start_times,
+        effective_cp_km, from_km_a, to_km_a, from_km_b, to_km_b,
+        min_overlap_duration, dynamic_conflict_length_m, overlap_duration_minutes
+    )
+    
+    # Calculate execution time
+    segment_elapsed_ms = int(1000 * (time.time() - segment_start_time))
+    
+    # Log structured statistics
+    _log_flow_segment_stats(
+        seg_id, event_a, event_b, "ORIGINAL",
+        {
+            "pairs_considered": len(df_a) * len(df_b),
+            "pairs_overlapped_ge_threshold": unique_encounters,
+            "passes_raw_a": overtakes_a,
+            "passes_raw_b": overtakes_b,
+            "copresence_a": copresence_a,
+            "copresence_b": copresence_b,
+            "unique_encounters": unique_encounters,
+            "participants_involved": participants_involved,
+            "min_overlap_sec": float(min_overlap_duration),
+            "elapsed_ms": segment_elapsed_ms,
+            "dataset_size_a": len(df_a),
+            "dataset_size_b": len(df_b),
+            "convergence_point": effective_cp_km,
+            "conflict_length_m": dynamic_conflict_length_m
+        }
+    )
+    
+    # Special case debugging/logging
+    _handle_special_case_debugging(
+        seg_id, event_a, event_b, df_a, df_b, from_km_a, to_km_a, from_km_b, to_km_b,
+        effective_cp_km, dynamic_conflict_length_m, overlap_duration_minutes,
+        overtakes_a, overtakes_b, copresence_a, copresence_b, unique_encounters,
+        participants_involved, cp_km, segment_result, overlap_window_duration,
+        start_times, min_overlap_duration
+    )
+    
+    # Apply validation and corrections (F1 specific)
+    overtakes_a, overtakes_b, copresence_a, copresence_b = _apply_f1_validation_if_needed(
+        seg_id, event_a, event_b, df_a, df_b, start_times,
+        from_km_a, to_km_a, from_km_b, to_km_b, dynamic_conflict_length_m,
+        overtakes_a, overtakes_b, copresence_a, copresence_b
+    )
+    
+    # Log binning decisions
+    use_time_bins = overlap_duration_minutes > TEMPORAL_BINNING_THRESHOLD_MINUTES
+    use_distance_bins = dynamic_conflict_length_m > SPATIAL_BINNING_THRESHOLD_METERS
+    
+    if use_time_bins or use_distance_bins:
+        print(f"🔧 BINNING APPLIED to {seg_id}: time_bins={use_time_bins}, distance_bins={use_distance_bins}")
+        print(f"   Overlap: {overlap_duration_minutes:.1f}min, Conflict: {dynamic_conflict_length_m:.0f}m")
+    
+    # Flag suspicious overtaking rates
+    pct_a = overtakes_a / len(df_a) if len(df_a) > 0 else 0
+    pct_b = overtakes_b / len(df_b) if len(df_b) > 0 else 0
+    
+    if pct_a > SUSPICIOUS_OVERTAKING_RATE_THRESHOLD or pct_b > SUSPICIOUS_OVERTAKING_RATE_THRESHOLD:
+        if not (use_time_bins or use_distance_bins):
+            print(f"⚠️  SUSPICIOUS OVERTAKING RATES in {seg_id}: {pct_a:.1%}, {pct_b:.1%} - NO BINNING APPLIED!")
+        else:
+            print(f"✅ High overtaking rates in {seg_id}: {pct_a:.1%}, {pct_b:.1%} - BINNING APPLIED")
+    
+    # Calculate conflict zone boundaries
+    conflict_start, conflict_end = _calculate_conflict_zone_boundaries(
+        cp_km, from_km_a, to_km_a, from_km_b, to_km_b, dynamic_conflict_length_m
+    )
+    
+    # Apply convergence policy
+    policy_results = _apply_convergence_policy(
+        conflict_start, conflict_end, copresence_a, copresence_b, overtakes_a, overtakes_b
+    )
+    
+    # Update segment result with policy
+    segment_result["has_convergence"] = policy_results["has_convergence_policy"]
+    segment_result.update({
+        "spatial_zone_exists": policy_results["spatial_zone_exists"],
+        "temporal_overlap_exists": policy_results["temporal_overlap_exists"],
+        "true_pass_exists": policy_results["true_pass_exists"],
+        "has_convergence_policy": policy_results["has_convergence_policy"],
+        "no_pass_reason_code": policy_results["no_pass_reason_code"]
+    })
+    
+    # Clear convergence_point if no convergence
+    if not policy_results["has_convergence_policy"]:
+        segment_result["convergence_point"] = None
+        segment_result["convergence_point_fraction"] = None
+    
+    # Calculate overtaking loads
+    try:
+        result = calculate_overtaking_loads(
+            df_a, df_b, event_a, event_b, start_times, cp_km,
+            from_km_a, to_km_a, from_km_b, to_km_b, dynamic_conflict_length_m
+        )
+        if result is None:
+            print(f"Warning: calculate_overtaking_loads returned None for segment {seg_id}")
+            overtaking_loads_a, overtaking_loads_b, avg_load_a, avg_load_b, max_load_a, max_load_b = {}, {}, 0.0, 0.0, 0, 0
+        else:
+            overtaking_loads_a, overtaking_loads_b, avg_load_a, avg_load_b, max_load_a, max_load_b = result
+    except Exception as e:
+        print(f"Error in calculate_overtaking_loads for segment {seg_id}: {e}")
+        overtaking_loads_a, overtaking_loads_b, avg_load_a, avg_load_b, max_load_a, max_load_b = {}, {}, 0.0, 0.0, 0, 0
+    
+    # Update segment result with all convergence data
+    segment_result.update({
+        "overtaking_a": overtakes_a,
+        "overtaking_b": overtakes_b,
+        "copresence_a": copresence_a,
+        "copresence_b": copresence_b,
+        "sample_a": bibs_a[:10],
+        "sample_b": bibs_b[:10],
+        "convergence_zone_start": conflict_start,
+        "convergence_zone_end": conflict_end,
+        "conflict_length_m": dynamic_conflict_length_m,
+        "unique_encounters": unique_encounters,
+        "participants_involved": participants_involved,
+        "overtaking_load_a": round(avg_load_a, 1),
+        "overtaking_load_b": round(avg_load_b, 1),
+        "max_overtaking_load_a": max_load_a,
+        "max_overtaking_load_b": max_load_b,
+        "overtaking_load_distribution_a": list(overtaking_loads_a.values()),
+        "overtaking_load_distribution_b": list(overtaking_loads_b.values())
+    })
+    
+    return segment_result
+
+
+def _handle_special_case_debugging(
+    seg_id: str,
+    event_a: str,
+    event_b: str,
+    df_a: pd.DataFrame,
+    df_b: pd.DataFrame,
+    from_km_a: float,
+    to_km_a: float,
+    from_km_b: float,
+    to_km_b: float,
+    effective_cp_km: float,
+    dynamic_conflict_length_m: float,
+    overlap_duration_minutes: float,
+    overtakes_a: int,
+    overtakes_b: int,
+    copresence_a: int,
+    copresence_b: int,
+    unique_encounters: int,
+    participants_involved: int,
+    cp_km: Optional[float],
+    segment_result: Dict[str, Any],
+    overlap_window_duration: Any,
+    start_times: Dict[str, float],
+    min_overlap_duration: float
+) -> None:
+    """Handle special case debugging for M1, F1, B2/K1/L1 segments."""
+    # M1 DETERMINISTIC TRACE LOGGING
+    if seg_id == "M1" and event_a == "Half" and event_b == "10K":
+        print(f"🔍 M1 Half vs 10K MAIN ANALYSIS TRACE:")
+        print(f"  Input data: A={len(df_a)} runners, B={len(df_b)} runners")
+        print(f"  Segment boundaries: A=[{from_km_a}, {to_km_a}], B=[{from_km_b}, {to_km_b}]")
+        print(f"  Convergence point: {effective_cp_km} km")
+        print(f"  Dynamic conflict length: {dynamic_conflict_length_m} m")
+        print(f"  Overlap duration: {overlap_duration_minutes} min")
+        print(f"  Raw calculation results: {overtakes_a}/{overtakes_b}")
+        print(f"  Co-presence: {copresence_a}/{copresence_b}")
+        print(f"  Unique encounters: {unique_encounters}")
+        print(f"  Participants involved: {participants_involved}")
+    
+    # B2, K1, L1 CONVERGENCE ZONE DEBUGGING
+    if seg_id in ["B2", "K1", "L1"] and cp_km is None:
+        print(f"🔍 {seg_id} {event_a} vs {event_b} CONVERGENCE DEBUG:")
+        print(f"  Segment ranges: {event_a} {from_km_a}-{to_km_a}km, {event_b} {from_km_b}-{to_km_b}km")
+        print(f"  Convergence point: {cp_km}")
+        print(f"  Has convergence: {segment_result.get('has_convergence', False)}")
+        print(f"  Convergence zone: {segment_result.get('convergence_zone_start', 'N/A')}-{segment_result.get('convergence_zone_end', 'N/A')}")
+        print(f"  Overtaking: {overtakes_a}, {overtakes_b}")
+        
+        intersection_start = max(from_km_a, from_km_b)
+        intersection_end = min(to_km_a, to_km_b)
+        has_intersection = intersection_start < intersection_end
+        print(f"  Intersection: {intersection_start}-{intersection_end}km (has_intersection={has_intersection})")
+        print(f"  Overlap window: {overlap_window_duration}")
+        print(f"  Total runners: {len(df_a)} {event_a}, {len(df_b)} {event_b}")
+
+
+def _apply_f1_validation_if_needed(
+    seg_id: str,
+    event_a: str,
+    event_b: str,
+    df_a: pd.DataFrame,
+    df_b: pd.DataFrame,
+    start_times: Dict[str, float],
+    from_km_a: float,
+    to_km_a: float,
+    from_km_b: float,
+    to_km_b: float,
+    dynamic_conflict_length_m: float,
+    overtakes_a: int,
+    overtakes_b: int,
+    copresence_a: int,
+    copresence_b: int
+) -> Tuple[int, int, int, int]:
+    """Apply F1 per-runner validation if applicable, returning corrected values."""
+    if seg_id == "F1" and event_a == "Half" and event_b == "10K":
+        validation_results = validate_per_runner_entry_exit_f1(
+            df_a, df_b, event_a, event_b, start_times,
+            from_km_a, to_km_a, from_km_b, to_km_b, dynamic_conflict_length_m
+        )
+        
+        if "error" not in validation_results:
+            main_a = overtakes_a
+            main_b = overtakes_b
+            val_a = validation_results["overtakes_a"]
+            val_b = validation_results["overtakes_b"]
+            
+            if main_a != val_a or main_b != val_b:
+                logging.warning(f"F1 {event_a} vs {event_b} DISCREPANCY DETECTED!")
+                logging.warning(f"  Current calculation: {main_a} ({main_a/len(df_a)*100:.1f}%), {main_b} ({main_b/len(df_b)*100:.1f}%)")
+                logging.warning(f"  Validation results:  {val_a} ({val_a/len(df_a)*100:.1f}%), {val_b} ({val_b/len(df_b)*100:.1f}%)")
+                logging.warning(f"  Using validation results.")
+                return val_a, val_b, validation_results["copresence_a"], validation_results["copresence_b"]
+    
+    return overtakes_a, overtakes_b, copresence_a, copresence_b
+
+
 def analyze_temporal_flow_segments(
     pace_csv: str,
     segments_csv: str,
@@ -2086,286 +2648,13 @@ def analyze_temporal_flow_segments(
         }
         
         if cp_km is not None:
-            # Calculate overtaking runners in convergence zone using local-axis mapping
-            # Calculate dynamic conflict length first
-            from app.constants import (
-                CONFLICT_LENGTH_LONG_SEGMENT_M,
-                CONFLICT_LENGTH_MEDIUM_SEGMENT_M, 
-                CONFLICT_LENGTH_SHORT_SEGMENT_M,
-                SEGMENT_LENGTH_LONG_THRESHOLD_KM,
-                SEGMENT_LENGTH_MEDIUM_THRESHOLD_KM
+            # Process segment with convergence - extracted to helper function to reduce complexity
+            segment_result = _process_segment_with_convergence(
+                seg_id, df_a, df_b, event_a, event_b, start_times,
+                cp_km, from_km_a, to_km_a, from_km_b, to_km_b,
+                min_overlap_duration, overlap_window_duration,
+                segment_start_time, segment_result
             )
-            
-            segment_length_km = to_km_a - from_km_a
-            if segment_length_km > SEGMENT_LENGTH_LONG_THRESHOLD_KM:
-                dynamic_conflict_length_m = CONFLICT_LENGTH_LONG_SEGMENT_M
-            elif segment_length_km > SEGMENT_LENGTH_MEDIUM_THRESHOLD_KM:
-                dynamic_conflict_length_m = CONFLICT_LENGTH_MEDIUM_SEGMENT_M
-            else:
-                dynamic_conflict_length_m = CONFLICT_LENGTH_SHORT_SEGMENT_M
-            
-            # For segments with no intersection (like F1), use segment center instead of convergence point
-            # The convergence point might be in a different coordinate system
-            if from_km_a <= cp_km <= to_km_a:
-                # Convergence point is within Event A's range - use it directly
-                effective_cp_km = cp_km
-            else:
-                # Convergence point is outside Event A's range - use segment center
-                # This handles segments with no intersection where convergence was detected in normalized space
-                effective_cp_km = (from_km_a + to_km_a) / 2.0
-            
-            # Calculate overlap duration in minutes for binning decision
-            # overlap_window_duration is a formatted string like "55:32", need to parse it
-            if isinstance(overlap_window_duration, str) and ':' in overlap_window_duration:
-                # Parse format like "55:32" or "1:23:45"
-                parts = overlap_window_duration.split(':')
-                if len(parts) == 2:  # MM:SS
-                    minutes = int(parts[0])
-                    seconds = int(parts[1])
-                    overlap_duration_minutes = minutes + seconds / 60.0
-                elif len(parts) == 3:  # HH:MM:SS
-                    hours = int(parts[0])
-                    minutes = int(parts[1])
-                    seconds = int(parts[2])
-                    overlap_duration_minutes = hours * 60 + minutes + seconds / 60.0
-                else:
-                    overlap_duration_minutes = 0.0
-            else:
-                overlap_duration_minutes = overlap_window_duration / 60.0 if isinstance(overlap_window_duration, (int, float)) else 0.0
-            
-            overtakes_a, overtakes_b, copresence_a, copresence_b, bibs_a, bibs_b, unique_encounters, participants_involved = calculate_convergence_zone_overlaps_with_binning(
-                df_a, df_b, event_a, event_b, start_times,
-                effective_cp_km, from_km_a, to_km_a, from_km_b, to_km_b, min_overlap_duration, dynamic_conflict_length_m, overlap_duration_minutes
-            )
-            
-            # Calculate execution time for this segment
-            segment_elapsed_ms = int(1000 * (time.time() - segment_start_time))
-            
-            # Log structured statistics for debugging
-            _log_flow_segment_stats(
-                seg_id, event_a, event_b, "ORIGINAL",
-                {
-                    "pairs_considered": len(df_a) * len(df_b),  # Approximate
-                    "pairs_overlapped_ge_threshold": unique_encounters,
-                    "passes_raw_a": overtakes_a,
-                    "passes_raw_b": overtakes_b,
-                    "copresence_a": copresence_a,
-                    "copresence_b": copresence_b,
-                    "unique_encounters": unique_encounters,
-                    "participants_involved": participants_involved,
-                    "min_overlap_sec": float(min_overlap_duration),
-                    "elapsed_ms": segment_elapsed_ms,
-                    "dataset_size_a": len(df_a),
-                    "dataset_size_b": len(df_b),
-                    "convergence_point": effective_cp_km,
-                    "conflict_length_m": dynamic_conflict_length_m
-                }
-            )
-            
-            # M1 DETERMINISTIC TRACE LOGGING (for debugging discrepancy)
-            if seg_id == "M1" and event_a == "Half" and event_b == "10K":
-                print(f"🔍 M1 Half vs 10K MAIN ANALYSIS TRACE:")
-                print(f"  Input data: A={len(df_a)} runners, B={len(df_b)} runners")
-                print(f"  Segment boundaries: A=[{from_km_a}, {to_km_a}], B=[{from_km_b}, {to_km_b}]")
-                print(f"  Convergence point: {effective_cp_km} km")
-                print(f"  Dynamic conflict length: {dynamic_conflict_length_m} m")
-                print(f"  Overlap duration: {overlap_duration_minutes} min")
-                print(f"  Raw calculation results: {overtakes_a}/{overtakes_b}")
-                print(f"  Co-presence: {copresence_a}/{copresence_b}")
-                print(f"  Unique encounters: {unique_encounters}")
-                print(f"  Participants involved: {participants_involved}")
-            
-            # F1 Half vs 10K PER-RUNNER VALIDATION
-            if seg_id == "F1" and event_a == "Half" and event_b == "10K":
-                validation_results = validate_per_runner_entry_exit_f1(
-                    df_a, df_b, event_a, event_b, start_times,
-                    from_km_a, to_km_a, from_km_b, to_km_b, dynamic_conflict_length_m
-                )
-                
-                if "error" not in validation_results:
-                    # Check for discrepancy between main calculation and validation
-                    main_a = overtakes_a
-                    main_b = overtakes_b
-                    val_a = validation_results["overtakes_a"]
-                    val_b = validation_results["overtakes_b"]
-                    
-                    if main_a != val_a or main_b != val_b:
-                        logging.warning(f"F1 {event_a} vs {event_b} DISCREPANCY DETECTED!")
-                        logging.warning(f"  Current calculation: {main_a} ({main_a/len(df_a)*100:.1f}%), {main_b} ({main_b/len(df_b)*100:.1f}%)")
-                        logging.warning(f"  Validation results:  {val_a} ({val_a/len(df_a)*100:.1f}%), {val_b} ({val_b/len(df_b)*100:.1f}%)")
-                        logging.warning(f"  Using validation results.")
-                        
-                        # Use validation results instead of main calculation
-                        overtakes_a = val_a
-                        overtakes_b = val_b
-                        copresence_a = validation_results["copresence_a"]
-                        copresence_b = validation_results["copresence_b"]
-            
-            # FLOW AUDIT GENERATION (parameterized for any segment)
-            # Note: Flow Audit is now available via /api/flow-audit endpoint
-            # The hardcoded F1 logic has been removed and replaced with a parameterized function
-            
-            # B2, K1, L1 CONVERGENCE ZONE DEBUGGING
-            if seg_id in ["B2", "K1", "L1"] and cp_km is None:
-                print(f"🔍 {seg_id} {event_a} vs {event_b} CONVERGENCE DEBUG:")
-                print(f"  Segment ranges: {event_a} {from_km_a}-{to_km_a}km, {event_b} {from_km_b}-{to_km_b}km")
-                print(f"  Convergence point: {cp_km}")
-                print(f"  Has convergence: {segment_result.get('has_convergence', False)}")
-                print(f"  Convergence zone: {segment_result.get('convergence_zone_start', 'N/A')}-{segment_result.get('convergence_zone_end', 'N/A')}")
-                print(f"  Overtaking: {overtakes_a}, {overtakes_b}")
-                
-                # Check if segments have intersection
-                intersection_start = max(from_km_a, from_km_b)
-                intersection_end = min(to_km_a, to_km_b)
-                has_intersection = intersection_start < intersection_end
-                print(f"  Intersection: {intersection_start}-{intersection_end}km (has_intersection={has_intersection})")
-                
-                # Check overlap window
-                print(f"  Overlap window: {overlap_window_duration}")
-                print(f"  Total runners: {len(df_a)} {event_a}, {len(df_b)} {event_b}")
-            
-            # Log binning decisions and warnings
-            
-            use_time_bins = overlap_duration_minutes > TEMPORAL_BINNING_THRESHOLD_MINUTES
-            use_distance_bins = dynamic_conflict_length_m > SPATIAL_BINNING_THRESHOLD_METERS
-            
-            if use_time_bins or use_distance_bins:
-                print(f"🔧 BINNING APPLIED to {seg_id}: time_bins={use_time_bins}, distance_bins={use_distance_bins}")
-                print(f"   Overlap: {overlap_duration_minutes:.1f}min, Conflict: {dynamic_conflict_length_m:.0f}m")
-            
-            # Flag suspicious overtaking rates (using true passes, not co-presence)
-            pct_a = overtakes_a / len(df_a) if len(df_a) > 0 else 0
-            pct_b = overtakes_b / len(df_b) if len(df_b) > 0 else 0
-            
-            if pct_a > SUSPICIOUS_OVERTAKING_RATE_THRESHOLD or pct_b > SUSPICIOUS_OVERTAKING_RATE_THRESHOLD:
-                if not (use_time_bins or use_distance_bins):
-                    print(f"⚠️  SUSPICIOUS OVERTAKING RATES in {seg_id}: {pct_a:.1%}, {pct_b:.1%} - NO BINNING APPLIED!")
-                else:
-                    print(f"✅ High overtaking rates in {seg_id}: {pct_a:.1%}, {pct_b:.1%} - BINNING APPLIED")
-            
-            # Calculate dynamic conflict zone boundaries using the same logic as calculate_convergence_zone_overlaps
-            # This ensures consistency between overtaking count calculation and reporting
-            len_a = to_km_a - from_km_a
-            len_b = to_km_b - from_km_b
-            
-            if from_km_a <= cp_km <= to_km_a:
-                # Convergence point is within Event A's range - use absolute approach
-                s_cp = (cp_km - from_km_a) / max(len_a, 1e-9)
-                s_cp, clamp_reason = clamp_normalized_fraction(s_cp, "convergence_point_")
-                
-                # Use proportional tolerance: 5% of shorter segment, minimum 50m
-                min_segment_len = min(len_a, len_b)
-                proportional_tolerance_km = max(0.05, 0.05 * min_segment_len)
-                s_conflict_half = proportional_tolerance_km / max(min_segment_len, 1e-9)
-                
-                # Define normalized conflict zone boundaries
-                s_start = max(0.0, s_cp - s_conflict_half)
-                s_end = min(1.0, s_cp + s_conflict_half)
-                
-                # Ensure conflict zone has some width
-                if s_end <= s_start:
-                    s_start = max(0.0, s_cp - 0.05)
-                    s_end = min(1.0, s_cp + 0.05)
-                
-                # Store normalized values for convergence zone (0.0 to 1.0)
-                conflict_start = s_start
-                conflict_end = s_end
-            else:
-                # Convergence point is outside Event A's range - use normalized approach
-                intersection_start = max(from_km_a, from_km_b)
-                intersection_end = min(to_km_a, to_km_b)
-                
-                if intersection_start < intersection_end:
-                    # Use intersection boundaries - normalize to segment
-                    len_a = to_km_a - from_km_a
-                    intersection_start_norm = (intersection_start - from_km_a) / len_a
-                    intersection_end_norm = (intersection_end - from_km_a) / len_a
-                    conflict_length_km = dynamic_conflict_length_m / 1000.0
-                    conflict_half_km = conflict_length_km / 2.0 / len_a  # Normalize to segment length
-                    conflict_start = max(0.0, intersection_start_norm - conflict_half_km)
-                    conflict_end = min(1.0, intersection_end_norm + conflict_half_km)
-                else:
-                    # Use segment center - normalize to segment
-                    len_a = to_km_a - from_km_a
-                    center_a_norm = 0.5  # Center of normalized segment
-                    conflict_length_km = dynamic_conflict_length_m / 1000.0
-                    conflict_half_km = conflict_length_km / 2.0 / len_a  # Normalize to segment length
-                    conflict_start = max(0.0, center_a_norm - conflict_half_km)
-                    conflict_end = min(1.0, center_a_norm + conflict_half_km)
-            
-            # IMPLEMENT THREE-BOOLEAN SCHEMA FOR CONVERGENCE POLICY
-            # Based on convergence policy framework: has_convergence := spatial_zone_exists AND temporal_overlap_exists
-            
-            # 1. spatial_zone_exists: convergence zones are calculated and non-empty
-            spatial_zone_exists = conflict_start is not None and conflict_end is not None
-            
-            # 2. temporal_overlap_exists: any copresence detected (runners with temporal overlap)
-            temporal_overlap_exists = copresence_a > 0 or copresence_b > 0
-            
-            # 3. true_pass_exists: any overtaking counts (directional changes)
-            true_pass_exists = overtakes_a > 0 or overtakes_b > 0
-            
-            # POLICY: has_convergence := spatial_zone_exists AND temporal_overlap_exists
-            has_convergence_policy = spatial_zone_exists and temporal_overlap_exists
-            
-            # Determine reason code when has_convergence=True but no true passes
-            no_pass_reason_code = None
-            if has_convergence_policy and not true_pass_exists:
-                no_pass_reason_code = "NO_DIRECTIONAL_CHANGE_OR_WINDOW_TOO_SHORT"
-            elif spatial_zone_exists and not temporal_overlap_exists:
-                no_pass_reason_code = "SPATIAL_ONLY_NO_TEMPORAL"
-            
-            # Set has_convergence based on policy
-            segment_result["has_convergence"] = has_convergence_policy
-            
-            # Store the three boolean flags for transparency and debugging
-            segment_result["spatial_zone_exists"] = spatial_zone_exists
-            segment_result["temporal_overlap_exists"] = temporal_overlap_exists
-            segment_result["true_pass_exists"] = true_pass_exists
-            segment_result["has_convergence_policy"] = has_convergence_policy
-            segment_result["no_pass_reason_code"] = no_pass_reason_code
-            
-            # Clear convergence_point and fraction if no convergence
-            if not has_convergence_policy:
-                segment_result["convergence_point"] = None
-                segment_result["convergence_point_fraction"] = None
-            
-            # Calculate overtaking loads for runner experience analysis
-            try:
-                result = calculate_overtaking_loads(
-                    df_a, df_b, event_a, event_b, start_times, cp_km, 
-                    from_km_a, to_km_a, from_km_b, to_km_b, dynamic_conflict_length_m
-                )
-                if result is None:
-                    print(f"Warning: calculate_overtaking_loads returned None for segment {seg_id}")
-                    overtaking_loads_a, overtaking_loads_b, avg_load_a, avg_load_b, max_load_a, max_load_b = {}, {}, 0.0, 0.0, 0, 0
-                else:
-                    overtaking_loads_a, overtaking_loads_b, avg_load_a, avg_load_b, max_load_a, max_load_b = result
-            except Exception as e:
-                print(f"Error in calculate_overtaking_loads for segment {seg_id}: {e}")
-                overtaking_loads_a, overtaking_loads_b, avg_load_a, avg_load_b, max_load_a, max_load_b = {}, {}, 0.0, 0.0, 0, 0
-            
-            segment_result.update({
-                "overtaking_a": overtakes_a,
-                "overtaking_b": overtakes_b,
-                "copresence_a": copresence_a,
-                "copresence_b": copresence_b,
-                "sample_a": bibs_a[:10],  # First 10 for samples
-                "sample_b": bibs_b[:10],
-                "convergence_zone_start": conflict_start,
-                "convergence_zone_end": conflict_end,
-                "conflict_length_m": dynamic_conflict_length_m,
-                "unique_encounters": unique_encounters,
-                "participants_involved": participants_involved,
-                # Overtaking load analysis for runner experience
-                "overtaking_load_a": round(avg_load_a, 1),
-                "overtaking_load_b": round(avg_load_b, 1),
-                "max_overtaking_load_a": max_load_a,
-                "max_overtaking_load_b": max_load_b,
-                "overtaking_load_distribution_a": list(overtaking_loads_a.values()),
-                "overtaking_load_distribution_b": list(overtaking_loads_b.values())
-            })
-            
             results["segments_with_convergence"] += 1
         
         results["segments"].append(segment_result)
@@ -2834,41 +3123,9 @@ def generate_tot_report(tot_data: Dict[str, Any]) -> str:
     return "\n".join(report)
 
 
-def generate_flow_audit_for_segment(
-    pace_csv: str,
-    segments_csv: str,
-    start_times: Dict[str, float],
-    seg_id: str,
-    event_a: str,
-    event_b: str,
-    min_overlap_duration: float = DEFAULT_MIN_OVERLAP_DURATION,
-    conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
-    output_dir: str = "reports"
-) -> Dict[str, Any]:
-    """
-    Generate Flow Audit for a specific segment and event pair.
-    
-    This function extracts the Flow Audit logic from the main analysis
-    and makes it available as a standalone API endpoint.
-    """
-    import pandas as pd
-    from datetime import datetime
-    
-    print(f"🔍 GENERATING FLOW AUDIT FOR {seg_id} {event_a} vs {event_b}")
-    
-    # Load data
-    df = pd.read_csv(pace_csv)
-    segments_df = pd.read_csv(segments_csv)
-    
-    # Find the specific segment
-    segment_row = segments_df[segments_df['seg_id'] == seg_id]
-    
-    if segment_row.empty:
-        raise ValueError(f"Segment {seg_id} not found in segments CSV")
-    
-    segment = segment_row.iloc[0].to_dict()
-    
-    # Extract segment parameters based on event types
+def _extract_segment_parameters_from_new_format(segment: Dict[str, Any], event_a: str, event_b: str) -> Tuple[float, float, float, float]:
+    """Extract segment parameters (from_km_a, to_km_a, from_km_b, to_km_b) from new format segments CSV."""
+    # Extract parameters for event_a
     if event_a == "Full":
         from_km_a = segment['full_from_km']
         to_km_a = segment['full_to_km']
@@ -2881,6 +3138,7 @@ def generate_flow_audit_for_segment(
     else:
         raise ValueError(f"Unsupported event type: {event_a}")
     
+    # Extract parameters for event_b
     if event_b == "Full":
         from_km_b = segment['full_from_km']
         to_km_b = segment['full_to_km']
@@ -2893,140 +3151,102 @@ def generate_flow_audit_for_segment(
     else:
         raise ValueError(f"Unsupported event type: {event_b}")
     
-    # Filter data for the specific events
-    df_a = df[df['event'] == event_a].copy()
-    df_b = df[df['event'] == event_b].copy()
-    
-    if df_a.empty or df_b.empty:
-        raise ValueError(f"No data found for {event_a} or {event_b} events")
-    
-    print(f"  📊 Data loaded: {len(df_a)} {event_a} runners, {len(df_b)} {event_b} runners")
-    
-    # Calculate convergence point
-    cp_km = calculate_convergence_point(
-        df_a, df_b, event_a, event_b, start_times,
-        from_km_a, to_km_a, from_km_b, to_km_b
-    )
-    
+    return from_km_a, to_km_a, from_km_b, to_km_b
+
+
+def _calculate_conflict_zone_for_audit(
+    cp_km: float,
+    from_km_a: float,
+    to_km_a: float,
+    from_km_b: float,
+    to_km_b: float
+) -> Tuple[Optional[float], Optional[float]]:
+    """Calculate conflict zone boundaries (normalized 0.0-1.0) for audit, following main analysis logic."""
     if cp_km is None:
-        return {
-            "error": f"No convergence point found for {seg_id} {event_a} vs {event_b}",
-            "segment_id": seg_id,
-            "event_a": event_a,
-            "event_b": event_b
-        }
+        return None, None
     
-    # Calculate conflict zone (convergence zone) - following the same logic as main analysis
-    conflict_start = None
-    conflict_end = None
-    
-    if cp_km is not None:
-        # Check if convergence point is within Event A's range
-        if from_km_a <= cp_km <= to_km_a:
-            # Calculate normalized convergence zone around the convergence point
-            len_a = to_km_a - from_km_a
-            len_b = to_km_b - from_km_b
-            s_cp = (cp_km - from_km_a) / len_a  # Normalized position of convergence point
-            
-            # Use proportional tolerance approach (same as Main Analysis)
-            # Use proportional tolerance: 5% of shorter segment, minimum 50m
-            min_segment_len = min(len_a, len_b)
-            proportional_tolerance_km = max(0.05, 0.05 * min_segment_len)  # 5% of shorter segment, min 50m
-            s_conflict_half = proportional_tolerance_km / max(min_segment_len, 1e-9)
-            
-            s_start = max(0.0, s_cp - s_conflict_half)
-            s_end = min(1.0, s_cp + s_conflict_half)
-            
-            # Ensure conflict zone has some width
-            if s_end <= s_start:
-                s_start = max(0.0, s_cp - 0.05)  # 5% of segment
-                s_end = min(1.0, s_cp + 0.05)    # 5% of segment
-            
-            conflict_start = s_start
-            conflict_end = s_end
-        else:
-            # Convergence point is outside Event A's range - use segment center
-            len_a = to_km_a - from_km_a
-            len_b = to_km_b - from_km_b
-            center_a_norm = 0.5  # Center of normalized segment
-            
-            # Use proportional tolerance approach (same as Main Analysis)
-            min_segment_len = min(len_a, len_b)
-            proportional_tolerance_km = max(0.05, 0.05 * min_segment_len)  # 5% of shorter segment, min 50m
-            s_conflict_half = proportional_tolerance_km / max(min_segment_len, 1e-9)
-            
-            conflict_start = max(0.0, center_a_norm - s_conflict_half)
-            conflict_end = min(1.0, center_a_norm + s_conflict_half)
-    
-    # Calculate overlaps and overtakes
-    effective_cp_km = cp_km
-    
-    # Calculate overlap duration dynamically (same as Main Analysis)
-    first_entry_a, last_exit_a, first_entry_b, last_exit_b, overlap_window_duration = calculate_entry_exit_times(
-        df_a, df_b, event_a, event_b, start_times,
-        from_km_a, to_km_a, from_km_b, to_km_b
-    )
-    
-    # Parse overlap duration in minutes for binning decision (same logic as Main Analysis)
-    if isinstance(overlap_window_duration, str) and ':' in overlap_window_duration:
-        # Parse format like "55:32" or "1:23:45"
-        parts = overlap_window_duration.split(':')
-        if len(parts) == 2:  # MM:SS
-            minutes = int(parts[0])
-            seconds = int(parts[1])
-            overlap_duration_minutes = minutes + seconds / 60.0
-        elif len(parts) == 3:  # HH:MM:SS
-            hours = int(parts[0])
-            minutes = int(parts[1])
-            seconds = int(parts[2])
-            overlap_duration_minutes = hours * 60 + minutes + seconds / 60.0
-        else:
-            overlap_duration_minutes = 0.0
-    else:
-        overlap_duration_minutes = overlap_window_duration / 60.0 if isinstance(overlap_window_duration, (int, float)) else 0.0
-    
-    # Use dynamic conflict length (same as Main Analysis)
-    try:
-        from app.constants import (
-            CONFLICT_LENGTH_LONG_SEGMENT_M,
-            CONFLICT_LENGTH_MEDIUM_SEGMENT_M, 
-            CONFLICT_LENGTH_SHORT_SEGMENT_M,
-            SEGMENT_LENGTH_LONG_THRESHOLD_KM,
-            SEGMENT_LENGTH_MEDIUM_THRESHOLD_KM
-        )
+    # Check if convergence point is within Event A's range
+    if from_km_a <= cp_km <= to_km_a:
+        # Calculate normalized convergence zone around the convergence point
+        len_a = to_km_a - from_km_a
+        len_b = to_km_b - from_km_b
+        s_cp = (cp_km - from_km_a) / len_a  # Normalized position of convergence point
         
-        segment_length_km = to_km_a - from_km_a
-        if segment_length_km > SEGMENT_LENGTH_LONG_THRESHOLD_KM:
-            dynamic_conflict_length_m = CONFLICT_LENGTH_LONG_SEGMENT_M
-        elif segment_length_km > SEGMENT_LENGTH_MEDIUM_THRESHOLD_KM:
-            dynamic_conflict_length_m = CONFLICT_LENGTH_MEDIUM_SEGMENT_M
-        else:
-            dynamic_conflict_length_m = CONFLICT_LENGTH_SHORT_SEGMENT_M
-    except ImportError:
-        dynamic_conflict_length_m = conflict_length_m
-    
-    # M1 DETERMINISTIC TRACE LOGGING (for debugging discrepancy)
-    if seg_id == "M1" and event_a == "Half" and event_b == "10K":
-        print(f"🔍 M1 Half vs 10K FLOW RUNNER TRACE:")
-        print(f"  Input data: A={len(df_a)} runners, B={len(df_b)} runners")
-        print(f"  Segment boundaries: A=[{from_km_a}, {to_km_a}], B=[{from_km_b}, {to_km_b}]")
-        print(f"  Convergence point: {effective_cp_km} km")
-        print(f"  Dynamic conflict length: {dynamic_conflict_length_m} m")
-        print(f"  Overlap duration: {overlap_duration_minutes} min")
+        # Use proportional tolerance approach (same as Main Analysis)
+        min_segment_len = min(len_a, len_b)
+        proportional_tolerance_km = max(0.05, 0.05 * min_segment_len)
+        s_conflict_half = proportional_tolerance_km / max(min_segment_len, 1e-9)
+        
+        s_start = max(0.0, s_cp - s_conflict_half)
+        s_end = min(1.0, s_cp + s_conflict_half)
+        
+        # Ensure conflict zone has some width
+        if s_end <= s_start:
+            s_start = max(0.0, s_cp - 0.05)
+            s_end = min(1.0, s_cp + 0.05)
+        
+        return s_start, s_end
+    else:
+        # Convergence point is outside Event A's range - use segment center
+        len_a = to_km_a - from_km_a
+        len_b = to_km_b - from_km_b
+        center_a_norm = 0.5
+        
+        min_segment_len = min(len_a, len_b)
+        proportional_tolerance_km = max(0.05, 0.05 * min_segment_len)
+        s_conflict_half = proportional_tolerance_km / max(min_segment_len, 1e-9)
+        
+        conflict_start = max(0.0, center_a_norm - s_conflict_half)
+        conflict_end = min(1.0, center_a_norm + s_conflict_half)
+        
+        return conflict_start, conflict_end
+
+
+def _calculate_audit_overlaps(
+    df_a: pd.DataFrame,
+    df_b: pd.DataFrame,
+    event_a: str,
+    event_b: str,
+    start_times: Dict[str, float],
+    cp_km: float,
+    from_km_a: float,
+    to_km_a: float,
+    from_km_b: float,
+    to_km_b: float,
+    min_overlap_duration: float,
+    dynamic_conflict_length_m: float,
+    overlap_duration_minutes: float
+) -> Tuple[int, int, int, int, List[str], List[str], int, int]:
+    """Calculate overlaps and overtakes for audit, handling special case debugging."""
+    effective_cp_km = cp_km
     
     overtakes_a, overtakes_b, copresence_a, copresence_b, bibs_a, bibs_b, unique_encounters, participants_involved = calculate_convergence_zone_overlaps_with_binning(
         df_a, df_b, event_a, event_b, start_times,
-        effective_cp_km, from_km_a, to_km_a, from_km_b, to_km_b, min_overlap_duration, dynamic_conflict_length_m, overlap_duration_minutes
+        effective_cp_km, from_km_a, to_km_a, from_km_b, to_km_b,
+        min_overlap_duration, dynamic_conflict_length_m, overlap_duration_minutes
     )
     
-    # M1 DETERMINISTIC TRACE LOGGING (for debugging discrepancy)
-    if seg_id == "M1" and event_a == "Half" and event_b == "10K":
-        print(f"  Raw calculation results: {overtakes_a}/{overtakes_b}")
-        print(f"  Co-presence: {copresence_a}/{copresence_b}")
-        print(f"  Unique encounters: {unique_encounters}")
-        print(f"  Participants involved: {participants_involved}")
-    
-    # F1 Half vs 10K PER-RUNNER VALIDATION (same as Main Analysis)
+    return overtakes_a, overtakes_b, copresence_a, copresence_b, bibs_a, bibs_b, unique_encounters, participants_involved
+
+
+def _apply_audit_validation(
+    seg_id: str,
+    event_a: str,
+    event_b: str,
+    df_a: pd.DataFrame,
+    df_b: pd.DataFrame,
+    start_times: Dict[str, float],
+    from_km_a: float,
+    to_km_a: float,
+    from_km_b: float,
+    to_km_b: float,
+    dynamic_conflict_length_m: float,
+    overtakes_a: int,
+    overtakes_b: int,
+    copresence_a: int,
+    copresence_b: int
+) -> Tuple[int, int, int, int]:
+    """Apply F1 validation if applicable and return corrected values."""
     if seg_id == "F1" and event_a == "Half" and event_b == "10K":
         validation_results = validate_per_runner_entry_exit_f1(
             df_a, df_b, event_a, event_b, start_times,
@@ -3034,7 +3254,6 @@ def generate_flow_audit_for_segment(
         )
         
         if "error" not in validation_results:
-            # Check for discrepancy between main calculation and validation
             main_a = overtakes_a
             main_b = overtakes_b
             val_a = validation_results["overtakes_a"]
@@ -3046,71 +3265,33 @@ def generate_flow_audit_for_segment(
                 print(f"  Validation results: {val_a}/{val_b}")
                 print(f"  Using validation results.")
                 
-                # Use validation results instead of main calculation
-                overtakes_a = val_a
-                overtakes_b = val_b
-                copresence_a = validation_results["copresence_a"]
-                copresence_b = validation_results["copresence_b"]
+                return val_a, val_b, validation_results["copresence_a"], validation_results["copresence_b"]
     
-    # M1 DETERMINISTIC TRACE LOGGING (for debugging discrepancy)
-    if seg_id == "M1" and event_a == "Half" and event_b == "10K":
-        print(f"🔍 M1 Half vs 10K FLOW RUNNER TRACE:")
-        print(f"  Input data: A={len(df_a)} runners, B={len(df_b)} runners")
-        print(f"  Segment boundaries: A=[{from_km_a}, {to_km_a}], B=[{from_km_b}, {to_km_b}]")
-        print(f"  Convergence point: {effective_cp_km} km")
-        print(f"  Dynamic conflict length: {dynamic_conflict_length_m} m")
-        print(f"  Overlap duration: {overlap_duration_minutes} min")
-        print(f"  Raw calculation results: {overtakes_a}/{overtakes_b}")
-        print(f"  Co-presence: {copresence_a}/{copresence_b}")
-        print(f"  Unique encounters: {unique_encounters}")
-        print(f"  Participants involved: {participants_involved}")
-    
-    # Store original results for comparison
-    original_overtakes_a = overtakes_a
-    original_overtakes_b = overtakes_b
-    
-    # Generate Flow Audit data
-    print(f"🔍 {seg_id} {event_a} vs {event_b} FLOW AUDIT DATA GENERATION:")
-    
-    # Calculate correct boolean values from actual analysis results
-    actual_spatial_zone_exists = conflict_start is not None and conflict_end is not None
-    actual_temporal_overlap_exists = copresence_a > 0 or copresence_b > 0
-    actual_true_pass_exists = overtakes_a > 0 or overtakes_b > 0
-    actual_has_convergence_policy = actual_spatial_zone_exists and actual_temporal_overlap_exists
-    
-    # Determine reason code when has_convergence=True but no true passes
-    actual_no_pass_reason_code = None
-    if actual_has_convergence_policy and not actual_true_pass_exists:
-        actual_no_pass_reason_code = "NO_DIRECTIONAL_CHANGE_OR_WINDOW_TOO_SHORT"
-    elif actual_spatial_zone_exists and not actual_temporal_overlap_exists:
-        actual_no_pass_reason_code = "SPATIAL_ONLY_NO_TEMPORAL"
-    
-    flow_audit_data = generate_flow_audit_data(
-        df_a, df_b, event_a, event_b, start_times,
-        from_km_a, to_km_a, from_km_b, to_km_b, conflict_length_m,
-        convergence_zone_start=conflict_start,
-        convergence_zone_end=conflict_end,
-        spatial_zone_exists=actual_spatial_zone_exists,
-        temporal_overlap_exists=actual_temporal_overlap_exists,
-        true_pass_exists=actual_true_pass_exists,
-        has_convergence_policy=actual_has_convergence_policy,
-        no_pass_reason_code=actual_no_pass_reason_code,
-        copresence_a=copresence_a,
-        copresence_b=copresence_b,
-        overtakes_a=overtakes_a,
-        overtakes_b=overtakes_b,
-        total_a=len(df_a),
-        total_b=len(df_b)
-    )
-    
-    print(f"  📊 Flow Audit data generated with {len(flow_audit_data)} fields")
-    
-    # Generate Runner-Level Audit
-    print(f"🔍 {seg_id} {event_a} vs {event_b} RUNNER-LEVEL AUDIT GENERATION:")
-    runner_audit_data = None
+    return overtakes_a, overtakes_b, copresence_a, copresence_b
+
+
+def _generate_runner_audit_for_segment(
+    seg_id: str,
+    segment: Dict[str, Any],
+    event_a: str,
+    event_b: str,
+    df_a: pd.DataFrame,
+    df_b: pd.DataFrame,
+    start_times: Dict[str, float],
+    from_km_a: float,
+    to_km_a: float,
+    from_km_b: float,
+    to_km_b: float,
+    conflict_start: Optional[float],
+    conflict_end: Optional[float],
+    conflict_length_m: float,
+    output_dir: str
+) -> Optional[Dict[str, Any]]:
+    """Generate runner-level audit for a segment, returning audit results or None on failure."""
+    from datetime import datetime
     
     try:
-        # Get date-based output directory for audit files
+        # Get date-based output directory
         try:
             from app.report_utils import get_date_folder_path
         except ImportError:
@@ -3152,27 +3333,184 @@ def generate_flow_audit_for_segment(
         print(f"    - TopK: {audit_results['topk_csv']}")
         print(f"    - Stats: {audit_results['stats']['overlapped_pairs']} overlaps, {audit_results['stats']['raw_pass']} raw passes, {audit_results['stats']['strict_pass']} strict passes")
         
-        runner_audit_data = audit_results
-        
         # STRICT-FIRST PUBLICATION RULE (Phase 2 Fix)
-        # Use main calculation results instead of audit stats for consistency
-        # The main calculation function already provides the correct strict pass counts
-        if runner_audit_data and 'stats' in runner_audit_data:
-            stats = runner_audit_data['stats']
+        if audit_results and 'stats' in audit_results:
+            stats = audit_results['stats']
             audit_strict_passes = stats.get('strict_pass', 0)
             audit_raw_passes = stats.get('raw_pass', 0)
             
-            # Use main calculation results (overtakes_a, overtakes_b) as the authoritative strict pass counts
-            # The audit generation uses different criteria and should not override the main calculation
             print(f"🔍 STRICT-FIRST RULE APPLIED for {seg_id} {event_a} vs {event_b}:")
-            print(f"  Main calculation: {overtakes_a}/{overtakes_b} strict passes")
             print(f"  Audit generation: {audit_strict_passes} strict, {audit_raw_passes} raw")
-            print(f"  Using main calculation results: {overtakes_a}/{overtakes_b}")
-            # No override needed - use main calculation results directly
+            print(f"  Using main calculation results (authoritative)")
+        
+        return audit_results
         
     except Exception as e:
         print(f"  ⚠️ Runner audit generation failed: {e}")
-        runner_audit_data = None
+        return None
+
+
+def generate_flow_audit_for_segment(
+    pace_csv: str,
+    segments_csv: str,
+    start_times: Dict[str, float],
+    seg_id: str,
+    event_a: str,
+    event_b: str,
+    min_overlap_duration: float = DEFAULT_MIN_OVERLAP_DURATION,
+    conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
+    output_dir: str = "reports"
+) -> Dict[str, Any]:
+    """
+    Generate Flow Audit for a specific segment and event pair.
+    
+    This function extracts the Flow Audit logic from the main analysis
+    and makes it available as a standalone API endpoint.
+    """
+    import pandas as pd
+    from datetime import datetime
+    
+    print(f"🔍 GENERATING FLOW AUDIT FOR {seg_id} {event_a} vs {event_b}")
+    
+    # Load data
+    df = pd.read_csv(pace_csv)
+    segments_df = pd.read_csv(segments_csv)
+    
+    # Find the specific segment
+    segment_row = segments_df[segments_df['seg_id'] == seg_id]
+    
+    if segment_row.empty:
+        raise ValueError(f"Segment {seg_id} not found in segments CSV")
+    
+    segment = segment_row.iloc[0].to_dict()
+    
+    # Extract segment parameters - extracted to helper function to reduce complexity
+    from_km_a, to_km_a, from_km_b, to_km_b = _extract_segment_parameters_from_new_format(segment, event_a, event_b)
+    
+    # Filter data for the specific events
+    df_a = df[df['event'] == event_a].copy()
+    df_b = df[df['event'] == event_b].copy()
+    
+    if df_a.empty or df_b.empty:
+        raise ValueError(f"No data found for {event_a} or {event_b} events")
+    
+    print(f"  📊 Data loaded: {len(df_a)} {event_a} runners, {len(df_b)} {event_b} runners")
+    
+    # Calculate convergence point
+    cp_km = calculate_convergence_point(
+        df_a, df_b, event_a, event_b, start_times,
+        from_km_a, to_km_a, from_km_b, to_km_b
+    )
+    
+    if cp_km is None:
+        return {
+            "error": f"No convergence point found for {seg_id} {event_a} vs {event_b}",
+            "segment_id": seg_id,
+            "event_a": event_a,
+            "event_b": event_b
+        }
+    
+    # Calculate conflict zone - extracted to helper function to reduce complexity
+    conflict_start, conflict_end = _calculate_conflict_zone_for_audit(
+        cp_km, from_km_a, to_km_a, from_km_b, to_km_b
+    )
+    
+    # Calculate overlap duration dynamically
+    first_entry_a, last_exit_a, first_entry_b, last_exit_b, overlap_window_duration = calculate_entry_exit_times(
+        df_a, df_b, event_a, event_b, start_times,
+        from_km_a, to_km_a, from_km_b, to_km_b
+    )
+    
+    # Parse overlap duration - reuse helper from analyze_temporal_flow_segments refactoring
+    overlap_duration_minutes = _parse_overlap_duration_minutes(overlap_window_duration)
+    
+    # Calculate dynamic conflict length - reuse helper from analyze_temporal_flow_segments refactoring
+    try:
+        from app.constants import (
+            CONFLICT_LENGTH_LONG_SEGMENT_M,
+            CONFLICT_LENGTH_MEDIUM_SEGMENT_M, 
+            CONFLICT_LENGTH_SHORT_SEGMENT_M,
+            SEGMENT_LENGTH_LONG_THRESHOLD_KM,
+            SEGMENT_LENGTH_MEDIUM_THRESHOLD_KM
+        )
+        
+        segment_length_km = to_km_a - from_km_a
+        dynamic_conflict_length_m = _calculate_dynamic_conflict_length(segment_length_km, from_km_a, to_km_a)
+    except ImportError:
+        dynamic_conflict_length_m = conflict_length_m
+    
+    # Calculate overlaps - extracted to helper function to reduce complexity
+    overtakes_a, overtakes_b, copresence_a, copresence_b, bibs_a, bibs_b, unique_encounters, participants_involved = _calculate_audit_overlaps(
+        df_a, df_b, event_a, event_b, start_times,
+        cp_km, from_km_a, to_km_a, from_km_b, to_km_b,
+        min_overlap_duration, dynamic_conflict_length_m, overlap_duration_minutes
+    )
+    
+    # Special case debugging for M1
+    if seg_id == "M1" and event_a == "Half" and event_b == "10K":
+        print(f"🔍 M1 Half vs 10K FLOW RUNNER TRACE:")
+        print(f"  Input data: A={len(df_a)} runners, B={len(df_b)} runners")
+        print(f"  Segment boundaries: A=[{from_km_a}, {to_km_a}], B=[{from_km_b}, {to_km_b}]")
+        print(f"  Convergence point: {cp_km} km")
+        print(f"  Dynamic conflict length: {dynamic_conflict_length_m} m")
+        print(f"  Overlap duration: {overlap_duration_minutes} min")
+        print(f"  Raw calculation results: {overtakes_a}/{overtakes_b}")
+        print(f"  Co-presence: {copresence_a}/{copresence_b}")
+        print(f"  Unique encounters: {unique_encounters}")
+        print(f"  Participants involved: {participants_involved}")
+    
+    # Apply validation and corrections - extracted to helper function to reduce complexity
+    overtakes_a, overtakes_b, copresence_a, copresence_b = _apply_audit_validation(
+        seg_id, event_a, event_b, df_a, df_b, start_times,
+        from_km_a, to_km_a, from_km_b, to_km_b, dynamic_conflict_length_m,
+        overtakes_a, overtakes_b, copresence_a, copresence_b
+    )
+    
+    # Generate Flow Audit data
+    print(f"🔍 {seg_id} {event_a} vs {event_b} FLOW AUDIT DATA GENERATION:")
+    
+    # Calculate convergence policy - reuse helper from analyze_temporal_flow_segments refactoring
+    policy_results = _apply_convergence_policy(
+        conflict_start, conflict_end, copresence_a, copresence_b, overtakes_a, overtakes_b
+    )
+    
+    flow_audit_data = generate_flow_audit_data(
+        df_a, df_b, event_a, event_b, start_times,
+        from_km_a, to_km_a, from_km_b, to_km_b, conflict_length_m,
+        convergence_zone_start=conflict_start,
+        convergence_zone_end=conflict_end,
+        spatial_zone_exists=policy_results["spatial_zone_exists"],
+        temporal_overlap_exists=policy_results["temporal_overlap_exists"],
+        true_pass_exists=policy_results["true_pass_exists"],
+        has_convergence_policy=policy_results["has_convergence_policy"],
+        no_pass_reason_code=policy_results["no_pass_reason_code"],
+        copresence_a=copresence_a,
+        copresence_b=copresence_b,
+        overtakes_a=overtakes_a,
+        overtakes_b=overtakes_b,
+        total_a=len(df_a),
+        total_b=len(df_b)
+    )
+    
+    print(f"  📊 Flow Audit data generated with {len(flow_audit_data)} fields")
+    
+    # Generate Runner-Level Audit - extracted to helper function to reduce complexity
+    print(f"🔍 {seg_id} {event_a} vs {event_b} RUNNER-LEVEL AUDIT GENERATION:")
+    runner_audit_data = _generate_runner_audit_for_segment(
+        seg_id, segment, event_a, event_b, df_a, df_b, start_times,
+        from_km_a, to_km_a, from_km_b, to_km_b,
+        conflict_start, conflict_end, conflict_length_m, output_dir
+    )
+    
+    # Log strict-first rule (already handled in helper, just log for audit)
+    if runner_audit_data and 'stats' in runner_audit_data:
+        stats = runner_audit_data['stats']
+        audit_strict_passes = stats.get('strict_pass', 0)
+        audit_raw_passes = stats.get('raw_pass', 0)
+        print(f"🔍 STRICT-FIRST RULE APPLIED for {seg_id} {event_a} vs {event_b}:")
+        print(f"  Main calculation: {overtakes_a}/{overtakes_b} strict passes")
+        print(f"  Audit generation: {audit_strict_passes} strict, {audit_raw_passes} raw")
+        print(f"  Using main calculation results: {overtakes_a}/{overtakes_b}")
     
     # Return comprehensive results
     return {
