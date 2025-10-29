@@ -10,7 +10,7 @@ Architecture: Option 3 - Hybrid Approach
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from pathlib import Path
 import logging
 
