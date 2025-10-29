@@ -855,7 +855,7 @@ def _regenerate_report_with_intelligence(
         Path to generated report file, or None if generation failed
     """
     from .storage_service import get_storage_service
-    from .density_template_engine import generate_new_density_report_issue246
+    # Note: generate_new_density_report_issue246 is defined later in this same file (line 3101)
     
     if not daily_folder_path:
         logger.warning("daily_folder_path not available for report regeneration")
