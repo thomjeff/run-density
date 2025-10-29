@@ -389,8 +389,120 @@ def render_segment_v2(md, ctx, rulebook):
         render_segment_v2._definitions_added = True
 
 
+def _render_v2_schema_content(md, ctx, schema):
+    """Render schema-based content for v2.0 rulebook (flow_type zone, drivers, mitigations, ops_box)."""
+    # Check for flow_type zone content first
+    flow_type = ctx.get("flow_type", "")
+    if flow_type:
+        flow_key = f"{flow_type}_zone"
+        flow_drivers = schema.get(flow_key, {})
+        if flow_drivers and "narrative_template" in flow_drivers:
+            md.write(flow_drivers["narrative_template"].format(**ctx) + "\n\n")
+    
+    # Then add general schema content
+    drivers = schema.get("drivers", [])
+    mitigations = schema.get("mitigations", [])
+    
+    if drivers:
+        md.write("### Density Analysis\n")
+        for driver in drivers:
+            md.write(f"- {driver}\n")
+        md.write("\n")
+    
+    if mitigations:
+        md.write("### Operational Implications\n")
+        for mitigation in mitigations:
+            md.write(f"- {mitigation}\n")
+        md.write("\n")
+    
+    # Check for operational guidance
+    ops_box = schema.get("ops_box", {})
+    if ops_box:
+        md.write("### Ops Box\n")
+        for category, items in ops_box.items():
+            if items:
+                md.write(f"- **{category.title()}:** {', '.join(items)}\n")
+        md.write("\n")
+
+
+def _collect_triggered_actions(triggers, ctx, schema_name):
+    """Collect all triggered actions from triggers (regular + high density)."""
+    triggered_actions = []
+    
+    # Process all triggers
+    for trigger in triggers:
+        if _trigger_matches(trigger, ctx, schema_name):
+            actions = trigger.get("actions", [])
+            if actions:
+                # Add trigger context to actions
+                when = trigger.get("when", {})
+                trigger_type = "Density" if "density_gte" in when else "Flow" if "flow_gte" in when else "General"
+                threshold = when.get("density_gte", when.get("flow_gte", "threshold"))
+                
+                for action in actions:
+                    triggered_actions.append(f"[{trigger_type} {threshold}] {action}")
+    
+    # Check for high density warnings (adapted from v1.x patches)
+    if ctx.get("is_high_density"):
+        # Look for high density triggers
+        for trigger in triggers:
+            when = trigger.get("when", {})
+            if (when.get("density_gte") in ["E", "F"] and _trigger_matches(trigger, ctx, schema_name)):
+                actions = trigger.get("actions", [])
+                if actions:
+                    for action in actions:
+                        triggered_actions.append(f"[High Density] {action}")
+    
+    return triggered_actions
+
+
+def _render_event_factors_v2(md, ctx, rulebook, segment_id):
+    """Render event-specific factors/overrides for v2.0 rulebook."""
+    event_type = ctx.get("event_type", "").lower()
+    if not event_type:
+        return
+    
+    # Look for event-specific overrides
+    overrides = rulebook.get("overrides", [])
+    for override in overrides:
+        if override.get("match", {}).get("segment_id") == segment_id:
+            notes = override.get("notes", [])
+            if notes:
+                md.write("_Event factors_: " + "; ".join(notes) + "\n\n")
+
+
+def _render_legacy_content(md, ctx, rulebook):
+    """Render segment using legacy v1.x rulebook structure."""
+    drivers = rulebook["templates"]["drivers"]
+    safety = rulebook["templates"]["safety"]
+    events = rulebook["templates"]["events"]
+
+    flow_key = f"{ctx.get('flow_type','')}_zone"
+    if flow_key in drivers:
+        md.write(drivers[flow_key]["narrative_template"].format(**ctx) + "\n\n")
+
+    dclass = ctx.get("density_class")
+    if dclass and dclass in drivers:
+        md.write(drivers[dclass]["narrative_template"].format(**ctx) + "\n\n")
+    else:
+        md.write(f"**Segment {ctx['segment_id']} ({ctx['segment_label']})** — density {ctx['density_value']}\n\n")
+
+    if ctx.get("is_high_density"):
+        if "high_density_warning" in safety:
+            md.write(safety["high_density_warning"].format(**ctx) + "\n")
+        if "flow_control_suggestion" in safety:
+            md.write(safety["flow_control_suggestion"].format(**ctx) + "\n")
+        md.write("\n")
+
+    et = (ctx.get("event_type") or "").lower()
+    if et in events:
+        factors = events[et].get("additional_factors", [])
+        if factors:
+            md.write("_Event factors_: " + "; ".join(factors) + "\n\n")
+
+
 def render_segment(md, ctx, rulebook):
-    """Render a segment using v2.0 rulebook structure."""
+    """Render a segment using v2.0 or legacy rulebook structure."""
     # Handle v2.0 rulebook structure
     if "schemas" in rulebook:
         # v2.0 rulebook - use schema-based rendering
@@ -404,83 +516,20 @@ def render_segment(md, ctx, rulebook):
         
         # Generate narrative based on schema
         if schema:
-            # Check for flow_type zone content first
-            flow_type = ctx.get("flow_type", "")
-            if flow_type:
-                flow_key = f"{flow_type}_zone"
-                flow_drivers = schema.get(flow_key, {})
-                if flow_drivers and "narrative_template" in flow_drivers:
-                    md.write(flow_drivers["narrative_template"].format(**ctx) + "\n\n")
-            
-            # Then add general schema content
-            drivers = schema.get("drivers", [])
-            mitigations = schema.get("mitigations", [])
-            
-            if drivers:
-                md.write("### Density Analysis\n")
-                for driver in drivers:
-                    md.write(f"- {driver}\n")
-                md.write("\n")
-            
-            if mitigations:
-                md.write("### Operational Implications\n")
-                for mitigation in mitigations:
-                    md.write(f"- {mitigation}\n")
-                md.write("\n")
-            
-            # Check for operational guidance
-            ops_box = schema.get("ops_box", {})
-            if ops_box:
-                md.write("### Ops Box\n")
-                for category, items in ops_box.items():
-                    if items:
-                        md.write(f"- **{category.title()}:** {', '.join(items)}\n")
-                md.write("\n")
+            _render_v2_schema_content(md, ctx, schema)
         
-        # Check triggers for this segment and show triggered actions
+        # Collect and display triggered actions
         triggers = rulebook.get("triggers", [])
-        triggered_actions = []
+        triggered_actions = _collect_triggered_actions(triggers, ctx, schema_name)
         
-        for trigger in triggers:
-            if _trigger_matches(trigger, ctx, schema_name):
-                actions = trigger.get("actions", [])
-                if actions:
-                    # Add trigger context to actions
-                    when = trigger.get("when", {})
-                    trigger_type = "Density" if "density_gte" in when else "Flow" if "flow_gte" in when else "General"
-                    threshold = when.get("density_gte", when.get("flow_gte", "threshold"))
-                    
-                    for action in actions:
-                        triggered_actions.append(f"[{trigger_type} {threshold}] {action}")
-        
-        # Check for high density warnings (adapted from v1.x patches)
-        if ctx.get("is_high_density"):
-            # Look for high density triggers
-            for trigger in triggers:
-                if (trigger.get("when", {}).get("density_gte") in ["E", "F"] and 
-                    _trigger_matches(trigger, ctx, schema_name)):
-                    actions = trigger.get("actions", [])
-                    if actions:
-                        for action in actions:
-                            triggered_actions.append(f"[High Density] {action}")
-        
-        # Display triggered actions if any
         if triggered_actions:
             md.write("### Triggered Actions\n")
             for action in triggered_actions:
                 md.write(f"- {action}\n")
             md.write("\n")
         
-        # Check for event-specific factors (adapted from v1.x patches)
-        event_type = ctx.get("event_type", "").lower()
-        if event_type:
-            # Look for event-specific overrides
-            overrides = rulebook.get("overrides", [])
-            for override in overrides:
-                if override.get("match", {}).get("segment_id") == segment_id:
-                    notes = override.get("notes", [])
-                    if notes:
-                        md.write("_Event factors_: " + "; ".join(notes) + "\n\n")
+        # Check for event-specific factors
+        _render_event_factors_v2(md, ctx, rulebook, segment_id)
         
         # Fallback if no schema found
         if not schema:
@@ -488,36 +537,7 @@ def render_segment(md, ctx, rulebook):
     
     else:
         # Legacy v1.x rulebook structure
-        drivers = rulebook["templates"]["drivers"]
-        safety  = rulebook["templates"]["safety"]
-        events  = rulebook["templates"]["events"]
-
-        flow_key = f"{ctx.get('flow_type','')}_zone"
-        if flow_key in drivers:
-            md.write(drivers[flow_key]["narrative_template"].format(**ctx) + "\n\n")
-
-        dclass = ctx.get("density_class")
-        if dclass and dclass in drivers:
-            md.write(drivers[dclass]["narrative_template"].format(**ctx) + "\n\n")
-        else:
-            # Linear vs Areal density label clarity
-            # Uncomment depending on computation:
-            # md.write(f"**Segment {ctx['segment_id']} ({ctx['segment_label']})** — linear density {ctx['density_value']} runners/m\n\n")
-            # md.write(f"**Segment {ctx['segment_id']} ({ctx['segment_label']})** — density {ctx['density_value']} runners/m²\n\n")
-            md.write(f"**Segment {ctx['segment_id']} ({ctx['segment_label']})** — density {ctx['density_value']}\n\n")
-
-        if ctx.get("is_high_density"):
-            if "high_density_warning" in safety:
-                md.write(safety["high_density_warning"].format(**ctx) + "\n")
-            if "flow_control_suggestion" in safety:
-                md.write(safety["flow_control_suggestion"].format(**ctx) + "\n")
-            md.write("\n")
-
-        et = (ctx.get("event_type") or "").lower()
-        if et in events:
-            factors = events[et].get("additional_factors", [])
-            if factors:
-                md.write("_Event factors_: " + "; ".join(factors) + "\n\n")
+        _render_legacy_content(md, ctx, rulebook)
 
 
 def render_methodology(md, rulebook):
