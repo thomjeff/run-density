@@ -1,23 +1,25 @@
-# Cloud UI Testing Checklist
+# UI Testing Checklist
 
 **Version:** 1.0  
 **Last Updated:** 2025-10-28  
-**Purpose:** Comprehensive Cloud UI testing steps for verifying deployments and issue fixes
+**Purpose:** Comprehensive UI testing steps for verifying deployments and issue fixes
 
-This document provides a systematic approach to testing Cloud Run deployments, ensuring all functionality works correctly after code changes. Use this checklist for any deployment verification or issue resolution testing.
+This document provides a systematic approach to testing local and cloud deployments, ensuring all functionality works correctly after code changes. Use this checklist for any local or cloud deployment for functional verification and issue resolution testing.
 
 ---
 
 ## Prerequisites
 
-- Cloud Run service deployed and accessible
-- CI Pipeline completed successfully
-- All 4 stages passed (Build, E2E, Bin Datasets, Release)
-- No critical errors in Cloud Run logs
+- Local environment is running and health (for local)
+- Cloud Run service deployed and accessible (for cloud)
+- For Cloud: CI Pipeline completed successfully and all 4 stages passed (Build, E2E, Bin Datasets, Release)
+- No critical errors in local start-up logs or Cloud Run logs for cloud
 
 ---
 
 ## Testing Environment
+
+**Cloud Run URL:** `http://localhost:8081`
 
 **Cloud Run URL:** `https://run-density-ln4r3sfkha-uc.a.run.app`
 
@@ -98,7 +100,9 @@ This document provides a systematic approach to testing Cloud Run deployments, e
 - `2025-10-28-1844-Density.md` (~109.0 KB)
 
 **Download Testing:**
+Download the following reports created from your E2E test:
 - [ ] Download Flow.csv successfully
+- [ ] Download Flow.md successfully
 - [ ] Download Density.md successfully
 - [ ] Verify downloaded files contain expected content
 
