@@ -594,6 +594,326 @@ def generate_flow_audit_data(
     return audit_data
 
 
+def _read_runners_csv(path: str) -> List[Dict[str, Any]]:
+    """Read runners CSV and return sorted list of runner records."""
+    import csv
+    
+    rows = []
+    with open(path, newline="") as f:
+        reader = csv.DictReader(f)
+        for r in reader:
+            try:
+                rows.append({
+                    "runner_id": r["runner_id"],
+                    "entry_time": float(r["entry_time_sec"]),
+                    "exit_time":  float(r["exit_time_sec"]),
+                    "entry_km":   float(r.get("entry_km", "nan") or "nan"),
+                    "exit_km":    float(r.get("exit_km",  "nan") or "nan"),
+                    "pace_min_per_km": float(r.get("pace_min_per_km", "nan") or "nan"),
+                    "start_offset_sec": float(r.get("start_offset_sec", "nan") or "nan"),
+                })
+            except KeyError as e:
+                raise SystemExit(f"Missing required column {e} in {path}")
+    rows.sort(key=lambda x: x["entry_time"])
+    return rows
+
+
+def _shard_key_from_overlap_start(ts: float, window_granularity_sec: int = 60) -> str:
+    """Generate shard key from overlap start timestamp."""
+    m = int(ts // window_granularity_sec)
+    return f"min_{m:06d}"
+
+
+def _overlap_interval(a_entry: float, a_exit: float, b_entry: float, b_exit: float) -> Tuple[float, float, float]:
+    """Calculate overlap interval between two runner time windows."""
+    start = max(a_entry, b_entry)
+    end   = min(a_exit,  b_exit)
+    dwell = end - start
+    return start, end, dwell
+
+
+def _sign(x: float) -> int:
+    """Return sign of number: 1 if positive, -1 if negative, 0 if zero."""
+    if x > 0: return 1
+    if x < 0: return -1
+    return 0
+
+
+def _determine_pass_flags_and_reason(
+    order_flip: bool,
+    dwell: float,
+    directional_gain: float,
+    strict_min_dwell: int,
+    strict_margin: int
+) -> Tuple[bool, bool, str]:
+    """Determine pass flags and reason code for overlap pair."""
+    pass_raw = order_flip
+    pass_strict = (order_flip and dwell >= strict_min_dwell and directional_gain >= strict_margin)
+    
+    reason = ""
+    if not pass_strict:
+        if not order_flip:
+            reason = "NO_DIRECTIONAL_CHANGE"
+        elif dwell < strict_min_dwell:
+            reason = "DWELL_TOO_SHORT"
+        elif directional_gain < strict_margin:
+            reason = "MARGIN_TOO_SMALL"
+    
+    return pass_raw, pass_strict, reason
+
+
+def _build_overlap_row(
+    run_id: str,
+    executed_at_utc: str,
+    seg_id: str,
+    segment_label: str,
+    flow_type: str,
+    event_a_name: str,
+    event_b_name: str,
+    convergence_zone_start: float,
+    convergence_zone_end: float,
+    zone_width_m: float,
+    binning_applied: bool,
+    binning_mode: str,
+    runner_a: Dict[str, Any],
+    runner_b: Dict[str, Any],
+    overlap_start: float,
+    overlap_end: float,
+    dwell: float,
+    entry_delta: float,
+    exit_delta: float,
+    rel_entry: int,
+    rel_exit: int,
+    order_flip: bool,
+    directional_gain: float,
+    pass_raw: bool,
+    pass_strict: bool,
+    reason: str
+) -> Dict[str, Any]:
+    """Build overlap row dictionary for CSV output."""
+    return {
+        "run_id": run_id,
+        "executed_at_utc": executed_at_utc,
+        "seg_id": seg_id,
+        "segment_label": segment_label,
+        "flow_type": flow_type,
+        "event_a": event_a_name,
+        "event_b": event_b_name,
+        "pair_key": f"{runner_a['runner_id']}-{runner_b['runner_id']}",
+        "convergence_zone_start": convergence_zone_start,
+        "convergence_zone_end":   convergence_zone_end,
+        "zone_width_m": zone_width_m,
+        "binning_applied": binning_applied,
+        "binning_mode": binning_mode,
+        "runner_id_a": runner_a["runner_id"],
+        "entry_km_a": runner_a["entry_km"],
+        "exit_km_a":  runner_a["exit_km"],
+        "entry_time_sec_a": runner_a["entry_time"],
+        "exit_time_sec_a":  runner_a["exit_time"],
+        "runner_id_b": runner_b["runner_id"],
+        "entry_km_b": runner_b["entry_km"],
+        "exit_km_b":  runner_b["exit_km"],
+        "entry_time_sec_b": runner_b["entry_time"],
+        "exit_time_sec_b":  runner_b["exit_time"],
+        "overlap_start_time_sec": overlap_start,
+        "overlap_end_time_sec":   overlap_end,
+        "overlap_dwell_sec": dwell,
+        "entry_delta_sec": entry_delta,
+        "exit_delta_sec":  exit_delta,
+        "rel_order_entry": rel_entry,
+        "rel_order_exit":  rel_exit,
+        "order_flip_bool": order_flip,
+        "directional_gain_sec": directional_gain,
+        "pass_flag_raw": pass_raw,
+        "pass_flag_strict": pass_strict,
+        "reason_code": reason
+    }
+
+
+class _ShardWriter:
+    """Helper class to manage shard file writing with row capping."""
+    def __init__(self, audit_dir: str, seg_id: str, event_a_name: str, event_b_name: str, 
+                 pair_base_cols: List[str], row_cap_per_shard: int):
+        self.audit_dir = audit_dir
+        self.seg_id = seg_id
+        self.event_a_name = event_a_name
+        self.event_b_name = event_b_name
+        self.pair_base_cols = pair_base_cols
+        self.row_cap_per_shard = row_cap_per_shard
+        self.shard_writers = {}
+        self.shard_counts = {}
+        self.current_shard_part = {}
+    
+    def _open_shard(self, shard_key: str, part_idx: int) -> Tuple[str, Any, Any]:
+        """Open a new shard file and return path, file handle, and writer."""
+        import csv, os
+        
+        shard_name = f"{self.seg_id}_{self.event_a_name}-{self.event_b_name}_{shard_key}_p{part_idx}.csv"
+        shard_path = os.path.join(self.audit_dir, shard_name)
+        f = open(shard_path, "w", newline="")
+        w = csv.DictWriter(f, fieldnames=self.pair_base_cols)
+        w.writeheader()
+        return shard_path, f, w
+    
+    def write_pair(self, shard_key: str, row: Dict[str, Any]) -> str:
+        """Write pair to appropriate shard, creating new shard if needed."""
+        if shard_key not in self.shard_writers:
+            path, fh, wr = self._open_shard(shard_key, 1)
+            self.shard_writers[shard_key] = (path, fh, wr)
+            self.shard_counts[shard_key] = 0
+            self.current_shard_part[shard_key] = 1
+        
+        path, fh, wr = self.shard_writers[shard_key]
+        if self.shard_counts[shard_key] >= self.row_cap_per_shard:
+            fh.close()
+            self.current_shard_part[shard_key] += 1
+            path, fh, wr = self._open_shard(shard_key, self.current_shard_part[shard_key])
+            self.shard_writers[shard_key] = (path, fh, wr)
+            self.shard_counts[shard_key] = 0
+        
+        wr.writerow(row)
+        self.shard_counts[shard_key] += 1
+        return path
+    
+    def close_all(self) -> List[str]:
+        """Close all shard files and return list of paths."""
+        shard_paths = []
+        for key, (path, fh, wr) in self.shard_writers.items():
+            fh.close()
+            shard_paths.append(path)
+        return shard_paths
+
+
+def _process_two_pointer_sweep(
+    A: List[Dict[str, Any]],
+    B: List[Dict[str, Any]],
+    shard_writer: _ShardWriter,
+    run_id: str,
+    executed_at_utc: str,
+    seg_id: str,
+    segment_label: str,
+    flow_type: str,
+    event_a_name: str,
+    event_b_name: str,
+    convergence_zone_start: float,
+    convergence_zone_end: float,
+    zone_width_m: float,
+    binning_applied: bool,
+    binning_mode: str,
+    strict_min_dwell: int,
+    strict_margin: int,
+    topk: List[Tuple[float, Dict[str, Any]]],
+    topk_size: int = 2000
+) -> Tuple[int, int, int, int]:
+    """Process two-pointer sweep algorithm for temporal interval join."""
+    WINDOW_GRANULARITY_SEC = 60
+    j = 0
+    total_pairs = 0
+    overlapped_pairs = 0
+    strict_pass = 0
+    raw_pass = 0
+    
+    for a in A:
+        while j < len(B) and B[j]["exit_time"] < a["entry_time"]:
+            j += 1
+        k = j
+        while k < len(B) and B[k]["entry_time"] <= a["exit_time"]:
+            b = B[k]
+            total_pairs += 1
+            os_, oe_, dwell = _overlap_interval(a["entry_time"], a["exit_time"], b["entry_time"], b["exit_time"])
+            
+            if dwell > 0:
+                overlapped_pairs += 1
+                entry_delta = a["entry_time"] - b["entry_time"]
+                exit_delta  = a["exit_time"]  - b["exit_time"]
+                rel_entry   = _sign(entry_delta)
+                rel_exit    = _sign(exit_delta)
+                order_flip  = (rel_entry != rel_exit)
+                directional_gain = exit_delta - entry_delta
+                
+                pass_raw, pass_strict, reason = _determine_pass_flags_and_reason(
+                    order_flip, dwell, directional_gain, strict_min_dwell, strict_margin
+                )
+                
+                if pass_raw: raw_pass += 1
+                if pass_strict: strict_pass += 1
+                
+                shard_key = _shard_key_from_overlap_start(os_, WINDOW_GRANULARITY_SEC)
+                row = _build_overlap_row(
+                    run_id, executed_at_utc, seg_id, segment_label, flow_type,
+                    event_a_name, event_b_name, convergence_zone_start, convergence_zone_end,
+                    zone_width_m, binning_applied, binning_mode, a, b,
+                    os_, oe_, dwell, entry_delta, exit_delta, rel_entry, rel_exit,
+                    order_flip, directional_gain, pass_raw, pass_strict, reason
+                )
+                shard_writer.write_pair(shard_key, row)
+                
+                topk.append((dwell, row))
+                if len(topk) > topk_size:
+                    topk.sort(key=lambda x: x[0], reverse=True)
+                    topk[:] = topk[:topk_size]
+            k += 1
+    
+    return total_pairs, overlapped_pairs, raw_pass, strict_pass
+
+
+def _write_index_csv(
+    audit_dir: str,
+    seg_id: str,
+    event_a_name: str,
+    event_b_name: str,
+    run_id: str,
+    total_pairs: int,
+    overlapped_pairs: int,
+    raw_pass: int,
+    strict_pass: int,
+    shard_paths: List[str]
+) -> str:
+    """Write index CSV with audit summary statistics."""
+    import csv, os
+    
+    index_path = os.path.join(audit_dir, f"{seg_id}_{event_a_name}-{event_b_name}_index.csv")
+    with open(index_path, "w", newline="") as f:
+        idx_cols = ["run_id","seg_id","event_a","event_b","n_pairs_total","n_pairs_overlapped","n_pass_raw","n_pass_strict","shards"]
+        w = csv.DictWriter(f, fieldnames=idx_cols)
+        w.writeheader()
+        w.writerow({
+            "run_id": run_id,
+            "seg_id": seg_id,
+            "event_a": event_a_name,
+            "event_b": event_b_name,
+            "n_pairs_total": total_pairs,
+            "n_pairs_overlapped": overlapped_pairs,
+            "n_pass_raw": raw_pass,
+            "n_pass_strict": strict_pass,
+            "shards": ";".join(os.path.basename(p) for p in sorted(shard_paths))
+        })
+    
+    return index_path
+
+
+def _write_topk_csv(
+    audit_dir: str,
+    seg_id: str,
+    event_a_name: str,
+    event_b_name: str,
+    topk: List[Tuple[float, Dict[str, Any]]],
+    pair_base_cols: List[str]
+) -> str:
+    """Write TopK CSV with highest dwell time overlaps."""
+    import csv, os
+    
+    topk_path = os.path.join(audit_dir, f"{seg_id}_{event_a_name}-{event_b_name}_TopK.csv")
+    with open(topk_path, "w", newline="") as f:
+        cols = list(topk[0][1].keys()) if topk else pair_base_cols
+        w = csv.DictWriter(f, fieldnames=cols)
+        w.writeheader()
+        for _, row in sorted(topk, key=lambda x: x[0], reverse=True):
+            w.writerow(row)
+    
+    return topk_path
+
+
 def emit_runner_audit(
     event_a_csv: str,
     event_b_csv: str,
@@ -620,67 +940,19 @@ def emit_runner_audit(
     Outputs: small index CSV + one or more shard CSVs with pairwise overlaps
     Strategy: interval join using two-pointer sweep; shard by minute window and row cap
     """
-    import csv, os, math, pathlib, datetime
+    import os, pathlib, datetime
     
     TOPK_CSV_ROWS = 2000
-    WINDOW_GRANULARITY_SEC = 60
     
-    # Create audit subdirectory within the output directory
+    # Create audit subdirectory
     audit_dir = os.path.join(out_dir, "audit")
-    os.makedirs(audit_dir, exist_ok=True)
+    pathlib.Path(audit_dir).mkdir(parents=True, exist_ok=True)
+    pathlib.Path(out_dir).mkdir(parents=True, exist_ok=True)
     
-    def read_runners_csv(path):
-        rows = []
-        with open(path, newline="") as f:
-            reader = csv.DictReader(f)
-            for r in reader:
-                try:
-                    rows.append({
-                        "runner_id": r["runner_id"],
-                        "entry_time": float(r["entry_time_sec"]),
-                        "exit_time":  float(r["exit_time_sec"]),
-                        "entry_km":   float(r.get("entry_km", "nan") or "nan"),
-                        "exit_km":    float(r.get("exit_km",  "nan") or "nan"),
-                        "pace_min_per_km": float(r.get("pace_min_per_km", "nan") or "nan"),
-                        "start_offset_sec": float(r.get("start_offset_sec", "nan") or "nan"),
-                    })
-                except KeyError as e:
-                    raise SystemExit(f"Missing required column {e} in {path}")
-        rows.sort(key=lambda x: x["entry_time"])
-        return rows
-
-    def shard_key_from_overlap_start(ts):
-        m = int(ts // WINDOW_GRANULARITY_SEC)
-        return f"min_{m:06d}"
-
-    def ensure_dir(path):
-        pathlib.Path(path).mkdir(parents=True, exist_ok=True)
-
-    def overlap_interval(a_entry, a_exit, b_entry, b_exit):
-        start = max(a_entry, b_entry)
-        end   = min(a_exit,  b_exit)
-        dwell = end - start
-        return start, end, dwell
-
-    def sign(x):
-        if x > 0: return 1
-        if x < 0: return -1
-        return 0
-
-    ensure_dir(out_dir)
-    A = read_runners_csv(event_a_csv)
-    B = read_runners_csv(event_b_csv)
-
-    j = 0
-    total_pairs = 0
-    overlapped_pairs = 0
-    strict_pass = 0
-    raw_pass = 0
-
-    shard_writers = {}
-    shard_counts = {}
-    topk = []
-
+    # Read runner CSVs
+    A = _read_runners_csv(event_a_csv)
+    B = _read_runners_csv(event_b_csv)
+    
     executed_at_utc = datetime.datetime.utcnow().isoformat()+"Z"
     pair_base_cols = [
         "run_id","executed_at_utc","seg_id","segment_label","flow_type",
@@ -694,142 +966,27 @@ def emit_runner_audit(
         "order_flip_bool","directional_gain_sec",
         "pass_flag_raw","pass_flag_strict","reason_code"
     ]
-
-    def open_shard(shard_key, part_idx):
-        shard_name = f"{seg_id}_{event_a_name}-{event_b_name}_{shard_key}_p{part_idx}.csv"
-        shard_path = os.path.join(audit_dir, shard_name)
-        f = open(shard_path, "w", newline="")
-        w = csv.DictWriter(f, fieldnames=pair_base_cols)
-        w.writeheader()
-        return shard_path, f, w
-
-    current_shard_part = {}
-    def write_pair(shard_key, row):
-        if shard_key not in shard_writers:
-            path, fh, wr = open_shard(shard_key, 1)
-            shard_writers[shard_key] = (path, fh, wr)
-            shard_counts[shard_key] = 0
-            current_shard_part[shard_key] = 1
-
-        path, fh, wr = shard_writers[shard_key]
-        if shard_counts[shard_key] >= row_cap_per_shard:
-            fh.close()
-            current_shard_part[shard_key] += 1
-            path, fh, wr = open_shard(shard_key, current_shard_part[shard_key])
-            shard_writers[shard_key] = (path, fh, wr)
-            shard_counts[shard_key] = 0
-        wr.writerow(row)
-        shard_counts[shard_key] += 1
-        return path
-
-    # Two-pointer sweep algorithm for temporal interval join
-    for a in A:
-        while j < len(B) and B[j]["exit_time"] < a["entry_time"]:
-            j += 1
-        k = j
-        while k < len(B) and B[k]["entry_time"] <= a["exit_time"]:
-            b = B[k]
-            total_pairs += 1
-            os_, oe_, dwell = overlap_interval(a["entry_time"], a["exit_time"], b["entry_time"], b["exit_time"])
-            if dwell > 0:
-                overlapped_pairs += 1
-                entry_delta = a["entry_time"] - b["entry_time"]
-                exit_delta  = a["exit_time"]  - b["exit_time"]
-                rel_entry   = sign(entry_delta)
-                rel_exit    = sign(exit_delta)
-                order_flip  = (rel_entry != rel_exit)
-                directional_gain = exit_delta - entry_delta
-
-                pass_raw = order_flip
-                pass_strict = (order_flip and dwell >= strict_min_dwell and directional_gain >= strict_margin)
-                reason = ""
-                if not pass_strict:
-                    if not order_flip: reason = "NO_DIRECTIONAL_CHANGE"
-                    elif dwell < strict_min_dwell: reason = "DWELL_TOO_SHORT"
-                    elif directional_gain < strict_margin: reason = "MARGIN_TOO_SMALL"
-
-                if pass_raw: raw_pass += 1
-                if pass_strict: strict_pass += 1
-
-                shard_key = shard_key_from_overlap_start(os_)
-                row = {
-                    "run_id": run_id,
-                    "executed_at_utc": executed_at_utc,
-                    "seg_id": seg_id,
-                    "segment_label": segment_label,
-                    "flow_type": flow_type,
-                    "event_a": event_a_name,
-                    "event_b": event_b_name,
-                    "pair_key": f"{a['runner_id']}-{b['runner_id']}",
-                    "convergence_zone_start": convergence_zone_start,
-                    "convergence_zone_end":   convergence_zone_end,
-                    "zone_width_m": zone_width_m,
-                    "binning_applied": binning_applied,
-                    "binning_mode": binning_mode,
-                    "runner_id_a": a["runner_id"],
-                    "entry_km_a": a["entry_km"],
-                    "exit_km_a":  a["exit_km"],
-                    "entry_time_sec_a": a["entry_time"],
-                    "exit_time_sec_a":  a["exit_time"],
-                    "runner_id_b": b["runner_id"],
-                    "entry_km_b": b["entry_km"],
-                    "exit_km_b":  b["exit_km"],
-                    "entry_time_sec_b": b["entry_time"],
-                    "exit_time_sec_b":  b["exit_time"],
-                    "overlap_start_time_sec": os_,
-                    "overlap_end_time_sec":   oe_,
-                    "overlap_dwell_sec": dwell,
-                    "entry_delta_sec": entry_delta,
-                    "exit_delta_sec":  exit_delta,
-                    "rel_order_entry": rel_entry,
-                    "rel_order_exit":  rel_exit,
-                    "order_flip_bool": order_flip,
-                    "directional_gain_sec": directional_gain,
-                    "pass_flag_raw": pass_raw,
-                    "pass_flag_strict": pass_strict,
-                    "reason_code": reason
-                }
-                shard_path = write_pair(shard_key, row)
-
-                topk.append((dwell, row))
-                if len(topk) > TOPK_CSV_ROWS:
-                    topk.sort(key=lambda x: x[0], reverse=True)
-                    topk = topk[:TOPK_CSV_ROWS]
-            k += 1
-
+    
+    # Initialize shard writer
+    shard_writer = _ShardWriter(audit_dir, seg_id, event_a_name, event_b_name, pair_base_cols, row_cap_per_shard)
+    
+    # Process two-pointer sweep algorithm
+    topk = []
+    total_pairs, overlapped_pairs, raw_pass, strict_pass = _process_two_pointer_sweep(
+        A, B, shard_writer, run_id, executed_at_utc, seg_id, segment_label, flow_type,
+        event_a_name, event_b_name, convergence_zone_start, convergence_zone_end,
+        zone_width_m, binning_applied, binning_mode, strict_min_dwell, strict_margin,
+        topk, TOPK_CSV_ROWS
+    )
+    
     # Close all shard files
-    shard_paths = []
-    for key, (path, fh, wr) in shard_writers.items():
-        fh.close()
-        shard_paths.append(path)
-
-    # Write index CSV
-    index_path = os.path.join(audit_dir, f"{seg_id}_{event_a_name}-{event_b_name}_index.csv")
-    with open(index_path, "w", newline="") as f:
-        idx_cols = ["run_id","seg_id","event_a","event_b","n_pairs_total","n_pairs_overlapped","n_pass_raw","n_pass_strict","shards"]
-        w = csv.DictWriter(f, fieldnames=idx_cols)
-        w.writeheader()
-        w.writerow({
-            "run_id": run_id,
-            "seg_id": seg_id,
-            "event_a": event_a_name,
-            "event_b": event_b_name,
-            "n_pairs_total": total_pairs,
-            "n_pairs_overlapped": overlapped_pairs,
-            "n_pass_raw": raw_pass,
-            "n_pass_strict": strict_pass,
-            "shards": ";".join(os.path.basename(p) for p in sorted(shard_paths))
-        })
-
-    # Write TopK CSV
-    topk_path = os.path.join(audit_dir, f"{seg_id}_{event_a_name}-{event_b_name}_TopK.csv")
-    with open(topk_path, "w", newline="") as f:
-        cols = list(topk[0][1].keys()) if topk else pair_base_cols
-        w = csv.DictWriter(f, fieldnames=cols)
-        w.writeheader()
-        for _, row in sorted(topk, key=lambda x: x[0], reverse=True):
-            w.writerow(row)
-
+    shard_paths = shard_writer.close_all()
+    
+    # Write index and TopK CSVs
+    index_path = _write_index_csv(audit_dir, seg_id, event_a_name, event_b_name, run_id,
+                                 total_pairs, overlapped_pairs, raw_pass, strict_pass, shard_paths)
+    topk_path = _write_topk_csv(audit_dir, seg_id, event_a_name, event_b_name, topk, pair_base_cols)
+    
     return {
         "index_csv": index_path,
         "shard_csvs": shard_paths,
