@@ -954,6 +954,113 @@ def _generate_bin_dataset_with_retry(
     return daily_folder_path, bin_metadata, bin_data
 
 
+def _generate_new_report_format(
+    daily_folder_path: str
+) -> Optional[str]:
+    """Generate new density report format (Issue #246)."""
+    print("📊 Generating new density report (Issue #246)...")
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+    timestamped_path = os.path.join(daily_folder_path, f"{timestamp}-Density.md")
+    
+    new_report_results = generate_new_density_report_issue246(
+        reports_dir=daily_folder_path,
+        output_path=timestamped_path,
+        app_version="1.6.42"
+    )
+    report_content_final = new_report_results['report_content']
+    print(f"📊 New density report saved to: {timestamped_path}")
+    
+    # Upload to GCS if enabled
+    if os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
+        try:
+            from .storage_service import get_storage_service
+            storage_service = get_storage_service()
+            gcs_path = storage_service.save_file(
+                filename=os.path.basename(timestamped_path),
+                content=report_content_final,
+                date=None
+            )
+            print(f"☁️ Density report uploaded to GCS: {gcs_path}")
+        except Exception as e:
+            print(f"⚠️ Failed to upload density.md to GCS: {e}")
+    
+    return timestamped_path
+
+
+def _generate_legacy_report_format(
+    results: Dict[str, Any],
+    start_times: Dict[str, float],
+    include_per_event: bool,
+    output_dir: str
+) -> str:
+    """Generate legacy density report format with operational intelligence."""
+    print("📊 Regenerating density report with operational intelligence...")
+    from .report_utils import get_report_paths
+    
+    # Note: generate_markdown_report is defined later in this same file
+    report_content_final = generate_markdown_report(
+        results,
+        start_times,
+        include_per_event,
+        include_operational_intelligence=True,
+        output_dir=output_dir
+    )
+    
+    # Get existing full_path from results or create new
+    full_path, _ = get_report_paths("Density", "md", output_dir)
+    with open(full_path, 'w', encoding='utf-8') as f:
+        f.write(report_content_final)
+    
+    print(f"📊 Density report (with operational intelligence) saved to: {full_path}")
+    
+    # Upload to GCS if enabled
+    if os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
+        try:
+            from .storage_service import get_storage_service
+            storage_service = get_storage_service()
+            gcs_path = storage_service.save_file(
+                filename=os.path.basename(full_path),
+                content=report_content_final,
+                date=None
+            )
+            print(f"☁️ Density report uploaded to GCS: {gcs_path}")
+        except (OSError, IOError) as e:
+            logger.error(f"Failed to upload density.md to GCS - file system error: {e}")
+        except (ValueError, TypeError) as e:
+            logger.error(f"Failed to upload density.md to GCS - invalid parameters: {e}")
+        except Exception as e:
+            logger.error(f"Failed to upload density.md to GCS - unexpected error: {e}")
+            logger.debug(f"GCS upload error details: {type(e).__name__}: {e}", exc_info=True)
+    
+    return full_path
+
+
+def _generate_tooltips_json(
+    results: Dict[str, Any],
+    daily_folder_path: str
+) -> None:
+    """Generate tooltips.json if operational intelligence was added."""
+    if '_operational_intelligence' not in results:
+        return
+    
+    try:
+        oi_data = results['_operational_intelligence']
+        bins_flagged = oi_data['bins_flagged']
+        flagged = get_flagged_bins(bins_flagged)
+        
+        if len(flagged) > 0:
+            tooltips_path = os.path.join(daily_folder_path, "tooltips.json")
+            if generate_tooltips_json(flagged, oi_data['config'], tooltips_path):
+                print(f"🗺️ Tooltips JSON saved to: {tooltips_path}")
+    except (KeyError, TypeError) as e:
+        logger.error(f"Invalid operational intelligence data structure: {e}")
+    except (OSError, IOError) as e:
+        logger.error(f"Failed to write tooltips.json: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error generating tooltips.json: {e}")
+        logger.debug(f"Tooltips generation error details: {type(e).__name__}: {e}", exc_info=True)
+
+
 def _regenerate_report_with_intelligence(
     results: Dict[str, Any],
     start_times: Dict[str, float],
@@ -976,95 +1083,19 @@ def _regenerate_report_with_intelligence(
     Returns:
         Path to generated report file, or None if generation failed
     """
-    from .storage_service import get_storage_service
-    # Note: generate_new_density_report_issue246 is defined later in this same file (line 3101)
-    
     if not daily_folder_path:
         logger.warning("daily_folder_path not available for report regeneration")
         return None
     
     if use_new_report_format:
-        print("📊 Generating new density report (Issue #246)...")
-        timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
-        timestamped_path = os.path.join(daily_folder_path, f"{timestamp}-Density.md")
-        
-        new_report_results = generate_new_density_report_issue246(
-            reports_dir=daily_folder_path,
-            output_path=timestamped_path,
-            app_version="1.6.42"
-        )
-        report_content_final = new_report_results['report_content']
-        full_path = timestamped_path
-        print(f"📊 New density report saved to: {full_path}")
-        
-        # Upload to GCS if enabled
-        if os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
-            try:
-                storage_service = get_storage_service()
-                gcs_path = storage_service.save_file(
-                    filename=os.path.basename(timestamped_path),
-                    content=report_content_final,
-                    date=None
-                )
-                print(f"☁️ Density report uploaded to GCS: {gcs_path}")
-            except Exception as e:
-                print(f"⚠️ Failed to upload density.md to GCS: {e}")
+        full_path = _generate_new_report_format(daily_folder_path)
     else:
-        print("📊 Regenerating density report with operational intelligence...")
-        from .report_utils import get_report_paths
-        
-        # Note: generate_markdown_report is defined later in this same file
-        report_content_final = generate_markdown_report(
-            results,
-            start_times,
-            include_per_event,
-            include_operational_intelligence=True,
-            output_dir=output_dir
+        full_path = _generate_legacy_report_format(
+            results, start_times, include_per_event, output_dir
         )
-        
-        # Get existing full_path from results or create new
-        full_path, _ = get_report_paths("Density", "md", output_dir)
-        with open(full_path, 'w', encoding='utf-8') as f:
-            f.write(report_content_final)
-        
-        print(f"📊 Density report (with operational intelligence) saved to: {full_path}")
-        
-        # Upload to GCS if enabled
-        if os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
-            try:
-                storage_service = get_storage_service()
-                gcs_path = storage_service.save_file(
-                    filename=os.path.basename(full_path),
-                    content=report_content_final,
-                    date=None
-                )
-                print(f"☁️ Density report uploaded to GCS: {gcs_path}")
-            except (OSError, IOError) as e:
-                logger.error(f"Failed to upload density.md to GCS - file system error: {e}")
-            except (ValueError, TypeError) as e:
-                logger.error(f"Failed to upload density.md to GCS - invalid parameters: {e}")
-            except Exception as e:
-                logger.error(f"Failed to upload density.md to GCS - unexpected error: {e}")
-                logger.debug(f"GCS upload error details: {type(e).__name__}: {e}", exc_info=True)
     
     # Generate tooltips.json if operational intelligence was added
-    if '_operational_intelligence' in results:
-        try:
-            oi_data = results['_operational_intelligence']
-            bins_flagged = oi_data['bins_flagged']
-            flagged = get_flagged_bins(bins_flagged)
-            
-            if len(flagged) > 0:
-                tooltips_path = os.path.join(daily_folder_path, "tooltips.json")
-                if generate_tooltips_json(flagged, oi_data['config'], tooltips_path):
-                    print(f"🗺️ Tooltips JSON saved to: {tooltips_path}")
-        except (KeyError, TypeError) as e:
-            logger.error(f"Invalid operational intelligence data structure: {e}")
-        except (OSError, IOError) as e:
-            logger.error(f"Failed to write tooltips.json: {e}")
-        except Exception as e:
-            logger.error(f"Unexpected error generating tooltips.json: {e}")
-            logger.debug(f"Tooltips generation error details: {type(e).__name__}: {e}", exc_info=True)
+    _generate_tooltips_json(results, daily_folder_path)
     
     return full_path
 
