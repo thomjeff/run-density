@@ -1166,6 +1166,161 @@ def parse_latest_density_report_segments():
         print(f"Error parsing density report segments: {e}")
         return []
 
+def _determine_los_from_density(peak_areal_density: float) -> str:
+    """Determine LOS from peak areal density value."""
+    if peak_areal_density < 0.5:
+        return "A"
+    elif peak_areal_density < 1.0:
+        return "B"
+    elif peak_areal_density < 1.5:
+        return "C"
+    elif peak_areal_density < 2.0:
+        return "D"
+    elif peak_areal_density < 3.0:
+        return "E"
+    else:
+        return "F"
+
+
+def _determine_status_from_los_and_severity(los: str, severity: str) -> str:
+    """Determine status from LOS and severity."""
+    if severity == 'CRITICAL':
+        return "CRITICAL"
+    elif severity in ['CAUTION', 'WATCH']:
+        return "FLAGGED"
+    elif los in ['E', 'F']:
+        return "OVERLOAD"
+    elif los in ['C', 'D']:
+        return "MODERATE"
+    else:
+        return "STABLE"
+
+
+def _load_segments_csv_dict() -> Dict[str, Dict[str, str]]:
+    """Load segments CSV and return dictionary mapping seg_id to seg_label."""
+    try:
+        import pandas as pd
+        segments_df = pd.read_csv("data/segments.csv")
+        segments_dict = {}
+        for _, row in segments_df.iterrows():
+            segments_dict[row['seg_id']] = {
+                'seg_label': row.get('seg_label', row['seg_id'])
+            }
+        return segments_dict
+    except Exception as e:
+        print(f"⚠️ Could not load segments CSV: {e}, using defaults")
+        return {}
+
+
+def _build_segment_from_canonical_data(
+    segment_id: str,
+    peak_data: Dict[str, Any],
+    segment_info: Dict[str, str],
+    oi: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Build segment entry from canonical data with operational intelligence."""
+    peak_areal_density = peak_data["peak_areal_density"]
+    
+    # Use LOS from operational intelligence if available, otherwise calculate
+    los = oi.get('los') if oi.get('los') else _determine_los_from_density(peak_areal_density)
+    
+    # Determine status from LOS and severity
+    severity = oi.get('severity', 'NONE')
+    status = _determine_status_from_los_and_severity(los, severity)
+    
+    return {
+        "id": segment_id,
+        "label": segment_info.get('seg_label', segment_id),
+        "los": los,
+        "los_description": oi.get('los_description', ''),
+        "los_color": oi.get('los_color', _get_los_color(los)),
+        "status": status,
+        "severity": severity,
+        "flag_reason": oi.get('flag_reason', 'NONE'),
+        "flagged_bins_count": oi.get('flagged_bins_count', 0),
+        "notes": [f"Canonical segments: {peak_data['total_windows']} windows"],
+        "peak_areal_density": peak_areal_density,
+        "peak_mean_density": peak_data["peak_mean_density"],
+        "source": "canonical_segments"
+    }
+
+
+def _load_canonical_segments_with_oi(tooltips_data) -> Optional[Dict[str, Any]]:
+    """Load canonical segments with operational intelligence."""
+    try:
+        from .canonical_segments import (
+            is_canonical_segments_available, get_segment_peak_densities,
+            get_canonical_segments_metadata
+        )
+        
+        if not is_canonical_segments_available():
+            return None
+        
+        print("🎯 Issue #231: /api/segments using canonical segments as source of truth")
+        
+        # Get canonical segments data
+        segment_peaks = get_segment_peak_densities()
+        metadata = get_canonical_segments_metadata()
+        
+        # Load segments CSV for labels
+        segments_dict = _load_segments_csv_dict()
+        
+        # Build operational intelligence lookup from tooltips
+        oi_by_segment = _build_operational_intelligence_lookup(tooltips_data)
+        
+        # Build segments list from canonical data with operational intelligence
+        segments = []
+        for segment_id, peak_data in segment_peaks.items():
+            segment_info = segments_dict.get(segment_id, {})
+            oi = oi_by_segment.get(segment_id, {})
+            segment = _build_segment_from_canonical_data(segment_id, peak_data, segment_info, oi)
+            segments.append(segment)
+        
+        return {
+            "ok": True,
+            "segments": segments,
+            "total": len(segments),
+            "metadata": {
+                "source": "canonical_segments",
+                "methodology": "bottom_up_aggregation",
+                "total_windows": metadata.get("total_windows", 0),
+                "has_operational_intelligence": tooltips_data is not None
+            }
+        }
+        
+    except ImportError:
+        print("⚠️ Canonical segments module not available, using legacy approach")
+        return None
+    except Exception as e:
+        print(f"⚠️ Error using canonical segments: {e}, falling back to legacy approach")
+        return None
+
+
+def _load_fallback_segments_from_csv() -> Dict[str, Any]:
+    """Load fallback segments from CSV when no analysis data available."""
+    print("⚠️ No density report found, using segments CSV fallback")
+    import pandas as pd
+    segments_df = pd.read_csv("data/segments.csv")
+    
+    segments = []
+    for _, row in segments_df.iterrows():
+        segments.append({
+            "id": row['seg_id'],
+            "label": row['seg_label'],
+            "los": "A",
+            "status": "STABLE",
+            "notes": ["No density analysis available"],
+            "source": "segments_csv"
+        })
+    
+    return {
+        "ok": True,
+        "segments": segments,
+        "total": len(segments),
+        "metadata": {"source": "segments_csv"}
+    }
+
+
 @app.get("/api/segments")
 async def get_segments():
     """Get segments data for frontend dashboard with operational intelligence (Issue #237)."""
@@ -1174,107 +1329,9 @@ async def get_segments():
         tooltips_data = _load_tooltips_json()
         
         # Issue #231: Try canonical segments first (ChatGPT's roadmap)
-        try:
-            from .canonical_segments import (
-                is_canonical_segments_available, get_segment_peak_densities,
-                get_canonical_segments_metadata
-            )
-            
-            if is_canonical_segments_available():
-                print("🎯 Issue #231: /api/segments using canonical segments as source of truth")
-                
-                # Get canonical segments data
-                segment_peaks = get_segment_peak_densities()
-                metadata = get_canonical_segments_metadata()
-                
-                # Load segments CSV for labels
-                try:
-                    import pandas as pd
-                    segments_df = pd.read_csv("data/segments.csv")
-                    segments_dict = {}
-                    for _, row in segments_df.iterrows():
-                        segments_dict[row['seg_id']] = {
-                            'seg_label': row.get('seg_label', row['seg_id'])
-                        }
-                except Exception as e:
-                    print(f"⚠️ Could not load segments CSV: {e}, using defaults")
-                    segments_dict = {}
-                
-                # Build operational intelligence lookup from tooltips
-                oi_by_segment = _build_operational_intelligence_lookup(tooltips_data)
-                
-                # Build segments list from canonical data with operational intelligence
-                segments = []
-                for segment_id, peak_data in segment_peaks.items():
-                    segment_info = segments_dict.get(segment_id, {})
-                    peak_areal_density = peak_data["peak_areal_density"]
-                    
-                    # Get operational intelligence for this segment
-                    oi = oi_by_segment.get(segment_id, {})
-                    
-                    # Use LOS from operational intelligence if available, otherwise calculate
-                    if oi.get('los'):
-                        los = oi['los']
-                    else:
-                        # Determine LOS from canonical density
-                        if peak_areal_density < 0.5:
-                            los = "A"
-                        elif peak_areal_density < 1.0:
-                            los = "B"
-                        elif peak_areal_density < 1.5:
-                            los = "C"
-                        elif peak_areal_density < 2.0:
-                            los = "D"
-                        elif peak_areal_density < 3.0:
-                            los = "E"
-                        else:
-                            los = "F"
-                    
-                    # Determine status from LOS and severity
-                    severity = oi.get('severity', 'NONE')
-                    if severity == 'CRITICAL':
-                        status = "CRITICAL"
-                    elif severity in ['CAUTION', 'WATCH']:
-                        status = "FLAGGED"
-                    elif los in ['E', 'F']:
-                        status = "OVERLOAD"
-                    elif los in ['C', 'D']:
-                        status = "MODERATE"
-                    else:
-                        status = "STABLE"
-                    
-                    segments.append({
-                        "id": segment_id,
-                        "label": segment_info.get('seg_label', segment_id),
-                        "los": los,
-                        "los_description": oi.get('los_description', ''),
-                        "los_color": oi.get('los_color', _get_los_color(los)),
-                        "status": status,
-                        "severity": severity,
-                        "flag_reason": oi.get('flag_reason', 'NONE'),
-                        "flagged_bins_count": oi.get('flagged_bins_count', 0),
-                        "notes": [f"Canonical segments: {peak_data['total_windows']} windows"],
-                        "peak_areal_density": peak_areal_density,
-                        "peak_mean_density": peak_data["peak_mean_density"],
-                        "source": "canonical_segments"
-                    })
-                
-                return {
-                    "ok": True,
-                    "segments": segments,
-                    "total": len(segments),
-                    "metadata": {
-                        "source": "canonical_segments",
-                        "methodology": "bottom_up_aggregation",
-                        "total_windows": metadata.get("total_windows", 0),
-                        "has_operational_intelligence": tooltips_data is not None
-                    }
-                }
-                
-        except ImportError:
-            print("⚠️ Canonical segments module not available, using legacy approach")
-        except Exception as e:
-            print(f"⚠️ Error using canonical segments: {e}, falling back to legacy approach")
+        canonical_result = _load_canonical_segments_with_oi(tooltips_data)
+        if canonical_result:
+            return canonical_result
         
         # Legacy fallback: Try to parse the latest density report first
         print("📊 /api/segments using legacy density report parsing")
@@ -1290,27 +1347,7 @@ async def get_segments():
             }
         else:
             # Final fallback to hardcoded values if no report found
-            print("⚠️ No density report found, using segments CSV fallback")
-            import pandas as pd
-            segments_df = pd.read_csv("data/segments.csv")
-            
-            segments = []
-            for _, row in segments_df.iterrows():
-                segments.append({
-                    "id": row['seg_id'],
-                    "label": row['seg_label'],
-                    "los": "A",
-                    "status": "STABLE",
-                    "notes": ["No density analysis available"],
-                    "source": "segments_csv"
-                })
-            
-            return {
-                "ok": True,
-                "segments": segments,
-                "total": len(segments),
-                "metadata": {"source": "segments_csv"}
-            }
+            return _load_fallback_segments_from_csv()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load segments data: {str(e)}")
