@@ -175,6 +175,89 @@ async def run_e2e():
         raise HTTPException(status_code=500, detail=f"E2E execution error: {str(e)}")
 
 
+def _upload_latest_json(latest_json: Path, upload_results: dict) -> None:
+    """Upload latest.json to GCS."""
+    if not latest_json.exists():
+        return
+    
+    try:
+        result = subprocess.run(
+            ["gsutil", "cp", str(latest_json), "gs://run-density-reports/artifacts/latest.json"],
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+        if result.returncode == 0:
+            upload_results["latest_json_uploaded"] = True
+            logger.info("Uploaded artifacts/latest.json")
+        else:
+            upload_results["errors"].append(f"Failed to upload latest.json: {result.stderr}")
+    except Exception as e:
+        upload_results["errors"].append(f"Error uploading latest.json: {str(e)}")
+
+
+def _get_run_id_from_latest_json(latest_json: Path) -> str:
+    """Get run_id from latest.json, falling back to today's date."""
+    run_id = None
+    if latest_json.exists():
+        try:
+            data = json.loads(latest_json.read_text())
+            run_id = data.get("run_id")
+        except Exception as e:
+            logger.warning(f"Could not read run_id from latest.json: {e}")
+    
+    if not run_id:
+        logger.warning("No run_id found, using today's date")
+        from datetime import datetime
+        run_id = datetime.now().strftime("%Y-%m-%d")
+    
+    return run_id
+
+
+def _upload_reports_directory(report_dir: Path, run_id: str, upload_results: dict) -> None:
+    """Upload reports directory to GCS."""
+    if not report_dir.exists():
+        return
+    
+    try:
+        result = subprocess.run(
+            ["gsutil", "-m", "cp", "-r", f"{report_dir}/*", f"gs://run-density-reports/reports/{run_id}/"],
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        if result.returncode == 0:
+            file_count = len(list(report_dir.iterdir()))
+            upload_results["reports_uploaded"] = file_count
+            logger.info(f"Uploaded {file_count} report files")
+        else:
+            upload_results["errors"].append(f"Failed to upload reports: {result.stderr}")
+    except Exception as e:
+        upload_results["errors"].append(f"Error uploading reports: {str(e)}")
+
+
+def _upload_artifacts_directory(artifact_ui_dir: Path, run_id: str, upload_results: dict) -> None:
+    """Upload artifacts directory to GCS."""
+    if not artifact_ui_dir.exists():
+        return
+    
+    try:
+        result = subprocess.run(
+            ["gsutil", "-m", "cp", "-r", f"{artifact_ui_dir}/*", f"gs://run-density-reports/artifacts/{run_id}/ui/"],
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        if result.returncode == 0:
+            file_count = len(list(artifact_ui_dir.iterdir()))
+            upload_results["artifacts_uploaded"] = file_count
+            logger.info(f"Uploaded {file_count} artifact files")
+        else:
+            upload_results["errors"].append(f"Failed to upload artifacts: {result.stderr}")
+    except Exception as e:
+        upload_results["errors"].append(f"Error uploading artifacts: {str(e)}")
+
+
 @router.post("/api/e2e/upload")
 async def upload_e2e_results():
     """
@@ -192,7 +275,6 @@ async def upload_e2e_results():
     """
     try:
         # Check if we're in Cloud Run
-        # Detect environment using utility function
         is_cloud, environment = _detect_environment()
         if not is_cloud:
             return JSONResponse(content={
@@ -215,73 +297,18 @@ async def upload_e2e_results():
         
         # Upload latest.json
         latest_json = artifacts_dir / "latest.json"
-        if latest_json.exists():
-            try:
-                result = subprocess.run(
-                    ["gsutil", "cp", str(latest_json), "gs://run-density-reports/artifacts/latest.json"],
-                    capture_output=True,
-                    text=True,
-                    timeout=60
-                )
-                if result.returncode == 0:
-                    upload_results["latest_json_uploaded"] = True
-                    logger.info("Uploaded artifacts/latest.json")
-                else:
-                    upload_results["errors"].append(f"Failed to upload latest.json: {result.stderr}")
-            except Exception as e:
-                upload_results["errors"].append(f"Error uploading latest.json: {str(e)}")
+        _upload_latest_json(latest_json, upload_results)
         
         # Get run_id from latest.json
-        run_id = None
-        if latest_json.exists():
-            try:
-                data = json.loads(latest_json.read_text())
-                run_id = data.get("run_id")
-            except Exception as e:
-                logger.warning(f"Could not read run_id from latest.json: {e}")
-        
-        if not run_id:
-            logger.warning("No run_id found, using today's date")
-            from datetime import datetime
-            run_id = datetime.now().strftime("%Y-%m-%d")
+        run_id = _get_run_id_from_latest_json(latest_json)
         
         # Upload reports
         report_dir = reports_dir / run_id
-        if report_dir.exists():
-            try:
-                result = subprocess.run(
-                    ["gsutil", "-m", "cp", "-r", f"{report_dir}/*", f"gs://run-density-reports/reports/{run_id}/"],
-                    capture_output=True,
-                    text=True,
-                    timeout=300
-                )
-                if result.returncode == 0:
-                    file_count = len(list(report_dir.iterdir()))
-                    upload_results["reports_uploaded"] = file_count
-                    logger.info(f"Uploaded {file_count} report files")
-                else:
-                    upload_results["errors"].append(f"Failed to upload reports: {result.stderr}")
-            except Exception as e:
-                upload_results["errors"].append(f"Error uploading reports: {str(e)}")
+        _upload_reports_directory(report_dir, run_id, upload_results)
         
         # Upload artifacts
         artifact_ui_dir = artifacts_dir / run_id / "ui"
-        if artifact_ui_dir.exists():
-            try:
-                result = subprocess.run(
-                    ["gsutil", "-m", "cp", "-r", f"{artifact_ui_dir}/*", f"gs://run-density-reports/artifacts/{run_id}/ui/"],
-                    capture_output=True,
-                    text=True,
-                    timeout=300
-                )
-                if result.returncode == 0:
-                    file_count = len(list(artifact_ui_dir.iterdir()))
-                    upload_results["artifacts_uploaded"] = file_count
-                    logger.info(f"Uploaded {file_count} artifact files")
-                else:
-                    upload_results["errors"].append(f"Failed to upload artifacts: {result.stderr}")
-            except Exception as e:
-                upload_results["errors"].append(f"Error uploading artifacts: {str(e)}")
+        _upload_artifacts_directory(artifact_ui_dir, run_id, upload_results)
         
         response = {
             "status": "success" if not upload_results["errors"] else "partial",
