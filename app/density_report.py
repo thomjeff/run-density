@@ -654,33 +654,13 @@ def format_duration(seconds: int) -> str:
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
-def _generate_bin_dataset_with_retry(
-    results: Dict[str, Any],
-    start_times: Dict[str, float],
-    output_dir: str,
-    analysis_context: Any
-) -> Tuple[Optional[str], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
-    """
-    Generate bin dataset with retry logic and adaptive coarsening.
-    
-    Args:
-        results: Density analysis results
-        start_times: Start times mapping
-        output_dir: Output directory for artifacts
-        analysis_context: Analysis context object
-        
-    Returns:
-        Tuple of (daily_folder_path, bin_metadata_dict, bin_data_dict)
-        Returns (None, None, None) if bin generation fails
-    """
+def _initialize_bin_generation_params() -> Tuple[float, int]:
+    """Initialize bin generation parameters with Cloud Run optimization."""
     from .constants import (
-        DEFAULT_BIN_SIZE_KM, FALLBACK_BIN_SIZE_KM, BIN_MAX_FEATURES,
-        DEFAULT_BIN_TIME_WINDOW_SECONDS, MAX_BIN_GENERATION_TIME_SECONDS
+        DEFAULT_BIN_SIZE_KM, FALLBACK_BIN_SIZE_KM,
+        DEFAULT_BIN_TIME_WINDOW_SECONDS
     )
-    # Note: generate_bin_dataset is defined later in this same file
-    # We'll call it directly since we're in the same module
     
-    start_time = time.monotonic()
     bin_size_to_use = DEFAULT_BIN_SIZE_KM
     dt_seconds = DEFAULT_BIN_TIME_WINDOW_SECONDS
     
@@ -689,11 +669,13 @@ def _generate_bin_dataset_with_retry(
         bin_size_to_use = FALLBACK_BIN_SIZE_KM
         log_bins_event(action="cloud_run_optimization", bin_size_km=bin_size_to_use)
     
-    # Implement ChatGPT's temporal-first coarsening and auto-timeout reaction
-    strategy_step = 0
-    bins_status = "ok"
+    return bin_size_to_use, dt_seconds
+
+
+def _apply_temporal_first_coarsening(bin_size_to_use: float, dt_seconds: int) -> int:
+    """Apply temporal-first coarsening based on projected features."""
+    from .constants import BIN_MAX_FEATURES
     
-    # Pre-calculate projected features for temporal-first coarsening
     try:
         avg_segment_length_m = 2000
         n_segments = 22
@@ -708,8 +690,23 @@ def _generate_bin_dataset_with_retry(
     except Exception as e:
         logger.warning(f"Feature projection failed, proceeding with defaults: {e}")
     
-    # Generate bin dataset with potential coarsening
-    bin_data = None
+    return dt_seconds
+
+
+def _try_bin_generation_with_coarsening(
+    results: Dict[str, Any],
+    start_times: Dict[str, float],
+    bin_size_to_use: float,
+    dt_seconds: int,
+    analysis_context: Any,
+    start_time: float,
+    strategy_step: int
+) -> Tuple[Optional[Dict[str, Any]], str, int, float, int]:
+    """Try generating bin dataset with adaptive coarsening strategy."""
+    from .constants import MAX_BIN_GENERATION_TIME_SECONDS
+    
+    bins_status = "ok"
+    
     while strategy_step < 3:
         try:
             bin_data = generate_bin_dataset(
@@ -720,8 +717,6 @@ def _generate_bin_dataset_with_retry(
             elapsed = time.monotonic() - start_time
             
             if bin_data.get("ok", False):
-                features_count = len(bin_data.get("geojson", {}).get("features", []))
-                
                 # Auto-coarsen on timeout per ChatGPT specification
                 if elapsed > MAX_BIN_GENERATION_TIME_SECONDS:
                     log_bins_event(action="auto_coarsen_triggered", 
@@ -759,12 +754,19 @@ def _generate_bin_dataset_with_retry(
             else:
                 raise gen_e
     
-    # Check final result
-    if not bin_data or not bin_data.get("ok", False):
-        error_msg = bin_data.get('error', 'Unknown error') if bin_data else 'Bin data is None'
-        raise ValueError(f"Bin generation failed: {error_msg}")
-    
-    # Save artifacts
+    return bin_data, bins_status, strategy_step, bin_size_to_use, dt_seconds
+
+
+def _save_bin_artifacts_and_metadata(
+    bin_data: Dict[str, Any],
+    bin_size_to_use: float,
+    dt_seconds: int,
+    bins_status: str,
+    strategy_step: int,
+    output_dir: str,
+    start_time: float
+) -> Tuple[str, str, Dict[str, Any]]:
+    """Save bin artifacts and generate metadata."""
     bin_geojson = bin_data.get("geojson", {})
     md = bin_geojson.get("metadata", {})
     occ = md.get("occupied_bins")
@@ -811,7 +813,11 @@ def _generate_bin_dataset_with_retry(
                  total_ms=int(elapsed * 1000),
                  metadata=bin_metadata)
     
-    # SEGMENTS FROM BINS ROLL-UP (guarded)
+    return daily_folder_path, geojson_path, bin_metadata
+
+
+def _process_segments_from_bins(daily_folder_path: str) -> None:
+    """Process segments from bins roll-up if enabled."""
     if os.getenv("SEGMENTS_FROM_BINS", "true").lower() == "true":
         try:
             bins_parquet = os.path.join(daily_folder_path, "bins.parquet")
@@ -830,13 +836,10 @@ def _generate_bin_dataset_with_retry(
                 print(f"SEG_COMPARE_FAILED {e}")
         except Exception as e:
             print(f"SEG_ROLLUP_FAILED {e}")
-    
-    print(f"📦 Bin dataset saved: {geojson_path} | {parquet_path}")
-    print(f"📦 Generated {final_features} bin features in {elapsed:.1f}s (bin_size={bin_size_to_use}km, dt={dt_seconds}s)")
-    if bins_status != "ok":
-        print(f"⚠️  Bin status: {bins_status} (applied {strategy_step} optimization steps)")
-    
-    # Upload to GCS if enabled
+
+
+def _upload_bin_artifacts_to_gcs(daily_folder_path: str) -> None:
+    """Upload bin artifacts to GCS if enabled."""
     gcs_upload_enabled = os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}
     if gcs_upload_enabled:
         try:
@@ -848,6 +851,67 @@ def _generate_bin_dataset_with_retry(
                 print(f"⚠️ GCS upload failed, bin files remain in container: {daily_folder_path}")
         except Exception as e:
             print(f"⚠️ GCS upload error: {e}")
+
+
+def _generate_bin_dataset_with_retry(
+    results: Dict[str, Any],
+    start_times: Dict[str, float],
+    output_dir: str,
+    analysis_context: Any
+) -> Tuple[Optional[str], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    """
+    Generate bin dataset with retry logic and adaptive coarsening.
+    
+    Args:
+        results: Density analysis results
+        start_times: Start times mapping
+        output_dir: Output directory for artifacts
+        analysis_context: Analysis context object
+        
+    Returns:
+        Tuple of (daily_folder_path, bin_metadata_dict, bin_data_dict)
+        Returns (None, None, None) if bin generation fails
+    """
+    start_time = time.monotonic()
+    
+    # Initialize parameters with Cloud Run optimization
+    bin_size_to_use, dt_seconds = _initialize_bin_generation_params()
+    
+    # Apply temporal-first coarsening
+    dt_seconds = _apply_temporal_first_coarsening(bin_size_to_use, dt_seconds)
+    
+    # Generate bin dataset with adaptive coarsening
+    strategy_step = 0
+    bin_data, bins_status, strategy_step, bin_size_to_use, dt_seconds = _try_bin_generation_with_coarsening(
+        results, start_times, bin_size_to_use, dt_seconds,
+        analysis_context, start_time, strategy_step
+    )
+    
+    # Check final result
+    if not bin_data or not bin_data.get("ok", False):
+        error_msg = bin_data.get('error', 'Unknown error') if bin_data else 'Bin data is None'
+        raise ValueError(f"Bin generation failed: {error_msg}")
+    
+    # Save artifacts and generate metadata
+    daily_folder_path, geojson_path, bin_metadata = _save_bin_artifacts_and_metadata(
+        bin_data, bin_size_to_use, dt_seconds, bins_status,
+        strategy_step, output_dir, start_time
+    )
+    
+    # Process segments from bins
+    _process_segments_from_bins(daily_folder_path)
+    
+    # Print summary
+    elapsed = time.monotonic() - start_time
+    final_features = len(bin_data.get("geojson", {}).get("features", []))
+    parquet_path = os.path.join(daily_folder_path, "bins.parquet")
+    print(f"📦 Bin dataset saved: {geojson_path} | {parquet_path}")
+    print(f"📦 Generated {final_features} bin features in {elapsed:.1f}s (bin_size={bin_size_to_use}km, dt={dt_seconds}s)")
+    if bins_status != "ok":
+        print(f"⚠️  Bin status: {bins_status} (applied {strategy_step} optimization steps)")
+    
+    # Upload to GCS
+    _upload_bin_artifacts_to_gcs(daily_folder_path)
     
     return daily_folder_path, bin_metadata, bin_data
 
