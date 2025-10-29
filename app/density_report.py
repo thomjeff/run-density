@@ -1283,45 +1283,15 @@ def generate_operational_intelligence_summary(stats: Dict[str, Any], segment_sum
     return content
 
 
-def generate_markdown_report(
-    results: Dict[str, Any], 
-    start_times: Dict[str, float], 
-    include_per_event: bool = True,
-    include_operational_intelligence: bool = True,
-    output_dir: str = "reports"
-) -> str:
-    """Generate markdown content for the density report with optional operational intelligence."""
-    
-    # Event start times for ordering
-    event_order = sorted(start_times.items(), key=lambda x: x[1])
-    
-    # Calculate total runners per event
-    event_totals = {}
-    for event, _ in event_order:
-        event_totals[event] = sum(
-            getattr(seg.get("per_event", {}).get(event), "n_event_runners", 0)
-            for seg in results.get("segments", {}).values()
-        )
-    
-    # Build report content
-    content = []
-    
-    # Header with standardized format (Issue #182)
-    content.append("# Improved Per-Event Density Analysis Report")
-    content.append("")
-    content.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    content.append("")
-    content.append(f"**Analysis Engine:** density")
-    content.append("")
-    
-    # Add version information using version module
+def _get_app_version() -> str:
+    """Get application version from version module or fallback to main.py."""
     try:
         from .version import get_current_version
-        version = get_current_version()
+        return get_current_version()
     except ImportError:
         try:
             from version import get_current_version
-            version = get_current_version()
+            return get_current_version()
         except ImportError:
             # Fallback to extracting from main.py
             import re
@@ -1329,14 +1299,26 @@ def generate_markdown_report(
                 with open('app/main.py', 'r') as f:
                     content_text = f.read()
                     match = re.search(r'version="(v\d+\.\d+\.\d+)"', content_text)
-                    version = match.group(1) if match else "unknown"
+                    return match.group(1) if match else "unknown"
             except Exception:
-                version = "unknown"
-    content.append(f"**Version:** {version}")
+                return "unknown"
+
+
+def _generate_report_header(results: Dict[str, Any]) -> List[str]:
+    """Generate report header with version, environment, and analysis metadata."""
+    import os
+    content = []
+    
+    content.append("# Improved Per-Event Density Analysis Report")
+    content.append("")
+    content.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    content.append("")
+    content.append(f"**Analysis Engine:** density")
+    content.append("")
+    content.append(f"**Version:** {_get_app_version()}")
     content.append("")
     
-    # Add environment information
-    import os
+    # Environment information
     if os.environ.get('TEST_CLOUD_RUN', 'false').lower() == 'true':
         content.append("**Environment:** https://run-density-ln4r3sfkha-uc.a.run.app (Cloud Run Production)")
     else:
@@ -1347,6 +1329,7 @@ def generate_markdown_report(
     content.append("")
     content.append(f"**Time Bin Size:** {results.get('time_window_s', 30)} seconds")
     content.append("")
+    
     summary = results.get("summary", {})
     content.append(f"**Total Segments:** {summary.get('total_segments', 0)}")
     content.append("")
@@ -1355,7 +1338,12 @@ def generate_markdown_report(
     content.append(f"**Skipped Segments:** {summary.get('skipped_segments', 0)}")
     content.append("")
     
-    # Legends & Definitions (for quick reference)
+    return content
+
+
+def _generate_quick_reference_section() -> List[str]:
+    """Generate quick reference section with units and terminology."""
+    content = []
     content.append("## Quick Reference")
     content.append("")
     content.append("**Units:**")
@@ -1369,58 +1357,67 @@ def generate_markdown_report(
     content.append("")
     content.append("**Color Coding:** 🟢 Green (A-B), 🟡 Yellow (C-D), 🔴 Red (E-F)")
     content.append("")
+    return content
+
+
+def _generate_operational_intelligence_content(
+    results: Dict[str, Any],
+    output_dir: str
+) -> List[str]:
+    """Generate operational intelligence executive summary if enabled."""
+    content = []
     
-    # Operational Intelligence Executive Summary (Issue #236)
-    if include_operational_intelligence:
+    try:
+        from .io_bins import load_bins
+        from .bin_intelligence import FlaggingConfig, apply_bin_flagging, summarize_segment_flags, get_flagging_statistics
+        
+        # Load configuration
+        import yaml
         try:
-            from .io_bins import load_bins
-            from .bin_intelligence import FlaggingConfig, apply_bin_flagging, summarize_segment_flags, get_flagging_statistics
+            with open("config/reporting.yml", "r") as f:
+                config = yaml.safe_load(f)
+        except FileNotFoundError:
+            config = None
+        
+        if config:
+            # Load bins
+            bins_df = load_bins(reports_dir=output_dir)
             
-            # Load configuration
-            import yaml
-            try:
-                with open("config/reporting.yml", "r") as f:
-                    config = yaml.safe_load(f)
-            except FileNotFoundError:
-                config = None
-            
-            if config:
-                # Load bins
-                bins_df = load_bins(reports_dir=output_dir)
+            if bins_df is not None and len(bins_df) > 0:
+                # Apply flagging
+                flagging_cfg = FlaggingConfig(
+                    min_los_flag=config['flagging']['min_los_flag'],
+                    utilization_pctile=config['flagging']['utilization_pctile'],
+                    require_min_bin_len_m=config['flagging']['require_min_bin_len_m'],
+                    density_field='density_peak'
+                )
                 
-                if bins_df is not None and len(bins_df) > 0:
-                    # Apply flagging
-                    flagging_cfg = FlaggingConfig(
-                        min_los_flag=config['flagging']['min_los_flag'],
-                        utilization_pctile=config['flagging']['utilization_pctile'],
-                        require_min_bin_len_m=config['flagging']['require_min_bin_len_m'],
-                        density_field='density_peak'
-                    )
-                    
-                    bins_flagged = apply_bin_flagging(bins_df, flagging_cfg, los_thresholds=config.get('los'))
-                    stats = get_flagging_statistics(bins_flagged)
-                    segment_summary = summarize_segment_flags(bins_flagged)
-                    
-                    # Generate operational intelligence sections
-                    content.extend(generate_operational_intelligence_summary(stats, segment_summary, config))
-                    content.append("")
-                    
-                    # Store for bin detail appendix later
-                    results['_operational_intelligence'] = {
-                        'bins_flagged': bins_flagged,
-                        'stats': stats,
-                        'segment_summary': segment_summary,
-                        'config': config
-                    }
-        except Exception as e:
-            logger.warning(f"Could not generate operational intelligence: {e}")
-            # Continue without operational intelligence
+                bins_flagged = apply_bin_flagging(bins_df, flagging_cfg, los_thresholds=config.get('los'))
+                stats = get_flagging_statistics(bins_flagged)
+                segment_summary = summarize_segment_flags(bins_flagged)
+                
+                # Generate operational intelligence sections
+                content.extend(generate_operational_intelligence_summary(stats, segment_summary, config))
+                content.append("")
+                
+                # Store for bin detail appendix later
+                results['_operational_intelligence'] = {
+                    'bins_flagged': bins_flagged,
+                    'stats': stats,
+                    'segment_summary': segment_summary,
+                    'config': config
+                }
+    except Exception as e:
+        logger.warning(f"Could not generate operational intelligence: {e}")
+        # Continue without operational intelligence
     
-    # Executive Summary Table (TL;DR for race directors)
-    summary_table = generate_summary_table(results.get("segments", {}))
-    content.extend(summary_table)
+    return content
+
+
+def _generate_methodology_section() -> List[str]:
+    """Generate methodology section using v2.0 rulebook or fallback."""
+    content = []
     
-    # Methodology section using v2.0 rulebook
     try:
         import yaml
         with open("config/density_rulebook.yml", "r") as f:
@@ -1441,9 +1438,16 @@ def generate_markdown_report(
         content.append("**Units**: Density thresholds use *runners/m²* (areal density).")
         content.append("")
     
-    # Note: Detailed definitions and LOS tables moved to Appendix
+    return content
+
+
+def _generate_event_start_times_table(
+    results: Dict[str, Any],
+    event_order: List[Tuple[str, float]]
+) -> List[str]:
+    """Generate event start times table with participant counts."""
+    content = []
     
-    # Event start times (showing actual participants in first segment as reference)
     content.append("## Event Start Times")
     content.append("")
     content.append("| Event | Start Time | Total Participants |")
@@ -1466,14 +1470,13 @@ def generate_markdown_report(
     content.append(f"| **Total** | - | **{total_runners:,}** |")
     content.append("")
     
-    # Process each segment
-    for segment_id, segment in results.get("segments", {}).items():
-        content.extend(generate_segment_section(segment_id, segment, event_order, include_per_event))
-        content.append("")
-        content.append("---")
-        content.append("")
+    return content
+
+
+def _generate_appendix_content(results: Dict[str, Any]) -> List[str]:
+    """Generate appendix with detailed definitions, LOS thresholds, and bin-level detail."""
+    content = []
     
-    # Appendix with detailed methodology and definitions
     content.append("## Appendix")
     content.append("")
     content.append("### Detailed Definitions")
@@ -1548,6 +1551,54 @@ def generate_markdown_report(
             
             content.append("---")
             content.append("")
+    
+    return content
+
+
+def generate_markdown_report(
+    results: Dict[str, Any], 
+    start_times: Dict[str, float], 
+    include_per_event: bool = True,
+    include_operational_intelligence: bool = True,
+    output_dir: str = "reports"
+) -> str:
+    """Generate markdown content for the density report with optional operational intelligence."""
+    
+    # Event start times for ordering
+    event_order = sorted(start_times.items(), key=lambda x: x[1])
+    
+    # Build report content
+    content = []
+    
+    # Header with standardized format (Issue #182)
+    content.extend(_generate_report_header(results))
+    
+    # Quick Reference section
+    content.extend(_generate_quick_reference_section())
+    
+    # Operational Intelligence Executive Summary (Issue #236)
+    if include_operational_intelligence:
+        content.extend(_generate_operational_intelligence_content(results, output_dir))
+    
+    # Executive Summary Table (TL;DR for race directors)
+    summary_table = generate_summary_table(results.get("segments", {}))
+    content.extend(summary_table)
+    
+    # Methodology section using v2.0 rulebook
+    content.extend(_generate_methodology_section())
+    
+    # Event start times (showing actual participants in first segment as reference)
+    content.extend(_generate_event_start_times_table(results, event_order))
+    
+    # Process each segment
+    for segment_id, segment in results.get("segments", {}).items():
+        content.extend(generate_segment_section(segment_id, segment, event_order, include_per_event))
+        content.append("")
+        content.append("---")
+        content.append("")
+    
+    # Appendix with detailed methodology and definitions
+    content.extend(_generate_appendix_content(results))
     
     return "\n".join(content)
 
