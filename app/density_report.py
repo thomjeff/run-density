@@ -3099,6 +3099,138 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
     
     return mapping
 
+def _build_geojson_from_bin_data(bin_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Build GeoJSON data structure from bin_data."""
+    from .constants import BIN_SCHEMA_VERSION
+    
+    geojson_data = {
+        "type": "FeatureCollection",
+        "features": [],
+        "metadata": {
+            "schema_version": BIN_SCHEMA_VERSION,
+            "generated_at": datetime.now().isoformat(),
+            "total_bins": len(bin_data.get("geojson", {}).get("features", [])),
+            "analysis_type": "bins"
+        }
+    }
+    
+    # Copy features from bin_data if available
+    if "geojson" in bin_data and "features" in bin_data["geojson"]:
+        geojson_data["features"] = bin_data["geojson"]["features"]
+        geojson_data["metadata"]["total_bins"] = len(bin_data["geojson"]["features"])
+    
+    return geojson_data
+
+
+def _convert_geometry_to_wkb(geometry_coords: list, bin_id: str) -> bytes:
+    """Convert geometry coordinates to WKB format."""
+    try:
+        from shapely.geometry import LineString
+        from shapely import wkb
+        
+        if not geometry_coords or not isinstance(geometry_coords, list) or len(geometry_coords) == 0:
+            return b""
+        
+        # Handle different geometry types
+        if isinstance(geometry_coords[0][0], list):  # Polygon
+            # Convert polygon to linestring for simplicity
+            coords = geometry_coords[0] if geometry_coords else []
+        else:  # Already linestring format
+            coords = geometry_coords
+        
+        if len(coords) >= 2:
+            return wkb.dumps(LineString(coords), hex=False)
+        return b""
+    except Exception as geom_e:
+        logger.warning(f"Geometry conversion failed for bin {bin_id}: {geom_e}")
+        return b""
+
+
+def _build_parquet_row_from_feature(feature: Dict[str, Any]) -> Dict[str, Any]:
+    """Build Parquet row from GeoJSON feature."""
+    from .constants import BIN_SCHEMA_VERSION
+    
+    props = feature["properties"]
+    geometry_coords = feature.get("geometry", {}).get("coordinates", [])
+    geometry_wkb = _convert_geometry_to_wkb(geometry_coords, props.get('bin_id', 'unknown'))
+    
+    return {
+        "bin_id": str(props.get("bin_id", "")),
+        "segment_id": str(props.get("segment_id", "")),
+        "start_km": float(props.get("start_km", 0.0)),
+        "end_km": float(props.get("end_km", 0.0)),
+        "t_start": str(props.get("t_start", "")),
+        "t_end": str(props.get("t_end", "")),
+        "window_idx": int(props.get("window_idx", 0)),
+        "density": float(props.get("density", 0.0)),
+        "rate": float(props.get("rate", 0.0)),
+        "los_class": str(props.get("los_class", "A")),
+        # Issue #254: Unified flagging fields
+        "flag_severity": str(props.get("flag_severity", "none")),
+        "flag_reason": str(props.get("flag_reason") or ""),
+        "rate_per_m_per_min": float(props.get("rate_per_m_per_min") or 0.0),
+        "util_percent": float(props.get("util_percent") or 0.0),
+        "util_percentile": float(props.get("util_percentile") or 0.0),
+        "schema_key": str(props.get("schema_key", "on_course_open")),
+        "width_m": float(props.get("width_m", 5.0)),
+        # Original fields
+        "bin_size_km": 0.1,  # Use constant for now
+        "schema_version": BIN_SCHEMA_VERSION,
+        "geometry": geometry_wkb
+    }
+
+
+def _write_parquet_file(parquet_rows: list, parquet_path: str) -> None:
+    """Write Parquet file from rows."""
+    from .constants import BIN_SCHEMA_VERSION
+    
+    try:
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+        
+        if parquet_rows:
+            table = pa.Table.from_pylist(parquet_rows)
+            pq.write_table(table, parquet_path, compression='zstd')
+        else:
+            # Empty dataset
+            schema = pa.schema([
+                ('bin_id', pa.string()),
+                ('segment_id', pa.string()),
+                ('start_km', pa.float64()),
+                ('end_km', pa.float64()),
+                ('t_start', pa.string()),
+                ('t_end', pa.string()),
+                ('window_idx', pa.int64()),
+                ('density', pa.float64()),
+                ('rate', pa.float64()),
+                ('los_class', pa.string()),
+                # Issue #254: Unified flagging fields
+                ('flag_severity', pa.string()),
+                ('flag_reason', pa.string()),
+                ('rate_per_m_per_min', pa.float64()),
+                ('util_percent', pa.float64()),
+                ('util_percentile', pa.float64()),
+                ('schema_key', pa.string()),
+                ('width_m', pa.float64()),
+                # Original fields
+                ('bin_size_km', pa.float64()),
+                ('schema_version', pa.string()),
+                ('geometry', pa.binary())
+            ])
+            empty_table = pa.Table.from_arrays([[] for _ in schema], schema=schema)
+            pq.write_table(empty_table, parquet_path, compression='zstd')
+            
+    except ImportError:
+        # Fallback if pyarrow not available
+        import json
+        with open(parquet_path, 'w', encoding='utf-8') as f:
+            json.dump({
+                "error": "pyarrow not available",
+                "schema_version": BIN_SCHEMA_VERSION,
+                "note": "Install pyarrow for Parquet support"
+            }, f, indent=2)
+
+
 def save_bin_artifacts_legacy(bin_data: Dict[str, Any], output_dir: str) -> tuple[str, str]:
     """
     Save bin dataset as both GeoJSON and Parquet files per ChatGPT specification.
@@ -3111,7 +3243,7 @@ def save_bin_artifacts_legacy(bin_data: Dict[str, Any], output_dir: str) -> tupl
         tuple: (geojson_path, parquet_path)
     """
     import json
-    from .constants import BIN_SCHEMA_VERSION, MAX_BIN_DATASET_SIZE_MB
+    from .constants import MAX_BIN_DATASET_SIZE_MB
     
     # Create reports directory with date
     date_str = datetime.now().strftime("%Y-%m-%d")
@@ -3127,22 +3259,8 @@ def save_bin_artifacts_legacy(bin_data: Dict[str, Any], output_dir: str) -> tupl
     parquet_path = os.path.join(reports_dir, parquet_filename)
     
     try:
-        # Prepare GeoJSON with ChatGPT's schema
-        geojson_data = {
-            "type": "FeatureCollection",
-            "features": [],
-            "metadata": {
-                "schema_version": BIN_SCHEMA_VERSION,
-                "generated_at": datetime.now().isoformat(),
-                "total_bins": len(bin_data.get("geojson", {}).get("features", [])),
-                "analysis_type": "bins"
-            }
-        }
-        
-        # Copy features from bin_data if available
-        if "geojson" in bin_data and "features" in bin_data["geojson"]:
-            geojson_data["features"] = bin_data["geojson"]["features"]
-            geojson_data["metadata"]["total_bins"] = len(bin_data["geojson"]["features"])
+        # Prepare GeoJSON data
+        geojson_data = _build_geojson_from_bin_data(bin_data)
         
         # Check file size before saving
         geojson_str = json.dumps(geojson_data, default=str)
@@ -3155,106 +3273,14 @@ def save_bin_artifacts_legacy(bin_data: Dict[str, Any], output_dir: str) -> tupl
         with open(geojson_path, 'w', encoding='utf-8') as f:
             f.write(geojson_str)
         
-        # Save real Parquet file per ChatGPT specification
-        try:
-            import pyarrow as pa
-            import pyarrow.parquet as pq
-            from shapely.geometry import LineString
-            from shapely import wkb
-            
-            def to_wkb(coords):
-                """Convert coordinates to WKB format."""
-                return wkb.dumps(LineString(coords), hex=False)
-            
-            # Prepare Parquet rows with ChatGPT's schema - fix coordinate handling
-            parquet_rows = []
-            for feature in geojson_data["features"]:
-                props = feature["properties"]
-                geometry_coords = feature.get("geometry", {}).get("coordinates", [])
-                
-                # Handle coordinate conversion safely
-                geometry_wkb = b""
-                try:
-                    if geometry_coords and isinstance(geometry_coords, list) and len(geometry_coords) > 0:
-                        # Handle different geometry types
-                        if isinstance(geometry_coords[0][0], list):  # Polygon
-                            # Convert polygon to linestring for simplicity
-                            coords = geometry_coords[0] if geometry_coords else []
-                        else:  # Already linestring format
-                            coords = geometry_coords
-                        
-                        if len(coords) >= 2:
-                            geometry_wkb = to_wkb(coords)
-                except Exception as geom_e:
-                    logger.warning(f"Geometry conversion failed for bin {props.get('bin_id', 'unknown')}: {geom_e}")
-                
-                row = {
-                    "bin_id": str(props.get("bin_id", "")),
-                    "segment_id": str(props.get("segment_id", "")),
-                    "start_km": float(props.get("start_km", 0.0)),
-                    "end_km": float(props.get("end_km", 0.0)),
-                    "t_start": str(props.get("t_start", "")),
-                    "t_end": str(props.get("t_end", "")),
-                    "window_idx": int(props.get("window_idx", 0)),
-                    "density": float(props.get("density", 0.0)),
-                    "rate": float(props.get("rate", 0.0)),
-                    "los_class": str(props.get("los_class", "A")),
-                    # Issue #254: Unified flagging fields
-                    "flag_severity": str(props.get("flag_severity", "none")),
-                    "flag_reason": str(props.get("flag_reason") or ""),
-                    "rate_per_m_per_min": float(props.get("rate_per_m_per_min") or 0.0),
-                    "util_percent": float(props.get("util_percent") or 0.0),
-                    "util_percentile": float(props.get("util_percentile") or 0.0),
-                    "schema_key": str(props.get("schema_key", "on_course_open")),
-                    "width_m": float(props.get("width_m", 5.0)),
-                    # Original fields
-                    "bin_size_km": 0.1,  # Use constant for now
-                    "schema_version": BIN_SCHEMA_VERSION,
-                    "geometry": geometry_wkb
-                }
-                parquet_rows.append(row)
-            
-            # Write Parquet with Arrow
-            if parquet_rows:
-                table = pa.Table.from_pylist(parquet_rows)
-                pq.write_table(table, parquet_path, compression='zstd')
-            else:
-                # Empty dataset
-                schema = pa.schema([
-                    ('bin_id', pa.string()),
-                    ('segment_id', pa.string()),
-                    ('start_km', pa.float64()),
-                    ('end_km', pa.float64()),
-                    ('t_start', pa.string()),
-                    ('t_end', pa.string()),
-                    ('window_idx', pa.int64()),
-                    ('density', pa.float64()),
-                    ('rate', pa.float64()),
-                    ('los_class', pa.string()),
-                    # Issue #254: Unified flagging fields
-                    ('flag_severity', pa.string()),
-                    ('flag_reason', pa.string()),
-                    ('rate_per_m_per_min', pa.float64()),
-                    ('util_percent', pa.float64()),
-                    ('util_percentile', pa.float64()),
-                    ('schema_key', pa.string()),
-                    ('width_m', pa.float64()),
-                    # Original fields
-                    ('bin_size_km', pa.float64()),
-                    ('schema_version', pa.string()),
-                    ('geometry', pa.binary())
-                ])
-                empty_table = pa.Table.from_arrays([[] for _ in schema], schema=schema)
-                pq.write_table(empty_table, parquet_path, compression='zstd')
-                
-        except ImportError:
-            # Fallback if pyarrow not available
-            with open(parquet_path, 'w', encoding='utf-8') as f:
-                json.dump({
-                    "error": "pyarrow not available",
-                    "schema_version": BIN_SCHEMA_VERSION,
-                    "note": "Install pyarrow for Parquet support"
-                }, f, indent=2)
+        # Build Parquet rows from features
+        parquet_rows = []
+        for feature in geojson_data["features"]:
+            row = _build_parquet_row_from_feature(feature)
+            parquet_rows.append(row)
+        
+        # Write Parquet file
+        _write_parquet_file(parquet_rows, parquet_path)
         
         return geojson_path, parquet_path
         
