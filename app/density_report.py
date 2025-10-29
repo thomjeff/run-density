@@ -2145,6 +2145,279 @@ def save_map_dataset_to_storage(map_data: Dict[str, Any], output_dir: str) -> st
         print(f"⚠️ Storage service failed, falling back to local: {e}")
         return save_map_dataset(map_data, output_dir)
 
+def _build_segment_catalog_from_results(results: Dict[str, Any], logger) -> dict:
+    """Build segment catalog from density analysis results."""
+    from .bins_accumulator import SegmentInfo
+    
+    segments = {}
+    if 'segments' in results and results['segments']:
+        # Use segments from density analysis results
+        results_segments = results['segments']
+        if isinstance(results_segments, dict):
+            # Real density analysis returns segments as a dict
+            for seg_id, seg_data in results_segments.items():
+                # Issue #248: Use actual segment length from density analysis
+                length_m = float(seg_data.get('length_m', 1000.0))
+                width_m = float(seg_data.get('width_m', 5.0))
+                coords = seg_data.get('coords', None)
+                
+                # Log if we're using default (indicates missing data)
+                if 'length_m' not in seg_data:
+                    logger.warning(f"Segment {seg_id}: length_m not in seg_data, using default {length_m}m")
+                
+                segments[seg_id] = SegmentInfo(seg_id, length_m, width_m, coords)
+        elif isinstance(results_segments, list):
+            # Fallback for list format
+            for seg in results_segments:
+                seg_id = seg.get('seg_id') or seg.get('id')
+                length_m = float(seg.get('length_m', 1000.0))
+                width_m = float(seg.get('width_m', 5.0))
+                coords = seg.get('coords', None)
+                segments[seg_id] = SegmentInfo(seg_id, length_m, width_m, coords)
+    else:
+        # Fallback: create segments from results data
+        logger.warning("No segment data in results, using fallback")
+        segments = {
+            "A1": SegmentInfo("A1", 1000.0, 5.0),
+            "B1": SegmentInfo("B1", 800.0, 4.0)
+        }
+    
+    return segments
+
+
+def _create_time_windows_for_bins(start_times: Dict[str, float], dt_seconds: int) -> list:
+    """Create time windows from start_times and analysis duration."""
+    from datetime import datetime, timezone, timedelta
+    from .bins_accumulator import make_time_windows
+    
+    base_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Find earliest start time and total duration
+    earliest_start_min = min(start_times.values())
+    latest_end_min = max(start_times.values()) + 120  # Add 2 hours for analysis duration
+    
+    t0_utc = base_date + timedelta(minutes=earliest_start_min)
+    total_duration_s = int((latest_end_min - earliest_start_min) * 60)
+    
+    return make_time_windows(t0=t0_utc, duration_s=total_duration_s, dt_seconds=dt_seconds)
+
+
+def _apply_flagging_to_bin_features(
+    geojson_features: list,
+    bin_features: list,
+    segments: dict,
+    time_windows: list,
+    logger
+) -> None:
+    """Apply unified flagging with utilization percentile to bin features."""
+    import time
+    flag_start = time.monotonic()
+    
+    try:
+        from . import rulebook
+        from .utilization import add_utilization_percentile
+        from .schema_resolver import resolve_schema
+        import pandas as pd
+        
+        # Create segments_dict for schema resolution
+        segments_dict = {}
+        try:
+            from .io.loader import load_segments
+            segments_df = load_segments("data/segments.csv")
+            for _, row in segments_df.iterrows():
+                segments_dict[row['seg_id']] = {
+                    'seg_label': row.get('seg_label', row['seg_id']),
+                    'width_m': row.get('width_m', 3.0),
+                    'flow_type': row.get('flow_type', 'none')
+                }
+        except Exception as e:
+            logger.warning(f"Could not load segments CSV for flagging: {e}, using defaults")
+            # Create minimal segments_dict from available segments
+            for seg_id in segments.keys():
+                segments_dict[seg_id] = {
+                    'seg_label': seg_id,
+                    'width_m': 5.0,
+                    'flow_type': 'none'
+                }
+        
+        # Convert features to DataFrame for vectorized processing
+        flag_rows = []
+        for idx, (feature, bin_feature) in enumerate(zip(geojson_features, bin_features)):
+            props = feature["properties"]
+            
+            # Compute window_idx by finding matching time window
+            window_idx = 0
+            for w_idx, (t_start, t_end, duration) in enumerate(time_windows):
+                if bin_feature.t_start == t_start and bin_feature.t_end == t_end:
+                    window_idx = w_idx
+                    break
+            
+            flag_rows.append({
+                "feature_idx": idx,
+                "segment_id": props["segment_id"],
+                "bin_id": props["bin_id"],
+                "start_km": props["start_km"],
+                "end_km": props["end_km"],
+                "t_start": props["t_start"],
+                "t_end": props["t_end"],
+                "density": props["density"],
+                "rate": props["rate"],  # p/s
+                "los_class": props["los_class"],
+                "bin_size_km": props["bin_size_km"],
+                # Add missing fields for flagging
+                "window_idx": window_idx,
+                "width_m": next((s.width_m for s in segments.values() if s.segment_id == props["segment_id"]), 5.0),
+                "schema_key": resolve_schema(props["segment_id"], segments_dict),
+            })
+        
+        flags_df = pd.DataFrame(flag_rows)
+        
+        # Compute utilization percentile per window (course-wide)
+        flags_df = add_utilization_percentile(flags_df, cohort="window")
+        
+        # Apply rulebook flagging to each bin
+        flag_results = []
+        for _, row in flags_df.iterrows():
+            result = rulebook.evaluate_flags(
+                density_pm2=row["density"],
+                rate_p_s=row["rate"],
+                width_m=row["width_m"],
+                schema_key=row["schema_key"],
+                util_percentile=row.get("util_percentile")
+            )
+            flag_results.append(result)
+        
+        # Add flag results back to GeoJSON features
+        for idx, (feature, result) in enumerate(zip(geojson_features, flag_results)):
+            props = feature["properties"]
+            props["flag_severity"] = result.severity
+            props["flag_reason"] = result.flag_reason
+            props["rate_per_m_per_min"] = result.rate_per_m_per_min
+            props["util_percent"] = result.util_percent
+            props["util_percentile"] = result.util_percentile
+            props["window_idx"] = flags_df.iloc[idx]["window_idx"]
+            props["schema_key"] = flags_df.iloc[idx]["schema_key"]
+            props["width_m"] = flags_df.iloc[idx]["width_m"]
+            # Update LOS from rulebook (may differ from bins_accumulator default)
+            props["los_class"] = result.los_class
+        
+        flag_time = int((time.monotonic() - flag_start) * 1000)
+        flagged_count = sum(1 for r in flag_results if r.severity != "none")
+        logger.info(f"✅ Flagging complete: {flagged_count}/{len(flag_results)} bins flagged ({flag_time}ms)")
+        
+    except Exception as flag_error:
+        logger.warning(f"⚠️ Flagging failed, bins will have no flags: {flag_error}")
+        # Continue without flags - bins will still have base properties
+
+
+def _add_geometries_to_bin_features(
+    geojson_features: list,
+    analysis_context: Optional[AnalysisContext],
+    logger
+) -> None:
+    """Add geometry backfill using bin_geometries.py."""
+    import time
+    geom_start = time.monotonic()
+    
+    try:
+        from .bin_geometries import generate_bin_polygon
+        from .gpx_processor import load_all_courses, generate_segment_coordinates
+        from .io.loader import load_segments
+        import pandas as pd
+        import json
+        
+        # Get segments_csv path from analysis_context
+        segments_csv_path = analysis_context.segments_csv_path if analysis_context else "data/segments.csv"
+        
+        # Load segment metadata for geometry
+        segments_df = load_segments(segments_csv_path)
+        
+        # Load GPX courses for centerlines
+        courses = load_all_courses("data")
+        
+        # Convert segments to dict format for GPX processor
+        segments_list = []
+        for _, segment in segments_df.iterrows():
+            segments_list.append({
+                "seg_id": segment['seg_id'],
+                "segment_label": segment.get('seg_label', segment['seg_id']),
+                "10K": segment.get('10K', 'n'),
+                "half": segment.get('half', 'n'),
+                "full": segment.get('full', 'n'),
+                "10K_from_km": segment.get('10K_from_km'),
+                "10K_to_km": segment.get('10K_to_km'),
+                "half_from_km": segment.get('half_from_km'),
+                "half_to_km": segment.get('half_to_km'),
+                "full_from_km": segment.get('full_from_km'),
+                "full_to_km": segment.get('full_to_km')
+            })
+        
+        # Generate segment centerlines from GPX
+        segments_with_coords = generate_segment_coordinates(courses, segments_list)
+        
+        # Build lookups
+        centerlines = {}  # segment_id -> centerline_coords (course-absolute)
+        segment_offsets = {}  # segment_id -> course_offset_km (to convert bin-relative to course-absolute)
+        widths = {}  # segment_id -> width_m
+        
+        for seg_coords in segments_with_coords:
+            seg_id = seg_coords['seg_id']
+            if seg_coords.get('line_coords') and not seg_coords.get('coord_issue'):
+                centerlines[seg_id] = seg_coords['line_coords']
+                # Store the course offset (from_km) to convert bin-relative km to course-absolute km
+                segment_offsets[seg_id] = seg_coords.get('from_km', 0.0)
+        
+        for _, seg in segments_df.iterrows():
+            widths[seg['seg_id']] = float(seg.get('width_m', 5.0))
+        
+        # Add geometry to each feature
+        geometries_added = 0
+        geometries_failed = 0
+        
+        for f in geojson_features:
+            seg_id = f["properties"]["segment_id"]
+            bin_start_km = f["properties"]["start_km"]  # Bin-relative km
+            bin_end_km = f["properties"]["end_km"]      # Bin-relative km
+            
+            # Get centerline, offset, and width
+            centerline = centerlines.get(seg_id)
+            segment_offset = segment_offsets.get(seg_id, 0.0)  # Course-absolute offset
+            width_m = widths.get(seg_id, 5.0)
+            
+            if centerline and segment_offset is not None:
+                # CRITICAL FIX: Bins use segment-relative km, but centerline is already sliced
+                # The centerline from gpx_processor is ALREADY sliced to segment boundaries
+                # So we should use bin-relative km directly (0.0 = start of centerline)
+                # The centerline itself spans the full segment length
+                
+                # Generate polygon geometry using bin-relative coordinates
+                # (centerline is already segment-specific, not full course)
+                polygon = generate_bin_polygon(
+                    segment_centerline_coords=centerline,
+                    bin_start_km=bin_start_km,  # Use bin-relative (centerline is segment-sliced)
+                    bin_end_km=bin_end_km,
+                    segment_width_m=width_m
+                )
+                
+                if polygon and polygon.is_valid:
+                    # Convert to GeoJSON geometry dict
+                    f["geometry"] = json.loads(json.dumps(polygon.__geo_interface__))
+                    geometries_added += 1
+                else:
+                    geometries_failed += 1
+                    # Leave as None
+            else:
+                geometries_failed += 1
+                # No centerline available, leave geometry as None
+        
+        geom_time = int((time.monotonic() - geom_start) * 1000)
+        logger.info(f"✅ Bin geometries generated: {geometries_added} successful, {geometries_failed} failed ({geom_time}ms)")
+        
+    except Exception as geom_error:
+        logger.warning(f"⚠️ Geometry generation failed, bins will have null geometry: {geom_error}")
+        # Continue without geometries - bins will still have properties
+
+
 def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float], bin_size_km: float = 0.1, 
                         analysis_context: Optional[AnalysisContext] = None, dt_seconds: int = 60) -> Dict[str, Any]:
     """
@@ -2178,53 +2451,11 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
         
         log_bins_event(action="start", bin_size_km=bin_size_km, dt_seconds=dt_seconds)
         
-        # 1) Build segment catalog from results
-        segments = {}
-        if 'segments' in results and results['segments']:
-            # Use segments from density analysis results
-            results_segments = results['segments']
-            if isinstance(results_segments, dict):
-                # Real density analysis returns segments as a dict
-                for seg_id, seg_data in results_segments.items():
-                    # Issue #248: Use actual segment length from density analysis
-                    length_m = float(seg_data.get('length_m', 1000.0))
-                    width_m = float(seg_data.get('width_m', 5.0))
-                    coords = seg_data.get('coords', None)
-                    
-                    # Log if we're using default (indicates missing data)
-                    if 'length_m' not in seg_data:
-                        logger.warning(f"Segment {seg_id}: length_m not in seg_data, using default {length_m}m")
-                    
-                    segments[seg_id] = SegmentInfo(seg_id, length_m, width_m, coords)
-            elif isinstance(results_segments, list):
-                # Fallback for list format
-                for seg in results_segments:
-                    seg_id = seg.get('seg_id') or seg.get('id')
-                    length_m = float(seg.get('length_m', 1000.0))
-                    width_m = float(seg.get('width_m', 5.0))
-                    coords = seg.get('coords', None)
-                    segments[seg_id] = SegmentInfo(seg_id, length_m, width_m, coords)
-        else:
-            # Fallback: create segments from results data
-            logger.warning("No segment data in results, using fallback")
-            segments = {
-                "A1": SegmentInfo("A1", 1000.0, 5.0),
-                "B1": SegmentInfo("B1", 800.0, 4.0)
-            }
+        # 1) Build segment catalog - extracted to helper function to reduce complexity
+        segments = _build_segment_catalog_from_results(results, logger)
         
-        # 2) Create time windows from start_times and analysis duration
-        # Convert start_times from minutes to datetime
-        from datetime import datetime, timezone, timedelta
-        base_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        
-        # Find earliest start time and total duration
-        earliest_start_min = min(start_times.values())
-        latest_end_min = max(start_times.values()) + 120  # Add 2 hours for analysis duration
-        
-        t0_utc = base_date + timedelta(minutes=earliest_start_min)
-        total_duration_s = int((latest_end_min - earliest_start_min) * 60)
-        
-        time_windows = make_time_windows(t0=t0_utc, duration_s=total_duration_s, dt_seconds=dt_seconds)
+        # 2) Create time windows - extracted to helper function to reduce complexity
+        time_windows = _create_time_windows_for_bins(start_times, dt_seconds)
         
         # 3) Build runner→segment/window mapping (adapter to your model)
         runners_by_segment_and_window = build_runner_window_mapping(results, time_windows, start_times)
@@ -2244,207 +2475,11 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
         # 5) Build geometries + GeoJSON
         geojson_features = to_geojson_features(bin_build.features)
         
-        # Issue #254: Apply unified flagging with utilization percentile
-        logger.info(f"🎯 Applying unified flagging policy to {len(geojson_features)} bins...")
-        flag_start = time.monotonic()
+        # Issue #254: Apply unified flagging - extracted to helper function to reduce complexity
+        _apply_flagging_to_bin_features(geojson_features, bin_build.features, segments, time_windows, logger)
         
-        try:
-            from . import rulebook
-            from .utilization import add_utilization_percentile
-            from .schema_resolver import resolve_schema
-            import pandas as pd
-            
-            # Create segments_dict for schema resolution
-            segments_dict = {}
-            try:
-                from .io.loader import load_segments
-                segments_df = load_segments("data/segments.csv")
-                for _, row in segments_df.iterrows():
-                    segments_dict[row['seg_id']] = {
-                        'seg_label': row.get('seg_label', row['seg_id']),
-                        'width_m': row.get('width_m', 3.0),
-                        'flow_type': row.get('flow_type', 'none')
-                    }
-            except Exception as e:
-                logger.warning(f"Could not load segments CSV for flagging: {e}, using defaults")
-                # Create minimal segments_dict from available segments
-                for seg_id in segments.keys():
-                    segments_dict[seg_id] = {
-                        'seg_label': seg_id,
-                        'width_m': 5.0,
-                        'flow_type': 'none'
-                    }
-            
-            # Convert features to DataFrame for vectorized processing
-            flag_rows = []
-            for idx, (feature, bin_feature) in enumerate(zip(geojson_features, bin_build.features)):
-                props = feature["properties"]
-                
-                # Compute window_idx by finding matching time window
-                window_idx = 0
-                for w_idx, (t_start, t_end, duration) in enumerate(time_windows):
-                    if bin_feature.t_start == t_start and bin_feature.t_end == t_end:
-                        window_idx = w_idx
-                        break
-                
-                flag_rows.append({
-                    "feature_idx": idx,
-                    "segment_id": props["segment_id"],
-                    "bin_id": props["bin_id"],
-                    "start_km": props["start_km"],
-                    "end_km": props["end_km"],
-                    "t_start": props["t_start"],
-                    "t_end": props["t_end"],
-                    "density": props["density"],
-                    "rate": props["rate"],  # p/s
-                    "los_class": props["los_class"],
-                    "bin_size_km": props["bin_size_km"],
-                    # Add missing fields for flagging
-                    "window_idx": window_idx,
-                    "width_m": next((s.width_m for s in segments if s.segment_id == props["segment_id"]), 5.0),
-                    "schema_key": resolve_schema(props["segment_id"], segments_dict),
-                })
-            
-            flags_df = pd.DataFrame(flag_rows)
-            
-            # Compute utilization percentile per window (course-wide)
-            flags_df = add_utilization_percentile(flags_df, cohort="window")
-            
-            # Apply rulebook flagging to each bin
-            flag_results = []
-            for _, row in flags_df.iterrows():
-                result = rulebook.evaluate_flags(
-                    density_pm2=row["density"],
-                    rate_p_s=row["rate"],
-                    width_m=row["width_m"],
-                    schema_key=row["schema_key"],
-                    util_percentile=row.get("util_percentile")
-                )
-                flag_results.append(result)
-            
-            # Add flag results back to GeoJSON features
-            for idx, (feature, result) in enumerate(zip(geojson_features, flag_results)):
-                props = feature["properties"]
-                props["flag_severity"] = result.severity
-                props["flag_reason"] = result.flag_reason
-                props["rate_per_m_per_min"] = result.rate_per_m_per_min
-                props["util_percent"] = result.util_percent
-                props["util_percentile"] = result.util_percentile
-                props["window_idx"] = flags_df.iloc[idx]["window_idx"]
-                props["schema_key"] = flags_df.iloc[idx]["schema_key"]
-                props["width_m"] = flags_df.iloc[idx]["width_m"]
-                # Update LOS from rulebook (may differ from bins_accumulator default)
-                props["los_class"] = result.los_class
-            
-            flag_time = int((time.monotonic() - flag_start) * 1000)
-            flagged_count = sum(1 for r in flag_results if r.severity != "none")
-            logger.info(f"✅ Flagging complete: {flagged_count}/{len(flag_results)} bins flagged ({flag_time}ms)")
-            
-        except Exception as flag_error:
-            logger.warning(f"⚠️ Flagging failed, bins will have no flags: {flag_error}")
-            # Continue without flags - bins will still have base properties
-        
-        # Issue #249: Add geometry backfill using bin_geometries.py
-        logger.info("🗺️ Generating bin polygon geometries...")
-        geom_start = time.monotonic()
-        
-        try:
-            from .bin_geometries import generate_bin_polygon
-            from .gpx_processor import load_all_courses, generate_segment_coordinates
-            from .io.loader import load_segments
-            import pandas as pd
-            
-            # Get segments_csv path from analysis_context
-            segments_csv_path = analysis_context.segments_csv_path if analysis_context else "data/segments.csv"
-            
-            # Load segment metadata for geometry
-            segments_df = load_segments(segments_csv_path)
-            
-            # Load GPX courses for centerlines
-            courses = load_all_courses("data")
-            
-            # Convert segments to dict format for GPX processor
-            segments_list = []
-            for _, segment in segments_df.iterrows():
-                segments_list.append({
-                    "seg_id": segment['seg_id'],
-                    "segment_label": segment.get('seg_label', segment['seg_id']),
-                    "10K": segment.get('10K', 'n'),
-                    "half": segment.get('half', 'n'),
-                    "full": segment.get('full', 'n'),
-                    "10K_from_km": segment.get('10K_from_km'),
-                    "10K_to_km": segment.get('10K_to_km'),
-                    "half_from_km": segment.get('half_from_km'),
-                    "half_to_km": segment.get('half_to_km'),
-                    "full_from_km": segment.get('full_from_km'),
-                    "full_to_km": segment.get('full_to_km')
-                })
-            
-            # Generate segment centerlines from GPX
-            segments_with_coords = generate_segment_coordinates(courses, segments_list)
-            
-            # Build lookups
-            centerlines = {}  # segment_id -> centerline_coords (course-absolute)
-            segment_offsets = {}  # segment_id -> course_offset_km (to convert bin-relative to course-absolute)
-            widths = {}  # segment_id -> width_m
-            
-            for seg_coords in segments_with_coords:
-                seg_id = seg_coords['seg_id']
-                if seg_coords.get('line_coords') and not seg_coords.get('coord_issue'):
-                    centerlines[seg_id] = seg_coords['line_coords']
-                    # Store the course offset (from_km) to convert bin-relative km to course-absolute km
-                    segment_offsets[seg_id] = seg_coords.get('from_km', 0.0)
-            
-            for _, seg in segments_df.iterrows():
-                widths[seg['seg_id']] = float(seg.get('width_m', 5.0))
-            
-            # Add geometry to each feature
-            geometries_added = 0
-            geometries_failed = 0
-            
-            for f in geojson_features:
-                seg_id = f["properties"]["segment_id"]
-                bin_start_km = f["properties"]["start_km"]  # Bin-relative km
-                bin_end_km = f["properties"]["end_km"]      # Bin-relative km
-                
-                # Get centerline, offset, and width
-                centerline = centerlines.get(seg_id)
-                segment_offset = segment_offsets.get(seg_id, 0.0)  # Course-absolute offset
-                width_m = widths.get(seg_id, 5.0)
-                
-                if centerline and segment_offset is not None:
-                    # CRITICAL FIX: Bins use segment-relative km, but centerline is already sliced
-                    # The centerline from gpx_processor is ALREADY sliced to segment boundaries
-                    # So we should use bin-relative km directly (0.0 = start of centerline)
-                    # The centerline itself spans the full segment length
-                    
-                    # Generate polygon geometry using bin-relative coordinates
-                    # (centerline is already segment-specific, not full course)
-                    polygon = generate_bin_polygon(
-                        segment_centerline_coords=centerline,
-                        bin_start_km=bin_start_km,  # Use bin-relative (centerline is segment-sliced)
-                        bin_end_km=bin_end_km,
-                        segment_width_m=width_m
-                    )
-                    
-                    if polygon and polygon.is_valid:
-                        # Convert to GeoJSON geometry dict
-                        import json
-                        f["geometry"] = json.loads(json.dumps(polygon.__geo_interface__))
-                        geometries_added += 1
-                    else:
-                        geometries_failed += 1
-                        # Leave as None
-                else:
-                    geometries_failed += 1
-                    # No centerline available, leave geometry as None
-            
-            geom_time = int((time.monotonic() - geom_start) * 1000)
-            logger.info(f"✅ Bin geometries generated: {geometries_added} successful, {geometries_failed} failed ({geom_time}ms)")
-            
-        except Exception as geom_error:
-            logger.warning(f"⚠️ Geometry generation failed, bins will have null geometry: {geom_error}")
-            # Continue without geometries - bins will still have properties
+        # Issue #249: Add geometry backfill - extracted to helper function to reduce complexity
+        _add_geometries_to_bin_features(geojson_features, analysis_context, logger)
         
         geojson = {"type": "FeatureCollection", "features": geojson_features, "metadata": bin_build.metadata}
         
