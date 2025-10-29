@@ -14,13 +14,13 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
-  # Part 0: Complexity Standards Check (Non-Blocking)
+  # Part 0: Complexity Standards Check (BLOCKING)
   # Issue #397: Phase 1 - Step 0 Bare Exception Check
   complexity-check:
     name: "0️⃣ Complexity Standards Check"
     runs-on: ubuntu-latest
-    # Non-blocking: allow other jobs to continue even if this fails
-    continue-on-error: true
+    # BLOCKING: complexity violations will fail the pipeline
+    continue-on-error: false
     permissions:
       contents: read
 
@@ -44,11 +44,11 @@ jobs:
           echo "Checking for bare exception handlers (B001)...";
           echo "Checking for complexity violations (C901, threshold=15)...";
           echo ""
-          echo "This check is non-blocking - pipeline will continue regardless of results"
+          echo "This check is BLOCKING - pipeline will fail if complexity violations are found"
           echo ""
           # Check B001 (bare exceptions) and C901 (complexity > 15)
           # Note: C901 threshold is enforced via .flake8 config or radon
-          flake8 app/ core/ --max-complexity=15 --select=B001,C901 --exclude=tests/* || true  # Truly advisory: always exit 0 to avoid confusing CI status
+          flake8 app/ core/ --max-complexity=15 --select=B001,C901 --exclude=tests/*  # BLOCKING: failures will stop the pipeline
           echo ""
           echo "✅ Complexity check completed"
 
