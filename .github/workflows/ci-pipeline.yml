@@ -33,10 +33,10 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install flake8
+      - name: Install flake8 and flake8-bugbear
         run: |
           python -m pip install --upgrade pip
-          pip install flake8
+          pip install flake8 flake8-bugbear
 
       - name: Run Bare Exception Check
         run: |
@@ -54,6 +54,8 @@ jobs:
   build-deploy:
     name: "1️⃣ Build & Deploy (Docker → Artifacts)"
     runs-on: ubuntu-latest
+    # Run after Step 0 completes (but don\'t wait if it fails due to continue-on-error)
+    needs: [complexity-check]
     # Skip deployment for PR events to prevent race conditions with merge
     if: github.event_name != 'pull_request'
     permissions:
