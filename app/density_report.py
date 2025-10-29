@@ -657,7 +657,8 @@ def _generate_bin_dataset_with_retry(
         DEFAULT_BIN_SIZE_KM, FALLBACK_BIN_SIZE_KM, BIN_MAX_FEATURES,
         DEFAULT_BIN_TIME_WINDOW_SECONDS, MAX_BIN_GENERATION_TIME_SECONDS
     )
-    from .bin_intelligence import generate_bin_dataset
+    # Note: generate_bin_dataset is defined later in this same file
+    # We'll call it directly since we're in the same module
     
     start_time = time.monotonic()
     bin_size_to_use = DEFAULT_BIN_SIZE_KM
