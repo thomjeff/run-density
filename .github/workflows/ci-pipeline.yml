@@ -14,6 +14,42 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
+  # Part 0: Complexity Standards Check (Non-Blocking)
+  # Issue #397: Phase 1 - Step 0 Bare Exception Check
+  complexity-check:
+    name: "0️⃣ Complexity Standards Check"
+    runs-on: ubuntu-latest
+    # Non-blocking: allow other jobs to continue even if this fails
+    continue-on-error: true
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install flake8
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8
+
+      - name: Run Bare Exception Check
+        run: |
+          echo "=== Running Complexity Standards Check ==="
+          echo "Checking for bare exception handlers (B001)..."
+          echo ""
+          echo "This check is non-blocking - pipeline will continue regardless of results"
+          echo ""
+          flake8 app/ core/ --select=B001 --exclude=tests/*
+          echo ""
+          echo "✅ Complexity check completed"
+
+
   # Part 1: Build & Deploy (Docker → Artifact Registry → Cloud Run)
   build-deploy:
     name: "1️⃣ Build & Deploy (Docker → Artifacts)"
