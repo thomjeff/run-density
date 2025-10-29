@@ -1,0 +1,52 @@
+[flake8]
+# Issue #390 - Phase 4 Complexity Standards Configuration
+
+# Maximum complexity (cyclomatic complexity)
+max-complexity = 10
+
+# Maximum line length
+max-line-length = 100
+
+# Ignore specific errors that are handled by other tools
+ignore = 
+    # E203: whitespace before ':' (handled by black)
+    E203,
+    # W503: line break before binary operator (handled by black)
+    W503,
+    # E501: line too long (handled by black)
+    E501
+
+# Exclude directories and files
+exclude = 
+    .git,
+    __pycache__,
+    .venv,
+    venv,
+    test_env,
+    .pytest_cache,
+    archive,
+    artifacts,
+    reports,
+    cache
+
+# Select specific checks
+select = 
+    # Complexity checks
+    C,
+    # Error codes
+    E,
+    # Warning codes
+    W,
+    # Flake8-bugbear checks
+    B,
+    # Flake8-comprehensions checks
+    C4
+
+# Per-file ignores
+per-file-ignores =
+    # Allow longer lines in test files
+    tests/*:E501
+    # Allow complexity in test files
+    tests/*:C901
+    # Allow imports in __init__.py files
+    __init__.py:F401

@@ -1,0 +1,632 @@
+name: CI Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_bin_e2e:
+        description: "Run Part 3: E2E Bin Datasets"
+        default: "false"
+        required: false
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  # Part 0: Complexity Standards Check (Non-Blocking)
+  # Issue #397: Phase 1 - Step 0 Bare Exception Check
+  complexity-check:
+    name: "0️⃣ Complexity Standards Check"
+    runs-on: ubuntu-latest
+    # Non-blocking: allow other jobs to continue even if this fails
+    continue-on-error: true
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install flake8 and flake8-bugbear
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 flake8-bugbear
+
+      - name: Run Complexity Checks (B001 + C901)
+        run: |
+          echo "=== Running Complexity Standards Check ==="
+          echo "Checking for bare exception handlers (B001)...";
+          echo "Checking for complexity violations (C901, threshold=15)...";
+          echo ""
+          echo "This check is non-blocking - pipeline will continue regardless of results"
+          echo ""
+          # Check B001 (bare exceptions) and C901 (complexity > 15)
+          # Note: C901 threshold is enforced via .flake8 config or radon
+          flake8 app/ core/ --max-complexity=15 --select=B001,C901 --exclude=tests/*
+          echo ""
+          echo "✅ Complexity check completed"
+
+
+  # Part 1: Build & Deploy (Docker → Artifact Registry → Cloud Run)
+  build-deploy:
+    name: "1️⃣ Build & Deploy (Docker → Artifacts)"
+    runs-on: ubuntu-latest
+    # Run after Step 0 completes (but don\'t wait if it fails due to continue-on-error)
+    needs: [complexity-check]
+    # Skip deployment for PR events to prevent race conditions with merge
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      id-token: write   # WIF required
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Auth (WIF)
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account:         ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: "Resolve parameters & configure Docker"
+        id: params
+        env:
+          REGION:     ${{ secrets.GCP_REGION }}
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          SERVICE:    ${{ secrets.GCP_SERVICE }}
+          REPO_SEC:   ${{ secrets.GCP_AR_REPO }}   # may be empty
+        run: |
+          set -euo pipefail
+          REPO="${REPO_SEC:-run}"   # default to 'run' if secret is empty
+          echo "REGION=${REGION}"       | tee -a "$GITHUB_OUTPUT"
+          echo "PROJECT_ID=${PROJECT_ID}" | tee -a "$GITHUB_OUTPUT"
+          echo "SERVICE=${SERVICE}"     | tee -a "$GITHUB_OUTPUT"
+          echo "REPO=${REPO}"           | tee -a "$GITHUB_OUTPUT"
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: "Build & Push image (Docker → Artifact Registry)"
+        env:
+          REGION:     ${{ steps.params.outputs.REGION }}
+          PROJECT_ID: ${{ steps.params.outputs.PROJECT_ID }}
+          SERVICE:    ${{ steps.params.outputs.SERVICE }}
+          REPO:       ${{ steps.params.outputs.REPO }}
+          SHA:        ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          
+          # Debug: Verify e2e.py and analytics are present in build context
+          echo "=== Verifying build context files ==="
+          ls -la e2e.py || echo "❌ e2e.py not found in build context"
+          ls -la analytics/ || echo "❌ analytics/ not found in build context"
+          
+          DOMAIN="${REGION}-docker.pkg.dev"
+          IMAGE="${DOMAIN}/${PROJECT_ID}/${REPO}/${SERVICE}:${SHA}"
+          echo "Building IMAGE=${IMAGE}"
+          docker build -t "${IMAGE}" .
+          docker push "${IMAGE}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+
+      - name: "Deploy to Cloud Run (latest)"
+        env:
+          REGION:     ${{ steps.params.outputs.REGION }}
+          PROJECT_ID: ${{ steps.params.outputs.PROJECT_ID }}
+          SERVICE:    ${{ steps.params.outputs.SERVICE }}
+          REPO:       ${{ steps.params.outputs.REPO }}
+          SHA:        ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          DOMAIN="${REGION}-docker.pkg.dev"
+          IMAGE="${DOMAIN}/${PROJECT_ID}/${REPO}/${SERVICE}:${SHA}"
+          echo "Deploying IMAGE=${IMAGE}"
+          gcloud run deploy "${SERVICE}" \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --image  "${IMAGE}" \
+            --platform managed \
+            --allow-unauthenticated \
+            --memory=3Gi --cpu=2 \
+            --min-instances=0 --max-instances=3 \
+            --timeout=600 --quiet
+
+      - name: "Redirect Traffic to Latest Revision"
+        env:
+          REGION:     ${{ steps.params.outputs.REGION }}
+          PROJECT_ID: ${{ steps.params.outputs.PROJECT_ID }}
+          SERVICE:    ${{ steps.params.outputs.SERVICE }}
+        run: |
+          set -euo pipefail
+          echo "Redirecting 100% traffic to latest revision..."
+          
+          # Get the latest revision name
+          LATEST_REVISION=$(gcloud run revisions list \
+            --service="${SERVICE}" \
+            --project="${PROJECT_ID}" \
+            --region="${REGION}" \
+            --sort-by="~metadata.creationTimestamp" \
+            --limit=1 \
+            --format="value(metadata.name)")
+          
+          echo "Latest revision: ${LATEST_REVISION}"
+          
+          # Redirect 100% traffic to latest revision
+          gcloud run services update-traffic "${SERVICE}" \
+            --project="${PROJECT_ID}" \
+            --region="${REGION}" \
+            --to-revisions="${LATEST_REVISION}=100" \
+            --quiet
+          
+          echo "✅ Traffic redirected to ${LATEST_REVISION}"
+
+  # Part 2: E2E Validation (Validate deployment with e2e.py)
+  e2e-validation:
+    name: "2️⃣ E2E (Density/Flow)"
+    runs-on: ubuntu-latest
+    needs: build-deploy
+    # Skip E2E validation for PR events (only needed for main branch)
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      id-token: write   # WIF required for GCS access
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Auth (WIF)
+      id: auth
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+        service_account:         ${{ secrets.GCP_SERVICE_ACCOUNT }}
+    
+    - name: Setup gcloud
+      uses: google-github-actions/setup-gcloud@v2
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run E2E Tests
+      run: |
+        echo "=== Running E2E Tests for Deployment Validation ==="
+        echo "Testing Cloud Run deployment with e2e.py"
+        python e2e.py --cloud
+    
+    - name: Generate UI Artifacts (Local)
+      run: |
+        echo "=== Generating UI Artifacts Locally in CI ==="
+        REPORT_DATE=$(date +%Y-%m-%d)
+        
+        echo "Note: Cloud Run generates reports automatically during API calls"
+        echo "For CI validation, we generate artifacts locally then upload to GCS"
+        
+        # Download latest reports from GCS if they exist (Cloud Run may have uploaded them)
+        echo "Checking for Cloud Run reports in GCS..."
+        mkdir -p reports/$REPORT_DATE
+        if gsutil ls gs://run-density-reports/$REPORT_DATE/*.md > /dev/null 2>&1; then
+          echo "Downloading reports from Cloud Run uploads..."
+          gsutil -m cp gs://run-density-reports/$REPORT_DATE/*.md reports/$REPORT_DATE/ || echo "Some reports not found"
+          gsutil -m cp gs://run-density-reports/$REPORT_DATE/*.csv reports/$REPORT_DATE/ || echo "Some CSVs not found"
+          gsutil -m cp gs://run-density-reports/$REPORT_DATE/bins.parquet reports/$REPORT_DATE/ || echo "bins.parquet not found"
+          gsutil -m cp gs://run-density-reports/$REPORT_DATE/bins.geojson.gz reports/$REPORT_DATE/ || echo "bins.geojson.gz not found"
+          echo "✅ Downloaded Cloud Run reports from GCS"
+        else
+          echo "⚠️ No Cloud Run reports found in GCS for $REPORT_DATE - may be expected"
+        fi
+        
+        # Generate UI artifacts from downloaded reports (if they exist)
+        if [ -d "reports/$REPORT_DATE" ] && [ "$(ls -A reports/$REPORT_DATE)" ]; then
+          echo "Generating UI artifacts from reports..."
+          python analytics/export_frontend_artifacts.py $REPORT_DATE
+          
+          # Note: Heatmap generation moved to app layer (Issue #365) via /api/generate/heatmaps endpoint
+          # Heatmaps are now generated by Cloud Run when needed. CI no longer generates them locally.
+          
+          # Upload UI artifacts to GCS
+          if [ -d "artifacts/$REPORT_DATE/ui" ]; then
+            echo "Uploading UI artifacts to GCS..."
+            gsutil -m cp -r artifacts/$REPORT_DATE/ui/* gs://run-density-reports/artifacts/$REPORT_DATE/ui/
+            echo "✅ UI artifacts uploaded"
+            
+            # Upload latest.json pointer (Issue #293)
+            if [ -f "artifacts/latest.json" ]; then
+              gsutil cp artifacts/latest.json gs://run-density-reports/artifacts/latest.json
+              echo "✅ latest.json uploaded to GCS"
+            fi
+          else
+            echo "⚠️ No artifacts generated (may be expected if no reports available)"
+          fi
+        else
+          echo "⚠️ No reports available for artifact generation"
+        fi
+    
+    - name: Validate Dashboard Data (Main Only)
+      if: github.ref == 'refs/heads/main'
+      run: |
+        echo "=== Validating Dashboard Data Artifacts ==="
+        python -c "
+        import sys
+        import httpx
+        
+        # Fetch dashboard summary from deployed service
+        base_url = 'https://run-density-ln4r3sfkha-uc.a.run.app'
+        response = httpx.get(f'{base_url}/api/dashboard/summary', timeout=30.0)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Check for warnings
+        warnings = data.get('warnings', [])
+        if len(warnings) > 0:
+            print(f'❌ Dashboard validation failed: {len(warnings)} warnings detected')
+            for w in warnings:
+                print(f'   - {w}')
+            print()
+            print('This indicates missing data artifacts. Step 7 exporter must run successfully.')
+            sys.exit(1)
+        
+        # Check for non-zero metrics
+        if data.get('segments_total', 0) == 0:
+            print('❌ Dashboard validation failed: segments_total is 0')
+            sys.exit(1)
+        
+        print(f'✅ Dashboard validation passed')
+        print(f'   segments_total: {data.get(\"segments_total\", 0)}')
+        print(f'   peak_density: {data.get(\"peak_density\", 0.0)}')
+        print(f'   warnings: {len(warnings)}')
+        "
+
+  # Part 3: E2E Bin Dataset Generation and Validation
+  # NOTE: Disabled by default during Front-End Simplification Epic (#261)
+  # To enable: workflow_dispatch with run_bin_e2e=true
+  bin-dataset-validation:
+    name: "3️⃣ E2E (Bin Datasets)"
+    runs-on: ubuntu-latest
+    needs: e2e-validation
+    # Skip bin validation for PR events (only needed for main branch)
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      id-token: write   # WIF required for GCS access
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Check feature flag status
+      id: bin_flag
+      run: |
+        echo "Feature flag: run_bin_e2e=${{ github.event.inputs.run_bin_e2e || 'false' }}"
+        if [ "${{ github.event.inputs.run_bin_e2e || 'false' }}" != "true" ]; then
+          echo "🔕 Bin dataset validation DISABLED (Epic #261 preparation)"
+          echo "To enable: workflow_dispatch with run_bin_e2e=true"
+          echo "⏭️  Skipping all subsequent steps to save CI resources"
+        else
+          echo "✅ Bin dataset validation ENABLED"
+        fi
+    
+    - name: Auth (WIF)
+      if: github.event.inputs.run_bin_e2e == 'true'
+      id: auth
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+        service_account:         ${{ secrets.GCP_SERVICE_ACCOUNT }}
+    
+    - name: Setup gcloud
+      if: github.event.inputs.run_bin_e2e == 'true'
+      uses: google-github-actions/setup-gcloud@v2
+    
+    - name: Setup Python
+      if: github.event.inputs.run_bin_e2e == 'true'
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      if: github.event.inputs.run_bin_e2e == 'true'
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Enable Bin Dataset Environment
+      if: github.event.inputs.run_bin_e2e == 'true'
+      run: |
+        echo "=== Configuring Bin Dataset Validation Environment ==="
+        echo "ENABLE_BIN_DATASET=true" >> $GITHUB_ENV
+        echo "BIN_MAX_FEATURES=10000" >> $GITHUB_ENV
+        echo "DEFAULT_BIN_TIME_WINDOW_SECONDS=60" >> $GITHUB_ENV
+        echo "DEFAULT_BIN_SIZE_KM=0.1" >> $GITHUB_ENV
+        echo "MAX_BIN_GENERATION_TIME_SECONDS=120" >> $GITHUB_ENV
+    
+    - name: Generate Bin Datasets
+      if: github.event.inputs.run_bin_e2e == 'true'
+      run: |
+        echo "=== Generating Bin Datasets on Cloud Run ==="
+        echo "Environment: ENABLE_BIN_DATASET=true"
+        echo "Calling /api/density-report with bin generation enabled..."
+        
+        # Generate bin datasets via density report API
+        RESPONSE=$(curl -X POST "https://run-density-ln4r3sfkha-uc.a.run.app/api/density-report" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "paceCsv": "data/runners.csv",
+            "densityCsv": "data/segments.csv", 
+            "startTimes": {"Full": 420, "10K": 440, "Half": 460},
+            "enable_bin_dataset": true
+          }' \
+          --max-time 300 \
+          --write-out "HTTPSTATUS:%{http_code}" \
+          --silent)
+        
+        HTTP_CODE=$(echo "$RESPONSE" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+        RESPONSE_BODY=$(echo "$RESPONSE" | sed 's/HTTPSTATUS:[0-9]*$//')
+        
+        if [ "$HTTP_CODE" = "200" ]; then
+          echo "✅ Bin Dataset Generation: COMPLETED"
+          echo "📦 Bin datasets generated and uploaded to GCS"
+          echo "Response size: $(echo "$RESPONSE_BODY" | wc -c) characters"
+        else
+          echo "❌ Bin Dataset Generation Failed: HTTP $HTTP_CODE"
+          echo "Response: $RESPONSE_BODY"
+          exit 1
+        fi
+    
+    - name: Verify Bin Artifacts Generated
+      if: github.event.inputs.run_bin_e2e == 'true'
+      run: |
+        echo "=== Verifying Bin Artifacts in GCS ==="
+        REPORT_DATE=$(date +%Y-%m-%d)
+        echo "Checking for bin artifacts in gs://run-density-reports/$REPORT_DATE/"
+        
+        # Check for bin artifacts
+        if gsutil ls gs://run-density-reports/$REPORT_DATE/bins.geojson.gz; then
+          echo "✅ Found bins.geojson.gz"
+          GEOJSON_SIZE=$(gsutil ls -l gs://run-density-reports/$REPORT_DATE/bins.geojson.gz | awk '{print $1}')
+          echo "✅ Size: $GEOJSON_SIZE bytes"
+        else
+          echo "❌ Missing bins.geojson.gz"
+          exit 1
+        fi
+        
+        if gsutil ls gs://run-density-reports/$REPORT_DATE/bins.parquet; then
+          echo "✅ Found bins.parquet"
+          PARQUET_SIZE=$(gsutil ls -l gs://run-density-reports/$REPORT_DATE/bins.parquet | awk '{print $1}')
+          echo "✅ Size: $PARQUET_SIZE bytes"
+        else
+          echo "❌ Missing bins.parquet"
+          exit 1
+        fi
+    
+    - name: Validate Bin Dataset Quality
+      if: github.event.inputs.run_bin_e2e == 'true'
+      run: |
+        echo "=== Bin Dataset Quality Validation ==="
+        REPORT_DATE=$(date +%Y-%m-%d)
+        
+        # Download artifacts for validation (need both geojson.gz and parquet)
+        mkdir -p ./validation_temp/$REPORT_DATE
+        gsutil cp gs://run-density-reports/$REPORT_DATE/bins.geojson.gz ./validation_temp/$REPORT_DATE/
+        gsutil cp gs://run-density-reports/$REPORT_DATE/bins.parquet ./validation_temp/$REPORT_DATE/
+        gsutil cp gs://run-density-reports/$REPORT_DATE/map_data_*.json ./validation_temp/$REPORT_DATE/ || echo "Map data will be checked separately"
+        
+        # Run validation using existing tools
+        python scripts/validation/verify_bins.py --reports-dir ./validation_temp
+        
+        echo "✅ Bin dataset quality validation completed"
+    
+    - name: Generate UI Artifacts
+      if: github.event.inputs.run_bin_e2e == 'true'
+      run: |
+        echo "=== Generating UI Artifacts for APIs ==="
+        REPORT_DATE=$(date +%Y-%m-%d)
+        
+        # Generate UI artifacts using the latest run_id
+        python analytics/export_frontend_artifacts.py $REPORT_DATE
+        
+        # Upload UI artifacts to Cloud Storage for API access
+        if [ -d "artifacts/$REPORT_DATE/ui" ]; then
+          echo "Uploading UI artifacts to Cloud Storage..."
+          gsutil -m cp -r artifacts/$REPORT_DATE/ui/* gs://run-density-reports/artifacts/$REPORT_DATE/ui/
+          echo "✅ UI artifacts uploaded to Cloud Storage"
+        else
+          echo "❌ UI artifacts directory not found: artifacts/$REPORT_DATE/ui"
+          exit 1
+        fi
+
+  # Part 4: Automated Release (GitHub release creation)
+  automated-release:
+    name: "4️⃣ Automated Release"
+    runs-on: ubuntu-latest
+    needs: [build-deploy, e2e-validation, bin-dataset-validation]
+    if: false  # Disabled: Always fails, not needed for non-version-bump PRs
+    permissions:
+      contents: write
+      id-token: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Check version and determine release action
+      id: version-check
+      run: |
+        echo "=== Version and Release Strategy Check ==="
+        
+        # Get versions using Python
+        CODE_VERSION=$(python -c "from app.version import get_current_version; print(get_current_version())")
+        GIT_TAG=$(python -c "from app.version import get_latest_git_tag; print(get_latest_git_tag())")
+        
+        echo "Current version in code: $CODE_VERSION"
+        echo "Latest git tag: $GIT_TAG"
+        
+        # Determine action based on version comparison
+        if [ "$CODE_VERSION" = "$GIT_TAG" ]; then
+            echo "✅ Code version matches latest tag"
+            echo "🔍 Checking if release exists for this version..."
+            echo "action=check_existing" >> $GITHUB_OUTPUT
+            echo "version=$CODE_VERSION" >> $GITHUB_OUTPUT
+        else
+            echo "🚀 Code version is newer than latest tag - new feature completed!"
+            echo "📦 Will create new release for version: $CODE_VERSION"
+            echo "action=create_new" >> $GITHUB_OUTPUT
+            echo "version=$CODE_VERSION" >> $GITHUB_OUTPUT
+            echo "previous_tag=$GIT_TAG" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Verify version strategy
+      run: |
+        echo "=== Version Strategy Verification ==="
+        python -c "
+        from app.version import get_current_version, get_latest_git_tag
+        import sys
+        
+        code_version = get_current_version()
+        git_tag = get_latest_git_tag()
+        
+        print('Final verification:')
+        print('Current version in code:', code_version)
+        print('Latest git tag:', git_tag)
+        
+        if code_version == git_tag:
+            print('✅ Standard release: Code version matches git tag')
+        elif code_version > git_tag:
+            print('🚀 New feature release: Code version is newer than git tag')
+        else:
+            print('❌ ERROR: Code version is older than git tag - this should not happen')
+            sys.exit(1)
+        
+        print('✅ Version strategy validation passed!')
+        "
+    
+    - name: Get final version for release
+      id: version
+      run: |
+        python -c "
+        from app.version import get_current_version
+        version = get_current_version()
+        print(f'version={version}')
+        " >> $GITHUB_OUTPUT
+    
+    - name: Check if release already exists (for existing versions)
+      id: check-release
+      if: steps.version-check.outputs.action == 'check_existing'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "Checking if release ${{ steps.version.outputs.version }} already exists..."
+        if gh release view ${{ steps.version.outputs.version }} >/dev/null 2>&1; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+          echo "✅ Release ${{ steps.version.outputs.version }} already exists - will skip creation"
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "✅ Release ${{ steps.version.outputs.version }} does not exist - will create"
+        fi
+    
+    - name: Skip Release Creation (Already Exists)
+      if: steps.version-check.outputs.action == 'check_existing' && steps.check-release.outputs.exists == 'true'
+      run: |
+        echo "=== Release Already Exists ==="
+        echo "✅ Release ${{ steps.version.outputs.version }} already exists"
+        echo "Skipping release creation to avoid duplicates"
+        echo "This is expected behavior when multiple pushes occur with the same version"
+    
+    - name: Create GitHub Release (New Version)
+      if: steps.version-check.outputs.action == 'create_new' || (steps.version-check.outputs.action == 'check_existing' && steps.check-release.outputs.exists == 'false')
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "=== Creating GitHub Release ==="
+        
+        if [ "${{ steps.version-check.outputs.action }}" = "create_new" ]; then
+          echo "🚀 Creating NEW release for version: ${{ steps.version.outputs.version }}"
+          echo "📈 Previous version was: ${{ steps.version-check.outputs.previous_tag }}"
+          RELEASE_TYPE="New Feature Release"
+        else
+          echo "🔄 Creating release for existing version: ${{ steps.version.outputs.version }}"
+          RELEASE_TYPE="Standard Release"
+        fi
+        
+        # Double-check release doesn't exist before creating
+        if gh release view ${{ steps.version.outputs.version }} >/dev/null 2>&1; then
+          echo "❌ ERROR: Release ${{ steps.version.outputs.version }} already exists! This should not happen."
+          echo "Skipping release creation to avoid duplicate."
+          exit 0
+        fi
+        
+        gh release create ${{ steps.version.outputs.version }} \
+          --title "$RELEASE_TYPE ${{ steps.version.outputs.version }}" \
+          --notes "## 🚀 $RELEASE_TYPE ${{ steps.version.outputs.version }}
+
+        This release was created automatically from the CI pipeline.
+
+        ### Release Type
+        - **Type**: $RELEASE_TYPE
+        - **Previous Version**: ${{ steps.version-check.outputs.previous_tag || 'Same version' }}
+        - **New Features**: ${{ steps.version-check.outputs.action == 'create_new' && 'Yes - version bumped for new functionality' || 'Standard release' }}
+
+        ### Validation
+        - ✅ Build & Deploy completed successfully
+        - ✅ E2E validation passed (density/flow)
+        - ✅ Bin dataset validation passed
+        - ✅ Quality gate enforced before release
+
+        ### Workflow
+        Deploy → E2E Test → Bin Validation → Release (only if all tests pass)
+
+        ### Next Steps
+        1. Review the release notes and attached assets
+        2. Verify production deployment is working
+        3. Monitor Cloud Run performance"
+    
+    - name: Upload Release Assets
+      if: steps.version-check.outputs.action == 'create_new' || (steps.version-check.outputs.action == 'check_existing' && steps.check-release.outputs.exists == 'false')
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "=== Uploading Release Assets ==="
+        # Find the latest reports
+        if [ -d "reports" ]; then
+          LATEST_DATE=$(ls -1 reports/ | sort | tail -1)
+          if [ -n "$LATEST_DATE" ] && [ -d "reports/$LATEST_DATE" ]; then
+            echo "Uploading reports from reports/$LATEST_DATE"
+            gh release upload ${{ steps.version.outputs.version }} reports/$LATEST_DATE/*.md reports/$LATEST_DATE/*.csv
+          fi
+        fi
+        
+        # Upload E2E test results if available
+        if [ -d "e2e_tests" ]; then
+          LATEST_E2E_DATE=$(ls -1 e2e_tests/ | sort | tail -1)
+          if [ -n "$LATEST_E2E_DATE" ] && [ -d "e2e_tests/$LATEST_E2E_DATE" ]; then
+            echo "Uploading E2E results from e2e_tests/$LATEST_E2E_DATE"
+            gh release upload ${{ steps.version.outputs.version }} e2e_tests/$LATEST_E2E_DATE/*.md
+          fi
+        fi
