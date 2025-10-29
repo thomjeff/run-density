@@ -226,7 +226,8 @@ def generate_segment_heatmap(
                 else:
                     clean_time = time_str
                 clean_times.append(clean_time)
-            except:
+            except (ValueError, TypeError) as e:
+                logging.warning(f"Failed to parse time string '{time_str}': {e}. Using raw value.")
                 clean_times.append(time_str)
         
         # Set clean time labels with smart spacing
