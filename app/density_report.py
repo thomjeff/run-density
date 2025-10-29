@@ -240,25 +240,8 @@ def generate_key_takeaway(segment_id: str, segment_data: Dict[str, Any], v2_cont
             return f"Low density ({density_str} p/m²) - comfortable flow"
 
 
-def render_segment_v2(md, ctx, rulebook):
-    """Render a segment using v2.0 rulebook structure with schema-specific formatting."""
-    # Get schema information
-    schema_name = ctx.get("schema_name", "on_course_open")
-    flow_rate = ctx.get("flow_rate")
-    flow_capacity = ctx.get("flow_capacity")
-    flow_utilization = ctx.get("flow_utilization")
-    fired_actions = ctx.get("fired_actions", [])
-    
-    # Get schema configuration
-    schemas = rulebook.get("schemas", {})
-    schema_config = schemas.get(schema_name, {})
-    
-    # Get LOS thresholds for this schema
-    los_thresholds = schema_config.get("los_thresholds", 
-                                     rulebook.get("globals", {}).get("los_thresholds", {}))
-    
-    # Determine LOS from areal density
-    areal_density = ctx.get("peak_areal_density", 0.0)
+def _determine_los_from_thresholds(areal_density: float, los_thresholds: Dict[str, Any]) -> str:
+    """Determine LOS letter from areal density using schema thresholds."""
     los_letter = "F"  # Default to worst case
     for letter in ["A", "B", "C", "D", "E", "F"]:
         rng = los_thresholds.get(letter, {})
@@ -267,11 +250,13 @@ def render_segment_v2(md, ctx, rulebook):
         if areal_density >= mn and areal_density < mx:
             los_letter = letter
             break
-    
-    # Render header with schema info (reduced heading size)
-    md.write(f"### Segment {ctx['segment_id']} — {ctx['seg_label']}\n\n")
-    
-    # Render metrics table (reduced heading size)
+    return los_letter
+
+
+def _render_metrics_table_v2(md, ctx, schema_name: str, areal_density: float, 
+                            flow_rate: Optional[float], flow_capacity: Optional[float],
+                            flow_utilization: Optional[float], los_letter: str) -> None:
+    """Render metrics table for v2.0 segment rendering."""
     md.write("#### Metrics\n\n")
     md.write("| Metric | Value | Units |\n")
     md.write("|--------|-------|-------|\n")
@@ -281,7 +266,6 @@ def render_segment_v2(md, ctx, rulebook):
     
     # For narrow/merge segments, show linear density
     if schema_name in ["on_course_narrow"]:
-        # Calculate linear density from areal density and width
         width_m = ctx.get("width_m", 3.0)  # Default width
         linear_density = areal_density * width_m
         md.write(f"| Linear Density | {linear_density:.2f} | p/m |\n")
@@ -301,13 +285,15 @@ def render_segment_v2(md, ctx, rulebook):
     los_display = format_los_with_color(los_letter)
     md.write(f"| LOS | {los_display} ({schema_name.replace('_', ' ').title()}) | — |\n")
     
-    # Add note about schema if start_corral
+    # Add note about schema
     if schema_name == "start_corral":
         md.write("\n| Note: LOS here uses start-corral thresholds, not Fruin. Flow-rate governs safety. |\n")
     elif schema_name == "on_course_narrow":
         md.write("\n| Note: LOS uses Fruin thresholds (linear density). |\n")
-    
-    # Add Key Takeaways line
+
+
+def _render_key_takeaways_v2(md, los_letter: str, flow_utilization: Optional[float]) -> None:
+    """Render key takeaways section for v2.0 segment rendering."""
     md.write("\n### Key Takeaways\n\n")
     
     # Determine status based on LOS and flow
@@ -320,12 +306,17 @@ def render_segment_v2(md, ctx, rulebook):
         md.write("⚠️ **Moderate**: Density approaching comfort limits - monitor closely.\n\n")
     else:  # E, F
         md.write("🔴 **Critical**: High density detected - immediate action required.\n\n")
-    
-    # Render operational implications
+
+
+def _render_operational_implications_v2(md, ctx, schema_config: Dict[str, Any],
+                                       schema_name: str, los_letter: str,
+                                       flow_rate: Optional[float],
+                                       flow_utilization: Optional[float],
+                                       flow_capacity: Optional[float]) -> None:
+    """Render operational implications section for v2.0 segment rendering."""
     md.write("### Operational Implications\n\n")
     
     # Get mitigations from schema
-    mitigations = schema_config.get("mitigations", [])
     drivers = schema_config.get("drivers", [])
     
     # Add driver context
@@ -357,7 +348,10 @@ def render_segment_v2(md, ctx, rulebook):
     if schema_name in ["on_course_narrow"] and flow_utilization and flow_utilization > 200:
         md.write(f"• **Flow Overload**: Supply ({flow_rate * ctx.get('width_m', 3.0):.0f} p/min) exceeds capacity ({flow_capacity:.0f} p/min) by {flow_utilization:.0f}%.\n")
         md.write("• Consider implementing flow metering or temporary holds upstream.\n")
-    
+
+
+def _render_mitigations_and_notes_v2(md, fired_actions: List[str], ops_box: Dict[str, Any]) -> None:
+    """Render mitigations fired and operational notes for v2.0 segment rendering."""
     # Add fired actions if any
     if fired_actions:
         md.write("\n### Mitigations Fired\n\n")
@@ -365,7 +359,6 @@ def render_segment_v2(md, ctx, rulebook):
             md.write(f"• {action}\n")
     
     # Add operational box if available
-    ops_box = schema_config.get("ops_box", {})
     if ops_box:
         md.write("\n### Operational Notes\n\n")
         for category, notes in ops_box.items():
@@ -374,8 +367,10 @@ def render_segment_v2(md, ctx, rulebook):
                 for note in notes:
                     md.write(f"• {note}\n")
                 md.write("\n")
-    
-    # Add definitions (only once per report)
+
+
+def _render_definitions_v2(md, flow_rate: Optional[float]) -> None:
+    """Render definitions section for v2.0 segment rendering (only once per report)."""
     if not hasattr(render_segment_v2, '_definitions_added'):
         md.write("\n📖 Definitions:\n\n")
         md.write("• Density = persons per square meter (p/m²).\n")
@@ -387,6 +382,49 @@ def render_segment_v2(md, ctx, rulebook):
             md.write("• Flow Utilization = percentage of capacity being used.\n")
         md.write("• `gte` = greater-than-or-equal-to (thresholds are inclusive).\n\n")
         render_segment_v2._definitions_added = True
+
+
+def render_segment_v2(md, ctx, rulebook):
+    """Render a segment using v2.0 rulebook structure with schema-specific formatting."""
+    # Get schema information
+    schema_name = ctx.get("schema_name", "on_course_open")
+    flow_rate = ctx.get("flow_rate")
+    flow_capacity = ctx.get("flow_capacity")
+    flow_utilization = ctx.get("flow_utilization")
+    fired_actions = ctx.get("fired_actions", [])
+    
+    # Get schema configuration
+    schemas = rulebook.get("schemas", {})
+    schema_config = schemas.get(schema_name, {})
+    
+    # Get LOS thresholds for this schema
+    los_thresholds = schema_config.get("los_thresholds", 
+                                     rulebook.get("globals", {}).get("los_thresholds", {}))
+    
+    # Determine LOS from areal density
+    areal_density = ctx.get("peak_areal_density", 0.0)
+    los_letter = _determine_los_from_thresholds(areal_density, los_thresholds)
+    
+    # Render header with schema info
+    md.write(f"### Segment {ctx['segment_id']} — {ctx['seg_label']}\n\n")
+    
+    # Render metrics table
+    _render_metrics_table_v2(md, ctx, schema_name, areal_density, flow_rate, 
+                            flow_capacity, flow_utilization, los_letter)
+    
+    # Render key takeaways
+    _render_key_takeaways_v2(md, los_letter, flow_utilization)
+    
+    # Render operational implications
+    _render_operational_implications_v2(md, ctx, schema_config, schema_name, los_letter,
+                                         flow_rate, flow_utilization, flow_capacity)
+    
+    # Render mitigations and operational notes
+    ops_box = schema_config.get("ops_box", {})
+    _render_mitigations_and_notes_v2(md, fired_actions, ops_box)
+    
+    # Render definitions
+    _render_definitions_v2(md, flow_rate)
 
 
 def _render_v2_schema_content(md, ctx, schema):
