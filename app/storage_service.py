@@ -132,6 +132,26 @@ class StorageService:
         """
         content = json.dumps(data, indent=2, default=str)
         return self.save_file(filename, content, date)
+
+    def save_artifact_json(self, file_path: str, data: Dict[str, Any]) -> str:
+        """
+        Save JSON to an explicit artifacts path (e.g., "artifacts/<run_id>/ui/captions.json").
+        This avoids automatic date-prefixing used by save_file/save_json.
+        """
+        content = json.dumps(data, indent=2, default=str)
+        if self.config.use_cloud_storage:
+            return self._save_to_gcs(file_path, content)
+        else:
+            # Write relative to repository root for local mode
+            try:
+                full_path = Path(file_path)
+                full_path.parent.mkdir(parents=True, exist_ok=True)
+                full_path.write_text(content)
+                logger.info(f"Saved artifact locally: {full_path}")
+                return str(full_path)
+            except Exception as e:
+                logger.error(f"Failed to save artifact locally {file_path}: {e}")
+                raise
     
     def load_file(self, filename: str, date: Optional[str] = None) -> Optional[str]:
         """
