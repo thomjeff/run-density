@@ -589,6 +589,7 @@ def export_heatmaps_and_captions(
     if captions:
         try:
             artifacts_path = f"artifacts/{run_id}/ui/captions.json"
+            print(f"   📤 Uploading captions to: gs://run-density-reports/{artifacts_path}")
             storage.save_artifact_json(artifacts_path, captions)
             print(f"   ✅ captions.json: {len(captions)} segments captioned")
         except Exception as e:
