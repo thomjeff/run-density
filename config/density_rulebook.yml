@@ -26,6 +26,14 @@ globals:
     E: { min: 1.08, max: 1.63, label: "Very dense" }
     F: { min: 1.63, max: 999.0, label: "Extremely dense" }
   
+  # Captioning thresholds (Issue #334; used for heatmap auto-captions)
+  captioning:
+    wave_gap_minutes: 5
+    clearance_threshold_p_m2: 0.10
+    clearance_sustain_minutes: 6
+    similarity_pct: 0.10
+    spread_pct: 0.20
+  
   # Operational policy (tuned to ~10% flagging rate, matching operational baseline)
   policy:
     density_watch_at: "C"           # Start flagging at LOS C (0.54 p/m²)
