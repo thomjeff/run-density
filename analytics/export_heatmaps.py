@@ -585,15 +585,14 @@ def export_heatmaps_and_captions(
             print(f"   ⚠️  {seg_id}: Error generating caption: {e}")
             continue
     
-    # Save captions.json in artifacts directory
+    # Save captions.json using StorageService to support Cloud (GCS) and Local
     if captions:
-        captions_path = Path("artifacts") / run_id / "ui" / "captions.json"
         try:
-            with open(captions_path, 'w') as f:
-                json.dump(captions, f, indent=2)
+            artifacts_path = f"artifacts/{run_id}/ui/captions.json"
+            storage.save_artifact_json(artifacts_path, captions)
             print(f"   ✅ captions.json: {len(captions)} segments captioned")
         except Exception as e:
-            print(f"   ⚠️  Could not save captions.json: {e}")
+            print(f"   ⚠️  Could not save captions.json via StorageService: {e}")
     
     print(f"\n{'='*60}")
     print(f"✅ Heatmaps & Captions Complete")
