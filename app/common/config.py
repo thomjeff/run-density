@@ -89,3 +89,29 @@ def load_reporting() -> Dict[str, Any]:
     with path.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
+
+def load_captioning() -> Dict[str, Any]:
+    """
+    Load captioning.yml (caption thresholds and qualitative rules).
+    
+    Returns:
+        dict: Parsed captioning config containing keys like:
+            - wave_gap_minutes
+            - clearance_threshold_p_m2
+            - clearance_sustain_minutes
+            - similarity_pct
+            - spread_pct
+    
+    Raises:
+        FileNotFoundError: If captioning.yml not found
+        yaml.YAMLError: If YAML parsing fails
+    """
+    path = CONFIG_DIR / "captioning.yml"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"captioning.yml not found at {path}. "
+            f"Ensure config/ directory contains caption thresholds as documented."
+        )
+    with path.open("r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+

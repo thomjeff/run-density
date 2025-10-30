@@ -66,6 +66,11 @@
             <img id="heatmap-image" src="" alt="Density heatmap" style="max-width: 100%; border-radius: 4px;" />
             <div id="heatmap-placeholder" class="placeholder">No heatmap data available for this segment.</div>
         </div>
+
+        <!-- Caption beneath heatmap (Issue #334) -->
+        <div id="caption-container" style="margin: 0.5rem 0 1.5rem 0; display: none;">
+            <div id="segment-caption" style="padding: 0.75rem; background: #f8f9fa; border-left: 4px solid #2c3e50; border-radius: 4px; color: #2c3e50; line-height: 1.4;"></div>
+        </div>
         
         <!-- Bin-Level Table -->
         <div id="bin-details-container" style="margin: 1.5rem 0;">
@@ -507,6 +512,17 @@
         } else {
             heatmapImg.style.display = 'none';
             noBinData.style.display = 'block';
+        }
+        
+        // Render caption (Issue #334)
+        const captionContainer = document.getElementById('caption-container');
+        const captionEl = document.getElementById('segment-caption');
+        if (detail.caption) {
+            captionEl.textContent = detail.caption;
+            captionContainer.style.display = 'block';
+        } else {
+            captionEl.textContent = '';
+            captionContainer.style.display = 'none';
         }
         
         // Show detail panel
