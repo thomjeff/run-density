@@ -10,7 +10,7 @@ Architecture: Option 3 - Hybrid Approach
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 import logging
 import pandas as pd
 from pathlib import Path
@@ -347,7 +347,7 @@ def _check_segment_flagged(storage_service, seg_id: str) -> bool:
     return is_flagged
 
 
-def _load_heatmap_and_caption(storage_service, seg_id: str) -> Tuple[Optional[str], Optional[str]]:
+def _load_heatmap_and_caption(storage_service, seg_id: str):
     """Load heatmap URL and caption for segment."""
     heatmap_url = None
     caption = None
