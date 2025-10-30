@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
-  "rulebook_hash": "sha256:4f9aa3e2ecb42912",
-  "dataset_version": "40bdf5f",
+  "rulebook_hash": "sha256:dddd93eae715de29",
+  "dataset_version": "1acd733",
   "units": {
     "density": "persons_per_m2",
     "rate": "persons_per_second",
