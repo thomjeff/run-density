@@ -435,23 +435,35 @@ def generate_segment_caption(
                     break
 
         # Compose summary text
+        clearance_phrase = (
+            f"Clears by {clearance_time}" if clearance_time else "Does not fully clear in the observed window"
+        )
         if len(waves_out) <= 1:
             summary = (
                 f"Segment {seg_id} — {label}. A single density wave passes, peaking near {peak_time} "
                 f"around {km_range} at {peak_density:.2f} p/m² ({los_grade}). "
-                f"{"Clears by " + clearance_time if clearance_time else "Does not fully clear in the observed window"}."
+                f"{clearance_phrase}."
             )
         else:
             wave1 = waves_out[0]
             wave2 = waves_out[1]
             adj = qualitative_note["relative_peak"] if qualitative_note else "similar"
             spread_txt = qualitative_note["spread"] if qualitative_note else "similar spread"
+            clearance_phrase = (
+                f"Clears by {clearance_time}" if clearance_time else "Remains active in window"
+            )
+            # Extract to local variables to avoid any f-string parser edge cases with quotes/brackets
+            w1_start = wave1.get("start_time")
+            w1_end = wave1.get("end_time")
+            w1_peak = wave1.get("peak_density_p_m2", 0.0)
+            w2_start = wave2.get("start_time")
+            w2_end = wave2.get("end_time")
             summary = (
                 f"Segment {seg_id} — {label}. Two distinct waves are visible. "
-                f"The first ({wave1['start_time']}–{wave1['end_time']}) peaks at ~{wave1['peak_density_p_m2']:.2f} p/m². "
-                f"A subsequent wave ({wave2['start_time']}–{wave2['end_time']}) is {adj} and {spread_txt}. "
+                f"The first ({w1_start}–{w1_end}) peaks at ~{w1_peak:.2f} p/m². "
+                f"A subsequent wave ({w2_start}–{w2_end}) is {adj} and {spread_txt}. "
                 f"Overall peak near {peak_time} around {km_range} at {peak_density:.2f} p/m² ({los_grade}). "
-                f"{"Clears by " + clearance_time if clearance_time else "Remains active in window"}."
+                f"{clearance_phrase}."
             )
 
         return {
