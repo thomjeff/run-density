@@ -1,0 +1,72 @@
+{
+  "schema_version": "1.0.0",
+  "environment": {
+    "platform": "Local",
+    "version": "unknown",
+    "data_root": "./data",
+    "last_updated": "2025-10-30T13:27:57.780999+00:00"
+  },
+  "files": [
+    {
+      "name": "segments.geojson",
+      "present": true,
+      "modified": "2025-10-30T13:27:57.779738+00:00"
+    },
+    {
+      "name": "segment_metrics.json",
+      "present": true,
+      "modified": "2025-10-30T13:27:57.148586+00:00"
+    },
+    {
+      "name": "flags.json",
+      "present": true,
+      "modified": "2025-10-30T13:27:57.149445+00:00"
+    },
+    {
+      "name": "meta.json",
+      "present": true,
+      "modified": "2025-10-30T13:27:56.964693+00:00"
+    },
+    {
+      "name": "flow.json",
+      "present": true,
+      "modified": "2025-10-30T13:27:57.466994+00:00"
+    },
+    {
+      "name": "schema_density.json",
+      "present": true,
+      "modified": "2025-10-30T13:27:57.780948+00:00"
+    }
+  ],
+  "hashes": {
+    "rulebook": "239579ae83d51919",
+    "reporting": "2650d0e5e018361a"
+  },
+  "endpoints": [
+    {
+      "path": "/api/segments",
+      "status": "up",
+      "latency_ms": null
+    },
+    {
+      "path": "/api/density",
+      "status": "up",
+      "latency_ms": null
+    },
+    {
+      "path": "/api/flow",
+      "status": "up",
+      "latency_ms": null
+    },
+    {
+      "path": "/api/reports",
+      "status": "up",
+      "latency_ms": null
+    },
+    {
+      "path": "/api/health",
+      "status": "up",
+      "latency_ms": null
+    }
+  ]
+}
