@@ -666,6 +666,19 @@ def export_ui_artifacts(reports_dir: Path, run_id: str, overtaking_segments: int
     print(f"✅ All artifacts exported to: {artifacts_dir}")
     print(f"{'='*60}\n")
     
+    # Issue #334: Also generate heatmaps and captions to ensure UI completeness
+    try:
+        from analytics.export_heatmaps import export_heatmaps_and_captions
+        from app.storage_service import get_storage_service
+        storage = get_storage_service()
+        print("\n============================================================")
+        print("Generating Heatmaps")
+        print("============================================================")
+        print("   Generating heatmaps...")
+        export_heatmaps_and_captions(run_id, reports_dir, storage)
+    except Exception as e:
+        print(f"   ⚠️  Skipping heatmaps/captions generation: {e}")
+
     return artifacts_dir
 
 
