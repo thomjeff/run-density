@@ -232,14 +232,8 @@ smoke-docker:
 	@echo ">> Hitting http://localhost:8080"
 	@curl -fsS "http://localhost:8080/health" | jq -e '.ok==true' >/dev/null && echo "health OK" || (echo "health FAILED" && exit 1)
 	@curl -fsS "http://localhost:8080/ready"  | jq -e '.ok==true and .density_loaded and .overlap_loaded' >/dev/null && echo "ready  OK" || (echo "ready FAILED" && exit 1)
-	@echo ">> tiny density call (from overlaps.csv)"
-	@curl -fsS -X POST "http://localhost:8080/api/density" \
-	  -H "Content-Type: application/json" -H "Accept: application/json" \
-	  -d '{ \
-	        "paceCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/your_pace_data.csv", \
-	        "overlapsCsv":"https://raw.githubusercontent.com/thomjeff/run-density/main/data/overlaps.csv", \
-	        "startTimes":{"Full":420,"10K":440,"Half":460}, \
-	        "stepKm":0.03,"timeWindow":60 \
-	      }' \
-	| jq -e '.engine=="density" and (.segments|length)>0' >/dev/null && echo "density OK" || (echo "density FAILED" && exit 1)
+	@echo ">> Testing API endpoints"
+	@curl -fsS "http://localhost:8080/api/segments" | jq -e '.segments | length > 0' >/dev/null && echo "segments OK" || (echo "segments FAILED" && exit 1)
+	@curl -fsS "http://localhost:8080/api/density/segments" | jq -e 'length > 0' >/dev/null && echo "density/segments OK" || (echo "density/segments FAILED" && exit 1)
+	@curl -fsS "http://localhost:8080/api/dashboard/summary" | jq -e '.segments_total >= 0' >/dev/null && echo "dashboard OK" || (echo "dashboard FAILED" && exit 1)
 	@echo "✅ smoke-docker passed"
