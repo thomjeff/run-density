@@ -112,8 +112,9 @@ def generate_temporal_flow_report(
     # Also save to storage service for persistence
     try:
         storage_service = get_storage_service()
-        timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
-        storage_filename = f"{timestamp}-Flow.md"
+        # Extract filename from local path to ensure timestamp consistency
+        # (avoid timezone drift between local write and GCS upload)
+        storage_filename = os.path.basename(full_path)
         storage_path = storage_service.save_file(storage_filename, report_content)
         print(f"📊 Flow report saved to storage: {storage_path}")
     except Exception as e:
@@ -797,8 +798,9 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
     # Also save to storage service for persistence
     try:
         storage_service = get_storage_service()
-        timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
-        storage_filename = f"{timestamp}-Flow.csv"
+        # Extract filename from local path to ensure timestamp consistency
+        # (avoid timezone drift between local write and GCS upload)
+        storage_filename = os.path.basename(full_path)
         
         # Read the CSV content to save to storage
         with open(full_path, 'r', encoding='utf-8') as f:
