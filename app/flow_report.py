@@ -815,7 +815,6 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
     audit_segments = [seg for seg in segments if "flow_audit_data" in seg]
     if audit_segments:
         # Extract output directory from the CSV path
-        import os
         output_dir = os.path.dirname(full_path)
         audit_path = generate_flow_audit_csv(segments, output_dir)
         print(f"🔍 Flow Audit data exported to: {audit_path}")
