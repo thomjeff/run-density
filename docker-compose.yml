@@ -20,6 +20,8 @@ services:
       - ./config:/app/config
       # Bind mount reports for local inspection (optional)
       - ./reports:/app/reports
+      # Bind mount artifacts directory (required for UI artifacts: meta.json, segment_metrics.json, flags.json)
+      - ./artifacts:/app/artifacts
       # Bind mount .env file for Phase 1 (will be replaced in Phase 2)
       # Note: .env may not exist - docker-compose will create empty directory if missing
       # This is acceptable for Phase 1 where .env is optional
