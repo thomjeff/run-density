@@ -16,7 +16,7 @@ from pathlib import Path
 
 # Configuration
 CLOUD_RUN_URL = "https://run-density-ln4r3sfkha-uc.a.run.app"
-LOCAL_URL = "http://localhost:8081"
+LOCAL_URL = "http://localhost:8080"  # Updated to 8080 to match Cloud Run default (Issue #415)
 DEFAULT_START_TIMES = {'Full': 420, '10K': 440, 'Half': 460}
 
 def parse_arguments():

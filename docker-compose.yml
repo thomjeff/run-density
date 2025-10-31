@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: run-density-dev
+    ports:
+      - "8080:8080"
+    volumes:
+      # Bind mount source code for hot reload during development
+      - ./app:/app/app
+      - ./api:/app/api
+      - ./core:/app/core
+      - ./analytics:/app/analytics
+      - ./e2e.py:/app/e2e.py
+      # Bind mount data and config directories
+      - ./data:/app/data
+      - ./config:/app/config
+      # Bind mount reports for local inspection (optional)
+      - ./reports:/app/reports
+      # Bind mount .env file for Phase 1 (will be replaced in Phase 2)
+      # Note: .env may not exist - docker-compose will create empty directory if missing
+      # This is acceptable for Phase 1 where .env is optional
+      - ./.env:/app/.env:ro
+    environment:
+      - PORT=8080
+      - PYTHONPATH=/app
+      - MPLBACKEND=Agg
+    # Override CMD for development mode with hot reload
+    # Production Dockerfile uses gunicorn; dev mode uses uvicorn --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+    stdin_open: true
+    tty: true
+
