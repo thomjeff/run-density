@@ -22,11 +22,12 @@ services:
       - ./reports:/app/reports
       # Bind mount artifacts directory (required for UI artifacts: meta.json, segment_metrics.json, flags.json)
       - ./artifacts:/app/artifacts
-      # Bind mount .env file for Phase 1 (will be replaced in Phase 2)
-      # Note: .env may not exist - docker-compose will create empty directory if missing
-      # This is acceptable for Phase 1 where .env is optional
-      - ./.env:/app/.env:ro
+    # Phase 2: Use env_file instead of mounting .env
+    # Environment variables from dev.env are injected into container
+    env_file:
+      - dev.env
     environment:
+      # Container-specific environment variables (not in dev.env)
       - PORT=8080
       - PYTHONPATH=/app
       - MPLBACKEND=Agg
