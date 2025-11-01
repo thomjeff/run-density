@@ -16,6 +16,7 @@ import json
 import pandas as pd
 import gzip
 import sys
+import os
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Tuple
@@ -666,6 +667,35 @@ def export_ui_artifacts(reports_dir: Path, run_id: str, overtaking_segments: int
     print(f"✅ All artifacts exported to: {artifacts_dir}")
     print(f"{'='*60}\n")
     
+    # Issue #415 Phase 3: Upload UI artifacts to GCS when enabled
+    if os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
+        try:
+            from app.storage_service import get_storage_service
+            storage_service = get_storage_service()
+            
+            # Upload all JSON artifacts to GCS
+            ui_artifacts = [
+                ("meta.json", meta),
+                ("segment_metrics.json", segment_metrics_with_summary),
+                ("flags.json", flags),
+                ("flow.json", flow),
+                ("segments.geojson", segments_geojson),
+                ("schema_density.json", schema_density),
+                ("health.json", health)
+            ]
+            
+            uploaded_count = 0
+            for filename, data in ui_artifacts:
+                try:
+                    gcs_path = storage_service.save_artifact_json(f"artifacts/{run_id}/ui/{filename}", data)
+                    uploaded_count += 1
+                except Exception as e:
+                    print(f"   ⚠️ Failed to upload {filename} to GCS: {e}")
+            
+            print(f"☁️ Uploaded {uploaded_count}/{len(ui_artifacts)} UI artifacts to GCS")
+        except Exception as e:
+            print(f"⚠️ Failed to upload UI artifacts to GCS: {e}")
+    
     # Issue #334: Also generate heatmaps and captions to ensure UI completeness
     try:
         from analytics.export_heatmaps import export_heatmaps_and_captions
@@ -735,6 +765,8 @@ def update_latest_pointer(run_id: str) -> None:
     This file is metadata-only (run_id, timestamp). Analytics metrics
     are exported to segment_metrics.json per Issue #304.
     
+    Uploads to both local filesystem and GCS (when GCS_UPLOAD is enabled).
+    
     Args:
         run_id: Run identifier (e.g., "2025-10-19-1655" or "2025-10-19")
     """
@@ -774,10 +806,23 @@ def update_latest_pointer(run_id: str) -> None:
         "ts": ts
     }
     
+    # Write to local filesystem
     pointer_path = artifacts_dir / "latest.json"
     pointer_path.write_text(json.dumps(pointer, indent=2))
     
     print(f"✅ Updated artifacts/latest.json → {run_id}")
+    
+    # Upload to GCS if enabled (Issue #415 Phase 3)
+    if os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
+        try:
+            from app.storage_service import get_storage_service
+            storage_service = get_storage_service()
+            
+            # Use save_artifact_json to upload to GCS at artifacts/latest.json path
+            gcs_path = storage_service.save_artifact_json("artifacts/latest.json", pointer)
+            print(f"☁️ latest.json uploaded to GCS: {gcs_path}")
+        except Exception as e:
+            print(f"⚠️ Failed to upload latest.json to GCS: {e}")
 
 
 def main():

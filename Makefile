@@ -8,6 +8,7 @@ BASE ?= http://127.0.0.1:$(PORT)
 
 # -------- Phony targets --------
 .PHONY: venv install run-local stop-local smoke-local smoke-prod clean-venv smoke-areal smoke-crowd overlaps
+.PHONY: dev-docker stop-docker build-docker smoke-docker e2e-docker
 
 venv:
 	$(PY) -m venv .venv
@@ -211,3 +212,33 @@ test-e2e:
 test-all:
 	@echo ">> Running all tests (fast → int → e2e)"
 	@. .venv/bin/activate && pytest -v tests/
+
+# -------- Docker Development (Issue #415 Phase 1) --------
+dev-docker:
+	@echo ">> Starting Docker container for local development"
+	@echo ">> Container will run on http://localhost:8080"
+	@docker-compose up --build
+
+stop-docker:
+	@echo ">> Stopping Docker container"
+	@docker-compose down
+
+build-docker:
+	@echo ">> Building Docker image"
+	@docker-compose build
+
+smoke-docker:
+	@echo ">> Running smoke tests against Docker container"
+	@echo ">> Hitting http://localhost:8080"
+	@curl -fsS "http://localhost:8080/health" | jq -e '.ok==true' >/dev/null && echo "health OK" || (echo "health FAILED" && exit 1)
+	@curl -fsS "http://localhost:8080/ready"  | jq -e '.ok==true and .density_loaded and .overlap_loaded' >/dev/null && echo "ready  OK" || (echo "ready FAILED" && exit 1)
+	@echo ">> Testing API endpoints"
+	@curl -fsS "http://localhost:8080/api/segments" | jq -e '.segments | length > 0' >/dev/null && echo "segments OK" || (echo "segments FAILED" && exit 1)
+	@curl -fsS "http://localhost:8080/api/density/segments" | jq -e 'length > 0' >/dev/null && echo "density/segments OK" || (echo "density/segments FAILED" && exit 1)
+	@curl -fsS "http://localhost:8080/api/dashboard/summary" | jq -e '.segments_total >= 0' >/dev/null && echo "dashboard OK" || (echo "dashboard FAILED" && exit 1)
+	@echo "✅ smoke-docker passed"
+
+# Run full E2E tests inside Docker container
+e2e-docker:
+	@echo ">> Running E2E tests inside Docker container"
+	@docker exec run-density-dev python /app/e2e.py --local

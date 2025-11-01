@@ -70,14 +70,46 @@ Before any code or tests are written, confirm the following:
 
 ---
 
-## 🐍 PYTHON ENVIRONMENT
+## 🐍 DEVELOPMENT ENVIRONMENT
 
-### Activate Before All Python Work:
+### Docker Development (Recommended - Issue #415)
+
+**Start development container:**
+```bash
+make dev-docker
+```
+
+**Run E2E tests:**
+```bash
+make e2e-docker
+```
+
+**Stop container:**
+```bash
+make stop-docker
+```
+
+**Benefits:**
+- ✅ Environment parity with Cloud Run
+- ✅ No Python version conflicts
+- ✅ Hot-reload enabled
+- ✅ GCS upload testing capability
+
+See `docs/DOCKER_DEV.md` for complete guide.
+
+### Legacy venv (Deprecated)
+
+> ⚠️ **Deprecated:** Docker workflow replaces venv. This will be removed in future.
+
+<details>
+<summary>Click to expand legacy venv instructions</summary>
+
+Activate before Python work:
 ```bash
 source test_env/bin/activate
 ```
 
-### Deactivate for Git or CLI:
+Deactivate for Git or CLI:
 ```bash
 deactivate
 ```
@@ -86,11 +118,26 @@ Signs you forgot:
 - `ModuleNotFoundError: No module named 'pandas'`
 - Commands fail or misbehave
 
+</details>
+
 ---
 
 ## 🧪 TESTING GUARDRAILS
 
-1. Activate venv
+### Docker Testing (Recommended)
+
+1. Start container: `make dev-docker`
+2. Run E2E tests: `make e2e-docker`
+3. Run smoke tests: `make smoke-docker`
+4. Validate output reports (CSV + MD)
+5. Check constants are used, not hardcoded values
+
+### Legacy venv Testing (Deprecated)
+
+<details>
+<summary>Click to expand legacy venv testing</summary>
+
+1. Activate venv: `source test_env/bin/activate`
 2. Use: `python e2e.py --local` for local testing
 3. Do NOT test via curl or isolated modules
 4. Validate output reports (CSV + MD)
@@ -105,6 +152,8 @@ pytest tests/test_*.py
 ```bash
 TEST_CLOUD_RUN=true python e2e.py --cloud
 ```
+
+</details>
 
 ---
 
@@ -238,7 +287,9 @@ You MUST:
 Follow this sequence:
 
 1. ✅ Confirm local branch health
-2. ✅ Run: `python e2e.py --local`
+2. ✅ Run E2E tests:
+   - **Docker (recommended):** `make e2e-docker`
+   - **Legacy venv:** `python e2e.py --local`
 3. ✅ Create PR with testing proof
 4. ✅ Wait for user to review and merge manually
 5. ✅ CI runs all Cloud Run tests: monitor workflow logs and Cloud Run logs during execution.
@@ -270,10 +321,25 @@ gh run view <run-id> --log 2>&1 | grep -E "(ERROR|FAIL)"
 
 ## ☁️ CLOUD RUN CONFIG (PROD)
 
-- **URL**: https://run-density-...a.run.app
+- **URL**: https://run-density-ln4r3sfkha-uc.a.run.app
 - **Timeout**: 600s
 - **Resources**: 3GB / 2CPU (verify using Google CLI as resources might have changed)
-- **Check**: `gcloud run services describe ...`
+- **Check**: `gcloud run services describe run-density`
+- **Port**: 8080 (matches local Docker development)
+
+### GCS Upload Behavior (Issue #415)
+
+**Local Docker Development:**
+- Default: `GCS_UPLOAD=false` (local-only, no GCS uploads)
+- Testing: Set `GCS_UPLOAD=true` in `dev.env` to enable GCS uploads
+- Requires: Service account key in `keys/gcs-sa.json`
+
+**Cloud Run Production:**
+- Automatic: GCS uploads always enabled when `GOOGLE_CLOUD_PROJECT` is set
+- Uses: Default service account for authentication
+- All reports and artifacts uploaded automatically
+
+See `docs/DOCKER_DEV.md` and `keys/README.md` for configuration details.
 
 ---
 

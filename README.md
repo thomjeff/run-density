@@ -20,6 +20,41 @@ It provides comprehensive reporting capabilities with both Markdown and CSV outp
 
 ## Quick Start (Local Development)
 
+### Docker Development (Recommended)
+
+**New in v1.6.50:** Docker-first development workflow provides environment parity with Cloud Run.
+
+Start the development container:
+```bash
+make dev-docker
+```
+
+The container runs on `http://localhost:8080` with hot-reload enabled.
+
+Run smoke tests:
+```bash
+make smoke-docker
+```
+
+Run full E2E tests:
+```bash
+make e2e-docker
+```
+
+Stop the container:
+```bash
+make stop-docker
+```
+
+**📖 Full Documentation:** See [`docs/DOCKER_DEV.md`](docs/DOCKER_DEV.md) for complete Docker development guide.
+
+### Legacy venv Development (Deprecated)
+
+> **⚠️ Deprecated:** This workflow will be removed in a future version. Use Docker development instead.
+
+<details>
+<summary>Click to expand legacy venv instructions</summary>
+
 Create and activate a Python virtual environment:
 ```bash
 python3 -m venv test_env
@@ -44,6 +79,8 @@ Smoke test locally:
 make smoke-local
 ```
 
+</details>
+
 ## Web UI Features
 
 ### Interactive Dashboard
@@ -59,8 +96,9 @@ make smoke-local
 - **Auto-Captions**: Text summaries for each heatmap generated automatically
 
 ### Access the Web UI
-- **Local**: http://localhost:8081/frontend/
-- **Production**: https://run-density-131075166528.us-central1.run.app/frontend/
+- **Local (Docker)**: http://localhost:8080/dashboard
+- **Local (Legacy)**: http://localhost:8081/frontend/
+- **Production**: https://run-density-ln4r3sfkha-uc.a.run.app/dashboard
 
 ## Report Generation
 
@@ -117,10 +155,19 @@ curl -X POST "http://localhost:8080/api/density-report" \
 ---
 
 ## Makefile Shortcuts
+
+### Docker Commands (Recommended)
+- `make dev-docker` – start Docker container on `http://localhost:8080` with hot-reload
+- `make smoke-docker` – run smoke tests against Docker container
+- `make e2e-docker` – run full E2E tests inside Docker container
+- `make stop-docker` – stop and remove Docker container
+- `make build-docker` – build Docker image (no start)
+
+### Legacy Commands (Deprecated)
 - `make bootstrap` – install runtime dependencies  
-- `make run-local` – start service on `http://localhost:8080`  
-- `make smoke-local` – hit `/health`, `/ready`, and a small `/api/density` payload  
-- `make smoke-prod` – run the same tests against the deployed Cloud Run service  
+- `make run-local` – start service via venv on `http://localhost:8081`
+- `make smoke-local` – hit `/health`, `/ready`, and test endpoints
+- `make smoke-prod` – run tests against deployed Cloud Run service  
 
 ---
 
