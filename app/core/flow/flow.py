@@ -23,7 +23,7 @@ import json
 from typing import Dict, Optional, Any, List, Tuple
 import pandas as pd
 import numpy as np
-from app.constants import (
+from app.utils.constants import (
     SECONDS_PER_MINUTE, SECONDS_PER_HOUR,
     DEFAULT_CONVERGENCE_STEP_KM, DEFAULT_MIN_OVERLAP_DURATION, 
     DEFAULT_CONFLICT_LENGTH_METERS, TEMPORAL_OVERLAP_TOLERANCE_SECONDS,
@@ -2039,7 +2039,7 @@ def generate_deep_dive_analysis(
     else:
         analysis.append("   • Low interaction potential: Events start >15 minutes apart")
     
-    from app.constants import (
+    from app.utils.constants import (
         PACE_SIMILAR_THRESHOLD,
         PACE_MODERATE_DIFFERENCE_THRESHOLD
     )
@@ -2131,7 +2131,7 @@ def _calculate_dynamic_conflict_length(
     to_km_a: float
 ) -> float:
     """Calculate dynamic conflict length based on segment length."""
-    from app.constants import (
+    from app.utils.constants import (
         CONFLICT_LENGTH_LONG_SEGMENT_M,
         CONFLICT_LENGTH_MEDIUM_SEGMENT_M,
         CONFLICT_LENGTH_SHORT_SEGMENT_M,
@@ -3426,7 +3426,7 @@ def generate_flow_audit_for_segment(
     
     # Calculate dynamic conflict length - reuse helper from analyze_temporal_flow_segments refactoring
     try:
-        from app.constants import (
+        from app.utils.constants import (
             CONFLICT_LENGTH_LONG_SEGMENT_M,
             CONFLICT_LENGTH_MEDIUM_SEGMENT_M, 
             CONFLICT_LENGTH_SHORT_SEGMENT_M,

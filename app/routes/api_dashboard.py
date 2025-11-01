@@ -42,7 +42,7 @@ def load_runners_data() -> Dict[str, Any]:
     try:
         # Read runners.csv directly from local filesystem (Docker image includes data/)
         import pandas as pd
-        from app.constants import DEFAULT_START_TIMES
+        from app.utils.constants import DEFAULT_START_TIMES
         df = pd.read_csv("data/runners.csv")
         
         # Count runners by event
