@@ -267,6 +267,105 @@ async def get_map_segments():
         raise HTTPException(status_code=500, detail=f"Error getting map segments: {e}")
 
 
+def _parse_bbox(bbox: str):
+    """Parse bounding box string into Shapely geometry."""
+    from shapely.geometry import box
+    try:
+        bbox_parts = bbox.split(",")
+        if len(bbox_parts) != 4:
+            raise ValueError
+        minx, miny, maxx, maxy = map(float, bbox_parts)
+        return box(minx, miny, maxx, maxy)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="bbox must be 'minX,minY,maxX,maxY'")
+
+
+def _find_latest_bin_data_dir():
+    """Find the latest directory containing bins.parquet."""
+    from pathlib import Path
+    reports_dir = Path("reports")
+    if not reports_dir.exists():
+        return None
+    
+    date_dirs = sorted([d for d in reports_dir.iterdir() if d.is_dir()], reverse=True)
+    for date_dir in date_dirs:
+        bins_file = date_dir / "bins.parquet"
+        if bins_file.exists():
+            return date_dir
+    return None
+
+
+def _load_bin_geometries(data_dir):
+    """Load bin geometries from bins.geojson.gz."""
+    import json
+    import gzip
+    bin_geometries = {}
+    
+    try:
+        bins_geojson_path = data_dir / "bins.geojson.gz"
+        if bins_geojson_path.exists():
+            with gzip.open(bins_geojson_path, 'rt', encoding='utf-8') as f:
+                geojson_data = json.load(f)
+                for feature in geojson_data.get('features', []):
+                    props = feature.get('properties', {})
+                    bin_id = props.get('bin_id')
+                    geometry = feature.get('geometry')
+                    if bin_id and geometry:
+                        bin_geometries[bin_id] = geometry
+            logger.info(f"Loaded {len(bin_geometries)} bin geometries from geojson.gz")
+    except Exception as geom_error:
+        logger.warning(f"Could not load bin geometries: {geom_error}")
+    
+    return bin_geometries
+
+
+def _filter_bins_by_severity(window_bins, severity: str):
+    """Filter bins by severity level."""
+    severity_col = 'flag_severity' if 'flag_severity' in window_bins.columns else 'severity'
+    
+    if severity == "any":
+        return window_bins, severity_col
+    
+    if severity_col in window_bins.columns:
+        return window_bins[window_bins[severity_col] == severity], severity_col
+    
+    logger.warning("Severity filtering requested but severity column not in bins.parquet")
+    return window_bins, severity_col
+
+
+def _build_bin_feature(bin_row, window_idx: int, severity_col: str, bin_geometries: dict):
+    """Build a GeoJSON feature from bin data."""
+    import pandas as pd
+    
+    # Format times as HH:MM
+    t_start = pd.to_datetime(bin_row['t_start'])
+    t_end = pd.to_datetime(bin_row['t_end'])
+    t_start_hhmm = t_start.strftime('%H:%M')
+    t_end_hhmm = t_end.strftime('%H:%M')
+    
+    bin_id = bin_row['bin_id']
+    
+    return {
+        "type": "Feature",
+        "properties": {
+            "segment_id": bin_row['segment_id'],
+            "bin_id": bin_id,
+            "start_km": float(bin_row['start_km']),
+            "end_km": float(bin_row['end_km']),
+            "window_idx": int(window_idx),
+            "t_start_hhmm": t_start_hhmm,
+            "t_end_hhmm": t_end_hhmm,
+            "density": float(bin_row['density']),
+            "rate": float(bin_row['rate']),
+            "los_class": bin_row['los_class'],
+            "severity": bin_row.get(severity_col, 'none'),
+            "flag_reason": bin_row.get('flag_reason', 'none'),
+            "rate_per_m_per_min": bin_row.get('rate_per_m_per_min', 0.0)
+        },
+        "geometry": bin_geometries.get(bin_id)
+    }
+
+
 @router.get("/map/bins")
 async def get_map_bins(
     window_idx: int = Query(..., description="Time window index (0-based)"),
@@ -287,139 +386,54 @@ async def get_map_bins(
     
     Returns GeoJSON FeatureCollection with bin polygons.
     """
-    try:
-        import pandas as pd
-        from pathlib import Path
-        from shapely.geometry import box, shape
-        import json
-        import gzip
-        
-        # Validate severity
-        allowed_severity = {"any", "watch", "critical", "none"}
-        if severity not in allowed_severity:
-            raise HTTPException(status_code=400, detail=f"severity must be one of: {allowed_severity}")
-        
-        # Parse bbox
-        try:
-            bbox_parts = bbox.split(",")
-            if len(bbox_parts) != 4:
-                raise ValueError
-            minx, miny, maxx, maxy = map(float, bbox_parts)
-            bbox_geom = box(minx, miny, maxx, maxy)
-        except (ValueError, TypeError):
-            raise HTTPException(status_code=400, detail="bbox must be 'minX,minY,maxX,maxY'")
-        
-        # Find latest bin data
-        reports_dir = Path("reports")
-        latest_date_dir = None
-        if reports_dir.exists():
-            date_dirs = sorted([d for d in reports_dir.iterdir() if d.is_dir()], reverse=True)
-            for date_dir in date_dirs:
-                bins_file = date_dir / "bins.parquet"
-                if bins_file.exists():
-                    latest_date_dir = date_dir
-                    break
-        
-        if not latest_date_dir:
-            raise HTTPException(status_code=404, detail="No bin data available")
-        
-        # Load bins.parquet
-        bins_df = pd.read_parquet(latest_date_dir / "bins.parquet")
-        
-        # Filter by window_idx
-        # Calculate window index from t_start
-        bins_df['t_start_dt'] = pd.to_datetime(bins_df['t_start'])
-        min_time = bins_df['t_start_dt'].min()
-        window_duration = pd.to_datetime(bins_df.iloc[0]['t_end']) - bins_df.iloc[0]['t_start_dt']
-        bins_df['window_idx'] = ((bins_df['t_start_dt'] - min_time) / window_duration).astype(int)
-        
-        window_bins = bins_df[bins_df['window_idx'] == window_idx]
-        
-        if window_bins.empty:
-            return JSONResponse(content={
-                "type": "FeatureCollection",
-                "features": []
-            })
-        
-        # Load bin geometries from bins.geojson.gz (Issue #249)
-        # Geometry is static (same for all windows), properties are time-varying
-        bin_geometries = {}  # Lookup: bin_id -> geometry
-        
-        try:
-            bins_geojson_path = latest_date_dir / "bins.geojson.gz"
-            if bins_geojson_path.exists():
-                with gzip.open(bins_geojson_path, 'rt', encoding='utf-8') as f:
-                    geojson_data = json.load(f)
-                    for feature in geojson_data.get('features', []):
-                        props = feature.get('properties', {})
-                        bin_id = props.get('bin_id')
-                        geometry = feature.get('geometry')
-                        if bin_id and geometry:
-                            bin_geometries[bin_id] = geometry
-                
-                logger.info(f"Loaded {len(bin_geometries)} bin geometries from geojson.gz")
-        except Exception as geom_error:
-            logger.warning(f"Could not load bin geometries: {geom_error}")
-            # Continue without geometries - bins will still have properties
-        
-        # Filter by severity (if column exists)
-        # Handle field name inconsistency: parquet uses 'flag_severity', API expects 'severity'
-        severity_col = 'flag_severity' if 'flag_severity' in window_bins.columns else 'severity'
-        if severity != "any" and severity_col in window_bins.columns:
-            window_bins = window_bins[window_bins[severity_col] == severity]
-        elif severity != "any" and severity_col not in window_bins.columns:
-            logger.warning("Severity filtering requested but severity column not in bins.parquet")
-            # Return empty if severity filter requested but column doesn't exist
-            # This ensures graceful degradation
-            pass  # Continue without filtering
-        
-        # Build GeoJSON features
-        features = []
-        for _, bin_row in window_bins.iterrows():
-            # Format times as HH:MM
-            t_start = pd.to_datetime(bin_row['t_start'])
-            t_end = pd.to_datetime(bin_row['t_end'])
-            t_start_hhmm = t_start.strftime('%H:%M')
-            t_end_hhmm = t_end.strftime('%H:%M')
-            
-            bin_id = bin_row['bin_id']
-            
-            feature = {
-                "type": "Feature",
-                "properties": {
-                    "segment_id": bin_row['segment_id'],
-                    "bin_id": bin_id,
-                    "start_km": float(bin_row['start_km']),
-                    "end_km": float(bin_row['end_km']),
-                    "window_idx": int(window_idx),
-                    "t_start_hhmm": t_start_hhmm,
-                    "t_end_hhmm": t_end_hhmm,
-                    "density": float(bin_row['density']),
-                    "rate": float(bin_row['rate']),
-                    "los_class": bin_row['los_class'],
-                    "severity": bin_row.get(severity_col, 'none'),
-                    "flag_reason": bin_row.get('flag_reason', 'none'),
-                    "rate_per_m_per_min": bin_row.get('rate_per_m_per_min', 0.0)
-                },
-                "geometry": bin_geometries.get(bin_id)  # Attach geometry from lookup
-            }
-            features.append(feature)
-        
-        return JSONResponse(content={
-            "type": "FeatureCollection",
-            "features": features,
-            "metadata": {
-                "window_idx": window_idx,
-                "count": len(features),
-                "severity_filter": severity
-            }
-        })
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting map bins: {e}")
-        raise HTTPException(status_code=500, detail=f"Error getting map bins: {e}")
+    import pandas as pd
+    
+    # Validate severity
+    allowed_severity = {"any", "watch", "critical", "none"}
+    if severity not in allowed_severity:
+        raise HTTPException(status_code=400, detail=f"severity must be one of: {allowed_severity}")
+    
+    # Parse bounding box
+    bbox_geom = _parse_bbox(bbox)
+    
+    # Find latest bin data
+    latest_date_dir = _find_latest_bin_data_dir()
+    if not latest_date_dir:
+        raise HTTPException(status_code=404, detail="No bin data available")
+    
+    # Load bins.parquet
+    bins_df = pd.read_parquet(latest_date_dir / "bins.parquet")
+    
+    # Filter by window_idx
+    bins_df['t_start_dt'] = pd.to_datetime(bins_df['t_start'])
+    min_time = bins_df['t_start_dt'].min()
+    window_duration = pd.to_datetime(bins_df.iloc[0]['t_end']) - bins_df.iloc[0]['t_start_dt']
+    bins_df['window_idx'] = ((bins_df['t_start_dt'] - min_time) / window_duration).astype(int)
+    
+    window_bins = bins_df[bins_df['window_idx'] == window_idx]
+    
+    if window_bins.empty:
+        return JSONResponse(content={"type": "FeatureCollection", "features": []})
+    
+    # Load bin geometries
+    bin_geometries = _load_bin_geometries(latest_date_dir)
+    
+    # Filter by severity
+    window_bins, severity_col = _filter_bins_by_severity(window_bins, severity)
+    
+    # Build GeoJSON features
+    features = [_build_bin_feature(bin_row, window_idx, severity_col, bin_geometries) 
+                for _, bin_row in window_bins.iterrows()]
+    
+    return JSONResponse(content={
+        "type": "FeatureCollection",
+        "features": features,
+        "metadata": {
+            "window_idx": window_idx,
+            "count": len(features),
+            "severity_filter": severity
+        }
+    })
 
 
 class MapRequest(BaseModel):
