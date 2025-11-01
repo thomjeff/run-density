@@ -18,16 +18,10 @@ from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 
-try:
-    from .constants import DISTANCE_BIN_SIZE_KM, METERS_PER_KM
-    from .density import analyze_density_segments
-    from .flow import analyze_temporal_flow_segments
-    from .io.loader import load_runners, load_segments
-except ImportError:
-    from app.utils.constants import DISTANCE_BIN_SIZE_KM, METERS_PER_KM
-    from density import analyze_density_segments
-    from flow import analyze_temporal_flow_segments
-    from io.loader import load_runners, load_segments
+from app.utils.constants import DISTANCE_BIN_SIZE_KM, METERS_PER_KM
+from app.core.density.compute import analyze_density_segments
+from app.core.flow.flow import analyze_temporal_flow_segments
+from app.io.loader import load_runners, load_segments
 
 logger = logging.getLogger(__name__)
 

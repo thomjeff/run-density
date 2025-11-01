@@ -17,17 +17,17 @@ from dataclasses import dataclass
 import os
 import pandas as pd
 import logging
-from .segments_from_bins import write_segments_from_bins
-from .constants import HOTSPOT_SEGMENTS
-from .save_bins import save_bin_artifacts
-from .report_utils import get_date_folder_path
-from .bin_summary import generate_bin_summary_artifact
-from .gcs_uploader import upload_bin_artifacts
-from .canonical_density_report import generate_tooltips_json
-from .bin_intelligence import get_flagged_bins
-from .heatmap_generator import generate_heatmaps_for_run
-from .routes.api_heatmaps import upload_binary_to_gcs
-from .geo_utils import generate_bins_geojson
+from app.segments_from_bins import write_segments_from_bins
+from app.utils.constants import HOTSPOT_SEGMENTS
+from app.save_bins import save_bin_artifacts
+from app.report_utils import get_date_folder_path
+from app.bin_summary import generate_bin_summary_artifact
+from app.gcs_uploader import upload_bin_artifacts
+from app.canonical_density_report import generate_tooltips_json
+from app.bin_intelligence import get_flagged_bins
+from app.heatmap_generator import generate_heatmaps_for_run
+from app.routes.api_heatmaps import upload_binary_to_gcs
+from app.geo_utils import generate_bins_geojson
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -37,11 +37,11 @@ def _validate_import_patterns():
     """Validate that all imports are properly resolved at module level."""
     try:
         # Test critical imports
-        from .storage_service import get_storage_service
-        from .density import analyze_density_segments, DensityConfig
-        from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, BIN_SCHEMA_VERSION
-        from .report_utils import get_report_paths
-        from .density_template_engine import DensityTemplateEngine, create_template_context
+        from app.storage_service import get_storage_service
+        from app.core.density.compute import analyze_density_segments, DensityConfig
+        from app.utils.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, BIN_SCHEMA_VERSION
+        from app.report_utils import get_report_paths
+        from app.density_template_engine import DensityTemplateEngine, create_template_context
         logger.info("✅ All critical imports resolved successfully at module level")
         return True
     except ImportError as e:
@@ -99,21 +99,11 @@ def coarsen_plan(seg_id: str, current_bin_km: float, current_dt_s: int, peak_los
     return coarsened_bin, coarsened_dt
 
 # Import storage service for persistent file storage
-try:
-    from .storage_service import get_storage_service
-except ImportError:
-    from storage_service import get_storage_service
-
-try:
-    from .density import analyze_density_segments, DensityConfig
-    from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, BIN_SCHEMA_VERSION
-    from .report_utils import get_report_paths
-    from .density_template_engine import DensityTemplateEngine, create_template_context
-except ImportError:
-    from density import analyze_density_segments, DensityConfig
-    from app.utils.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, BIN_SCHEMA_VERSION
-    from report_utils import get_report_paths
-    from density_template_engine import DensityTemplateEngine, create_template_context
+from app.storage_service import get_storage_service
+from app.core.density.compute import analyze_density_segments, DensityConfig
+from app.utils.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, BIN_SCHEMA_VERSION
+from app.report_utils import get_report_paths
+from app.density_template_engine import DensityTemplateEngine, create_template_context
 import pandas as pd
 import json
 from datetime import datetime

@@ -109,10 +109,7 @@ BUILD_AT = os.getenv("BUILD_AT", datetime.datetime.now(datetime.timezone.utc).is
 # Boot environment logging for bin dataset debugging
 import logging
 import pathlib
-try:
-    from .util_env import env_bool, env_str
-except ImportError:
-    from app.utils.env import env_bool, env_str
+from app.utils.env import env_bool, env_str
 
 BOOT_ENV = {
     "cwd": str(pathlib.Path.cwd()),

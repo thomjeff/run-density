@@ -20,7 +20,7 @@ try:
 except ImportError:
     PYPANDOC_AVAILABLE = False
 
-from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS
+from app.utils.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS
 
 
 def validate_pandoc_installation() -> bool:

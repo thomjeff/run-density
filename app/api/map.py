@@ -21,28 +21,16 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 
-try:
-    from app.bin_analysis import get_all_segment_bins, analyze_segment_bins, get_cache_stats
-    from app.geo_utils import generate_segments_geojson, generate_bins_geojson
-    from app.constants import (
-        DISTANCE_BIN_SIZE_KM, DEFAULT_PACE_CSV, DEFAULT_SEGMENTS_CSV, 
-        DEFAULT_START_TIMES, MAP_CENTER_LAT, MAP_CENTER_LON,
-        DEFAULT_SEGMENT_WIDTH_M, DEFAULT_FLOW_TYPE, DEFAULT_ZONE
-    )
-    from app.cache_manager import get_global_cache_manager
-    from app.map_data_generator import find_latest_reports
-    from app.storage_service import get_storage_service
-except ImportError:
-    from bin_analysis import get_all_segment_bins, analyze_segment_bins, get_cache_stats
-    from geo_utils import generate_segments_geojson, generate_bins_geojson
-    from constants import (
-        DISTANCE_BIN_SIZE_KM, DEFAULT_PACE_CSV, DEFAULT_SEGMENTS_CSV, 
-        DEFAULT_START_TIMES, MAP_CENTER_LAT, MAP_CENTER_LON,
-        DEFAULT_SEGMENT_WIDTH_M, DEFAULT_FLOW_TYPE, DEFAULT_ZONE
-    )
-    from cache_manager import get_global_cache_manager
-    from map_data_generator import find_latest_reports
-    from storage_service import get_storage_service
+from app.bin_analysis import get_all_segment_bins, analyze_segment_bins, get_cache_stats
+from app.geo_utils import generate_segments_geojson, generate_bins_geojson
+from app.utils.constants import (
+    DISTANCE_BIN_SIZE_KM, DEFAULT_PACE_CSV, DEFAULT_SEGMENTS_CSV, 
+    DEFAULT_START_TIMES, MAP_CENTER_LAT, MAP_CENTER_LON,
+    DEFAULT_SEGMENT_WIDTH_M, DEFAULT_FLOW_TYPE, DEFAULT_ZONE
+)
+from app.cache_manager import get_global_cache_manager
+from app.map_data_generator import find_latest_reports
+from app.storage_service import get_storage_service
 
 logger = logging.getLogger(__name__)
 

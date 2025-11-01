@@ -21,26 +21,15 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple
 from pathlib import Path
 
-try:
-    from .density import analyze_density_segments
-    from .flow import analyze_temporal_flow_segments
-    from .io.loader import load_runners, load_segments
-    from .constants import DISTANCE_BIN_SIZE_KM
-    from .canonical_segments import (
-        load_canonical_segments, get_segment_peak_densities, 
-        get_segment_time_series, is_canonical_segments_available,
-        get_canonical_segments_metadata
-    )
-except ImportError:
-    from density import analyze_density_segments
-    from flow import analyze_temporal_flow_segments
-    from io.loader import load_runners, load_segments
-    from app.utils.constants import DISTANCE_BIN_SIZE_KM
-    from canonical_segments import (
-        load_canonical_segments, get_segment_peak_densities, 
-        get_segment_time_series, is_canonical_segments_available,
-        get_canonical_segments_metadata
-    )
+from app.core.density.compute import analyze_density_segments
+from app.core.flow.flow import analyze_temporal_flow_segments
+from app.io.loader import load_runners, load_segments
+from app.utils.constants import DISTANCE_BIN_SIZE_KM
+from app.canonical_segments import (
+    load_canonical_segments, get_segment_peak_densities, 
+    get_segment_time_series, is_canonical_segments_available,
+    get_canonical_segments_metadata
+)
 
 logger = logging.getLogger(__name__)
 

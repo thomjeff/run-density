@@ -8,10 +8,7 @@ import os, mimetypes
 from datetime import datetime
 
 # Import storage service for Cloud Storage integration
-try:
-    from ..storage_service import get_storage_service
-except ImportError:
-    from storage_service import get_storage_service
+from app.storage_service import get_storage_service
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 templates = Jinja2Templates(directory="app/templates")

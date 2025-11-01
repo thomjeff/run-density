@@ -16,12 +16,8 @@ import logging
 import math
 from typing import Dict, List, Any, Optional, Tuple
 
-try:
-    from .bin_analysis import SegmentBinData, BinData
-    from .constants import DISTANCE_BIN_SIZE_KM, METERS_PER_KM
-except ImportError:
-    from bin_analysis import SegmentBinData, BinData
-    from app.utils.constants import DISTANCE_BIN_SIZE_KM, METERS_PER_KM
+from app.bin_analysis import SegmentBinData, BinData
+from app.utils.constants import DISTANCE_BIN_SIZE_KM, METERS_PER_KM
 
 logger = logging.getLogger(__name__)
 
