@@ -49,7 +49,7 @@ run-density/
 │   ├── main.py            # FastAPI application entry point
 │   └── *.py               # Supporting modules (reports, services, etc.)
 │
-├── analytics/             # Offline data processing
+├── /app/core/artifacts/  # UI artifacts & heatmap generation
 ├── data/                  # Input CSV files
 ├── config/                # YAML configuration
 ├── tests/                 # Test suite

@@ -168,7 +168,7 @@ def run_heatmaps_if_local(reports_dir, run_id):
     
     print("   Generating heatmaps...")
     try:
-        from analytics.export_heatmaps import export_heatmaps_and_captions
+        from app.core.artifacts.heatmaps import export_heatmaps_and_captions
         from app.storage_service import get_storage_service
         
         # Determine reports directory for this run
@@ -284,7 +284,7 @@ def main():
         run_id = None
         
         try:
-            from analytics.export_frontend_artifacts import export_ui_artifacts, update_latest_pointer
+            from app.core.artifacts.frontend import export_ui_artifacts, update_latest_pointer
             import re
             
             # Find the latest report directory
