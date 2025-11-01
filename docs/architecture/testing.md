@@ -1,458 +1,316 @@
-# Architecture Testing Strategy - v1.7.0
+# Architecture Testing Strategy - v1.7
 
 **Last Updated:** 2025-11-01  
-**Architecture:** v1.7.0
+**Architecture:** v1.7.1  
+**Testing Approach:** End-to-End (E2E) Testing
 
 ---
 
 ## Overview
 
-This document describes the testing strategy for enforcing v1.7 architectural rules and preventing regression to problematic patterns.
+The v1.7 architecture is validated through comprehensive end-to-end (E2E) testing rather than unit tests. This approach tests the full stack integration and real-world API behavior.
 
-**Test Layers:**
-1. **Architecture Tests** - Enforce structural rules
-2. **Import Linting** - Validate layer boundaries
-3. **Unit Tests** - Test individual modules
-4. **E2E Tests** - Validate complete system
-
----
-
-## Architecture Tests
-
-**File:** `tests/test_architecture.py`
-
-**Purpose:** Enforce v1.7 architectural rules through automated tests
-
-### Test Classes
-
-#### TestImportPatterns
-
-**What it tests:**
-- No try/except import fallbacks exist
-- All imports use app.* prefix
-- No stub redirect files remain
-
-**Tests:**
-```python
-def test_no_import_fallbacks_in_main()
-    # Ensures main.py has no try/except for imports
-    
-def test_all_imports_use_app_prefix()
-    # Verifies all imports use from app.* pattern
-    
-def test_no_stub_files()
-    # Confirms stub files (density_api.py, etc.) removed
-```
-
-**Why it matters:**
-- Prevents shadow dependencies
-- Catches regressions to v1.6.x patterns
-- Ensures environment parity
-
-#### TestLayerBoundaries
-
-**What it tests:**
-- Utils doesn't import from app modules
-- Core doesn't import from API
-
-**Tests:**
-```python
-def test_utils_no_app_imports()
-    # Utils should only import stdlib
-    
-def test_core_no_api_imports()
-    # Core should not depend on HTTP layer
-```
-
-**Why it matters:**
-- Enforces domain isolation
-- Prevents circular dependencies
-- Maintains clear boundaries
-
-#### TestDeprecatedFiles
-
-**What it tests:**
-- Deprecated files have warnings
-- No deprecated code in production paths
-
-**Why it matters:**
-- Documents intent to remove
-- Prevents accidental usage
-
-#### TestStructure
-
-**What it tests:**
-- Required directories exist
-- v1.7 structure in place
-
-**Why it matters:**
-- Validates migration complete
-- Ensures structure consistency
-
----
-
-## Import Linting
-
-**Tool:** import-linter  
-**Config:** `.importlinter`
-
-### Contract Validation
-
-**Layer Contract:**
-```
-layers =
-    api
-    routes
-    core
-    utils
-```
-
-**Rules Enforced:**
-- API can import: Core, Utils
-- Core can import: Utils only
-- Utils can import: stdlib only
-
-### Running Import Linter
-
-**Local development:**
-```bash
-lint-imports
-```
-
-**Expected output:**
-```
-=============
-Import Linter
-=============
-
----------
-Contracts
----------
-
-Analyzed 4 contracts.
-✓ Layer architecture must be respected
-✓ API modules should not import from routes
-✓ Core modules should not import from API
-✓ Utils should not import from app modules
-
-Completed successfully.
-```
-
-**On failure:**
-```
-✗ Core modules should not import from API
-
-app.core.density.compute imports app.api.density:
-    app/core/density/compute.py:15
-```
-
-Fix by following layer rules in [README.md](README.md).
-
----
-
-## Unit Testing Strategy
-
-### Core Module Tests
-
-**Location:** `tests/test_*_core.py`
-
-**What to test:**
-- Business logic correctness
-- Edge cases and error handling
-- Algorithm behavior
-
-**Example:**
-```python
-# tests/test_density_core.py
-from app.core.density.compute import analyze_density_segments
-from app.utils.constants import DEFAULT_STEP_KM
-
-def test_density_analysis():
-    result = analyze_density_segments(
-        pace_csv="data/runners.csv",
-        segments_csv="data/segments.csv"
-    )
-    assert result is not None
-    assert 'segments' in result
-```
-
-**Pattern:**
-- Test domain logic independently of HTTP
-- Use real constants from app.utils.constants
-- Mock external dependencies (GCS, etc.)
-
-### API Route Tests
-
-**Location:** `tests/test_*_api.py`
-
-**What to test:**
-- Request/response models
-- HTTP status codes
-- Error handling
-- Integration with core logic
-
-**Example:**
-```python
-# tests/test_density_api.py
-from fastapi.testclient import TestClient
-from app.main import app
-
-client = TestClient(app)
-
-def test_density_endpoint():
-    response = client.post('/api/density/analyze', json={
-        'paceCsv': 'data/runners.csv',
-        'segmentsCsv': 'data/segments.csv'
-    })
-    assert response.status_code == 200
-    assert 'segments' in response.json()
-```
+**Current Testing Strategy:**
+1. **E2E API Tests** - Validate complete system via `e2e.py`
+2. **Complexity Standards** - Enforced via CI pipeline (flake8)
+3. **UI Testing** - Manual checklist for deployment verification
+4. **Architecture Reviews** - Pull request reviews for structural compliance
 
 ---
 
 ## E2E Testing
 
-**Tool:** `make e2e-docker` (runs `e2e.py` inside container)
+**Primary Tool:** `e2e.py`  
+**Scope:** Full system validation via API calls
 
-**What it tests:**
-- Complete request→response flow
-- All APIs functional
-- Report generation works
-- Artifact creation successful
+### Running E2E Tests
 
-**Coverage:**
-- `/health`, `/ready` - Health checks
-- `/api/density-report` - Density analysis
-- `/api/temporal-flow-report` - Flow analysis
-- `/api/map/manifest` - Map data
+**Local Docker:**
+```bash
+make dev-docker    # Start container
+make e2e-docker    # Run E2E tests
+```
 
-**Success criteria:**
-- All endpoints return 200 OK
-- Reports generated correctly
-- Artifacts created
-- No runtime errors
+**Cloud Run:**
+```bash
+TEST_CLOUD_RUN=true python e2e.py --cloud
+```
+
+### What E2E Tests Cover
+
+- ✅ **Density Analysis** - POST /api/density-report
+- ✅ **Flow Analysis** - POST /api/temporal-flow-report
+- ✅ **Map Data** - GET /api/map/manifest
+- ✅ **Dashboard** - GET /api/dashboard/summary
+- ✅ **Segments** - GET /api/segments/summary
+- ✅ **Reports** - GET /api/reports/list
+- ✅ **Health Checks** - GET /health, /ready
+
+### Expected Results
+
+E2E tests verify:
+- API endpoints respond correctly
+- Data calculations match expected values
+- Reports generate without errors
+- GCS integration works (when enabled)
+- Docker environment parity
 
 ---
 
-## Test Execution Order
+## Complexity Standards
 
-### Local Development Cycle
+**Enforced in:** CI Pipeline Stage 0  
+**Tool:** flake8 with flake8-bugbear
 
+### Rules
+
+**Cyclomatic Complexity (C901):**
+- Threshold: ≤ 15
+- Check: `flake8 app/ --max-complexity=15 --select=C901`
+
+**Bare Exceptions (B001):**
+- No `except:` without exception type
+- Check: `flake8 app/ --select=B001`
+
+### CI Enforcement
+
+**GitHub Actions** (`.github/workflows/ci-pipeline.yml`):
+```yaml
+- name: Run Complexity Checks (B001 + C901)
+  run: |
+    flake8 app/ core/ --max-complexity=15 --select=B001,C901
+```
+
+**Blocking:** Pipeline fails if violations found
+
+---
+
+## UI Testing
+
+**Tool:** Manual testing checklist  
+**File:** `docs/ui-testing-checklist.md`
+
+### Test All Pages
+
+After deployment, verify:
+- Dashboard loads with correct metrics
+- Density page shows segments and flags
+- Flow page displays interaction data
+- Segments page renders map correctly
+- Reports page lists available downloads
+- Health check shows all systems operational
+
+### Critical Checks
+
+- No JavaScript console errors
+- No broken images or 404s
+- All data displays correctly
+- No zero values in metrics
+- Heatmaps load properly
+
+**See:** `docs/ui-testing-checklist.md` for full checklist
+
+---
+
+## Architecture Compliance
+
+**Enforced via:** Pull request reviews and documentation
+
+### Import Patterns
+
+**✅ Correct:**
+```python
+from app.core.density.compute import analyze_density_segments
+from app.api.density import router as density_router
+from app.utils.constants import DEFAULT_BIN_SIZE
+```
+
+**❌ Prohibited:**
+```python
+# No try/except import fallbacks
+try:
+    from density import analyze
+except ImportError:
+    from app.density import analyze
+
+# No relative imports in main.py
+from .density import analyze
+```
+
+### Layer Boundaries
+
+**Rules:**
+- API layer can import: Core, Utils
+- Core layer can import: Utils only
+- Utils layer: stdlib and third-party only
+- No circular dependencies
+
+**Enforcement:** Manual review during PR process
+
+### Directory Structure
+
+**Required:**
+```
+app/
+├── api/          - FastAPI routes only
+├── routes/       - Additional route handlers
+├── core/         - Business logic, no HTTP
+│   ├── artifacts/  - Frontend artifact generation
+│   ├── bin/        - Bin analysis
+│   ├── density/    - Density calculation
+│   ├── flow/       - Flow analysis
+│   └── gpx/        - GPX processing
+├── common/       - Shared configuration
+├── utils/        - Shared utilities
+└── validation/   - Input validation
+```
+
+**See:** `docs/architecture/README.md` for full structure
+
+---
+
+## Deployment Testing
+
+### Local Docker Testing
+
+**Before creating PR:**
+1. Build Docker image locally
+2. Run E2E tests in Docker
+3. Verify no linter errors
+4. Test UI manually
+
+**Commands:**
 ```bash
-# 1. Quick validation (< 5 seconds)
-pytest tests/test_architecture.py
-
-# 2. Import boundaries (< 10 seconds)
-lint-imports
-
-# 3. Smoke tests (< 1 minute)
-make smoke-docker
-
-# 4. Full E2E (2-3 minutes)
+docker build -t run-density-test .
+make dev-docker
 make e2e-docker
 ```
 
-### Pre-Commit Validation
+### CI Pipeline Testing
 
-**Minimum before committing:**
-```bash
-pytest tests/test_architecture.py  # Must pass
-lint-imports                        # Must pass
-```
+**Automated stages:**
+1. **Stage 0:** Complexity Standards Check
+2. **Stage 1:** Build & Deploy Docker image
+3. **Stage 2:** E2E Tests (Density/Flow)
+4. **Stage 3:** E2E Tests (Bin Datasets)  
+5. **Stage 4:** Automated Release
 
-### Pre-PR Validation
+**All must pass before merge**
 
-**Minimum before creating PR:**
-```bash
-make smoke-docker  # Must pass
-make e2e-docker    # Must pass
-```
+### Post-Deploy Validation
 
----
-
-## CI Pipeline Integration
-
-**File:** `.github/workflows/ci-pipeline.yml`
-
-### Current Structure
-
-```yaml
-jobs:
-  complexity-check:  # Step 0: Complexity standards
-  build:             # Step 1: Build Docker image
-  e2e-test:          # Step 2: Run E2E tests
-  bin-datasets:      # Step 3: Bin dataset generation
-  release:           # Step 4: Deploy to Cloud Run
-```
-
-### Proposed v1.7 Additions
-
-**Add to complexity-check job:**
-```yaml
-- name: Architecture Tests
-  run: pytest tests/test_architecture.py -v
-
-- name: Import Linter
-  run: lint-imports
-```
-
-**Why:**
-- Catches architectural violations before deployment
-- Prevents merge of code violating v1.7 rules
-- Blocks regressions to dual import patterns
+After merge to `main`:
+1. Monitor CI pipeline completion
+2. Check Cloud Run logs for errors
+3. Run UI testing checklist
+4. Verify all pages load correctly
+5. Check for any console/network errors
 
 ---
 
-## Adding New Architecture Tests
+## Testing Philosophy
 
-### When to Add
+### Why E2E Over Unit Tests?
 
-Add architecture tests when:
-- New architectural rule introduced
-- Specific anti-pattern needs prevention
-- Layer boundary expanded/changed
-- New directory structure added
+**Current Approach:**
+- Test via real API calls
+- Validate full stack integration
+- Catch deployment issues early
+- Simpler test maintenance
 
-### How to Add
+**Trade-offs:**
+- Less isolated failure diagnosis
+- Slower feedback loop
+- No fine-grained coverage metrics
 
-**File:** `tests/test_architecture.py`
-
-**Pattern:**
-```python
-def test_my_architecture_rule():
-    """Ensure [describe rule]."""
-    # Scan relevant files
-    files = Path('app/my_layer').glob('**/*.py')
-    
-    for file_path in files:
-        content = file_path.read_text()
-        
-        # Assert rule compliance
-        assert 'forbidden_pattern' not in content, \
-            f"{file_path} violates architecture rule"
-```
-
-**Example:**
-
-```python
-def test_no_deprecated_imports():
-    """Ensure no code imports from deprecated modules."""
-    deprecated = ['new_density_report', 'new_flagging', 'storage']
-    
-    for py_file in Path('app').rglob('*.py'):
-        content = py_file.read_text()
-        for dep_module in deprecated:
-            pattern = f'from app.{dep_module} import'
-            assert pattern not in content, \
-                f"{py_file} imports deprecated module: {dep_module}"
-```
+**Decision:** E2E testing provides sufficient confidence for this project's needs.
 
 ---
 
-## Test Maintenance
+## Quality Gates
 
-### When Tests Fail
+### Before PR Creation
 
-1. **Understand why**
-   - Read test output carefully
-   - Check what rule was violated
-   - Understand the architectural principle
+- ✅ Docker build succeeds locally
+- ✅ E2E tests pass in Docker
+- ✅ No complexity violations (flake8)
+- ✅ No bare exceptions
+- ✅ UI manually tested
 
-2. **Fix the code, not the test**
-   - Architecture tests encode non-negotiable rules
-   - If test fails, code is wrong
-   - Don't weaken tests to pass
+### Before Merge
 
-3. **Exception: Legitimate rule change**
-   - Document WHY rule needs changing
-   - Update architecture docs first
-   - Then update test
-   - Get team review
+- ✅ CI Pipeline passes (all 5 stages)
+- ✅ PR reviewed
+- ✅ No merge conflicts
+- ✅ Branch up to date with main
 
-### Keeping Tests Updated
+### After Deploy
 
-**When new layers added:**
-- Update TestStructure
-- Add layer boundary tests
-- Update import-linter config
-
-**When new patterns emerge:**
-- Add tests for new patterns
-- Document in architecture README
-- Update GUARDRAILS.md
+- ✅ Cloud Run deployment healthy
+- ✅ UI testing checklist complete
+- ✅ No errors in Cloud Run logs
+- ✅ All API endpoints responsive
 
 ---
 
-## Testing Anti-Patterns
+## Troubleshooting
 
-### ❌ Don't Mock Architecture
+### E2E Test Failures
 
-```python
-# BAD - defeats purpose of architecture tests
-@mock.patch('builtins.open')
-def test_no_fallbacks(mock_open):
-    # This doesn't actually test the code
-```
+**Check:**
+1. Docker container running?
+2. Data files in `/data` correct?
+3. Configuration files valid YAML?
+4. Previous deployment successful?
 
-**Instead:** Test real code files
-
-### ❌ Don't Skip Architecture Tests
-
-```python
-# BAD
-@pytest.mark.skip("Imports are hard, fix later")
-def test_layer_boundaries():
-    ...
-```
-
-**Instead:** Fix the code to comply
-
-### ❌ Don't Weaken Assertions
-
-```python
-# BAD - makes test pass when it shouldn't
-assert 'except ImportError:' not in content[:100]  # Only checks first 100 chars
-
-# GOOD - checks entire file
-assert 'except ImportError:' not in content
-```
-
----
-
-## Quick Reference
-
-### Run All Architecture Validation
-
+**Debug:**
 ```bash
-# Complete validation suite
-pytest tests/test_architecture.py -v
-lint-imports
-make smoke-docker
-make e2e-docker
+# Check container logs
+docker logs <container-id>
+
+# Run E2E with verbose output
+python e2e.py --local
 ```
 
-### Run Specific Test Class
+### Complexity Violations
 
+**Fix:**
+1. Extract helper functions
+2. Reduce nesting depth
+3. Simplify conditional logic
+4. Break long functions into smaller ones
+
+**Verify locally:**
 ```bash
-pytest tests/test_architecture.py::TestImportPatterns -v
-pytest tests/test_architecture.py::TestLayerBoundaries -v
+flake8 app/ --max-complexity=15 --select=C901,B001
 ```
 
-### Run Single Test
+### UI Issues
 
-```bash
-pytest tests/test_architecture.py::TestImportPatterns::test_no_import_fallbacks_in_main -v
-```
+**Check:**
+1. Browser console for JavaScript errors
+2. Network tab for failed requests
+3. Cloud Run logs for backend errors
+4. Verify data files exist in GCS
 
 ---
 
 ## Related Documentation
 
-- [Architecture README](README.md) - Overall architecture
-- [Adding Modules Guide](adding-modules.md) - How to add code
-- [v1.7 Reset Rationale](v1.7-reset-rationale.md) - Why these rules exist
+- **E2E Testing:** Run `python e2e.py --help`
+- **UI Testing:** `docs/ui-testing-checklist.md`
+- **Operations:** `docs/dev-guides/OPERATIONS.md`
+- **Docker Workflow:** `docs/DOCKER_DEV.md`
+- **Architecture:** `docs/architecture/README.md`
 
 ---
 
-**Architecture tests are the safety net. Keep them strong, keep them passing.**
+## Future Enhancements
 
+Potential additions for future consideration:
+- Automated UI testing (Playwright/Selenium)
+- Integration tests for critical modules
+- Performance benchmarking
+- Load testing for Cloud Run
+
+**Current priority:** E2E testing provides adequate coverage for production needs.

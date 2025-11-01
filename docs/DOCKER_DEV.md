@@ -341,28 +341,7 @@ gsutil ls gs://run-density-reports/$(date +%Y-%m-%d)/
 
 ---
 
-## Comparison: Legacy vs Docker Workflow
-
-### Legacy Workflow (Deprecated)
-
-```bash
-# Create venv
-make venv
-
-# Activate venv
-source test_env/bin/activate
-
-# Start server
-make run-local  # port 8081
-
-# Run E2E
-python e2e.py --local
-
-# Deactivate
-deactivate
-```
-
-### Docker Workflow (Current)
+## Docker Workflow
 
 ```bash
 # Start container

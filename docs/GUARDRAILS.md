@@ -1,8 +1,8 @@
 
 # Guardrails for AI-Assisted Development
 
-**Version:** 1.2  (replaces /archive/guardrails.md)
-**Last Updated:** 2025-10-28  
+**Version:** 1.3  (replaces /archive/guardrails.md)
+**Last Updated:** 2025-11-01  
 **Applies to:** Cursor, ChatGPT w/ Code Interpreter, GitHub Copilot (read-only), VSCode AI Agents (custom plugins)  
 
 ⚠️ **CRITICAL**: This document contains NON-NEGOTIABLE RULES for AI pair programming assistants. These rules were established through hard-learned lessons and MUST be followed without exception.
@@ -168,29 +168,6 @@ make stop-docker
 
 See `docs/DOCKER_DEV.md` for complete guide.
 
-### Legacy venv (Deprecated)
-
-> ⚠️ **Deprecated:** Docker workflow replaces venv. This will be removed in future.
-
-<details>
-<summary>Click to expand legacy venv instructions</summary>
-
-Activate before Python work:
-```bash
-source test_env/bin/activate
-```
-
-Deactivate for Git or CLI:
-```bash
-deactivate
-```
-
-Signs you forgot:
-- `ModuleNotFoundError: No module named 'pandas'`
-- Commands fail or misbehave
-
-</details>
-
 ---
 
 ## 🧪 TESTING GUARDRAILS
@@ -203,28 +180,11 @@ Signs you forgot:
 4. Validate output reports (CSV + MD)
 5. Check constants are used, not hardcoded values
 
-### Legacy venv Testing (Deprecated)
-
-<details>
-<summary>Click to expand legacy venv testing</summary>
-
-1. Activate venv: `source test_env/bin/activate`
-2. Use: `python e2e.py --local` for local testing
-3. Do NOT test via curl or isolated modules
-4. Validate output reports (CSV + MD)
-5. Check constants are used, not hardcoded values
-
-### For Unit Testing:
-```bash
-pytest tests/test_*.py
-```
-
 ### For Cloud Run Validation:
 ```bash
+# Test against Cloud Run deployment
 TEST_CLOUD_RUN=true python e2e.py --cloud
 ```
-
-</details>
 
 ---
 
