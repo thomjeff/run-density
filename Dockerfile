@@ -17,7 +17,6 @@ COPY app ./app
     COPY config ./config
     COPY static ./static
     COPY templates ./templates
-COPY tests ./tests
 COPY e2e.py ./
 
 EXPOSE 8080
