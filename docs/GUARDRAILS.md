@@ -64,6 +64,7 @@ Before any code or tests are written, confirm the following:
     /density/          – Density computation
     /flow/             – Temporal flow analysis
     /gpx/              – GPX processing
+    /artifacts/        – UI artifacts & heatmap generation
   /routes/             – Additional HTTP handlers
   /utils/              – Shared utilities
     constants.py       – System constants
