@@ -12,3 +12,10 @@ server.log.DS_Store
 server.log
 run-density-signer-key.json
 keys/*.json
+
+# Python virtual environments
+test_env/
+venv/
+env/
+.venv/
+*.egg-info/
