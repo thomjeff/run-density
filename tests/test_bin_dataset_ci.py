@@ -24,7 +24,7 @@ from typing import Dict, Any, List
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from app.density_report import generate_bin_dataset
-from app.constants import (
+from app.utils.constants import (
     BIN_SCHEMA_VERSION, MAX_BIN_GENERATION_TIME_SECONDS, 
     BIN_MAX_FEATURES, HOTSPOT_SEGMENTS
 )

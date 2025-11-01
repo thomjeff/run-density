@@ -31,7 +31,7 @@ from app.overlap import (
     calculate_true_pass_detection,
     calculate_convergence_point as overlap_convergence_point
 )
-from app.constants import (
+from app.utils.constants import (
     MIN_NORMALIZED_FRACTION,
     MAX_NORMALIZED_FRACTION,
     FRACTION_CLAMP_REASON_NEGATIVE,

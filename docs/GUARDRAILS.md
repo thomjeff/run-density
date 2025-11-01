@@ -49,24 +49,94 @@ Before any code or tests are written, confirm the following:
 - `data/flow_expected_results.csv`
 - `config/density_rulebook.yml`
 - `config/reporting.yml`
-- `app/constants.py`
+- `app/utils/constants.py` (v1.7.0+)
 
 ### ❌ Never Use:
 - `data/segments_old.csv`
 - `data/your_pace_data.csv` (archived)
 
-### Directory Structure
+### Directory Structure (v1.7.0)
 ```
-/app          – Core application code
-/config       – YAML configuration
-/data         – Input CSVs only
-/docs         – Internal documentation
-/frontend     – Static files
-/tests        – Unit and integration tests
-/reports      – Auto-generated results
-/cache        – Git-ignored analysis cache
-/archive      – Historical snapshots
+/app                    – Application root
+  /api/                – FastAPI routes and models
+  /core/               – Business logic (domain layer)
+    /bin/              – Bin-level analysis
+    /density/          – Density computation
+    /flow/             – Temporal flow analysis
+    /gpx/              – GPX processing
+  /routes/             – Additional HTTP handlers
+  /utils/              – Shared utilities
+    constants.py       – System constants
+    env.py             – Environment helpers
+    shared.py          – Common utilities
+  main.py              – FastAPI entry point
+
+/config                – YAML configuration
+/data                  – Input CSVs only
+/docs                  – Internal documentation
+/tests                 – Unit and integration tests
+/reports               – Auto-generated results
+/cache                 – Git-ignored analysis cache
+/archive               – Historical snapshots
 ```
+
+---
+
+## 🏗️ IMPORT PATTERNS (v1.7.0)
+
+### Required Import Pattern
+
+**All imports MUST use absolute paths with `app.` prefix:**
+
+```python
+# ✅ CORRECT - v1.7.0 pattern
+from app.api.density import router
+from app.core.density.compute import analyze_density_segments
+from app.core.flow.flow import analyze_temporal_flow_segments
+from app.utils.constants import DEFAULT_STEP_KM
+from app.utils.env import env_bool, env_str
+```
+
+### Forbidden Patterns
+
+```python
+# ❌ FORBIDDEN - Relative imports
+from .density import analyze_density_segments
+from ..core.flow import analyze_temporal_flow_segments
+
+# ❌ FORBIDDEN - Try/except import fallbacks  
+try:
+    from .module import function
+except ImportError:
+    from module import function
+
+# ❌ FORBIDDEN - Imports without app. prefix
+from core.density.compute import analyze_density_segments
+from constants import DEFAULT_STEP_KM
+```
+
+### Layer Import Rules
+
+```
+API Layer (app/api/, app/routes/)
+├─ CAN import from: app.core.*, app.utils.*
+└─ CANNOT import from: other API modules (prevents coupling)
+
+Core Layer (app/core/*)
+├─ CAN import from: app.utils.* only
+└─ CANNOT import from: app.api.*, app.routes.* (domain isolation)
+
+Utils Layer (app/utils/*)
+├─ CAN import from: Standard library only
+└─ CANNOT import from: ANY app modules (zero dependencies)
+```
+
+**Enforcement:**
+- Architecture tests: `pytest tests/test_architecture.py`
+- Import linting: `lint-imports`
+- CI pipeline validates on every PR
+
+**See:** `docs/architecture/README.md` for complete guide
 
 ---
 
@@ -279,6 +349,9 @@ You MUST:
 - Guessing API formats or variable names
 - Creating unrequested todos
 - Leaving ambiguity unresolved
+- **Using relative imports (from .)** - v1.7.0+ only allows absolute app.* imports
+- **Using try/except import fallbacks** - v1.7.0+ requires single import pattern
+- **Creating stub redirect files** - v1.7.0+ requires direct imports only
 
 ---
 
@@ -410,7 +483,10 @@ Never do these things:
 6. Guessing production URLs instead of using documented values
 7. Using inconsistent testing methodologies (local vs cloud)
 8. Incomplete GitHub issue reading (missing comments)
-9. Forgetting to activate the virtual environment before running e2e.py tests.
+9. Forgetting to activate the virtual environment before running e2e.py tests
 10. Mixing time units without conversion
+11. **Using relative imports or try/except fallbacks (v1.7.0+)**
+12. **Importing without app.* prefix (v1.7.0+)**
+13. **Violating layer boundaries (Core → API, Utils → anything) (v1.7.0+)**
 
 **Remember**: These guardrails exist because they've been violated before, causing significant debugging overhead. Follow them strictly to maintain code quality and development velocity.

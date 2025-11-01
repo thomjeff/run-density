@@ -10,10 +10,7 @@ import os
 from datetime import datetime
 from typing import Tuple
 
-try:
-    from .paths import get_analysis_dir
-except ImportError:
-    from paths import get_analysis_dir
+from app.paths import get_analysis_dir
 
 
 def get_date_folder_path(base_path: str = "reports") -> Tuple[str, str]:

@@ -17,17 +17,17 @@ from dataclasses import dataclass
 import os
 import pandas as pd
 import logging
-from .segments_from_bins import write_segments_from_bins
-from .constants import HOTSPOT_SEGMENTS
-from .save_bins import save_bin_artifacts
-from .report_utils import get_date_folder_path
-from .bin_summary import generate_bin_summary_artifact
-from .gcs_uploader import upload_bin_artifacts
-from .canonical_density_report import generate_tooltips_json
-from .bin_intelligence import get_flagged_bins
-from .heatmap_generator import generate_heatmaps_for_run
-from .routes.api_heatmaps import upload_binary_to_gcs
-from .geo_utils import generate_bins_geojson
+from app.segments_from_bins import write_segments_from_bins
+from app.utils.constants import HOTSPOT_SEGMENTS
+from app.save_bins import save_bin_artifacts
+from app.report_utils import get_date_folder_path
+from app.bin_summary import generate_bin_summary_artifact
+from app.gcs_uploader import upload_bin_artifacts
+from app.canonical_density_report import generate_tooltips_json
+from app.bin_intelligence import get_flagged_bins
+from app.heatmap_generator import generate_heatmaps_for_run
+from app.routes.api_heatmaps import upload_binary_to_gcs
+from app.geo_utils import generate_bins_geojson
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -37,11 +37,11 @@ def _validate_import_patterns():
     """Validate that all imports are properly resolved at module level."""
     try:
         # Test critical imports
-        from .storage_service import get_storage_service
-        from .density import analyze_density_segments, DensityConfig
-        from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, BIN_SCHEMA_VERSION
-        from .report_utils import get_report_paths
-        from .density_template_engine import DensityTemplateEngine, create_template_context
+        from app.storage_service import get_storage_service
+        from app.core.density.compute import analyze_density_segments, DensityConfig
+        from app.utils.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, BIN_SCHEMA_VERSION
+        from app.report_utils import get_report_paths
+        from app.density_template_engine import DensityTemplateEngine, create_template_context
         logger.info("✅ All critical imports resolved successfully at module level")
         return True
     except ImportError as e:
@@ -99,21 +99,11 @@ def coarsen_plan(seg_id: str, current_bin_km: float, current_dt_s: int, peak_los
     return coarsened_bin, coarsened_dt
 
 # Import storage service for persistent file storage
-try:
-    from .storage_service import get_storage_service
-except ImportError:
-    from storage_service import get_storage_service
-
-try:
-    from .density import analyze_density_segments, DensityConfig
-    from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, BIN_SCHEMA_VERSION
-    from .report_utils import get_report_paths
-    from .density_template_engine import DensityTemplateEngine, create_template_context
-except ImportError:
-    from density import analyze_density_segments, DensityConfig
-    from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, BIN_SCHEMA_VERSION
-    from report_utils import get_report_paths
-    from density_template_engine import DensityTemplateEngine, create_template_context
+from app.storage_service import get_storage_service
+from app.core.density.compute import analyze_density_segments, DensityConfig
+from app.utils.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, BIN_SCHEMA_VERSION
+from app.report_utils import get_report_paths
+from app.density_template_engine import DensityTemplateEngine, create_template_context
 import pandas as pd
 import json
 from datetime import datetime
@@ -694,7 +684,7 @@ def format_duration(seconds: int) -> str:
 
 def _initialize_bin_generation_params() -> Tuple[float, int]:
     """Initialize bin generation parameters with Cloud Run optimization."""
-    from .constants import (
+    from app.utils.constants import (
         DEFAULT_BIN_SIZE_KM, FALLBACK_BIN_SIZE_KM,
         DEFAULT_BIN_TIME_WINDOW_SECONDS
     )
@@ -712,7 +702,7 @@ def _initialize_bin_generation_params() -> Tuple[float, int]:
 
 def _apply_temporal_first_coarsening(bin_size_to_use: float, dt_seconds: int) -> int:
     """Apply temporal-first coarsening based on projected features."""
-    from .constants import BIN_MAX_FEATURES
+    from app.utils.constants import BIN_MAX_FEATURES
     
     try:
         avg_segment_length_m = 2000
@@ -741,7 +731,7 @@ def _try_bin_generation_with_coarsening(
     strategy_step: int
 ) -> Tuple[Optional[Dict[str, Any]], str, int, float, int]:
     """Try generating bin dataset with adaptive coarsening strategy."""
-    from .constants import MAX_BIN_GENERATION_TIME_SECONDS
+    from app.utils.constants import MAX_BIN_GENERATION_TIME_SECONDS
     
     bins_status = "ok"
     
@@ -973,7 +963,7 @@ def _generate_new_report_format(
     # Upload to GCS if enabled
     if os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
         try:
-            from .storage_service import get_storage_service
+            from app.storage_service import get_storage_service
             storage_service = get_storage_service()
             gcs_path = storage_service.save_file(
                 filename=os.path.basename(timestamped_path),
@@ -995,7 +985,7 @@ def _generate_legacy_report_format(
 ) -> str:
     """Generate legacy density report format with operational intelligence."""
     print("📊 Regenerating density report with operational intelligence...")
-    from .report_utils import get_report_paths
+    from app.report_utils import get_report_paths
     
     # Note: generate_markdown_report is defined later in this same file
     report_content_final = generate_markdown_report(
@@ -1016,7 +1006,7 @@ def _generate_legacy_report_format(
     # Upload to GCS if enabled
     if os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
         try:
-            from .storage_service import get_storage_service
+            from app.storage_service import get_storage_service
             storage_service = get_storage_service()
             gcs_path = storage_service.save_file(
                 filename=os.path.basename(full_path),
@@ -1280,7 +1270,7 @@ def generate_density_report(
     if enable_bins:
         logger.info("✅ Bin dataset generation enabled (enable_bin_dataset=True)")
         try:
-            from .constants import BIN_SCHEMA_VERSION
+            from app.utils.constants import BIN_SCHEMA_VERSION
             
             # Create AnalysisContext per ChatGPT specification
             analysis_context = AnalysisContext(
@@ -1341,7 +1331,7 @@ def generate_operational_intelligence_summary(stats: Dict[str, Any], segment_sum
     Returns:
         List of markdown lines for operational intelligence section
     """
-    from .los import get_los_description
+    from app.los import get_los_description
     
     content = []
     
@@ -1419,7 +1409,7 @@ def generate_operational_intelligence_summary(stats: Dict[str, Any], segment_sum
 def _get_app_version() -> str:
     """Get application version from version module or fallback to main.py."""
     try:
-        from .version import get_current_version
+        from app.version import get_current_version
         return get_current_version()
     except ImportError:
         try:
@@ -1501,8 +1491,8 @@ def _generate_operational_intelligence_content(
     content = []
     
     try:
-        from .io_bins import load_bins
-        from .bin_intelligence import FlaggingConfig, apply_bin_flagging, summarize_segment_flags, get_flagging_statistics
+        from app.io_bins import load_bins
+        from app.bin_intelligence import FlaggingConfig, apply_bin_flagging, summarize_segment_flags, get_flagging_statistics
         
         # Load configuration
         import yaml
@@ -1642,7 +1632,7 @@ def _generate_appendix_content(results: Dict[str, Any]) -> List[str]:
         bins_flagged = oi_data['bins_flagged']
         
         # Get only flagged bins
-        from .bin_intelligence import get_flagged_bins
+        from app.bin_intelligence import get_flagged_bins
         flagged = get_flagged_bins(bins_flagged)
         
         if len(flagged) > 0:
@@ -2145,7 +2135,7 @@ def generate_map_dataset(results: Dict[str, Any], start_times: Dict[str, float])
     """
     # Issue #231: Try canonical segments first (ChatGPT's roadmap)
     try:
-        from .canonical_segments import (
+        from app.canonical_segments import (
             is_canonical_segments_available, get_segment_peak_densities, 
             get_segment_time_series, get_canonical_segments_metadata
         )
@@ -2162,7 +2152,7 @@ def generate_map_dataset(results: Dict[str, Any], start_times: Dict[str, float])
             
             # Load segments CSV for labels and other metadata
             try:
-                from .io.loader import load_segments
+                from app.io.loader import load_segments
                 segments_df = load_segments("data/segments.csv")
                 segments_dict = {}
                 for _, row in segments_df.iterrows():
@@ -2331,7 +2321,7 @@ def save_map_dataset_to_storage(map_data: Dict[str, Any], output_dir: str) -> st
 
 def _build_segment_catalog_from_results(results: Dict[str, Any], logger) -> dict:
     """Build segment catalog from density analysis results."""
-    from .bins_accumulator import SegmentInfo
+    from app.bins_accumulator import SegmentInfo
     
     segments = {}
     if 'segments' in results and results['segments']:
@@ -2372,7 +2362,7 @@ def _build_segment_catalog_from_results(results: Dict[str, Any], logger) -> dict
 def _create_time_windows_for_bins(start_times: Dict[str, float], dt_seconds: int) -> list:
     """Create time windows from start_times and analysis duration."""
     from datetime import datetime, timezone, timedelta
-    from .bins_accumulator import make_time_windows
+    from app.bins_accumulator import make_time_windows
     
     base_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     
@@ -2398,15 +2388,15 @@ def _apply_flagging_to_bin_features(
     flag_start = time.monotonic()
     
     try:
-        from . import rulebook
-        from .utilization import add_utilization_percentile
-        from .schema_resolver import resolve_schema
+        from app import rulebook
+        from app.utilization import add_utilization_percentile
+        from app.schema_resolver import resolve_schema
         import pandas as pd
         
         # Create segments_dict for schema resolution
         segments_dict = {}
         try:
-            from .io.loader import load_segments
+            from app.io.loader import load_segments
             segments_df = load_segments("data/segments.csv")
             for _, row in segments_df.iterrows():
                 segments_dict[row['seg_id']] = {
@@ -2504,9 +2494,9 @@ def _add_geometries_to_bin_features(
     geom_start = time.monotonic()
     
     try:
-        from .bin_geometries import generate_bin_polygon
-        from .gpx_processor import load_all_courses, generate_segment_coordinates
-        from .io.loader import load_segments
+        from app.bin_geometries import generate_bin_polygon
+        from app.core.gpx.processor import load_all_courses, generate_segment_coordinates
+        from app.io.loader import load_segments
         import pandas as pd
         import json
         
@@ -2617,10 +2607,10 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
     
     try:
         # Import ChatGPT's bins_accumulator
-        from .bins_accumulator import (
+        from app.bins_accumulator import (
             SegmentInfo, build_bin_features, make_time_windows, to_geojson_features
         )
-        from .constants import (
+        from app.utils.constants import (
             BIN_SCHEMA_VERSION, DEFAULT_BIN_TIME_WINDOW_SECONDS, 
             MAX_BIN_GENERATION_TIME_SECONDS, BIN_MAX_FEATURES, HOTSPOT_SEGMENTS
         )
@@ -2714,8 +2704,8 @@ def generate_bin_features_with_coarsening(segments: dict, time_windows: list, ru
     - Hotspot preservation (keep original resolution)
     - Soft-timeout reaction with auto-coarsening
     """
-    from .bins_accumulator import build_bin_features
-    from .constants import MAX_BIN_GENERATION_TIME_SECONDS, BIN_MAX_FEATURES, HOTSPOT_SEGMENTS
+    from app.bins_accumulator import build_bin_features
+    from app.utils.constants import MAX_BIN_GENERATION_TIME_SECONDS, BIN_MAX_FEATURES, HOTSPOT_SEGMENTS
     import time
     
     start_time = time.monotonic()
@@ -2776,7 +2766,7 @@ def generate_bin_features_with_coarsening(segments: dict, time_windows: list, ru
         total_duration_s = int((latest_end_min - earliest_start_min) * 60)
         
         # Recreate time windows with coarsened dt
-        from .bins_accumulator import make_time_windows
+        from app.bins_accumulator import make_time_windows
         coarsened_time_windows = make_time_windows(t0=t0_utc, duration_s=total_duration_s, dt_seconds=new_dt_seconds)
         
         # Issue #243 Fix: Re-map runners to new coarsened window indices
@@ -3101,7 +3091,7 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
 
 def _build_geojson_from_bin_data(bin_data: Dict[str, Any]) -> Dict[str, Any]:
     """Build GeoJSON data structure from bin_data."""
-    from .constants import BIN_SCHEMA_VERSION
+    from app.utils.constants import BIN_SCHEMA_VERSION
     
     geojson_data = {
         "type": "FeatureCollection",
@@ -3148,7 +3138,7 @@ def _convert_geometry_to_wkb(geometry_coords: list, bin_id: str) -> bytes:
 
 def _build_parquet_row_from_feature(feature: Dict[str, Any]) -> Dict[str, Any]:
     """Build Parquet row from GeoJSON feature."""
-    from .constants import BIN_SCHEMA_VERSION
+    from app.utils.constants import BIN_SCHEMA_VERSION
     
     props = feature["properties"]
     geometry_coords = feature.get("geometry", {}).get("coordinates", [])
@@ -3182,7 +3172,7 @@ def _build_parquet_row_from_feature(feature: Dict[str, Any]) -> Dict[str, Any]:
 
 def _write_parquet_file(parquet_rows: list, parquet_path: str) -> None:
     """Write Parquet file from rows."""
-    from .constants import BIN_SCHEMA_VERSION
+    from app.utils.constants import BIN_SCHEMA_VERSION
     
     try:
         import pyarrow as pa
@@ -3243,7 +3233,7 @@ def save_bin_artifacts_legacy(bin_data: Dict[str, Any], output_dir: str) -> tupl
         tuple: (geojson_path, parquet_path)
     """
     import json
-    from .constants import MAX_BIN_DATASET_SIZE_MB
+    from app.utils.constants import MAX_BIN_DATASET_SIZE_MB
     
     # Create reports directory with date
     date_str = datetime.now().strftime("%Y-%m-%d")
@@ -3401,7 +3391,7 @@ def save_bin_dataset(bin_data: Dict[str, Any], output_dir: str) -> str:
     """
     Legacy function - redirects to save_bin_artifacts for backward compatibility.
     """
-    from .save_bins import save_bin_artifacts
+    from app.save_bins import save_bin_artifacts
     geojson_path, _ = save_bin_artifacts(bin_data, output_dir)
     return geojson_path
 
@@ -3425,7 +3415,7 @@ def generate_new_density_report_issue246(
     Returns:
         Dictionary with report content and metadata
     """
-    from .new_density_report import generate_new_density_report
+    from app.new_density_report import generate_new_density_report
     from pathlib import Path
     
     # Convert string paths to Path objects

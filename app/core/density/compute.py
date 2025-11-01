@@ -21,7 +21,7 @@ import logging
 from datetime import datetime, timedelta
 
 # Import data models
-from .models import DensityConfig, SegmentMeta, DensityResult, EventViewSummary, DensitySummary
+from app.core.density.models import DensityConfig, SegmentMeta, DensityResult, EventViewSummary, DensitySummary
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

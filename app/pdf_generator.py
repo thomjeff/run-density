@@ -20,7 +20,7 @@ try:
 except ImportError:
     PYPANDOC_AVAILABLE = False
 
-from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS
+from app.utils.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS
 
 
 def validate_pandoc_installation() -> bool:
@@ -156,8 +156,8 @@ def generate_pdf_report(
         return None
     
     # Generate markdown content (reuse existing functions)
-    from .density_report import generate_markdown_report
-    from .flow_report import generate_markdown_report as generate_flow_markdown
+    from app.density_report import generate_markdown_report
+    from app.flow_report import generate_markdown_report as generate_flow_markdown
     
     # Determine report type and generate markdown
     if 'segments' in report_data:

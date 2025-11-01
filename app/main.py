@@ -12,51 +12,26 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse
 from pydantic import BaseModel
 
-# Import new modules
-try:
-    # Try relative imports first (for local development)
-    from .density import analyze_density_segments
-    from .density_api import router as density_router
-    from .density_report import generate_density_report, generate_simple_density_report
-    from .flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
-    from .flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
-    from .report import generate_combined_report, generate_combined_narrative
-    from .map_api import router as map_router
-    from .routes.reports import router as reports_router
-    from .routes.ui import router as ui_router
-    from .routes.api_segments import router as api_segments_router
-    from .routes.api_dashboard import router as api_dashboard_router
-    from .routes.api_health import router as api_health_router
-    from .routes.api_density import router as api_density_router
-    from .routes.api_flow import router as api_flow_router
-    from .routes.api_reports import router as api_reports_router
-    from .routes.api_bins import router as api_bins_router
-    from .routes.api_e2e import router as api_e2e_router
-    from .routes.api_heatmaps import router as api_heatmaps_router
-    # from .test_api import test_router  # Disabled for Cloud Run deployment
-    from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
-except ImportError:
-    # Fall back to absolute imports (for Cloud Run)
-    from density import analyze_density_segments
-    from density_api import router as density_router
-    from density_report import generate_density_report, generate_simple_density_report
-    from flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
-    from flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
-    from report import generate_combined_report, generate_combined_narrative
-    from map_api import router as map_router
-    from routes.reports import router as reports_router
-    from routes.ui import router as ui_router
-    from routes.api_segments import router as api_segments_router
-    from routes.api_dashboard import router as api_dashboard_router
-    from routes.api_health import router as api_health_router
-    from routes.api_density import router as api_density_router
-    from routes.api_flow import router as api_flow_router
-    from routes.api_reports import router as api_reports_router
-    from routes.api_bins import router as api_bins_router
-    from routes.api_e2e import router as api_e2e_router
-    from routes.api_heatmaps import router as api_heatmaps_router
-    # from test_api import test_router  # Disabled for Cloud Run deployment
-    from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
+# Import modules using v1.7 absolute import pattern
+from app.core.density.compute import analyze_density_segments
+from app.api.density import router as density_router
+from app.density_report import generate_density_report, generate_simple_density_report
+from app.core.flow.flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
+from app.flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
+from app.api.report import generate_combined_report, generate_combined_narrative
+from app.api.map import router as map_router
+from app.routes.reports import router as reports_router
+from app.routes.ui import router as ui_router
+from app.routes.api_segments import router as api_segments_router
+from app.routes.api_dashboard import router as api_dashboard_router
+from app.routes.api_health import router as api_health_router
+from app.routes.api_density import router as api_density_router
+from app.routes.api_flow import router as api_flow_router
+from app.routes.api_reports import router as api_reports_router
+from app.routes.api_bins import router as api_bins_router
+from app.routes.api_e2e import router as api_e2e_router
+from app.routes.api_heatmaps import router as api_heatmaps_router
+from app.utils.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
 # Pydantic models for request bodies
 class AnalysisRequest(BaseModel):
@@ -134,10 +109,7 @@ BUILD_AT = os.getenv("BUILD_AT", datetime.datetime.now(datetime.timezone.utc).is
 # Boot environment logging for bin dataset debugging
 import logging
 import pathlib
-try:
-    from .util_env import env_bool, env_str
-except ImportError:
-    from util_env import env_bool, env_str
+from app.utils.env import env_bool, env_str
 
 BOOT_ENV = {
     "cwd": str(pathlib.Path.cwd()),
@@ -249,7 +221,7 @@ async def debug_env():
     # Check canonical segments availability
     canonical_status = {"available": False, "error": "Not checked"}
     try:
-        from .canonical_segments import is_canonical_segments_available, get_canonical_segments_metadata
+        from app.canonical_segments import is_canonical_segments_available, get_canonical_segments_metadata
         canonical_available = is_canonical_segments_available()
         canonical_status = {
             "available": canonical_available,
@@ -312,7 +284,7 @@ async def analyze_single_segment_flow(request: SingleSegmentFlowRequest):
     """Analyze temporal flow for a single segment with optional event filtering."""
     try:
         # Create a new flags instance with single segment mode
-        from .config_algo_consistency import AlgoConsistencyFlags
+        from app.config_algo_consistency import AlgoConsistencyFlags
         import app.config_algo_consistency as config_module
         
         # Store original flags
@@ -499,7 +471,7 @@ async def generate_flow_audit_endpoint(request: FlowAuditRequest):
     """Generate Flow Audit for a specific segment and event pair."""
     try:
         # Import the flow audit function (we'll create this)
-        from .flow import generate_flow_audit_for_segment
+        from app.core.flow.flow import generate_flow_audit_for_segment
         
         results = generate_flow_audit_for_segment(
             pace_csv=request.paceCsv,
@@ -542,9 +514,9 @@ async def legacy_overlap_endpoint(request: ReportRequest):
 async def generate_flow_density_correlation_endpoint(request: ReportRequest):
     """Generate Flow↔Density correlation analysis report."""
     try:
-        from .flow_density_correlation import analyze_flow_density_correlation, export_correlation_report
-        from .density import analyze_density_segments, load_density_cfg
-        from .flow import analyze_temporal_flow_segments
+        from app.flow_density_correlation import analyze_flow_density_correlation, export_correlation_report
+        from app.core.density.compute import analyze_density_segments, load_density_cfg
+        from app.core.flow.flow import analyze_temporal_flow_segments
         
         # Run both Flow and Density analysis
         flow_results = analyze_temporal_flow_segments(
@@ -556,8 +528,8 @@ async def generate_flow_density_correlation_endpoint(request: ReportRequest):
         )
         
         # Load data for density analysis
-        from .io.loader import load_runners, load_segments
-        from .density import DensityConfig, StaticWidthProvider
+        from app.io.loader import load_runners, load_segments
+        from app.core.density.compute import DensityConfig, StaticWidthProvider
         
         pace_data = load_runners(request.paceCsv)
         segments_df = load_segments(request.segmentsCsv)
@@ -647,7 +619,7 @@ class PDFReportRequest(BaseModel):
 async def generate_pdf_report_endpoint(request: PDFReportRequest):
     """Generate PDF report from analysis data."""
     try:
-        from .pdf_generator import generate_pdf_report, validate_pandoc_installation
+        from app.pdf_generator import generate_pdf_report, validate_pandoc_installation
         
         # Check if Pandoc is available
         if not validate_pandoc_installation():
@@ -658,7 +630,7 @@ async def generate_pdf_report_endpoint(request: PDFReportRequest):
         
         # Generate report data based on type
         if request.reportType == "density":
-            from .density import analyze_density_segments
+            from app.core.density.compute import analyze_density_segments
             from datetime import datetime
             
             # Convert start times to datetime objects
@@ -677,7 +649,7 @@ async def generate_pdf_report_endpoint(request: PDFReportRequest):
             results['start_times'] = request.startTimes
             
         elif request.reportType == "flow":
-            from .flow import analyze_temporal_flow_segments
+            from app.core.flow.flow import analyze_temporal_flow_segments
             
             # Run flow analysis
             results = analyze_temporal_flow_segments(
@@ -708,7 +680,7 @@ async def generate_pdf_report_endpoint(request: PDFReportRequest):
 async def list_pdf_templates():
     """List available PDF templates."""
     try:
-        from .pdf_generator import setup_pdf_templates
+        from app.pdf_generator import setup_pdf_templates
         
         templates = setup_pdf_templates()
         
@@ -725,7 +697,7 @@ async def list_pdf_templates():
 async def check_pdf_status():
     """Check PDF generation system status."""
     try:
-        from .pdf_generator import validate_pandoc_installation
+        from app.pdf_generator import validate_pandoc_installation
         
         pandoc_available = validate_pandoc_installation()
         
@@ -1248,7 +1220,7 @@ def _build_segment_from_canonical_data(
 def _load_canonical_segments_with_oi(tooltips_data) -> Optional[Dict[str, Any]]:
     """Load canonical segments with operational intelligence."""
     try:
-        from .canonical_segments import (
+        from app.canonical_segments import (
             is_canonical_segments_available, get_segment_peak_densities,
             get_canonical_segments_metadata
         )

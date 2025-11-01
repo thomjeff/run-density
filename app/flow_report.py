@@ -14,18 +14,11 @@ from datetime import datetime
 import os
 import pandas as pd
 
-try:
-    from .flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
-    from .constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
-    from .report_utils import get_report_paths, format_decimal_places
-    from .storage_service import get_storage_service
-    from .flow_density_correlation import analyze_flow_density_correlation
-except ImportError:
-    from flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
-    from constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
-    from report_utils import get_report_paths, format_decimal_places
-    from storage_service import get_storage_service
-    from flow_density_correlation import analyze_flow_density_correlation
+from app.core.flow.flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
+from app.utils.constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
+from app.report_utils import get_report_paths, format_decimal_places
+from app.storage_service import get_storage_service
+from app.flow_density_correlation import analyze_flow_density_correlation
 
 # Get app version from main.py to ensure consistency
 def get_app_version():
@@ -157,7 +150,7 @@ def generate_markdown_report(
     
     # Add version information using version module
     try:
-        from .version import get_current_version
+        from app.version import get_current_version
         version = get_current_version()
     except ImportError:
         try:
@@ -431,15 +424,15 @@ def generate_basic_info_table(segment: Dict[str, Any]) -> List[str]:
             width_val = seg_row['width_m'].iloc[0]
             # Handle NaN/NA values
             if pd.isna(width_val) or width_val == '':
-                from .constants import DEFAULT_CONFLICT_LENGTH_METERS
+                from app.utils.constants import DEFAULT_CONFLICT_LENGTH_METERS
                 width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
             else:
                 width_m = float(width_val)
         else:
-            from .constants import DEFAULT_CONFLICT_LENGTH_METERS
+            from app.utils.constants import DEFAULT_CONFLICT_LENGTH_METERS
             width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
     except Exception:
-        from .constants import DEFAULT_CONFLICT_LENGTH_METERS
+        from app.utils.constants import DEFAULT_CONFLICT_LENGTH_METERS
         width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
     
     # Get event names
@@ -508,7 +501,7 @@ def generate_convergence_analysis(segment: Dict[str, Any]) -> List[str]:
             # Calculate raw fraction
             raw_fraction = (convergence_point - from_km_a) / segment_len
             # Apply fraction clamping to ensure [0.0, 1.0] range
-            from app.constants import MIN_NORMALIZED_FRACTION, MAX_NORMALIZED_FRACTION
+            from app.utils.constants import MIN_NORMALIZED_FRACTION, MAX_NORMALIZED_FRACTION
             if raw_fraction < MIN_NORMALIZED_FRACTION:
                 normalized_cp = MIN_NORMALIZED_FRACTION
                 logging.warning(f"Clamped negative convergence fraction {raw_fraction:.3f} to {MIN_NORMALIZED_FRACTION} for {segment.get('seg_id', 'unknown')} {event_a} vs {event_b}")
@@ -687,12 +680,12 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
                 width_val = seg_row['width_m'].iloc[0]
                 # Handle NaN/NA values
                 if pd.isna(width_val) or width_val == '':
-                    from .constants import DEFAULT_CONFLICT_LENGTH_METERS
+                    from app.utils.constants import DEFAULT_CONFLICT_LENGTH_METERS
                     width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
                 else:
                     width_m = float(width_val)
             else:
-                from .constants import DEFAULT_CONFLICT_LENGTH_METERS
+                from app.utils.constants import DEFAULT_CONFLICT_LENGTH_METERS
                 width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
             
             # Fix convergence point normalization and decimal formatting (max 3 decimals)
@@ -710,7 +703,7 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
                     # Calculate raw fraction
                     raw_fraction = (cp_km - from_km_a) / segment_len
                     # Apply fraction clamping to ensure [0.0, 1.0] range
-                    from app.constants import MIN_NORMALIZED_FRACTION, MAX_NORMALIZED_FRACTION
+                    from app.utils.constants import MIN_NORMALIZED_FRACTION, MAX_NORMALIZED_FRACTION
                     if raw_fraction < MIN_NORMALIZED_FRACTION:
                         normalized_cp = MIN_NORMALIZED_FRACTION
                         logging.warning(f"Clamped negative convergence fraction {raw_fraction:.3f} to {MIN_NORMALIZED_FRACTION} for {seg_id} {segment.get('event_a', 'A')} vs {segment.get('event_b', 'B')}")

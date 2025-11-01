@@ -1,8 +1,8 @@
 # Unified Function Selector for Algorithm Consistency
 # Ensures both Main Analysis and Flow Runner use identical path selection logic
 
-from .normalization import NormalizedInputs
-from .config_algo_consistency import FLAGS
+from app.normalization import NormalizedInputs
+from app.config_algo_consistency import FLAGS
 
 def choose_path(segment_key: str, norm: NormalizedInputs) -> str:
     """

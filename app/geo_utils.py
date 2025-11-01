@@ -16,12 +16,8 @@ import logging
 import math
 from typing import Dict, List, Any, Optional, Tuple
 
-try:
-    from .bin_analysis import SegmentBinData, BinData
-    from .constants import DISTANCE_BIN_SIZE_KM, METERS_PER_KM
-except ImportError:
-    from bin_analysis import SegmentBinData, BinData
-    from constants import DISTANCE_BIN_SIZE_KM, METERS_PER_KM
+from app.bin_analysis import SegmentBinData, BinData
+from app.utils.constants import DISTANCE_BIN_SIZE_KM, METERS_PER_KM
 
 logger = logging.getLogger(__name__)
 
@@ -251,8 +247,8 @@ def generate_bins_geojson(segments_data: Dict[str, SegmentBinData]) -> Dict[str,
     
     # Load real segment coordinates from GPX data
     try:
-        from .gpx_processor import load_all_courses, generate_segment_coordinates
-        from .io.loader import load_segments
+        from app.core.gpx.processor import load_all_courses, generate_segment_coordinates
+        from app.io.loader import load_segments
         
         # Load GPX courses
         courses = load_all_courses("data")

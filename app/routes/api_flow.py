@@ -6,4 +6,4 @@ All functionality has been moved to the api package.
 """
 
 # DEPRECATED – logic moved to api/flow.py
-from api.flow import *
+from app.api.flow import *
