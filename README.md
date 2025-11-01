@@ -7,7 +7,7 @@
 This service models runner density on shared course segments using a density engine and temporal flow analysis.  
 It provides comprehensive reporting capabilities with both Markdown and CSV outputs, and is containerized and deployed to Google Cloud Run.
 
-**Current Version: v1.7.0** - Architecture Reset: Clean layered architecture with enforced boundaries
+**Current Version: v1.7.2** - Repository Cleanup: Post-v1.7 consolidation, removing 757MB of legacy code and streamlining documentation
 
 ## Key Features
 - **Density Analysis**: Spatial concentration analysis with areal and crowd density calculations

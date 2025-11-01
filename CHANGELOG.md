@@ -1,5 +1,115 @@
 # Changelog
 
+## [v1.7.2] - 2025-11-01
+
+### Repository Cleanup - Post-v1.7 Architecture Consolidation
+
+**Complete cleanup following v1.7 architecture reset, removing legacy code, obsolete tools, and stale documentation.**
+
+#### Code Cleanup (PR #431, #433)
+
+**Archived Legacy Directories:**
+- `/frontend` - Duplicate outdated config code (superseded by `/app/common/config.py`)
+- `/analytics` - Migrated to `/app/core/artifacts/` (Issue #429)
+- `/tests` - 36 unit test files never executed by CI/E2E
+- `/test_fixtures` - 4 unused mock data files
+- `/test_env` - 379MB Python venv (Docker-only workflow)
+- `.venv` - 378MB Python venv
+- `.pytest_cache` - Pytest cache
+- Empty directories: `/api`, `/core`, `scripts/complexity/`
+
+**Removed GitHub Workflows (7 files):**
+- 2 backup files: `ci-pipeline.yml.backup`, `ci-pipeline.yml.backup-phase3.3`
+- 5 failing workflows: `validate.yml`, `dashboard.yml`, `map.yml`, `reports.yml`, `ui-artifacts-qc.yml`
+- All functionality consolidated in `ci-pipeline.yml`
+
+**Removed Obsolete Scripts (11 files):**
+- Validation scripts (4): `validate_density_refactoring.py`, `validate_flow_refactoring.py`, test files
+- Broken script: `generate_frontend_data.py` (imported deleted analytics modules)
+- Manual tools: `bump_version.sh`, `validation/` directory (5 bin validation tools)
+
+**Removed Configuration (2 files):**
+- `.importlinter` - Configured but never executed
+- `.python-version` - Version mismatch (said 3.12.5, Docker uses 3.11)
+
+**Removed Dependency:**
+- `import-linter>=2.0` from requirements.txt
+
+**Space Freed:** ~757MB
+
+#### Documentation Cleanup (PR #434)
+
+**Archived Obsolete Documentation (6 files):**
+- `flow-validation-guide.md`, `density-validation-guide.md` (Issue #390 validation complete)
+- `developer-onboarding.md` (superseded by `onboarding/developer-checklist.md`)
+- `dev-guides/TEST_FRAMEWORK.md` (testing infrastructure archived)
+- `dev-guides/ARCHITECTURE.md` (superseded by `architecture/README.md`)
+- `dev-guides/segments_combined_schema.md` (legacy schema)
+
+**Consolidated Reference Docs (9 files → 3 files):**
+- Created `docs/reference/QUICK_REFERENCE.md` (consolidated from 4 dev-guides)
+- Moved `GLOBAL_TIME_GRID_ARCHITECTURE.md` to `docs/reference/`
+- Moved `DENSITY_ANALYSIS_README.md` to `docs/reference/`
+- Archived originals: `REFERENCE.md`, `VARIABLE_NAMING_REFERENCE.md`, `CSV_EXPORT_STANDARDS.md`, `FLOW_VS_RATE_TERMINOLOGY.md`
+
+**Updated Current Documentation (4 files):**
+- `GUARDRAILS.md` (v1.3) - Removed test_env and legacy venv references
+- `DOCKER_DEV.md` - Removed venv workflow sections
+- `architecture/testing.md` - Rewrote for E2E-only strategy
+- `onboarding/developer-checklist.md` - Updated testing workflow
+
+**Documentation Reduction:** 24 files → 15 files (-37%)
+
+#### Developer Experience Improvements (PR #434)
+
+**Simplified Makefile:**
+- Reduced from 244 lines → 63 lines (-84%)
+- Removed all venv targets and legacy pytest commands
+- Docker-only workflow
+- Added `make help` command with self-documenting targets
+- Clean, simple interface
+
+**Fixed docker-compose.yml:**
+- Removed broken volume mounts for deleted directories (`/api`, `/core`, `/analytics`)
+- Aligned with v1.7 architecture
+- Ready for `make dev-docker` usage
+
+**Updated .gitignore:**
+- Added standard Python venv patterns (`test_env/`, `venv/`, `env/`, `.venv/`)
+
+#### Archive Organization
+
+All removed code and documentation preserved in `archive/` with comprehensive READMEs:
+- `archive/frontend/` - Legacy config
+- `archive/github-workflows/` - Workflow backups and failing workflows  
+- `archive/scripts/` - Obsolete validation and manual tool scripts
+- `archive/test-fixtures/` - Mock data
+- `archive/testing-infrastructure/` - Unit tests and testing config
+- `archive/docs/` - 6 archive locations for obsolete documentation
+
+**Total:** 19 archive READMEs documenting context and restoration instructions
+
+#### Benefits
+
+- **-757MB Repository Size**: Removed large unused venvs
+- **-37% Documentation**: From 24 to 15 files, all current
+- **-84% Makefile**: Simpler, Docker-only interface
+- **Clean Git History**: All legacy code preserved in archive with context
+- **No Stale References**: All docs updated for v1.7.1
+- **Better Discoverability**: Consolidated reference documentation
+- **Easier Maintenance**: Fewer files to keep synchronized
+
+#### Testing
+
+- ✅ CI Pipeline passes (all stages)
+- ✅ Docker build succeeds
+- ✅ E2E tests pass
+- ✅ No complexity violations
+- ✅ Cloud Run deployment verified
+- ✅ UI testing complete
+
+---
+
 ## [v1.7.0] - 2025-11-01
 
 ### v1.7 Architecture Reset - Complete Refactoring
