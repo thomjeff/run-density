@@ -150,7 +150,7 @@ def generate_markdown_report(
     
     # Add version information using version module
     try:
-        from .version import get_current_version
+        from app.version import get_current_version
         version = get_current_version()
     except ImportError:
         try:
@@ -424,15 +424,15 @@ def generate_basic_info_table(segment: Dict[str, Any]) -> List[str]:
             width_val = seg_row['width_m'].iloc[0]
             # Handle NaN/NA values
             if pd.isna(width_val) or width_val == '':
-                from .constants import DEFAULT_CONFLICT_LENGTH_METERS
+                from app.utils.constants import DEFAULT_CONFLICT_LENGTH_METERS
                 width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
             else:
                 width_m = float(width_val)
         else:
-            from .constants import DEFAULT_CONFLICT_LENGTH_METERS
+            from app.utils.constants import DEFAULT_CONFLICT_LENGTH_METERS
             width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
     except Exception:
-        from .constants import DEFAULT_CONFLICT_LENGTH_METERS
+        from app.utils.constants import DEFAULT_CONFLICT_LENGTH_METERS
         width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
     
     # Get event names
@@ -680,12 +680,12 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
                 width_val = seg_row['width_m'].iloc[0]
                 # Handle NaN/NA values
                 if pd.isna(width_val) or width_val == '':
-                    from .constants import DEFAULT_CONFLICT_LENGTH_METERS
+                    from app.utils.constants import DEFAULT_CONFLICT_LENGTH_METERS
                     width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
                 else:
                     width_m = float(width_val)
             else:
-                from .constants import DEFAULT_CONFLICT_LENGTH_METERS
+                from app.utils.constants import DEFAULT_CONFLICT_LENGTH_METERS
                 width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
             
             # Fix convergence point normalization and decimal formatting (max 3 decimals)

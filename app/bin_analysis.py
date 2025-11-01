@@ -822,7 +822,7 @@ def export_bin_data(
     
     elif format.lower() == "geojson":
         # Generate GeoJSON data
-        from .geo_utils import generate_bins_geojson
+        from app.geo_utils import generate_bins_geojson
         geojson = generate_bins_geojson(all_bins)
         return {
             "ok": True,

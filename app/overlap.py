@@ -3,7 +3,7 @@ import time
 from typing import Dict, Optional, Any, List, Tuple
 import pandas as pd
 import numpy as np
-from .utils import load_pace_csv, arrival_time_sec
+from app.utils import load_pace_csv, arrival_time_sec
 
 # Use shared utility functions from utils module
 
@@ -492,7 +492,7 @@ def calculate_convergence_point(
         
         # Check for temporal overlaps (runners present at same time)
         # Use configurable tolerance for temporal overlap
-        from .constants import TEMPORAL_OVERLAP_TOLERANCE_SECONDS
+        from app.utils.constants import TEMPORAL_OVERLAP_TOLERANCE_SECONDS
         tolerance_seconds = TEMPORAL_OVERLAP_TOLERANCE_SECONDS
         
         # Find if any runners from A and B are present at the same time
@@ -590,7 +590,7 @@ def calculate_true_pass_detection(
         arrival_end_b = start_b + offset_b + pace_b * to_km
         
         # Use configurable tolerance for true pass detection
-        from .constants import TRUE_PASS_DETECTION_TOLERANCE_SECONDS
+        from app.utils.constants import TRUE_PASS_DETECTION_TOLERANCE_SECONDS
         tolerance_seconds = TRUE_PASS_DETECTION_TOLERANCE_SECONDS
         
         # Check for true passes: temporal overlap AND directional change

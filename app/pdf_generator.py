@@ -156,8 +156,8 @@ def generate_pdf_report(
         return None
     
     # Generate markdown content (reuse existing functions)
-    from .density_report import generate_markdown_report
-    from .flow_report import generate_markdown_report as generate_flow_markdown
+    from app.density_report import generate_markdown_report
+    from app.flow_report import generate_markdown_report as generate_flow_markdown
     
     # Determine report type and generate markdown
     if 'segments' in report_data:

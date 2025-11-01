@@ -3,7 +3,7 @@
 
 from dataclasses import dataclass
 from typing import Optional, Tuple
-from .config_algo_consistency import FLAGS
+from app.config_algo_consistency import FLAGS
 
 @dataclass
 class OvertakeCounts:

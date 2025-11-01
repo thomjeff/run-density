@@ -247,8 +247,8 @@ def generate_bins_geojson(segments_data: Dict[str, SegmentBinData]) -> Dict[str,
     
     # Load real segment coordinates from GPX data
     try:
-        from .gpx_processor import load_all_courses, generate_segment_coordinates
-        from .io.loader import load_segments
+        from app.core.gpx.processor import load_all_courses, generate_segment_coordinates
+        from app.io.loader import load_segments
         
         # Load GPX courses
         courses = load_all_courses("data")

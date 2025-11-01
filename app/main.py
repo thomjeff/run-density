@@ -221,7 +221,7 @@ async def debug_env():
     # Check canonical segments availability
     canonical_status = {"available": False, "error": "Not checked"}
     try:
-        from .canonical_segments import is_canonical_segments_available, get_canonical_segments_metadata
+        from app.canonical_segments import is_canonical_segments_available, get_canonical_segments_metadata
         canonical_available = is_canonical_segments_available()
         canonical_status = {
             "available": canonical_available,
@@ -284,7 +284,7 @@ async def analyze_single_segment_flow(request: SingleSegmentFlowRequest):
     """Analyze temporal flow for a single segment with optional event filtering."""
     try:
         # Create a new flags instance with single segment mode
-        from .config_algo_consistency import AlgoConsistencyFlags
+        from app.config_algo_consistency import AlgoConsistencyFlags
         import app.config_algo_consistency as config_module
         
         # Store original flags
@@ -471,7 +471,7 @@ async def generate_flow_audit_endpoint(request: FlowAuditRequest):
     """Generate Flow Audit for a specific segment and event pair."""
     try:
         # Import the flow audit function (we'll create this)
-        from .flow import generate_flow_audit_for_segment
+        from app.core.flow.flow import generate_flow_audit_for_segment
         
         results = generate_flow_audit_for_segment(
             pace_csv=request.paceCsv,
@@ -514,9 +514,9 @@ async def legacy_overlap_endpoint(request: ReportRequest):
 async def generate_flow_density_correlation_endpoint(request: ReportRequest):
     """Generate Flow↔Density correlation analysis report."""
     try:
-        from .flow_density_correlation import analyze_flow_density_correlation, export_correlation_report
-        from .density import analyze_density_segments, load_density_cfg
-        from .flow import analyze_temporal_flow_segments
+        from app.flow_density_correlation import analyze_flow_density_correlation, export_correlation_report
+        from app.core.density.compute import analyze_density_segments, load_density_cfg
+        from app.core.flow.flow import analyze_temporal_flow_segments
         
         # Run both Flow and Density analysis
         flow_results = analyze_temporal_flow_segments(
@@ -528,8 +528,8 @@ async def generate_flow_density_correlation_endpoint(request: ReportRequest):
         )
         
         # Load data for density analysis
-        from .io.loader import load_runners, load_segments
-        from .density import DensityConfig, StaticWidthProvider
+        from app.io.loader import load_runners, load_segments
+        from app.core.density.compute import DensityConfig, StaticWidthProvider
         
         pace_data = load_runners(request.paceCsv)
         segments_df = load_segments(request.segmentsCsv)
@@ -619,7 +619,7 @@ class PDFReportRequest(BaseModel):
 async def generate_pdf_report_endpoint(request: PDFReportRequest):
     """Generate PDF report from analysis data."""
     try:
-        from .pdf_generator import generate_pdf_report, validate_pandoc_installation
+        from app.pdf_generator import generate_pdf_report, validate_pandoc_installation
         
         # Check if Pandoc is available
         if not validate_pandoc_installation():
@@ -630,7 +630,7 @@ async def generate_pdf_report_endpoint(request: PDFReportRequest):
         
         # Generate report data based on type
         if request.reportType == "density":
-            from .density import analyze_density_segments
+            from app.core.density.compute import analyze_density_segments
             from datetime import datetime
             
             # Convert start times to datetime objects
@@ -649,7 +649,7 @@ async def generate_pdf_report_endpoint(request: PDFReportRequest):
             results['start_times'] = request.startTimes
             
         elif request.reportType == "flow":
-            from .flow import analyze_temporal_flow_segments
+            from app.core.flow.flow import analyze_temporal_flow_segments
             
             # Run flow analysis
             results = analyze_temporal_flow_segments(
@@ -680,7 +680,7 @@ async def generate_pdf_report_endpoint(request: PDFReportRequest):
 async def list_pdf_templates():
     """List available PDF templates."""
     try:
-        from .pdf_generator import setup_pdf_templates
+        from app.pdf_generator import setup_pdf_templates
         
         templates = setup_pdf_templates()
         
@@ -697,7 +697,7 @@ async def list_pdf_templates():
 async def check_pdf_status():
     """Check PDF generation system status."""
     try:
-        from .pdf_generator import validate_pandoc_installation
+        from app.pdf_generator import validate_pandoc_installation
         
         pandoc_available = validate_pandoc_installation()
         
@@ -1220,7 +1220,7 @@ def _build_segment_from_canonical_data(
 def _load_canonical_segments_with_oi(tooltips_data) -> Optional[Dict[str, Any]]:
     """Load canonical segments with operational intelligence."""
     try:
-        from .canonical_segments import (
+        from app.canonical_segments import (
             is_canonical_segments_available, get_segment_peak_densities,
             get_canonical_segments_metadata
         )

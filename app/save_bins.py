@@ -83,8 +83,8 @@ def _build_parquet_rows_from_features(features: t.List[Feature], metadata: JsonD
 def _apply_flagging_to_rows(rows: t.List[JsonDict], logger=None) -> t.List[JsonDict]:
     """Apply rulebook-based flagging to parquet rows (Issue #254)."""
     try:
-        from .new_flagging import apply_new_flagging
-        from .io.loader import load_segments
+        from app.new_flagging import apply_new_flagging
+        from app.io.loader import load_segments
         
         # Convert rows to DataFrame for flagging
         bins_df = pd.DataFrame(rows)

@@ -187,8 +187,8 @@ async def get_map_segments():
         
         # Load GPX centerlines
         try:
-            from .gpx_processor import load_all_courses, generate_segment_coordinates
-            from .io.loader import load_segments
+            from app.core.gpx.processor import load_all_courses, generate_segment_coordinates
+            from app.io.loader import load_segments
         except ImportError:
             from gpx_processor import load_all_courses, generate_segment_coordinates
             from io.loader import load_segments
@@ -482,7 +482,7 @@ async def get_bins_data(
         else:
             # Try to load existing bin data from reports
             try:
-                from .map_data_generator import find_latest_bin_dataset
+                from app.map_data_generator import find_latest_bin_dataset
                 bin_data = find_latest_bin_dataset()
                 
                 if bin_data and bin_data.get('ok'):
@@ -687,7 +687,7 @@ async def get_map_config():
     to avoid hardcoded values in JavaScript.
     """
     try:
-        from .constants import (
+        from app.utils.constants import (
             DEFAULT_START_TIMES, DEFAULT_PACE_CSV, DEFAULT_SEGMENTS_CSV,
             MAP_CENTER_LAT, MAP_CENTER_LON, MAP_DEFAULT_ZOOM,
             MAP_TILE_URL, MAP_TILE_ATTRIBUTION, MAP_MAX_ZOOM,
@@ -752,7 +752,7 @@ async def clear_map_cache():
     fresh computation on next request.
     """
     try:
-        from .bin_analysis import clear_bin_cache
+        from app.bin_analysis import clear_bin_cache
         clear_bin_cache()
         
         return JSONResponse(content={
@@ -773,7 +773,7 @@ async def get_historical_trends(request: MapRequest):
     how bin-level data changes over time or across different scenarios.
     """
     try:
-        from .bin_analysis import analyze_historical_trends
+        from app.bin_analysis import analyze_historical_trends
         
         # Get segment ID from request (assuming it's in the request body)
         segment_id = getattr(request, 'segmentId', None)
@@ -803,7 +803,7 @@ async def compare_segments(request: dict):
     how different segments perform relative to each other.
     """
     try:
-        from .bin_analysis import compare_segments
+        from app.bin_analysis import compare_segments
         
         segment_ids = request.get('segmentIds', [])
         if len(segment_ids) < 2:
@@ -832,7 +832,7 @@ async def export_advanced_data(request: dict):
     with filtering, sorting, and multiple format options.
     """
     try:
-        from .bin_analysis import export_bin_data
+        from app.bin_analysis import export_bin_data
         
         segment_ids = request.get('segmentIds', [])
         export_format = request.get('format', 'csv')
@@ -861,7 +861,7 @@ async def get_cache_management():
     capabilities for the map system.
     """
     try:
-        from .bin_analysis import get_cache_stats, clear_bin_cache
+        from app.bin_analysis import get_cache_stats, clear_bin_cache
         
         cache_stats = get_cache_stats()
         
@@ -893,7 +893,7 @@ async def invalidate_segment_cache(request: dict):
     without clearing the entire cache.
     """
     try:
-        from .bin_analysis import _bin_cache, calculate_dataset_hash
+        from app.bin_analysis import _bin_cache, calculate_dataset_hash
         
         segment_id = request.get('segmentId')
         if not segment_id:
@@ -938,7 +938,7 @@ async def get_cache_status(
         start_times = json.loads(startTimes)
         
         # Calculate dataset hash
-        from .bin_analysis import calculate_dataset_hash
+        from app.bin_analysis import calculate_dataset_hash
         dataset_hash = calculate_dataset_hash(paceCsv, segmentsCsv, start_times)
         
         # Get cache manager
@@ -981,7 +981,7 @@ async def get_cached_analysis(
         start_times = json.loads(startTimes)
         
         # Calculate dataset hash
-        from .bin_analysis import calculate_dataset_hash
+        from app.bin_analysis import calculate_dataset_hash
         dataset_hash = calculate_dataset_hash(paceCsv, segmentsCsv, start_times)
         
         # Get cache manager

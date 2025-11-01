@@ -7,7 +7,7 @@ Common functions used across multiple modules to avoid code duplication.
 from __future__ import annotations
 from typing import Dict, Optional
 import pandas as pd
-from .constants import SECONDS_PER_MINUTE
+from app.utils.constants import SECONDS_PER_MINUTE
 
 
 def load_pace_csv(url_or_path: str) -> pd.DataFrame:
