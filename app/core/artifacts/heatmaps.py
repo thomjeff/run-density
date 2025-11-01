@@ -85,6 +85,109 @@ def load_bin_data(reports_dir: Path) -> pd.DataFrame:
         return df
 
 
+
+def _prepare_segment_data(segment_bins):
+    """Prepare time and distance arrays from segment bins."""
+    times = []
+    for _, row in segment_bins.iterrows():
+        if "t_start" in row:
+            times.append(row.get("t_start", ""))
+        elif "start_time" in row:
+            times.append(row.get("start_time", ""))
+    
+    distances = sorted(set(segment_bins.get("start_km", 0)))
+    times = sorted(set(times))
+    return times, distances
+
+
+def _create_density_matrix(segment_bins, times, distances):
+    """Create density matrix from segment bins."""
+    import numpy as np
+    matrix = np.full((len(times), len(distances)), np.nan)
+    
+    for _, row in segment_bins.iterrows():
+        try:
+            if "t_start" in row:
+                time_val = row.get("t_start", "")
+            elif "start_time" in row:
+                time_val = row.get("start_time", "")
+            else:
+                continue
+            
+            t_idx = times.index(time_val)
+            d_idx = distances.index(row.get("start_km", 0))
+            density = float(row.get("density", 0))
+            matrix[t_idx, d_idx] = density
+        except (ValueError, TypeError):
+            continue
+    
+    return matrix
+
+
+def _setup_heatmap_plot(matrix, times, distances, seg_id, los_cmap):
+    """Set up matplotlib heatmap plot."""
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import PowerNorm
+    
+    fig, ax = plt.subplots(figsize=(12, 6))
+    matrix_transposed = matrix.T
+    los_cmap.set_bad(color="white")
+    norm = PowerNorm(gamma=0.5, vmin=0, vmax=2.0)
+    im = ax.imshow(matrix_transposed, cmap=los_cmap, norm=norm, aspect='auto', origin='lower')
+    
+    segment_labels = {
+        'A1': 'Start Corral', 'B1': '10K Turn', 'B2': '10K Turn to Friel',
+        'D1': 'Full Turn Blake (Out)', 'F1': 'Friel to Station Rd.',
+        'H1': 'Trail/Aberdeen to/from Station Rd', 'I1': 'Station Rd to Bridge/Mill',
+        'J1': 'Bridge/Mill to Half Turn (Outbound)', 'J4': 'Half Turn to Bridge/Mill',
+        'J5': 'Half Turn to Bridge/Mill (Slow Half)', 'K1': 'Bridge/Mill to Station Rd',
+        'L1': 'Trail/Aberdeen to/from Station Rd', 'M1': 'Trail/Aberdeen to Finish (Full to Loop)'
+    }
+    
+    segment_label = segment_labels.get(seg_id, f'Segment {seg_id}')
+    ax.set_title(f'Segment {seg_id} — {segment_label}: Density Through Space & Time')
+    ax.set_xlabel('Time of day (HH:MM)')
+    ax.set_ylabel('Distance along segment (km)')
+    
+    return fig, ax, im
+
+
+def _format_heatmap_axes(ax, times, distances):
+    """Format heatmap axes with time and distance labels."""
+    from datetime import datetime
+    
+    # Format time labels
+    clean_times = []
+    for time_str in times:
+        try:
+            if 'T' in time_str:
+                dt = datetime.fromisoformat(time_str.replace('Z', '+00:00'))
+                clean_time = dt.strftime('%H:%M')
+            elif ':' in time_str and len(time_str) > 5:
+                time_part = time_str.split(' ')[-1] if ' ' in time_str else time_str
+                clean_time = time_part[:5] if len(time_part) >= 5 else time_str
+            else:
+                clean_time = time_str
+            clean_times.append(clean_time)
+        except Exception:
+            clean_times.append(time_str)
+    
+    # Set ticks with smart spacing
+    n_ticks = min(8, len(times))
+    if len(times) > 1:
+        step = max(1, len(times) // n_ticks)
+        tick_indices = range(0, len(times), step)
+        ax.set_xticks(tick_indices)
+        ax.set_xticklabels([clean_times[i] for i in tick_indices], rotation=30, ha='right')
+    else:
+        ax.set_xticks([0])
+        ax.set_xticklabels(clean_times, rotation=30, ha='right')
+    
+    ax.set_yticks(range(len(distances)))
+    ax.set_yticklabels([f'{d:.1f}' for d in distances])
+    ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
+
+
 def generate_segment_heatmap(
     seg_id: str, 
     bins_df: pd.DataFrame, 
@@ -113,15 +216,7 @@ def generate_segment_heatmap(
         
         # Create 2D matrix (time × distance)
         # Handle both t_start/t_end and start_time/end_time field names
-        times = []
-        for _, row in segment_bins.iterrows():
-            if "t_start" in row:
-                times.append(row.get("t_start", ""))
-            elif "start_time" in row:
-                times.append(row.get("start_time", ""))
-        
-        distances = sorted(set(segment_bins.get("start_km", 0)))
-        times = sorted(set(times))
+        times, distances = _prepare_segment_data(segment_bins)
         
         if not times or not distances:
             print(f"   ⚠️  No valid time/distance data for segment {seg_id}")
@@ -149,90 +244,11 @@ def generate_segment_heatmap(
                 continue
         
         # Create heatmap
-        fig, ax = plt.subplots(figsize=(12, 6))
-        
-        # Transpose matrix so X=time, Y=distance (proper spatiotemporal visualization)
-        matrix_transposed = matrix.T
-        
-        # Create LOS-compliant colormap from rulebook
         los_cmap = create_los_colormap(los_colors)
+        fig, ax, im = _setup_heatmap_plot(matrix, times, distances, seg_id, los_cmap)
         
-        # Set NaN values to white (no data) to match Epic #279 mock-ups
-        los_cmap.set_bad(color="white")
-        
-        # Enhanced contrast for better visual separation (Epic #279 mock-ups)
-        from matplotlib.colors import PowerNorm
-        norm = PowerNorm(gamma=0.5, vmin=0, vmax=2.0)
-        
-        # Use LOS colormap with enhanced contrast for density visualization
-        im = ax.imshow(matrix_transposed, cmap=los_cmap, norm=norm, aspect='auto', origin='lower')
-        
-        # Set labels to match Epic #279 mock-ups
-        ax.set_xlabel('Time of day (HH:MM)')
-        ax.set_ylabel('Distance along segment (km)')
-        
-        # Create descriptive title based on segment
-        segment_labels = {
-            'A1': 'Start Corral',
-            'B1': '10K Turn',
-            'B2': '10K Turn to Friel', 
-            'D1': 'Full Turn Blake (Out)',
-            'F1': 'Friel to Station Rd.',
-            'H1': 'Trail/Aberdeen to/from Station Rd',
-            'I1': 'Station Rd to Bridge/Mill',
-            'J1': 'Bridge/Mill to Half Turn (Outbound)',
-            'J4': 'Half Turn to Bridge/Mill',
-            'J5': 'Half Turn to Bridge/Mill (Slow Half)',
-            'K1': 'Bridge/Mill to Station Rd',
-            'L1': 'Trail/Aberdeen to/from Station Rd',
-            'M1': 'Trail/Aberdeen to Finish (Full to Loop)'
-        }
-        
-        segment_label = segment_labels.get(seg_id, f'Segment {seg_id}')
-        ax.set_title(f'Segment {seg_id} — {segment_label}: Density Through Space & Time')
-        
-        # Set ticks with proper formatting (transposed)
-        ax.set_xticks(range(len(times)))
-        ax.set_xticklabels(times, rotation=45, ha='right')
-        ax.set_yticks(range(len(distances)))
-        ax.set_yticklabels([f'{d:.1f}' for d in distances])
-        
-        # Clean up x-axis labels to show HH:MM format (Epic #279 mock-ups)
-        # Convert timestamps to clean HH:MM format
-        clean_times = []
-        for time_str in times:
-            try:
-                # Handle different timestamp formats
-                if 'T' in time_str:
-                    # ISO format: 2025-10-24T07:42:00Z
-                    dt = datetime.fromisoformat(time_str.replace('Z', '+00:00'))
-                    clean_time = dt.strftime('%H:%M')
-                elif ':' in time_str and len(time_str) > 5:
-                    # Extract time part: 07:42:00
-                    time_part = time_str.split(' ')[-1] if ' ' in time_str else time_str
-                    if len(time_part) >= 5:
-                        clean_time = time_part[:5]  # HH:MM
-                    else:
-                        clean_time = time_str
-                else:
-                    clean_time = time_str
-                clean_times.append(clean_time)
-            except:
-                clean_times.append(time_str)
-        
-        # Set clean time labels with smart spacing
-        n_ticks = min(8, len(times))  # Max 8 ticks to avoid clutter
-        if len(times) > 1:
-            step = max(1, len(times) // n_ticks)
-            tick_indices = range(0, len(times), step)
-            ax.set_xticks(tick_indices)
-            ax.set_xticklabels([clean_times[i] for i in tick_indices], rotation=30, ha='right')
-        else:
-            ax.set_xticks([0])
-            ax.set_xticklabels(clean_times, rotation=30, ha='right')
-        
-        # Add grid like in mock-ups
-        ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
+        # Format axes
+        _format_heatmap_axes(ax, times, distances)
         
         # Add colorbar with proper label
         cbar = plt.colorbar(im, ax=ax)
@@ -248,6 +264,239 @@ def generate_segment_heatmap(
     except Exception as e:
         print(f"   ⚠️  Could not generate heatmap for segment {seg_id}: {e}")
         return False
+
+
+
+def _prepare_caption_bins(segment_bins):
+    """Prepare and normalize bins for caption generation."""
+    import pandas as pd
+    
+    # Normalize column names
+    required_cols = ["t_start", "t_end", "density", "start_km", "end_km"]
+    for col in required_cols:
+        if col not in segment_bins.columns:
+            alias_map = {
+                "t_start": "start_time",
+                "t_end": "end_time",
+                "start_km": "from_km",
+                "end_km": "to_km"
+            }
+            if alias_map.get(col) in segment_bins.columns:
+                segment_bins[col] = segment_bins[alias_map[col]]
+    
+    # Drop rows with missing data and parse timestamps
+    segment_bins = segment_bins.dropna(subset=["t_start", "t_end", "density", "start_km", "end_km"]).copy()
+    segment_bins["t_start"] = pd.to_datetime(segment_bins["t_start"], errors="coerce")
+    segment_bins["t_end"] = pd.to_datetime(segment_bins["t_end"], errors="coerce")
+    segment_bins = segment_bins.dropna(subset=["t_start", "t_end"]).sort_values("t_start")
+    
+    return segment_bins
+
+
+def _compute_caption_peak(segment_bins):
+    """Compute peak density and related metrics for caption."""
+    import pandas as pd
+    
+    peak_idx = segment_bins["density"].idxmax()
+    peak_row = segment_bins.loc[peak_idx]
+    peak_density = float(peak_row["density"]) if pd.notna(peak_row["density"]) else 0.0
+    peak_time = peak_row["t_end"].strftime("%H:%M") if pd.notna(peak_row["t_end"]) else ""
+    km_range = f"{float(peak_row['start_km']):.1f}–{float(peak_row['end_km']):.1f} km"
+    
+    return peak_density, peak_time, km_range, peak_row
+
+
+def _get_los_grade(peak_density):
+    """Determine LOS grade for a density value."""
+    try:
+        from app.common.config import load_rulebook
+        los_thresholds = load_rulebook().get("globals", {}).get("los_thresholds", {})
+    except Exception:
+        los_thresholds = {}
+    
+    los_grade = "F"
+    if isinstance(los_thresholds, dict) and los_thresholds:
+        for grade, rng in los_thresholds.items():
+            try:
+                min_v = float(rng.get("min", 0.0))
+                max_v = float(rng.get("max", float("inf")))
+                if min_v <= peak_density < max_v:
+                    los_grade = grade
+                    break
+            except Exception:
+                continue
+    
+    return los_grade
+
+
+
+def _load_caption_config():
+    """Load captioning configuration from rulebook."""
+    try:
+        from app.common.config import load_rulebook
+        rulebook = load_rulebook()
+        caption_cfg = rulebook.get("globals", {}).get("captioning", {})
+    except Exception:
+        caption_cfg = {}
+    
+    return {
+        "wave_gap_minutes": float(caption_cfg.get("wave_gap_minutes", 5)),
+        "clearance_threshold": float(caption_cfg.get("clearance_threshold_p_m2", 0.10)),
+        "clearance_sustain": int(caption_cfg.get("clearance_sustain_minutes", 6)),
+        "similarity_pct": float(caption_cfg.get("similarity_pct", 0.10)),
+        "spread_pct": float(caption_cfg.get("spread_pct", 0.20))
+    }
+
+
+def _split_into_waves(segment_bins, wave_gap_minutes):
+    """Split bins into waves based on time gaps."""
+    import pandas as pd
+    
+    waves_bins = []
+    current = []
+    prev_end = None
+    
+    for idx, row in segment_bins.iterrows():
+        if prev_end is None:
+            current = [idx]
+            prev_end = row["t_end"]
+            continue
+        
+        gap_min = (pd.Timestamp(row["t_start"]) - pd.Timestamp(prev_end)).total_seconds() / 60.0
+        if gap_min > wave_gap_minutes:
+            waves_bins.append(segment_bins.loc[current])
+            current = [idx]
+        else:
+            current.append(idx)
+        prev_end = row["t_end"]
+    
+    if current:
+        waves_bins.append(segment_bins.loc[current])
+    
+    return waves_bins
+
+
+def _analyze_wave(wdf):
+    """Analyze a single density wave."""
+    import pandas as pd
+    
+    w_peak_idx = wdf["density"].idxmax()
+    w_peak = wdf.loc[w_peak_idx]
+    w_peak_density = float(w_peak["density"]) if pd.notna(w_peak["density"]) else 0.0
+    w_start = pd.to_datetime(wdf["t_start"].min()).strftime("%H:%M")
+    w_end = pd.to_datetime(wdf["t_end"].max()).strftime("%H:%M")
+    w_km_range = f"{float(w_peak['start_km']):.1f}–{float(w_peak['end_km']):.1f} km"
+    
+    unique_minutes = wdf["t_start"].dt.floor("min").nunique()
+    unique_dist = pd.Index(wdf["start_km"]).nunique()
+    spread = float(unique_minutes * unique_dist)
+    
+    return {
+        "start_time": w_start,
+        "end_time": w_end,
+        "peak_density_p_m2": w_peak_density,
+        "peak_time": pd.to_datetime(w_peak["t_end"]).strftime("%H:%M") if pd.notna(w_peak["t_end"]) else "",
+        "peak_km_range": w_km_range,
+        "bins_count": int(len(wdf)),
+    }, spread
+
+
+def _compare_waves(waves_out, spread_scores, config):
+    """Compare first two waves if available."""
+    if len(waves_out) < 2:
+        return None
+    
+    p0 = waves_out[0]["peak_density_p_m2"]
+    p1 = waves_out[1]["peak_density_p_m2"]
+    rel = (p1 - p0) / p0 if p0 > 0 else 0.0
+    
+    if abs(rel) <= config["similarity_pct"]:
+        rel_txt = "similar"
+    elif rel < 0:
+        rel_txt = "lighter"
+    else:
+        rel_txt = "heavier"
+    
+    s0 = spread_scores[0]
+    s1 = spread_scores[1]
+    spread_rel = (s1 - s0) / s0 if s0 > 0 else 0.0
+    
+    if spread_rel >= config["spread_pct"]:
+        spread_txt = "more dispersed"
+    elif spread_rel <= -config["spread_pct"]:
+        spread_txt = "more concentrated"
+    else:
+        spread_txt = "similar spread"
+    
+    return {"relative_peak": rel_txt, "spread": spread_txt}
+
+
+def _find_clearance_time(segment_bins, peak_row, config):
+    """Find when segment clears after peak."""
+    import pandas as pd
+    import numpy as np
+    
+    minute_index = pd.date_range(
+        start=segment_bins["t_start"].min().floor("min"),
+        end=segment_bins["t_end"].max().ceil("min"),
+        freq="1min"
+    )
+    per_min = pd.Series(index=minute_index, dtype=float)
+    
+    for _, row in segment_bins.iterrows():
+        ts = pd.date_range(start=row["t_start"].floor("min"), end=row["t_end"].ceil("min"), freq="1min")
+        per_min.loc[ts] = np.fmax(
+            per_min.loc[ts].to_numpy(dtype=float, copy=True), 
+            float(row["density"])
+        ) if per_min.loc[ts].notna().any() else float(row["density"])
+    
+    clearance_time = None
+    if len(per_min) > 0:
+        start_idx = per_min.index.get_indexer([pd.to_datetime(peak_row["t_end"]).floor("min")], method="nearest")[0]
+        series_after = per_min.iloc[start_idx:]
+        window = config["clearance_sustain"]
+        
+        for i in range(0, max(0, len(series_after) - window)):
+            window_slice = series_after.iloc[i:i+window]
+            if window_slice.isna().any():
+                continue
+            if (window_slice <= config["clearance_threshold"]).all():
+                clearance_time = window_slice.index[0].strftime("%H:%M")
+                break
+    
+    return clearance_time
+
+
+def _build_caption_summary(seg_id, label, waves_out, peak_time, km_range, peak_density, los_grade, clearance_time, qualitative_note):
+    """Build summary text for caption."""
+    clearance_phrase = f"Clears by {clearance_time}" if clearance_time else "Does not fully clear in the observed window"
+    
+    if len(waves_out) <= 1:
+        return (
+            f"Segment {seg_id} — {label}. A single density wave passes, peaking near {peak_time} "
+            f"around {km_range} at {peak_density:.2f} p/m² ({los_grade}). "
+            f"{clearance_phrase}."
+        )
+    
+    wave1 = waves_out[0]
+    wave2 = waves_out[1]
+    adj = qualitative_note["relative_peak"] if qualitative_note else "similar"
+    spread_txt = qualitative_note["spread"] if qualitative_note else "similar spread"
+    clearance_phrase = f"Clears by {clearance_time}" if clearance_time else "Remains active in window"
+    
+    w1_start = wave1.get("start_time")
+    w1_end = wave1.get("end_time")
+    w1_peak = wave1.get("peak_density_p_m2", 0.0)
+    w2_start = wave2.get("start_time")
+    w2_end = wave2.get("end_time")
+    
+    return (
+        f"Segment {seg_id} — {label}. Two distinct waves are visible. "
+        f"The first ({w1_start}–{w1_end}) peaks at ~{w1_peak:.2f} p/m². "
+        f"A subsequent wave ({w2_start}–{w2_end}) is {adj} and {spread_txt}. "
+        f"Overall peak near {peak_time} around {km_range} at {peak_density:.2f} p/m² ({los_grade}). "
+        f"{clearance_phrase}."
+    )
 
 
 def generate_segment_caption(
@@ -267,204 +516,52 @@ def generate_segment_caption(
         Caption dictionary
     """
     try:
-        # Load captioning thresholds from density_rulebook.yml (globals.captioning)
-        try:
-            rulebook = load_rulebook()
-            caption_cfg = rulebook.get("globals", {}).get("captioning", {})
-        except Exception:
-            caption_cfg = {}
-        wave_gap_minutes = float(caption_cfg.get("wave_gap_minutes", 5))
-        clearance_threshold = float(caption_cfg.get("clearance_threshold_p_m2", 0.10))
-        clearance_sustain = int(caption_cfg.get("clearance_sustain_minutes", 6))
-        similarity_pct = float(caption_cfg.get("similarity_pct", 0.10))
-        spread_pct = float(caption_cfg.get("spread_pct", 0.20))
-
+        # Load configuration
+        config = _load_caption_config()
+        
         # Filter bins for this segment
         segment_bins = bins_df[bins_df['segment_id'] == seg_id].copy()
-        
         if len(segment_bins) == 0:
             return None
         
         # Get segment metadata
         meta = segments_meta.get(seg_id, {})
         label = meta.get('label', seg_id)
-
-        # Normalize/parse times
-        # Ensure expected columns exist
-        required_cols = ["t_start", "t_end", "density", "start_km", "end_km"]
-        for col in required_cols:
-            if col not in segment_bins.columns:
-                # Attempt aliases
-                alias_map = {
-                    "t_start": "start_time",
-                    "t_end": "end_time",
-                    "density": "density",
-                    "start_km": "from_km",
-                    "end_km": "to_km"
-                }
-                if alias_map.get(col) in segment_bins.columns:
-                    segment_bins[col] = segment_bins[alias_map[col]]
-
-        segment_bins = segment_bins.dropna(subset=["t_start", "t_end", "density", "start_km", "end_km"]).copy()
+        
+        # Prepare bins
+        segment_bins = _prepare_caption_bins(segment_bins)
         if len(segment_bins) == 0:
             return None
-
-        # Parse to pandas timestamps and sort
-        segment_bins["t_start"] = pd.to_datetime(segment_bins["t_start"], errors="coerce")
-        segment_bins["t_end"] = pd.to_datetime(segment_bins["t_end"], errors="coerce")
-        segment_bins = segment_bins.dropna(subset=["t_start", "t_end"]).sort_values("t_start")
-
-        # Compute global peak
-        peak_idx = segment_bins["density"].idxmax()
-        peak_row = segment_bins.loc[peak_idx]
-        peak_density = float(peak_row["density"]) if pd.notna(peak_row["density"]) else 0.0
-        peak_time = peak_row["t_end"].strftime("%H:%M") if pd.notna(peak_row["t_end"]) else ""
-        km_range = f"{float(peak_row['start_km']):.1f}–{float(peak_row['end_km']):.1f} km"
-
-        # Determine LOS using rulebook
-        try:
-            los_thresholds = load_rulebook().get("globals", {}).get("los_thresholds", {})
-        except Exception:
-            los_thresholds = {}
-        # Simple classifier using local helper from export_frontend_artifacts if available is not imported here;
-        # replicate minimal logic: find first grade whose max exceeds density
-        los_grade = "F"
-        if isinstance(los_thresholds, dict) and los_thresholds:
-            # Expect dict of grades with min/max
-            for grade, rng in los_thresholds.items():
-                try:
-                    min_v = float(rng.get("min", 0.0))
-                    max_v = float(rng.get("max", float("inf")))
-                    if min_v <= peak_density < max_v:
-                        los_grade = grade
-                        break
-                except Exception:
-                    continue
-
-        # Wave detection per Issue #280: split when gap (next.t_start - prev.t_end) > wave_gap_minutes
-        waves_bins: List[pd.DataFrame] = []
-        current: List[int] = []
-        prev_end = None
-        for idx, row in segment_bins.iterrows():
-            if prev_end is None:
-                current = [idx]
-                prev_end = row["t_end"]
-                continue
-            gap_min = (pd.Timestamp(row["t_start"]) - pd.Timestamp(prev_end)).total_seconds() / 60.0
-            if gap_min > wave_gap_minutes:
-                waves_bins.append(segment_bins.loc[current])
-                current = [idx]
-            else:
-                current.append(idx)
-            prev_end = row["t_end"]
-        if current:
-            waves_bins.append(segment_bins.loc[current])
-
-        waves_out: List[Dict[str, Any]] = []
-        spread_scores: List[float] = []
+        
+        # Compute peak metrics
+        peak_density, peak_time, km_range, peak_row = _compute_caption_peak(segment_bins)
+        los_grade = _get_los_grade(peak_density)
+        
+        # Detect waves
+        waves_bins = _split_into_waves(segment_bins, config["wave_gap_minutes"])
+        
+        # Analyze waves
+        waves_out = []
+        spread_scores = []
         for wdf in waves_bins:
-            w_peak_idx = wdf["density"].idxmax()
-            w_peak = wdf.loc[w_peak_idx]
-            w_peak_density = float(w_peak["density"]) if pd.notna(w_peak["density"]) else 0.0
-            w_start = pd.to_datetime(wdf["t_start"].min()).strftime("%H:%M")
-            w_end = pd.to_datetime(wdf["t_end"].max()).strftime("%H:%M")
-            w_km_range = f"{float(w_peak['start_km']):.1f}–{float(w_peak['end_km']):.1f} km"
-            # spread score = unique minutes × unique distance bins
-            unique_minutes = wdf["t_start"].dt.floor("min").nunique()
-            unique_dist = pd.Index(wdf["start_km"]).nunique()
-            spread = float(unique_minutes * unique_dist)
+            wave_data, spread = _analyze_wave(wdf)
+            waves_out.append(wave_data)
             spread_scores.append(spread)
-            waves_out.append({
-                "start_time": w_start,
-                "end_time": w_end,
-                "peak_density_p_m2": w_peak_density,
-                "peak_time": pd.to_datetime(w_peak["t_end"]).strftime("%H:%M") if pd.notna(w_peak["t_end"]) else "",
-                "peak_km_range": w_km_range,
-                "bins_count": int(len(wdf)),
-            })
-
-        # Qualitative comparison between first two waves, if available
-        qualitative_note = None
-        if len(waves_out) >= 2:
-            p0 = waves_out[0]["peak_density_p_m2"]
-            p1 = waves_out[1]["peak_density_p_m2"]
-            rel = (p1 - p0) / p0 if p0 > 0 else 0.0
-            if abs(rel) <= similarity_pct:
-                rel_txt = "similar"
-            elif rel < 0:
-                rel_txt = "lighter"
-            else:
-                rel_txt = "heavier"
-            s0 = spread_scores[0]
-            s1 = spread_scores[1]
-            spread_rel = (s1 - s0) / s0 if s0 > 0 else 0.0
-            if spread_rel >= spread_pct:
-                spread_txt = "more dispersed"
-            elif spread_rel <= -spread_pct:
-                spread_txt = "more concentrated"
-            else:
-                spread_txt = "similar spread"
-            qualitative_note = {"relative_peak": rel_txt, "spread": spread_txt}
+        
+        # Compare waves
+        qualitative_note = _compare_waves(waves_out, spread_scores, config)
+        if qualitative_note and len(waves_out) >= 2:
             waves_out[1]["qualitative"] = qualitative_note
-
-        # Clearance detection: 1-minute series, find earliest T with sustained <= threshold
-        # Build per-minute max density across km
-        minute_index = pd.date_range(
-            start=segment_bins["t_start"].min().floor("min"),
-            end=segment_bins["t_end"].max().ceil("min"),
-            freq="1min"
+        
+        # Find clearance time
+        clearance_time = _find_clearance_time(segment_bins, peak_row, config)
+        
+        # Build summary
+        summary = _build_caption_summary(
+            seg_id, label, waves_out, peak_time, km_range, 
+            peak_density, los_grade, clearance_time, qualitative_note
         )
-        per_min = pd.Series(index=minute_index, dtype=float)
-        for _, row in segment_bins.iterrows():
-            ts = pd.date_range(start=row["t_start"].floor("min"), end=row["t_end"].ceil("min"), freq="1min")
-            # take max across overlaps
-            per_min.loc[ts] = np.fmax(per_min.loc[ts].to_numpy(dtype=float, copy=True), float(row["density"])) if per_min.loc[ts].notna().any() else float(row["density"])
-        clearance_time = None
-        if len(per_min) > 0:
-            # find window after peak time
-            start_idx = per_min.index.get_indexer([pd.to_datetime(peak_row["t_end"]).floor("min")], method="nearest")[0]
-            series_after = per_min.iloc[start_idx:]
-            window = clearance_sustain
-            for i in range(0, max(0, len(series_after) - window)):
-                window_slice = series_after.iloc[i:i+window]
-                if window_slice.isna().any():
-                    continue  # unknown minutes cannot prove clearance
-                if (window_slice <= clearance_threshold).all():
-                    clearance_time = window_slice.index[0].strftime("%H:%M")
-                    break
-
-        # Compose summary text
-        clearance_phrase = (
-            f"Clears by {clearance_time}" if clearance_time else "Does not fully clear in the observed window"
-        )
-        if len(waves_out) <= 1:
-            summary = (
-                f"Segment {seg_id} — {label}. A single density wave passes, peaking near {peak_time} "
-                f"around {km_range} at {peak_density:.2f} p/m² ({los_grade}). "
-                f"{clearance_phrase}."
-            )
-        else:
-            wave1 = waves_out[0]
-            wave2 = waves_out[1]
-            adj = qualitative_note["relative_peak"] if qualitative_note else "similar"
-            spread_txt = qualitative_note["spread"] if qualitative_note else "similar spread"
-            clearance_phrase = (
-                f"Clears by {clearance_time}" if clearance_time else "Remains active in window"
-            )
-            # Extract to local variables to avoid any f-string parser edge cases with quotes/brackets
-            w1_start = wave1.get("start_time")
-            w1_end = wave1.get("end_time")
-            w1_peak = wave1.get("peak_density_p_m2", 0.0)
-            w2_start = wave2.get("start_time")
-            w2_end = wave2.get("end_time")
-            summary = (
-                f"Segment {seg_id} — {label}. Two distinct waves are visible. "
-                f"The first ({w1_start}–{w1_end}) peaks at ~{w1_peak:.2f} p/m². "
-                f"A subsequent wave ({w2_start}–{w2_end}) is {adj} and {spread_txt}. "
-                f"Overall peak near {peak_time} around {km_range} at {peak_density:.2f} p/m² ({los_grade}). "
-                f"{clearance_phrase}."
-            )
-
+        
         return {
             "seg_id": seg_id,
             "label": label,
@@ -483,6 +580,7 @@ def generate_segment_caption(
     except Exception as e:
         print(f"   ⚠️  Could not generate caption for segment {seg_id}: {e}")
         return None
+
 
 
 def load_segments_metadata() -> Dict[str, Dict[str, Any]]:

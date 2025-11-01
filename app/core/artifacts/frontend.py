@@ -444,6 +444,106 @@ def generate_flow_json(reports_dir: Path) -> Dict[str, Any]:
     return payload
 
 
+
+def _load_segment_dimensions():
+    """Load segment dimensions from segments.csv."""
+    import pandas as pd
+    from pathlib import Path
+    
+    dimensions_path = Path("data/segments.csv")
+    if not dimensions_path.exists():
+        print(f"Warning: {dimensions_path} not found")
+        return {}
+    
+    df_dims = pd.read_csv(dimensions_path)
+    return df_dims.set_index('seg_id').to_dict('index')
+
+
+def _load_schema_keys(reports_dir):
+    """Load schema keys from bins.parquet."""
+    import pandas as pd
+    from pathlib import Path
+    
+    schema_keys = {}
+    bins_parquet_path = reports_dir / "bins.parquet"
+    
+    if bins_parquet_path.exists():
+        try:
+            bins_df = pd.read_parquet(bins_parquet_path)
+            if 'schema_key' in bins_df.columns:
+                for seg_id, group in bins_df.groupby('segment_id'):
+                    schema_keys[seg_id] = group['schema_key'].iloc[0]
+                print(f"   ✅ Loaded schema keys for {len(schema_keys)} segments from bins.parquet")
+            else:
+                print(f"   ⚠️  schema_key column not found in bins.parquet")
+        except Exception as e:
+            print(f"   ⚠️  Could not load schema keys from bins.parquet: {e}")
+    else:
+        print(f"   ⚠️  bins.parquet not found at {bins_parquet_path}")
+    
+    return schema_keys
+
+
+def _create_segment_feature(seg_id, segment_dims, schema_keys):
+    """Create a GeoJSON feature for a segment."""
+    dims = segment_dims.get(seg_id, {})
+    
+    return {
+        "type": "Feature",
+        "geometry": {
+            "type": "LineString",
+            "coordinates": []
+        },
+        "properties": {
+            "seg_id": seg_id,
+            "label": dims.get("seg_label", dims.get("name", seg_id)),
+            "length_km": float(dims.get("full_length", dims.get("half_length", dims.get("10K_length", 0.0)))),
+            "width_m": float(dims.get("width_m", 0.0)),
+            "direction": dims.get("direction", "uni"),
+            "events": [event for event in ["Full", "Half", "10K"] if dims.get(event.lower() if event != "10K" else "10K", "") == "y"],
+            "schema": schema_keys.get(seg_id, "on_course_open"),
+            "description": dims.get("description", "No description available")
+        }
+    }
+
+
+
+def _load_segment_schema_keys(reports_dir):
+    """Load schema keys from bins.parquet."""
+    import pandas as pd
+    schema_keys = {}
+    bins_parquet_path = reports_dir / "bins.parquet"
+    
+    if bins_parquet_path.exists():
+        try:
+            bins_df = pd.read_parquet(bins_parquet_path)
+            if 'schema_key' in bins_df.columns:
+                for seg_id, group in bins_df.groupby('segment_id'):
+                    schema_keys[seg_id] = group['schema_key'].iloc[0]
+                print(f"   ✅ Loaded schema keys for {len(schema_keys)} segments")
+        except Exception as e:
+            print(f"   ⚠️  Could not load schema keys: {e}")
+    
+    return schema_keys
+
+
+def _build_segment_feature_properties(seg_id, segment_dims, schema_keys):
+    """Build GeoJSON feature properties for a segment."""
+    dims = segment_dims.get(seg_id, {})
+    
+    return {
+        "seg_id": seg_id,
+        "label": dims.get("seg_label", dims.get("name", seg_id)),
+        "length_km": float(dims.get("full_length", dims.get("half_length", dims.get("10K_length", 0.0)))),
+        "width_m": float(dims.get("width_m", 0.0)),
+        "direction": dims.get("direction", "uni"),
+        "events": [event for event in ["Full", "Half", "10K"] 
+                   if dims.get(event.lower() if event != "10K" else "10K", "") == "y"],
+        "schema": schema_keys.get(seg_id, "on_course_open"),
+        "description": dims.get("description", "No description available")
+    }
+
+
 def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
     """
     Generate segments.geojson from bins.geojson.gz by aggregating bins into segment polylines.
@@ -465,31 +565,10 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
         bins_data = json.load(f)
     
     # Load dimensions for segment metadata
-    dimensions_path = Path("data/segments.csv")
-    if not dimensions_path.exists():
-        print(f"Warning: {dimensions_path} not found")
-        segment_dims = {}
-    else:
-        df_dims = pd.read_csv(dimensions_path)
-        segment_dims = df_dims.set_index('seg_id').to_dict('index')
+    segment_dims = _load_segment_dimensions()
     
     # Load schema_key from bins.parquet (Issue #285)
-    schema_keys = {}
-    bins_parquet_path = reports_dir / "bins.parquet"
-    if bins_parquet_path.exists():
-        try:
-            bins_df = pd.read_parquet(bins_parquet_path)
-            if 'schema_key' in bins_df.columns:
-                # Get schema_key for each segment from the first bin
-                for seg_id, group in bins_df.groupby('segment_id'):
-                    schema_keys[seg_id] = group['schema_key'].iloc[0]
-                print(f"   ✅ Loaded schema keys for {len(schema_keys)} segments from bins.parquet")
-            else:
-                print(f"   ⚠️  schema_key column not found in bins.parquet")
-        except Exception as e:
-            print(f"   ⚠️  Could not load schema keys from bins.parquet: {e}")
-    else:
-        print(f"   ⚠️  bins.parquet not found at {bins_parquet_path}")
+    schema_keys = _load_schema_keys(reports_dir)
     
     # Group bins by seg_id and create simplified polylines
     segments_features = {}
@@ -503,26 +582,7 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
         
         # Get or create segment feature
         if seg_id not in segments_features:
-            # Get segment dimensions
-            dims = segment_dims.get(seg_id, {})
-            
-            segments_features[seg_id] = {
-                "type": "Feature",
-                "geometry": {
-                    "type": "LineString",
-                    "coordinates": []
-                },
-                "properties": {
-                    "seg_id": seg_id,
-                    "label": dims.get("seg_label", dims.get("name", seg_id)),
-                    "length_km": float(dims.get("full_length", dims.get("half_length", dims.get("10K_length", 0.0)))),
-                    "width_m": float(dims.get("width_m", 0.0)),
-                    "direction": dims.get("direction", "uni"),
-                    "events": [event for event in ["Full", "Half", "10K"] if dims.get(event.lower() if event != "10K" else "10K", "") == "y"],
-                    "schema": schema_keys.get(seg_id, "on_course_open"),  # Issue #285: Add operational schema tag from bins.parquet
-                    "description": dims.get("description", "No description available")  # Issue #373: Add segment description
-                }
-            }
+            segments_features[seg_id] = _create_segment_feature(seg_id, segment_dims, schema_keys)
         
         # Add bin centroid to segment's coordinate list
         geom = feature.get("geometry")
