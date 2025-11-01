@@ -1,0 +1,10 @@
+{
+  "items": [
+    {
+      "segment_id": "A1",
+      "severity": "WATCH",
+      "type": "high_utilization"
+    }
+  ]
+}
+
