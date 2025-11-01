@@ -11,9 +11,6 @@ services:
     volumes:
       # Bind mount source code for hot reload during development
       - ./app:/app/app
-      - ./api:/app/api
-      - ./core:/app/core
-      - ./analytics:/app/analytics
       - ./e2e.py:/app/e2e.py
       # Bind mount data and config directories
       - ./data:/app/data
