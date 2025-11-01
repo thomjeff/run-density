@@ -13,11 +13,10 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
-COPY data ./data
-COPY config ./config
-COPY frontend ./frontend
-COPY static ./static
-COPY templates ./templates
+    COPY data ./data
+    COPY config ./config
+    COPY static ./static
+    COPY templates ./templates
 COPY tests ./tests
 COPY e2e.py ./
 
