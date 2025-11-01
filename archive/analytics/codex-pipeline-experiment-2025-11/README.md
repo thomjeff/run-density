@@ -39,3 +39,37 @@ The application uses direct report generation instead of pipeline orchestration.
 - **Impact:** None (code was not in use)
 
 **Archived as part of v1.7.1 architecture cleanup.**
+
+## Additional Archived Files (Migrated to app/core/artifacts/)
+
+### export_frontend_artifacts.py (1048 lines)
+- **Purpose:** UI artifact generation (meta.json, segment_metrics.json, flags.json, flow.json, etc.)
+- **Migration:** Moved to `app/core/artifacts/frontend.py`
+- **Used By:** CI pipeline (.github/workflows/ci-pipeline.yml), e2e.py
+- **Why Migrated:** Active code brought into v1.7 architecture
+
+### export_heatmaps.py (648 lines)
+- **Purpose:** PNG heatmap and captions.json generation
+- **Migration:** Moved to `app/core/artifacts/heatmaps.py`
+- **Used By:** e2e.py (local testing), frontend.py (heatmap generation)
+- **Why Migrated:** Active code brought into v1.7 architecture
+
+### __init__.py (0 lines)
+- **Purpose:** Package marker for analytics/
+- **Status:** No longer needed after migration
+
+## Migration Complete
+
+All functional code from `/analytics` has been migrated to `/app/core/artifacts/` as part of v1.7.1 cleanup.
+
+**New Locations:**
+- `app/core/artifacts/frontend.py` - UI artifact generation
+- `app/core/artifacts/heatmaps.py` - Heatmap and caption generation
+- `app/core/artifacts/__init__.py` - Package marker
+
+**Updated References:**
+- `e2e.py` - Uses `from app.core.artifacts.frontend import ...`
+- `.github/workflows/ci-pipeline.yml` - Uses `python -m app.core.artifacts.frontend`
+- `Dockerfile` - No longer copies `/analytics` directory
+
+**Archive Date:** 2025-11-01
