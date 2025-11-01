@@ -1,7 +1,19 @@
 # Current Import Dependencies - v1.6.52
 
 **Generated:** 2025-11-01  
-**Purpose:** Map all import patterns to support v1.7.0 architecture reset
+**Purpose:** Map all import patterns to support v1.7.0 architecture reset  
+**Status:** Raw audit - needs transformation to visual dependency graph
+
+---
+
+## Table of Contents
+1. [Critical Finding: Dual Import Paths](#critical-finding-dual-import-paths)
+2. [Architecture Layers](#architecture-layers)
+3. [Visual Dependency Graph](#visual-dependency-graph)
+4. [Module Import Contract](#module-import-contract)
+5. [Complete Import Map](#complete-import-map-from-mainpy)
+6. [Safe vs Unsafe Archival](#files-actually-deprecated-safe-to-archive)
+7. [Recommendations](#recommendations-for-v170)
 
 ---
 
@@ -47,6 +59,152 @@ except ImportError:
 | `app/gpx_processor.py` | `.gpx_processor` | `gpx_processor` | GPX processing stub |
 
 **Status:** ⚠️ **CANNOT be archived** - Required by Cloud Run import fallbacks
+
+---
+
+## Architecture Layers
+
+### Current Layer Structure (v1.6.52)
+
+```
+┌─────────────────────────────────────────────────┐
+│  ENTRYPOINT: app/main.py                        │
+│  - FastAPI application                          │
+│  - Dual import pattern (try/except fallbacks)   │
+└─────────────────────────────────────────────────┘
+                     ↓
+┌─────────────────────────────────────────────────┐
+│  LAYER 1: API Routes (HTTP Interface)           │
+│  - routes/api_*.py (11 routers)                 │
+│  - routes/reports.py, routes/ui.py              │
+└─────────────────────────────────────────────────┘
+                     ↓
+┌─────────────────────────────────────────────────┐
+│  LAYER 2: Stub Redirects (Compatibility)        │
+│  - density_api.py → api/density.py              │
+│  - map_api.py → api/map.py                      │
+│  - report.py → api/report.py                    │
+│  ⚠️ Required by fallback imports                │
+└─────────────────────────────────────────────────┘
+                     ↓
+┌─────────────────────────────────────────────────┐
+│  LAYER 3: Business Logic (Core Domain)          │
+│  - density_report.py (report generation)        │
+│  - flow_report.py (flow analysis)               │
+│  - core/* (domain logic)                        │
+└─────────────────────────────────────────────────┘
+                     ↓
+┌─────────────────────────────────────────────────┐
+│  LAYER 4: Utilities & Configuration             │
+│  - constants.py (system constants)              │
+│  - util_env.py (environment helpers)            │
+└─────────────────────────────────────────────────┘
+```
+
+### Problems with Current Structure
+
+1. **Layers are not enforced** - any module can import from any other
+2. **Stub layer shouldn't exist** - architectural smell
+3. **Circular dependencies possible** - no import guards
+4. **Environment-dependent behavior** - different paths in prod vs local
+
+---
+
+## Visual Dependency Graph
+
+### Main Entry Point Dependencies
+
+```mermaid
+graph TD
+    A[app/main.py] -->|try/except| B[Relative Imports]
+    A -->|fallback| C[Absolute Imports]
+    
+    B -->|.density_api| D[app/density_api.py]
+    C -->|density_api| D
+    
+    B -->|.report| E[app/report.py]
+    C -->|report| E
+    
+    B -->|.map_api| F[app/map_api.py]
+    C -->|map_api| F
+    
+    B -->|.routes.*| G[app/routes/*]
+    C -->|routes.*| G
+    
+    D -->|redirects| H[api/density.py]
+    E -->|redirects| I[api/report.py]
+    F -->|redirects| J[api/map.py]
+    
+    A -->|direct| K[density_report.py]
+    A -->|direct| L[flow_report.py]
+    A -->|direct| M[constants.py]
+    
+    style A fill:#ff6b6b
+    style D fill:#ffd93d
+    style E fill:#ffd93d
+    style F fill:#ffd93d
+    style H fill:#6bcf7f
+    style I fill:#6bcf7f
+    style J fill:#6bcf7f
+```
+
+**Legend:**
+- 🔴 Red: Entry point (main.py)
+- 🟡 Yellow: Stub files (should be removed in v1.7)
+- 🟢 Green: Actual implementation files
+- Gray: Direct imports (no stubs)
+
+---
+
+## Module Import Contract
+
+### Proposed v1.7.0 Import Rules
+
+**Allowed Import Patterns:**
+
+```python
+# ✅ ALLOWED: Absolute imports with package prefix
+from app.api.density import router
+from app.core.flow.flow import analyze_temporal_flow
+from app.utils.constants import DEFAULT_STEP_KM
+
+# ✅ ALLOWED: Standard library and third-party
+from typing import Dict, List
+from fastapi import FastAPI
+
+# ❌ FORBIDDEN: Relative imports in entry points
+from .density_api import router
+
+# ❌ FORBIDDEN: Try/except import fallbacks
+try:
+    from .module import function
+except ImportError:
+    from module import function
+
+# ❌ FORBIDDEN: Stub files
+# No files should exist solely to redirect imports
+```
+
+**Layer Import Rules:**
+
+```
+API Layer (routes/*)
+├─ CAN import from: Core, Utils
+└─ CANNOT import from: Other routes (prevents coupling)
+
+Core Layer (core/*)
+├─ CAN import from: Utils
+└─ CANNOT import from: API, Routes (domain isolation)
+
+Utils Layer (utils/*, constants.py)
+├─ CAN import from: Standard library only
+└─ CANNOT import from: API, Core, Routes (no dependencies)
+```
+
+**Enforcement:**
+- Add pre-commit hook to validate import patterns
+- CI test to detect try/except import blocks
+- Architecture tests to enforce layer boundaries
 
 ---
 
