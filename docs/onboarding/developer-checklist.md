@@ -191,10 +191,9 @@ Before submitting any PR, verify:
 
 ### ✅ Testing
 
-- [ ] Architecture tests pass: `pytest tests/test_architecture.py`
-- [ ] Import linter passes: `lint-imports`
-- [ ] Smoke tests pass: `make smoke-docker`
 - [ ] E2E tests pass: `make e2e-docker`
+- [ ] Smoke tests pass: `make smoke-docker`
+- [ ] No complexity violations: `flake8 app/ --max-complexity=15 --select=C901,B001`
 
 ### ✅ Code Quality
 
@@ -253,7 +252,7 @@ Before submitting any PR, verify:
 | API endpoint | `app/api/density.py` | FastAPI routes, request models |
 | Core logic | `app/core/density/compute.py` | Business logic, domain isolation |
 | Utilities | `app/utils/shared.py` | Helper functions, zero dependencies |
-| Testing | `tests/test_architecture.py` | Architecture validation |
+| Testing | `e2e.py` | End-to-end API validation |
 
 ### Key Documents
 
@@ -274,9 +273,9 @@ Before submitting any PR, verify:
 
 2. **Run diagnostic commands**
    ```bash
-   pytest tests/test_architecture.py -v  # Architecture validation
-   lint-imports                           # Layer boundary check
+   make e2e-docker                        # End-to-end API validation
    docker logs run-density-dev            # Container logs
+   flake8 app/                            # Code quality check
    ```
 
 3. **Ask the team**
@@ -296,7 +295,7 @@ A: Always `from app.X.Y import Z` - see [Architecture README](../architecture/RE
 A: Domain isolation - Core should work without HTTP. See [Layer Rules](../architecture/README.md#layer-architecture)
 
 **Q: Tests are failing after my change**  
-A: Run `pytest tests/test_architecture.py -v` to see which architectural rule was violated
+A: Check the E2E test output to see what failed. Review `docs/architecture/README.md` for layer rules
 
 ---
 
