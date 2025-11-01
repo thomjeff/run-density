@@ -36,7 +36,7 @@ from app.constants import (
     DISTANCE_BIN_SIZE_KM, DEFAULT_STEP_KM, DEFAULT_TOT_THRESHOLDS,
     DEFAULT_TIME_BIN_SECONDS, CONFLICT_LENGTH_LONG_SEGMENT_M
 )
-from app.utils import load_pace_csv, arrival_time_sec, load_segments_csv
+from app.utils.shared import load_pace_csv, arrival_time_sec, load_segments_csv
 
 
 def _get_event_distance_range(segment: pd.Series, event: str) -> Tuple[float, float]:

@@ -3,7 +3,7 @@ import time
 from typing import Dict, Optional, Any, List, Tuple
 import pandas as pd
 import numpy as np
-from app.utils import load_pace_csv, arrival_time_sec
+from app.utils.shared import load_pace_csv, arrival_time_sec
 
 # Use shared utility functions from utils module
 
