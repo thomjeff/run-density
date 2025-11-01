@@ -111,7 +111,7 @@ try:
     from .density_template_engine import DensityTemplateEngine, create_template_context
 except ImportError:
     from density import analyze_density_segments, DensityConfig
-    from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, BIN_SCHEMA_VERSION
+    from app.utils.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, BIN_SCHEMA_VERSION
     from report_utils import get_report_paths
     from density_template_engine import DensityTemplateEngine, create_template_context
 import pandas as pd

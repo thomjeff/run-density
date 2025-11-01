@@ -11,14 +11,9 @@ from typing import Dict, Optional, Any, List
 import pandas as pd
 from datetime import datetime
 
-try:
-    from core.density.compute import analyze_density_segments
-    from core.flow.flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
-    from app.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
-except ImportError:
-    from core.density.compute import analyze_density_segments
-    from core.flow.flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
-    from app.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
+from app.core.density.compute import analyze_density_segments
+from app.core.flow.flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
+from app.utils.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
 
 def generate_combined_report(

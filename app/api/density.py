@@ -17,7 +17,7 @@ import logging
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
 
-from core.density.compute import (
+from app.core.density.compute import (
     analyze_density_segments,
     DensityConfig,
     StaticWidthProvider,
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/api/density', tags=['density'])
 
 
-from api.models.density import DensityAnalysisRequest, DensityAnalysisResponse, DensityReportRequest, DensityReportResponse
+from app.api.models.density import DensityAnalysisRequest, DensityAnalysisResponse, DensityReportRequest, DensityReportResponse
 
 
 @router.post('/analyze', response_model=DensityAnalysisResponse)

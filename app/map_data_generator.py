@@ -35,7 +35,7 @@ except ImportError:
     from density import analyze_density_segments
     from flow import analyze_temporal_flow_segments
     from io.loader import load_runners, load_segments
-    from constants import DISTANCE_BIN_SIZE_KM
+    from app.utils.constants import DISTANCE_BIN_SIZE_KM
     from canonical_segments import (
         load_canonical_segments, get_segment_peak_densities, 
         get_segment_time_series, is_canonical_segments_available,

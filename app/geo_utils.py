@@ -21,7 +21,7 @@ try:
     from .constants import DISTANCE_BIN_SIZE_KM, METERS_PER_KM
 except ImportError:
     from bin_analysis import SegmentBinData, BinData
-    from constants import DISTANCE_BIN_SIZE_KM, METERS_PER_KM
+    from app.utils.constants import DISTANCE_BIN_SIZE_KM, METERS_PER_KM
 
 logger = logging.getLogger(__name__)
 

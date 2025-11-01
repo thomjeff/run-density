@@ -112,7 +112,7 @@ import pathlib
 try:
     from .util_env import env_bool, env_str
 except ImportError:
-    from util_env import env_bool, env_str
+    from app.utils.env import env_bool, env_str
 
 BOOT_ENV = {
     "cwd": str(pathlib.Path.cwd()),

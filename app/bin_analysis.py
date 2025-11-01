@@ -24,7 +24,7 @@ try:
     from .flow import analyze_temporal_flow_segments
     from .io.loader import load_runners, load_segments
 except ImportError:
-    from constants import DISTANCE_BIN_SIZE_KM, METERS_PER_KM
+    from app.utils.constants import DISTANCE_BIN_SIZE_KM, METERS_PER_KM
     from density import analyze_density_segments
     from flow import analyze_temporal_flow_segments
     from io.loader import load_runners, load_segments
