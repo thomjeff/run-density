@@ -1,5 +1,189 @@
 # Changelog
 
+## [v1.7.0] - 2025-11-01
+
+### v1.7 Architecture Reset - Complete Refactoring
+
+**Issue #422 Complete**: Comprehensive architectural reset eliminating technical debt and establishing clean import patterns
+
+#### Overview
+Major architectural refactoring that eliminated environment divergence, removed fallback import patterns, and established a clean layered architecture with strict boundary enforcement.
+
+#### The Problem
+- **Environment Drift**: Local development (try/except imports) diverged from Cloud Run (absolute imports)
+- **Opaque Import Patterns**: Try/except import fallbacks masked module resolution issues
+- **Directory Sprawl**: Stub redirect files scattered across app/ directory
+- **No Layer Boundaries**: API, Core, and Utils layers could import from anywhere
+- **Technical Debt**: Accumulated complexity made changes risky and debugging difficult
+
+#### The Solution
+
+**Track 1 - Issue #423: Architecture Reset Setup**
+- Analyzed current import patterns and dependencies
+- Created comprehensive architecture documentation
+- Tagged v1.6.52-stable baseline
+- Created `refactor/v1.7-architecture` feature branch
+- Documented reset rationale and migration strategy
+
+**Track 2 - Issue #424: Core Architecture Implementation**
+- Consolidated directory structure:
+  - `/app/api/` - FastAPI routes and models
+  - `/app/core/` - Business logic (domain layer with /bin, /density, /flow, /gpx)
+  - `/app/utils/` - Shared utilities (constants, env, shared)
+- Eliminated all try/except import fallbacks
+- Removed 6 stub redirect files (density.py, density_api.py, report.py, map_api.py, gpx_processor.py, bin_geometries.py)
+- Enforced single `app.*` absolute import pattern
+- Renamed utilities for consistency:
+  - `app/utils.py` → `app/utils/shared.py`
+  - `app/constants.py` → `app/utils/constants.py`
+  - `app/util_env.py` → `app/utils/env.py`
+- Added architecture validation tests
+- Configured `import-linter` for layer boundary enforcement
+
+**Track 3 - Issue #425: Developer Documentation**
+- Created `docs/architecture/README.md` - Architecture overview
+- Created `docs/architecture/adding-modules.md` - Module addition guide
+- Created `docs/architecture/testing.md` - Architecture testing strategy
+- Created `docs/onboarding/developer-checklist.md` - New developer onboarding
+- Updated `docs/GUARDRAILS.md` with v1.7 import patterns and layer rules
+- Enhanced `docs/architecture/current-import-dependencies.md` with structured dependency map
+
+**Hotfix #427: Complexity Reduction**
+- Refactored `get_map_bins()` in `app/api/map.py` from complexity 21 → 8
+- Extracted 5 helper functions for clarity
+- Met CI complexity threshold (<15)
+
+**Hotfix #428: Docker Configuration**
+- Updated Dockerfile to remove obsolete COPY commands
+- Fixed deployment to Cloud Run
+
+#### Technical Implementation
+
+**Architecture Enforcement:**
+- **Import Linting**: `pytest tests/test_architecture.py` validates patterns
+- **Layer Boundaries**: 
+  - API Layer can import from Core and Utils
+  - Core Layer can import from Utils only
+  - Utils Layer has zero app dependencies
+- **CI Pipeline**: Architecture validation runs on every PR
+- **Contract Tests**: Automated checks prevent pattern violations
+
+**Directory Structure (v1.7.0):**
+```
+/app
+  /api/          - FastAPI routes (density, flow, reports, etc.)
+  /core/         - Business logic
+    /bin/        - Bin-level analysis
+    /density/    - Density computation
+    /flow/       - Temporal flow analysis
+    /gpx/        - GPX processing
+  /routes/       - Additional HTTP handlers
+  /utils/        - Shared utilities
+    constants.py - System constants
+    env.py       - Environment helpers
+    shared.py    - Common utilities
+  main.py        - FastAPI entry point
+```
+
+**Import Pattern (v1.7.0):**
+```python
+# ✅ CORRECT
+from app.api.density import router
+from app.core.density.compute import analyze_density_segments
+from app.utils.constants import DEFAULT_STEP_KM
+
+# ❌ FORBIDDEN
+try:
+    from .module import function
+except ImportError:
+    from module import function
+```
+
+#### Files Modified/Created
+
+**Core Refactoring:**
+- `app/main.py` - Removed try/except fallbacks, consolidated imports
+- `app/utils/constants.py` - Moved from app/constants.py
+- `app/utils/env.py` - Moved from app/util_env.py
+- `app/utils/shared.py` - Moved from app/utils.py
+- `app/api/map.py` - Complexity reduction (21 → 8)
+- `Dockerfile` - Removed obsolete COPY commands
+- `requirements.txt` - Added import-linter>=2.0
+
+**Deleted Files:**
+- `app/density.py` - Stub redirect (logic in core/density/)
+- `app/density_api.py` - Stub redirect (logic in api/density.py)
+- `app/report.py` - Stub redirect (logic in routes/reports.py)
+- `app/map_api.py` - Stub redirect (logic in api/map.py)
+- `app/gpx_processor.py` - Stub redirect (logic in core/gpx/)
+- `app/bin_geometries.py` - Stub redirect (logic in core/bin/)
+
+**Documentation Created:**
+- `docs/architecture/README.md` - Architecture overview
+- `docs/architecture/adding-modules.md` - Module addition guide (440 lines)
+- `docs/architecture/testing.md` - Testing strategy
+- `docs/onboarding/developer-checklist.md` - Onboarding checklist
+- `docs/architecture/v1.7-reset-rationale.md` - Reset justification
+
+**Testing Infrastructure:**
+- `tests/test_architecture.py` - Architecture validation tests
+- `.importlinter` - Import linting configuration
+
+#### Testing & Validation
+- ✅ All E2E tests passing (local Docker + Cloud Run)
+- ✅ All complexity checks passing (<15 threshold)
+- ✅ All architecture validation tests passing
+- ✅ Docker build successful with new structure
+- ✅ Cloud Run deployment successful
+- ✅ All 7 API endpoints operational (Health Check verified)
+- ✅ Complete UI testing passed (Dashboard, Density, Flow, Segments, Health)
+
+#### Benefits Achieved
+- ✅ **Environment Parity**: Docker local matches Cloud Run configuration
+- ✅ **Clean Imports**: Single `app.*` absolute import pattern
+- ✅ **Layer Boundaries**: Enforced architectural boundaries prevent coupling
+- ✅ **No Fallbacks**: Eliminated opaque try/except import patterns
+- ✅ **Directory Clarity**: Clear separation between API, Core, and Utils
+- ✅ **Better Onboarding**: Comprehensive documentation for new developers
+- ✅ **CI Enforcement**: Automated validation prevents architectural drift
+- ✅ **Reduced Complexity**: All functions meet <15 complexity threshold
+
+#### Migration Impact
+**For Developers:**
+- All imports must use `app.*` prefix
+- No relative imports or try/except fallbacks
+- Follow layer import rules (documented in GUARDRAILS.md)
+- Use architecture tests to validate changes
+
+**For Production:**
+- No breaking changes to external APIs
+- All endpoints continue working as before
+- Performance unchanged
+- Docker deployment streamlined
+
+#### Pull Requests
+- **PR #426**: Track 1+2 - v1.7.0 Architecture Reset Complete Implementation
+- **PR #427**: Hotfix - Reduce get_map_bins complexity to meet CI threshold
+- **PR #428**: Hotfix - Update Dockerfile for v1.7 directory structure
+
+#### Success Metrics
+
+**Before v1.7:**
+- Try/except import patterns: ~15 locations
+- Stub redirect files: 6 files
+- Directory structure: Flat app/ directory
+- Layer boundaries: None (any module could import anything)
+- Architecture enforcement: None
+
+**After v1.7:**
+- Try/except import patterns: 0
+- Stub redirect files: 0
+- Directory structure: Layered (API, Core, Utils)
+- Layer boundaries: Enforced with import-linter
+- Architecture enforcement: CI validation + unit tests
+
+---
+
 ## [v1.6.51] - 2025-11-01
 
 ### Docker-first, GCS-always Architecture
