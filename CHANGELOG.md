@@ -1,5 +1,120 @@
 # Changelog
 
+## [v1.6.51] - 2025-11-01
+
+### Docker-first, GCS-always Architecture
+
+**Issue #415 Complete**: Local-Cloud Runtime Alignment with Docker-first Development
+
+#### Overview
+Complete architectural refactor achieving environment parity between local development and Cloud Run production through Docker-first workflow and GCS-always storage patterns.
+
+#### The Problem
+- **Environment Drift**: Local development (.env, venv) diverged from Cloud Run (Docker, injected config)
+- **Inconsistent Testing**: Different behaviors between local and production
+- **GCS Upload Gaps**: Missing UI artifacts (flags.json, flow.json, latest.json) from GCS
+- **Developer Friction**: Complex setup with Python version conflicts and environment management
+
+#### The Solution
+
+**Phase 1: Containerize Local Dev Environment**
+- Created `docker-compose.yml` for local development
+- Added Makefile targets: `dev-docker`, `stop-docker`, `build-docker`, `smoke-docker`
+- Volume mounts for source code hot-reload
+- Updated `e2e.py` to use port 8080 (Cloud Run alignment)
+
+**Phase 2: Replace .env with Docker-Injected Config**
+- Created `dev.env` for environment variable injection
+- Removed `.env` file dependency from container
+- Configured `docker-compose.yml` to use `env_file` directive
+
+**Phase 3: Enable GCS Uploads from Local Container**
+- Created `keys/` directory for service account authentication
+- Fixed `latest.json` generation and GCS upload
+- Fixed UI artifact uploads (7 JSON files + segments.geojson)
+- Added `e2e-docker` Makefile target
+- Verified all reports and artifacts sync to GCS
+
+**Phase 4: Standardize Dev/Test Execution with Docker**
+- Created comprehensive `docs/DOCKER_DEV.md` guide
+- Updated `README.md` with Docker-first Quick Start
+- Deprecated legacy venv workflow
+- Documented complete Docker development workflow
+
+**Phase 5: Cleanup and Documentation**
+- Updated `GUARDRAILS.md` with Docker-first workflow
+- Marked legacy venv as deprecated
+- Documented GCS upload behavior (local vs Cloud Run)
+- Completed final E2E testing and UI validation
+
+#### Technical Implementation
+
+**New Files:**
+- `docker-compose.yml` - Container orchestration for local dev
+- `dev.env` - Environment configuration template
+- `keys/README.md` - GCS service account setup guide
+- `docs/DOCKER_DEV.md` - Complete Docker development guide
+
+**Modified Files:**
+- `Makefile` - Added Docker targets (dev-docker, smoke-docker, e2e-docker, etc.)
+- `README.md` - Docker-first Quick Start section
+- `docs/GUARDRAILS.md` - Docker workflow and GCS behavior documentation
+- `e2e.py` - Port 8080 alignment with Cloud Run
+- `analytics/export_frontend_artifacts.py` - UI artifact and latest.json GCS uploads
+- `.gitignore` - Added `keys/*.json` exclusion for service account security
+
+**Issues Created:**
+- #418 - Duplicate reports bug (E2E generating multiple versions)
+- #419 - Cleanup duplicate GCS upload logic in CI pipeline
+
+#### Testing & Validation
+- ✅ All E2E tests passing (local Docker + Cloud Run)
+- ✅ All UI artifacts synchronized (local ↔ GCS)
+- ✅ Complete UI testing on production
+- ✅ GCS uploads verified (15 reports + 8 UI artifacts + 17 heatmaps)
+- ✅ No regressions detected
+
+#### Benefits Achieved
+- ✅ Environment Parity: Local Docker matches Cloud Run configuration
+- ✅ No Python Version Conflicts: Containerized Python environment
+- ✅ Hot Reload: Source code changes reflected immediately
+- ✅ GCS Testing: Can test GCS uploads locally before deployment
+- ✅ Simplified Onboarding: Single command to start development
+- ✅ Consistent Testing: Same Docker environment for all developers
+- ✅ Port Alignment: Local (8080) matches Cloud Run (8080)
+
+#### Files Modified
+**Core Application:**
+- `analytics/export_frontend_artifacts.py` - GCS upload fixes for UI artifacts and latest.json
+- `e2e.py` - Port 8080 alignment
+
+**Infrastructure:**
+- `docker-compose.yml` (new) - Docker Compose configuration
+- `dev.env` (new) - Environment variables template
+- `Makefile` - Docker workflow targets
+- `.gitignore` - Service account key exclusion
+
+**Documentation:**
+- `README.md` - Docker-first Quick Start
+- `docs/DOCKER_DEV.md` (new) - Complete Docker development guide
+- `docs/GUARDRAILS.md` - Docker workflow and GCS expectations
+- `keys/README.md` (new) - Service account setup instructions
+
+#### Migration Impact
+**For Developers:**
+- New workflow: `make dev-docker` replaces `make run-local`
+- E2E testing: `make e2e-docker` replaces venv activation
+- Legacy venv: Still supported but deprecated
+
+**For CI/CD:**
+- No changes required (Issue #419 tracks future optimization)
+
+**For Production:**
+- No breaking changes
+- GCS uploads continue working as before
+
+---
+
 ## [v1.6.50] - 2025-10-29
 
 ### Phase 4 Complexity Standards - Complete Refactoring
