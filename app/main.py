@@ -12,51 +12,26 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse
 from pydantic import BaseModel
 
-# Import new modules
-try:
-    # Try relative imports first (for local development)
-    from .density import analyze_density_segments
-    from .density_api import router as density_router
-    from .density_report import generate_density_report, generate_simple_density_report
-    from .flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
-    from .flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
-    from .report import generate_combined_report, generate_combined_narrative
-    from .map_api import router as map_router
-    from .routes.reports import router as reports_router
-    from .routes.ui import router as ui_router
-    from .routes.api_segments import router as api_segments_router
-    from .routes.api_dashboard import router as api_dashboard_router
-    from .routes.api_health import router as api_health_router
-    from .routes.api_density import router as api_density_router
-    from .routes.api_flow import router as api_flow_router
-    from .routes.api_reports import router as api_reports_router
-    from .routes.api_bins import router as api_bins_router
-    from .routes.api_e2e import router as api_e2e_router
-    from .routes.api_heatmaps import router as api_heatmaps_router
-    # from .test_api import test_router  # Disabled for Cloud Run deployment
-    from .constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
-except ImportError:
-    # Fall back to absolute imports (for Cloud Run)
-    from density import analyze_density_segments
-    from density_api import router as density_router
-    from density_report import generate_density_report, generate_simple_density_report
-    from flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
-    from flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
-    from report import generate_combined_report, generate_combined_narrative
-    from map_api import router as map_router
-    from routes.reports import router as reports_router
-    from routes.ui import router as ui_router
-    from routes.api_segments import router as api_segments_router
-    from routes.api_dashboard import router as api_dashboard_router
-    from routes.api_health import router as api_health_router
-    from routes.api_density import router as api_density_router
-    from routes.api_flow import router as api_flow_router
-    from routes.api_reports import router as api_reports_router
-    from routes.api_bins import router as api_bins_router
-    from routes.api_e2e import router as api_e2e_router
-    from routes.api_heatmaps import router as api_heatmaps_router
-    # from test_api import test_router  # Disabled for Cloud Run deployment
-    from constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
+# Import modules using v1.7 absolute import pattern
+from app.core.density.compute import analyze_density_segments
+from app.api.density import router as density_router
+from app.density_report import generate_density_report, generate_simple_density_report
+from app.core.flow.flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
+from app.flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
+from app.api.report import generate_combined_report, generate_combined_narrative
+from app.api.map import router as map_router
+from app.routes.reports import router as reports_router
+from app.routes.ui import router as ui_router
+from app.routes.api_segments import router as api_segments_router
+from app.routes.api_dashboard import router as api_dashboard_router
+from app.routes.api_health import router as api_health_router
+from app.routes.api_density import router as api_density_router
+from app.routes.api_flow import router as api_flow_router
+from app.routes.api_reports import router as api_reports_router
+from app.routes.api_bins import router as api_bins_router
+from app.routes.api_e2e import router as api_e2e_router
+from app.routes.api_heatmaps import router as api_heatmaps_router
+from app.utils.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
 # Pydantic models for request bodies
 class AnalysisRequest(BaseModel):
