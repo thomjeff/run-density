@@ -200,11 +200,26 @@ def main():
     # Parse command line arguments
     args = parse_arguments()
     
-    # Determine target URL
+    # Determine target URL and enable GCS uploads for cloud testing
     if args.cloud:
         base_url = CLOUD_RUN_URL
         environment = "Cloud Run Production"
         print("🌐 Testing against Cloud Run production")
+        
+        # Enable GCS uploads for cloud testing (Issues #439, #440)
+        # This ensures artifacts are uploaded to GCS, not just written locally
+        os.environ["GCS_UPLOAD"] = "true"
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "run-density"
+        
+        # Set GCS credentials if service account key exists
+        # (Docker container mounts ./keys to /tmp/keys)
+        sa_key_path = "/tmp/keys/gcs-sa.json"
+        if Path(sa_key_path).exists():
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = sa_key_path
+            print("☁️  GCS uploads enabled with service account authentication")
+        else:
+            print("☁️  GCS uploads enabled (requires service account key at /tmp/keys/gcs-sa.json)")
+            print("    See keys/README.md for setup instructions")
     else:
         base_url = LOCAL_URL
         environment = "Local Server"

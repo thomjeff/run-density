@@ -14,9 +14,9 @@
 Before starting ANY work, you **MUST** reference these documents:
 
 - `@GUARDRAILS.md` – This document
-- `@ARCHITECTURE.md` – System design and core concepts
-- `@VARIABLE_NAMING_REFERENCE.md` – Authoritative variable names and field mappings
-- `@OPERATIONS.md` – Deployment, monitoring, and version control
+- `@ARCHITECTURE.md` – System design and core concepts (docs/architecture/README.md)
+- `@QUICK_REFERENCE.md` – Authoritative variable names and field mappings (docs/reference/QUICK_REFERENCE.md)
+- `@OPERATIONS.md` – Deployment, monitoring, and version control (docs/dev-guides/OPERATIONS.md)
 
 ---
 
