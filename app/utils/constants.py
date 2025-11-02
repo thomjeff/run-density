@@ -133,3 +133,15 @@ MAP_ZONE_COLORS = {
     "red": "#F44336",
     "dark-red": "#B71C1C"
 }
+
+# Storage configuration (Epic #444)
+# GCS bucket names (configurable via environment variables)
+GCS_BUCKET_LEGACY = "run-density-reports"  # Legacy date-based structure
+GCS_BUCKET_RUNFLOW = "runflow"              # New UUID-based structure (Epic #444)
+
+# Storage root directories
+RUNFLOW_ROOT_LOCAL = "/users/jthompson/documents/runflow"  # Local filesystem root
+RUNFLOW_ROOT_CONTAINER = "/app/runflow"                     # Docker container root
+
+# Run metadata
+RUN_ID_MIN_LENGTH = 10  # Minimum run ID length per Epic #444
