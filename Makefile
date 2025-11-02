@@ -28,7 +28,8 @@ help: ## Show this help message
 	@echo ""
 	@echo "Examples:"
 	@echo "  make dev-docker              # Start development container"
-	@echo "  make e2e-docker        # Run E2E test (--local flag)"
+	@echo "  make e2e-docker              # Run E2E test (default to local)"
+	@echo "  make e2e-local-docker        # Run E2E test (--local flag)"
 	@echo "  make smoke-docker            # Quick health check"
 	@echo "  make stop-docker             # Stop container"
 	@echo ""
@@ -59,6 +60,10 @@ smoke-docker: ## Run smoke tests (health, ready, API endpoints)
 	@echo "✅ smoke-docker passed"
 
 e2e-docker: ## Run e2e.py inside Docker container
+	@echo ">> Running E2E tests inside Docker container"
+	@docker exec run-density-dev python /app/e2e.py --local
+
+e2e-local-docker: ## Run e2e --local
 	@echo ">> Running E2E tests inside Docker container"
 	@docker exec run-density-dev python /app/e2e.py --local
 
