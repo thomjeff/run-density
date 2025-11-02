@@ -67,10 +67,6 @@ e2e-local-docker: ## Run e2e --local
 	@echo ">> Running E2E tests inside Docker container"
 	@docker exec run-density-dev python /app/e2e.py --local
 
-e2e-local-docker: ## Run e2e --local
-	@echo ">> Running E2E tests inside Docker container"
-	@docker exec run-density-dev python /app/e2e.py --local
-
 e2e-cloud-docker: ## Run e2e --cloud
 	@echo ">> Running E2E tests inside Docker container"
 	@docker exec run-density-dev python /app/e2e.py --cloud
