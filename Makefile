@@ -28,7 +28,7 @@ help: ## Show this help message
 	@echo ""
 	@echo "Examples:"
 	@echo "  make dev-docker              # Start development container"
-	@echo "  make e2e-docker              # Run E2E tests"
+	@echo "  make e2e-local-docker        # Run E2E test (--local flag)"
 	@echo "  make smoke-docker            # Quick health check"
 	@echo "  make stop-docker             # Stop container"
 	@echo ""
@@ -47,7 +47,7 @@ build-docker: ## Build Docker image without starting container
 	@echo ">> Building Docker image"
 	@docker-compose build
 
-smoke-docker: ## Run smoke tests against Docker container (health, ready, API endpoints)
+smoke-docker: ## Run smoke tests (health, ready, API endpoints)
 	@echo ">> Running smoke tests against Docker container"
 	@echo ">> Hitting http://localhost:8080"
 	@curl -fsS "http://localhost:8080/health" | jq -e '.ok==true' >/dev/null && echo "health OK" || (echo "health FAILED" && exit 1)
@@ -58,6 +58,10 @@ smoke-docker: ## Run smoke tests against Docker container (health, ready, API en
 	@curl -fsS "http://localhost:8080/api/dashboard/summary" | jq -e '.segments_total >= 0' >/dev/null && echo "dashboard OK" || (echo "dashboard FAILED" && exit 1)
 	@echo "✅ smoke-docker passed"
 
-e2e-docker: ## Run full E2E tests inside Docker container
+e2e-local-docker: ## Run e2e --local
 	@echo ">> Running E2E tests inside Docker container"
 	@docker exec run-density-dev python /app/e2e.py --local
+
+e2e-cloud-docker: ## Run e2e --cloud
+	@echo ">> Running E2E tests inside Docker container"
+	@docker exec run-density-dev python /app/e2e.py --cloud
