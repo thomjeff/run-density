@@ -1,8 +1,8 @@
 # Docker Development Guide
 
-**Version:** 1.0  
-**Last Updated:** 2025-11-01  
-**Issue:** #415 (Docker-first, GCS-always architecture)
+**Version:** 1.1  
+**Last Updated:** 2025-11-03  
+**Issues:** #415 (Docker-first, GCS-always architecture), #447 (E2E Test Modes)
 
 This guide covers local development using Docker containers, replacing the legacy `.venv` workflow.
 
@@ -33,13 +33,22 @@ This runs quick smoke tests to verify:
 - Ready endpoint showing loaded data
 - Core API endpoints functional
 
-### 3. Run Full E2E Tests
+### 3. Run E2E Tests
 
+**Recommended for local testing:**
 ```bash
-make e2e-docker
+make e2e-local-docker
 ```
 
-This executes the complete E2E test suite inside the container.
+This restarts the container and runs the complete E2E test suite with filesystem storage.
+
+**Other E2E modes:**
+```bash
+make e2e-staging-docker    # Test GCS upload logic
+make e2e-prod-gcp          # Test Cloud Run production (requires running container)
+```
+
+See "E2E Test Modes" section below for details on when to use each mode.
 
 ### 4. Stop Container
 
@@ -59,14 +68,133 @@ make stop-docker
 | `make stop-docker` | Stop and remove the container |
 | `make build-docker` | Build the Docker image (no start) |
 | `make smoke-docker` | Run smoke tests against running container |
-| `make e2e-docker` | Run full E2E tests inside container |
+
+### E2E Testing Commands (Issue #447)
+
+| Command | Target | Storage | Container | Description |
+|---------|--------|---------|-----------|-------------|
+| `make e2e-local-docker` | Local container | Filesystem | Restarts automatically | Test with local storage (no GCS) |
+| `make e2e-staging-docker` | Local container | GCS | Restarts automatically | Test with GCS storage (validates upload logic) |
+| `make e2e-prod-gcp` | Cloud Run production | GCS | Requires running container | Test deployed service |
+| `make e2e-docker` | Local container | Uses dev.env | Requires running container | Legacy target (default to local) |
+
+---
+
+## E2E Test Modes (Issue #447)
+
+Three distinct E2E test modes for comprehensive testing:
+
+### 1. `e2e-local-docker` - Local Filesystem Testing
+
+**Purpose:** Fast local development testing without GCS dependency
+
+**Behavior:**
+- Restarts container with `GCS_UPLOAD=false`
+- Saves all files to local filesystem (`./reports/`, `./artifacts/`)
+- No GCS uploads attempted
+- Uses `e2e.py --local` flag
+
+**When to Use:**
+- ✅ Rapid local development iterations
+- ✅ Testing without internet/GCS access
+- ✅ Debugging report generation logic
+- ✅ Quick validation before staging
+
+**Example:**
+```bash
+make e2e-local-docker
+# Check results in ./reports/YYYY-MM-DD/
+```
+
+---
+
+### 2. `e2e-staging-docker` - GCS Integration Testing
+
+**Purpose:** Test GCS upload logic before deployment
+
+**Behavior:**
+- Restarts container with `GCS_UPLOAD=true` and GCS credentials
+- Tests **local container code** against **GCS storage**
+- Validates storage_service GCS upload logic
+- Uses `e2e.py --local` flag (local container, remote storage)
+
+**When to Use:**
+- ✅ Before merging changes affecting storage logic
+- ✅ Validating GCS permissions and credentials
+- ✅ Testing storage path correctness
+- ✅ Pre-deployment verification
+
+**Known Behavior:**
+- Files saved to both local filesystem AND GCS (volume mount side effect)
+- Primary purpose is validating GCS uploads work correctly
+
+**Example:**
+```bash
+make e2e-staging-docker
+# Check GCS: gsutil ls gs://run-density-reports/YYYY-MM-DD/
+# Check local: ls reports/YYYY-MM-DD/  (also present)
+```
+
+**After Running:**
+Container remains in GCS mode. To restore filesystem mode:
+```bash
+make e2e-local-docker  # Restarts with GCS_UPLOAD=false
+```
+
+---
+
+### 3. `e2e-prod-gcp` - Production Cloud Run Testing
+
+**Purpose:** Verify deployed Cloud Run production service
+
+**Behavior:**
+- Tests **deployed Cloud Run** service (https://run-density-ln4r3sfkha-uc.a.run.app)
+- Makes HTTP requests to remote service
+- Cloud Run generates and uploads all files to GCS
+- Uses `e2e.py --cloud` flag
+- **100% API-driven** - no local filesystem dependency
+
+**When to Use:**
+- ✅ After CI deployment completes
+- ✅ Verifying production service health
+- ✅ Validating Cloud Run environment
+- ✅ Post-release smoke testing
+
+**Requirements:**
+- ⚠️ Requires a running local container (for Python environment only)
+- Container can be in any mode (local/staging)
+- Can run after `e2e-local-docker` or `e2e-staging-docker`
+
+**Example:**
+```bash
+# Option 1: After running another e2e mode
+make e2e-local-docker      # Container now running
+make e2e-prod-gcp          # Tests Cloud Run
+
+# Option 2: Start container separately
+make dev-docker            # Start container
+make e2e-prod-gcp          # Tests Cloud Run
+```
+
+---
+
+### E2E Mode Comparison
+
+| Mode | Target | Storage | Restarts Container | Local Files Created | GCS Upload |
+|------|--------|---------|-------------------|---------------------|------------|
+| `e2e-local-docker` | Local | Filesystem | ✅ Yes | ✅ Yes | ❌ No |
+| `e2e-staging-docker` | Local | GCS | ✅ Yes | ✅ Yes (side effect) | ✅ Yes |
+| `e2e-prod-gcp` | Cloud Run | GCS | ❌ No (needs running) | ❌ No | ✅ Yes (by Cloud Run) |
+
+---
 
 ### Legacy Commands (Deprecated)
 
-These commands still work but are deprecated in favor of Docker workflow:
+These commands still work but are deprecated in favor of the new E2E modes:
 
 | Command | Docker Equivalent | Notes |
 |---------|------------------|-------|
+| `make e2e-docker` | `make e2e-local-docker` | Generic target, prefer specific modes |
 | `make run-local` | `make dev-docker` | Uses venv, will be removed in future |
 | `make stop-local` | `make stop-docker` | Kills port 8081, not Docker-aware |
 
@@ -296,30 +424,69 @@ make dev-docker
 # 3. Test changes
 make smoke-docker
 
-# 4. Run full E2E
-make e2e-docker
+# 4. Run full E2E (local mode)
+make e2e-local-docker     # Restarts container, runs E2E with filesystem storage
 
-# 5. Stop container when done
+# 5. Test GCS integration (before merging)
+make e2e-staging-docker   # Restarts container, runs E2E with GCS uploads
+
+# 6. Stop container when done
 make stop-docker
 ```
 
-### Testing GCS Uploads
+### Pre-Deployment Workflow
 
 ```bash
-# 1. Configure GCS (one-time setup)
-# - Place service account key in keys/gcs-sa.json
-# - Edit dev.env to enable GCS_UPLOAD=true
+# 1. Test locally
+make e2e-local-docker
 
-# 2. Start container
+# 2. Test GCS integration
+make e2e-staging-docker
+
+# 3. Merge to main (triggers CI/CD)
+
+# 4. After CI deploys, verify production
+make e2e-local-docker     # Ensure container running
+make e2e-prod-gcp         # Test deployed Cloud Run service
+```
+
+### Testing GCS Uploads (Issue #447)
+
+**Recommended: Use `e2e-staging-docker`**
+
+```bash
+# 1. One-time setup: Ensure service account key exists
+ls -lh keys/gcs-sa.json
+
+# 2. Run staging mode (automatically configures GCS)
+make e2e-staging-docker
+
+# 3. Verify uploads
+gsutil ls gs://run-density-reports/$(date +%Y-%m-%d)/
+gsutil ls gs://run-density-reports/artifacts/$(date +%Y-%m-%d)/ui/
+
+# 4. Return to local mode (disables GCS)
+make e2e-local-docker
+```
+
+**Legacy Method (Manual Configuration):**
+
+If you need persistent GCS uploads for development:
+
+```bash
+# 1. Edit dev.env
+GCS_UPLOAD=true
+GOOGLE_CLOUD_PROJECT=run-density
+GOOGLE_APPLICATION_CREDENTIALS=/tmp/keys/gcs-sa.json
+
+# 2. Restart container
+make stop-docker
 make dev-docker
 
-# 3. Run E2E (will upload to GCS)
+# 3. All E2E runs will upload to GCS
 make e2e-docker
 
-# 4. Verify uploads
-gsutil ls gs://run-density-reports/$(date +%Y-%m-%d)/
-
-# 5. Disable GCS for normal dev
+# 4. Disable GCS for normal dev
 # - Edit dev.env, set GCS_UPLOAD=false
 # - Restart: make stop-docker && make dev-docker
 ```
@@ -421,7 +588,7 @@ After mastering Docker development:
 
 ---
 
-**Last Updated:** 2025-11-01  
-**Updated By:** AI Assistant (Issue #415 Phase 4)  
+**Last Updated:** 2025-11-03  
+**Updated By:** AI Assistant (Issue #447 - E2E Test Modes)  
 **Next Review:** When Docker workflow becomes primary development method
 
