@@ -376,7 +376,11 @@ class CloudStorageCacheManager(CacheManager):
 
 def get_cache_manager() -> CacheManager:
     """Get appropriate cache manager based on environment."""
-    if os.getenv('GOOGLE_CLOUD_PROJECT'):
+    # Issue #447: Check GCS_UPLOAD flag first (staging mode)
+    if os.getenv('GCS_UPLOAD', '').lower() == 'true':
+        # Staging mode - use Cloud Storage
+        return CloudStorageCacheManager()
+    elif os.getenv('GOOGLE_CLOUD_PROJECT'):
         # Cloud Run environment
         return CloudStorageCacheManager()
     else:

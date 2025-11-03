@@ -6,7 +6,10 @@ BASE ?= http://localhost:$(PORT)
 # make smoke-docker BASE=https://run-density-ln4r3sfkha-uc.a.run.app
 
 # -------- Phony targets --------
-.PHONY: help dev-docker stop-docker build-docker smoke-docker e2e-docker e2e-local-docker e2e-cloud-docker
+.PHONY: help dev-docker stop-docker build-docker smoke-docker e2e-docker e2e-local-docker e2e-staging-docker e2e-prod-gcp
+
+# Issue #447: Use same shell for all lines in e2e targets (required for environment variables)
+.ONESHELL:
 
 # -------- Help --------
 .DEFAULT_GOAL := help
@@ -29,7 +32,9 @@ help: ## Show this help message
 	@echo "Examples:"
 	@echo "  make dev-docker              # Start development container"
 	@echo "  make e2e-docker              # Run E2E test (default to local)"
-	@echo "  make e2e-local-docker        # Run E2E test (--local flag)"
+	@echo "  make e2e-local-docker        # Run E2E test (local, filesystem)"
+	@echo "  make e2e-staging-docker      # Run E2E test (local, GCS storage)"
+	@echo "  make e2e-prod-gcp            # Run E2E test (Cloud Run production)"
 	@echo "  make smoke-docker            # Quick health check"
 	@echo "  make stop-docker             # Stop container"
 	@echo ""
@@ -60,13 +65,34 @@ smoke-docker: ## Run smoke tests (health, ready, API endpoints)
 	@echo "✅ smoke-docker passed"
 
 e2e-docker: ## Run e2e.py inside Docker container
-	@echo ">> Running E2E tests inside Docker container"
+	@echo ">> Running E2E tests inside Docker container (default to local)"
 	@docker exec run-density-dev python /app/e2e.py --local
 
-e2e-local-docker: ## Run e2e --local
-	@echo ">> Running E2E tests inside Docker container"
-	@docker exec run-density-dev python /app/e2e.py --local
+e2e-local-docker: ## Run e2e --local (local container, filesystem storage)
+	@echo ">> Restarting container with local mode (filesystem storage)"
+	docker-compose down
+	echo "GCS_UPLOAD=false" > .env.override
+	docker-compose --env-file .env.override up -d
+	rm -f .env.override
+	echo ">> Waiting for container to be ready (15s)..."
+	sleep 15
+	echo ">> Running E2E tests in local mode"
+	docker exec run-density-dev python /app/e2e.py --local
 
-e2e-cloud-docker: ## Run e2e --cloud
-	@echo ">> Running E2E tests inside Docker container"
+e2e-staging-docker: ## Run e2e --local with GCS (local container, GCS storage)
+	@echo ">> Restarting container with staging mode (GCS storage)"
+	docker-compose down
+	echo "GCS_UPLOAD=true" > .env.override
+	echo "GOOGLE_CLOUD_PROJECT=run-density" >> .env.override
+	echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/keys/gcs-sa.json" >> .env.override
+	docker-compose --env-file dev.env --env-file .env.override up -d
+	rm -f .env.override
+	echo ">> Waiting for container to be ready (15s)..."
+	sleep 15
+	echo ">> Running E2E tests in staging mode (local code, GCS storage)"
+	docker exec run-density-dev python /app/e2e.py --local
+	echo ">> Note: Container is now in GCS mode. Run 'make e2e-local-docker' to restore filesystem mode."
+
+e2e-prod-gcp: ## Run e2e --cloud (tests Cloud Run production)
+	@echo ">> Testing Cloud Run production (requires running container)"
 	@docker exec run-density-dev python /app/e2e.py --cloud

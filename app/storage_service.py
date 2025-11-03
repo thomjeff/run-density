@@ -61,8 +61,13 @@ class StorageService:
     
     def _detect_environment(self):
         """Detect if running in Cloud Run or local environment."""
+        # Issue #447: Check for explicit GCS upload flag first (staging mode)
+        if os.getenv('GCS_UPLOAD', '').lower() == 'true':
+            self.config.use_cloud_storage = True
+            self.config.project_id = os.getenv('GOOGLE_CLOUD_PROJECT', 'run-density')
+            logger.info("GCS uploads enabled via GCS_UPLOAD flag - using Cloud Storage")
         # Check for Cloud Run environment variables
-        if os.getenv('K_SERVICE') or os.getenv('GOOGLE_CLOUD_PROJECT'):
+        elif os.getenv('K_SERVICE') or os.getenv('GOOGLE_CLOUD_PROJECT'):
             self.config.use_cloud_storage = True
             self.config.project_id = os.getenv('GOOGLE_CLOUD_PROJECT')
             logger.info("Detected Cloud Run environment - using Cloud Storage")
