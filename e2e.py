@@ -294,53 +294,76 @@ def main():
         print("Exporting UI Artifacts")
         print("=" * 60)
         
-        # Variables to store run info for heatmap generation
-        reports_dir = None
-        run_id = None
-        
-        try:
-            from app.core.artifacts.frontend import export_ui_artifacts, update_latest_pointer
-            import re
-            
-            # Find the latest report directory
-            reports_dir = Path("reports")
-            if reports_dir.exists():
-                # Get the most recent date-based report directory (YYYY-MM-DD format only)
-                # Filter out non-date directories like 'ui' to avoid picking wrong source
-                date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
-                run_dirs = sorted(
-                    [d for d in reports_dir.iterdir() 
-                     if d.is_dir() and date_pattern.match(d.name)],
-                    reverse=True
-                )
-                if run_dirs:
-                    latest_run_dir = run_dirs[0]
-                    run_id = latest_run_dir.name
-                    
-                    print(f"Exporting artifacts from: {latest_run_dir}")
-                    export_ui_artifacts(latest_run_dir, run_id)
-                    update_latest_pointer(run_id)
-                    print("✅ UI artifacts exported successfully")
+        # Hotfix #447: Split logic - cloud mode uses API, local mode uses filesystem
+        if args.cloud:
+            # Cloud mode: Call remote API to export artifacts from Cloud Run's fresh data
+            try:
+                print("☁️ Calling Cloud Run API to export UI artifacts...")
+                response = requests.post(f"{base_url}/api/export-ui-artifacts", timeout=180)
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    run_id = result.get('run_id', 'unknown')
+                    print(f"✅ UI artifacts exported remotely for {run_id}")
+                    print(f"   Artifacts saved to GCS: artifacts/{run_id}/ui/")
                 else:
-                    print("⚠️ No report directories found in reports/")
-            else:
-                print("⚠️ Reports directory not found")
-        except Exception as e:
-            print(f"⚠️ Warning: Could not export UI artifacts: {e}")
-            print("   Dashboard will show warnings for missing data")
+                    print(f"⚠️ Failed to export UI artifacts: {response.status_code}")
+                    print(f"   Response: {response.text[:200]}")
+            except Exception as e:
+                print(f"⚠️ Warning: Could not export UI artifacts via API: {e}")
+                print("   Dashboard may show warnings for missing data")
+        else:
+            # Local mode: Use local filesystem to export artifacts
+            reports_dir = None
+            run_id = None
+            
+            try:
+                from app.core.artifacts.frontend import export_ui_artifacts, update_latest_pointer
+                import re
+                
+                # Find the latest report directory
+                reports_dir = Path("reports")
+                if reports_dir.exists():
+                    # Get the most recent date-based report directory (YYYY-MM-DD format only)
+                    # Filter out non-date directories like 'ui' to avoid picking wrong source
+                    date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+                    run_dirs = sorted(
+                        [d for d in reports_dir.iterdir() 
+                         if d.is_dir() and date_pattern.match(d.name)],
+                        reverse=True
+                    )
+                    if run_dirs:
+                        latest_run_dir = run_dirs[0]
+                        run_id = latest_run_dir.name
+                        
+                        print(f"Exporting artifacts from: {latest_run_dir}")
+                        export_ui_artifacts(latest_run_dir, run_id)
+                        update_latest_pointer(run_id)
+                        print("✅ UI artifacts exported successfully")
+                    else:
+                        print("⚠️ No report directories found in reports/")
+                else:
+                    print("⚠️ Reports directory not found")
+            except Exception as e:
+                print(f"⚠️ Warning: Could not export UI artifacts: {e}")
+                print("   Dashboard will show warnings for missing data")
         
-        # Generate heatmaps for local testing (skip in CI)
-        print("\n" + "=" * 60)
-        print("Generating Heatmaps")
-        print("=" * 60)
-        try:
-            if reports_dir and run_id:
-                run_heatmaps_if_local(reports_dir, run_id)
-            else:
-                print("   ⚠️ No run data available for heatmap generation")
-        except Exception as e:
-            print(f"⚠️ Warning: Could not generate heatmaps: {e}")
-            print("   Heatmaps are optional for local testing")
+        # Generate heatmaps for local testing (skip in cloud mode)
+        # Hotfix #447: Cloud mode heatmaps are generated by Cloud Run API, not locally
+        if not args.cloud:
+            print("\n" + "=" * 60)
+            print("Generating Heatmaps")
+            print("=" * 60)
+            try:
+                if reports_dir and run_id:
+                    run_heatmaps_if_local(reports_dir, run_id)
+                else:
+                    print("   ⚠️ No run data available for heatmap generation")
+            except Exception as e:
+                print(f"⚠️ Warning: Could not generate heatmaps: {e}")
+                print("   Heatmaps are optional for local testing")
+        else:
+            print("\n☁️ Heatmaps generated by Cloud Run API (already complete)")
         
         sys.exit(0)
     else:
