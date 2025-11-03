@@ -34,6 +34,7 @@ services:
       # Issue #447: Allow shell overrides for e2e-staging-docker (shell takes precedence over dev.env)
       - GCS_UPLOAD=${GCS_UPLOAD}
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
     # Override CMD for development mode with hot reload
     # Production Dockerfile uses gunicorn; dev mode uses uvicorn --reload
     command: uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
