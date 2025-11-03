@@ -68,16 +68,18 @@ e2e-docker: ## Run e2e.py inside Docker container
 e2e-local-docker: ## Run e2e --local (local container, filesystem storage)
 	@echo ">> Restarting container with local mode (filesystem storage)"
 	@docker-compose down
-	@GCS_UPLOAD=false docker-compose up -d
-	@sleep 5
+	@export GCS_UPLOAD=false && docker-compose up -d
+	@echo ">> Waiting for container to be ready (10s)..."
+	@sleep 10
 	@echo ">> Running E2E tests in local mode"
 	@docker exec run-density-dev python /app/e2e.py --local
 
 e2e-staging-docker: ## Run e2e --local with GCS (local container, GCS storage)
 	@echo ">> Restarting container with staging mode (GCS storage)"
 	@docker-compose down
-	@GCS_UPLOAD=true GOOGLE_CLOUD_PROJECT=run-density docker-compose up -d
-	@sleep 5
+	@export GCS_UPLOAD=true && export GOOGLE_CLOUD_PROJECT=run-density && docker-compose up -d
+	@echo ">> Waiting for container to be ready (10s)..."
+	@sleep 10
 	@echo ">> Running E2E tests in staging mode (local code, GCS storage)"
 	@docker exec run-density-dev python /app/e2e.py --local
 	@echo ">> Note: Container is now in GCS mode. Run 'make e2e-local-docker' to restore filesystem mode."
