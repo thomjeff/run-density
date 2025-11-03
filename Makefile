@@ -94,5 +94,5 @@ e2e-staging-docker: ## Run e2e --local with GCS (local container, GCS storage)
 	echo ">> Note: Container is now in GCS mode. Run 'make e2e-local-docker' to restore filesystem mode."
 
 e2e-prod-gcp: ## Run e2e --cloud (tests Cloud Run production)
-	@echo ">> Testing Cloud Run production (runs on host, no Docker needed)"
-	@python3 e2e.py --cloud
+	@echo ">> Testing Cloud Run production (requires running container)"
+	@docker exec run-density-dev python /app/e2e.py --cloud
