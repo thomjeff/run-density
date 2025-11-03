@@ -84,6 +84,7 @@ e2e-staging-docker: ## Run e2e --local with GCS (local container, GCS storage)
 	docker-compose down
 	echo "GCS_UPLOAD=true" > .env.override
 	echo "GOOGLE_CLOUD_PROJECT=run-density" >> .env.override
+	echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/keys/gcs-sa.json" >> .env.override
 	docker-compose --env-file dev.env --env-file .env.override up -d
 	rm -f .env.override
 	echo ">> Waiting for container to be ready (15s)..."
