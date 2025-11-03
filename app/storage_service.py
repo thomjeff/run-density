@@ -292,11 +292,13 @@ class StorageService:
     def _save_to_gcs(self, file_path: str, content: str) -> str:
         """Save file to Google Cloud Storage."""
         try:
+            # Issue #447: Add reports/ prefix to match local storage structure
+            gcs_path = f"{self.config.local_reports_dir}/{file_path}"
             bucket = self._client.bucket(self.config.bucket_name)
-            blob = bucket.blob(file_path)
+            blob = bucket.blob(gcs_path)
             blob.upload_from_string(content)
-            logger.info(f"Saved file to GCS: {file_path}")
-            return f"gs://{self.config.bucket_name}/{file_path}"
+            logger.info(f"Saved file to GCS: {gcs_path}")
+            return f"gs://{self.config.bucket_name}/{gcs_path}"
         except GoogleCloudError as e:
             logger.error(f"Failed to save file to GCS {file_path}: {e}")
             raise
@@ -316,11 +318,11 @@ class StorageService:
     def _load_from_gcs(self, path: str) -> Optional[str]:
         """Load file from Google Cloud Storage."""
         try:
-            # Normalize path
+            # Issue #447: Add reports/ prefix if not already present
             if path.startswith("reports/"):
-                gcs_path = path[len("reports/"):]
-            else:
                 gcs_path = path
+            else:
+                gcs_path = f"{self.config.local_reports_dir}/{path}"
 
             bucket = self._client.bucket(self.config.bucket_name)
             blob = bucket.blob(gcs_path)
@@ -358,8 +360,10 @@ class StorageService:
     def _list_gcs_files(self, date_path: str, pattern: Optional[str] = None) -> List[str]:
         """List files in Google Cloud Storage."""
         try:
+            # Issue #447: Add reports/ prefix to match local storage structure
+            gcs_prefix = f"{self.config.local_reports_dir}/{date_path}/"
             bucket = self._client.bucket(self.config.bucket_name)
-            blobs = bucket.list_blobs(prefix=date_path + "/")
+            blobs = bucket.list_blobs(prefix=gcs_prefix)
             
             files = []
             for blob in blobs:
@@ -367,7 +371,7 @@ class StorageService:
                 if not pattern or pattern in filename:
                     files.append(filename)
             
-            logger.debug(f"Listed {len(files)} files from GCS: {date_path}")
+            logger.debug(f"Listed {len(files)} files from GCS: {gcs_prefix}")
             return files
         except GoogleCloudError as e:
             logger.error(f"Failed to list files from GCS {date_path}: {e}")
@@ -397,8 +401,10 @@ class StorageService:
     def _gcs_file_exists(self, file_path: str) -> bool:
         """Check if file exists in Google Cloud Storage."""
         try:
+            # Issue #447: Add reports/ prefix to match local storage structure
+            gcs_path = f"{self.config.local_reports_dir}/{file_path}"
             bucket = self._client.bucket(self.config.bucket_name)
-            blob = bucket.blob(file_path)
+            blob = bucket.blob(gcs_path)
             return blob.exists()
         except GoogleCloudError as e:
             logger.error(f"Failed to check file existence in GCS {file_path}: {e}")
