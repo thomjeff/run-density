@@ -308,7 +308,11 @@ def create_storage_from_env() -> Storage:
         Storage: Configured storage instance
     """
     # Auto-detect Cloud Run environment (same as storage_service.py)
-    is_cloud = bool(os.getenv('K_SERVICE') or os.getenv('GOOGLE_CLOUD_PROJECT'))
+    # Issue #447: Check GCS_UPLOAD flag first (staging mode)
+    if os.getenv('GCS_UPLOAD', '').lower() == 'true':
+        is_cloud = True
+    else:
+        is_cloud = bool(os.getenv('K_SERVICE') or os.getenv('GOOGLE_CLOUD_PROJECT'))
     env = "cloud" if is_cloud else "local"
     
     if env == "local":

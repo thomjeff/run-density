@@ -38,7 +38,11 @@ def _detect_environment() -> Tuple[bool, str]:
     Returns:
         Tuple of (is_cloud: bool, environment_name: str)
     """
-    is_cloud = bool(os.getenv('K_SERVICE') or os.getenv('GOOGLE_CLOUD_PROJECT'))
+    # Issue #447: Check GCS_UPLOAD flag first (staging mode)
+    if os.getenv('GCS_UPLOAD', '').lower() == 'true':
+        is_cloud = True
+    else:
+        is_cloud = bool(os.getenv('K_SERVICE') or os.getenv('GOOGLE_CLOUD_PROJECT'))
     environment = "Cloud Run" if is_cloud else "Local"
     return is_cloud, environment
 
