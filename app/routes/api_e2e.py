@@ -383,6 +383,75 @@ async def upload_e2e_results():
         raise HTTPException(status_code=500, detail=f"Upload error: {str(e)}")
 
 
+@router.post("/api/export-ui-artifacts")
+async def export_ui_artifacts_endpoint():
+    """
+    Export UI artifacts from the latest report directory.
+    
+    Hotfix #447: This endpoint allows e2e.py --cloud to trigger artifact export
+    remotely without depending on the GitHub runner's local filesystem.
+    
+    This endpoint:
+    1. Finds the latest report directory (from Cloud Run's data)
+    2. Generates UI artifacts (meta.json, flags.json, flow.json, etc.)
+    3. Uploads them to GCS
+    4. Updates latest.json
+    
+    Returns:
+        Status of artifact export with file counts
+    """
+    try:
+        logger.info("=== Exporting UI Artifacts ===")
+        
+        # Import needed modules
+        from app.core.artifacts.frontend import export_ui_artifacts, update_latest_pointer
+        import re
+        
+        # Find the latest report directory
+        reports_dir = Path("reports")
+        if not reports_dir.exists():
+            raise HTTPException(status_code=404, detail="Reports directory not found")
+        
+        # Get the most recent date-based report directory (YYYY-MM-DD format only)
+        date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+        run_dirs = sorted(
+            [d for d in reports_dir.iterdir() 
+             if d.is_dir() and date_pattern.match(d.name)],
+            reverse=True
+        )
+        
+        if not run_dirs:
+            raise HTTPException(status_code=404, detail="No report directories found")
+        
+        latest_run_dir = run_dirs[0]
+        run_id = latest_run_dir.name
+        
+        logger.info(f"Exporting artifacts from: {latest_run_dir}")
+        
+        # Export UI artifacts (will upload to GCS if GCS_UPLOAD=true)
+        artifacts_dir = export_ui_artifacts(latest_run_dir, run_id)
+        
+        # Update latest.json pointer (will upload to GCS if GCS_UPLOAD=true)
+        update_latest_pointer(run_id)
+        
+        response = {
+            "status": "success",
+            "run_id": run_id,
+            "artifacts_dir": str(artifacts_dir),
+            "message": f"UI artifacts exported for {run_id}"
+        }
+        
+        logger.info(f"✅ UI artifacts exported successfully for {run_id}")
+        
+        return JSONResponse(content=response)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error exporting UI artifacts: {e}")
+        raise HTTPException(status_code=500, detail=f"Export error: {str(e)}")
+
+
 @router.get("/api/e2e/status")
 async def get_e2e_status():
     """
