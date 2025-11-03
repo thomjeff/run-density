@@ -6,7 +6,7 @@ BASE ?= http://localhost:$(PORT)
 # make smoke-docker BASE=https://run-density-ln4r3sfkha-uc.a.run.app
 
 # -------- Phony targets --------
-.PHONY: help dev-docker stop-docker build-docker smoke-docker e2e-docker e2e-local-docker e2e-cloud-docker
+.PHONY: help dev-docker stop-docker build-docker smoke-docker e2e-docker e2e-local-docker e2e-staging-docker e2e-prod-gcp
 
 # -------- Help --------
 .DEFAULT_GOAL := help
@@ -29,7 +29,9 @@ help: ## Show this help message
 	@echo "Examples:"
 	@echo "  make dev-docker              # Start development container"
 	@echo "  make e2e-docker              # Run E2E test (default to local)"
-	@echo "  make e2e-local-docker        # Run E2E test (--local flag)"
+	@echo "  make e2e-local-docker        # Run E2E test (local, filesystem)"
+	@echo "  make e2e-staging-docker      # Run E2E test (local, GCS storage)"
+	@echo "  make e2e-prod-gcp            # Run E2E test (Cloud Run production)"
 	@echo "  make smoke-docker            # Quick health check"
 	@echo "  make stop-docker             # Stop container"
 	@echo ""
@@ -60,13 +62,17 @@ smoke-docker: ## Run smoke tests (health, ready, API endpoints)
 	@echo "✅ smoke-docker passed"
 
 e2e-docker: ## Run e2e.py inside Docker container
-	@echo ">> Running E2E tests inside Docker container"
+	@echo ">> Running E2E tests inside Docker container (default to local)"
 	@docker exec run-density-dev python /app/e2e.py --local
 
-e2e-local-docker: ## Run e2e --local
-	@echo ">> Running E2E tests inside Docker container"
+e2e-local-docker: ## Run e2e --local (local container, filesystem storage)
+	@echo ">> Running E2E tests inside Docker container (local flag set)"
 	@docker exec run-density-dev python /app/e2e.py --local
 
-e2e-cloud-docker: ## Run e2e --cloud
-	@echo ">> Running E2E tests inside Docker container"
+e2e-staging-docker: ## Run e2e --local with GCS (local container, GCS storage)
+	@echo ">> Running E2E tests inside Docker container (staging mode: local code, GCS storage)"
+	@docker exec -e GCS_UPLOAD=true -e GOOGLE_CLOUD_PROJECT=run-density run-density-dev python /app/e2e.py --local
+
+e2e-prod-gcp: ## Run e2e --cloud (tests Cloud Run production)
+	@echo ">> Running E2E tests against Cloud Run production"
 	@docker exec run-density-dev python /app/e2e.py --cloud
