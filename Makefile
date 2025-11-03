@@ -71,8 +71,9 @@ e2e-docker: ## Run e2e.py inside Docker container
 e2e-local-docker: ## Run e2e --local (local container, filesystem storage)
 	@echo ">> Restarting container with local mode (filesystem storage)"
 	docker-compose down
-	export GCS_UPLOAD=false
-	docker-compose up -d
+	echo "GCS_UPLOAD=false" > .env.override
+	docker-compose --env-file .env.override up -d
+	rm -f .env.override
 	echo ">> Waiting for container to be ready (15s)..."
 	sleep 15
 	echo ">> Running E2E tests in local mode"
@@ -81,9 +82,10 @@ e2e-local-docker: ## Run e2e --local (local container, filesystem storage)
 e2e-staging-docker: ## Run e2e --local with GCS (local container, GCS storage)
 	@echo ">> Restarting container with staging mode (GCS storage)"
 	docker-compose down
-	export GCS_UPLOAD=true
-	export GOOGLE_CLOUD_PROJECT=run-density
-	docker-compose up -d
+	echo "GCS_UPLOAD=true" > .env.override
+	echo "GOOGLE_CLOUD_PROJECT=run-density" >> .env.override
+	docker-compose --env-file dev.env --env-file .env.override up -d
+	rm -f .env.override
 	echo ">> Waiting for container to be ready (15s)..."
 	sleep 15
 	echo ">> Running E2E tests in staging mode (local code, GCS storage)"
