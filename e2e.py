@@ -357,7 +357,16 @@ def main():
                         print(f"Exporting artifacts from runflow: {latest_run_dir}")
                         export_ui_artifacts(latest_run_dir, run_id)
                         update_latest_pointer(run_id)
-                        print("✅ UI artifacts exported successfully")
+                        
+                        # Issue #455: Refresh metadata after UI export
+                        try:
+                            from app.utils.metadata import create_run_metadata, write_metadata_json
+                            metadata = create_run_metadata(run_id, latest_run_dir, status="complete")
+                            write_metadata_json(latest_run_dir, metadata)
+                            print("✅ UI artifacts exported and metadata updated")
+                        except Exception as e:
+                            print(f"✅ UI artifacts exported (metadata update failed: {e})")
+                        
                         reports_dir = runflow_dir  # For heatmap generation
                     else:
                         print("⚠️ No UUID run directories found in runflow/")
@@ -380,7 +389,15 @@ def main():
                             print(f"Exporting artifacts from legacy reports: {latest_run_dir}")
                             export_ui_artifacts(latest_run_dir, run_id)
                             update_latest_pointer(run_id)
-                            print("✅ UI artifacts exported successfully")
+                            
+                            # Issue #455: Refresh metadata after UI export (legacy mode)
+                            try:
+                                from app.utils.metadata import create_run_metadata, write_metadata_json
+                                metadata = create_run_metadata(run_id, latest_run_dir, status="complete")
+                                write_metadata_json(latest_run_dir, metadata)
+                                print("✅ UI artifacts exported and metadata updated")
+                            except Exception as e:
+                                print(f"✅ UI artifacts exported (metadata update failed: {e})")
                         else:
                             print("⚠️ No report directories found in reports/")
                     else:
