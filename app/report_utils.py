@@ -28,8 +28,18 @@ def get_date_folder_path(base_path: str = "reports") -> Tuple[str, str]:
         Tuple of (full_path, date_folder_name)
         - full_path: Complete path including date folder
         - date_folder_name: Just the date folder name (YYYY-MM-DD)
+    
+    Issue #455: If base_path is already a runflow path (contains /runflow/),
+    returns it as-is without adding date subfolder.
     """
-    # Create date folder name (YYYY-MM-DD format)
+    # Issue #455: Surgical update - detect runflow mode
+    # If base_path looks like a runflow path, don't add date subfolder
+    if "/runflow/" in base_path or base_path.startswith("runflow/"):
+        # Already in runflow structure, return as-is
+        # Use base_path basename as the "folder name" for compatibility
+        return base_path, os.path.basename(base_path)
+    
+    # Legacy behavior: Create date folder name (YYYY-MM-DD format)
     date_folder = datetime.now().strftime("%Y-%m-%d")
     full_path = os.path.join(base_path, date_folder)
     
@@ -39,20 +49,29 @@ def get_date_folder_path(base_path: str = "reports") -> Tuple[str, str]:
     return full_path, date_folder
 
 
-def get_standard_filename(report_type: str, extension: str = "csv") -> str:
+def get_standard_filename(report_type: str, extension: str = "csv", use_runflow: bool = False) -> str:
     """
     Generate standardized filename with consistent naming convention.
     
     Args:
         report_type: Type of report (Flow, Density, Combined, etc.)
         extension: File extension (csv, md, json, etc.)
+        use_runflow: If True, use generic name without timestamp (Issue #455)
     
     Returns:
         Standardized filename in format: YYYY-MM-DD-hhmm-[ReportType].[extension]
+        Or if use_runflow=True: [ReportType].[extension]
         Note: Uses hhmm instead of hh:mm to avoid filesystem path separator issues
+    
+    Issue #455: When use_runflow=True, returns generic filename (e.g., "Density.md")
     """
-    timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
-    return f"{timestamp}-{report_type}.{extension}"
+    if use_runflow:
+        # Issue #455: Generic filename without timestamp for runflow structure
+        return f"{report_type}.{extension}"
+    else:
+        # Legacy: Timestamp-prefixed filename
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+        return f"{timestamp}-{report_type}.{extension}"
 
 
 def get_report_paths(report_type: str, extension: str = "csv", base_path: str = None) -> Tuple[str, str]:
@@ -68,16 +87,21 @@ def get_report_paths(report_type: str, extension: str = "csv", base_path: str = 
         Tuple of (full_path, relative_path)
         - full_path: Complete file path including date folder
         - relative_path: Relative path from base_path
+    
+    Issue #455: Detects runflow mode and uses generic filenames without timestamps
     """
     # Use Cloud Run-friendly path if not specified
     if base_path is None:
         base_path = get_analysis_dir()
     
-    # Get date-based folder
+    # Issue #455: Detect runflow mode
+    is_runflow = "/runflow/" in base_path or base_path.startswith("runflow/")
+    
+    # Get date-based folder (or runflow folder if in runflow mode)
     date_folder_path, date_folder_name = get_date_folder_path(base_path)
     
-    # Generate standardized filename
-    filename = get_standard_filename(report_type, extension)
+    # Generate standardized filename (without timestamp if runflow)
+    filename = get_standard_filename(report_type, extension, use_runflow=is_runflow)
     
     # Create full path
     full_path = os.path.join(date_folder_path, filename)

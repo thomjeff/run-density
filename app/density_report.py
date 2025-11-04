@@ -807,6 +807,9 @@ def _save_bin_artifacts_and_metadata(
             logger.error("Pre-save check indicates empty occupancy; saving anyway for debugging.")
     
     geojson_start = time.monotonic()
+    # Issue #455: Use runflow path if run_id provided, otherwise legacy date path
+    # This function is called from _generate_bin_dataset_with_retry which doesn't have run_id yet
+    # For now, keep legacy behavior - will be updated when full call chain supports run_id
     daily_folder_path, _ = get_date_folder_path(output_dir)
     os.makedirs(daily_folder_path, exist_ok=True)
     geojson_path, parquet_path = save_bin_artifacts(bin_data.get("geojson", {}), daily_folder_path)
@@ -945,12 +948,19 @@ def _generate_bin_dataset_with_retry(
 
 
 def _generate_new_report_format(
-    daily_folder_path: str
+    daily_folder_path: str,
+    run_id: str = None  # Issue #455: UUID for runflow structure
 ) -> Optional[str]:
     """Generate new density report format (Issue #246)."""
     print("📊 Generating new density report (Issue #246)...")
-    timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
-    timestamped_path = os.path.join(daily_folder_path, f"{timestamp}-Density.md")
+    
+    # Issue #455: Use generic filename for runflow, timestamped for legacy
+    if run_id:
+        from app.report_utils import get_runflow_file_path
+        timestamped_path = get_runflow_file_path(run_id, "reports", "Density.md")
+    else:
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+        timestamped_path = os.path.join(daily_folder_path, f"{timestamp}-Density.md")
     
     new_report_results = generate_new_density_report_issue246(
         reports_dir=daily_folder_path,
@@ -981,11 +991,12 @@ def _generate_legacy_report_format(
     results: Dict[str, Any],
     start_times: Dict[str, float],
     include_per_event: bool,
-    output_dir: str
+    output_dir: str,
+    run_id: str = None  # Issue #455: UUID for runflow structure
 ) -> str:
     """Generate legacy density report format with operational intelligence."""
     print("📊 Regenerating density report with operational intelligence...")
-    from app.report_utils import get_report_paths
+    from app.report_utils import get_report_paths, get_runflow_file_path
     
     # Note: generate_markdown_report is defined later in this same file
     report_content_final = generate_markdown_report(
@@ -996,8 +1007,12 @@ def _generate_legacy_report_format(
         output_dir=output_dir
     )
     
-    # Get existing full_path from results or create new
-    full_path, _ = get_report_paths("Density", "md", output_dir)
+    # Issue #455: Use runflow path for reports if run_id provided
+    if run_id:
+        full_path = get_runflow_file_path(run_id, "reports", "Density.md")
+    else:
+        # Legacy: Get existing full_path from results or create new
+        full_path, _ = get_report_paths("Density", "md", output_dir)
     with open(full_path, 'w', encoding='utf-8') as f:
         f.write(report_content_final)
     
@@ -1057,7 +1072,8 @@ def _regenerate_report_with_intelligence(
     include_per_event: bool,
     daily_folder_path: Optional[str],
     output_dir: str,
-    use_new_report_format: bool
+    use_new_report_format: bool,
+    run_id: str = None  # Issue #455: UUID for runflow structure
 ) -> Optional[str]:
     """
     Regenerate density report with operational intelligence after bin generation.
@@ -1078,10 +1094,10 @@ def _regenerate_report_with_intelligence(
         return None
     
     if use_new_report_format:
-        full_path = _generate_new_report_format(daily_folder_path)
+        full_path = _generate_new_report_format(daily_folder_path, run_id=run_id)  # Issue #455: Pass run_id
     else:
         full_path = _generate_legacy_report_format(
-            results, start_times, include_per_event, output_dir
+            results, start_times, include_per_event, output_dir, run_id=run_id  # Issue #455: Pass run_id
         )
     
     # Generate tooltips.json if operational intelligence was added
@@ -1144,7 +1160,8 @@ def generate_density_report(
     include_per_event: bool = True,
     output_dir: str = "reports",
     enable_bin_dataset: bool = True,  # Issue #319: Enable by default (resource constraints resolved)
-    use_new_report_format: bool = True
+    use_new_report_format: bool = True,
+    run_id: str = None  # Issue #455: UUID for runflow structure
 ) -> Dict[str, Any]:
     """
     Generate a comprehensive density analysis report.
@@ -1163,6 +1180,15 @@ def generate_density_report(
     """
     import logging
     logger = logging.getLogger(__name__)
+    
+    # Issue #455: Surgical path update for runflow structure
+    # If run_id provided, use runflow paths; otherwise legacy date-based paths
+    if run_id:
+        from app.report_utils import get_runflow_category_path
+        # Override output_dir to use runflow/bins/ for bin artifacts
+        # Reports will be saved to runflow/reports/ via get_report_paths
+        output_dir = get_runflow_category_path(run_id, "bins")
+        logger.info(f"Issue #455: Using runflow structure for run_id={run_id}, bins_dir={output_dir}")
     
     print("🔍 Starting density analysis...")
     
@@ -1298,7 +1324,8 @@ def generate_density_report(
         try:
             full_path = _regenerate_report_with_intelligence(
                 results, start_times, include_per_event,
-                daily_folder_path, output_dir, use_new_report_format
+                daily_folder_path, output_dir, use_new_report_format,
+                run_id=run_id  # Issue #455: Pass run_id
             )
             _generate_and_upload_heatmaps(daily_folder_path)
         except Exception as e:

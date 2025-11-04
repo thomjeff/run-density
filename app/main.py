@@ -357,6 +357,10 @@ async def legacy_overtake_endpoint(request: TemporalFlowRequest):
 async def generate_density_report_endpoint(request: DensityReportRequest):
     """Generate comprehensive density analysis report with per-event views."""
     try:
+        # Issue #455: Generate UUID for this run
+        from app.utils.run_id import generate_run_id
+        run_id = generate_run_id()
+        
         results = generate_density_report(
             pace_csv=request.paceCsv,
             density_csv=request.densityCsv,
@@ -365,7 +369,8 @@ async def generate_density_report_endpoint(request: DensityReportRequest):
             time_window_s=request.timeWindow,
             include_per_event=request.includePerEvent,
             output_dir=request.outputDir,
-            enable_bin_dataset=request.enable_bin_dataset
+            enable_bin_dataset=request.enable_bin_dataset,
+            run_id=run_id  # Issue #455: Pass UUID to report generation
         )
         # Handle NaN values and dataclass objects for JSON serialization
         import json
@@ -413,6 +418,10 @@ def detect_environment() -> str:
 async def generate_temporal_flow_report_endpoint(request: TemporalFlowReportRequest):
     """Generate comprehensive temporal flow analysis report with convergence analysis."""
     try:
+        # Issue #455: Generate UUID for this run
+        from app.utils.run_id import generate_run_id
+        run_id = generate_run_id()
+        
         environment = detect_environment()
         results = generate_temporal_flow_report(
             pace_csv=request.paceCsv,
@@ -421,7 +430,8 @@ async def generate_temporal_flow_report_endpoint(request: TemporalFlowReportRequ
             min_overlap_duration=request.minOverlapDuration,
             conflict_length_m=request.conflictLengthM,
             output_dir=request.outputDir,
-            environment=environment
+            environment=environment,
+            run_id=run_id  # Issue #455: Pass UUID to report generation
         )
         # Handle NaN values for JSON serialization
         import json
