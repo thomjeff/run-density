@@ -701,28 +701,20 @@ def export_heatmaps_and_captions(
             print(f"   ⚠️  {seg_id}: Error generating caption: {e}")
             continue
     
-    # Issue #455 Phase 3: Save captions.json locally (GCS upload handled by upload_runflow_to_gcs)
+    # Save captions.json using StorageService to support Cloud (GCS) and Local
     if captions:
         try:
-            from app.report_utils import get_runflow_file_path
-            
             # Issue #455: Use runflow structure for UUID run_ids
             if is_legacy_date_format(run_id):
-                # Legacy mode: Use StorageService
                 artifacts_path = f"artifacts/{run_id}/ui/captions.json"
-                print(f"   📤 Uploading captions to: gs://run-density-reports/{artifacts_path}")
-                storage.save_artifact_json(artifacts_path, captions)
-                print(f"   ✅ captions.json: {len(captions)} segments captioned")
             else:
-                # Runflow mode: Save locally, GCS upload happens later
-                captions_path = Path(get_runflow_file_path(run_id, "ui", "captions.json"))
-                captions_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(captions_path, 'w') as f:
-                    json.dump(captions, f, indent=2)
-                print(f"   💾 Saved captions locally: {captions_path}")
-                print(f"   ✅ captions.json: {len(captions)} segments captioned")
+                from app.report_utils import get_runflow_file_path
+                artifacts_path = get_runflow_file_path(run_id, "ui", "captions.json")
+            print(f"   📤 Uploading captions to: gs://run-density-reports/{artifacts_path}")
+            storage.save_artifact_json(artifacts_path, captions)
+            print(f"   ✅ captions.json: {len(captions)} segments captioned")
         except Exception as e:
-            print(f"   ⚠️  Could not save captions.json: {e}")
+            print(f"   ⚠️  Could not save captions.json via StorageService: {e}")
     
     print(f"\n{'='*60}")
     print(f"✅ Heatmaps & Captions Complete")
