@@ -633,7 +633,14 @@ def export_ui_artifacts(reports_dir: Path, run_id: str, overtaking_segments: int
     print(f"{'='*60}\n")
     
     # Create output directory
-    artifacts_dir = Path("artifacts") / run_id / "ui"
+    # Issue #455: Use runflow structure for UUID run_ids, legacy artifacts/ for dates
+    from app.utils.run_id import is_legacy_date_format
+    if is_legacy_date_format(run_id):
+        artifacts_dir = Path("artifacts") / run_id / "ui"
+    else:
+        # UUID-based run: use runflow structure
+        from app.report_utils import get_runflow_category_path
+        artifacts_dir = Path(get_runflow_category_path(run_id, "ui"))
     artifacts_dir.mkdir(parents=True, exist_ok=True)
     
     # 1. Generate meta.json
