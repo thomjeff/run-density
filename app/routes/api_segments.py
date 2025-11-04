@@ -183,8 +183,8 @@ async def get_segments_summary():
         run_id = get_latest_run_id()
         storage = create_runflow_storage(run_id)
         
-        # Read segments.geojson from UI artifacts
-        segments_geojson = storage.read_geojson(f"{artifacts_path}/segments.geojson")
+        # Read segments.geojson from runflow UI artifacts (GeoJSON is JSON)
+        segments_geojson = storage.read_json("ui/segments.geojson")
         if segments_geojson is None:
             return JSONResponse(content={"error": "segments.geojson not found"})
         
