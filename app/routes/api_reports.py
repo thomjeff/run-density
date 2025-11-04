@@ -171,11 +171,12 @@ def download_report(path: str = Query(..., description="Report file path")):
     """
     logger.info(f"[Download] Requested path: {path}")
 
-    storage_service = get_storage_service()
-    run_id = storage_service.get_latest_run_id()
+    # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
+    from app.utils.metadata import get_latest_run_id
+    run_id = get_latest_run_id()
 
-    # Allow only: reports/<run_id>/* or data/*
-    if not (path.startswith(f"reports/{run_id}") or path.startswith("data/")):
+    # Allow only: runflow/<run_id>/* or data/*
+    if not (path.startswith(f"runflow/{run_id}") or path.startswith("data/")):
         logger.warning(f"[Download] Access denied for path: {path}")
         raise HTTPException(status_code=403, detail="Access denied")
 

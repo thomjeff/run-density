@@ -37,16 +37,15 @@ def load_density_metrics_from_bins():
         Dict with segment_id -> {utilization, worst_bin, bin_detail}
     """
     try:
-        # Get latest run_id via StorageService (GCS-aware)
-        from app.storage_service import get_storage_service
-        storage = get_storage_service()
-        run_id = storage.get_latest_run_id()
+        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
+        from app.utils.metadata import get_latest_run_id
+        from app.storage import create_runflow_storage
         
-        if not run_id:
-            return {}
+        run_id = get_latest_run_id()
+        storage = create_runflow_storage(run_id)
         
-        # Load bins.parquet (GCS-aware via StorageService)
-        bins_df = storage.read_parquet(f"reports/{run_id}/bins.parquet")
+        # Load bins.parquet from runflow structure
+        bins_df = storage.read_parquet("bins/bins.parquet")
         if bins_df is None:
             return {}
         

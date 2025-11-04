@@ -176,9 +176,12 @@ async def get_segments_summary():
         Summary statistics about segments and metrics
     """
     try:
-        # Get latest run_id to locate UI artifacts
-        run_id = storage.get_latest_run_id()
-        artifacts_path = f"artifacts/{run_id}/ui"
+        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
+        from app.utils.metadata import get_latest_run_id
+        from app.storage import create_runflow_storage
+        
+        run_id = get_latest_run_id()
+        storage = create_runflow_storage(run_id)
         
         # Read segments.geojson from UI artifacts
         segments_geojson = storage.read_geojson(f"{artifacts_path}/segments.geojson")
