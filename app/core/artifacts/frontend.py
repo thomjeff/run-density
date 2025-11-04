@@ -33,7 +33,14 @@ from app import flagging as ssot_flagging
 
 def _load_bins_df(reports_root: Path, run_id: str) -> pd.DataFrame:
     """Load and normalize bins.parquet DataFrame."""
-    bins_path = reports_root / run_id / "bins.parquet"
+    # Issue #455: Use runflow structure for UUID run_ids
+    from app.utils.run_id import is_legacy_date_format
+    if is_legacy_date_format(run_id):
+        bins_path = reports_root / run_id / "bins.parquet"
+    else:
+        # UUID: Use runflow structure
+        from app.report_utils import get_runflow_file_path
+        bins_path = Path(get_runflow_file_path(run_id, "bins", "bins.parquet"))
     df = pd.read_parquet(bins_path)
     
     # Normalize expected columns
