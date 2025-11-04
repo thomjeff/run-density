@@ -357,7 +357,7 @@ def upload_runflow_to_gcs(run_id: str) -> None:
         return  # Skip upload in local mode
     
     # Get local run directory
-    local_run_dir = Path(get_runflow_file_path(run_id, "", "")).parent
+    local_run_dir = Path(get_run_folder_path(run_id))
     if not local_run_dir.exists():
         print(f"⚠️  Runflow directory not found: {local_run_dir}")
         return
