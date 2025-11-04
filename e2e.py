@@ -339,7 +339,7 @@ def main():
             run_id = None
             
             try:
-                from app.core.artifacts.frontend import export_ui_artifacts, update_latest_pointer
+                from app.core.artifacts.frontend import export_ui_artifacts
                 import re
                 
                 # Issue #455: Check runflow directory first for UUID runs
@@ -356,7 +356,6 @@ def main():
                         run_id = latest_run_dir.name
                         print(f"Exporting artifacts from runflow: {latest_run_dir}")
                         export_ui_artifacts(latest_run_dir, run_id)
-                        update_latest_pointer(run_id)
                         
                         # Issue #455: Refresh metadata after UI export
                         try:
@@ -397,7 +396,6 @@ def main():
                             
                             print(f"Exporting artifacts from legacy reports: {latest_run_dir}")
                             export_ui_artifacts(latest_run_dir, run_id)
-                            update_latest_pointer(run_id)
                             
                             # Issue #455: Refresh metadata after UI export (legacy mode)
                             try:
