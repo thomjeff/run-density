@@ -61,7 +61,8 @@ def generate_temporal_flow_report(
     output_dir: str = "reports",
     density_results: Optional[Dict[str, Any]] = None,
     segments_config: Optional[Dict[str, Any]] = None,
-    environment: str = "local"
+    environment: str = "local",
+    run_id: str = None  # Issue #455: UUID for runflow structure
 ) -> Dict[str, Any]:
     """
     Generate a comprehensive temporal flow analysis report.
@@ -77,6 +78,16 @@ def generate_temporal_flow_report(
     Returns:
         Dict with analysis results and report path
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Issue #455: Surgical path update for runflow structure
+    if run_id:
+        from app.report_utils import get_runflow_category_path
+        # Override output_dir to use runflow/reports/ 
+        output_dir = get_runflow_category_path(run_id, "reports")
+        logger.info(f"Issue #455: Using runflow structure for run_id={run_id}, reports_dir={output_dir}")
+    
     print("🔍 Starting temporal flow analysis...")
     
     # Run temporal flow analysis
