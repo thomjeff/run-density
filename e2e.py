@@ -86,17 +86,35 @@ def test_density_report(base_url):
                            json=density_payload, timeout=600)
     
     if response.status_code == 200:
-        print("✅ Density Report: OK")
-        return True
+        # Issue #455: Extract run_id for combined runs
+        try:
+            result = response.json()
+            run_id = result.get('run_id')
+            if run_id:
+                print(f"✅ Density Report: OK (run_id: {run_id})")
+                return True, run_id
+            else:
+                print("✅ Density Report: OK")
+                return True, None
+        except:
+            print("✅ Density Report: OK")
+            return True, None
     else:
         print(f"❌ Density Report: FAILED (status: {response.status_code})")
-        return False
+        return False, None
 
-def test_temporal_flow_report(base_url):
+def test_temporal_flow_report(base_url, run_id=None):
     """Test temporal flow report generation"""
     print("🔍 Testing /api/temporal-flow-report...")
+    
+    # Issue #455: Use provided run_id for combined runs
+    payload = flow_payload.copy()
+    if run_id:
+        payload['run_id'] = run_id
+        print(f"   Using shared run_id: {run_id}")
+    
     response = requests.post(f'{base_url}/api/temporal-flow-report', 
-                           json=flow_payload, timeout=600)
+                           json=payload, timeout=600)
     
     if response.status_code == 200:
         print("✅ Temporal Flow Report: OK")
@@ -251,7 +269,9 @@ def main():
     print()
     
     # Test 3: Density report (heavy operation)
-    if not test_density_report(base_url):
+    # Issue #455: Capture run_id for combined runs
+    density_success, run_id = test_density_report(base_url)
+    if not density_success:
         all_passed = False
     
     print()
@@ -275,7 +295,8 @@ def main():
     print()
     
     # Test 4: Temporal flow report (heavy operation)
-    if not test_temporal_flow_report(base_url):
+    # Issue #455: Pass run_id from density report for combined runs
+    if not test_temporal_flow_report(base_url, run_id=run_id):
         all_passed = False
     
     print()
