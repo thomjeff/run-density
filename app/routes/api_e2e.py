@@ -432,10 +432,13 @@ async def export_ui_artifacts_endpoint():
                 
                 # Issue #455: Update metadata.json after UI artifact export
                 try:
-                    from app.utils.metadata import create_run_metadata, write_metadata_json
+                    from app.utils.metadata import create_run_metadata, write_metadata_json, append_to_run_index
                     metadata = create_run_metadata(run_id, latest_run_dir, status="complete")
                     metadata_path = write_metadata_json(latest_run_dir, metadata)
                     logger.info(f"Issue #455: Updated metadata.json after UI export: {metadata_path}")
+                    
+                    # Issue #456 Phase 4: Update index.json (latest.json already called above)
+                    append_to_run_index(metadata)
                     
                     # Issue #455 Phase 3: Upload to GCS if enabled
                     from app.report_utils import upload_runflow_to_gcs

@@ -300,3 +300,147 @@ def read_run_metadata(run_path: Path) -> Optional[Dict[str, Any]]:
         logging.warning(f"Could not read metadata.json from {run_path}: {e}")
         return None
 
+
+# ===== Phase 4: Pointer and Index Files (Issue #456) =====
+
+def update_latest_pointer(run_id: str) -> None:
+    """
+    Update runflow/latest.json to point to the most recent run (Issue #456 Task 1).
+    
+    This file serves as a lightweight pointer to the latest run, used by future
+    GET /api/runs/latest endpoint (Phase 5+).
+    
+    Atomic write pattern: write to temp file, then rename.
+    Works for both local filesystem and GCS (via storage abstraction).
+    
+    Args:
+        run_id: UUID of the completed run
+        
+    Example:
+        update_latest_pointer("G4FAdzseZT3G2gFizftHXX")
+        # Writes: { "run_id": "G4FAdzseZT3G2gFizftHXX" }
+    """
+    from app.utils.env import detect_storage_target
+    from app.utils.constants import RUNFLOW_ROOT_LOCAL, GCS_BUCKET_RUNFLOW
+    import tempfile
+    import shutil
+    
+    storage_target = detect_storage_target()
+    latest_data = {"run_id": run_id}
+    
+    if storage_target == "filesystem":
+        # Local mode: Use atomic write (temp → rename)
+        runflow_root = Path(RUNFLOW_ROOT_LOCAL)
+        runflow_root.mkdir(parents=True, exist_ok=True)
+        latest_path = runflow_root / "latest.json"
+        
+        # Write to temp file first
+        with tempfile.NamedTemporaryFile(mode='w', dir=runflow_root, delete=False, suffix='.tmp') as f:
+            json.dump(latest_data, f, indent=2)
+            temp_path = f.name
+        
+        # Atomic rename
+        shutil.move(temp_path, latest_path)
+    else:
+        # GCS mode: Direct write (GCS operations are atomic)
+        from google.cloud import storage as gcs
+        
+        bucket_name = os.getenv("GCS_BUCKET_RUNFLOW", GCS_BUCKET_RUNFLOW)
+        client = gcs.Client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob("latest.json")
+        blob.upload_from_string(json.dumps(latest_data, indent=2), content_type='application/json')
+
+
+def append_to_run_index(metadata: Dict[str, Any]) -> None:
+    """
+    Append run metadata to runflow/index.json (Issue #456 Task 2).
+    
+    Maintains an append-only log of all runs with their metadata summaries.
+    Used by future GET /api/runs endpoint (Phase 5+).
+    
+    Deduplicates by run_id - if run already exists, skips append.
+    
+    Args:
+        metadata: Metadata dictionary from create_run_metadata()
+        
+    Format:
+        [
+          { "run_id": "...", "created_at": "...", "file_counts": {...}, ... },
+          { "run_id": "...", "created_at": "...", "file_counts": {...}, ... }
+        ]
+    """
+    from app.utils.env import detect_storage_target
+    from app.utils.constants import RUNFLOW_ROOT_LOCAL, GCS_BUCKET_RUNFLOW
+    
+    storage_target = detect_storage_target()
+    run_id = metadata.get("run_id")
+    
+    # Extract summary for index (subset of full metadata)
+    index_entry = {
+        "run_id": run_id,
+        "created_at": metadata.get("created_at"),
+        "runtime_env": metadata.get("runtime_env"),
+        "storage_target": metadata.get("storage_target"),
+        "app_version": metadata.get("app_version"),
+        "git_sha": metadata.get("git_sha"),
+        "file_counts": metadata.get("file_counts", {}),
+        "status": metadata.get("status", "complete")
+    }
+    
+    if storage_target == "filesystem":
+        # Local mode: Read → Append → Write
+        runflow_root = Path(RUNFLOW_ROOT_LOCAL)
+        runflow_root.mkdir(parents=True, exist_ok=True)
+        index_path = runflow_root / "index.json"
+        
+        # Read existing index
+        if index_path.exists():
+            try:
+                index_data = json.loads(index_path.read_text())
+                if not isinstance(index_data, list):
+                    index_data = []
+            except (json.JSONDecodeError, Exception):
+                index_data = []
+        else:
+            index_data = []
+        
+        # Deduplication: Check if run_id already exists
+        if any(entry.get("run_id") == run_id for entry in index_data):
+            return  # Already indexed, skip
+        
+        # Append new entry
+        index_data.append(index_entry)
+        
+        # Write back
+        index_path.write_text(json.dumps(index_data, indent=2, default=str))
+    else:
+        # GCS mode: Read → Append → Write
+        from google.cloud import storage as gcs
+        
+        bucket_name = os.getenv("GCS_BUCKET_RUNFLOW", GCS_BUCKET_RUNFLOW)
+        client = gcs.Client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob("index.json")
+        
+        # Read existing index
+        if blob.exists():
+            try:
+                index_data = json.loads(blob.download_as_text())
+                if not isinstance(index_data, list):
+                    index_data = []
+            except (json.JSONDecodeError, Exception):
+                index_data = []
+        else:
+            index_data = []
+        
+        # Deduplication: Check if run_id already exists
+        if any(entry.get("run_id") == run_id for entry in index_data):
+            return  # Already indexed, skip
+        
+        # Append new entry
+        index_data.append(index_entry)
+        
+        # Write back
+        blob.upload_from_string(json.dumps(index_data, indent=2, default=str), content_type='application/json')
+
