@@ -1106,19 +1106,23 @@ def _regenerate_report_with_intelligence(
     return full_path
 
 
-def _generate_and_upload_heatmaps(daily_folder_path: Optional[str]) -> None:
+def _generate_and_upload_heatmaps(daily_folder_path: Optional[str], run_id: str = None) -> None:
     """
     Generate and upload heatmaps for a run.
     
     Args:
         daily_folder_path: Path to daily folder containing artifacts
+        run_id: Run identifier (Issue #455: UUID or legacy date)
     """
     if not daily_folder_path:
         logger.warning("daily_folder_path not available for heatmap generation")
         return
     
-    try:
+    # Issue #455: Use provided run_id or extract from daily_folder_path
+    if not run_id:
         run_id = os.path.basename(daily_folder_path)
+    
+    try:
         print(f"🔥 Generating heatmaps for run_id: {run_id}")
         
         heatmaps_generated, segments = generate_heatmaps_for_run(run_id)
@@ -1281,7 +1285,7 @@ def generate_density_report(
     
     # Generate and save map dataset using storage service
     map_data = generate_map_dataset(results, start_times)
-    map_path = save_map_dataset_to_storage(map_data, output_dir)
+    map_path = save_map_dataset_to_storage(map_data, output_dir, run_id=run_id)  # Issue #455: Pass run_id
     print(f"🗺️ Map dataset saved to: {map_path}")
     
     # Issue #198: Re-enable bin dataset generation with feature flag
@@ -1327,7 +1331,7 @@ def generate_density_report(
                 daily_folder_path, output_dir, use_new_report_format,
                 run_id=run_id  # Issue #455: Pass run_id
             )
-            _generate_and_upload_heatmaps(daily_folder_path)
+            _generate_and_upload_heatmaps(daily_folder_path, run_id=run_id)  # Issue #455: Pass run_id
         except Exception as e:
             logger.warning(f"Could not regenerate report with operational intelligence: {e}")
             full_path = None
@@ -2317,17 +2321,29 @@ def save_map_dataset(map_data: Dict[str, Any], output_dir: str) -> str:
     
     return file_path
 
-def save_map_dataset_to_storage(map_data: Dict[str, Any], output_dir: str) -> str:
+def save_map_dataset_to_storage(map_data: Dict[str, Any], output_dir: str, run_id: str = None) -> str:
     """
     Save map dataset to storage service (local or Cloud Storage).
     
     Args:
         map_data: Map dataset dictionary
-        output_dir: Output directory (used for fallback)
+        output_dir: Output directory (used for fallback or runflow bins path)
+        run_id: Run identifier (Issue #455: UUID for runflow structure)
     
     Returns:
         Path to saved file
     """
+    # Issue #455: Use runflow structure if run_id provided
+    if run_id:
+        from app.report_utils import get_runflow_file_path
+        # Save to runflow/<uuid>/maps/map_data.json (no timestamp)
+        file_path = get_runflow_file_path(run_id, "maps", "map_data.json")
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(map_data, f, indent=2, default=str)
+        print(f"🗺️ Map dataset saved to runflow: {file_path}")
+        return file_path
+    
+    # Legacy: Use storage service
     try:
         # Use storage service for persistent storage
         storage_service = get_storage_service()
