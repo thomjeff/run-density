@@ -61,18 +61,26 @@ def load_bin_data(run_id: str) -> pd.DataFrame:
     Load bin data from bins.parquet using StorageService (environment-aware).
     
     Args:
-        run_id: Run identifier (e.g., "2025-10-27")
+        run_id: Run identifier (e.g., "2025-10-27" or UUID)
         
     Returns:
         DataFrame with filtered bin-level data (flagged bins only)
     """
     try:
-        storage = get_storage_service()
+        # Issue #455: Check runflow structure for UUID run_ids
+        from app.utils.run_id import is_legacy_date_format
         
-        # Use StorageService.read_parquet() for environment-aware access
-        # This automatically handles local (./reports/) vs cloud (GCS) paths
-        logger.info(f"Loading bins.parquet for run_id: {run_id}")
-        bins_df = storage.read_parquet(f"reports/{run_id}/bins.parquet")
+        if is_legacy_date_format(run_id):
+            # Legacy: Use StorageService for environment-aware access
+            storage = get_storage_service()
+            logger.info(f"Loading bins.parquet for run_id: {run_id} (legacy mode)")
+            bins_df = storage.read_parquet(f"reports/{run_id}/bins.parquet")
+        else:
+            # UUID: Use runflow structure
+            from app.report_utils import get_runflow_file_path
+            bins_path = get_runflow_file_path(run_id, "bins", "bins.parquet")
+            logger.info(f"Loading bins.parquet for run_id: {run_id} (runflow mode): {bins_path}")
+            bins_df = pd.read_parquet(bins_path)
         
         if bins_df is None or bins_df.empty:
             raise FileNotFoundError(f"bins.parquet not found or empty for run_id: {run_id}")
