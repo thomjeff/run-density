@@ -223,21 +223,30 @@ async def get_dashboard_summary():
         - runners.csv → total_runners, cohorts
     """
     try:
+        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
+        from app.utils.metadata import get_latest_run_id
+        from app.storage import create_runflow_storage
+        
+        run_id = get_latest_run_id()
+        storage = create_runflow_storage(run_id)
+        
         # Track missing files for warnings
         warnings = []
         
-        # Load meta data from UI artifacts
-        meta = storage_service.load_ui_artifact("meta.json")
-        if meta is None:
+        # Load meta data from runflow UI artifacts
+        try:
+            meta = storage.read_json("ui/meta.json")
+        except:
             warnings.append("missing: meta.json")
             meta = {}
         
         timestamp = meta.get("run_timestamp", datetime.now().isoformat() + "Z")
         environment = meta.get("environment", "local")
         
-        # Load segment metrics from UI artifacts
-        segment_metrics = storage_service.load_ui_artifact("segment_metrics.json")
-        if segment_metrics is None:
+        # Load segment metrics from runflow UI artifacts
+        try:
+            segment_metrics = storage.read_json("ui/segment_metrics.json")
+        except:
             warnings.append("missing: segment_metrics.json")
             segment_metrics = {}
         
@@ -255,8 +264,12 @@ async def get_dashboard_summary():
         # Calculate peak density LOS
         peak_density_los = calculate_peak_density_los(peak_density)
         
-        # Load flags data from UI artifacts
-        flags = storage_service.load_ui_artifact("flags.json")
+        # Load flags data from runflow UI artifacts
+        try:
+            flags = storage.read_json("ui/flags.json")
+        except:
+            flags = None
+        
         logger.info(f"Loaded flags data: {type(flags)}, length: {len(flags) if flags else 0}")
         if flags is None:
             warnings.append("missing: flags.json")
