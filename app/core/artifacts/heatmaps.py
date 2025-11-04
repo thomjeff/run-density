@@ -655,8 +655,14 @@ def export_heatmaps_and_captions(
     print("\n7️⃣  Generating heatmaps...")
     heatmaps_generated = 0
     
-    # Create heatmaps directory in artifacts
-    heatmaps_dir = Path("artifacts") / run_id / "ui" / "heatmaps"
+    # Create heatmaps directory
+    # Issue #455: Use runflow structure for UUID run_ids
+    from app.utils.run_id import is_legacy_date_format
+    from app.report_utils import get_runflow_category_path
+    if is_legacy_date_format(run_id):
+        heatmaps_dir = Path("artifacts") / run_id / "ui" / "heatmaps"
+    else:
+        heatmaps_dir = Path(get_runflow_category_path(run_id, "heatmaps"))
     heatmaps_dir.mkdir(parents=True, exist_ok=True)
     
     for seg_id in segments:
@@ -697,7 +703,12 @@ def export_heatmaps_and_captions(
     # Save captions.json using StorageService to support Cloud (GCS) and Local
     if captions:
         try:
-            artifacts_path = f"artifacts/{run_id}/ui/captions.json"
+            # Issue #455: Use runflow structure for UUID run_ids
+            if is_legacy_date_format(run_id):
+                artifacts_path = f"artifacts/{run_id}/ui/captions.json"
+            else:
+                from app.report_utils import get_runflow_file_path
+                artifacts_path = get_runflow_file_path(run_id, "ui", "captions.json")
             print(f"   📤 Uploading captions to: gs://run-density-reports/{artifacts_path}")
             storage.save_artifact_json(artifacts_path, captions)
             print(f"   ✅ captions.json: {len(captions)} segments captioned")
