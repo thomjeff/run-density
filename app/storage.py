@@ -414,9 +414,12 @@ def create_runflow_storage(run_id: str) -> Storage:
     storage_target = detect_storage_target()
     
     if storage_target == "filesystem":
-        # Local mode: Use RUNFLOW_ROOT_LOCAL
-        # Note: In Docker, this will be mounted to /app/runflow
-        root = RUNFLOW_ROOT_LOCAL
+        # Local mode: Detect if we're in Docker container
+        # Use container root if in Docker, otherwise use local root
+        if Path(RUNFLOW_ROOT_CONTAINER).exists():
+            root = RUNFLOW_ROOT_CONTAINER
+        else:
+            root = RUNFLOW_ROOT_LOCAL
         return Storage(mode="local", root=f"{root}/{run_id}")
     else:
         # GCS mode: Use runflow bucket with run_id as prefix
