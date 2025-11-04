@@ -60,12 +60,13 @@ def load_bin_data(reports_dir: Path) -> pd.DataFrame:
     Load bin data from bin.parquet (canonical SSOT) and apply filtering.
     
     Args:
-        reports_dir: Path to reports/<run_id>/ directory
+        reports_dir: Path to run directory (reports/<run_id>/ or runflow/<uuid>/)
         
     Returns:
         DataFrame with filtered bin-level data (flagged bins only)
     """
-    bins_path = reports_dir / "bins.parquet"
+    # Issue #455: bins.parquet is in bins/ subdirectory
+    bins_path = reports_dir / "bins" / "bins.parquet"
     
     if not bins_path.exists():
         raise FileNotFoundError(f"bins.parquet not found at {bins_path}")
