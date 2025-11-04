@@ -321,7 +321,7 @@ def update_latest_pointer(run_id: str) -> None:
         # Writes: { "run_id": "G4FAdzseZT3G2gFizftHXX" }
     """
     from app.utils.env import detect_storage_target
-    from app.utils.constants import RUNFLOW_ROOT_LOCAL, GCS_BUCKET_RUNFLOW
+    from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER, GCS_BUCKET_RUNFLOW
     import tempfile
     import shutil
     
@@ -330,7 +330,11 @@ def update_latest_pointer(run_id: str) -> None:
     
     if storage_target == "filesystem":
         # Local mode: Use atomic write (temp → rename)
-        runflow_root = Path(RUNFLOW_ROOT_LOCAL)
+        # Use container root if in Docker, otherwise use local root
+        if Path(RUNFLOW_ROOT_CONTAINER).exists():
+            runflow_root = Path(RUNFLOW_ROOT_CONTAINER)
+        else:
+            runflow_root = Path(RUNFLOW_ROOT_LOCAL)
         runflow_root.mkdir(parents=True, exist_ok=True)
         latest_path = runflow_root / "latest.json"
         
@@ -372,7 +376,7 @@ def append_to_run_index(metadata: Dict[str, Any]) -> None:
         ]
     """
     from app.utils.env import detect_storage_target
-    from app.utils.constants import RUNFLOW_ROOT_LOCAL, GCS_BUCKET_RUNFLOW
+    from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER, GCS_BUCKET_RUNFLOW
     
     storage_target = detect_storage_target()
     run_id = metadata.get("run_id")
@@ -391,7 +395,11 @@ def append_to_run_index(metadata: Dict[str, Any]) -> None:
     
     if storage_target == "filesystem":
         # Local mode: Read → Append → Write
-        runflow_root = Path(RUNFLOW_ROOT_LOCAL)
+        # Use container root if in Docker, otherwise use local root
+        if Path(RUNFLOW_ROOT_CONTAINER).exists():
+            runflow_root = Path(RUNFLOW_ROOT_CONTAINER)
+        else:
+            runflow_root = Path(RUNFLOW_ROOT_LOCAL)
         runflow_root.mkdir(parents=True, exist_ok=True)
         index_path = runflow_root / "index.json"
         
