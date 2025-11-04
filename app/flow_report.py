@@ -127,11 +127,28 @@ def generate_temporal_flow_report(
     # Also generate CSV
     export_temporal_flow_csv(results, output_dir, start_times, min_overlap_duration, conflict_length_m, environment)
     
+    # Issue #455: Write metadata.json at end of successful generation (flow report only)
+    # Note: For combined runs (density+flow), density writes the metadata
+    # This is only for standalone flow report calls
+    if run_id:
+        try:
+            from app.utils.metadata import create_run_metadata, write_metadata_json
+            from app.report_utils import get_run_folder_path
+            from pathlib import Path
+            
+            run_path = Path(get_run_folder_path(run_id))
+            metadata = create_run_metadata(run_id, run_path, status="complete")
+            metadata_path = write_metadata_json(run_path, metadata)
+            print(f"Issue #455: Written metadata.json to {metadata_path}")
+        except Exception as e:
+            print(f"⚠️ Failed to write metadata.json: {e}")
+    
     # Return results in the format expected by other functions
     results.update({
         "ok": True,
         "report_path": full_path,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "run_id": run_id  # Issue #455: Include run_id in response
     })
     
     return results

@@ -20,7 +20,7 @@ import logging
 from app.segments_from_bins import write_segments_from_bins
 from app.utils.constants import HOTSPOT_SEGMENTS
 from app.save_bins import save_bin_artifacts
-from app.report_utils import get_date_folder_path
+from app.report_utils import get_date_folder_path, get_run_folder_path
 from app.bin_summary import generate_bin_summary_artifact
 from app.gcs_uploader import upload_bin_artifacts
 from app.canonical_density_report import generate_tooltips_json
@@ -1340,13 +1340,27 @@ def generate_density_report(
     # This data was only needed for report generation, not for API response
     results_for_api = {k: v for k, v in results.items() if k != '_operational_intelligence'}
     
+    # Issue #455: Write metadata.json at end of successful generation
+    if run_id and daily_folder_path:
+        try:
+            from app.utils.metadata import create_run_metadata, write_metadata_json
+            from pathlib import Path
+            
+            run_path = Path(get_run_folder_path(run_id))
+            metadata = create_run_metadata(run_id, run_path, status="complete")
+            metadata_path = write_metadata_json(run_path, metadata)
+            logger.info(f"Issue #455: Written metadata.json to {metadata_path}")
+        except Exception as e:
+            logger.warning(f"Failed to write metadata.json: {e}")
+    
     return {
         "ok": True,
         "report_path": full_path,
         "pdf_path": pdf_path if 'pdf_path' in locals() else None,
         "map_dataset_path": map_path,
         "analysis_results": results_for_api,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "run_id": run_id  # Issue #455: Include run_id in response
     }
 
 
