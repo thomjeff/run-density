@@ -121,22 +121,21 @@ async def get_reports_list():
         Array of file objects with name, path, mtime, size
     """
     try:
-        # Get latest run_id via StorageService (GCS-aware)
-        storage_service = get_storage_service()
-        run_id = storage_service.get_latest_run_id()
+        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
+        from app.utils.metadata import get_latest_run_id
+        from app.storage import create_runflow_storage
         
-        if not run_id:
-            logger.warning("No latest run_id found")
-            return JSONResponse(content=[])
+        run_id = get_latest_run_id()
+        storage = create_runflow_storage(run_id)
         
-        # List report files from GCS using StorageService
+        # List report files from runflow structure
         reports = []
-        file_list = storage_service.list_files(f"reports/{run_id}")
+        file_list = storage.list_files("reports")
         
         for filename in file_list:
             description = _get_file_description_from_extension(filename)
-            file_path = f"reports/{run_id}/{filename}"
-            mtime, size = _get_file_metadata(storage_service, file_path)
+            file_path = f"reports/{filename}"
+            mtime, size = _get_file_metadata(storage, file_path)
             
             reports.append({
                 "name": filename,
