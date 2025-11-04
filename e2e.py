@@ -342,29 +342,49 @@ def main():
                 from app.core.artifacts.frontend import export_ui_artifacts, update_latest_pointer
                 import re
                 
-                # Find the latest report directory
-                reports_dir = Path("reports")
-                if reports_dir.exists():
-                    # Get the most recent date-based report directory (YYYY-MM-DD format only)
-                    # Filter out non-date directories like 'ui' to avoid picking wrong source
-                    date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
-                    run_dirs = sorted(
-                        [d for d in reports_dir.iterdir() 
-                         if d.is_dir() and date_pattern.match(d.name)],
+                # Issue #455: Check runflow directory first for UUID runs
+                runflow_dir = Path("runflow")
+                if runflow_dir.exists():
+                    uuid_dirs = sorted(
+                        [d for d in runflow_dir.iterdir() 
+                         if d.is_dir() and not d.name.endswith('.json') and d.name != '.DS_Store'],
+                        key=lambda x: x.stat().st_mtime,
                         reverse=True
                     )
-                    if run_dirs:
-                        latest_run_dir = run_dirs[0]
+                    if uuid_dirs:
+                        latest_run_dir = uuid_dirs[0]
                         run_id = latest_run_dir.name
-                        
-                        print(f"Exporting artifacts from: {latest_run_dir}")
+                        print(f"Exporting artifacts from runflow: {latest_run_dir}")
                         export_ui_artifacts(latest_run_dir, run_id)
                         update_latest_pointer(run_id)
                         print("✅ UI artifacts exported successfully")
+                        reports_dir = runflow_dir  # For heatmap generation
                     else:
-                        print("⚠️ No report directories found in reports/")
-                else:
-                    print("⚠️ Reports directory not found")
+                        print("⚠️ No UUID run directories found in runflow/")
+                
+                # Fallback to legacy reports/ directory if runflow not found
+                if not run_id:
+                    reports_dir = Path("reports")
+                    if reports_dir.exists():
+                        # Get the most recent date-based report directory (YYYY-MM-DD format only)
+                        date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+                        run_dirs = sorted(
+                            [d for d in reports_dir.iterdir() 
+                             if d.is_dir() and date_pattern.match(d.name)],
+                            reverse=True
+                        )
+                        if run_dirs:
+                            latest_run_dir = run_dirs[0]
+                            run_id = latest_run_dir.name
+                            
+                            print(f"Exporting artifacts from legacy reports: {latest_run_dir}")
+                            export_ui_artifacts(latest_run_dir, run_id)
+                            update_latest_pointer(run_id)
+                            print("✅ UI artifacts exported successfully")
+                        else:
+                            print("⚠️ No report directories found in reports/")
+                    else:
+                        print("⚠️ No runflow or reports directories found")
             except Exception as e:
                 print(f"⚠️ Warning: Could not export UI artifacts: {e}")
                 print("   Dashboard will show warnings for missing data")
