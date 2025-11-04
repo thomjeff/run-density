@@ -1352,6 +1352,10 @@ def generate_density_report(
             metadata = create_run_metadata(run_id, run_path, status="complete")
             metadata_path = write_metadata_json(run_path, metadata)
             logger.info(f"Issue #455: Written metadata.json to {metadata_path}")
+            
+            # Issue #455 Phase 3: Upload to GCS if enabled
+            from app.report_utils import upload_runflow_to_gcs
+            upload_runflow_to_gcs(run_id)
         except Exception as e:
             logger.warning(f"Failed to write metadata.json: {e}")
     

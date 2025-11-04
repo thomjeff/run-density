@@ -361,8 +361,13 @@ def main():
                         # Issue #455: Refresh metadata after UI export
                         try:
                             from app.utils.metadata import create_run_metadata, write_metadata_json
+                            from app.report_utils import upload_runflow_to_gcs
                             metadata = create_run_metadata(run_id, latest_run_dir, status="complete")
                             write_metadata_json(latest_run_dir, metadata)
+                            
+                            # Issue #455 Phase 3: Upload to GCS if enabled
+                            upload_runflow_to_gcs(run_id)
+                            
                             print("✅ UI artifacts exported and metadata updated")
                         except Exception as e:
                             print(f"✅ UI artifacts exported (metadata update failed: {e})")
@@ -393,8 +398,13 @@ def main():
                             # Issue #455: Refresh metadata after UI export (legacy mode)
                             try:
                                 from app.utils.metadata import create_run_metadata, write_metadata_json
+                                from app.report_utils import upload_runflow_to_gcs
                                 metadata = create_run_metadata(run_id, latest_run_dir, status="complete")
                                 write_metadata_json(latest_run_dir, metadata)
+                                
+                                # Issue #455 Phase 3: Upload to GCS if enabled
+                                upload_runflow_to_gcs(run_id)
+                                
                                 print("✅ UI artifacts exported and metadata updated")
                             except Exception as e:
                                 print(f"✅ UI artifacts exported (metadata update failed: {e})")
