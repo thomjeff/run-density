@@ -363,8 +363,14 @@ def generate_heatmaps_for_run(run_id: str) -> Tuple[int, List[str]]:
     heatmaps_generated = 0
     generated_segments = []
     
-    # Create heatmaps directory in artifacts
-    heatmaps_dir = Path("artifacts") / run_id / "ui" / "heatmaps"
+    # Issue #455: Use runflow structure for UUID run_ids
+    from app.utils.run_id import is_legacy_date_format
+    if is_legacy_date_format(run_id):
+        heatmaps_dir = Path("artifacts") / run_id / "ui" / "heatmaps"
+    else:
+        # UUID-based run: use runflow structure
+        from app.report_utils import get_runflow_category_path
+        heatmaps_dir = Path(get_runflow_category_path(run_id, "heatmaps"))
     heatmaps_dir.mkdir(parents=True, exist_ok=True)
     
     for seg_id in segments:
@@ -398,7 +404,14 @@ def get_heatmap_files(run_id: str) -> List[Path]:
     Returns:
         List of Path objects for generated PNG files
     """
-    local_heatmaps_dir = Path("artifacts") / run_id / "ui" / "heatmaps"
+    # Issue #455: Use runflow structure for UUID run_ids
+    from app.utils.run_id import is_legacy_date_format
+    if is_legacy_date_format(run_id):
+        local_heatmaps_dir = Path("artifacts") / run_id / "ui" / "heatmaps"
+    else:
+        # UUID-based run: use runflow structure
+        from app.report_utils import get_runflow_category_path
+        local_heatmaps_dir = Path(get_runflow_category_path(run_id, "heatmaps"))
     
     if not local_heatmaps_dir.exists():
         return []
