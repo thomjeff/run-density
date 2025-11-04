@@ -430,6 +430,15 @@ async def export_ui_artifacts_endpoint():
                 # Update latest.json pointer (will upload to GCS if GCS_UPLOAD=true)
                 update_latest_pointer(run_id)
                 
+                # Issue #455: Update metadata.json after UI artifact export
+                try:
+                    from app.utils.metadata import create_run_metadata, write_metadata_json
+                    metadata = create_run_metadata(run_id, latest_run_dir, status="complete")
+                    metadata_path = write_metadata_json(latest_run_dir, metadata)
+                    logger.info(f"Issue #455: Updated metadata.json after UI export: {metadata_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to update metadata.json after UI export: {e}")
+                
                 response = {
                     "status": "success",
                     "run_id": run_id,
@@ -465,6 +474,15 @@ async def export_ui_artifacts_endpoint():
         
         # Update latest.json pointer (will upload to GCS if GCS_UPLOAD=true)
         update_latest_pointer(run_id)
+        
+        # Issue #455: Update metadata.json after UI artifact export (legacy mode)
+        try:
+            from app.utils.metadata import create_run_metadata, write_metadata_json
+            metadata = create_run_metadata(run_id, latest_run_dir, status="complete")
+            metadata_path = write_metadata_json(latest_run_dir, metadata)
+            logger.info(f"Issue #455: Updated metadata.json after UI export: {metadata_path}")
+        except Exception as e:
+            logger.warning(f"Failed to update metadata.json after UI export: {e}")
         
         response = {
             "status": "success",
