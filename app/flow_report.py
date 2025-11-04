@@ -113,19 +113,21 @@ def generate_temporal_flow_report(
     
     print(f"📊 Temporal flow report saved to: {full_path}")
     
-    # Also save to storage service for persistence
-    try:
-        storage_service = get_storage_service()
-        # Extract filename from local path to ensure timestamp consistency
-        # (avoid timezone drift between local write and GCS upload)
-        storage_filename = os.path.basename(full_path)
-        storage_path = storage_service.save_file(storage_filename, report_content)
-        print(f"📊 Flow report saved to storage: {storage_path}")
-    except Exception as e:
-        print(f"⚠️ Failed to save flow report to storage: {e}")
+    # Issue #455: Skip storage_service for runflow mode (already written to correct location)
+    # Also save to storage service for persistence (legacy mode only)
+    if not run_id:
+        try:
+            storage_service = get_storage_service()
+            # Extract filename from local path to ensure timestamp consistency
+            # (avoid timezone drift between local write and GCS upload)
+            storage_filename = os.path.basename(full_path)
+            storage_path = storage_service.save_file(storage_filename, report_content)
+            print(f"📊 Flow report saved to storage: {storage_path}")
+        except Exception as e:
+            print(f"⚠️ Failed to save flow report to storage: {e}")
 
     # Also generate CSV
-    export_temporal_flow_csv(results, output_dir, start_times, min_overlap_duration, conflict_length_m, environment)
+    export_temporal_flow_csv(results, output_dir, start_times, min_overlap_duration, conflict_length_m, environment, run_id=run_id)
     
     # Issue #455: Write metadata.json at end of successful generation (flow report only)
     # Note: For combined runs (density+flow), density writes the metadata
@@ -657,7 +659,7 @@ def generate_simple_temporal_flow_report(
     )
 
 
-def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_times: Dict[str, float] = None, min_overlap_duration: float = 5.0, conflict_length_m: float = 100.0, environment: str = "local") -> None:
+def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_times: Dict[str, float] = None, min_overlap_duration: float = 5.0, conflict_length_m: float = 100.0, environment: str = "local", run_id: str = None) -> None:
     """Export temporal flow analysis results to CSV with enhanced formatting."""
     import csv
     import pandas as pd
@@ -816,21 +818,23 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
     
     print(f"📊 Temporal flow analysis exported to: {full_path}")
     
-    # Also save to storage service for persistence
-    try:
-        storage_service = get_storage_service()
-        # Extract filename from local path to ensure timestamp consistency
-        # (avoid timezone drift between local write and GCS upload)
-        storage_filename = os.path.basename(full_path)
-        
-        # Read the CSV content to save to storage
-        with open(full_path, 'r', encoding='utf-8') as f:
-            csv_content = f.read()
-        
-        storage_path = storage_service.save_file(storage_filename, csv_content)
-        print(f"📊 Flow CSV saved to storage: {storage_path}")
-    except Exception as e:
-        print(f"⚠️ Failed to save flow CSV to storage: {e}")
+    # Issue #455: Skip storage_service for runflow mode (already written to correct location)
+    # Also save to storage service for persistence (legacy mode only)
+    if not run_id:
+        try:
+            storage_service = get_storage_service()
+            # Extract filename from local path to ensure timestamp consistency
+            # (avoid timezone drift between local write and GCS upload)
+            storage_filename = os.path.basename(full_path)
+            
+            # Read the CSV content to save to storage
+            with open(full_path, 'r', encoding='utf-8') as f:
+                csv_content = f.read()
+            
+            storage_path = storage_service.save_file(storage_filename, csv_content)
+            print(f"📊 Flow CSV saved to storage: {storage_path}")
+        except Exception as e:
+            print(f"⚠️ Failed to save flow CSV to storage: {e}")
     
     # Generate Flow Audit CSV if any segments have audit data
     audit_segments = [seg for seg in segments if "flow_audit_data" in seg]
