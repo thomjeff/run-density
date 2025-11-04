@@ -970,8 +970,9 @@ def _generate_new_report_format(
     report_content_final = new_report_results['report_content']
     print(f"📊 New density report saved to: {timestamped_path}")
     
-    # Upload to GCS if enabled
-    if os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
+    # Issue #455: Skip storage_service for runflow mode (already in correct location)
+    # Upload to GCS if enabled (legacy mode only)
+    if not run_id and os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
         try:
             from app.storage_service import get_storage_service
             storage_service = get_storage_service()
@@ -1018,8 +1019,9 @@ def _generate_legacy_report_format(
     
     print(f"📊 Density report (with operational intelligence) saved to: {full_path}")
     
-    # Upload to GCS if enabled
-    if os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
+    # Issue #455: Skip storage_service for runflow mode (already in correct location)
+    # Upload to GCS if enabled (legacy mode only)
+    if not run_id and os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
         try:
             from app.storage_service import get_storage_service
             storage_service = get_storage_service()
