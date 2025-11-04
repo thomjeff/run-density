@@ -14,7 +14,7 @@ import json
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Literal
 
 # Issue #452: Delegate to canonical environment detection functions
 # These follow the Issue #447 priority order documented in docs/architecture/env-detection.md
