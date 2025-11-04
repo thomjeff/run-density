@@ -3,14 +3,18 @@ Report Utilities Module
 
 Provides common utilities for report generation including date-based folder organization
 and consistent file naming conventions.
+
+Issue #455 Phase 3: Added runflow UUID-based path utilities.
 """
 
 from __future__ import annotations
 import os
 from datetime import datetime
 from typing import Tuple
+from pathlib import Path
 
 from app.paths import get_analysis_dir
+from app.utils.constants import RUNFLOW_ROOT_CONTAINER, RUNFLOW_ROOT_LOCAL
 
 
 def get_date_folder_path(base_path: str = "reports") -> Tuple[str, str]:
@@ -102,3 +106,128 @@ def format_decimal_places(value: float, places: int = 2) -> float:
         return round(float(value), places)
     except (ValueError, TypeError):
         return value
+
+
+# ============================================================================
+# Runflow UUID-Based Path Utilities (Issue #455 Phase 3)
+# ============================================================================
+
+def get_runflow_root() -> str:
+    """
+    Get the runflow root directory based on environment.
+    
+    Returns:
+        Path to runflow root directory
+    
+    Examples:
+        In Docker container: /runflow
+        Local development: /users/jthompson/documents/runflow
+    
+    Issue #455: Adapted from commit c8cfb3e (Epic #444 Phase 3)
+    """
+    # Check if running in container (has /app directory)
+    if Path("/app").exists():
+        return RUNFLOW_ROOT_CONTAINER
+    else:
+        return RUNFLOW_ROOT_LOCAL
+
+
+def get_run_folder_path(run_id: str) -> str:
+    """
+    Get the runflow folder path for a specific run ID.
+    
+    Args:
+        run_id: Short UUID run identifier
+    
+    Returns:
+        Complete path to run folder
+    
+    Example:
+        >>> get_run_folder_path("p0ZoB1FwH6")
+        '/runflow/p0ZoB1FwH6'
+    
+    Issue #455: Creates parent directory for all run outputs
+    """
+    runflow_root = get_runflow_root()
+    full_path = os.path.join(runflow_root, run_id)
+    
+    # Ensure the run folder exists
+    os.makedirs(full_path, exist_ok=True)
+    
+    return full_path
+
+
+def get_runflow_category_path(run_id: str, category: str) -> str:
+    """
+    Get path to a category subdirectory within a run folder.
+    
+    Args:
+        run_id: Short UUID run identifier
+        category: Category name (reports, bins, maps, heatmaps, ui)
+    
+    Returns:
+        Full path to category directory
+    
+    Example:
+        >>> get_runflow_category_path("p0ZoB1FwH6", "reports")
+        '/runflow/p0ZoB1FwH6/reports'
+    
+    Issue #455: Creates category subdirectories as needed
+    """
+    run_path = get_run_folder_path(run_id)
+    category_path = os.path.join(run_path, category)
+    
+    # Ensure category directory exists
+    os.makedirs(category_path, exist_ok=True)
+    
+    return category_path
+
+
+def get_runflow_file_path(run_id: str, category: str, filename: str) -> str:
+    """
+    Get full file path in runflow structure.
+    
+    Args:
+        run_id: Short UUID run identifier
+        category: Category name (reports, bins, maps, heatmaps, ui)
+        filename: File name (without timestamp prefix - Issue #455)
+    
+    Returns:
+        Complete file path
+    
+    Examples:
+        >>> get_runflow_file_path("p0ZoB1FwH6", "reports", "Density.md")
+        '/runflow/p0ZoB1FwH6/reports/Density.md'
+    
+    Issue #455: Generic filenames without timestamps
+    """
+    category_path = get_runflow_category_path(run_id, category)
+    full_path = os.path.join(category_path, filename)
+    
+    return full_path
+
+
+def get_runflow_report_filename(report_type: str, extension: str = "md") -> str:
+    """
+    Generate runflow report filename (no timestamp prefix - Issue #455).
+    
+    Args:
+        report_type: Type of report (Flow, Density, etc.)
+        extension: File extension (md, csv, json)
+    
+    Returns:
+        Generic filename: "<ReportType>.<extension>"
+    
+    Examples:
+        >>> get_runflow_report_filename("Density", "md")
+        'Density.md'
+        >>> get_runflow_report_filename("Flow", "csv")
+        'Flow.csv'
+    
+    Note:
+        Unlike legacy get_standard_filename(), this does NOT include
+        timestamps. Temporal tracking is via metadata.json created_at field.
+    
+    Issue #455: Simplified naming convention for UUID-based runs
+    """
+    return f"{report_type}.{extension}"
