@@ -341,6 +341,7 @@ def update_latest_pointer(run_id: str) -> None:
         
         # Atomic rename
         shutil.move(temp_path, latest_path)
+        print(f"   📌 Updated latest.json → {run_id}")
     else:
         # GCS mode: Direct write (GCS operations are atomic)
         from google.cloud import storage as gcs
@@ -414,6 +415,7 @@ def append_to_run_index(metadata: Dict[str, Any]) -> None:
         
         # Write back
         index_path.write_text(json.dumps(index_data, indent=2, default=str))
+        print(f"   📊 Appended to index.json ({len(index_data)} total runs)")
     else:
         # GCS mode: Read → Append → Write
         from google.cloud import storage as gcs
@@ -443,4 +445,5 @@ def append_to_run_index(metadata: Dict[str, Any]) -> None:
         
         # Write back
         blob.upload_from_string(json.dumps(index_data, indent=2, default=str), content_type='application/json')
+        print(f"   📊 Appended to GCS index.json ({len(index_data)} total runs)")
 

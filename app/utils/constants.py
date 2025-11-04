@@ -139,7 +139,7 @@ MAP_ZONE_COLORS = {
 GCS_BUCKET_RUNFLOW = "runflow"  # New UUID-based structure
 
 # Storage root directories
-RUNFLOW_ROOT_LOCAL = "/users/jthompson/documents/runflow"
+RUNFLOW_ROOT_LOCAL = "/Users/jthompson/Documents/runflow"  # Must match docker-compose.yml volume mount
 RUNFLOW_ROOT_CONTAINER = "/app/runflow"
 
 # Run metadata
