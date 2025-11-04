@@ -407,10 +407,42 @@ async def export_ui_artifacts_endpoint():
         from app.core.artifacts.frontend import export_ui_artifacts, update_latest_pointer
         import re
         
-        # Find the latest report directory
+        # Issue #455: Check both runflow (UUID) and reports (legacy date) directories
+        runflow_dir = Path("runflow")
         reports_dir = Path("reports")
+        
+        # Try runflow first (UUID-based runs)
+        if runflow_dir.exists():
+            uuid_dirs = sorted(
+                [d for d in runflow_dir.iterdir() 
+                 if d.is_dir() and not d.name.endswith('.json') and d.name != '.DS_Store'],
+                key=lambda x: x.stat().st_mtime,
+                reverse=True
+            )
+            if uuid_dirs:
+                latest_run_dir = uuid_dirs[0]
+                run_id = latest_run_dir.name
+                logger.info(f"Found UUID run: {run_id}")
+                
+                # Export UI artifacts (will upload to GCS if GCS_UPLOAD=true)
+                artifacts_dir = export_ui_artifacts(latest_run_dir, run_id)
+                
+                # Update latest.json pointer (will upload to GCS if GCS_UPLOAD=true)
+                update_latest_pointer(run_id)
+                
+                response = {
+                    "status": "success",
+                    "run_id": run_id,
+                    "artifacts_dir": str(artifacts_dir),
+                    "message": f"UI artifacts exported for {run_id} (runflow mode)"
+                }
+                
+                logger.info(f"✅ UI artifacts exported successfully for {run_id}")
+                return JSONResponse(content=response)
+        
+        # Fallback to legacy date-based reports
         if not reports_dir.exists():
-            raise HTTPException(status_code=404, detail="Reports directory not found")
+            raise HTTPException(status_code=404, detail="No runflow or reports directories found")
         
         # Get the most recent date-based report directory (YYYY-MM-DD format only)
         date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
@@ -426,7 +458,7 @@ async def export_ui_artifacts_endpoint():
         latest_run_dir = run_dirs[0]
         run_id = latest_run_dir.name
         
-        logger.info(f"Exporting artifacts from: {latest_run_dir}")
+        logger.info(f"Exporting artifacts from legacy reports: {latest_run_dir}")
         
         # Export UI artifacts (will upload to GCS if GCS_UPLOAD=true)
         artifacts_dir = export_ui_artifacts(latest_run_dir, run_id)
