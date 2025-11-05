@@ -1,5 +1,118 @@
 # Changelog
 
+## [v1.7.3] - 2025-11-05
+
+### Epic #444: UUID-Based Run ID System - Complete Implementation (5 Phases)
+
+**Major architectural change replacing date-based folder structure with UUID-based runflow storage system.**
+
+#### Overview
+Implemented a comprehensive UUID-based run identification and storage system to replace the legacy date-based folder naming convention (`reports/YYYY-MM-DD/`). This Epic was delivered in 5 phases with proper testing and validation at each stage.
+
+#### Phase 1: Infrastructure & Environment Readiness (Issue #451)
+- ✅ Verified read/write access to GCS (`gs://runflow`) and local (`/users/jthompson/documents/runflow`) storage
+- ✅ Audited Docker configuration for storage-related settings
+- ✅ Documented storage access patterns in `docs/infrastructure/storage-access.md`
+- ✅ Validated environment detection logic from Issue #447 in `docs/architecture/env-detection.md`
+
+#### Phase 2: Short UUID for Run ID (Issue #452)
+- ✅ Added `app/utils/run_id.py` with `shortuuid` library for collision-resistant IDs
+- ✅ Added `app/utils/metadata.py` for run metadata management
+- ✅ Updated `app/utils/constants.py` with runflow-related constants
+- ✅ Added `shortuuid` to `requirements.txt`
+- ✅ Aligned environment detection with Issue #447 canonical functions
+
+#### Phase 3: UUID-Based Write Path Refactor (Issue #455)
+- ✅ Redirected all file output to `runflow/<run_id>/` structure (reports, bins, maps, heatmaps, ui)
+- ✅ Stripped timestamp prefixes from all filenames (e.g., `2025-11-04-0840_Density.md` → `Density.md`)
+- ✅ Integrated GCS upload support for runflow structure
+- ✅ Extended `app/storage.py` with write methods for unified storage abstraction
+- ✅ Implemented combined runs (single UUID for density + flow)
+- ✅ Updated `docker-compose.yml` with runflow volume mount
+- ✅ Added `runflow/` to `.gitignore`
+
+#### Phase 4: Pointer File and Run Index (Issue #456)
+- ✅ Implemented `runflow/latest.json` pointer file for most recent run
+- ✅ Implemented `runflow/index.json` append-only run history
+- ✅ Added atomic write operations for pointer files
+- ✅ Integrated pointer updates in density, flow, and E2E workflows
+
+#### Phase 5: API Refactor to Support runflow/ (Issue #460)
+- ✅ Migrated all read APIs from legacy `reports/YYYY-MM-DD/` to `runflow/<uuid>/`
+- ✅ Updated UI routes to use `latest.json` for current run ID
+- ✅ Updated dashboard, density, flow, reports, and health check APIs
+- ✅ Fixed Storage class path resolution for Docker environment
+- ✅ Added helper functions `get_latest_run_id()` and `get_run_index()` in `metadata.py`
+
+#### Post-Merge Fixes
+- ✅ Fixed complexity violations in 4 files (extracted 8 helper functions)
+  - `app/routes/api_dashboard.py` (17→12)
+  - `app/routes/reports.py` (bare except fixed)
+  - `app/core/artifacts/heatmaps.py` (16→12)
+  - `app/density_report.py` (18→15)
+- ✅ Fixed undefined `enable_bins` variable causing 500 errors
+- ✅ Fixed caption field name mismatch (`caption` → `summary`)
+
+#### New File Structure
+```
+runflow/<run_id>/
+├── metadata.json
+├── reports/
+│   ├── Density.md
+│   ├── Flow.csv
+│   └── Flow.md
+├── bins/
+│   ├── bins.parquet
+│   ├── bins.geojson.gz
+│   ├── segment_windows_from_bins.parquet
+│   ├── segments_legacy_vs_canonical.csv
+│   └── bin_summary.json
+├── maps/
+│   └── map_data.json
+├── heatmaps/
+│   └── *.png (17 files)
+└── ui/
+    ├── captions.json
+    ├── flags.json
+    ├── flow.json
+    ├── health.json
+    ├── meta.json
+    ├── schema_density.json
+    ├── segment_metrics.json
+    └── segments.geojson
+```
+
+#### Testing Completed
+- ✅ 3 consecutive e2e-local-docker tests passing
+- ✅ UI Testing Checklist: 5/5 pages verified
+- ✅ All 6 checkpoints validated:
+  1. New run ID created correctly
+  2. latest.json updated correctly
+  3. All files match baseline sizes (36 files)
+  4. metadata.json accurate with correct counts
+  5. index.json appended correctly
+  6. UI functioning with new run data
+
+#### Files Changed
+- **New Files:** `app/utils/run_id.py`, `app/utils/metadata.py`, `docs/infrastructure/storage-access.md`, `docs/architecture/env-detection.md`
+- **Modified Files:** 25+ files across storage, report generation, APIs, and artifact creation
+- **Total Commits:** 76 commits across 5 phases + hotfixes
+
+#### Breaking Changes
+- Legacy `reports/YYYY-MM-DD/` and `artifacts/YYYY-MM-DD/` paths deprecated
+- All new runs write to `runflow/<uuid>/` structure
+- APIs now read from `runflow/latest.json` instead of date-based discovery
+
+#### Known Limitations
+- ⚠️ UI export endpoint (`/api/e2e/export-ui-artifacts`) not fully working in GCS-only Cloud Run mode (Issue #458)
+
+#### Migration Notes
+- Local storage: `/users/jthompson/documents/runflow/`
+- Container storage: `/app/runflow/`
+- GCS storage: `gs://runflow/`
+- Pointer files enable "latest run" discovery
+- Run index provides historical run tracking
+
 ## [v1.7.2] - 2025-11-01
 
 ### Repository Cleanup - Post-v1.7 Architecture Consolidation
