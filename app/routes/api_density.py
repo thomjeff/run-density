@@ -240,23 +240,38 @@ async def get_density_segments():
         - utilization, flagged, worst_bin, watch, mitigation
     """
     try:
-        # Load segment metrics
-        segment_metrics = _load_and_normalize_segment_metrics(storage_service)
+        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
+        from app.utils.metadata import get_latest_run_id
+        from app.storage import create_runflow_storage
+        
+        run_id = get_latest_run_id()
+        storage = create_runflow_storage(run_id)
+        
+        # Load segment metrics from runflow structure
+        segment_metrics_raw = storage.read_json("ui/segment_metrics.json")
+        if not segment_metrics_raw:
+            return JSONResponse(
+                content={"detail": "No segment metrics available"},
+                status_code=404
+            )
+        
+        # Extract per-segment data (skip summary fields)
+        segment_metrics = {k: v for k, v in segment_metrics_raw.items() 
+                          if isinstance(v, dict) and k not in ["peak_density", "peak_rate", "segments_with_flags", "flagged_bins"]}
         
         # Load segments geojson for labels
-        segments_geojson = {}
-        try:
-            segments_geojson = storage_service.load_ui_artifact("segments.geojson")
-            if not segments_geojson:
-                logger.warning("segments.geojson not found in storage service")
-        except Exception as e:
-            logger.warning(f"Could not load segments geojson from storage service: {e}")
+        segments_geojson = storage.read_json("ui/segments.geojson")
+        if not segments_geojson:
+            logger.warning("segments.geojson not found")
         
         # Build label lookup
-        label_lookup = _build_label_lookup_from_geojson(segments_geojson)
+        label_lookup = _build_label_lookup_from_geojson(segments_geojson or {})
         
-        # Load flags
-        flagged_seg_ids = _load_flagged_segment_ids(storage_service)
+        # Load flags from runflow structure
+        flags_data = storage.read_json("ui/flags.json")
+        flagged_seg_ids = set()
+        if flags_data and isinstance(flags_data, list):
+            flagged_seg_ids = {flag.get("segment_id") or flag.get("seg_id") for flag in flags_data}
         
         # Load density metrics from bins.parquet
         density_metrics = load_density_metrics_from_bins()
