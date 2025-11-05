@@ -475,7 +475,7 @@ async def get_density_segment_detail(seg_id: str):
             # Mounted as: /heatmaps -> /app/runflow
             # URL path: /heatmaps/<run_id>/heatmaps/<seg_id>.png
             heatmap_url = f"/heatmaps/{run_id}/heatmaps/{seg_id}.png"
-            caption = caption_data.get("caption", "")
+            caption = caption_data.get("summary", "")
         
         # Build detail response
         detail = _build_segment_detail_response(
