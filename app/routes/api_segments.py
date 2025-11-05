@@ -191,7 +191,7 @@ async def get_segments_summary():
         features = segments_geojson.get("features", [])
         
         # Read segment_metrics.json from UI artifacts
-        segment_metrics = storage.read_json(f"{artifacts_path}/segment_metrics.json")
+        segment_metrics = storage.read_json("ui/segment_metrics.json")
         if segment_metrics is None:
             segment_metrics = {}
         
