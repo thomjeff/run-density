@@ -383,6 +383,22 @@ async def upload_e2e_results():
         raise HTTPException(status_code=500, detail=f"Upload error: {str(e)}")
 
 
+
+
+def _download_bins_from_gcs(storage, run_id: str):
+    """Download bins from GCS to temp directory for UI export."""
+    import tempfile
+    temp_dir = Path(tempfile.mkdtemp())
+    bins_dir = temp_dir / "bins"
+    bins_dir.mkdir(parents=True, exist_ok=True)
+    
+    bins_content = storage.read_bytes("bins/bins.parquet")
+    (bins_dir / "bins.parquet").write_bytes(bins_content)
+    
+    logger.info(f"Downloaded bins from GCS for run {run_id}")
+    return temp_dir
+
+
 @router.post("/api/export-ui-artifacts")
 async def export_ui_artifacts_endpoint():
     """
@@ -423,20 +439,9 @@ async def export_ui_artifacts_endpoint():
             storage_target = detect_storage_target()
             
             if storage_target == "gcs":
-                # Download bins from GCS to temp location
-                import tempfile
-                temp_dir = Path(tempfile.mkdtemp())
-                bins_dir = temp_dir / "bins"
-                bins_dir.mkdir(parents=True, exist_ok=True)
-                
-                # Download bins.parquet
-                bins_content = storage.read_bytes("bins/bins.parquet")
-                (bins_dir / "bins.parquet").write_bytes(bins_content)
-                
+                temp_dir = _download_bins_from_gcs(storage, run_id)
                 latest_run_dir = temp_dir
-                logger.info(f"Downloaded bins from GCS for run {run_id}")
             else:
-                # Local mode: use existing directory
                 from app.report_utils import get_run_folder_path
                 latest_run_dir = Path(get_run_folder_path(run_id))
                 logger.info(f"Using local runflow directory: {latest_run_dir}")
