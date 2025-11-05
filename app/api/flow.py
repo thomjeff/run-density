@@ -49,11 +49,15 @@ async def get_flow_segments():
         # Load Flow CSV from runflow structure
         try:
             # Flow.csv is at: runflow/<run_id>/reports/Flow.csv
-            df = storage.read_csv("reports/Flow.csv")
+            csv_content = storage.read_file("reports/Flow.csv")
             
-            if df is None:
-                logger.error(f"Failed to read Flow CSV: {latest_flow_csv}")
+            if not csv_content:
+                logger.error("Failed to read Flow CSV: file is empty")
                 return JSONResponse(content=[])
+            
+            # Parse CSV content
+            from io import StringIO
+            df = pd.read_csv(StringIO(csv_content))
         
         except Exception as e:
             logger.error(f"Failed to load Flow CSV: {e}")
