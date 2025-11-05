@@ -34,10 +34,62 @@ The Run Density application uses environment detection to automatically configur
 
 ## Detection Functions
 
-### 1. `detect_environment()` - Runtime Detection
+### Canonical Detection Functions (Issue #452)
+**Location:** `app/utils/env.py`
+
+These are the **canonical** environment detection functions that should be used across the application. They follow the Issue #447 priority order and provide consistent behavior.
+
+#### `detect_runtime_environment()` - Canonical Runtime Detection
+**Returns:** `Literal["local_docker", "cloud_run"]`
+
+**Logic:**
+```python
+def detect_runtime_environment() -> Literal["local_docker", "cloud_run"]:
+    # K_SERVICE is set automatically by Cloud Run
+    if os.getenv('K_SERVICE'):
+        return "cloud_run"
+    else:
+        return "local_docker"
+```
+
+**Used By:**
+- `app/utils/metadata.py` - Run metadata generation
+- Future: Other modules can be refactored to use this
+
+---
+
+#### `detect_storage_target()` - Canonical Storage Detection
+**Returns:** `Literal["filesystem", "gcs"]`
+
+**Logic (Priority Order):**
+1. Check `GCS_UPLOAD=true` → Use GCS (explicit override for staging)
+2. Check `K_SERVICE` or `GOOGLE_CLOUD_PROJECT` → Use GCS (Cloud Run auto-detect)
+3. Default → Use filesystem (local development)
+
+```python
+def detect_storage_target() -> Literal["filesystem", "gcs"]:
+    # Issue #447: Check GCS_UPLOAD flag first (staging mode)
+    if os.getenv('GCS_UPLOAD', '').lower() == 'true':
+        return "gcs"
+    # Check Cloud Run environment variables (automatic detection)
+    elif os.getenv('K_SERVICE') or os.getenv('GOOGLE_CLOUD_PROJECT'):
+        return "gcs"
+    else:
+        return "filesystem"
+```
+
+**Used By:**
+- `app/utils/metadata.py` - Run metadata generation
+- Future: StorageService, Storage, api_e2e can be refactored to use this
+
+**Note:** These canonical functions were introduced in Issue #452 to ensure consistent environment detection across the application following Issue #447 standards.
+
+---
+
+### 1. `detect_environment()` - Runtime Detection (Informational)
 **Location:** `app/main.py:400`
 
-**Purpose:** Identify the cloud platform runtime environment
+**Purpose:** Identify the cloud platform runtime environment (informational, broader scope)
 
 **Logic:**
 ```python
@@ -489,13 +541,23 @@ make e2e-prod-gcp
   - Validated detection across all runtimes
   - Created architecture documentation
 
+## Implementation History (Continued)
+
+- **Issue #452:** Phase 2 - Short UUID for Run ID
+  - Created canonical detection functions in `app/utils/env.py`
+  - Refactored `app/utils/metadata.py` to delegate to canonical functions
+  - Established pattern for future module consolidation
+
 ## References
 
 - Issue #447: E2E Test Refactor
 - Issue #451: Run ID Phase 1 - Infrastructure & Environment Readiness
-- `app/storage_service.py` - Reports storage detection
-- `app/storage.py` - Artifacts storage detection
-- `app/routes/api_e2e.py` - E2E endpoint detection
+- Issue #452: Run ID Phase 2 - Short UUID for Run ID
+- **Canonical Functions:** `app/utils/env.py` - detect_runtime_environment(), detect_storage_target()
+- `app/utils/metadata.py` - Uses canonical functions (Issue #452)
+- `app/storage_service.py` - Reports storage detection (can be refactored)
+- `app/storage.py` - Artifacts storage detection (can be refactored)
+- `app/routes/api_e2e.py` - E2E endpoint detection (can be refactored)
 - `Makefile` - E2E testing targets
 - `e2e.py` - E2E test script
 - `docker-compose.yml` - Local development configuration

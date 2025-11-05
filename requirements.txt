@@ -28,6 +28,9 @@ numpy>=1.24.0
 # HTTP Client (for health checks)
 httpx>=0.24.0
 
+# Short UUID generation (Epic #444)
+shortuuid>=1.0.0
+
 # Bin Dataset Support (Issue #198)
 pyarrow>=10.0.0
 shapely>=2.0.0
