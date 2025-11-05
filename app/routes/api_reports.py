@@ -80,12 +80,15 @@ def _get_file_metadata_from_local(file_path: str) -> tuple[Optional[float], Opti
         return None, None
 
 
-def _get_file_metadata(storage_service, file_path: str) -> tuple[Optional[float], Optional[int]]:
+def _get_file_metadata(storage, file_path: str) -> tuple[Optional[float], Optional[int]]:
     """Get file metadata (mtime, size) based on storage type."""
-    if storage_service.config.use_cloud_storage:
-        return _get_file_metadata_from_gcs(storage_service, file_path)
+    # Issue #460: Storage class uses .mode instead of .config.use_cloud_storage
+    if storage.mode == "gcs":
+        return _get_file_metadata_from_gcs(storage, file_path)
     else:
-        return _get_file_metadata_from_local(file_path)
+        # For local mode, need to construct full path from storage root
+        full_path = storage._full_local(file_path)
+        return _get_file_metadata_from_local(str(full_path))
 
 
 def _add_core_data_files(reports: list) -> None:
