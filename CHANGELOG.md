@@ -1,6 +1,6 @@
 # Changelog
 
-## [v1.7.3] - 2025-11-05
+## [v1.8.0] - 2025-11-05
 
 ### Epic #444: UUID-Based Run ID System - Complete Implementation (5 Phases)
 
