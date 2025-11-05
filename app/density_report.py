@@ -1157,6 +1157,77 @@ def _generate_and_upload_heatmaps(daily_folder_path: Optional[str], run_id: str 
         logger.debug(f"Heatmap generation error details: {type(e).__name__}: {e}", exc_info=True)
 
 
+
+
+def _setup_runflow_output_dir(run_id: str, logger):
+    """Setup runflow output directory for UUID-based runs."""
+    if run_id:
+        from app.report_utils import get_runflow_category_path
+        output_dir = get_runflow_category_path(run_id, "bins")
+        logger.info(f"Issue #455: Using runflow structure for run_id={run_id}, bins_dir={output_dir}")
+        return output_dir
+    return None
+
+
+def _finalize_run_metadata(run_id: str, daily_folder_path: str, logger):
+    """Write metadata and upload to GCS for completed runs."""
+    if not run_id or not daily_folder_path:
+        return
+        
+    try:
+        from app.utils.metadata import create_run_metadata, write_metadata_json, update_latest_pointer
+        from app.report_utils import get_run_folder_path, upload_runflow_to_gcs
+        from pathlib import Path
+        
+        run_path = Path(get_run_folder_path(run_id))
+        metadata = create_run_metadata(run_id, run_path, status="complete")
+        metadata_path = write_metadata_json(run_path, metadata)
+        logger.info(f"Issue #455: Written metadata.json to {metadata_path}")
+        
+        # Update latest.json pointer
+        update_latest_pointer(run_id)
+        
+        # Upload to GCS if enabled
+        upload_runflow_to_gcs(run_id)
+    except Exception as e:
+        logger.warning(f"Failed to write metadata.json: {e}")
+
+
+
+def _execute_bin_dataset_generation(results, start_times, output_dir, enable_bin_dataset, logger):
+    """Execute bin dataset generation with retry logic."""
+    enable_bins = enable_bin_dataset or os.getenv('ENABLE_BIN_DATASET', 'false').lower() == 'true'
+    logger.info(f"Bin dataset generation: enable_bin_dataset={enable_bin_dataset}, env_var={os.getenv('ENABLE_BIN_DATASET')}, effective={enable_bins}")
+    
+    if not enable_bins:
+        print("📦 Bin dataset generation disabled (ENABLE_BIN_DATASET=false)")
+        return None
+        
+    logger.info("✅ Bin dataset generation enabled (enable_bin_dataset=True)")
+    try:
+        from app.utils.constants import BIN_SCHEMA_VERSION
+        
+        # Create AnalysisContext
+        analysis_context = AnalysisContext(
+            course_id="fredericton_marathon",
+            segments=pd.DataFrame(),
+            runners=pd.DataFrame(),
+            params={"start_times": start_times},
+            code_version="v1.6.37",
+            schema_version=BIN_SCHEMA_VERSION,
+            pace_csv_path="data/runners.csv",
+            segments_csv_path="data/segments.csv"
+        )
+        
+        daily_folder_path, _, _ = _generate_bin_dataset_with_retry(
+            results, start_times, output_dir, analysis_context
+        )
+        return daily_folder_path
+    except Exception as e:
+        print(f"⚠️ Bin dataset unavailable: {e}")
+        return None
+
+
 def generate_density_report(
     pace_csv: str,
     density_csv: str,
@@ -1188,13 +1259,9 @@ def generate_density_report(
     logger = logging.getLogger(__name__)
     
     # Issue #455: Surgical path update for runflow structure
-    # If run_id provided, use runflow paths; otherwise legacy date-based paths
-    if run_id:
-        from app.report_utils import get_runflow_category_path
-        # Override output_dir to use runflow/bins/ for bin artifacts
-        # Reports will be saved to runflow/reports/ via get_report_paths
-        output_dir = get_runflow_category_path(run_id, "bins")
-        logger.info(f"Issue #455: Using runflow structure for run_id={run_id}, bins_dir={output_dir}")
+    runflow_dir = _setup_runflow_output_dir(run_id, logger)
+    if runflow_dir:
+        output_dir = runflow_dir
     
     print("🔍 Starting density analysis...")
     
@@ -1291,39 +1358,9 @@ def generate_density_report(
     print(f"🗺️ Map dataset saved to: {map_path}")
     
     # Issue #198: Re-enable bin dataset generation with feature flag
-    # Use API parameter if provided, otherwise fall back to environment variable
-    enable_bins = enable_bin_dataset or os.getenv('ENABLE_BIN_DATASET', 'false').lower() == 'true'
-    
-    # Issue #319: Confirmation logging for bin dataset generation
-    logger.info(f"Bin dataset generation: enable_bin_dataset={enable_bin_dataset}, env_var={os.getenv('ENABLE_BIN_DATASET')}, effective={enable_bins}")
-    
-    # Bin dataset generation with retry logic
-    daily_folder_path = None
-    if enable_bins:
-        logger.info("✅ Bin dataset generation enabled (enable_bin_dataset=True)")
-        try:
-            from app.utils.constants import BIN_SCHEMA_VERSION
-            
-            # Create AnalysisContext per ChatGPT specification
-            analysis_context = AnalysisContext(
-                course_id="fredericton_marathon",
-                segments=pd.DataFrame(),  # Placeholder - can be enhanced
-                runners=pd.DataFrame(),   # Placeholder - can be enhanced  
-                params={"start_times": start_times},
-                code_version="v1.6.37",
-                schema_version=BIN_SCHEMA_VERSION,
-                pace_csv_path="data/runners.csv",
-                segments_csv_path="data/segments.csv"
-            )
-            
-            daily_folder_path, _, _ = _generate_bin_dataset_with_retry(
-                results, start_times, output_dir, analysis_context
-            )
-        except Exception as e:
-            print(f"⚠️ Bin dataset unavailable: {e}")
-            daily_folder_path = None
-    else:
-        print("📦 Bin dataset generation disabled (ENABLE_BIN_DATASET=false)")
+    daily_folder_path = _execute_bin_dataset_generation(
+        results, start_times, output_dir, enable_bin_dataset, logger
+    )
     
     # Regenerate report WITH operational intelligence now that bins exist (Issue #239 fix)
     if enable_bins and daily_folder_path:
@@ -1343,25 +1380,7 @@ def generate_density_report(
     results_for_api = {k: v for k, v in results.items() if k != '_operational_intelligence'}
     
     # Issue #455: Write metadata.json at end of successful generation
-    if run_id and daily_folder_path:
-        try:
-            from app.utils.metadata import create_run_metadata, write_metadata_json
-            from pathlib import Path
-            
-            run_path = Path(get_run_folder_path(run_id))
-            metadata = create_run_metadata(run_id, run_path, status="complete")
-            metadata_path = write_metadata_json(run_path, metadata)
-            logger.info(f"Issue #455: Written metadata.json to {metadata_path}")
-            
-            # Issue #456 Phase 4: Update latest.json (index.json updated after UI export)
-            from app.utils.metadata import update_latest_pointer
-            update_latest_pointer(run_id)
-            
-            # Issue #455 Phase 3: Upload to GCS if enabled
-            from app.report_utils import upload_runflow_to_gcs
-            upload_runflow_to_gcs(run_id)
-        except Exception as e:
-            logger.warning(f"Failed to write metadata.json: {e}")
+    _finalize_run_metadata(run_id, daily_folder_path, logger)
     
     return {
         "ok": True,

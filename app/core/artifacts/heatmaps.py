@@ -609,6 +609,42 @@ def load_segments_metadata() -> Dict[str, Dict[str, Any]]:
     return segments_meta
 
 
+def _determine_heatmap_output_dir(run_id: str):
+    """Determine output directory for heatmaps based on run ID format."""
+    from pathlib import Path
+    from app.utils.run_id import is_legacy_date_format
+    from app.report_utils import get_runflow_category_path
+    
+    if is_legacy_date_format(run_id):
+        return Path("artifacts") / run_id / "ui" / "heatmaps"
+    else:
+        return Path(get_runflow_category_path(run_id, "heatmaps"))
+
+
+def _save_captions_json(run_id: str, captions: dict, storage):
+    """Save captions.json to appropriate location based on run ID format."""
+    from pathlib import Path
+    from app.utils.run_id import is_legacy_date_format
+    from app.report_utils import get_runflow_file_path
+    import json
+    
+    if is_legacy_date_format(run_id):
+        # Legacy mode: Use StorageService
+        artifacts_path = f"artifacts/{run_id}/ui/captions.json"
+        print(f"   📤 Uploading captions to: gs://run-density-reports/{artifacts_path}")
+        storage.save_artifact_json(artifacts_path, captions)
+        print(f"   ✅ captions.json: {len(captions)} segments captioned")
+    else:
+        # Runflow mode: Save locally, GCS upload happens later
+        captions_path = Path(get_runflow_file_path(run_id, "ui", "captions.json"))
+        captions_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(captions_path, 'w') as f:
+            json.dump(captions, f, indent=2)
+        print(f"   💾 Saved captions locally: {captions_path}")
+        print(f"   ✅ captions.json: {len(captions)} segments captioned")
+
+
+
 def export_heatmaps_and_captions(
     run_id: str, 
     reports_dir: Path, 
@@ -657,13 +693,7 @@ def export_heatmaps_and_captions(
     heatmaps_generated = 0
     
     # Create heatmaps directory
-    # Issue #455: Use runflow structure for UUID run_ids
-    from app.utils.run_id import is_legacy_date_format
-    from app.report_utils import get_runflow_category_path
-    if is_legacy_date_format(run_id):
-        heatmaps_dir = Path("artifacts") / run_id / "ui" / "heatmaps"
-    else:
-        heatmaps_dir = Path(get_runflow_category_path(run_id, "heatmaps"))
+    heatmaps_dir = _determine_heatmap_output_dir(run_id)
     heatmaps_dir.mkdir(parents=True, exist_ok=True)
     
     for seg_id in segments:
@@ -704,23 +734,7 @@ def export_heatmaps_and_captions(
     # Issue #455 Phase 3: Save captions.json locally (GCS upload handled by upload_runflow_to_gcs)
     if captions:
         try:
-            from app.report_utils import get_runflow_file_path
-            
-            # Issue #455: Use runflow structure for UUID run_ids
-            if is_legacy_date_format(run_id):
-                # Legacy mode: Use StorageService
-                artifacts_path = f"artifacts/{run_id}/ui/captions.json"
-                print(f"   📤 Uploading captions to: gs://run-density-reports/{artifacts_path}")
-                storage.save_artifact_json(artifacts_path, captions)
-                print(f"   ✅ captions.json: {len(captions)} segments captioned")
-            else:
-                # Runflow mode: Save locally, GCS upload happens later
-                captions_path = Path(get_runflow_file_path(run_id, "ui", "captions.json"))
-                captions_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(captions_path, 'w') as f:
-                    json.dump(captions, f, indent=2)
-                print(f"   💾 Saved captions locally: {captions_path}")
-                print(f"   ✅ captions.json: {len(captions)} segments captioned")
+            _save_captions_json(run_id, captions, storage)
         except Exception as e:
             print(f"   ⚠️  Could not save captions.json: {e}")
     

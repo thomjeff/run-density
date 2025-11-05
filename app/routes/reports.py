@@ -80,7 +80,8 @@ def _scan_runflow_reports(limit: int) -> List[Dict]:
         # Parse timestamp
         try:
             ts = datetime.fromisoformat(created_at.replace("Z", "+00:00")) if created_at else datetime.now()
-        except:
+        except (ValueError, AttributeError) as e:
+            logger.warning(f"Failed to parse timestamp for run {run_id}: {e}")
             ts = datetime.now()
         
         # Add report files from this run
