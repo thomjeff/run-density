@@ -427,23 +427,52 @@ async def get_density_segment_detail(seg_id: str):
     """
     logger.info(f"=== UPDATED CODE LOADED === Processing segment detail for {seg_id}")
     try:
-        storage_service = get_storage_service()
+        # Issue #460 Phase 5: Use runflow structure
+        from app.utils.metadata import get_latest_run_id
+        from app.storage import create_runflow_storage
         
-        # Load segment metrics
-        segment_metrics = _load_segment_metrics_from_storage(storage_service)
+        run_id = get_latest_run_id()
+        storage = create_runflow_storage(run_id)
+        
+        # Load segment metrics from runflow
+        segment_metrics_raw = storage.read_json("ui/segment_metrics.json")
+        if not segment_metrics_raw:
+            raise HTTPException(status_code=404, detail="Segment metrics not found")
+        
+        # Extract per-segment data
+        segment_metrics = {k: v for k, v in segment_metrics_raw.items() 
+                          if isinstance(v, dict) and k not in ["peak_density", "peak_rate", "segments_with_flags", "flagged_bins"]}
+        
         if seg_id not in segment_metrics:
             raise HTTPException(status_code=404, detail=f"Segment {seg_id} not found")
         
         metrics = segment_metrics[seg_id]
         
         # Load segment metadata from geojson
-        metadata = _load_segment_metadata_from_geojson(storage_service, seg_id)
+        segments_geojson = storage.read_json("ui/segments.geojson")
+        metadata = {}
+        if segments_geojson and "features" in segments_geojson:
+            for feature in segments_geojson["features"]:
+                props = feature.get("properties", {})
+                if props.get("seg_id") == seg_id:
+                    metadata = props
+                    break
         
         # Check if flagged
-        is_flagged = _check_segment_flagged(storage_service, seg_id)
+        flags_data = storage.read_json("ui/flags.json")
+        is_flagged = False
+        if flags_data and isinstance(flags_data, list):
+            is_flagged = any(f.get("segment_id") == seg_id or f.get("seg_id") == seg_id for f in flags_data)
         
-        # Load heatmap and caption
-        heatmap_url, caption = _load_heatmap_and_caption(storage_service, seg_id)
+        # Load heatmap URL and caption from captions.json
+        captions = storage.read_json("ui/captions.json")
+        heatmap_url = None
+        caption = ""
+        if captions and seg_id in captions:
+            caption_data = captions[seg_id]
+            # Build heatmap URL for runflow structure
+            heatmap_url = f"/heatmaps/{run_id}/{seg_id}.png"
+            caption = caption_data.get("caption", "")
         
         # Build detail response
         detail = _build_segment_detail_response(

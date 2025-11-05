@@ -206,28 +206,32 @@ def download_report(path: str = Query(..., description="Report file path")):
             logger.error(f"[Download] Failed to read local file {path}: {e}")
             raise HTTPException(status_code=404, detail="File not found")
 
-    # Case B: Read report files (local or GCS)
+    # Case B: Read report files from runflow structure
     else:
-        # Check if we're in local mode or Cloud Run mode
-        if storage_service.config.use_cloud_storage:
-            # Cloud Run: Read from GCS
-            content = storage_service._load_from_gcs(path)
-            if content is None:
-                logger.warning(f"[Download] GCS file not found or unreadable: {path}")
-                raise HTTPException(status_code=404, detail="File not found")
-        else:
-            # Local: Read from local filesystem
-            try:
-                if path.startswith("reports/"):
-                    file_path = path  # reports/2025-10-21/file.md
-                else:
-                    file_path = f"reports/{path}"  # 2025-10-21/file.md -> reports/2025-10-21/file.md
+        # Issue #460: Use Storage abstraction for runflow files
+        # Path is like: runflow/<run_id>/reports/Density.md
+        # Extract the run_id and relative path
+        try:
+            parts = path.split("/")
+            if parts[0] == "runflow" and len(parts) >= 3:
+                report_run_id = parts[1]
+                relative_path = "/".join(parts[2:])  # e.g., "reports/Density.md"
                 
-                content = open(file_path, "r", encoding="utf-8").read()
-                logger.info(f"[Download] Loaded local report file: {file_path}")
-            except Exception as e:
-                logger.error(f"[Download] Failed to read local report file {file_path}: {e}")
-                raise HTTPException(status_code=404, detail="File not found")
+                from app.storage import create_runflow_storage
+                storage = create_runflow_storage(report_run_id)
+                content = storage.read_text(relative_path)
+                
+                if not content:
+                    logger.warning(f"[Download] File not found: {path}")
+                    raise HTTPException(status_code=404, detail="File not found")
+                
+                logger.info(f"[Download] Loaded runflow file: {path}")
+            else:
+                logger.error(f"[Download] Invalid path format: {path}")
+                raise HTTPException(status_code=400, detail="Invalid path format")
+        except Exception as e:
+            logger.error(f"[Download] Failed to read file {path}: {e}")
+            raise HTTPException(status_code=404, detail="File not found")
 
     # Safe encoding
     try:
