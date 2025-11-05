@@ -19,3 +19,6 @@ venv/
 env/
 .venv/
 *.egg-info/
+
+# Runflow UUID-based storage (Issue #455)
+runflow/
