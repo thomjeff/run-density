@@ -209,7 +209,7 @@ async def get_segments_summary():
         
         # Count flagged segments (if flags exist)
         flagged_count = 0
-        flags = storage.read_json(f"{artifacts_path}/flags.json")
+        flags = storage.read_json("ui/flags.json")
         if flags:
             # Handle both dict and array formats
             if isinstance(flags, dict):
