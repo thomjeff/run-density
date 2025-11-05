@@ -1363,7 +1363,7 @@ def generate_density_report(
     )
     
     # Regenerate report WITH operational intelligence now that bins exist (Issue #239 fix)
-    if daily_folder_path:
+    if enable_bins and daily_folder_path:
         try:
             full_path = _regenerate_report_with_intelligence(
                 results, start_times, include_per_event,

@@ -383,22 +383,6 @@ async def upload_e2e_results():
         raise HTTPException(status_code=500, detail=f"Upload error: {str(e)}")
 
 
-
-
-def _download_bins_from_gcs(storage, run_id: str):
-    """Download bins from GCS to temp directory for UI export."""
-    import tempfile
-    temp_dir = Path(tempfile.mkdtemp())
-    bins_dir = temp_dir / "bins"
-    bins_dir.mkdir(parents=True, exist_ok=True)
-    
-    bins_content = storage.read_bytes("bins/bins.parquet")
-    (bins_dir / "bins.parquet").write_bytes(bins_content)
-    
-    logger.info(f"Downloaded bins from GCS for run {run_id}")
-    return temp_dir
-
-
 @router.post("/api/export-ui-artifacts")
 async def export_ui_artifacts_endpoint():
     """
@@ -420,68 +404,14 @@ async def export_ui_artifacts_endpoint():
         logger.info("=== Exporting UI Artifacts ===")
         
         # Import needed modules
-        from app.core.artifacts.frontend import export_ui_artifacts
-        from app.utils.metadata import get_latest_run_id, create_run_metadata, write_metadata_json, append_to_run_index
-        from app.storage import create_runflow_storage
-        from app.report_utils import upload_runflow_to_gcs
+        from app.core.artifacts.frontend import export_ui_artifacts, update_latest_pointer
         import re
         
-        # Issue #460 Phase 5: Use storage abstraction instead of checking local dirs
-        # This works in both GCS mode (reads from gs://runflow/) and local mode
-        try:
-            run_id = get_latest_run_id()
-            storage = create_runflow_storage(run_id)
-            logger.info(f"Found latest run: {run_id} (using storage abstraction)")
-            
-            # In GCS mode, we need to download bins locally first for UI export
-            # In local mode, bins are already there
-            from app.utils.env import detect_storage_target
-            storage_target = detect_storage_target()
-            
-            if storage_target == "gcs":
-                temp_dir = _download_bins_from_gcs(storage, run_id)
-                latest_run_dir = temp_dir
-            else:
-                from app.report_utils import get_run_folder_path
-                latest_run_dir = Path(get_run_folder_path(run_id))
-                logger.info(f"Using local runflow directory: {latest_run_dir}")
-            
-            # Export UI artifacts
-            artifacts_dir = export_ui_artifacts(latest_run_dir, run_id)
-            
-            # Update metadata and index
-            metadata = create_run_metadata(run_id, latest_run_dir, status="complete")
-            metadata_path = write_metadata_json(latest_run_dir, metadata)
-            logger.info(f"Updated metadata.json: {metadata_path}")
-            
-            append_to_run_index(metadata)
-            upload_runflow_to_gcs(run_id)
-            
-            # Clean up temp dir if in GCS mode
-            if storage_target == "gcs":
-                import shutil
-                shutil.rmtree(temp_dir, ignore_errors=True)
-            
-            response = {
-                "status": "success",
-                "run_id": run_id,
-                "storage_mode": storage_target,
-                "message": f"UI artifacts exported for {run_id}"
-            }
-            
-            logger.info(f"✅ UI artifacts exported successfully for {run_id}")
-            return JSONResponse(content=response)
-            
-        except FileNotFoundError as e:
-            logger.warning(f"No latest.json found: {e}")
-            # Fallback to legacy mode
-            pass
-        
-        # Fallback to legacy date-based reports
+        # Issue #455: Check both runflow (UUID) and reports (legacy date) directories
         runflow_dir = Path("runflow")
         reports_dir = Path("reports")
         
-        # Try runflow local directory (only works in local/filesystem mode)
+        # Try runflow first (UUID-based runs)
         if runflow_dir.exists():
             uuid_dirs = sorted(
                 [d for d in runflow_dir.iterdir() 
