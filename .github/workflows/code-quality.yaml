@@ -1,0 +1,46 @@
+name: Code Quality
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  lint-and-complexity:
+    name: "Code Lint + Complexity"
+    runs-on: ubuntu-latest
+    continue-on-error: false
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install linting tools
+        run: |
+          pip install --upgrade pip
+          pip install flake8 flake8-bugbear black isort
+
+      - name: Run flake8 checks (complexity + style)
+        run: |
+          echo "🔍 flake8: complexity and lint checks"
+          flake8 app/ core/ \
+            --max-complexity=15 \
+            --select=B001,C901,E,F,W \
+            --exclude=tests/*
+
+      - name: Check code formatting with black
+        run: |
+          echo "🧱 black: formatting check"
+          black app/ core/ --check
+
+      - name: Check import sorting with isort
+        run: |
+          echo "🔃 isort: import order check"
+          isort app/ core/ --check-only --profile black
