@@ -455,3 +455,139 @@ def append_to_run_index(metadata: Dict[str, Any]) -> None:
         blob.upload_from_string(json.dumps(index_data, indent=2, default=str), content_type='application/json')
         print(f"   📊 Appended to GCS index.json ({len(index_data)} total runs)")
 
+
+# ===== Phase 5: API Read Helpers (Issue #460) =====
+
+def get_latest_run_id() -> str:
+    """
+    Get the most recent run_id from runflow/latest.json (Issue #460).
+    
+    Used by "Latest-only" API endpoints that serve data from the most recent run.
+    
+    Returns:
+        run_id string (UUID)
+        
+    Raises:
+        FileNotFoundError: If latest.json doesn't exist or is unreadable
+        ValueError: If latest.json is invalid or missing run_id field
+        
+    Example:
+        run_id = get_latest_run_id()
+        storage = create_runflow_storage(run_id)
+        data = storage.read_json("ui/meta.json")
+    """
+    from app.utils.env import detect_storage_target
+    from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER, GCS_BUCKET_RUNFLOW
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    storage_target = detect_storage_target()
+    
+    try:
+        if storage_target == "filesystem":
+            # Local mode: Read from filesystem
+            if Path(RUNFLOW_ROOT_CONTAINER).exists():
+                runflow_root = Path(RUNFLOW_ROOT_CONTAINER)
+            else:
+                runflow_root = Path(RUNFLOW_ROOT_LOCAL)
+            
+            latest_path = runflow_root / "latest.json"
+            if not latest_path.exists():
+                raise FileNotFoundError(f"latest.json not found at {latest_path}")
+            
+            latest_data = json.loads(latest_path.read_text())
+        else:
+            # GCS mode: Read from GCS
+            from google.cloud import storage as gcs
+            
+            bucket_name = os.getenv("GCS_BUCKET_RUNFLOW", GCS_BUCKET_RUNFLOW)
+            client = gcs.Client()
+            bucket = client.bucket(bucket_name)
+            blob = bucket.blob("latest.json")
+            
+            if not blob.exists():
+                raise FileNotFoundError(f"latest.json not found in gs://{bucket_name}/")
+            
+            latest_data = json.loads(blob.download_as_text())
+        
+        # Extract and validate run_id
+        run_id = latest_data.get("run_id")
+        if not run_id:
+            raise ValueError("latest.json missing 'run_id' field")
+        
+        return run_id
+    
+    except FileNotFoundError as e:
+        logger.error(f"latest.json not found: {e}")
+        raise
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.error(f"latest.json invalid: {e}")
+        raise ValueError(f"latest.json missing or unreadable: {e}")
+    except Exception as e:
+        logger.error(f"Error reading latest.json: {e}")
+        raise
+
+
+def get_run_index() -> List[Dict[str, Any]]:
+    """
+    Get the list of all runs from runflow/index.json (Issue #460).
+    
+    Used by "Multi-run" API endpoints that show recent run summaries.
+    
+    Returns:
+        List of run metadata dictionaries (newest first)
+        Returns empty list [] if index.json doesn't exist
+        
+    Example:
+        runs = get_run_index()
+        recent_runs = runs[:10]  # Last 10 runs
+        return [{"run_id": r["run_id"], "created_at": r["created_at"], ...} for r in recent_runs]
+    """
+    from app.utils.env import detect_storage_target
+    from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER, GCS_BUCKET_RUNFLOW
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    storage_target = detect_storage_target()
+    
+    try:
+        if storage_target == "filesystem":
+            # Local mode: Read from filesystem
+            if Path(RUNFLOW_ROOT_CONTAINER).exists():
+                runflow_root = Path(RUNFLOW_ROOT_CONTAINER)
+            else:
+                runflow_root = Path(RUNFLOW_ROOT_LOCAL)
+            
+            index_path = runflow_root / "index.json"
+            if not index_path.exists():
+                logger.warning(f"index.json not found at {index_path}, returning empty list")
+                return []
+            
+            index_data = json.loads(index_path.read_text())
+        else:
+            # GCS mode: Read from GCS
+            from google.cloud import storage as gcs
+            
+            bucket_name = os.getenv("GCS_BUCKET_RUNFLOW", GCS_BUCKET_RUNFLOW)
+            client = gcs.Client()
+            bucket = client.bucket(bucket_name)
+            blob = bucket.blob("index.json")
+            
+            if not blob.exists():
+                logger.warning(f"index.json not found in gs://{bucket_name}/, returning empty list")
+                return []
+            
+            index_data = json.loads(blob.download_as_text())
+        
+        # Validate structure
+        if not isinstance(index_data, list):
+            logger.warning(f"index.json is not a list, returning empty list")
+            return []
+        
+        # Return in reverse order (newest first)
+        return list(reversed(index_data))
+    
+    except (json.JSONDecodeError, Exception) as e:
+        logger.error(f"Error reading index.json: {e}")
+        return []
+

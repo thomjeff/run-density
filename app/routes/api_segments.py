@@ -108,28 +108,31 @@ async def get_segments_geojson():
         - Logs warnings for missing data
     """
     try:
-        # Get latest run_id to locate UI artifacts
-        run_id = storage.get_latest_run_id()
-        artifacts_path = f"artifacts/{run_id}/ui"
+        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
+        from app.utils.metadata import get_latest_run_id
+        from app.storage import create_runflow_storage
         
-        # Read segments.geojson from UI artifacts
-        segments_geojson = storage.read_geojson(f"{artifacts_path}/segments.geojson")
+        run_id = get_latest_run_id()
+        storage = create_runflow_storage(run_id)
+        
+        # Read segments.geojson from runflow UI artifacts (GeoJSON is JSON)
+        segments_geojson = storage.read_json("ui/segments.geojson")
         if segments_geojson is None:
-            logger.warning(f"segments.geojson not found in {artifacts_path}")
+            logger.warning(f"segments.geojson not found in runflow/{run_id}/ui/")
             return JSONResponse(
                 content={"type": "FeatureCollection", "features": []},
                 headers={"Cache-Control": "public, max-age=60"}
             )
         
-        # Read segment_metrics.json from UI artifacts
-        segment_metrics = storage.read_json(f"{artifacts_path}/segment_metrics.json")
+        # Read segment_metrics.json from runflow UI artifacts
+        segment_metrics = storage.read_json("ui/segment_metrics.json")
         if segment_metrics is None:
-            logger.warning(f"segment_metrics.json not found in {artifacts_path}")
+            logger.warning(f"segment_metrics.json not found in runflow/{run_id}/ui/")
             segment_metrics = {}
         
         # Load flags to mark flagged segments
         flagged_seg_ids = set()
-        flags = storage.read_json(f"{artifacts_path}/flags.json")
+        flags = storage.read_json("ui/flags.json")
         if flags:
             try:
                 # Handle both dict and array formats
@@ -173,19 +176,22 @@ async def get_segments_summary():
         Summary statistics about segments and metrics
     """
     try:
-        # Get latest run_id to locate UI artifacts
-        run_id = storage.get_latest_run_id()
-        artifacts_path = f"artifacts/{run_id}/ui"
+        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
+        from app.utils.metadata import get_latest_run_id
+        from app.storage import create_runflow_storage
         
-        # Read segments.geojson from UI artifacts
-        segments_geojson = storage.read_geojson(f"{artifacts_path}/segments.geojson")
+        run_id = get_latest_run_id()
+        storage = create_runflow_storage(run_id)
+        
+        # Read segments.geojson from runflow UI artifacts (GeoJSON is JSON)
+        segments_geojson = storage.read_json("ui/segments.geojson")
         if segments_geojson is None:
             return JSONResponse(content={"error": "segments.geojson not found"})
         
         features = segments_geojson.get("features", [])
         
         # Read segment_metrics.json from UI artifacts
-        segment_metrics = storage.read_json(f"{artifacts_path}/segment_metrics.json")
+        segment_metrics = storage.read_json("ui/segment_metrics.json")
         if segment_metrics is None:
             segment_metrics = {}
         
@@ -203,7 +209,7 @@ async def get_segments_summary():
         
         # Count flagged segments (if flags exist)
         flagged_count = 0
-        flags = storage.read_json(f"{artifacts_path}/flags.json")
+        flags = storage.read_json("ui/flags.json")
         if flags:
             # Handle both dict and array formats
             if isinstance(flags, dict):

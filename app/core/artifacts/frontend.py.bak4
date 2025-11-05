@@ -561,7 +561,7 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
     Returns:
         GeoJSON FeatureCollection
     """
-    bins_geojson_path = reports_dir / "bins" / "bins.geojson.gz"
+    bins_geojson_path = reports_dir / "bins.geojson.gz"
     
     if not bins_geojson_path.exists():
         print(f"Warning: {bins_geojson_path} not found, returning empty GeoJSON")

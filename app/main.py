@@ -172,7 +172,7 @@ try:
 except Exception as e:
     print(f"Warning: Could not mount static directory: {e}")
 
-# Mount artifacts directory for local development only
+# Mount artifacts directory for local development only (legacy)
 # In Cloud Run, heatmaps are served via signed URLs from GCS
 if os.path.exists("artifacts"):
     try:
@@ -181,6 +181,19 @@ if os.path.exists("artifacts"):
         print(f"Warning: Could not mount artifacts directory: {e}")
 else:
     print("Info: Artifacts directory not found - using GCS storage mode")
+
+# Issue #460 Phase 5: Mount runflow directory for local development
+# Heatmaps are now at /heatmaps/<run_id>/<seg_id>.png
+from app.utils.constants import RUNFLOW_ROOT_CONTAINER, RUNFLOW_ROOT_LOCAL
+runflow_root = RUNFLOW_ROOT_CONTAINER if os.path.exists(RUNFLOW_ROOT_CONTAINER) else RUNFLOW_ROOT_LOCAL
+if os.path.exists(runflow_root):
+    try:
+        app.mount("/heatmaps", StaticFiles(directory=runflow_root), name="heatmaps")
+        print(f"Info: Mounted heatmaps from {runflow_root}")
+    except Exception as e:
+        print(f"Warning: Could not mount runflow directory for heatmaps: {e}")
+else:
+    print(f"Info: Runflow directory not found at {runflow_root} - using GCS storage mode")
 
 @app.get("/")
 async def root():

@@ -188,7 +188,7 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
     Returns:
         Dictionary mapping seg_id to metrics
     """
-    parquet_path = reports_dir / "bins" / "bins.parquet"
+    parquet_path = reports_dir / "bins.parquet"
     
     if not parquet_path.exists():
         print(f"Warning: {parquet_path} not found, returning empty metrics")
@@ -275,7 +275,7 @@ def generate_flags_json(reports_dir: Path, segment_metrics: Dict[str, Dict[str, 
     
     try:
         # Load bins.parquet (authoritative source)
-        bins_path = reports_dir / "bins" / "bins.parquet"
+        bins_path = reports_dir / "bins.parquet"
         if not bins_path.exists():
             print(f"   ⚠️ bins.parquet not found at {bins_path}, returning empty flags")
             return []
@@ -391,7 +391,7 @@ def generate_flow_json(reports_dir: Path) -> Dict[str, Any]:
     Returns:
         Dictionary with schema_version, units, rows (bin-level time series), and summaries (segment aggregates)
     """
-    bins_path = reports_dir / "bins" / "bins.parquet"
+    bins_path = reports_dir / "bins.parquet"
     
     if not bins_path.exists():
         print(f"   ⚠️  bins.parquet not found at {bins_path}")
@@ -561,7 +561,7 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
     Returns:
         GeoJSON FeatureCollection
     """
-    bins_geojson_path = reports_dir / "bins" / "bins.geojson.gz"
+    bins_geojson_path = reports_dir / "bins.geojson.gz"
     
     if not bins_geojson_path.exists():
         print(f"Warning: {bins_geojson_path} not found, returning empty GeoJSON")

@@ -141,8 +141,6 @@ async def density(request: Request):
     Returns:
         HTML: Density metrics with heatmap and bin-level data
     """
-    from app.storage_service import get_storage_service
-    
     meta = get_stub_meta()
     
     # Load LOS colors from SSOT
@@ -155,32 +153,15 @@ async def density(request: Request):
             "D": "#FF9800", "E": "#FF5722", "F": "#F44336"
         }
     
-    # Get current run_id for error messages (Issue #361)
+    # Issue #460 Phase 5: Get current run_id from runflow/latest.json
     run_id = None
     try:
-        storage_service = get_storage_service()
-        # Try to get the latest run_id from artifacts/latest.json
-        try:
-            latest_path = Path("artifacts/latest.json")
-            if latest_path.exists():
-                import json
-                latest_data = json.loads(latest_path.read_text())
-                run_id = latest_data.get("run_id")
-        except Exception as e:
-            logger.warning(f"Could not load run_id from artifacts/latest.json: {e}")
-        
-        # If local method failed and in cloud mode, try storage service
-        if not run_id and storage_service.config.use_cloud_storage:
-            try:
-                content = storage_service._load_from_gcs("artifacts/latest.json")
-                if content:
-                    import json
-                    latest_data = json.loads(content)
-                    run_id = latest_data.get("run_id")
-            except Exception as e:
-                logger.warning(f"Could not load run_id from GCS: {e}")
+        from app.utils.metadata import get_latest_run_id
+        run_id = get_latest_run_id()
+    except (FileNotFoundError, ValueError) as e:
+        logger.warning(f"Could not load run_id from runflow/latest.json: {e}")
     except Exception as e:
-        logger.warning(f"Could not determine run_id: {e}")
+        logger.error(f"Error getting latest run_id: {e}")
     
     return templates.TemplateResponse(
         "pages/density.html",

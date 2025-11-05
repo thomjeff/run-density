@@ -84,10 +84,12 @@ class Storage:
     def _full_local(self, path: str) -> Path:
         """Get full local path from relative path."""
         assert self.root is not None, "root must be set for local mode"
-        # Handle absolute paths (starting with data/, config/, etc.)
-        if path.startswith(('data/', 'config/', 'reports/')):
+        # Issue #460 Phase 5: Remove hardcoded bypass for 'reports/' to support runflow structure
+        # For runflow operations, all paths are relative to self.root (e.g., /app/runflow/<uuid>/)
+        # Only bypass for data/ and config/ which are truly absolute workspace paths
+        if path.startswith(('data/', 'config/')):
             return Path(path).resolve()
-        # Handle relative paths from artifacts root
+        # All other paths are relative to self.root
         return (self.root / path).resolve()
     
     def read_json(self, path: str) -> Dict[str, Any]:
@@ -414,9 +416,12 @@ def create_runflow_storage(run_id: str) -> Storage:
     storage_target = detect_storage_target()
     
     if storage_target == "filesystem":
-        # Local mode: Use RUNFLOW_ROOT_LOCAL
-        # Note: In Docker, this will be mounted to /app/runflow
-        root = RUNFLOW_ROOT_LOCAL
+        # Local mode: Detect if we're in Docker container
+        # Use container root if in Docker, otherwise use local root
+        if Path(RUNFLOW_ROOT_CONTAINER).exists():
+            root = RUNFLOW_ROOT_CONTAINER
+        else:
+            root = RUNFLOW_ROOT_LOCAL
         return Storage(mode="local", root=f"{root}/{run_id}")
     else:
         # GCS mode: Use runflow bucket with run_id as prefix
