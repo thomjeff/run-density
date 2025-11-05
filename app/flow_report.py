@@ -143,6 +143,10 @@ def generate_temporal_flow_report(
             metadata_path = write_metadata_json(run_path, metadata)
             print(f"Issue #455: Written metadata.json to {metadata_path}")
             
+            # Issue #456 Phase 4: Update latest.json (index.json updated after UI export)
+            from app.utils.metadata import update_latest_pointer
+            update_latest_pointer(run_id)
+            
             # Issue #455 Phase 3: Upload to GCS if enabled
             from app.report_utils import upload_runflow_to_gcs
             upload_runflow_to_gcs(run_id)
