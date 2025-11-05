@@ -391,7 +391,7 @@ def generate_flow_json(reports_dir: Path) -> Dict[str, Any]:
     Returns:
         Dictionary with schema_version, units, rows (bin-level time series), and summaries (segment aggregates)
     """
-    bins_path = reports_dir / "bins" / "bins.parquet"
+    bins_path = reports_dir / "bins.parquet"
     
     if not bins_path.exists():
         print(f"   ⚠️  bins.parquet not found at {bins_path}")
