@@ -135,10 +135,24 @@ async def get_reports_list():
         reports = []
         file_list = storage.list_paths("reports")
         
-        for filename in file_list:
+        for relative_path in file_list:
+            # list_paths() returns paths like "reports/Density.md"
+            # Extract just the filename
+            filename = Path(relative_path).name
             description = _get_file_description_from_extension(filename)
-            file_path = f"reports/{filename}"
-            mtime, size = _get_file_metadata(storage, file_path)
+            
+            # Get full path for metadata
+            full_path = storage._full_local(relative_path) if storage.mode == "local" else None
+            if full_path and full_path.exists():
+                stat = full_path.stat()
+                mtime = stat.st_mtime
+                size = stat.st_size
+            else:
+                mtime = None
+                size = None
+            
+            # Path for download should be runflow/<run_id>/reports/<filename>
+            file_path = f"runflow/{run_id}/reports/{filename}"
             
             reports.append({
                 "name": filename,
