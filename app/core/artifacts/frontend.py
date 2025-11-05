@@ -33,7 +33,14 @@ from app import flagging as ssot_flagging
 
 def _load_bins_df(reports_root: Path, run_id: str) -> pd.DataFrame:
     """Load and normalize bins.parquet DataFrame."""
-    bins_path = reports_root / run_id / "bins.parquet"
+    # Issue #455: Use runflow structure for UUID run_ids
+    from app.utils.run_id import is_legacy_date_format
+    if is_legacy_date_format(run_id):
+        bins_path = reports_root / run_id / "bins.parquet"
+    else:
+        # UUID: Use runflow structure
+        from app.report_utils import get_runflow_file_path
+        bins_path = Path(get_runflow_file_path(run_id, "bins", "bins.parquet"))
     df = pd.read_parquet(bins_path)
     
     # Normalize expected columns
@@ -181,7 +188,7 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
     Returns:
         Dictionary mapping seg_id to metrics
     """
-    parquet_path = reports_dir / "bins.parquet"
+    parquet_path = reports_dir / "bins" / "bins.parquet"
     
     if not parquet_path.exists():
         print(f"Warning: {parquet_path} not found, returning empty metrics")
@@ -268,7 +275,7 @@ def generate_flags_json(reports_dir: Path, segment_metrics: Dict[str, Dict[str, 
     
     try:
         # Load bins.parquet (authoritative source)
-        bins_path = reports_dir / "bins.parquet"
+        bins_path = reports_dir / "bins" / "bins.parquet"
         if not bins_path.exists():
             print(f"   ⚠️ bins.parquet not found at {bins_path}, returning empty flags")
             return []
@@ -384,7 +391,7 @@ def generate_flow_json(reports_dir: Path) -> Dict[str, Any]:
     Returns:
         Dictionary with schema_version, units, rows (bin-level time series), and summaries (segment aggregates)
     """
-    bins_path = reports_dir / "bins.parquet"
+    bins_path = reports_dir / "bins" / "bins.parquet"
     
     if not bins_path.exists():
         print(f"   ⚠️  bins.parquet not found at {bins_path}")
@@ -554,7 +561,7 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
     Returns:
         GeoJSON FeatureCollection
     """
-    bins_geojson_path = reports_dir / "bins.geojson.gz"
+    bins_geojson_path = reports_dir / "bins" / "bins.geojson.gz"
     
     if not bins_geojson_path.exists():
         print(f"Warning: {bins_geojson_path} not found, returning empty GeoJSON")
@@ -633,7 +640,14 @@ def export_ui_artifacts(reports_dir: Path, run_id: str, overtaking_segments: int
     print(f"{'='*60}\n")
     
     # Create output directory
-    artifacts_dir = Path("artifacts") / run_id / "ui"
+    # Issue #455: Use runflow structure for UUID run_ids, legacy artifacts/ for dates
+    from app.utils.run_id import is_legacy_date_format
+    if is_legacy_date_format(run_id):
+        artifacts_dir = Path("artifacts") / run_id / "ui"
+    else:
+        # UUID-based run: use runflow structure
+        from app.report_utils import get_runflow_category_path
+        artifacts_dir = Path(get_runflow_category_path(run_id, "ui"))
     artifacts_dir.mkdir(parents=True, exist_ok=True)
     
     # 1. Generate meta.json

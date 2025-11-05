@@ -22,6 +22,8 @@ services:
       # Phase 3: Mount service account keys directory for GCS authentication
       # Mount keys/ to /tmp/keys in container (keys/ may be empty if not using GCS)
       - ./keys:/tmp/keys:ro
+      # Issue #455: Mount local runflow directory for Run ID storage
+      - /Users/jthompson/Documents/runflow:/app/runflow
     # Phase 2: Use env_file instead of mounting .env
     # Environment variables from dev.env are injected into container
     env_file:

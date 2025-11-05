@@ -54,25 +54,45 @@ def _build_report_row(file_name: str, file_path: str, ts: datetime, is_cloud: bo
     }
 
 
-def _scan_cloud_reports(storage_service, limit: int) -> List[Dict]:
-    """Scan reports from cloud storage."""
-    rows = []
-    from datetime import timedelta
+def _scan_runflow_reports(limit: int) -> List[Dict]:
+    """
+    Scan reports from runflow index (Issue #460 Phase 5).
     
-    today = datetime.now().date()
-    for days_back in range(7):  # Check last 7 days
-        check_date = today - timedelta(days=days_back)
-        date_str = check_date.strftime("%Y-%m-%d")
+    Reads from runflow/index.json to get list of all runs.
+    """
+    from app.utils.metadata import get_run_index
+    from app.utils.env import detect_storage_target
+    
+    rows = []
+    storage_target = detect_storage_target()
+    
+    # Get all runs from index.json
+    runs = get_run_index()  # Newest first
+    
+    # Take the most recent N runs
+    recent_runs = runs[:limit] if limit > 0 else runs
+    
+    for run_entry in recent_runs:
+        run_id = run_entry.get("run_id")
+        created_at = run_entry.get("created_at")
+        file_counts = run_entry.get("file_counts", {})
         
-        # List files for this date
-        files = storage_service.list_files(date=date_str)
+        # Parse timestamp
+        try:
+            ts = datetime.fromisoformat(created_at.replace("Z", "+00:00")) if created_at else datetime.now()
+        except (ValueError, AttributeError) as e:
+            logger.warning(f"Failed to parse timestamp for run {run_id}: {e}")
+            ts = datetime.now()
         
-        for file_path in files:
-            file_name = file_path.split('/')[-1]  # Get just the filename
-            if any(file_name.lower().endswith(ext) for ext in ALLOWED_EXTS):
-                ts = _extract_timestamp_from_filename(file_name, check_date)
-                row = _build_report_row(file_name, file_path, ts, storage_service.use_cloud_storage)
-                rows.append(row)
+        # Add report files from this run
+        for report_num in range(file_counts.get("reports", 0)):
+            # Report filenames: Density.md, Flow.csv, Flow.md
+            report_names = ["Density.md", "Flow.csv", "Flow.md"]
+            for report_name in report_names:
+                if any(report_name.lower().endswith(ext) for ext in ALLOWED_EXTS):
+                    file_path = f"runflow/{run_id}/reports/{report_name}"
+                    row = _build_report_row(report_name, file_path, ts, storage_target == "gcs")
+                    rows.append(row)
     
     return rows
 
@@ -103,10 +123,10 @@ def _scan_reports(limit: int = 20) -> List[Dict]:
     rows = []
     
     try:
-        storage_service = get_storage_service()
-        rows = _scan_cloud_reports(storage_service, limit)
+        # Issue #460 Phase 5: Use runflow index instead of date-based scanning
+        rows = _scan_runflow_reports(limit)
     except Exception as e:
-        # Fallback to local file system
+        # Fallback to empty list (no legacy fallback)
         rows = _scan_local_reports(limit)
     
     # Sort by modification time (newest first)

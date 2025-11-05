@@ -133,3 +133,14 @@ MAP_ZONE_COLORS = {
     "red": "#F44336",
     "dark-red": "#B71C1C"
 }
+
+# Storage Configuration (Issue #452)
+# GCS bucket names (configurable via environment variables)
+GCS_BUCKET_RUNFLOW = "runflow"  # New UUID-based structure
+
+# Storage root directories
+RUNFLOW_ROOT_LOCAL = "/Users/jthompson/Documents/runflow"  # Must match docker-compose.yml volume mount
+RUNFLOW_ROOT_CONTAINER = "/app/runflow"
+
+# Run metadata
+RUN_ID_MIN_LENGTH = 10

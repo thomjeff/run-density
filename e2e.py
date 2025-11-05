@@ -86,17 +86,35 @@ def test_density_report(base_url):
                            json=density_payload, timeout=600)
     
     if response.status_code == 200:
-        print("✅ Density Report: OK")
-        return True
+        # Issue #455: Extract run_id for combined runs
+        try:
+            result = response.json()
+            run_id = result.get('run_id')
+            if run_id:
+                print(f"✅ Density Report: OK (run_id: {run_id})")
+                return True, run_id
+            else:
+                print("✅ Density Report: OK")
+                return True, None
+        except:
+            print("✅ Density Report: OK")
+            return True, None
     else:
         print(f"❌ Density Report: FAILED (status: {response.status_code})")
-        return False
+        return False, None
 
-def test_temporal_flow_report(base_url):
+def test_temporal_flow_report(base_url, run_id=None):
     """Test temporal flow report generation"""
     print("🔍 Testing /api/temporal-flow-report...")
+    
+    # Issue #455: Use provided run_id for combined runs
+    payload = flow_payload.copy()
+    if run_id:
+        payload['run_id'] = run_id
+        print(f"   Using shared run_id: {run_id}")
+    
     response = requests.post(f'{base_url}/api/temporal-flow-report', 
-                           json=flow_payload, timeout=600)
+                           json=payload, timeout=600)
     
     if response.status_code == 200:
         print("✅ Temporal Flow Report: OK")
@@ -251,7 +269,9 @@ def main():
     print()
     
     # Test 3: Density report (heavy operation)
-    if not test_density_report(base_url):
+    # Issue #455: Capture run_id for combined runs
+    density_success, run_id = test_density_report(base_url)
+    if not density_success:
         all_passed = False
     
     print()
@@ -275,7 +295,8 @@ def main():
     print()
     
     # Test 4: Temporal flow report (heavy operation)
-    if not test_temporal_flow_report(base_url):
+    # Issue #455: Pass run_id from density report for combined runs
+    if not test_temporal_flow_report(base_url, run_id=run_id):
         all_passed = False
     
     print()
@@ -318,32 +339,85 @@ def main():
             run_id = None
             
             try:
-                from app.core.artifacts.frontend import export_ui_artifacts, update_latest_pointer
+                from app.core.artifacts.frontend import export_ui_artifacts
                 import re
                 
-                # Find the latest report directory
-                reports_dir = Path("reports")
-                if reports_dir.exists():
-                    # Get the most recent date-based report directory (YYYY-MM-DD format only)
-                    # Filter out non-date directories like 'ui' to avoid picking wrong source
-                    date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
-                    run_dirs = sorted(
-                        [d for d in reports_dir.iterdir() 
-                         if d.is_dir() and date_pattern.match(d.name)],
+                # Issue #455: Check runflow directory first for UUID runs
+                runflow_dir = Path("runflow")
+                if runflow_dir.exists():
+                    uuid_dirs = sorted(
+                        [d for d in runflow_dir.iterdir() 
+                         if d.is_dir() and not d.name.endswith('.json') and d.name != '.DS_Store'],
+                        key=lambda x: x.stat().st_mtime,
                         reverse=True
                     )
-                    if run_dirs:
-                        latest_run_dir = run_dirs[0]
+                    if uuid_dirs:
+                        latest_run_dir = uuid_dirs[0]
                         run_id = latest_run_dir.name
-                        
-                        print(f"Exporting artifacts from: {latest_run_dir}")
+                        print(f"Exporting artifacts from runflow: {latest_run_dir}")
                         export_ui_artifacts(latest_run_dir, run_id)
-                        update_latest_pointer(run_id)
-                        print("✅ UI artifacts exported successfully")
+                        
+                        # Issue #455: Refresh metadata after UI export
+                        try:
+                            from app.utils.metadata import create_run_metadata, write_metadata_json, update_latest_pointer, append_to_run_index
+                            from app.report_utils import upload_runflow_to_gcs
+                            metadata = create_run_metadata(run_id, latest_run_dir, status="complete")
+                            write_metadata_json(latest_run_dir, metadata)
+                            
+                            # Issue #456 Phase 4: Update latest.json and index.json
+                            update_latest_pointer(run_id)
+                            append_to_run_index(metadata)
+                            
+                            # Issue #455 Phase 3: Upload to GCS if enabled
+                            upload_runflow_to_gcs(run_id)
+                            
+                            print("✅ UI artifacts exported and metadata updated")
+                        except Exception as e:
+                            print(f"✅ UI artifacts exported (metadata update failed: {e})")
+                        
+                        reports_dir = runflow_dir  # For heatmap generation
                     else:
-                        print("⚠️ No report directories found in reports/")
-                else:
-                    print("⚠️ Reports directory not found")
+                        print("⚠️ No UUID run directories found in runflow/")
+                
+                # Fallback to legacy reports/ directory if runflow not found
+                if not run_id:
+                    reports_dir = Path("reports")
+                    if reports_dir.exists():
+                        # Get the most recent date-based report directory (YYYY-MM-DD format only)
+                        date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+                        run_dirs = sorted(
+                            [d for d in reports_dir.iterdir() 
+                             if d.is_dir() and date_pattern.match(d.name)],
+                            reverse=True
+                        )
+                        if run_dirs:
+                            latest_run_dir = run_dirs[0]
+                            run_id = latest_run_dir.name
+                            
+                            print(f"Exporting artifacts from legacy reports: {latest_run_dir}")
+                            export_ui_artifacts(latest_run_dir, run_id)
+                            
+                            # Issue #455: Refresh metadata after UI export (legacy mode)
+                            try:
+                                from app.utils.metadata import create_run_metadata, write_metadata_json, update_latest_pointer, append_to_run_index
+                                from app.report_utils import upload_runflow_to_gcs
+                                metadata = create_run_metadata(run_id, latest_run_dir, status="complete")
+                                write_metadata_json(latest_run_dir, metadata)
+                                
+                                # Issue #456 Phase 4: Update latest.json and index.json
+                                update_latest_pointer(run_id)
+                                append_to_run_index(metadata)
+                                
+                                # Issue #455 Phase 3: Upload to GCS if enabled
+                                upload_runflow_to_gcs(run_id)
+                                
+                                print("✅ UI artifacts exported and metadata updated")
+                            except Exception as e:
+                                print(f"✅ UI artifacts exported (metadata update failed: {e})")
+                        else:
+                            print("⚠️ No report directories found in reports/")
+                    else:
+                        print("⚠️ No runflow or reports directories found")
             except Exception as e:
                 print(f"⚠️ Warning: Could not export UI artifacts: {e}")
                 print("   Dashboard will show warnings for missing data")

@@ -20,7 +20,7 @@ import logging
 from app.segments_from_bins import write_segments_from_bins
 from app.utils.constants import HOTSPOT_SEGMENTS
 from app.save_bins import save_bin_artifacts
-from app.report_utils import get_date_folder_path
+from app.report_utils import get_date_folder_path, get_run_folder_path
 from app.bin_summary import generate_bin_summary_artifact
 from app.gcs_uploader import upload_bin_artifacts
 from app.canonical_density_report import generate_tooltips_json
@@ -807,6 +807,9 @@ def _save_bin_artifacts_and_metadata(
             logger.error("Pre-save check indicates empty occupancy; saving anyway for debugging.")
     
     geojson_start = time.monotonic()
+    # Issue #455: Use runflow path if run_id provided, otherwise legacy date path
+    # This function is called from _generate_bin_dataset_with_retry which doesn't have run_id yet
+    # For now, keep legacy behavior - will be updated when full call chain supports run_id
     daily_folder_path, _ = get_date_folder_path(output_dir)
     os.makedirs(daily_folder_path, exist_ok=True)
     geojson_path, parquet_path = save_bin_artifacts(bin_data.get("geojson", {}), daily_folder_path)
@@ -945,12 +948,19 @@ def _generate_bin_dataset_with_retry(
 
 
 def _generate_new_report_format(
-    daily_folder_path: str
+    daily_folder_path: str,
+    run_id: str = None  # Issue #455: UUID for runflow structure
 ) -> Optional[str]:
     """Generate new density report format (Issue #246)."""
     print("📊 Generating new density report (Issue #246)...")
-    timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
-    timestamped_path = os.path.join(daily_folder_path, f"{timestamp}-Density.md")
+    
+    # Issue #455: Use generic filename for runflow, timestamped for legacy
+    if run_id:
+        from app.report_utils import get_runflow_file_path
+        timestamped_path = get_runflow_file_path(run_id, "reports", "Density.md")
+    else:
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+        timestamped_path = os.path.join(daily_folder_path, f"{timestamp}-Density.md")
     
     new_report_results = generate_new_density_report_issue246(
         reports_dir=daily_folder_path,
@@ -960,8 +970,9 @@ def _generate_new_report_format(
     report_content_final = new_report_results['report_content']
     print(f"📊 New density report saved to: {timestamped_path}")
     
-    # Upload to GCS if enabled
-    if os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
+    # Issue #455: Skip storage_service for runflow mode (already in correct location)
+    # Upload to GCS if enabled (legacy mode only)
+    if not run_id and os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
         try:
             from app.storage_service import get_storage_service
             storage_service = get_storage_service()
@@ -981,11 +992,12 @@ def _generate_legacy_report_format(
     results: Dict[str, Any],
     start_times: Dict[str, float],
     include_per_event: bool,
-    output_dir: str
+    output_dir: str,
+    run_id: str = None  # Issue #455: UUID for runflow structure
 ) -> str:
     """Generate legacy density report format with operational intelligence."""
     print("📊 Regenerating density report with operational intelligence...")
-    from app.report_utils import get_report_paths
+    from app.report_utils import get_report_paths, get_runflow_file_path
     
     # Note: generate_markdown_report is defined later in this same file
     report_content_final = generate_markdown_report(
@@ -996,15 +1008,20 @@ def _generate_legacy_report_format(
         output_dir=output_dir
     )
     
-    # Get existing full_path from results or create new
-    full_path, _ = get_report_paths("Density", "md", output_dir)
+    # Issue #455: Use runflow path for reports if run_id provided
+    if run_id:
+        full_path = get_runflow_file_path(run_id, "reports", "Density.md")
+    else:
+        # Legacy: Get existing full_path from results or create new
+        full_path, _ = get_report_paths("Density", "md", output_dir)
     with open(full_path, 'w', encoding='utf-8') as f:
         f.write(report_content_final)
     
     print(f"📊 Density report (with operational intelligence) saved to: {full_path}")
     
-    # Upload to GCS if enabled
-    if os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
+    # Issue #455: Skip storage_service for runflow mode (already in correct location)
+    # Upload to GCS if enabled (legacy mode only)
+    if not run_id and os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
         try:
             from app.storage_service import get_storage_service
             storage_service = get_storage_service()
@@ -1057,7 +1074,8 @@ def _regenerate_report_with_intelligence(
     include_per_event: bool,
     daily_folder_path: Optional[str],
     output_dir: str,
-    use_new_report_format: bool
+    use_new_report_format: bool,
+    run_id: str = None  # Issue #455: UUID for runflow structure
 ) -> Optional[str]:
     """
     Regenerate density report with operational intelligence after bin generation.
@@ -1078,10 +1096,10 @@ def _regenerate_report_with_intelligence(
         return None
     
     if use_new_report_format:
-        full_path = _generate_new_report_format(daily_folder_path)
+        full_path = _generate_new_report_format(daily_folder_path, run_id=run_id)  # Issue #455: Pass run_id
     else:
         full_path = _generate_legacy_report_format(
-            results, start_times, include_per_event, output_dir
+            results, start_times, include_per_event, output_dir, run_id=run_id  # Issue #455: Pass run_id
         )
     
     # Generate tooltips.json if operational intelligence was added
@@ -1090,19 +1108,23 @@ def _regenerate_report_with_intelligence(
     return full_path
 
 
-def _generate_and_upload_heatmaps(daily_folder_path: Optional[str]) -> None:
+def _generate_and_upload_heatmaps(daily_folder_path: Optional[str], run_id: str = None) -> None:
     """
     Generate and upload heatmaps for a run.
     
     Args:
         daily_folder_path: Path to daily folder containing artifacts
+        run_id: Run identifier (Issue #455: UUID or legacy date)
     """
     if not daily_folder_path:
         logger.warning("daily_folder_path not available for heatmap generation")
         return
     
-    try:
+    # Issue #455: Use provided run_id or extract from daily_folder_path
+    if not run_id:
         run_id = os.path.basename(daily_folder_path)
+    
+    try:
         print(f"🔥 Generating heatmaps for run_id: {run_id}")
         
         heatmaps_generated, segments = generate_heatmaps_for_run(run_id)
@@ -1135,6 +1157,77 @@ def _generate_and_upload_heatmaps(daily_folder_path: Optional[str]) -> None:
         logger.debug(f"Heatmap generation error details: {type(e).__name__}: {e}", exc_info=True)
 
 
+
+
+def _setup_runflow_output_dir(run_id: str, logger):
+    """Setup runflow output directory for UUID-based runs."""
+    if run_id:
+        from app.report_utils import get_runflow_category_path
+        output_dir = get_runflow_category_path(run_id, "bins")
+        logger.info(f"Issue #455: Using runflow structure for run_id={run_id}, bins_dir={output_dir}")
+        return output_dir
+    return None
+
+
+def _finalize_run_metadata(run_id: str, daily_folder_path: str, logger):
+    """Write metadata and upload to GCS for completed runs."""
+    if not run_id or not daily_folder_path:
+        return
+        
+    try:
+        from app.utils.metadata import create_run_metadata, write_metadata_json, update_latest_pointer
+        from app.report_utils import get_run_folder_path, upload_runflow_to_gcs
+        from pathlib import Path
+        
+        run_path = Path(get_run_folder_path(run_id))
+        metadata = create_run_metadata(run_id, run_path, status="complete")
+        metadata_path = write_metadata_json(run_path, metadata)
+        logger.info(f"Issue #455: Written metadata.json to {metadata_path}")
+        
+        # Update latest.json pointer
+        update_latest_pointer(run_id)
+        
+        # Upload to GCS if enabled
+        upload_runflow_to_gcs(run_id)
+    except Exception as e:
+        logger.warning(f"Failed to write metadata.json: {e}")
+
+
+
+def _execute_bin_dataset_generation(results, start_times, output_dir, enable_bin_dataset, logger):
+    """Execute bin dataset generation with retry logic."""
+    enable_bins = enable_bin_dataset or os.getenv('ENABLE_BIN_DATASET', 'false').lower() == 'true'
+    logger.info(f"Bin dataset generation: enable_bin_dataset={enable_bin_dataset}, env_var={os.getenv('ENABLE_BIN_DATASET')}, effective={enable_bins}")
+    
+    if not enable_bins:
+        print("📦 Bin dataset generation disabled (ENABLE_BIN_DATASET=false)")
+        return None
+        
+    logger.info("✅ Bin dataset generation enabled (enable_bin_dataset=True)")
+    try:
+        from app.utils.constants import BIN_SCHEMA_VERSION
+        
+        # Create AnalysisContext
+        analysis_context = AnalysisContext(
+            course_id="fredericton_marathon",
+            segments=pd.DataFrame(),
+            runners=pd.DataFrame(),
+            params={"start_times": start_times},
+            code_version="v1.6.37",
+            schema_version=BIN_SCHEMA_VERSION,
+            pace_csv_path="data/runners.csv",
+            segments_csv_path="data/segments.csv"
+        )
+        
+        daily_folder_path, _, _ = _generate_bin_dataset_with_retry(
+            results, start_times, output_dir, analysis_context
+        )
+        return daily_folder_path
+    except Exception as e:
+        print(f"⚠️ Bin dataset unavailable: {e}")
+        return None
+
+
 def generate_density_report(
     pace_csv: str,
     density_csv: str,
@@ -1144,7 +1237,8 @@ def generate_density_report(
     include_per_event: bool = True,
     output_dir: str = "reports",
     enable_bin_dataset: bool = True,  # Issue #319: Enable by default (resource constraints resolved)
-    use_new_report_format: bool = True
+    use_new_report_format: bool = True,
+    run_id: str = None  # Issue #455: UUID for runflow structure
 ) -> Dict[str, Any]:
     """
     Generate a comprehensive density analysis report.
@@ -1163,6 +1257,11 @@ def generate_density_report(
     """
     import logging
     logger = logging.getLogger(__name__)
+    
+    # Issue #455: Surgical path update for runflow structure
+    runflow_dir = _setup_runflow_output_dir(run_id, logger)
+    if runflow_dir:
+        output_dir = runflow_dir
     
     print("🔍 Starting density analysis...")
     
@@ -1255,52 +1354,23 @@ def generate_density_report(
     
     # Generate and save map dataset using storage service
     map_data = generate_map_dataset(results, start_times)
-    map_path = save_map_dataset_to_storage(map_data, output_dir)
+    map_path = save_map_dataset_to_storage(map_data, output_dir, run_id=run_id)  # Issue #455: Pass run_id
     print(f"🗺️ Map dataset saved to: {map_path}")
     
     # Issue #198: Re-enable bin dataset generation with feature flag
-    # Use API parameter if provided, otherwise fall back to environment variable
-    enable_bins = enable_bin_dataset or os.getenv('ENABLE_BIN_DATASET', 'false').lower() == 'true'
-    
-    # Issue #319: Confirmation logging for bin dataset generation
-    logger.info(f"Bin dataset generation: enable_bin_dataset={enable_bin_dataset}, env_var={os.getenv('ENABLE_BIN_DATASET')}, effective={enable_bins}")
-    
-    # Bin dataset generation with retry logic
-    daily_folder_path = None
-    if enable_bins:
-        logger.info("✅ Bin dataset generation enabled (enable_bin_dataset=True)")
-        try:
-            from app.utils.constants import BIN_SCHEMA_VERSION
-            
-            # Create AnalysisContext per ChatGPT specification
-            analysis_context = AnalysisContext(
-                course_id="fredericton_marathon",
-                segments=pd.DataFrame(),  # Placeholder - can be enhanced
-                runners=pd.DataFrame(),   # Placeholder - can be enhanced  
-                params={"start_times": start_times},
-                code_version="v1.6.37",
-                schema_version=BIN_SCHEMA_VERSION,
-                pace_csv_path="data/runners.csv",
-                segments_csv_path="data/segments.csv"
-            )
-            
-            daily_folder_path, _, _ = _generate_bin_dataset_with_retry(
-                results, start_times, output_dir, analysis_context
-            )
-        except Exception as e:
-            print(f"⚠️ Bin dataset unavailable: {e}")
-            daily_folder_path = None
-    else:
-        print("📦 Bin dataset generation disabled (ENABLE_BIN_DATASET=false)")
+    daily_folder_path = _execute_bin_dataset_generation(
+        results, start_times, output_dir, enable_bin_dataset, logger
+    )
     
     # Regenerate report WITH operational intelligence now that bins exist (Issue #239 fix)
     if enable_bins and daily_folder_path:
         try:
             full_path = _regenerate_report_with_intelligence(
                 results, start_times, include_per_event,
-                daily_folder_path, output_dir, use_new_report_format
+                daily_folder_path, output_dir, use_new_report_format,
+                run_id=run_id  # Issue #455: Pass run_id
             )
-            _generate_and_upload_heatmaps(daily_folder_path)
+            _generate_and_upload_heatmaps(daily_folder_path, run_id=run_id)  # Issue #455: Pass run_id
         except Exception as e:
             logger.warning(f"Could not regenerate report with operational intelligence: {e}")
             full_path = None
@@ -1309,13 +1379,17 @@ def generate_density_report(
     # This data was only needed for report generation, not for API response
     results_for_api = {k: v for k, v in results.items() if k != '_operational_intelligence'}
     
+    # Issue #455: Write metadata.json at end of successful generation
+    _finalize_run_metadata(run_id, daily_folder_path, logger)
+    
     return {
         "ok": True,
         "report_path": full_path,
         "pdf_path": pdf_path if 'pdf_path' in locals() else None,
         "map_dataset_path": map_path,
         "analysis_results": results_for_api,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "run_id": run_id  # Issue #455: Include run_id in response
     }
 
 
@@ -2290,17 +2364,29 @@ def save_map_dataset(map_data: Dict[str, Any], output_dir: str) -> str:
     
     return file_path
 
-def save_map_dataset_to_storage(map_data: Dict[str, Any], output_dir: str) -> str:
+def save_map_dataset_to_storage(map_data: Dict[str, Any], output_dir: str, run_id: str = None) -> str:
     """
     Save map dataset to storage service (local or Cloud Storage).
     
     Args:
         map_data: Map dataset dictionary
-        output_dir: Output directory (used for fallback)
+        output_dir: Output directory (used for fallback or runflow bins path)
+        run_id: Run identifier (Issue #455: UUID for runflow structure)
     
     Returns:
         Path to saved file
     """
+    # Issue #455: Use runflow structure if run_id provided
+    if run_id:
+        from app.report_utils import get_runflow_file_path
+        # Save to runflow/<uuid>/maps/map_data.json (no timestamp)
+        file_path = get_runflow_file_path(run_id, "maps", "map_data.json")
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(map_data, f, indent=2, default=str)
+        print(f"🗺️ Map dataset saved to runflow: {file_path}")
+        return file_path
+    
+    # Legacy: Use storage service
     try:
         # Use storage service for persistent storage
         storage_service = get_storage_service()

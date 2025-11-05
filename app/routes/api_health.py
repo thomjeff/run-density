@@ -15,12 +15,9 @@ import json
 import logging
 from pathlib import Path
 
-from app.storage_service import StorageService
-
 # Create router
 router = APIRouter()
 logger = logging.getLogger(__name__)
-storage_service = StorageService()
 
 
 @router.get("/api/health/data")
@@ -30,18 +27,24 @@ async def get_health_data():
     
     Issue #288: Health page should render from system health data,
     not operational metrics.
+    Issue #460 Phase 5: Read from runflow/<run_id>/ui/health.json
     
     Returns:
         JSON with system health information (environment, files, hashes, endpoints)
     """
     try:
-        # Use storage service to find the latest health.json artifact
-        health_data = storage_service.load_ui_artifact("health.json")
+        # Issue #460 Phase 5: Get latest run_id and read from runflow structure
+        from app.utils.metadata import get_latest_run_id
+        from app.storage import create_runflow_storage
+        
+        run_id = get_latest_run_id()
+        storage = create_runflow_storage(run_id)
+        health_data = storage.read_json("ui/health.json")
         
         if health_data is None:
-            raise HTTPException(status_code=404, detail="health.json not found in storage")
+            raise HTTPException(status_code=404, detail="health.json not found in runflow storage")
         
-        logger.info("Loaded health data from storage")
+        logger.info(f"Loaded health data from runflow/{run_id}/ui/health.json")
         return JSONResponse(content=health_data)
         
     except HTTPException:

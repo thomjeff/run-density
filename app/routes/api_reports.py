@@ -80,12 +80,15 @@ def _get_file_metadata_from_local(file_path: str) -> tuple[Optional[float], Opti
         return None, None
 
 
-def _get_file_metadata(storage_service, file_path: str) -> tuple[Optional[float], Optional[int]]:
+def _get_file_metadata(storage, file_path: str) -> tuple[Optional[float], Optional[int]]:
     """Get file metadata (mtime, size) based on storage type."""
-    if storage_service.config.use_cloud_storage:
-        return _get_file_metadata_from_gcs(storage_service, file_path)
+    # Issue #460: Storage class uses .mode instead of .config.use_cloud_storage
+    if storage.mode == "gcs":
+        return _get_file_metadata_from_gcs(storage, file_path)
     else:
-        return _get_file_metadata_from_local(file_path)
+        # For local mode, need to construct full path from storage root
+        full_path = storage._full_local(file_path)
+        return _get_file_metadata_from_local(str(full_path))
 
 
 def _add_core_data_files(reports: list) -> None:
@@ -121,22 +124,35 @@ async def get_reports_list():
         Array of file objects with name, path, mtime, size
     """
     try:
-        # Get latest run_id via StorageService (GCS-aware)
-        storage_service = get_storage_service()
-        run_id = storage_service.get_latest_run_id()
+        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
+        from app.utils.metadata import get_latest_run_id
+        from app.storage import create_runflow_storage
         
-        if not run_id:
-            logger.warning("No latest run_id found")
-            return JSONResponse(content=[])
+        run_id = get_latest_run_id()
+        storage = create_runflow_storage(run_id)
         
-        # List report files from GCS using StorageService
+        # List report files from runflow structure
         reports = []
-        file_list = storage_service.list_files(f"reports/{run_id}")
+        file_list = storage.list_paths("reports")
         
-        for filename in file_list:
+        for relative_path in file_list:
+            # list_paths() returns paths like "reports/Density.md"
+            # Extract just the filename
+            filename = Path(relative_path).name
             description = _get_file_description_from_extension(filename)
-            file_path = f"reports/{run_id}/{filename}"
-            mtime, size = _get_file_metadata(storage_service, file_path)
+            
+            # Get full path for metadata
+            full_path = storage._full_local(relative_path) if storage.mode == "local" else None
+            if full_path and full_path.exists():
+                stat = full_path.stat()
+                mtime = stat.st_mtime
+                size = stat.st_size
+            else:
+                mtime = None
+                size = None
+            
+            # Path for download should be runflow/<run_id>/reports/<filename>
+            file_path = f"runflow/{run_id}/reports/{filename}"
             
             reports.append({
                 "name": filename,
@@ -172,11 +188,12 @@ def download_report(path: str = Query(..., description="Report file path")):
     """
     logger.info(f"[Download] Requested path: {path}")
 
-    storage_service = get_storage_service()
-    run_id = storage_service.get_latest_run_id()
+    # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
+    from app.utils.metadata import get_latest_run_id
+    run_id = get_latest_run_id()
 
-    # Allow only: reports/<run_id>/* or data/*
-    if not (path.startswith(f"reports/{run_id}") or path.startswith("data/")):
+    # Allow only: runflow/<run_id>/* or data/*
+    if not (path.startswith(f"runflow/{run_id}") or path.startswith("data/")):
         logger.warning(f"[Download] Access denied for path: {path}")
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -189,28 +206,32 @@ def download_report(path: str = Query(..., description="Report file path")):
             logger.error(f"[Download] Failed to read local file {path}: {e}")
             raise HTTPException(status_code=404, detail="File not found")
 
-    # Case B: Read report files (local or GCS)
+    # Case B: Read report files from runflow structure
     else:
-        # Check if we're in local mode or Cloud Run mode
-        if storage_service.config.use_cloud_storage:
-            # Cloud Run: Read from GCS
-            content = storage_service._load_from_gcs(path)
-            if content is None:
-                logger.warning(f"[Download] GCS file not found or unreadable: {path}")
-                raise HTTPException(status_code=404, detail="File not found")
-        else:
-            # Local: Read from local filesystem
-            try:
-                if path.startswith("reports/"):
-                    file_path = path  # reports/2025-10-21/file.md
-                else:
-                    file_path = f"reports/{path}"  # 2025-10-21/file.md -> reports/2025-10-21/file.md
+        # Issue #460: Use Storage abstraction for runflow files
+        # Path is like: runflow/<run_id>/reports/Density.md
+        # Extract the run_id and relative path
+        try:
+            parts = path.split("/")
+            if parts[0] == "runflow" and len(parts) >= 3:
+                report_run_id = parts[1]
+                relative_path = "/".join(parts[2:])  # e.g., "reports/Density.md"
                 
-                content = open(file_path, "r", encoding="utf-8").read()
-                logger.info(f"[Download] Loaded local report file: {file_path}")
-            except Exception as e:
-                logger.error(f"[Download] Failed to read local report file {file_path}: {e}")
-                raise HTTPException(status_code=404, detail="File not found")
+                from app.storage import create_runflow_storage
+                storage = create_runflow_storage(report_run_id)
+                content = storage.read_text(relative_path)
+                
+                if not content:
+                    logger.warning(f"[Download] File not found: {path}")
+                    raise HTTPException(status_code=404, detail="File not found")
+                
+                logger.info(f"[Download] Loaded runflow file: {path}")
+            else:
+                logger.error(f"[Download] Invalid path format: {path}")
+                raise HTTPException(status_code=400, detail="Invalid path format")
+        except Exception as e:
+            logger.error(f"[Download] Failed to read file {path}: {e}")
+            raise HTTPException(status_code=404, detail="File not found")
 
     # Safe encoding
     try:

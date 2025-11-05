@@ -81,6 +81,7 @@ class DensityReportRequest(BaseModel):
     includePerEvent: bool = True
     outputDir: str = "reports"
     enable_bin_dataset: bool = True  # Issue #319: Enable by default (resource constraints resolved)
+    run_id: Optional[str] = None  # Issue #455: Optional run_id for combined runs
 
 class TemporalFlowReportRequest(BaseModel):
     paceCsv: str
@@ -89,6 +90,7 @@ class TemporalFlowReportRequest(BaseModel):
     minOverlapDuration: float = DEFAULT_MIN_OVERLAP_DURATION
     conflictLengthM: float = DEFAULT_CONFLICT_LENGTH_METERS
     outputDir: str = "reports"
+    run_id: Optional[str] = None  # Issue #455: Optional run_id for combined runs
 
 class FlowAuditRequest(BaseModel):
     paceCsv: str
@@ -170,7 +172,7 @@ try:
 except Exception as e:
     print(f"Warning: Could not mount static directory: {e}")
 
-# Mount artifacts directory for local development only
+# Mount artifacts directory for local development only (legacy)
 # In Cloud Run, heatmaps are served via signed URLs from GCS
 if os.path.exists("artifacts"):
     try:
@@ -179,6 +181,19 @@ if os.path.exists("artifacts"):
         print(f"Warning: Could not mount artifacts directory: {e}")
 else:
     print("Info: Artifacts directory not found - using GCS storage mode")
+
+# Issue #460 Phase 5: Mount runflow directory for local development
+# Heatmaps are now at /heatmaps/<run_id>/<seg_id>.png
+from app.utils.constants import RUNFLOW_ROOT_CONTAINER, RUNFLOW_ROOT_LOCAL
+runflow_root = RUNFLOW_ROOT_CONTAINER if os.path.exists(RUNFLOW_ROOT_CONTAINER) else RUNFLOW_ROOT_LOCAL
+if os.path.exists(runflow_root):
+    try:
+        app.mount("/heatmaps", StaticFiles(directory=runflow_root), name="heatmaps")
+        print(f"Info: Mounted heatmaps from {runflow_root}")
+    except Exception as e:
+        print(f"Warning: Could not mount runflow directory for heatmaps: {e}")
+else:
+    print(f"Info: Runflow directory not found at {runflow_root} - using GCS storage mode")
 
 @app.get("/")
 async def root():
@@ -357,6 +372,10 @@ async def legacy_overtake_endpoint(request: TemporalFlowRequest):
 async def generate_density_report_endpoint(request: DensityReportRequest):
     """Generate comprehensive density analysis report with per-event views."""
     try:
+        # Issue #455: Generate UUID for this run (or use provided run_id for combined runs)
+        from app.utils.run_id import generate_run_id
+        run_id = request.run_id if request.run_id else generate_run_id()
+        
         results = generate_density_report(
             pace_csv=request.paceCsv,
             density_csv=request.densityCsv,
@@ -365,7 +384,8 @@ async def generate_density_report_endpoint(request: DensityReportRequest):
             time_window_s=request.timeWindow,
             include_per_event=request.includePerEvent,
             output_dir=request.outputDir,
-            enable_bin_dataset=request.enable_bin_dataset
+            enable_bin_dataset=request.enable_bin_dataset,
+            run_id=run_id  # Issue #455: Pass UUID to report generation
         )
         # Handle NaN values and dataclass objects for JSON serialization
         import json
@@ -413,6 +433,10 @@ def detect_environment() -> str:
 async def generate_temporal_flow_report_endpoint(request: TemporalFlowReportRequest):
     """Generate comprehensive temporal flow analysis report with convergence analysis."""
     try:
+        # Issue #455: Generate UUID for this run (or use provided run_id for combined runs)
+        from app.utils.run_id import generate_run_id
+        run_id = request.run_id if request.run_id else generate_run_id()
+        
         environment = detect_environment()
         results = generate_temporal_flow_report(
             pace_csv=request.paceCsv,
@@ -421,7 +445,8 @@ async def generate_temporal_flow_report_endpoint(request: TemporalFlowReportRequ
             min_overlap_duration=request.minOverlapDuration,
             conflict_length_m=request.conflictLengthM,
             output_dir=request.outputDir,
-            environment=environment
+            environment=environment,
+            run_id=run_id  # Issue #455: Pass UUID to report generation
         )
         # Handle NaN values for JSON serialization
         import json

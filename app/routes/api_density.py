@@ -37,16 +37,15 @@ def load_density_metrics_from_bins():
         Dict with segment_id -> {utilization, worst_bin, bin_detail}
     """
     try:
-        # Get latest run_id via StorageService (GCS-aware)
-        from app.storage_service import get_storage_service
-        storage = get_storage_service()
-        run_id = storage.get_latest_run_id()
+        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
+        from app.utils.metadata import get_latest_run_id
+        from app.storage import create_runflow_storage
         
-        if not run_id:
-            return {}
+        run_id = get_latest_run_id()
+        storage = create_runflow_storage(run_id)
         
-        # Load bins.parquet (GCS-aware via StorageService)
-        bins_df = storage.read_parquet(f"reports/{run_id}/bins.parquet")
+        # Load bins.parquet from runflow structure
+        bins_df = storage.read_parquet("bins/bins.parquet")
         if bins_df is None:
             return {}
         
@@ -241,23 +240,38 @@ async def get_density_segments():
         - utilization, flagged, worst_bin, watch, mitigation
     """
     try:
-        # Load segment metrics
-        segment_metrics = _load_and_normalize_segment_metrics(storage_service)
+        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
+        from app.utils.metadata import get_latest_run_id
+        from app.storage import create_runflow_storage
+        
+        run_id = get_latest_run_id()
+        storage = create_runflow_storage(run_id)
+        
+        # Load segment metrics from runflow structure
+        segment_metrics_raw = storage.read_json("ui/segment_metrics.json")
+        if not segment_metrics_raw:
+            return JSONResponse(
+                content={"detail": "No segment metrics available"},
+                status_code=404
+            )
+        
+        # Extract per-segment data (skip summary fields)
+        segment_metrics = {k: v for k, v in segment_metrics_raw.items() 
+                          if isinstance(v, dict) and k not in ["peak_density", "peak_rate", "segments_with_flags", "flagged_bins"]}
         
         # Load segments geojson for labels
-        segments_geojson = {}
-        try:
-            segments_geojson = storage_service.load_ui_artifact("segments.geojson")
-            if not segments_geojson:
-                logger.warning("segments.geojson not found in storage service")
-        except Exception as e:
-            logger.warning(f"Could not load segments geojson from storage service: {e}")
+        segments_geojson = storage.read_json("ui/segments.geojson")
+        if not segments_geojson:
+            logger.warning("segments.geojson not found")
         
         # Build label lookup
-        label_lookup = _build_label_lookup_from_geojson(segments_geojson)
+        label_lookup = _build_label_lookup_from_geojson(segments_geojson or {})
         
-        # Load flags
-        flagged_seg_ids = _load_flagged_segment_ids(storage_service)
+        # Load flags from runflow structure
+        flags_data = storage.read_json("ui/flags.json")
+        flagged_seg_ids = set()
+        if flags_data and isinstance(flags_data, list):
+            flagged_seg_ids = {flag.get("segment_id") or flag.get("seg_id") for flag in flags_data}
         
         # Load density metrics from bins.parquet
         density_metrics = load_density_metrics_from_bins()
@@ -413,23 +427,55 @@ async def get_density_segment_detail(seg_id: str):
     """
     logger.info(f"=== UPDATED CODE LOADED === Processing segment detail for {seg_id}")
     try:
-        storage_service = get_storage_service()
+        # Issue #460 Phase 5: Use runflow structure
+        from app.utils.metadata import get_latest_run_id
+        from app.storage import create_runflow_storage
         
-        # Load segment metrics
-        segment_metrics = _load_segment_metrics_from_storage(storage_service)
+        run_id = get_latest_run_id()
+        storage = create_runflow_storage(run_id)
+        
+        # Load segment metrics from runflow
+        segment_metrics_raw = storage.read_json("ui/segment_metrics.json")
+        if not segment_metrics_raw:
+            raise HTTPException(status_code=404, detail="Segment metrics not found")
+        
+        # Extract per-segment data
+        segment_metrics = {k: v for k, v in segment_metrics_raw.items() 
+                          if isinstance(v, dict) and k not in ["peak_density", "peak_rate", "segments_with_flags", "flagged_bins"]}
+        
         if seg_id not in segment_metrics:
             raise HTTPException(status_code=404, detail=f"Segment {seg_id} not found")
         
         metrics = segment_metrics[seg_id]
         
         # Load segment metadata from geojson
-        metadata = _load_segment_metadata_from_geojson(storage_service, seg_id)
+        segments_geojson = storage.read_json("ui/segments.geojson")
+        metadata = {}
+        if segments_geojson and "features" in segments_geojson:
+            for feature in segments_geojson["features"]:
+                props = feature.get("properties", {})
+                if props.get("seg_id") == seg_id:
+                    metadata = props
+                    break
         
         # Check if flagged
-        is_flagged = _check_segment_flagged(storage_service, seg_id)
+        flags_data = storage.read_json("ui/flags.json")
+        is_flagged = False
+        if flags_data and isinstance(flags_data, list):
+            is_flagged = any(f.get("segment_id") == seg_id or f.get("seg_id") == seg_id for f in flags_data)
         
-        # Load heatmap and caption
-        heatmap_url, caption = _load_heatmap_and_caption(storage_service, seg_id)
+        # Load heatmap URL and caption from captions.json
+        captions = storage.read_json("ui/captions.json")
+        heatmap_url = None
+        caption = ""
+        if captions and seg_id in captions:
+            caption_data = captions[seg_id]
+            # Build heatmap URL for runflow structure
+            # Files are at: runflow/<run_id>/heatmaps/<seg_id>.png
+            # Mounted as: /heatmaps -> /app/runflow
+            # URL path: /heatmaps/<run_id>/heatmaps/<seg_id>.png
+            heatmap_url = f"/heatmaps/{run_id}/heatmaps/{seg_id}.png"
+            caption = caption_data.get("caption", "")
         
         # Build detail response
         detail = _build_segment_detail_response(

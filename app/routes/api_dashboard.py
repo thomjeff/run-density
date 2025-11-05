@@ -207,6 +207,44 @@ def calculate_peak_density_los(peak_density: float) -> str:
             return "F"
 
 
+def _load_ui_artifact_safe(storage, path: str, warnings: list):
+    """Load UI artifact with safe exception handling."""
+    try:
+        return storage.read_json(path)
+    except Exception as e:
+        logger.warning(f"Failed to load {path}: {e}")
+        warnings.append(f"missing: {path.split('/')[-1]}")
+        return None
+
+
+def _calculate_flags_metrics(flags) -> tuple:
+    """Calculate segments_flagged and bins_flagged from flags data."""
+    if isinstance(flags, dict):
+        segments_flagged = len(flags.get("flagged_segments", []))
+        bins_flagged = flags.get("total_bins_flagged", 0)
+    elif isinstance(flags, list):
+        segments_flagged = len(flags)
+        bins_flagged = sum(f.get("flagged_bins", 0) for f in flags)
+        logger.info(f"Calculated bins_flagged: {bins_flagged} from {len(flags)} flag entries")
+    else:
+        segments_flagged = 0
+        bins_flagged = 0
+    return segments_flagged, bins_flagged
+
+
+def _calculate_peak_metrics(segment_metrics: dict) -> tuple:
+    """Calculate peak density and rate from segment metrics."""
+    peak_density = 0.0
+    peak_rate = 0.0
+    
+    for seg_id, metrics in segment_metrics.items():
+        if isinstance(metrics, dict):
+            peak_density = max(peak_density, metrics.get("peak_density", 0.0))
+            peak_rate = max(peak_rate, metrics.get("peak_rate", 0.0))
+    
+    return peak_density, peak_rate
+
+
 @router.get("/api/dashboard/summary")
 async def get_dashboard_summary():
     """
@@ -223,59 +261,36 @@ async def get_dashboard_summary():
         - runners.csv → total_runners, cohorts
     """
     try:
+        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
+        from app.utils.metadata import get_latest_run_id
+        from app.storage import create_runflow_storage
+        
+        run_id = get_latest_run_id()
+        storage = create_runflow_storage(run_id)
+        
         # Track missing files for warnings
         warnings = []
         
-        # Load meta data from UI artifacts
-        meta = storage_service.load_ui_artifact("meta.json")
-        if meta is None:
-            warnings.append("missing: meta.json")
-            meta = {}
-        
+        # Load meta data
+        meta = _load_ui_artifact_safe(storage, "ui/meta.json", warnings) or {}
         timestamp = meta.get("run_timestamp", datetime.now().isoformat() + "Z")
         environment = meta.get("environment", "local")
         
-        # Load segment metrics from UI artifacts
-        segment_metrics = storage_service.load_ui_artifact("segment_metrics.json")
-        if segment_metrics is None:
-            warnings.append("missing: segment_metrics.json")
-            segment_metrics = {}
-        
+        # Load segment metrics
+        segment_metrics = _load_ui_artifact_safe(storage, "ui/segment_metrics.json", warnings) or {}
         segments_total = len(segment_metrics)
         
-        # Calculate peak density and rate across all segments
-        peak_density = 0.0
-        peak_rate = 0.0
-        
-        for seg_id, metrics in segment_metrics.items():
-            if isinstance(metrics, dict):
-                peak_density = max(peak_density, metrics.get("peak_density", 0.0))
-                peak_rate = max(peak_rate, metrics.get("peak_rate", 0.0))
-        
-        # Calculate peak density LOS
+        # Calculate peak density and rate
+        peak_density, peak_rate = _calculate_peak_metrics(segment_metrics)
         peak_density_los = calculate_peak_density_los(peak_density)
         
-        # Load flags data from UI artifacts
-        flags = storage_service.load_ui_artifact("flags.json")
-        logger.info(f"Loaded flags data: {type(flags)}, length: {len(flags) if flags else 0}")
+        # Load flags data
+        flags = _load_ui_artifact_safe(storage, "ui/flags.json", warnings)
         if flags is None:
-            warnings.append("missing: flags.json")
             flags = []
         
-        # Handle both old dict format and new array format
-        if isinstance(flags, dict):
-            # Old format: {"flagged_segments": [...], "total_bins_flagged": N}
-            segments_flagged = len(flags.get("flagged_segments", []))
-            bins_flagged = flags.get("total_bins_flagged", 0)
-        elif isinstance(flags, list):
-            # New format: [{seg_id, type, severity, ...}]
-            segments_flagged = len(flags)
-            # Calculate bins_flagged from flags data
-            bins_flagged = sum(f.get("flagged_bins", 0) for f in flags)
-            logger.info(f"Calculated bins_flagged: {bins_flagged} from {len(flags)} flag entries")
-        else:
-            segments_flagged = 0
-            bins_flagged = 0
+        logger.info(f"Loaded flags data: {type(flags)}, length: {len(flags) if flags else 0}")
+        segments_flagged, bins_flagged = _calculate_flags_metrics(flags)
         
         # Load runners data (from local data/ directory)
         from pathlib import Path

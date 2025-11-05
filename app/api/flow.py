@@ -38,37 +38,26 @@ async def get_flow_segments():
         Each row represents a segment-event_a-event_b combination.
     """
     try:
-        # Load Flow CSV data using storage service (environment-aware)
+        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
         import pandas as pd
-        from app.storage_service import get_storage_service
+        from app.utils.metadata import get_latest_run_id
+        from app.storage import create_runflow_storage
         
-        # Get latest run_id via StorageService (GCS-aware)
-        storage = get_storage_service()
-        run_id = storage.get_latest_run_id()
+        run_id = get_latest_run_id()
+        storage = create_runflow_storage(run_id)
         
-        if not run_id:
-            logger.warning("Could not determine latest run_id")
-            return JSONResponse(content=[])
-        
-        # Find Flow CSV file using storage service (GCS-aware)
+        # Load Flow CSV from runflow structure
         try:
-            # List Flow CSV files in the reports directory for this run_id
-            flow_csv_files = storage.list_files(f"reports/{run_id}", suffix="-Flow.csv")
+            # Flow.csv is at: runflow/<run_id>/reports/Flow.csv
+            csv_content = storage.read_text("reports/Flow.csv")
             
-            if not flow_csv_files:
-                logger.warning(f"No Flow CSV files found in reports/{run_id}")
+            if not csv_content:
+                logger.error("Failed to read Flow CSV: file is empty")
                 return JSONResponse(content=[])
             
-            # Use the latest Flow CSV (last in sorted list = most recent timestamp)
-            latest_flow_csv = flow_csv_files[-1]
-            logger.info(f"Using Flow CSV: {latest_flow_csv}")
-            
-            # Read the CSV file (GCS-aware)
-            df = storage.read_csv(f"reports/{run_id}/{latest_flow_csv}")
-            
-            if df is None:
-                logger.error(f"Failed to read Flow CSV: {latest_flow_csv}")
-                return JSONResponse(content=[])
+            # Parse CSV content
+            from io import StringIO
+            df = pd.read_csv(StringIO(csv_content))
         
         except Exception as e:
             logger.error(f"Failed to load Flow CSV: {e}")

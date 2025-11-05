@@ -58,12 +58,15 @@ def load_bins_data() -> List[Dict[str, Any]]:
     try:
         import json
         
-        # Get the latest run ID and construct the path
-        run_id = storage.get_latest_run_id()
-        bin_summary_path = f"reports/{run_id}/bin_summary.json"
+        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
+        from app.utils.metadata import get_latest_run_id
+        from app.storage import create_runflow_storage
         
-        # Load bin_summary.json from storage service
-        bin_summary_data = storage.read_json(bin_summary_path)
+        run_id = get_latest_run_id()
+        storage = create_runflow_storage(run_id)
+        
+        # Load bin_summary.json from runflow/<run_id>/bins/
+        bin_summary_data = storage.read_json("bins/bin_summary.json")
         
         if not bin_summary_data or "segments" not in bin_summary_data:
             logger.warning("bin_summary.json is empty or not found")
