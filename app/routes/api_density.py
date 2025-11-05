@@ -471,7 +471,10 @@ async def get_density_segment_detail(seg_id: str):
         if captions and seg_id in captions:
             caption_data = captions[seg_id]
             # Build heatmap URL for runflow structure
-            heatmap_url = f"/heatmaps/{run_id}/{seg_id}.png"
+            # Files are at: runflow/<run_id>/heatmaps/<seg_id>.png
+            # Mounted as: /heatmaps -> /app/runflow
+            # URL path: /heatmaps/<run_id>/heatmaps/<seg_id>.png
+            heatmap_url = f"/heatmaps/{run_id}/heatmaps/{seg_id}.png"
             caption = caption_data.get("caption", "")
         
         # Build detail response
