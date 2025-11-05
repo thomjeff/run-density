@@ -49,7 +49,7 @@ async def get_flow_segments():
         # Load Flow CSV from runflow structure
         try:
             # Flow.csv is at: runflow/<run_id>/reports/Flow.csv
-            csv_content = storage.read_file("reports/Flow.csv")
+            csv_content = storage.read_text("reports/Flow.csv")
             
             if not csv_content:
                 logger.error("Failed to read Flow CSV: file is empty")
