@@ -130,7 +130,7 @@ async def get_reports_list():
         
         # List report files from runflow structure
         reports = []
-        file_list = storage.list_files("reports")
+        file_list = storage.list_paths("reports")
         
         for filename in file_list:
             description = _get_file_description_from_extension(filename)
