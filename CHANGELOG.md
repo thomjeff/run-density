@@ -1,6 +1,6 @@
 # Changelog
 
-## [v1.9.0] - 2025-11-10
+## [v1.8.2] - 2025-11-10
 
 ### Issue #464: Phase 1 — Declouding Complete
 
