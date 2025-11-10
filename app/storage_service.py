@@ -133,8 +133,8 @@ class StorageService:
         """
         Load UI artifact JSON from local filesystem.
         
-        UI artifacts are stored in artifacts/{run_id}/ui/ directory structure.
-        If date is None, uses the latest run_id from artifacts/latest.json.
+        UI artifacts are stored in runflow/{run_id}/ui/ directory structure.
+        If date is None, uses the latest run_id from runflow/latest.json.
         
         Args:
             filename: Name of the UI artifact file (e.g., "health.json", "flags.json")
@@ -142,25 +142,28 @@ class StorageService:
             
         Returns:
             Parsed JSON data, or None if not found
+        
+        Note:
+            Issue #470: Migrated from artifacts/latest.json to runflow/latest.json.
         """
         if date is None:
-            # Try to get the latest run_id from artifacts/latest.json
+            # Issue #470: Try to get the latest run_id from runflow/latest.json (single source of truth)
             try:
-                latest_path = Path("artifacts/latest.json")
+                latest_path = Path("runflow/latest.json")
                 if latest_path.exists():
                     content = latest_path.read_text()
                     latest_data = json.loads(content)
                     date = latest_data.get("run_id")
-                    logger.info(f"Using latest run_id from latest.json: {date}")
+                    logger.info(f"Using latest run_id from runflow/latest.json: {date}")
                 else:
-                    logger.warning("artifacts/latest.json not found, using today's date")
+                    logger.warning("runflow/latest.json not found, using today's date")
                     date = datetime.now().strftime("%Y-%m-%d")
             except Exception as e:
-                logger.warning(f"Could not read artifacts/latest.json: {e}, using today's date")
+                logger.warning(f"Could not read runflow/latest.json: {e}, using today's date")
                 date = datetime.now().strftime("%Y-%m-%d")
         
-        # UI artifacts are stored in artifacts/{run_id}/ui/ path
-        ui_artifact_path = f"artifacts/{date}/ui/{filename}"
+        # Issue #470: UI artifacts are stored in runflow/{run_id}/ui/ path
+        ui_artifact_path = f"runflow/{date}/ui/{filename}"
         
         try:
             content = self._load_from_local(ui_artifact_path)
@@ -269,24 +272,29 @@ class StorageService:
     
     def get_latest_run_id(self) -> Optional[str]:
         """
-        Get latest run_id from artifacts/latest.json.
+        Get latest run_id from runflow/latest.json (single source of truth).
         
         Falls back to today's date if latest.json not found.
         
         Returns:
-            Run ID string (e.g., "2025-10-21") or today's date as fallback
+            Run ID string (e.g., "abc123xyz") or today's date as fallback
+        
+        Note:
+            Issue #470: Migrated from artifacts/latest.json to runflow/latest.json
+            to resolve dual pointer file inconsistency.
         """
         try:
-            latest_path = Path("artifacts/latest.json")
+            # Issue #470: Use runflow/latest.json as single source of truth
+            latest_path = Path("runflow/latest.json")
             if latest_path.exists():
                 content = latest_path.read_text()
                 latest_data = json.loads(content)
                 run_id = latest_data.get("run_id")
                 if run_id:
-                    logger.info(f"Loaded latest run_id: {run_id}")
+                    logger.info(f"Loaded latest run_id from runflow/latest.json: {run_id}")
                     return run_id
         except Exception as e:
-            logger.warning(f"Could not load latest run_id: {e}")
+            logger.warning(f"Could not load latest run_id from runflow/latest.json: {e}")
         
         # Fallback to today's date
         fallback = datetime.now().strftime("%Y-%m-%d")

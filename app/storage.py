@@ -158,23 +158,24 @@ class Storage:
         run_id = os.getenv("RUN_ID")
         if not run_id:
             try:
-                # Read latest.json from project root, not from storage root
-                latest_path = Path("artifacts/latest.json")
+                # Issue #470: Read from runflow/latest.json (single source of truth)
+                latest_path = Path("runflow/latest.json")
                 if latest_path.exists():
                     latest_data = json.loads(latest_path.read_text())
                     run_id = latest_data.get("run_id")
                 else:
-                    logging.warning("artifacts/latest.json not found for run_id")
+                    logging.warning("runflow/latest.json not found for run_id")
                     run_id = None
             except Exception as e:
-                    logging.warning(f"Could not load latest.json for run_id: {e}")
+                    logging.warning(f"Could not load runflow/latest.json for run_id: {e}")
                     run_id = None
         
         # Issue #361: Do not fall back to hardcoded date - return None if run_id unavailable
         if not run_id:
             logging.warning("No run_id available - cannot generate heatmap URL. Artifacts missing for current run.")
             return None
-        return f"/artifacts/{run_id}/ui/heatmaps/{segment_id}.png"
+        # Issue #470: Heatmaps stored in runflow structure
+        return f"/runflow/{run_id}/ui/heatmaps/{segment_id}.png"
     
     # ===== Write Methods (Issue #455 - Phase 3) =====
     
@@ -279,28 +280,32 @@ def create_storage_from_env() -> Storage:
     """
     Create Storage instance from environment variables.
     
-    Resolves artifacts/<run_id>/ui/ from artifacts/latest.json pointer.
+    Resolves runflow/<run_id>/ui/ from runflow/latest.json pointer.
     
     Environment Variables:
-        DATA_ROOT: Root directory for local mode (default: resolved from artifacts/latest.json)
+        DATA_ROOT: Root directory for local mode (default: resolved from runflow/latest.json)
     
     Returns:
         Storage: Configured storage instance
+    
+    Note:
+        Issue #470: Migrated from artifacts/latest.json to runflow/latest.json
+        to use single source of truth for run_id pointer.
     """
     root = os.getenv("DATA_ROOT")
     
-    # Try to resolve from artifacts/latest.json pointer
+    # Issue #470: Try to resolve from runflow/latest.json pointer (single source of truth)
     if not root:
-        latest_pointer = Path("artifacts/latest.json")
+        latest_pointer = Path("runflow/latest.json")
         if latest_pointer.exists():
             try:
                 pointer_data = json.loads(latest_pointer.read_text())
                 run_id = pointer_data.get("run_id")
                 if run_id:
-                    root = f"artifacts/{run_id}/ui"
+                    root = f"runflow/{run_id}/ui"
             except Exception as e:
                 import logging
-                logging.warning(f"Could not read artifacts/latest.json: {e}")
+                logging.warning(f"Could not read runflow/latest.json: {e}")
     
     # Fallback to "./data" if pointer not found
     if not root:
@@ -313,13 +318,17 @@ def create_storage_from_env() -> Storage:
 
 def load_latest_run_id(storage: Storage) -> Optional[str]:
     """
-    Load the latest run_id from artifacts/latest.json.
+    Load the latest run_id from runflow/latest.json (single source of truth).
     
     Returns:
-        Run ID string (e.g., "2025-10-19") or None if not found
+        Run ID string (e.g., "abc123xyz") or None if not found
+    
+    Note:
+        Issue #470: Migrated from artifacts/latest.json to runflow/latest.json.
     """
     try:
-        latest_path = Path("artifacts/latest.json")
+        # Issue #470: Use runflow/latest.json as single source of truth
+        latest_path = Path("runflow/latest.json")
         if latest_path.exists():
             return json.loads(latest_path.read_text()).get("run_id")
     except Exception:
