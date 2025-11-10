@@ -15,10 +15,7 @@ services:
       # Bind mount data and config directories
       - ./data:/app/data
       - ./config:/app/config
-      # Bind mount reports for local inspection (optional)
-      - ./reports:/app/reports
-      # Bind mount artifacts directory (required for UI artifacts: meta.json, segment_metrics.json, flags.json)
-      - ./artifacts:/app/artifacts
+      # Issue #470: Legacy artifacts/ and reports/ mounts removed - using runflow/ structure exclusively
       # Issue #465: GCS keys mount disabled during Phase 0 (local-only mode)
       # - ./keys:/tmp/keys:ro
       # Issue #455: Mount local runflow directory for Run ID storage
