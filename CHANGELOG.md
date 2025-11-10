@@ -1,5 +1,131 @@
 # Changelog
 
+## [v1.9.0] - 2025-11-10
+
+### Issue #464: Phase 1 — Declouding Complete
+
+**Major architectural transformation removing all Google Cloud Platform dependencies.**
+
+#### Overview
+Completed Phase 1 declouding to transform run-density into a fully local, Docker-only project. Systematically removed all GCP dependencies while maintaining 100% functional local development workflow. All cloud code archived, simplified, and replaced with local-only implementations.
+
+#### Pre-Work: Archive Consolidation
+- ✅ Consolidated 51 cloud-related files into `archive/declouding-2025/`
+- ✅ Organized by category: workflows, analytics, testing, scripts, docs
+- ✅ Retroactive consolidation of Phase 0 archives from Issue #465
+
+#### Step 1: Simplify Code (-566 lines)
+
+**app/storage_service.py** (682 → 398 lines):
+- Removed all GCS imports (`google.cloud.storage`)
+- Removed GCS client initialization and authentication
+- Removed cloud environment detection logic
+- Removed all GCS-specific methods (_save_to_gcs, _load_from_gcs, etc.)
+- Simplified to filesystem-only operations
+- Fixed Bugbot method signature conflict (list_files → list_directory_files)
+
+**app/storage.py** (607 → 405 lines):
+- Removed all GCS imports and mode switching
+- Removed GCS blob operations
+- Simplified Storage class to local-only
+- Removed cloud detection from create_storage_from_env()
+- Updated helper functions for filesystem-only
+
+**app/utils/env.py** (105 → 64 lines):
+- Simplified detect_runtime_environment() - always returns "local_docker"
+- Simplified detect_storage_target() - always returns "filesystem"
+- Removed all Cloud Run and GCS environment variable checks
+- Updated docstrings for Phase 1 declouding
+
+**app/density_report.py**:
+- Removed `from app.gcs_uploader import` statement
+- Removed _upload_bin_artifacts_to_gcs() function
+- Removed GCS upload blocks from 4 functions
+- Simplified _finalize_run_metadata() (removed GCS upload call)
+
+#### Step 2: Archive Unused Files
+- ✅ `app/gcs_uploader.py` → `archive/declouding-2025/app/`
+- ✅ `scripts/test_storage_access.py` → `archive/declouding-2025/scripts/`
+- ✅ `scripts/cleanup_cloud_run_revisions.sh` → `archive/declouding-2025/scripts/`
+- ✅ `docs/infrastructure/storage-access.md` → `archive/declouding-2025/docs/infrastructure/`
+- ✅ `cursor/chatgpt/` artifacts → `archive/declouding-2025/cursor/chatgpt/`
+
+#### Step 3: Rewrite Documentation (-343 lines)
+
+**docs/architecture/env-detection.md** (566 → 345 lines):
+- Removed Cloud Run and GCS detection documentation
+- Updated to document local-only environment
+- Removed staging, production, and cloud testing sections
+- Added reference to archived version
+- Documented Phase 1 declouding changes
+
+**docs/DOCKER_DEV.md** (595 → 334 lines):
+- Removed GCS upload configuration sections
+- Removed staging and production testing modes
+- Simplified to local Docker development only
+- Removed GCS troubleshooting sections
+- Updated E2E testing documentation (local-only)
+- Simplified workflow examples
+
+#### Code Review Fixes
+
+**Codex P1 Issues (Commit a32fdb7):**
+- Fixed 3 AttributeError issues from removed `use_cloud_storage` attribute
+- Updated `app/main.py` (4 locations)
+- Updated `app/routes/api_heatmaps.py`
+- Updated `app/routes/reports.py`
+
+**Cursor Bugbot Issue (Commit 7ef93a8):**
+- Fixed method signature conflict in `app/storage_service.py`
+- Renamed duplicate `list_files()` method to `list_directory_files()`
+
+#### Archive Structure
+Created `archive/declouding-2025/` containing:
+- ✅ `.declouding.txt` marker file (complete index)
+- ✅ github-workflows/ (9 CI/CD pipeline files)
+- ✅ analytics/ (6 pipeline experiment files)
+- ✅ testing-infrastructure/ (24 cloud-specific test files)
+- ✅ app/ (gcs_uploader.py)
+- ✅ scripts/ (2 cloud operation scripts)
+- ✅ docs/infrastructure/ (storage-access.md)
+- ✅ cursor/chatgpt/ (audit artifacts)
+
+**Total Archived:** 60+ files representing 100% of GCP infrastructure
+
+#### Testing & Verification
+- ✅ E2E tests passed after each step (3/3 checkpoints)
+- ✅ Comprehensive UI testing completed (6/6 pages passed)
+- ✅ All artifacts verified (reports, bins, UI files, heatmaps)
+- ✅ No functional regressions
+- ✅ No performance degradation
+
+#### What Was Removed
+1. **GCS Integration:** Storage client, uploads/downloads, authentication, signed URLs
+2. **Cloud Run Integration:** K_SERVICE detection, auto-configuration, ADC
+3. **Multi-Environment Support:** Runtime detection, storage routing, staging/production modes
+4. **CI/CD Infrastructure:** Automated deployment, Artifact Registry, Cloud Run deployment
+
+#### Impact
+- **Before:** Hybrid architecture (Local + Cloud Run + GCS)
+- **After:** Local-only architecture (Docker + Filesystem)
+- **Code Reduction:** -865 net lines (566 + 343 - 44 new)
+- **Architecture:** Single environment, single storage, simplified detection
+
+#### Files Changed
+- **Total:** 66 files
+- **Modified:** 7 code files
+- **Archived:** 60+ files
+- **Created:** 1 marker file
+
+**Total Commits:** 7  
+**Lines Changed:** +669, -1,534  
+**Net Reduction:** -865 lines
+
+#### Known Issues
+- Issue #470: Dual latest.json files causing UI run_id mismatch (separate fix branch)
+
+---
+
 ## [v1.8.1] - 2025-11-10
 
 ### Issue #465: Phase 0 — Disable Cloud CI
