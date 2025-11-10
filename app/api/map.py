@@ -30,7 +30,7 @@ from app.utils.constants import (
 )
 from app.cache_manager import get_global_cache_manager
 from app.map_data_generator import find_latest_reports
-from app.storage_service import get_storage_service
+# Issue #466 Step 2: Storage consolidated to app.storage
 
 logger = logging.getLogger(__name__)
 

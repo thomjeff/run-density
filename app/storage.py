@@ -244,6 +244,74 @@ class Storage:
         import shutil
         shutil.copy2(source_path, full_dest)
         return str(full_dest)
+    
+    def read_parquet(self, path: str) -> Optional['pd.DataFrame']:
+        """
+        Read parquet file from local filesystem.
+        
+        Issue #466 Step 2: Migrated from storage_service.py for consolidation.
+        
+        Args:
+            path: Relative path to parquet file
+            
+        Returns:
+            DataFrame or None if not found
+        """
+        try:
+            import pandas as pd
+            full_path = self._full_local(path)
+            if not full_path.exists():
+                logger.warning(f"Parquet file not found: {full_path}")
+                return None
+            return pd.read_parquet(full_path)
+        except Exception as e:
+            logger.error(f"Failed to read parquet {path}: {e}")
+            return None
+    
+    def read_csv(self, path: str) -> Optional['pd.DataFrame']:
+        """
+        Read CSV file from local filesystem.
+        
+        Issue #466 Step 2: Migrated from storage_service.py for consolidation.
+        
+        Args:
+            path: Relative path to CSV file
+            
+        Returns:
+            DataFrame or None if not found
+        """
+        try:
+            import pandas as pd
+            full_path = self._full_local(path)
+            if not full_path.exists():
+                logger.warning(f"CSV file not found: {full_path}")
+                return None
+            return pd.read_csv(full_path)
+        except Exception as e:
+            logger.error(f"Failed to read CSV {path}: {e}")
+            return None
+    
+    def read_geojson(self, path: str) -> Optional[Dict[str, Any]]:
+        """
+        Read GeoJSON file from local filesystem.
+        
+        Issue #466 Step 2: Migrated from storage_service.py for consolidation.
+        
+        Args:
+            path: Relative path to GeoJSON file
+            
+        Returns:
+            dict or None if not found
+        """
+        try:
+            full_path = self._full_local(path)
+            if not full_path.exists():
+                logger.warning(f"GeoJSON file not found: {full_path}")
+                return None
+            return json.loads(full_path.read_text())
+        except Exception as e:
+            logger.error(f"Failed to read GeoJSON {path}: {e}")
+            return None
 
 
 # ===== Helper Functions =====

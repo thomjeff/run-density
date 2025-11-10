@@ -36,7 +36,7 @@ def _validate_import_patterns():
     """Validate that all imports are properly resolved at module level."""
     try:
         # Test critical imports
-        from app.storage_service import get_storage_service
+        # Issue #466 Step 2: Storage consolidated to app.storage
         from app.core.density.compute import analyze_density_segments, DensityConfig
         from app.utils.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, BIN_SCHEMA_VERSION
         from app.report_utils import get_report_paths
@@ -98,7 +98,7 @@ def coarsen_plan(seg_id: str, current_bin_km: float, current_dt_s: int, peak_los
     return coarsened_bin, coarsened_dt
 
 # Import storage service for persistent file storage
-from app.storage_service import get_storage_service
+# Issue #466 Step 2: Storage consolidated to app.storage
 from app.core.density.compute import analyze_density_segments, DensityConfig
 from app.utils.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, BIN_SCHEMA_VERSION
 from app.report_utils import get_report_paths

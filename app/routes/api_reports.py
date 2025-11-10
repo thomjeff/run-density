@@ -14,7 +14,7 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 import logging
 
-from app.storage_service import get_storage_service
+# Issue #466 Step 2: Storage consolidated to app.storage
 
 # Configure logging
 logger = logging.getLogger(__name__)

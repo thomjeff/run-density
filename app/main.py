@@ -738,7 +738,7 @@ async def check_pdf_status():
 def _find_latest_density_report_file(storage) -> Optional[Tuple[str, str]]:
     """Find the latest density report file from the last 7 days."""
     from datetime import timedelta
-    from app.storage_service import get_storage_service
+    # Issue #466 Step 2: Storage consolidated to app.storage
     
     all_files = []
     
@@ -853,7 +853,7 @@ def _extract_current_segment(line: str) -> Optional[str]:
 
 def parse_latest_density_report():
     """Parse the latest density report to extract summary data without running new analysis."""
-    from app.storage_service import get_storage_service
+    # Issue #466 Step 2: Storage consolidated to app.storage
     
     # Use unified storage service that works in both local and Cloud Run
     storage = get_storage_service()
@@ -1087,7 +1087,7 @@ def parse_latest_density_report_segments():
     import re
     from pathlib import Path
     from datetime import datetime
-    from app.storage_service import get_storage_service
+    # Issue #466 Step 2: Storage consolidated to app.storage
     
     # Use unified storage service that works in both local and Cloud Run
     storage = get_storage_service()

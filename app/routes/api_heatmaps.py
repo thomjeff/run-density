@@ -14,7 +14,7 @@ from pathlib import Path
 import logging
 
 from app.heatmap_generator import generate_heatmaps_for_run, get_heatmap_files
-from app.storage_service import get_storage_service
+# Issue #466 Step 2: Storage consolidated to app.storage
 
 # Configure logging
 logger = logging.getLogger(__name__)

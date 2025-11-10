@@ -15,7 +15,7 @@ import logging
 import pandas as pd
 from datetime import datetime
 
-from app.storage_service import get_storage_service
+# Issue #466 Step 2: Storage consolidated to app.storage
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -23,8 +23,7 @@ logger = logging.getLogger(__name__)
 # Create router
 router = APIRouter()
 
-# Initialize storage service
-storage = get_storage_service()
+# Issue #466 Step 2: Removed legacy storage singleton (not needed)
 
 
 def format_time_for_display(iso_string: str) -> str:

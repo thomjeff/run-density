@@ -26,7 +26,7 @@ from typing import Dict, Any, List, Tuple, Optional
 import logging
 
 from app.common.config import load_rulebook, load_reporting
-from app.storage_service import get_storage_service
+# Issue #466 Step 2: Storage consolidated to app.storage
 
 logger = logging.getLogger(__name__)
 

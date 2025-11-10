@@ -8,7 +8,7 @@ import os, mimetypes
 from datetime import datetime
 
 # Import storage service for Cloud Storage integration
-from app.storage_service import get_storage_service
+# Issue #466 Step 2: Storage consolidated to app.storage
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 templates = Jinja2Templates(directory="app/templates")
@@ -137,7 +137,7 @@ def _latest(kind: str) -> Optional[Dict]:
     """Get the latest report of a specific kind from storage or local files."""
     try:
         from datetime import datetime, timedelta
-        from app.storage_service import get_storage_service
+        # Issue #466 Step 2: Storage consolidated to app.storage
         
         storage_service = get_storage_service()
         today = datetime.now().date()
