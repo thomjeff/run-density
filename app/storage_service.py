@@ -355,7 +355,7 @@ class StorageService:
         # GeoJSON is just JSON with geo features
         return self.read_json(file_path)
     
-    def list_files(self, directory: str, suffix: str = "") -> List[str]:
+    def list_directory_files(self, directory: str, suffix: str = "") -> List[str]:
         """
         List files in a directory from local filesystem.
         
