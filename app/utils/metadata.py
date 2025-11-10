@@ -460,15 +460,16 @@ def append_to_run_index(metadata: Dict[str, Any]) -> None:
 
 def get_latest_run_id() -> str:
     """
-    Get the most recent run_id from runflow/latest.json (Issue #460).
+    Get the most recent run_id from runflow/latest.json.
     
-    Used by "Latest-only" API endpoints that serve data from the most recent run.
+    Issue #466 Step 1: Forwards to centralized implementation in app.utils.run_id.
+    This function maintained for backwards compatibility during transition.
     
     Returns:
         run_id string (UUID)
         
     Raises:
-        FileNotFoundError: If latest.json doesn't exist or is unreadable
+        FileNotFoundError: If latest.json doesn't exist
         ValueError: If latest.json is invalid or missing run_id field
         
     Example:
@@ -476,56 +477,9 @@ def get_latest_run_id() -> str:
         storage = create_runflow_storage(run_id)
         data = storage.read_json("ui/meta.json")
     """
-    from app.utils.env import detect_storage_target
-    from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER, GCS_BUCKET_RUNFLOW
-    import logging
-    
-    logger = logging.getLogger(__name__)
-    storage_target = detect_storage_target()
-    
-    try:
-        if storage_target == "filesystem":
-            # Local mode: Read from filesystem
-            if Path(RUNFLOW_ROOT_CONTAINER).exists():
-                runflow_root = Path(RUNFLOW_ROOT_CONTAINER)
-            else:
-                runflow_root = Path(RUNFLOW_ROOT_LOCAL)
-            
-            latest_path = runflow_root / "latest.json"
-            if not latest_path.exists():
-                raise FileNotFoundError(f"latest.json not found at {latest_path}")
-            
-            latest_data = json.loads(latest_path.read_text())
-        else:
-            # GCS mode: Read from GCS
-            from google.cloud import storage as gcs
-            
-            bucket_name = os.getenv("GCS_BUCKET_RUNFLOW", GCS_BUCKET_RUNFLOW)
-            client = gcs.Client()
-            bucket = client.bucket(bucket_name)
-            blob = bucket.blob("latest.json")
-            
-            if not blob.exists():
-                raise FileNotFoundError(f"latest.json not found in gs://{bucket_name}/")
-            
-            latest_data = json.loads(blob.download_as_text())
-        
-        # Extract and validate run_id
-        run_id = latest_data.get("run_id")
-        if not run_id:
-            raise ValueError("latest.json missing 'run_id' field")
-        
-        return run_id
-    
-    except FileNotFoundError as e:
-        logger.error(f"latest.json not found: {e}")
-        raise
-    except (json.JSONDecodeError, ValueError) as e:
-        logger.error(f"latest.json invalid: {e}")
-        raise ValueError(f"latest.json missing or unreadable: {e}")
-    except Exception as e:
-        logger.error(f"Error reading latest.json: {e}")
-        raise
+    # Issue #466 Step 1: Use centralized implementation
+    from app.utils.run_id import get_latest_run_id as _get_latest_run_id
+    return _get_latest_run_id()
 
 
 def get_run_index() -> List[Dict[str, Any]]:

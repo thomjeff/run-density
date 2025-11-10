@@ -252,7 +252,7 @@ def create_runflow_storage(run_id: str) -> Storage:
     """
     Create Storage instance for runflow operations (Issue #455).
     
-    Uses local filesystem storage only.
+    Issue #466 Step 1: Uses centralized path resolution from app.utils.run_id.
     
     Args:
         run_id: UUID for the run
@@ -265,47 +265,39 @@ def create_runflow_storage(run_id: str) -> Storage:
         storage.write_json("reports/Density.md", content)
         # Writes to: /users/.../runflow/abc123xyz/reports/Density.md
     """
-    from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER
+    # Issue #466 Step 1: Use centralized path resolution
+    from app.utils.run_id import get_run_directory
     
-    # Local mode: Detect if we're in Docker container
-    # Use container root if in Docker, otherwise use local root
-    if Path(RUNFLOW_ROOT_CONTAINER).exists():
-        root = RUNFLOW_ROOT_CONTAINER
-    else:
-        root = RUNFLOW_ROOT_LOCAL
-    return Storage(root=f"{root}/{run_id}")
+    run_dir = get_run_directory(run_id)
+    return Storage(root=str(run_dir))
 
 
 def create_storage_from_env() -> Storage:
     """
     Create Storage instance from environment variables.
     
+    Issue #466 Step 1: Uses centralized run_id module for path resolution.
     Resolves runflow/<run_id>/ui/ from runflow/latest.json pointer.
     
     Environment Variables:
-        DATA_ROOT: Root directory for local mode (default: resolved from runflow/latest.json)
+        DATA_ROOT: Root directory (default: resolved from runflow/latest.json)
     
     Returns:
         Storage: Configured storage instance
-    
-    Note:
-        Issue #470: Migrated from artifacts/latest.json to runflow/latest.json
-        to use single source of truth for run_id pointer.
     """
     root = os.getenv("DATA_ROOT")
     
-    # Issue #470: Try to resolve from runflow/latest.json pointer (single source of truth)
+    # Issue #466 Step 1: Use centralized run_id module
     if not root:
-        latest_pointer = Path("runflow/latest.json")
-        if latest_pointer.exists():
-            try:
-                pointer_data = json.loads(latest_pointer.read_text())
-                run_id = pointer_data.get("run_id")
-                if run_id:
-                    root = f"runflow/{run_id}/ui"
-            except Exception as e:
-                import logging
-                logging.warning(f"Could not read runflow/latest.json: {e}")
+        try:
+            from app.utils.run_id import get_latest_run_id, get_run_directory
+            
+            run_id = get_latest_run_id()
+            run_dir = get_run_directory(run_id)
+            root = str(run_dir / "ui")
+        except (FileNotFoundError, ValueError) as e:
+            import logging
+            logging.warning(f"Could not load latest run_id: {e}")
     
     # Fallback to "./data" if pointer not found
     if not root:
@@ -318,22 +310,19 @@ def create_storage_from_env() -> Storage:
 
 def load_latest_run_id(storage: Storage) -> Optional[str]:
     """
-    Load the latest run_id from runflow/latest.json (single source of truth).
+    Load the latest run_id from runflow/latest.json.
+    
+    Issue #466 Step 1: Uses centralized implementation from app.utils.run_id.
     
     Returns:
         Run ID string (e.g., "abc123xyz") or None if not found
-    
-    Note:
-        Issue #470: Migrated from artifacts/latest.json to runflow/latest.json.
     """
     try:
-        # Issue #470: Use runflow/latest.json as single source of truth
-        latest_path = Path("runflow/latest.json")
-        if latest_path.exists():
-            return json.loads(latest_path.read_text()).get("run_id")
-    except Exception:
-        pass
-    return None
+        # Issue #466 Step 1: Use centralized implementation
+        from app.utils.run_id import get_latest_run_id
+        return get_latest_run_id()
+    except (FileNotFoundError, ValueError):
+        return None
 
 
 def list_reports(storage: Storage, run_id: str) -> List[Dict[str, Any]]:
