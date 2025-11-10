@@ -176,12 +176,12 @@ def _latest(kind: str) -> Optional[Dict]:
                 matching_files.sort(key=lambda x: x[1], reverse=True)
                 latest_date, latest_filename = matching_files[0]
                 
-                print(f"DEBUG: _latest() storage_service.config.use_cloud_storage = {storage_service.config.use_cloud_storage}")
+                # Issue #464: Local-only after Phase 1 declouding
                 result = {
                     "rel": latest_filename,
                     "kind": kind,
                     "date": latest_date,
-                    "source": "cloud" if storage_service.config.use_cloud_storage else "local"
+                    "source": "local"
                 }
                 print(f"DEBUG: _latest() returning: {result}")
                 return result
