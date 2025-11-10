@@ -1,0 +1,52 @@
+# GCP Declouding Archive - 2025
+
+This directory contains all code, configuration, and documentation removed
+during the Phase 1 declouding effort (Issue #464).
+
+## Scope
+
+This archive represents 100% of GCP-era removals from the run-density project:
+
+### Code Modules
+- app/gcs_uploader.py - GCS upload utilities and retry logic
+- All Google Cloud Storage integration code
+- Cloud Run deployment logic
+- GCS authentication and client initialization
+
+### Scripts & Utilities
+- scripts/test_storage_access.py - GCS access validation
+- scripts/cleanup_cloud_run_revisions.sh - Cloud Run operations
+- Cloud deployment automation scripts
+
+### CI/CD Infrastructure
+- github-workflows/ci-pipeline.yml - Full CI/CD pipeline
+- github-workflows/legacy-split-workflows-2025-11/ - Previous iterations
+- Artifact Registry integration
+- Cloud Run deployment configuration
+
+### Testing Infrastructure
+- testing-infrastructure/unused-tests-2025-11/ - Cloud-specific test suite
+- CI-specific tests
+- GCS integration tests
+
+### Documentation
+- docs/infrastructure/storage-access.md - GCS access patterns
+- Previous versions of env-detection.md and DOCKER_DEV.md
+
+### Supporting Artifacts
+- cursor/chatgpt/ - ChatGPT audit files
+- Analytics pipeline experiments
+
+---
+
+## Timeline
+
+Phase 0 (Issue #465) - 2025-11-10: Disabled Cloud CI/CD
+Phase 1 (Issue #464) - 2025-11-10: Complete declouding
+
+## Architecture Change
+
+From: Local + Cloud Run + GCS hybrid architecture
+To: Local-only, Docker-only architecture
+
+All files in this archive represent the complete removal of GCP dependencies.

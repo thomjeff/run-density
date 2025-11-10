@@ -92,23 +92,11 @@ async def generate_heatmaps(request: Dict[str, Any]):
                 detail=f"No heatmaps were generated for run_id: {run_id}"
             )
         
-        # Upload to GCS (only if using cloud storage)
-        storage = get_storage_service()
-        uploaded_count = 0
+        # Issue #464: Local-only after Phase 1 declouding
+        logger.info("Local mode: Heatmaps written to local filesystem")
+        uploaded_count = heatmaps_generated
         
-        if storage.config.use_cloud_storage:
-            logger.info("Cloud mode: Uploading heatmaps to GCS")
-            png_files = get_heatmap_files(run_id)
-            
-            for png_file in png_files:
-                gcs_dest = f"artifacts/{run_id}/ui/heatmaps/{png_file.name}"
-                if upload_binary_to_gcs(png_file, gcs_dest):
-                    uploaded_count += 1
-        else:
-            logger.info("Local mode: Heatmaps written to local filesystem")
-            uploaded_count = heatmaps_generated
-        
-        logger.info(f"Successfully generated and uploaded {uploaded_count} heatmaps for {run_id}")
+        logger.info(f"Successfully generated {uploaded_count} heatmaps for {run_id}")
         
         return JSONResponse(content={
             "status": "success",

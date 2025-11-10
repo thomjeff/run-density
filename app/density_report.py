@@ -22,7 +22,6 @@ from app.utils.constants import HOTSPOT_SEGMENTS
 from app.save_bins import save_bin_artifacts
 from app.report_utils import get_date_folder_path, get_run_folder_path
 from app.bin_summary import generate_bin_summary_artifact
-from app.gcs_uploader import upload_bin_artifacts
 from app.canonical_density_report import generate_tooltips_json
 from app.bin_intelligence import get_flagged_bins
 from app.heatmap_generator import generate_heatmaps_for_run
@@ -869,19 +868,7 @@ def _process_segments_from_bins(daily_folder_path: str) -> None:
             print(f"SEG_ROLLUP_FAILED {e}")
 
 
-def _upload_bin_artifacts_to_gcs(daily_folder_path: str) -> None:
-    """Upload bin artifacts to GCS if enabled."""
-    gcs_upload_enabled = os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}
-    if gcs_upload_enabled:
-        try:
-            bucket_name = os.getenv("GCS_BUCKET", "run-density-reports")
-            upload_success = upload_bin_artifacts(daily_folder_path, bucket_name)
-            if upload_success:
-                print(f"☁️ Bin artifacts uploaded to GCS: gs://{bucket_name}/{os.path.basename(daily_folder_path)}/")
-            else:
-                print(f"⚠️ GCS upload failed, bin files remain in container: {daily_folder_path}")
-        except Exception as e:
-            print(f"⚠️ GCS upload error: {e}")
+# Issue #464: GCS upload logic removed during Phase 1 declouding
 
 
 def _generate_bin_dataset_with_retry(
@@ -941,8 +928,7 @@ def _generate_bin_dataset_with_retry(
     if bins_status != "ok":
         print(f"⚠️  Bin status: {bins_status} (applied {strategy_step} optimization steps)")
     
-    # Upload to GCS
-    _upload_bin_artifacts_to_gcs(daily_folder_path)
+    # Issue #464: GCS upload removed during Phase 1 declouding
     
     return daily_folder_path, bin_metadata, bin_data
 
@@ -970,20 +956,7 @@ def _generate_new_report_format(
     report_content_final = new_report_results['report_content']
     print(f"📊 New density report saved to: {timestamped_path}")
     
-    # Issue #455: Skip storage_service for runflow mode (already in correct location)
-    # Upload to GCS if enabled (legacy mode only)
-    if not run_id and os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
-        try:
-            from app.storage_service import get_storage_service
-            storage_service = get_storage_service()
-            gcs_path = storage_service.save_file(
-                filename=os.path.basename(timestamped_path),
-                content=report_content_final,
-                date=None
-            )
-            print(f"☁️ Density report uploaded to GCS: {gcs_path}")
-        except Exception as e:
-            print(f"⚠️ Failed to upload density.md to GCS: {e}")
+    # Issue #464: GCS upload removed during Phase 1 declouding
     
     return timestamped_path
 
@@ -1019,25 +992,7 @@ def _generate_legacy_report_format(
     
     print(f"📊 Density report (with operational intelligence) saved to: {full_path}")
     
-    # Issue #455: Skip storage_service for runflow mode (already in correct location)
-    # Upload to GCS if enabled (legacy mode only)
-    if not run_id and os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
-        try:
-            from app.storage_service import get_storage_service
-            storage_service = get_storage_service()
-            gcs_path = storage_service.save_file(
-                filename=os.path.basename(full_path),
-                content=report_content_final,
-                date=None
-            )
-            print(f"☁️ Density report uploaded to GCS: {gcs_path}")
-        except (OSError, IOError) as e:
-            logger.error(f"Failed to upload density.md to GCS - file system error: {e}")
-        except (ValueError, TypeError) as e:
-            logger.error(f"Failed to upload density.md to GCS - invalid parameters: {e}")
-        except Exception as e:
-            logger.error(f"Failed to upload density.md to GCS - unexpected error: {e}")
-            logger.debug(f"GCS upload error details: {type(e).__name__}: {e}", exc_info=True)
+    # Issue #464: GCS upload removed during Phase 1 declouding
     
     return full_path
 
@@ -1130,26 +1085,7 @@ def _generate_and_upload_heatmaps(daily_folder_path: Optional[str], run_id: str 
         heatmaps_generated, segments = generate_heatmaps_for_run(run_id)
         print(f"🔥 Generated {heatmaps_generated} heatmaps for {run_id}")
         
-        # Upload to GCS if enabled
-        if os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
-            try:
-                heatmaps_dir = Path("artifacts") / run_id / "ui" / "heatmaps"
-                if not heatmaps_dir.exists():
-                    logger.warning(f"Heatmaps directory not found: {heatmaps_dir}")
-                    return
-                    
-                png_files = list(heatmaps_dir.glob("*.png"))
-                uploaded_count = 0
-                for png_file in png_files:
-                    gcs_dest = f"artifacts/{run_id}/ui/heatmaps/{png_file.name}"
-                    if upload_binary_to_gcs(png_file, gcs_dest):
-                        uploaded_count += 1
-                print(f"☁️ Uploaded {uploaded_count} heatmaps to GCS for {run_id}")
-            except (OSError, IOError) as e:
-                logger.error(f"Failed to access heatmaps directory {heatmaps_dir}: {e}")
-            except Exception as e:
-                logger.error(f"Failed to upload heatmaps to GCS: {e}")
-                logger.debug(f"Heatmap upload error details: {type(e).__name__}: {e}", exc_info=True)
+        # Issue #464: GCS upload removed during Phase 1 declouding
     except (KeyError, ValueError) as e:
         logger.error(f"Invalid run_id or heatmap generation parameters: {e}")
     except Exception as e:
@@ -1170,13 +1106,13 @@ def _setup_runflow_output_dir(run_id: str, logger):
 
 
 def _finalize_run_metadata(run_id: str, daily_folder_path: str, logger):
-    """Write metadata and upload to GCS for completed runs."""
+    """Write metadata for completed runs."""
     if not run_id or not daily_folder_path:
         return
         
     try:
         from app.utils.metadata import create_run_metadata, write_metadata_json, update_latest_pointer
-        from app.report_utils import get_run_folder_path, upload_runflow_to_gcs
+        from app.report_utils import get_run_folder_path
         from pathlib import Path
         
         run_path = Path(get_run_folder_path(run_id))
@@ -1187,8 +1123,7 @@ def _finalize_run_metadata(run_id: str, daily_folder_path: str, logger):
         # Update latest.json pointer
         update_latest_pointer(run_id)
         
-        # Upload to GCS if enabled
-        upload_runflow_to_gcs(run_id)
+        # Issue #464: GCS upload removed during Phase 1 declouding
     except Exception as e:
         logger.warning(f"Failed to write metadata.json: {e}")
 

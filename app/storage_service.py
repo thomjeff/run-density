@@ -1,15 +1,14 @@
 """
-Google Cloud Storage Service for Persistent File Storage
+Local Filesystem Storage Service
 
-This module provides a unified interface for file storage operations that works
-in both local development and Cloud Run production environments.
+This module provides a unified interface for file storage operations using
+the local filesystem only.
 
 Features:
-- Automatic environment detection (local vs Cloud Run)
-- File upload/download with retry logic
-- Organized file structure by date
+- File upload/download operations
+- Organized file structure
 - Error handling and logging
-- Support for all file types (JSON, PDF, CSV, MD)
+- Support for all file types (JSON, PDF, CSV, MD, Parquet)
 """
 
 import os
@@ -21,77 +20,23 @@ from typing import Optional, Dict, Any, List
 import pandas as pd
 from dataclasses import dataclass
 
-# Google Cloud Storage imports
-try:
-    from google.cloud import storage
-    from google.cloud.exceptions import NotFound, GoogleCloudError
-    GCS_AVAILABLE = True
-except ImportError:
-    GCS_AVAILABLE = False
-    storage = None
-    NotFound = Exception
-    GoogleCloudError = Exception
-
 logger = logging.getLogger(__name__)
 
 @dataclass
 class StorageConfig:
     """Configuration for storage service."""
-    bucket_name: str = "run-density-reports"
     local_reports_dir: str = "reports"
-    use_cloud_storage: bool = False
-    project_id: Optional[str] = None
 
 class StorageService:
     """
-    Unified storage service for local and Cloud Storage operations.
+    Filesystem storage service for local development.
     
-    Automatically detects environment and uses appropriate storage method:
-    - Local development: File system storage
-    - Cloud Run production: Google Cloud Storage
+    Provides file operations for reports, artifacts, and data files.
     """
     
     def __init__(self, config: Optional[StorageConfig] = None):
         self.config = config or StorageConfig()
-        self._detect_environment()
-        self._client = None
-        
-        if self.config.use_cloud_storage:
-            self._initialize_gcs_client()
-    
-    def _detect_environment(self):
-        """Detect if running in Cloud Run or local environment."""
-        # Issue #447: Check for explicit GCS upload flag first (staging mode)
-        if os.getenv('GCS_UPLOAD', '').lower() == 'true':
-            self.config.use_cloud_storage = True
-            self.config.project_id = os.getenv('GOOGLE_CLOUD_PROJECT', 'run-density')
-            logger.info("GCS uploads enabled via GCS_UPLOAD flag - using Cloud Storage")
-        # Check for Cloud Run environment variables
-        elif os.getenv('K_SERVICE') or os.getenv('GOOGLE_CLOUD_PROJECT'):
-            self.config.use_cloud_storage = True
-            self.config.project_id = os.getenv('GOOGLE_CLOUD_PROJECT')
-            logger.info("Detected Cloud Run environment - using Cloud Storage")
-        else:
-            self.config.use_cloud_storage = False
-            logger.info("Detected local environment - using file system storage")
-    
-    def _initialize_gcs_client(self):
-        """Initialize Google Cloud Storage client."""
-        if not GCS_AVAILABLE:
-            raise ImportError("google-cloud-storage not available. Install with: pip install google-cloud-storage")
-        
-        try:
-            self._client = storage.Client(project=self.config.project_id)
-            # Skip bucket existence check to avoid startup failures
-            try:
-                _ = self._client.get_bucket(self.config.bucket_name)
-                logger.info(f"Initialized Cloud Storage client for bucket: {self.config.bucket_name}")
-            except Exception as e:
-                logger.warning(f"Skipping bucket check: {e}")
-                logger.info(f"Initialized Cloud Storage client for bucket: {self.config.bucket_name}")
-        except Exception as e:
-            logger.error(f"Failed to initialize Cloud Storage client: {e}")
-            raise
+        logger.info("Detected local environment - using file system storage")
     
     def _get_date_path(self, date: Optional[str] = None) -> str:
         """Get the date-based path for file organization."""
@@ -106,7 +51,7 @@ class StorageService:
     
     def save_file(self, filename: str, content: str, date: Optional[str] = None) -> str:
         """
-        Save file content to storage.
+        Save file content to local filesystem.
         
         Args:
             filename: Name of the file to save
@@ -117,15 +62,11 @@ class StorageService:
             Full path where file was saved
         """
         file_path = self._get_file_path(filename, date)
-        
-        if self.config.use_cloud_storage:
-            return self._save_to_gcs(file_path, content)
-        else:
-            return self._save_to_local(file_path, content)
+        return self._save_to_local(file_path, content)
     
     def save_json(self, filename: str, data: Dict[str, Any], date: Optional[str] = None) -> str:
         """
-        Save JSON data to storage.
+        Save JSON data to local filesystem.
         
         Args:
             filename: Name of the file to save
@@ -144,23 +85,19 @@ class StorageService:
         This avoids automatic date-prefixing used by save_file/save_json.
         """
         content = json.dumps(data, indent=2, default=str)
-        if self.config.use_cloud_storage:
-            return self._save_to_gcs(file_path, content)
-        else:
-            # Write relative to repository root for local mode
-            try:
-                full_path = Path(file_path)
-                full_path.parent.mkdir(parents=True, exist_ok=True)
-                full_path.write_text(content)
-                logger.info(f"Saved artifact locally: {full_path}")
-                return str(full_path)
-            except Exception as e:
-                logger.error(f"Failed to save artifact locally {file_path}: {e}")
-                raise
+        try:
+            full_path = Path(file_path)
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            full_path.write_text(content)
+            logger.info(f"Saved artifact locally: {full_path}")
+            return str(full_path)
+        except Exception as e:
+            logger.error(f"Failed to save artifact locally {file_path}: {e}")
+            raise
     
     def load_file(self, filename: str, date: Optional[str] = None) -> Optional[str]:
         """
-        Load file content from storage.
+        Load file content from local filesystem.
         
         Args:
             filename: Name of the file to load
@@ -170,15 +107,11 @@ class StorageService:
             File content as string, or None if not found
         """
         file_path = self._get_file_path(filename, date)
-        
-        if self.config.use_cloud_storage:
-            return self._load_from_gcs(file_path)
-        else:
-            return self._load_from_local(file_path)
+        return self._load_from_local(file_path)
     
     def load_json(self, filename: str, date: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
-        Load JSON data from storage.
+        Load JSON data from local filesystem.
         
         Args:
             filename: Name of the file to load
@@ -198,7 +131,7 @@ class StorageService:
     
     def load_ui_artifact(self, filename: str, date: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
-        Load UI artifact JSON from storage.
+        Load UI artifact JSON from local filesystem.
         
         UI artifacts are stored in artifacts/{run_id}/ui/ directory structure.
         If date is None, uses the latest run_id from artifacts/latest.json.
@@ -213,14 +146,9 @@ class StorageService:
         if date is None:
             # Try to get the latest run_id from artifacts/latest.json
             try:
-                # Read latest.json from appropriate storage (local or GCS)
-                if self.config.use_cloud_storage:
-                    content = self._load_from_gcs("artifacts/latest.json")
-                else:
-                    latest_path = Path("artifacts/latest.json")
-                    content = latest_path.read_text() if latest_path.exists() else None
-                
-                if content:
+                latest_path = Path("artifacts/latest.json")
+                if latest_path.exists():
+                    content = latest_path.read_text()
                     latest_data = json.loads(content)
                     date = latest_data.get("run_id")
                     logger.info(f"Using latest run_id from latest.json: {date}")
@@ -235,10 +163,7 @@ class StorageService:
         ui_artifact_path = f"artifacts/{date}/ui/{filename}"
         
         try:
-            if self.config.use_cloud_storage:
-                content = self._load_from_gcs(ui_artifact_path)
-            else:
-                content = self._load_from_local(ui_artifact_path)
+            content = self._load_from_local(ui_artifact_path)
             
             if content is None:
                 logger.warning(f"UI artifact not found: {ui_artifact_path}")
@@ -255,7 +180,7 @@ class StorageService:
     
     def list_files(self, date: Optional[str] = None, pattern: Optional[str] = None) -> List[str]:
         """
-        List files in storage for a given date.
+        List files in local filesystem for a given date.
         
         Args:
             date: Optional date string (YYYY-MM-DD), defaults to today
@@ -265,15 +190,11 @@ class StorageService:
             List of filenames
         """
         date_path = self._get_date_path(date)
-        
-        if self.config.use_cloud_storage:
-            return self._list_gcs_files(date_path, pattern)
-        else:
-            return self._list_local_files(date_path, pattern)
+        return self._list_local_files(date_path, pattern)
     
     def file_exists(self, filename: str, date: Optional[str] = None) -> bool:
         """
-        Check if a file exists in storage.
+        Check if a file exists in local filesystem.
         
         Args:
             filename: Name of the file to check
@@ -283,23 +204,7 @@ class StorageService:
             True if file exists, False otherwise
         """
         file_path = self._get_file_path(filename, date)
-        
-        if self.config.use_cloud_storage:
-            return self._gcs_file_exists(file_path)
-        else:
-            return self._local_file_exists(file_path)
-    
-    def _save_to_gcs(self, file_path: str, content: str) -> str:
-        """Save file to Google Cloud Storage."""
-        try:
-            bucket = self._client.bucket(self.config.bucket_name)
-            blob = bucket.blob(file_path)
-            blob.upload_from_string(content)
-            logger.info(f"Saved file to GCS: {file_path}")
-            return f"gs://{self.config.bucket_name}/{file_path}"
-        except GoogleCloudError as e:
-            logger.error(f"Failed to save file to GCS {file_path}: {e}")
-            raise
+        return self._local_file_exists(file_path)
     
     def _save_to_local(self, file_path: str, content: str) -> str:
         """Save file to local file system."""
@@ -312,29 +217,6 @@ class StorageService:
         except Exception as e:
             logger.error(f"Failed to save file locally {file_path}: {e}")
             raise
-    
-    def _load_from_gcs(self, path: str) -> Optional[str]:
-        """Load file from Google Cloud Storage."""
-        try:
-            # Normalize path
-            if path.startswith("reports/"):
-                gcs_path = path[len("reports/"):]
-            else:
-                gcs_path = path
-
-            bucket = self._client.bucket(self.config.bucket_name)
-            blob = bucket.blob(gcs_path)
-
-            if not blob.exists():
-                logger.warning(f"[GCS] Blob not found: {gcs_path}")
-                return None
-
-            logger.info(f"[GCS] Downloading blob: {gcs_path}")
-            return blob.download_as_text()
-
-        except Exception as e:
-            logger.error(f"[GCS] Failed to load {path}: {e}")
-            return None
     
     def _load_from_local(self, file_path: str) -> Optional[str]:
         """Load file from local file system."""
@@ -354,24 +236,6 @@ class StorageService:
         except Exception as e:
             logger.error(f"Failed to load file locally {file_path}: {e}")
             return None
-    
-    def _list_gcs_files(self, date_path: str, pattern: Optional[str] = None) -> List[str]:
-        """List files in Google Cloud Storage."""
-        try:
-            bucket = self._client.bucket(self.config.bucket_name)
-            blobs = bucket.list_blobs(prefix=date_path + "/")
-            
-            files = []
-            for blob in blobs:
-                filename = blob.name.split("/")[-1]
-                if not pattern or pattern in filename:
-                    files.append(filename)
-            
-            logger.debug(f"Listed {len(files)} files from GCS: {date_path}")
-            return files
-        except GoogleCloudError as e:
-            logger.error(f"Failed to list files from GCS {date_path}: {e}")
-            return []
     
     def _list_local_files(self, date_path: str, pattern: Optional[str] = None) -> List[str]:
         """List files in local file system."""
@@ -394,16 +258,6 @@ class StorageService:
             logger.error(f"Failed to list files locally {date_path}: {e}")
             return []
     
-    def _gcs_file_exists(self, file_path: str) -> bool:
-        """Check if file exists in Google Cloud Storage."""
-        try:
-            bucket = self._client.bucket(self.config.bucket_name)
-            blob = bucket.blob(file_path)
-            return blob.exists()
-        except GoogleCloudError as e:
-            logger.error(f"Failed to check file existence in GCS {file_path}: {e}")
-            return False
-    
     def _local_file_exists(self, file_path: str) -> bool:
         """Check if file exists in local file system."""
         try:
@@ -415,22 +269,17 @@ class StorageService:
     
     def get_latest_run_id(self) -> Optional[str]:
         """
-        Get latest run_id from artifacts/latest.json (environment-aware).
+        Get latest run_id from artifacts/latest.json.
         
-        Reads from GCS in Cloud Run, local filesystem in development.
         Falls back to today's date if latest.json not found.
         
         Returns:
             Run ID string (e.g., "2025-10-21") or today's date as fallback
         """
         try:
-            if self.config.use_cloud_storage:
-                content = self._load_from_gcs("artifacts/latest.json")
-            else:
-                latest_path = Path("artifacts/latest.json")
-                content = latest_path.read_text() if latest_path.exists() else None
-            
-            if content:
+            latest_path = Path("artifacts/latest.json")
+            if latest_path.exists():
+                content = latest_path.read_text()
                 latest_data = json.loads(content)
                 run_id = latest_data.get("run_id")
                 if run_id:
@@ -440,14 +289,13 @@ class StorageService:
             logger.warning(f"Could not load latest run_id: {e}")
         
         # Fallback to today's date
-        from datetime import datetime
         fallback = datetime.now().strftime("%Y-%m-%d")
         logger.info(f"Using fallback run_id: {fallback}")
         return fallback
     
     def read_parquet(self, file_path: str) -> Optional[pd.DataFrame]:
         """
-        Read parquet file from GCS or local filesystem.
+        Read parquet file from local filesystem.
         
         Args:
             file_path: Path like "reports/2025-10-21/bins.parquet"
@@ -456,27 +304,14 @@ class StorageService:
             DataFrame or None if file not found/error
         """
         try:
-            if self.config.use_cloud_storage:
-                # Normalize GCS path (strip "reports/" prefix if present)
-                if file_path.startswith("reports/"):
-                    gcs_path = file_path[len("reports/"):]
-                else:
-                    gcs_path = file_path
-                
-                bucket = self._client.bucket(self.config.bucket_name)
-                blob = bucket.blob(gcs_path)
-                data = blob.download_as_bytes()
-                from io import BytesIO
-                return pd.read_parquet(BytesIO(data))
-            else:
-                return pd.read_parquet(file_path)
+            return pd.read_parquet(file_path)
         except Exception as e:
             logger.warning(f"Could not read parquet {file_path}: {e}")
             return None
     
     def read_csv(self, file_path: str) -> Optional[pd.DataFrame]:
         """
-        Read CSV file from GCS or local filesystem.
+        Read CSV file from local filesystem.
         
         Args:
             file_path: Path like "reports/2025-10-21/Flow.csv"
@@ -485,27 +320,14 @@ class StorageService:
             DataFrame or None if file not found/error
         """
         try:
-            if self.config.use_cloud_storage:
-                # Normalize GCS path (strip "reports/" prefix if present)
-                if file_path.startswith("reports/"):
-                    gcs_path = file_path[len("reports/"):]
-                else:
-                    gcs_path = file_path
-                
-                bucket = self._client.bucket(self.config.bucket_name)
-                blob = bucket.blob(gcs_path)
-                content = blob.download_as_text()
-                from io import StringIO
-                return pd.read_csv(StringIO(content))
-            else:
-                return pd.read_csv(file_path)
+            return pd.read_csv(file_path)
         except Exception as e:
             logger.warning(f"Could not read CSV {file_path}: {e}")
             return None
     
     def read_json(self, file_path: str) -> Optional[dict]:
         """
-        Read JSON file from GCS or local filesystem.
+        Read JSON file from local filesystem.
         
         Args:
             file_path: Path like "artifacts/2025-10-21/ui/flow.json"
@@ -514,30 +336,15 @@ class StorageService:
             Dict or None if file not found/error
         """
         try:
-            if self.config.use_cloud_storage:
-                # Normalize GCS path (strip "reports/" or "artifacts/" prefix if present)
-                if file_path.startswith("reports/"):
-                    gcs_path = file_path[len("reports/"):]
-                elif file_path.startswith("artifacts/"):
-                    # artifacts/ is already in GCS path structure, keep as-is
-                    gcs_path = file_path
-                else:
-                    gcs_path = file_path
-                
-                bucket = self._client.bucket(self.config.bucket_name)
-                blob = bucket.blob(gcs_path)
-                content = blob.download_as_text()
-                return json.loads(content)
-            else:
-                with open(file_path, "r") as f:
-                    return json.load(f)
+            with open(file_path, "r") as f:
+                return json.load(f)
         except Exception as e:
             logger.warning(f"Could not read JSON {file_path}: {e}")
             return None
     
     def read_geojson(self, file_path: str) -> Optional[dict]:
         """
-        Read GeoJSON file from GCS or local filesystem.
+        Read GeoJSON file from local filesystem.
         
         Args:
             file_path: Path like "artifacts/2025-10-21/ui/segments.geojson"
@@ -548,9 +355,9 @@ class StorageService:
         # GeoJSON is just JSON with geo features
         return self.read_json(file_path)
     
-    def list_files(self, directory: str, suffix: str = "") -> List[str]:
+    def list_directory_files(self, directory: str, suffix: str = "") -> List[str]:
         """
-        List files in a directory from GCS or local filesystem.
+        List files in a directory from local filesystem.
         
         Args:
             directory: Directory path like "reports/2025-10-21" or "2025-10-21"
@@ -560,108 +367,37 @@ class StorageService:
             List of file paths (relative to directory)
         """
         try:
-            if self.config.use_cloud_storage:
-                # Normalize GCS path (strip "reports/" prefix if present)
-                if directory.startswith("reports/"):
-                    gcs_dir = directory[len("reports/"):]
-                else:
-                    gcs_dir = directory
-                
-                # Ensure directory ends with /
-                if not gcs_dir.endswith("/"):
-                    gcs_dir += "/"
-                
-                bucket = self._client.bucket(self.config.bucket_name)
-                blobs = bucket.list_blobs(prefix=gcs_dir)
-                
-                files = []
-                for blob in blobs:
-                    # Get filename relative to directory
-                    filename = blob.name[len(gcs_dir):]
-                    if filename and suffix and filename.endswith(suffix):
-                        files.append(filename)
-                    elif filename and not suffix:
-                        files.append(filename)
-                
-                return sorted(files)
+            dir_path = Path(directory)
+            if not dir_path.exists():
+                return []
+            
+            if suffix:
+                files = [f.name for f in dir_path.glob(f"*{suffix}")]
             else:
-                dir_path = Path(directory)
-                if not dir_path.exists():
-                    return []
-                
-                if suffix:
-                    files = [f.name for f in dir_path.glob(f"*{suffix}")]
-                else:
-                    files = [f.name for f in dir_path.iterdir() if f.is_file()]
-                
-                return sorted(files)
+                files = [f.name for f in dir_path.iterdir() if f.is_file()]
+            
+            return sorted(files)
         except Exception as e:
             logger.warning(f"Could not list files in {directory}: {e}")
             return []
 
     def get_heatmap_signed_url(self, segment_id: str, expiry_seconds=3600) -> Optional[str]:
-        """Generate signed URL for heatmap using service account key."""
-        if not self.config.use_cloud_storage:
-            # For local mode, return the local path
-            run_id = self.get_latest_run_id()
-            if not run_id:
-                logging.warning("No run_id available - cannot generate heatmap URL. Artifacts missing for current run.")
-                return None
-            return f"/artifacts/{run_id}/ui/heatmaps/{segment_id}.png"
-        
-        # For GCS mode, use service account key for signing
-        try:
-            # Try to use the base64 encoded service account key from environment
-            import base64
-            from google.oauth2 import service_account
-            import datetime
-            
-            sa_key_b64 = os.getenv("SERVICE_ACCOUNT_KEY_B64")
-            logging.info(f"SERVICE_ACCOUNT_KEY_B64 environment variable exists: {bool(sa_key_b64)}")
-            if sa_key_b64:
-                sa_key_json = base64.b64decode(sa_key_b64).decode('utf-8')
-                sa_key_dict = json.loads(sa_key_json)
-                creds = service_account.Credentials.from_service_account_info(sa_key_dict)
-                # Get project from the service account key
-                project = sa_key_dict.get('project_id', 'run-density')
-                logging.info("Using base64 encoded service account key for signed URL generation")
-            else:
-                # Fallback to default credentials
-                import google.auth
-                creds, project = google.auth.default()
-                logging.info("Using default credentials for signed URL generation")
-        except Exception as e:
-            logging.warning(f"Could not load service account key: {e}")
-            import google.auth
-            creds, project = google.auth.default()
-        
-        client = storage.Client(credentials=creds, project=project)
-        bucket = client.bucket(self.config.bucket_name)
-        
-        # Get run_id for blob path
+        """Generate local URL for heatmap."""
         run_id = self.get_latest_run_id()
         if not run_id:
-            logging.warning("No run_id available - cannot generate heatmap URL. Artifacts missing for current run.")
+            logger.warning("No run_id available - cannot generate heatmap URL. Artifacts missing for current run.")
             return None
-        
-        blob_path = f"artifacts/{run_id}/ui/heatmaps/{segment_id}.png"
-        blob = bucket.blob(blob_path)
-        
-        return blob.generate_signed_url(
-            version="v4",
-            expiration=datetime.timedelta(seconds=expiry_seconds),
-            method="GET",
-        )
+        return f"/artifacts/{run_id}/ui/heatmaps/{segment_id}.png"
 
     @property
     def mode(self) -> str:
         """Return the storage mode for compatibility with legacy code."""
-        return "cloud" if self.config.use_cloud_storage else "local"
+        return "local"
     
     @property
     def bucket(self) -> str:
-        """Return the bucket name for compatibility with legacy code."""
-        return self.config.bucket_name
+        """Return empty string for compatibility with legacy code."""
+        return ""
 
 
 # Global storage service instance

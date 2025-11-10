@@ -19,86 +19,46 @@ def env_str(name: str, default: str = "") -> str:
     return v if v is not None else default
 
 
-# Canonical Environment Detection Functions (Issue #452)
-# These functions follow the detection priority established in Issue #447
-# and documented in docs/architecture/env-detection.md
+# Canonical Environment Detection Functions
+# Simplified for local-only operations after Phase 1 declouding
 
-def detect_runtime_environment() -> Literal["local_docker", "cloud_run"]:
+def detect_runtime_environment() -> Literal["local_docker"]:
     """
     Detect the runtime environment where the container is running.
     
     This is the canonical runtime detection function used across the application.
-    Follows Issue #447 standards documented in docs/architecture/env-detection.md.
+    After Phase 1 declouding, this always returns "local_docker".
     
     Returns:
-        "cloud_run" if running in GCP Cloud Run (K_SERVICE is set)
-        "local_docker" if running in local Docker container or development
+        "local_docker" - local Docker container or development
     
     Examples:
-        >>> # In Cloud Run:
-        >>> detect_runtime_environment()
-        'cloud_run'
-        
-        >>> # In local Docker:
         >>> detect_runtime_environment()
         'local_docker'
     
     References:
-        - Issue #447: E2E Test Refactor (detection priority)
-        - Issue #451: Infrastructure & Environment Readiness
-        - Issue #452: Phase 2 - Short UUID for Run ID
+        - Issue #464: Phase 1 - Declouding (cloud detection removed)
+        - Issue #465: Phase 0 - Disable Cloud CI
     """
-    # K_SERVICE is set automatically by Cloud Run
-    if os.getenv('K_SERVICE'):
-        return "cloud_run"
-    else:
-        return "local_docker"
+    return "local_docker"
 
 
-def detect_storage_target() -> Literal["filesystem", "gcs"]:
+def detect_storage_target() -> Literal["filesystem"]:
     """
-    Detect storage target based on environment configuration.
+    Detect storage target for the application.
     
     This is the canonical storage detection function used across the application.
-    Follows Issue #447 priority order documented in docs/architecture/env-detection.md.
-    
-    Detection Priority:
-    1. Check GCS_UPLOAD flag (explicit override for staging mode)
-    2. Check K_SERVICE or GOOGLE_CLOUD_PROJECT (Cloud Run auto-detect)
-    3. Default to filesystem (local development mode)
+    After Phase 1 declouding, this always returns "filesystem".
     
     Returns:
-        "gcs" if cloud storage should be used
-        "filesystem" if local filesystem should be used
+        "filesystem" - local filesystem storage
     
     Examples:
-        >>> # Staging mode (local container with GCS):
-        >>> os.environ['GCS_UPLOAD'] = 'true'
-        >>> detect_storage_target()
-        'gcs'
-        
-        >>> # Local development (default):
-        >>> os.environ.pop('GCS_UPLOAD', None)
-        >>> os.environ.pop('K_SERVICE', None)
         >>> detect_storage_target()
         'filesystem'
-        
-        >>> # Cloud Run (automatic):
-        >>> os.environ['K_SERVICE'] = 'run-density'
-        >>> detect_storage_target()
-        'gcs'
     
     References:
-        - Issue #447: E2E Test Refactor (GCS_UPLOAD flag priority)
-        - Issue #451: Infrastructure & Environment Readiness
-        - Issue #452: Phase 2 - Short UUID for Run ID
+        - Issue #464: Phase 1 - Declouding (GCS support removed)
+        - Issue #465: Phase 0 - Disable Cloud CI
     """
-    # Issue #447: Check GCS_UPLOAD flag first (staging mode)
-    # Default is empty string, which evaluates to local mode
-    if os.getenv('GCS_UPLOAD', '').lower() == 'true':
-        return "gcs"
-    # Check Cloud Run environment variables (automatic detection)
-    elif os.getenv('K_SERVICE') or os.getenv('GOOGLE_CLOUD_PROJECT'):
-        return "gcs"
-    else:
-        return "filesystem"
+    return "filesystem"

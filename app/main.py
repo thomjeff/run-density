@@ -748,7 +748,8 @@ def _find_latest_density_report_file(storage) -> Optional[Tuple[str, str]]:
         
         # Check the reports folder structure (reports/YYYY-MM-DD/)
         reports_date_path = f"reports/{check_date}"
-        files = storage._list_gcs_files(reports_date_path, "Density.md") if storage.config.use_cloud_storage else storage._list_local_files(reports_date_path, "Density.md")
+        # Issue #464: Local-only after Phase 1 declouding
+        files = storage._list_local_files(reports_date_path, "Density.md")
         for file in files:
             all_files.append((check_date, file))
     
@@ -760,8 +761,9 @@ def _find_latest_density_report_file(storage) -> Optional[Tuple[str, str]]:
 
 
 def _load_density_report_content(storage, latest_date: str, latest_filename: str) -> Optional[str]:
-    """Load the latest density report content from storage."""
-    content = storage._load_from_gcs(f"reports/{latest_date}/{latest_filename}") if storage.config.use_cloud_storage else storage._load_from_local(f"reports/{latest_date}/{latest_filename}")
+    """Load the latest density report content from local storage."""
+    # Issue #464: Local-only after Phase 1 declouding
+    content = storage._load_from_local(f"reports/{latest_date}/{latest_filename}")
     return content
 
 
@@ -1101,7 +1103,8 @@ def parse_latest_density_report_segments():
             check_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
             
             # Files are saved directly in YYYY-MM-DD/ not reports/YYYY-MM-DD/
-            files = storage._list_gcs_files(check_date, "Density.md") if storage.config.use_cloud_storage else storage._list_local_files(check_date, "Density.md")
+            # Issue #464: Local-only after Phase 1 declouding
+            files = storage._list_local_files(check_date, "Density.md")
             for file in files:
                 all_files.append((check_date, file))
         
@@ -1112,7 +1115,8 @@ def parse_latest_density_report_segments():
         latest_date, latest_filename = max(all_files, key=lambda x: (x[0], x[1]))
         
         # Load the latest density report content
-        content = storage._load_from_gcs(f"{latest_date}/{latest_filename}") if storage.config.use_cloud_storage else storage._load_from_local(f"{latest_date}/{latest_filename}")
+        # Issue #464: Local-only after Phase 1 declouding
+        content = storage._load_from_local(f"{latest_date}/{latest_filename}")
         if not content:
             return []
         
