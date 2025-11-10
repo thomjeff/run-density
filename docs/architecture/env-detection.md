@@ -1,565 +1,318 @@
 # Environment Detection Architecture
 
-**Issue:** #451 Task 2  
-**Date:** 2025-11-04  
-**Purpose:** Document environment detection logic across runtime and storage configurations
+**Updated:** 2025-11-10 (Issue #464 - Phase 1 Declouding)  
+**Previous Version:** Archived to `archive/declouding-2025/docs/architecture/env-detection.md`  
+**Purpose:** Document environment detection logic for local-only architecture
 
 ## Overview
 
-The Run Density application uses environment detection to automatically configure itself for different runtime environments and storage targets. This system was enhanced in Issue #447 to support E2E testing across local and staging environments.
+After Phase 1 declouding (Issue #464), the Run Density application operates exclusively in local-only mode. Environment detection has been dramatically simplified to support local Docker development without cloud dependencies.
 
-**Key Principle:** Detection is based on environment variables, not hardcoded configuration files, enabling seamless deployment across local, staging, and production environments without code changes.
+**Key Principle:** The application uses local filesystem storage only. All cloud detection logic has been removed.
 
 ## Environment Variables
 
-### Runtime Detection Variables
-
-| Variable | Set By | Purpose |
-|----------|--------|---------|
-| `K_SERVICE` | Cloud Run | Identifies Cloud Run runtime environment |
-| `GAE_SERVICE` | App Engine | Identifies App Engine runtime (legacy support) |
-| `GOOGLE_CLOUD_PROJECT` | Cloud Run / Manual | GCP project identifier |
-| `GCS_UPLOAD` | Manual / CI | **Explicit override** for storage target selection |
-
-### Storage Configuration Variables
+### Local Development Configuration
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `GCS_UPLOAD` | Enable/disable GCS storage | `false` |
-| `GOOGLE_CLOUD_PROJECT` | GCP project ID | `run-density` |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account key | `/tmp/keys/gcs-sa.json` |
-| `DATA_ROOT` | Local storage root (local mode) | Resolved from `artifacts/latest.json` or `./data` |
-| `GCS_BUCKET` | GCS bucket name (cloud mode) | `run-density-reports` |
-| `GCS_PREFIX` | GCS object prefix (cloud mode) | `artifacts` |
+| `PORT` | Application server port | `8080` |
+| `PYTHONPATH` | Python module path | `/app` |
+| `OUTPUT_DIR` | Output directory for reports | `reports` |
+| `ENABLE_BIN_DATASET` | Enable bin dataset generation | `true` |
+| `DATA_ROOT` | Local storage root | Resolved from `artifacts/latest.json` or `./data` |
+
+### Removed Variables (Phase 1 Declouding)
+
+The following variables were removed in Issue #464:
+- ~~`GCS_UPLOAD`~~ - GCS storage control (removed)
+- ~~`GOOGLE_CLOUD_PROJECT`~~ - GCP project ID (removed)
+- ~~`GOOGLE_APPLICATION_CREDENTIALS`~~ - Service account key (removed)
+- ~~`K_SERVICE`~~ - Cloud Run detection (removed)
+- ~~`GCS_BUCKET`~~ - GCS bucket name (removed)
+- ~~`GCS_PREFIX`~~ - GCS path prefix (removed)
 
 ## Detection Functions
 
-### Canonical Detection Functions (Issue #452)
+### Canonical Detection Functions (Simplified)
 **Location:** `app/utils/env.py`
 
-These are the **canonical** environment detection functions that should be used across the application. They follow the Issue #447 priority order and provide consistent behavior.
+These are the **canonical** environment detection functions used across the application. After Phase 1 declouding, they always return local-only values.
 
-#### `detect_runtime_environment()` - Canonical Runtime Detection
-**Returns:** `Literal["local_docker", "cloud_run"]`
+#### `detect_runtime_environment()` - Runtime Detection
+**Returns:** `Literal["local_docker"]`
 
 **Logic:**
 ```python
-def detect_runtime_environment() -> Literal["local_docker", "cloud_run"]:
-    # K_SERVICE is set automatically by Cloud Run
-    if os.getenv('K_SERVICE'):
-        return "cloud_run"
-    else:
-        return "local_docker"
+def detect_runtime_environment() -> Literal["local_docker"]:
+    """Always returns local_docker after Phase 1 declouding."""
+    return "local_docker"
 ```
 
 **Used By:**
 - `app/utils/metadata.py` - Run metadata generation
-- Future: Other modules can be refactored to use this
+- Any module needing runtime information
 
 ---
 
-#### `detect_storage_target()` - Canonical Storage Detection
-**Returns:** `Literal["filesystem", "gcs"]`
+#### `detect_storage_target()` - Storage Detection
+**Returns:** `Literal["filesystem"]`
 
-**Logic (Priority Order):**
-1. Check `GCS_UPLOAD=true` → Use GCS (explicit override for staging)
-2. Check `K_SERVICE` or `GOOGLE_CLOUD_PROJECT` → Use GCS (Cloud Run auto-detect)
-3. Default → Use filesystem (local development)
-
+**Logic:**
 ```python
-def detect_storage_target() -> Literal["filesystem", "gcs"]:
-    # Issue #447: Check GCS_UPLOAD flag first (staging mode)
-    if os.getenv('GCS_UPLOAD', '').lower() == 'true':
-        return "gcs"
-    # Check Cloud Run environment variables (automatic detection)
-    elif os.getenv('K_SERVICE') or os.getenv('GOOGLE_CLOUD_PROJECT'):
-        return "gcs"
-    else:
-        return "filesystem"
+def detect_storage_target() -> Literal["filesystem"]:
+    """Always returns filesystem after Phase 1 declouding."""
+    return "filesystem"
 ```
 
 **Used By:**
 - `app/utils/metadata.py` - Run metadata generation
-- Future: StorageService, Storage, api_e2e can be refactored to use this
-
-**Note:** These canonical functions were introduced in Issue #452 to ensure consistent environment detection across the application following Issue #447 standards.
+- Storage layer initialization
 
 ---
 
-### 1. `detect_environment()` - Runtime Detection (Informational)
-**Location:** `app/main.py:400`
+### Storage Classes (Simplified)
 
-**Purpose:** Identify the cloud platform runtime environment (informational, broader scope)
+#### `StorageService` - Reports Storage
+**Location:** `app/storage_service.py`
 
-**Logic:**
-```python
-def detect_environment() -> str:
-    if os.getenv("K_SERVICE"):
-        return "cloud-run"
-    elif os.getenv("GAE_SERVICE"):
-        return "app-engine"
-    elif os.getenv("VERCEL"):
-        return "vercel"
-    else:
-        return "local"
-```
-
-**Returns:** Platform identifier string (`cloud-run`, `app-engine`, `vercel`, `local`)
-
-**Used By:** General runtime detection (informational)
-
----
-
-### 2. `StorageService._detect_environment()` - Storage Target Detection
-**Location:** `app/storage_service.py:62`
-
-**Purpose:** Determine whether to use Cloud Storage or local filesystem for reports
-
-**Logic (Priority Order):**
-1. **Explicit GCS Flag (Highest Priority):**
-   - If `GCS_UPLOAD=true` → Use Cloud Storage
-   - Enables staging mode (local container, cloud storage)
-
-2. **Cloud Run Detection:**
-   - If `K_SERVICE` or `GOOGLE_CLOUD_PROJECT` set → Use Cloud Storage
-   - Automatic for production Cloud Run
-
-3. **Default:**
-   - Use local filesystem storage
+**Purpose:** File operations for reports and artifacts using local filesystem
 
 **Implementation:**
 ```python
-def _detect_environment(self):
-    # Issue #447: Check for explicit GCS upload flag first (staging mode)
-    if os.getenv('GCS_UPLOAD', '').lower() == 'true':
-        self.config.use_cloud_storage = True
-        self.config.project_id = os.getenv('GOOGLE_CLOUD_PROJECT', 'run-density')
-        logger.info("GCS uploads enabled via GCS_UPLOAD flag - using Cloud Storage")
-    # Check for Cloud Run environment variables
-    elif os.getenv('K_SERVICE') or os.getenv('GOOGLE_CLOUD_PROJECT'):
-        self.config.use_cloud_storage = True
-        self.config.project_id = os.getenv('GOOGLE_CLOUD_PROJECT')
-        logger.info("Detected Cloud Run environment - using Cloud Storage")
-    else:
-        self.config.use_cloud_storage = False
-        logger.info("Detected local environment - using file system storage")
+def __init__(self, config: Optional[StorageConfig] = None):
+    self.config = config or StorageConfig()
+    logger.info("Detected local environment - using file system storage")
 ```
 
-**Returns:** Configures `self.config.use_cloud_storage` boolean
-
-**Used By:** `StorageService` (reports storage)
+**Storage Location:**
+- Reports: `./reports/`
+- Artifacts: `./artifacts/{run_id}/ui/`
 
 ---
 
-### 3. `create_storage_from_env()` - Artifacts Storage Detection
-**Location:** `app/storage.py:295`
+#### `Storage` - Artifacts Storage
+**Location:** `app/storage.py`
 
-**Purpose:** Configure `Storage` instance for UI artifacts (heatmaps, metadata)
+**Purpose:** Unified interface for reading files from local filesystem
 
-**Logic (Same Priority as StorageService):**
-1. Check `GCS_UPLOAD=true` → Cloud mode
-2. Check `K_SERVICE` or `GOOGLE_CLOUD_PROJECT` → Cloud mode
-3. Default → Local mode
+**Implementation:**
+```python
+def __init__(self, root: Optional[str] = None):
+    self.mode = "local"
+    self.root = Path(root) if root else None
+```
+
+**Storage Location:**
+- UI Artifacts: `./artifacts/{run_id}/ui/`
+- Data Files: `./data/`
+- Config Files: `./config/`
+
+---
+
+### Helper Function: `create_storage_from_env()`
+**Location:** `app/storage.py`
+
+**Purpose:** Create Storage instance from environment variables
 
 **Implementation:**
 ```python
 def create_storage_from_env() -> Storage:
-    # Auto-detect Cloud Run environment (same as storage_service.py)
-    # Issue #447: Check GCS_UPLOAD flag first (staging mode)
-    if os.getenv('GCS_UPLOAD', '').lower() == 'true':
-        is_cloud = True
-    else:
-        is_cloud = bool(os.getenv('K_SERVICE') or os.getenv('GOOGLE_CLOUD_PROJECT'))
-    env = "cloud" if is_cloud else "local"
+    """Create Storage instance for local filesystem."""
+    root = os.getenv("DATA_ROOT")
     
-    if env == "local":
-        root = os.getenv("DATA_ROOT")
-        # Try to resolve from artifacts/latest.json pointer
-        if not root:
-            latest_pointer = Path("artifacts/latest.json")
-            if latest_pointer.exists():
-                pointer_data = json.loads(latest_pointer.read_text())
-                run_id = pointer_data.get("run_id")
-                if run_id:
-                    root = f"artifacts/{run_id}/ui"
-        # Fallback to "./data" if pointer not found
-        if not root:
-            root = "./data"
-        return Storage(mode="local", root=root)
-    else:
-        # Cloud Run mode - use GCS with defaults
-        bucket = os.getenv("GCS_BUCKET", "run-density-reports")
-        prefix = os.getenv("GCS_PREFIX", "artifacts")
-        return Storage(mode="gcs", bucket=bucket, prefix=prefix)
+    # Try to resolve from artifacts/latest.json pointer
+    if not root:
+        latest_pointer = Path("artifacts/latest.json")
+        if latest_pointer.exists():
+            pointer_data = json.loads(latest_pointer.read_text())
+            run_id = pointer_data.get("run_id")
+            if run_id:
+                root = f"artifacts/{run_id}/ui"
+    
+    # Fallback to "./data" if pointer not found
+    if not root:
+        root = "./data"
+    
+    return Storage(root=root)
 ```
-
-**Returns:** `Storage` instance configured for local or GCS mode
-
-**Used By:** Heatmap generation, UI artifacts storage
 
 ---
 
-### 4. `_detect_environment()` - E2E API Detection
-**Location:** `app/routes/api_e2e.py:34`
+### Helper Function: `create_runflow_storage()`
+**Location:** `app/storage.py`
 
-**Purpose:** Detect environment for E2E testing endpoints
+**Purpose:** Create Storage instance for runflow operations
 
-**Logic (Same Priority):**
+**Implementation:**
 ```python
-def _detect_environment() -> Tuple[bool, str]:
-    # Issue #447: Check GCS_UPLOAD flag first (staging mode)
-    if os.getenv('GCS_UPLOAD', '').lower() == 'true':
-        is_cloud = True
+def create_runflow_storage(run_id: str) -> Storage:
+    """Create Storage instance for runflow with local filesystem."""
+    from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER
+    
+    # Detect if we're in Docker container
+    if Path(RUNFLOW_ROOT_CONTAINER).exists():
+        root = RUNFLOW_ROOT_CONTAINER
     else:
-        is_cloud = bool(os.getenv('K_SERVICE') or os.getenv('GOOGLE_CLOUD_PROJECT'))
-    environment = "Cloud Run" if is_cloud else "Local"
-    return is_cloud, environment
+        root = RUNFLOW_ROOT_LOCAL
+    return Storage(root=f"{root}/{run_id}")
 ```
-
-**Returns:** Tuple of `(is_cloud: bool, environment_name: str)`
-
-**Used By:** E2E API endpoints (`/api/e2e/run`, `/api/e2e/upload`)
 
 ## Environment Configurations
 
-### Local Development (Default)
-**Runtime:** Local Python process or Docker container  
+### Local Development (Only Mode)
+**Runtime:** Local Docker container  
 **Storage:** Local filesystem
 
 **Environment:**
 ```bash
-# No special variables required
-# Or explicitly set:
-GCS_UPLOAD=false
+# Standard local development
+GCS_UPLOAD=false  # Default in dev.env
+PORT=8080
+ENABLE_BIN_DATASET=true
+OUTPUT_DIR=reports
 ```
 
-**Detection Result:**
-- Runtime: `local`
-- Storage: Local filesystem
+**Storage Locations:**
 - Reports: `./reports/`
 - Artifacts: `./artifacts/{run_id}/ui/`
+- Runflow: `./runflow/{run_id}/` or `/app/runflow/{run_id}/` (Docker)
+- Heatmaps: `./artifacts/{run_id}/ui/heatmaps/`
 
 **Use Cases:**
-- Standard local development
-- Testing without cloud dependencies
-- Offline development
+- All development work
+- All testing (E2E, smoke, unit)
+- All report generation
+- All API operations
 
 ---
 
-### Staging Mode (E2E Testing)
-**Runtime:** Local Docker container  
-**Storage:** Google Cloud Storage
+## Testing
 
-**Environment:**
-```bash
-GCS_UPLOAD=true
-GOOGLE_CLOUD_PROJECT=run-density
-GOOGLE_APPLICATION_CREDENTIALS=/tmp/keys/gcs-sa.json
-```
-
-**Detection Result:**
-- Runtime: `local` (container)
-- Storage: Cloud Storage (GCS)
-- Reports: `gs://run-density-reports/YYYY-MM-DD/`
-- Artifacts: `gs://run-density-reports/artifacts/{run_id}/ui/`
-
-**Use Cases:**
-- E2E testing against staging Cloud Run
-- Validating GCS integration locally
-- Pre-production testing
-
-**Makefile Target:**
-```bash
-make e2e-staging-docker
-```
-
----
-
-### Production Cloud Run
-**Runtime:** Google Cloud Run  
-**Storage:** Google Cloud Storage (automatic)
-
-**Environment:**
-```bash
-# Auto-detected by Cloud Run:
-K_SERVICE=run-density
-GOOGLE_CLOUD_PROJECT=run-density
-# Application Default Credentials (no key file)
-```
-
-**Detection Result:**
-- Runtime: `cloud-run`
-- Storage: Cloud Storage (GCS)
-- Reports: `gs://run-density-reports/YYYY-MM-DD/`
-- Artifacts: `gs://run-density-reports/artifacts/{run_id}/ui/`
-
-**Use Cases:**
-- Production workloads
-- Public API serving
-- Persistent storage requirements
-
----
-
-### Staging Cloud Run
-**Runtime:** Google Cloud Run (staging service)  
-**Storage:** Google Cloud Storage (automatic)
-
-**Environment:**
-```bash
-# Auto-detected by Cloud Run:
-K_SERVICE=run-density-staging
-GOOGLE_CLOUD_PROJECT=run-density
-# Application Default Credentials (no key file)
-```
-
-**Detection Result:**
-- Runtime: `cloud-run`
-- Storage: Cloud Storage (GCS)
-- Reports: `gs://run-density-reports/YYYY-MM-DD/`
-- Artifacts: `gs://run-density-reports/artifacts/{run_id}/ui/`
-
-**Use Cases:**
-- Pre-production validation
-- Integration testing
-- Staging deployments
-
-## E2E Testing Modes
-
-### E2E Local Mode
-**Command:** `python e2e.py --local` or `make e2e-local-docker`
+### E2E Local Mode (Only Mode)
+**Command:** `make e2e-local-docker`
 
 **Configuration:**
 - Target: `http://localhost:8080`
-- Container environment: Local filesystem storage
+- Storage: Local filesystem
 - Tests: All endpoints against local server
 
 **Environment Setup:**
 ```bash
-GCS_UPLOAD=false  # Explicitly disable GCS
+GCS_UPLOAD=false
 ```
 
 **Validation:**
 - ✅ Local storage write access
 - ✅ Report generation to `./reports/`
 - ✅ Artifacts saved to `./artifacts/`
+- ✅ All heatmaps generated locally
 
----
-
-### E2E Staging Mode
-**Command:** `make e2e-staging-docker`
-
-**Configuration:**
-- Target: `http://localhost:8080`
-- Container environment: GCS storage enabled
-- Tests: All endpoints with cloud storage
-
-**Environment Setup:**
-```bash
-GCS_UPLOAD=true
-GOOGLE_CLOUD_PROJECT=run-density
-GOOGLE_APPLICATION_CREDENTIALS=/tmp/keys/gcs-sa.json
+**Expected Output:**
 ```
-
-**Validation:**
-- ✅ GCS storage write access
-- ✅ Report generation to `gs://run-density-reports/`
-- ✅ Artifacts saved to GCS
-- ✅ Service account authentication
-
----
-
-### E2E Production Mode
-**Command:** `python e2e.py --cloud` or `make e2e-prod-gcp`
-
-**Configuration:**
-- Target: `https://run-density-{hash}.us-central1.run.app`
-- Container environment: Cloud Run production
-- Tests: All endpoints against production service
-
-**Environment:**
-- Auto-detected by Cloud Run runtime
-- No explicit configuration required
-
-**Validation:**
-- ✅ Production endpoint availability
-- ✅ Cloud Run authentication
-- ✅ GCS storage (automatic)
-
-## Detection Flow Diagram
-
-```
-┌─────────────────────────────────────┐
-│   Application Startup               │
-└──────────────┬──────────────────────┘
-               │
-               ▼
-┌─────────────────────────────────────┐
-│   Check Environment Variables       │
-└──────────────┬──────────────────────┘
-               │
-               ▼
-       ┌───────────────┐
-       │  GCS_UPLOAD?  │
-       └───┬───────┬───┘
-           │       │
-       Yes │       │ No
-           │       │
-           ▼       ▼
-    ┌──────────┐  ┌────────────────┐
-    │  Cloud   │  │  K_SERVICE or  │
-    │ Storage  │  │  GCP_PROJECT?  │
-    └──────────┘  └────┬───────┬───┘
-                       │       │
-                   Yes │       │ No
-                       │       │
-                       ▼       ▼
-                ┌──────────┐  ┌──────────┐
-                │  Cloud   │  │  Local   │
-                │ Storage  │  │ Storage  │
-                └──────────┘  └──────────┘
-```
-
-## Consistency Requirements
-
-### Issue #447 Alignment
-All detection functions must follow the same priority order:
-1. **Check `GCS_UPLOAD` flag first** (explicit override for staging)
-2. Check Cloud Run environment variables (`K_SERVICE`, `GOOGLE_CLOUD_PROJECT`)
-3. Default to local mode
-
-This ensures consistent behavior across:
-- `StorageService` (reports)
-- `Storage` (artifacts)
-- `api_e2e` router (E2E endpoints)
-- E2E test scripts
-
-### Code Consistency Check
-```bash
-# All these should use identical detection logic:
-grep -A 5 "_detect_environment" app/storage_service.py
-grep -A 5 "create_storage_from_env" app/storage.py
-grep -A 5 "_detect_environment" app/routes/api_e2e.py
-```
-
-## Troubleshooting
-
-### Issue: Wrong storage target selected
-**Symptoms:** Files saved to local when expecting GCS (or vice versa)
-
-**Diagnosis:**
-```python
-# Add debug logging to check detection:
-import os
-print(f"GCS_UPLOAD: {os.getenv('GCS_UPLOAD')}")
-print(f"K_SERVICE: {os.getenv('K_SERVICE')}")
-print(f"GOOGLE_CLOUD_PROJECT: {os.getenv('GOOGLE_CLOUD_PROJECT')}")
-```
-
-**Resolution:**
-1. Verify environment variables are set correctly
-2. Check docker-compose.yml doesn't override with empty values
-3. Restart container after env changes: `docker-compose restart`
-
----
-
-### Issue: Staging mode not working in local Docker
-**Symptoms:** `GCS_UPLOAD=true` but still using local storage
-
-**Common Causes:**
-1. Environment variable not passed to container
-2. docker-compose.yml has conflicting override
-3. Container not restarted after env change
-
-**Resolution:**
-```bash
-# Verify env inside container:
-docker-compose exec app env | grep GCS
-
-# Should show:
-# GCS_UPLOAD=true
-# GOOGLE_CLOUD_PROJECT=run-density
-# GOOGLE_APPLICATION_CREDENTIALS=/tmp/keys/gcs-sa.json
-
-# If not, check docker-compose.yml env_file configuration
+✅ Health: OK
+✅ Ready: OK
+✅ Density Report: OK
+✅ Map Manifest: OK
+✅ Temporal Flow Report: OK
+✅ UI Artifacts: 7 files exported
+✅ Heatmaps: 17 PNG files + 17 captions
 ```
 
 ---
 
-### Issue: Cloud Run not using GCS
-**Symptoms:** Cloud Run deployment using local storage
+## File Structure
 
-**Diagnosis:**
-- Cloud Run should automatically set `K_SERVICE`
-- Check Cloud Run service configuration
+### Local Filesystem Organization
 
-**Resolution:**
-1. Verify service account has Storage permissions
-2. Check Cloud Run environment variables in GCP Console
-3. Ensure `K_SERVICE` is present: `gcloud run services describe run-density`
-
-## Testing Validation
-
-### Validation Commands
-
-**Test Local Mode:**
-```bash
-make e2e-local-docker
-# Expected: Reports in ./reports/, artifacts in ./artifacts/
+```
+run-density/
+├── artifacts/
+│   ├── latest.json              # Pointer to latest run_id
+│   ├── index.json               # Run history
+│   └── {run_id}/
+│       └── ui/
+│           ├── meta.json
+│           ├── segment_metrics.json
+│           ├── flags.json
+│           ├── flow.json
+│           ├── segments.geojson
+│           ├── schema_density.json
+│           ├── health.json
+│           ├── captions.json
+│           └── heatmaps/
+│               └── *.png (17 files)
+├── reports/
+│   └── {date}/
+│       ├── Density.md
+│       ├── Flow.md
+│       └── Flow.csv
+└── runflow/
+    ├── latest.json
+    ├── index.json
+    └── {run_id}/
+        ├── metadata.json
+        ├── reports/
+        ├── bins/
+        ├── maps/
+        ├── heatmaps/
+        └── ui/
 ```
 
-**Test Staging Mode:**
-```bash
-make e2e-staging-docker
-# Expected: Reports in gs://run-density-reports/, GCS logs in container
-```
-
-**Test Production:**
-```bash
-make e2e-prod-gcp
-# Expected: Tests pass against Cloud Run URL
-```
-
-### Expected Behaviors
-
-| Mode | `GCS_UPLOAD` | `K_SERVICE` | Storage Target | Reports Location |
-|------|--------------|-------------|----------------|------------------|
-| Local Dev | `false` or unset | unset | Local | `./reports/` |
-| Staging (local+GCS) | `true` | unset | GCS | `gs://run-density-reports/` |
-| Cloud Run Staging | auto (ignored) | set | GCS | `gs://run-density-reports/` |
-| Cloud Run Prod | auto (ignored) | set | GCS | `gs://run-density-reports/` |
+---
 
 ## Implementation History
 
-- **Issue #447:** E2E Test Refactor
-  - Added `GCS_UPLOAD` flag for explicit storage control
-  - Unified detection logic across all modules
-  - Enabled staging mode (local runtime + cloud storage)
-  - Added `make e2e-staging-docker` target
+### Phase 1 Declouding (Issue #464) - 2025-11-10
+- ✅ Removed all GCS/Cloud Run detection logic
+- ✅ Simplified `detect_runtime_environment()` - always returns "local_docker"
+- ✅ Simplified `detect_storage_target()` - always returns "filesystem"
+- ✅ Removed GCS imports from storage modules
+- ✅ Archived `gcs_uploader.py`, cloud scripts, and GCS documentation
 
-- **Issue #451:** Infrastructure & Environment Readiness
-  - Documented detection flow
-  - Validated detection across all runtimes
-  - Created architecture documentation
+### Phase 0 (Issue #465) - 2025-11-10
+- ✅ Disabled Cloud CI/CD pipeline
+- ✅ Archived `ci-pipeline.yml`
+- ✅ Commented out cloud targets in Makefile
+- ✅ Removed Cloud Run references from README
 
-## Implementation History (Continued)
+### Previous Implementation (Archived)
+- **Issue #447:** E2E Test Refactor (GCS_UPLOAD flag, staging mode)
+- **Issue #451:** Infrastructure & Environment Readiness (multi-environment support)
+- **Issue #452:** Phase 2 - Short UUID for Run ID (canonical detection functions)
 
-- **Issue #452:** Phase 2 - Short UUID for Run ID
-  - Created canonical detection functions in `app/utils/env.py`
-  - Refactored `app/utils/metadata.py` to delegate to canonical functions
-  - Established pattern for future module consolidation
+**Note:** Previous multi-environment architecture is fully documented in archived version at `archive/declouding-2025/docs/architecture/env-detection.md`.
+
+---
 
 ## References
 
-- Issue #447: E2E Test Refactor
-- Issue #451: Run ID Phase 1 - Infrastructure & Environment Readiness
-- Issue #452: Run ID Phase 2 - Short UUID for Run ID
-- **Canonical Functions:** `app/utils/env.py` - detect_runtime_environment(), detect_storage_target()
-- `app/utils/metadata.py` - Uses canonical functions (Issue #452)
-- `app/storage_service.py` - Reports storage detection (can be refactored)
-- `app/storage.py` - Artifacts storage detection (can be refactored)
-- `app/routes/api_e2e.py` - E2E endpoint detection (can be refactored)
-- `Makefile` - E2E testing targets
-- `e2e.py` - E2E test script
+### Active Files
+- `app/utils/env.py` - Canonical detection functions (simplified)
+- `app/storage_service.py` - Reports storage (local-only)
+- `app/storage.py` - Artifacts storage (local-only)
+- `app/utils/metadata.py` - Run metadata generation
+- `Makefile` - E2E testing targets (local-only)
+- `e2e.py` - E2E test script (local mode)
 - `docker-compose.yml` - Local development configuration
 - `dev.env` - Development environment variables
 
+### Archived Files (Phase 1 Declouding)
+- `archive/declouding-2025/app/gcs_uploader.py` - GCS upload utilities
+- `archive/declouding-2025/scripts/test_storage_access.py` - GCS access testing
+- `archive/declouding-2025/scripts/cleanup_cloud_run_revisions.sh` - Cloud Run operations
+- `archive/declouding-2025/docs/infrastructure/storage-access.md` - GCS access patterns
+- `archive/declouding-2025/docs/architecture/env-detection.md` (previous version) - Multi-environment detection
+
+---
+
+## Summary
+
+After Phase 1 declouding:
+- **Single Environment:** Local Docker only
+- **Single Storage:** Filesystem only
+- **Simplified Detection:** Always returns local values
+- **No Cloud Dependencies:** All GCP logic removed
+- **Clean Architecture:** Reduced complexity, easier maintenance
+
+For historical multi-environment architecture, see archived version at `archive/declouding-2025/docs/architecture/env-detection.md`.
