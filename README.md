@@ -1,18 +1,17 @@
 # Run Density
 
-[![Deploy and Test](https://github.com/thomjeff/run-density/actions/workflows/deploy-and-test.yml/badge.svg)](https://github.com/thomjeff/run-density/actions/workflows/deploy-and-test.yml)
-[![Deploy](https://github.com/thomjeff/run-density/actions/workflows/deploy-and-test.yml/badge.svg)](https://github.com/thomjeff/run-density/actions/workflows/deploy-and-test.yml)
+[![Code Quality](https://github.com/thomjeff/run-density/actions/workflows/code-quality.yaml/badge.svg)](https://github.com/thomjeff/run-density/actions/workflows/code-quality.yaml)
 
 ## Overview
 This service models runner density on shared course segments using a density engine and temporal flow analysis.  
-It provides comprehensive reporting capabilities with both Markdown and CSV outputs, and is containerized and deployed to Google Cloud Run.
+It provides comprehensive reporting capabilities with both Markdown and CSV outputs, and is containerized for local development.
 
 **Current Version: v1.8.0** - Epic #444: UUID-Based Run ID System - Complete implementation with 5 phases, replacing date-based folders with UUID-based runflow structure
 
 ## Key Features
 - **Density Analysis**: Spatial concentration analysis with areal and crowd density calculations
 - **Temporal Flow Analysis**: Convergence and overtaking analysis between different race events
-- **Heatmap Visualizations**: Interactive PNG heatmaps for race segments with GCS integration
+- **Heatmap Visualizations**: Interactive PNG heatmaps for race segments
 - **Comprehensive Reporting**: Auto-generated Markdown and CSV reports with detailed analytics
 - **RESTful API**: Full FastAPI integration with configurable parameters
 - **CLI Tools**: Command-line scripts for report generation and analysis
@@ -22,7 +21,7 @@ It provides comprehensive reporting capabilities with both Markdown and CSV outp
 
 ### Docker Development (Recommended)
 
-**New in v1.6.50:** Docker-first development workflow provides environment parity with Cloud Run.
+**New in v1.6.50:** Docker-first development workflow.
 
 Start the development container:
 ```bash
@@ -90,15 +89,13 @@ make smoke-local
 - **Real-time Monitoring**: Health checks and API status monitoring
 
 ### Heatmap Display
-- **GCS Integration**: Secure signed URLs for private bucket access
-- **Environment-Aware**: Works in both local development and Cloud Run production
+- **Local Storage**: Heatmaps stored in local filesystem
 - **Interactive Segments**: Click on segments to view detailed heatmap visualizations
 - **Auto-Captions**: Text summaries for each heatmap generated automatically
 
 ### Access the Web UI
 - **Local (Docker)**: http://localhost:8080/dashboard
 - **Local (Legacy)**: http://localhost:8081/frontend/
-- **Production**: https://run-density-ln4r3sfkha-uc.a.run.app/dashboard
 
 ## Report Generation
 
@@ -166,59 +163,53 @@ curl -X POST "http://localhost:8080/api/density-report" \
 ### Legacy Commands (Deprecated)
 - `make bootstrap` – install runtime dependencies  
 - `make run-local` – start service via venv on `http://localhost:8081`
-- `make smoke-local` – hit `/health`, `/ready`, and test endpoints
-- `make smoke-prod` – run tests against deployed Cloud Run service  
+- `make smoke-local` – hit `/health`, `/ready`, and test endpoints  
 
 ---
 
-## Deployment (CI/CD)
+## Code Quality
 
-Deployment is automated with **GitHub Actions** (`.github/workflows/deploy-and-test.yml`).
+Code quality is enforced with **GitHub Actions** (`.github/workflows/code-quality.yaml`).
 
-### Deployment Flow
-1. Build Docker image locally inside GitHub Actions runner  
-2. Push to **Artifact Registry**  
-3. Deploy to **Cloud Run**  
+### Quality Checks (On Pull Requests)
+The CI pipeline runs automated checks on all Python code changes:
 
-⚠️ **Important**:  
-- **Do NOT use Google Cloud Build** for this project.  
-  - Past attempts caused IAM/permissions errors.  
-  - Always use **Docker → Artifact Registry → Cloud Run**.  
+1. **flake8** - Complexity and lint checks
+   - Max complexity: 15
+   - Checks: B001 (bare exceptions), C901 (complexity), E/F/W (style)
 
-### CI/CD Notes
+2. **black** - Code formatting
+   - Ensures consistent code style
 
-**1. Smoke Tests**
-- After deployment, the smoke test job dynamically fetches the Cloud Run service URL:
-  ```bash
-  gcloud run services describe $SERVICE     --project $PROJECT_ID --region $REGION     --format='value(status.url)'
-  ```
-- Do **not** attempt to pass `BASE_URL` between jobs.  
-- If you see `ERROR: BASE_URL is empty`, the fix is already included (the smoke step re-fetches the URL).
+3. **isort** - Import sorting
+   - Maintains organized imports with black profile
 
-**2. Artifact Registry Repo**
-- If `GCP_AR_REPO` is not set in repo secrets, the workflow defaults to `run`.
-
-**3. Cloud Run Config**
-- Memory: `1Gi`  
-- CPU: `1`  
-- Min instances: `0`  
-- Max instances: `3`
+All checks must pass before code can be merged to main.
 
 ---
 
-## ChatGPT Reminder Prompt
+## Testing
 
-When opening new chats with ChatGPT for this repo, paste the following at the top:
+### Local Testing
+Run end-to-end tests locally using Docker:
 
+```bash
+# Start container
+make dev-docker
+
+# Run E2E tests
+make e2e-local-docker
+
+# Run smoke tests
+make smoke-docker
 ```
-Reminder:
-- Never suggest using Google Cloud Build for this repo. Always use Docker → Artifact Registry → Cloud Run.
-- Smoke tests must resolve the Cloud Run URL dynamically (never pass BASE_URL between jobs).
-- Keep Makefile targets venv-aware to avoid pip/uvicorn “command not found” issues.
-```
+
+### Test Coverage
+- **E2E Tests**: Full workflow validation with `e2e.py`
+- **Smoke Tests**: Health checks and API endpoint validation
+- **Code Quality**: Automated linting and formatting checks
 
 ---
 
 ## License
 MIT
-# Retry CI pipeline after authentication timeout

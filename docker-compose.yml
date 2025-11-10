@@ -19,9 +19,8 @@ services:
       - ./reports:/app/reports
       # Bind mount artifacts directory (required for UI artifacts: meta.json, segment_metrics.json, flags.json)
       - ./artifacts:/app/artifacts
-      # Phase 3: Mount service account keys directory for GCS authentication
-      # Mount keys/ to /tmp/keys in container (keys/ may be empty if not using GCS)
-      - ./keys:/tmp/keys:ro
+      # Issue #465: GCS keys mount disabled during Phase 0 (local-only mode)
+      # - ./keys:/tmp/keys:ro
       # Issue #455: Mount local runflow directory for Run ID storage
       - /Users/jthompson/Documents/runflow:/app/runflow
     # Phase 2: Use env_file instead of mounting .env
@@ -33,10 +32,10 @@ services:
       - PORT=8080
       - PYTHONPATH=/app
       - MPLBACKEND=Agg
-      # Issue #447: Allow shell overrides for e2e-staging-docker (shell takes precedence over dev.env)
-      - GCS_UPLOAD=${GCS_UPLOAD}
-      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
-      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
+      # Issue #465: GCS environment overrides disabled during Phase 0 (local-only mode)
+      # - GCS_UPLOAD=${GCS_UPLOAD}
+      # - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
+      # - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
     # Override CMD for development mode with hot reload
     # Production Dockerfile uses gunicorn; dev mode uses uvicorn --reload
     command: uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
