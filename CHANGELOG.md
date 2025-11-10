@@ -1,5 +1,61 @@
 # Changelog
 
+## [v1.8.1] - 2025-11-10
+
+### Issue #465: Phase 0 — Disable Cloud CI
+
+**Infrastructure change to freeze cloud deployment during upcoming declouding refactor.**
+
+#### Overview
+Completed Phase 0 safeguards to prevent automated cloud deployments while transitioning to local-only architecture. All cloud CI/CD infrastructure disabled while preserving fully functional local development workflow.
+
+#### Changes Made
+
+**CI/CD Infrastructure**
+- ✅ Archived `.github/workflows/ci-pipeline.yml` to `archive/workflows/`
+- ✅ Retained `code-quality.yaml` for PR linting only (flake8, black, isort)
+- ✅ Optimized `code-quality.yaml` with path filters (Python files only, ignore archive)
+
+**Local Development Tools**
+- ✅ Disabled cloud targets in Makefile: `e2e-staging-docker`, `e2e-prod-gcp`
+- ✅ Updated Makefile help text to reflect local-only workflow
+- ✅ Preserved local targets: `dev-docker`, `e2e-local-docker`, `smoke-docker`
+
+**Documentation**
+- ✅ Removed Cloud Run deployment sections from README.md
+- ✅ Updated badges (code-quality only)
+- ✅ Removed production URLs and cloud references
+- ✅ Added Code Quality and Testing sections for local workflow
+
+**Configuration**
+- ✅ Simplified `dev.env` (removed GCS service account references)
+- ✅ Commented out GCS keys mount in `docker-compose.yml`
+- ✅ Commented out GCS environment variables
+- ✅ Set `GCS_UPLOAD=false` for local-only mode
+
+#### Verification
+- ✅ All E2E tests passed (`make e2e-local-docker`)
+- ✅ Local development workflow fully functional
+- ✅ No cloud deployments triggered from pushes/merges
+
+#### Impact
+- **Before:** Pushes to main triggered automatic Cloud Run deployments
+- **After:** No cloud deployments; local development only
+- **Next:** Phase 1 can safely proceed with declouding architectural changes
+
+#### Files Changed
+- `.github/workflows/ci-pipeline.yml` → `archive/workflows/ci-pipeline.yml` (moved)
+- `.github/workflows/code-quality.yaml` (optimized)
+- `Makefile` (cloud targets commented out)
+- `README.md` (cloud references removed)
+- `dev.env` (simplified)
+- `docker-compose.yml` (GCS mounts/vars commented out)
+
+**Total Commits:** 5  
+**Lines Changed:** +87, -131
+
+---
+
 ## [v1.8.0] - 2025-11-05
 
 ### Epic #444: UUID-Based Run ID System - Complete Implementation (5 Phases)
