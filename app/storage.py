@@ -1,25 +1,18 @@
 """
-Environment-Aware Storage Adapter for Run-Density (RF-FE-002)
+Local Filesystem Storage Adapter for Run-Density
 
-Provides unified interface for reading files from local filesystem or GCS.
-Ensures identical behavior across Local and Cloud Run environments.
+Provides unified interface for reading files from local filesystem.
+Ensures consistent behavior across all environments.
 
 Author: Cursor AI Assistant (per ChatGPT specification)
-Epic: RF-FE-002 | Issue: #279 | Step: 3
-Architecture: Option 3 - Hybrid Approach
+Architecture: Local-only filesystem approach
 """
 
-from typing import Literal, List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any
 from pathlib import Path
 import json
 import os
-import time
-from datetime import timedelta
-import datetime
 import logging
-from google.cloud import storage
-import google.auth
-from google.auth import impersonated_credentials
 
 # Single source of truth for dataset paths
 # These paths are relative to the ARTIFACTS_ROOT resolved from latest.json
@@ -35,51 +28,25 @@ DATASET = {
 
 class Storage:
     """
-    Unified storage interface supporting local filesystem and Google Cloud Storage.
+    Unified storage interface for local filesystem operations.
     
     Environment Variables:
-        RUNFLOW_ENV: "local" or "cloud" (determines mode)
         DATA_ROOT: Root directory for local mode (e.g., "./data")
-        GCS_BUCKET: Bucket name for cloud mode
-        GCS_PREFIX: Optional prefix for GCS paths
     
     Example:
-        # Local mode
-        storage = Storage(mode="local", root="./data")
-        meta = storage.read_json("meta.json")
-        
-        # Cloud mode
-        storage = Storage(mode="gcs", bucket="run-density-data", prefix="current")
+        storage = Storage(root="./data")
         meta = storage.read_json("meta.json")
     """
     
-    def __init__(
-        self,
-        mode: Literal["local", "gcs"],
-        root: Optional[str] = None,
-        bucket: Optional[str] = None,
-        prefix: Optional[str] = None
-    ):
+    def __init__(self, root: Optional[str] = None):
         """
         Initialize storage adapter.
         
         Args:
-            mode: "local" for filesystem, "gcs" for Google Cloud Storage
             root: Root directory for local mode
-            bucket: GCS bucket name for cloud mode
-            prefix: Optional GCS path prefix
         """
-        self.mode = mode
+        self.mode = "local"
         self.root = Path(root) if root else None
-        self.bucket = bucket
-        self.prefix = prefix
-        
-        # Lazy import GCS client (only for cloud mode)
-        if self.mode == "gcs":
-            from google.cloud import storage as gcs
-            self._gcs = gcs.Client()
-            self._bkt = self._gcs.bucket(self.bucket)
-            self.client = self._gcs  # For heatmap URL generation
     
     def _full_local(self, path: str) -> Path:
         """Get full local path from relative path."""
@@ -102,10 +69,7 @@ class Storage:
         Returns:
             dict: Parsed JSON content
         """
-        if self.mode == "local":
-            return json.loads(self.read_text(path))
-        blob = self._bkt.blob(f"{self.prefix}/{path}" if self.prefix else path)
-        return json.loads(blob.download_as_text())
+        return json.loads(self.read_text(path))
     
     def read_text(self, path: str) -> str:
         """
@@ -117,10 +81,7 @@ class Storage:
         Returns:
             str: File contents as UTF-8 text
         """
-        if self.mode == "local":
-            return self._full_local(path).read_text(encoding="utf-8")
-        blob = self._bkt.blob(f"{self.prefix}/{path}" if self.prefix else path)
-        return blob.download_as_text()
+        return self._full_local(path).read_text(encoding="utf-8")
     
     def read_bytes(self, path: str) -> bytes:
         """
@@ -132,10 +93,7 @@ class Storage:
         Returns:
             bytes: File contents as raw bytes
         """
-        if self.mode == "local":
-            return self._full_local(path).read_bytes()
-        blob = self._bkt.blob(f"{self.prefix}/{path}" if self.prefix else path)
-        return blob.download_as_bytes()  # noqa
+        return self._full_local(path).read_bytes()
     
     def exists(self, path: str) -> bool:
         """
@@ -147,10 +105,7 @@ class Storage:
         Returns:
             bool: True if file exists
         """
-        if self.mode == "local":
-            return self._full_local(path).exists()
-        blob = self._bkt.blob(f"{self.prefix}/{path}" if self.prefix else path)
-        return blob.exists()
+        return self._full_local(path).exists()
     
     def mtime(self, path: str) -> float:
         """
@@ -162,15 +117,8 @@ class Storage:
         Returns:
             float: Modification time as epoch seconds (0.0 if not exists)
         """
-        if self.mode == "local":
-            p = self._full_local(path)
-            return p.stat().st_mtime if p.exists() else 0.0
-        blob = self._bkt.blob(f"{self.prefix}/{path}" if self.prefix else path)
-        if not blob.exists():
-            return 0.0
-        # GCS updated time → epoch seconds
-        updated = blob.reload() or blob.updated  # ensure metadata
-        return blob.updated.timestamp() if blob.updated else 0.0
+        p = self._full_local(path)
+        return p.stat().st_mtime if p.exists() else 0.0
     
     def size(self, path: str) -> int:
         """
@@ -182,15 +130,8 @@ class Storage:
         Returns:
             int: File size in bytes (0 if not exists)
         """
-        if self.mode == "local":
-            p = self._full_local(path)
-            return p.stat().st_size if p.exists() else 0
-        blob = self._bkt.blob(f"{self.prefix}/{path}" if self.prefix else path)
-        if not blob.exists():
-            return 0
-        # GCS size
-        blob.reload()  # ensure metadata
-        return blob.size or 0
+        p = self._full_local(path)
+        return p.stat().st_size if p.exists() else 0
     
     def list_paths(self, prefix: str) -> List[str]:
         """
@@ -202,100 +143,44 @@ class Storage:
         Returns:
             list: Relative paths of all files found
         """
-        if self.mode == "local":
-            base = self._full_local(prefix)
-            if not base.exists():
-                return []
-            out = []
-            for root, _, files in os.walk(base):
-                for f in files:
-                    rel = Path(root, f).relative_to(self.root)
-                    out.append(str(rel).replace("\\", "/"))
-            return out
-        # GCS
-        base = f"{self.prefix}/{prefix}" if self.prefix else prefix
-        return [b.name for b in self._gcs.list_blobs(self.bucket, prefix=base)]
+        base = self._full_local(prefix)
+        if not base.exists():
+            return []
+        out = []
+        for root, _, files in os.walk(base):
+            for f in files:
+                rel = Path(root, f).relative_to(self.root)
+                out.append(str(rel).replace("\\", "/"))
+        return out
 
     def get_heatmap_signed_url(self, segment_id: str, expiry_seconds=3600):
-        """Generate signed URL for heatmap using service account key."""
-        if self.mode == "local":
-            # For local mode, return the local path
-            run_id = os.getenv("RUN_ID")
-            if not run_id:
-                try:
-                    # Read latest.json from project root, not from storage root
-                    latest_path = Path("artifacts/latest.json")
-                    if latest_path.exists():
-                        latest_data = json.loads(latest_path.read_text())
-                        run_id = latest_data.get("run_id")
-                    else:
-                        logging.warning("artifacts/latest.json not found for run_id")
-                        run_id = None
-                except Exception as e:
-                        logging.warning(f"Could not load latest.json for run_id: {e}")
-                        run_id = None
-            
-            # Issue #361: Do not fall back to hardcoded date - return None if run_id unavailable
-            if not run_id:
-                logging.warning("No run_id available - cannot generate heatmap URL. Artifacts missing for current run.")
-                return None
-            return f"/artifacts/{run_id}/ui/heatmaps/{segment_id}.png"
-        
-        # For GCS mode, use service account key for signing
-        try:
-            # Try to use the base64 encoded service account key from environment
-            import base64
-            from google.oauth2 import service_account
-            
-            sa_key_b64 = os.getenv("SERVICE_ACCOUNT_KEY_B64")
-            logging.info(f"SERVICE_ACCOUNT_KEY_B64 environment variable exists: {bool(sa_key_b64)}")
-            if sa_key_b64:
-                sa_key_json = base64.b64decode(sa_key_b64).decode('utf-8')
-                sa_key_dict = json.loads(sa_key_json)
-                creds = service_account.Credentials.from_service_account_info(sa_key_dict)
-                # Get project from the service account key
-                project = sa_key_dict.get('project_id', 'run-density')
-                logging.info("Using base64 encoded service account key for signed URL generation")
-            else:
-                # Fallback to default credentials
-                creds, project = google.auth.default()
-                logging.info("Using default credentials for signed URL generation")
-        except Exception as e:
-            logging.warning(f"Could not load service account key: {e}")
-            creds, project = google.auth.default()
-        
-        client = storage.Client(credentials=creds, project=project)
-        bucket = client.bucket(self.bucket)
-        
-        # Get run_id for blob path
+        """Generate local URL for heatmap."""
         run_id = os.getenv("RUN_ID")
         if not run_id:
             try:
-                latest_data = self.read_json("latest.json")
-                run_id = latest_data.get("run_id")
+                # Read latest.json from project root, not from storage root
+                latest_path = Path("artifacts/latest.json")
+                if latest_path.exists():
+                    latest_data = json.loads(latest_path.read_text())
+                    run_id = latest_data.get("run_id")
+                else:
+                    logging.warning("artifacts/latest.json not found for run_id")
+                    run_id = None
             except Exception as e:
-                logging.warning(f"Could not load latest.json for run_id: {e}")
-                run_id = None
+                    logging.warning(f"Could not load latest.json for run_id: {e}")
+                    run_id = None
         
         # Issue #361: Do not fall back to hardcoded date - return None if run_id unavailable
         if not run_id:
             logging.warning("No run_id available - cannot generate heatmap URL. Artifacts missing for current run.")
             return None
-        
-        blob_path = f"artifacts/{run_id}/ui/heatmaps/{segment_id}.png"
-        blob = bucket.blob(blob_path)
-        
-        return blob.generate_signed_url(
-            version="v4",
-            expiration=datetime.timedelta(seconds=expiry_seconds),
-            method="GET",
-        )
+        return f"/artifacts/{run_id}/ui/heatmaps/{segment_id}.png"
     
     # ===== Write Methods (Issue #455 - Phase 3) =====
     
     def write_file(self, path: str, content: str) -> str:
         """
-        Write text content to storage (filesystem or GCS).
+        Write text content to local filesystem.
         
         Args:
             path: Relative path for the file
@@ -304,21 +189,14 @@ class Storage:
         Returns:
             Full path where file was written
         """
-        if self.mode == "local":
-            full_path = self._full_local(path)
-            full_path.parent.mkdir(parents=True, exist_ok=True)
-            full_path.write_text(content, encoding='utf-8')
-            return str(full_path)
-        else:
-            # GCS mode
-            gcs_path = f"{self.prefix}/{path}" if self.prefix else path
-            blob = self._bkt.blob(gcs_path)
-            blob.upload_from_string(content, content_type='text/plain')
-            return f"gs://{self.bucket}/{gcs_path}"
+        full_path = self._full_local(path)
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        full_path.write_text(content, encoding='utf-8')
+        return str(full_path)
     
     def write_json(self, path: str, data: Dict[str, Any]) -> str:
         """
-        Write JSON data to storage.
+        Write JSON data to local filesystem.
         
         Args:
             path: Relative path for the JSON file
@@ -328,22 +206,14 @@ class Storage:
             Full path where file was written
         """
         json_content = json.dumps(data, indent=2)
-        
-        if self.mode == "local":
-            full_path = self._full_local(path)
-            full_path.parent.mkdir(parents=True, exist_ok=True)
-            full_path.write_text(json_content, encoding='utf-8')
-            return str(full_path)
-        else:
-            # GCS mode
-            gcs_path = f"{self.prefix}/{path}" if self.prefix else path
-            blob = self._bkt.blob(gcs_path)
-            blob.upload_from_string(json_content, content_type='application/json')
-            return f"gs://{self.bucket}/{gcs_path}"
+        full_path = self._full_local(path)
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        full_path.write_text(json_content, encoding='utf-8')
+        return str(full_path)
     
     def write_bytes(self, path: str, content: bytes) -> str:
         """
-        Write binary content to storage.
+        Write binary content to local filesystem.
         
         Args:
             path: Relative path for the file
@@ -352,21 +222,14 @@ class Storage:
         Returns:
             Full path where file was written
         """
-        if self.mode == "local":
-            full_path = self._full_local(path)
-            full_path.parent.mkdir(parents=True, exist_ok=True)
-            full_path.write_bytes(content)
-            return str(full_path)
-        else:
-            # GCS mode
-            gcs_path = f"{self.prefix}/{path}" if self.prefix else path
-            blob = self._bkt.blob(gcs_path)
-            blob.upload_from_string(content, content_type='application/octet-stream')
-            return f"gs://{self.bucket}/{gcs_path}"
+        full_path = self._full_local(path)
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        full_path.write_bytes(content)
+        return str(full_path)
     
     def copy_file(self, source_path: Path, dest_path: str) -> str:
         """
-        Copy a local file to storage (filesystem or GCS).
+        Copy a local file to local filesystem storage.
         
         Args:
             source_path: Path to source file (local filesystem)
@@ -375,18 +238,11 @@ class Storage:
         Returns:
             Full path where file was written
         """
-        if self.mode == "local":
-            full_dest = self._full_local(dest_path)
-            full_dest.parent.mkdir(parents=True, exist_ok=True)
-            import shutil
-            shutil.copy2(source_path, full_dest)
-            return str(full_dest)
-        else:
-            # GCS mode
-            gcs_path = f"{self.prefix}/{dest_path}" if self.prefix else dest_path
-            blob = self._bkt.blob(gcs_path)
-            blob.upload_from_filename(str(source_path))
-            return f"gs://{self.bucket}/{gcs_path}"
+        full_dest = self._full_local(dest_path)
+        full_dest.parent.mkdir(parents=True, exist_ok=True)
+        import shutil
+        shutil.copy2(source_path, full_dest)
+        return str(full_dest)
 
 
 # ===== Helper Functions =====
@@ -395,8 +251,7 @@ def create_runflow_storage(run_id: str) -> Storage:
     """
     Create Storage instance for runflow operations (Issue #455).
     
-    Uses canonical detect_storage_target() from app.utils.env to determine
-    whether to use filesystem or GCS storage.
+    Uses local filesystem storage only.
     
     Args:
         run_id: UUID for the run
@@ -407,26 +262,17 @@ def create_runflow_storage(run_id: str) -> Storage:
     Example:
         storage = create_runflow_storage("abc123xyz")
         storage.write_json("reports/Density.md", content)
-        # Writes to: /users/.../runflow/abc123xyz/reports/Density.md (local)
-        #        or: gs://runflow/abc123xyz/reports/Density.md (GCS)
+        # Writes to: /users/.../runflow/abc123xyz/reports/Density.md
     """
-    from app.utils.env import detect_storage_target
-    from app.utils.constants import GCS_BUCKET_RUNFLOW, RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER
+    from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER
     
-    storage_target = detect_storage_target()
-    
-    if storage_target == "filesystem":
-        # Local mode: Detect if we're in Docker container
-        # Use container root if in Docker, otherwise use local root
-        if Path(RUNFLOW_ROOT_CONTAINER).exists():
-            root = RUNFLOW_ROOT_CONTAINER
-        else:
-            root = RUNFLOW_ROOT_LOCAL
-        return Storage(mode="local", root=f"{root}/{run_id}")
+    # Local mode: Detect if we're in Docker container
+    # Use container root if in Docker, otherwise use local root
+    if Path(RUNFLOW_ROOT_CONTAINER).exists():
+        root = RUNFLOW_ROOT_CONTAINER
     else:
-        # GCS mode: Use runflow bucket with run_id as prefix
-        bucket = os.getenv("GCS_BUCKET_RUNFLOW", GCS_BUCKET_RUNFLOW)
-        return Storage(mode="gcs", bucket=bucket, prefix=run_id)
+        root = RUNFLOW_ROOT_LOCAL
+    return Storage(root=f"{root}/{run_id}")
 
 
 def create_storage_from_env() -> Storage:
@@ -436,48 +282,31 @@ def create_storage_from_env() -> Storage:
     Resolves artifacts/<run_id>/ui/ from artifacts/latest.json pointer.
     
     Environment Variables:
-        K_SERVICE or GOOGLE_CLOUD_PROJECT: Auto-detected for Cloud Run
         DATA_ROOT: Root directory for local mode (default: resolved from artifacts/latest.json)
-        GCS_BUCKET: Bucket name for cloud mode (default: run-density-reports)
-        GCS_PREFIX: Optional prefix for GCS paths (default: artifacts)
     
     Returns:
         Storage: Configured storage instance
     """
-    # Auto-detect Cloud Run environment (same as storage_service.py)
-    # Issue #447: Check GCS_UPLOAD flag first (staging mode)
-    if os.getenv('GCS_UPLOAD', '').lower() == 'true':
-        is_cloud = True
-    else:
-        is_cloud = bool(os.getenv('K_SERVICE') or os.getenv('GOOGLE_CLOUD_PROJECT'))
-    env = "cloud" if is_cloud else "local"
+    root = os.getenv("DATA_ROOT")
     
-    if env == "local":
-        root = os.getenv("DATA_ROOT")
-        
-        # Try to resolve from artifacts/latest.json pointer
-        if not root:
-            latest_pointer = Path("artifacts/latest.json")
-            if latest_pointer.exists():
-                try:
-                    pointer_data = json.loads(latest_pointer.read_text())
-                    run_id = pointer_data.get("run_id")
-                    if run_id:
-                        root = f"artifacts/{run_id}/ui"
-                except Exception as e:
-                    import logging
-                    logging.warning(f"Could not read artifacts/latest.json: {e}")
-        
-        # Fallback to "./data" if pointer not found
-        if not root:
-            root = "./data"
-        
-        return Storage(mode="local", root=root)
-    else:
-        # Cloud Run mode - use GCS with defaults
-        bucket = os.getenv("GCS_BUCKET", "run-density-reports")
-        prefix = os.getenv("GCS_PREFIX", "artifacts")
-        return Storage(mode="gcs", bucket=bucket, prefix=prefix)
+    # Try to resolve from artifacts/latest.json pointer
+    if not root:
+        latest_pointer = Path("artifacts/latest.json")
+        if latest_pointer.exists():
+            try:
+                pointer_data = json.loads(latest_pointer.read_text())
+                run_id = pointer_data.get("run_id")
+                if run_id:
+                    root = f"artifacts/{run_id}/ui"
+            except Exception as e:
+                import logging
+                logging.warning(f"Could not read artifacts/latest.json: {e}")
+    
+    # Fallback to "./data" if pointer not found
+    if not root:
+        root = "./data"
+    
+    return Storage(root=root)
 
 
 # ===== UI Artifact Helpers (Step 8) =====
@@ -490,19 +319,12 @@ def load_latest_run_id(storage: Storage) -> Optional[str]:
         Run ID string (e.g., "2025-10-19") or None if not found
     """
     try:
-        pointer = storage.read_json("artifacts/latest.json")
-        return pointer.get("run_id")
+        latest_path = Path("artifacts/latest.json")
+        if latest_path.exists():
+            return json.loads(latest_path.read_text()).get("run_id")
     except Exception:
-        # Fallback: try direct read for local mode
-        if storage.mode == "local":
-            try:
-                latest_path = Path("artifacts/latest.json")
-                if latest_path.exists():
-                    import json
-                    return json.loads(latest_path.read_text()).get("run_id")
-            except Exception:
-                pass
-        return None
+        pass
+    return None
 
 
 def list_reports(storage: Storage, run_id: str) -> List[Dict[str, Any]]:
@@ -516,38 +338,23 @@ def list_reports(storage: Storage, run_id: str) -> List[Dict[str, Any]]:
     Returns:
         List of dicts with name, path, mtime, size
     """
-    reports_prefix = f"../reports/{run_id}"
-    
     try:
-        if storage.mode == "local":
-            # Read from local reports directory
-            reports_dir = Path("reports") / run_id
-            if not reports_dir.exists():
-                return []
-            
-            files = []
-            for file_path in reports_dir.iterdir():
-                if file_path.is_file():
-                    files.append({
-                        "name": file_path.name,
-                        "path": str(file_path.relative_to(Path("reports"))),
-                        "mtime": file_path.stat().st_mtime,
-                        "size": file_path.stat().st_size
-                    })
-            
-            return sorted(files, key=lambda x: x["name"])
-        else:
-            # GCS mode - list blobs
-            paths = storage.list_paths(reports_prefix)
-            files = []
-            for path in paths:
+        # Read from local reports directory
+        reports_dir = Path("reports") / run_id
+        if not reports_dir.exists():
+            return []
+        
+        files = []
+        for file_path in reports_dir.iterdir():
+            if file_path.is_file():
                 files.append({
-                    "name": Path(path).name,
-                    "path": path,
-                    "mtime": 0,
-                    "size": 0
+                    "name": file_path.name,
+                    "path": str(file_path.relative_to(Path("reports"))),
+                    "mtime": file_path.stat().st_mtime,
+                    "size": file_path.stat().st_size
                 })
-            return files
+        
+        return sorted(files, key=lambda x: x["name"])
             
     except Exception as e:
         import logging
@@ -600,7 +407,3 @@ def load_bin_details_csv(storage: Storage, segment_id: str) -> Optional[str]:
     except Exception as e:
         print(f"⚠️  Could not load bin_details/{segment_id}.csv: {e}")
         return None
-
-
-# Removed duplicate global heatmap helper functions - now handled by Storage class methods
-
