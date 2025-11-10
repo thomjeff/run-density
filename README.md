@@ -6,7 +6,7 @@
 This service models runner density on shared course segments using a density engine and temporal flow analysis.  
 It provides comprehensive reporting capabilities with both Markdown and CSV outputs, and is containerized for local development.
 
-**Current Version: v1.8.2** - Issue #464: Phase 1 — Declouding Complete - Major architectural transformation removing all Google Cloud Platform dependencies
+**Current Version: v1.8.3** - Issue #470: Fixed dual latest.json bug causing null run_id in Dashboard API. All APIs now use single source of truth (runflow/latest.json)
 
 ## Key Features
 - **Density Analysis**: Spatial concentration analysis with areal and crowd density calculations

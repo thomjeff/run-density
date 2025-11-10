@@ -1,5 +1,69 @@
 # Changelog
 
+## [v1.8.3] - 2025-11-10
+
+### Issue #470: Fix Dual latest.json Causing Null run_id
+
+**Bug Fix: Unified pointer system for consistent run_id across all APIs.**
+
+#### Problem
+The application maintained two separate `latest.json` pointer files that became out of sync:
+- `artifacts/latest.json` (stale) → Dashboard/Segments/Density APIs returned `null`
+- `runflow/latest.json` (current) → Reports API worked correctly
+
+This caused inconsistent `run_id` values across UI pages and prevented users from identifying which run the data came from.
+
+#### Solution (ChatGPT Option 1 - Recommended)
+Migrated to single source of truth: **`runflow/latest.json`**
+
+**Architectural Rationale:**
+Fixed before Phase 2 to prevent building new abstractions on unstable filesystem base. Ensures deterministic path resolution across all environments (per ChatGPT technical architect guidance).
+
+#### Changes
+
+**Storage Layer Unification:**
+- **app/storage_service.py**:
+  - `get_latest_run_id()`: Now reads from `runflow/latest.json` (was `artifacts/`)
+  - `load_ui_artifact()`: Now reads from `runflow/latest.json` and uses `runflow/{run_id}/ui/` path
+- **app/storage.py**:
+  - `create_storage_from_env()`: Now reads from `runflow/latest.json` and uses `runflow/{run_id}/ui/` root
+  - `load_latest_run_id()`: Now reads from `runflow/latest.json`
+  - `get_heatmap_signed_url()`: Now reads from `runflow/latest.json` and returns `/runflow/{run_id}/ui/heatmaps/` URLs
+
+**API Response Fix:**
+- **app/routes/api_dashboard.py**:
+  - Added `run_id` field to response dictionary (was missing, causing null values)
+
+#### Testing Results
+**Before Fix:**
+```
+Dashboard API:  run_id = null ❌
+Reports API:    run_id = CrutyrJt72KdYzoC3kv5Fx ✅
+```
+
+**After Fix:**
+```
+Dashboard API:          CrutyrJt72KdYzoC3kv5Fx ✅
+Reports API:            CrutyrJt72KdYzoC3kv5Fx ✅
+runflow/latest.json:    CrutyrJt72KdYzoC3kv5Fx ✅
+```
+
+**E2E Tests:** All passed ✅
+
+#### Impact
+- ✅ Single `latest.json` pointer as source of truth
+- ✅ All API endpoints return consistent `run_id`
+- ✅ Dashboard shows correct run_id (not null)
+- ✅ UI displays consistent run information across all pages
+- ✅ Deterministic storage behavior ready for Phase 2 refactor
+
+#### Related Issues
+- Epic #444: UUID-Based Run ID System (introduced runflow structure)
+- Issue #460: Phase 5 - API Refactor to Support runflow/
+- Issue #464: Phase 1 — Declouding Complete
+
+---
+
 ## [v1.8.2] - 2025-11-10
 
 ### Issue #464: Phase 1 — Declouding Complete
