@@ -321,6 +321,7 @@ async def get_dashboard_summary():
         
         # Build response
         summary = {
+            "run_id": run_id,  # Issue #470: Include run_id in response
             "timestamp": timestamp,
             "environment": environment,
             "total_runners": total_runners,
