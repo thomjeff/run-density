@@ -7,7 +7,7 @@
 PORT ?= 8080
 
 # -------- Phony targets --------
-.PHONY: help dev e2e-local test stop-docker build-docker
+.PHONY: help dev e2e-local test stop build validate-output validate-all
 
 # -------- Use same shell for multi-line targets --------
 .ONESHELL:
