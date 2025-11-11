@@ -516,13 +516,105 @@ def validate_schemas(run_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def validate_run(run_id: Optional[str] = None, config: Optional[Dict] = None) -> Dict[str, Any]:
+def inject_verification_status(run_id: str, validation_results: Dict[str, Any]) -> None:
+    """
+    Extend metadata.json with output_verification block.
+    
+    Placed immediately after file_counts.
+    Updates root status field based on verification.
+    
+    Args:
+        run_id: Run ID
+        validation_results: Results from validate_run()
+    """
+    metadata_path = Path(f'runflow/{run_id}/metadata.json')
+    
+    if not metadata_path.exists():
+        logger.warning(f"⚠️ metadata.json not found, skipping injection — Run: {run_id}")
+        return
+    
+    try:
+        metadata = json.loads(metadata_path.read_text())
+        
+        # Update root status to reflect verification
+        verification_status = validation_results['status']
+        metadata['status'] = verification_status
+        
+        # Insert output_verification after file_counts
+        metadata['output_verification'] = {
+            'status': verification_status,
+            'validated_at': validation_results['validated_at'],
+            'validator_version': validation_results['validator_version'],
+            'missing': validation_results.get('missing', []),
+            'schema_errors': validation_results.get('schema_errors', []),
+            'invalid_artifacts': validation_results.get('invalid_artifacts', []),
+            'checks': validation_results.get('checks', {})
+        }
+        
+        # Atomic write
+        temp_path = metadata_path.with_suffix('.tmp')
+        temp_path.write_text(json.dumps(metadata, indent=2))
+        temp_path.replace(metadata_path)
+        
+        logger.info(f"✅ Metadata Updated — Status: {verification_status} — Run: {run_id}")
+    
+    except Exception as e:
+        logger.error(f"❌ Metadata Injection Failed — Error: {e} — Run: {run_id}")
+        raise
+
+
+def update_index_status(run_id: str, status: str) -> None:
+    """
+    Update status field in index.json entry.
+    
+    Status is propagated from metadata.json root status field.
+    
+    Args:
+        run_id: Run ID
+        status: PASS | PARTIAL | FAIL
+    """
+    index_path = Path('runflow/index.json')
+    
+    if not index_path.exists():
+        logger.warning(f"⚠️ index.json not found, skipping status update — Run: {run_id}")
+        return
+    
+    try:
+        index = json.loads(index_path.read_text())
+        
+        # Find and update entry
+        updated = False
+        for entry in index:
+            if entry.get('run_id') == run_id:
+                entry['status'] = status
+                updated = True
+                break
+        
+        if not updated:
+            logger.warning(f"⚠️ Run not found in index.json — Run: {run_id}")
+            return
+        
+        # Atomic write
+        temp_path = index_path.with_suffix('.tmp')
+        temp_path.write_text(json.dumps(index, indent=2))
+        temp_path.replace(index_path)
+        
+        logger.info(f"✅ Index Updated — Status: {status} — Run: {run_id}")
+    
+    except Exception as e:
+        logger.error(f"❌ Index Update Failed — Error: {e} — Run: {run_id}")
+        raise
+
+
+def validate_run(run_id: Optional[str] = None, config: Optional[Dict] = None, 
+                 update_metadata: bool = True) -> Dict[str, Any]:
     """
     Validate a complete run's outputs.
     
     Args:
         run_id: Run ID to validate (defaults to latest from latest.json)
         config: Validation config (defaults to config/reporting.yml)
+        update_metadata: If True, inject results into metadata.json and index.json
     
     Returns:
         Validation results with status, missing files, errors
@@ -596,6 +688,14 @@ def validate_run(run_id: Optional[str] = None, config: Optional[Dict] = None) ->
     else:
         logger.error(f"❌ Overall Status: FAIL — Run: {run_id}")
         logger.error(f"   Missing: {len(validation_results['missing'])} files")
+    
+    # Update metadata.json and index.json with verification results (Steps 4 & 5)
+    if update_metadata:
+        try:
+            inject_verification_status(run_id, validation_results)
+            update_index_status(run_id, validation_results['status'])
+        except Exception as e:
+            logger.warning(f"⚠️ Could not update metadata/index: {e}")
     
     return validation_results
 
