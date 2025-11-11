@@ -97,11 +97,21 @@ logging.getLogger().addHandler(error_handler)
 ### Modules Using New Patterns
 
 - ✅ `app/tests/validate_output.py` - Full implementation
+- ✅ `app/heatmap_generator.py` - Structured summaries added
+- ✅ `app/common/config.py` - Fixed nested metadata access
 - ⏳ `app/density_report.py` - Opportunistic updates
 - ⏳ `app/flow_report.py` - Opportunistic updates
-- ⏳ `app/heatmap_generator.py` - Opportunistic updates
 
 **Strategy:** All new code must follow these patterns. Existing code updated opportunistically during maintenance.
+
+### Key Improvements (Issue #467 Step 7)
+
+1. **Structured Summaries** - Clear completion messages with counts
+   - Example: `✅ Heatmap Generation completed — Generated: 17 — Failed: 0 — Run: {run_id}`
+2. **Optional Endpoints** - 404s clarified as expected, not errors
+   - Example: `⚠️ Map Manifest: Endpoint not available (404) - Optional feature, skipping`
+3. **Nested Config** - Properly access `meta.version` instead of top-level `version`
+   - Fixes: "Successfully loaded rulebook with version: 2.2" (was "unknown")
 
 ---
 
