@@ -1,7 +1,7 @@
 # Developer Onboarding Checklist
 
 **Target Audience:** New developers joining the run-density project  
-**Architecture Version:** v1.7.0  
+**Architecture Version:** v1.8.4 (Post-Phase 2)  
 **Estimated Time:** 2-4 hours
 
 ---
@@ -27,7 +27,7 @@ docker --version
 docker-compose --version
 
 # Start development environment
-make dev-docker
+make dev
 
 # Verify application runs
 # Open browser: http://localhost:8080
@@ -37,14 +37,14 @@ make dev-docker
 ### ✅ Run Tests
 
 ```bash
-# Quick smoke tests (< 1 minute)
-make smoke-docker
+# Quick smoke tests (< 5 seconds)
+make test
 
 # Full E2E tests (~ 2-3 minutes)
-make e2e-docker
+make e2e-local
 
-# Architecture tests
-pytest tests/test_architecture.py -v
+# Check logs for errors
+docker logs run-density-dev | grep -iE "error|exception"
 ```
 
 **Success Criteria:**

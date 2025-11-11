@@ -1,8 +1,8 @@
 
 # Guardrails for AI-Assisted Development
 
-**Version:** 1.3  (replaces /archive/guardrails.md)
-**Last Updated:** 2025-11-01  
+**Version:** 1.4  
+**Last Updated:** 2025-11-11  
 **Applies to:** Cursor, ChatGPT w/ Code Interpreter, GitHub Copilot (read-only), VSCode AI Agents (custom plugins)  
 
 ⚠️ **CRITICAL**: This document contains NON-NEGOTIABLE RULES for AI pair programming assistants. These rules were established through hard-learned lessons and MUST be followed without exception.
@@ -14,9 +14,10 @@
 Before starting ANY work, you **MUST** reference these documents:
 
 - `@GUARDRAILS.md` – This document
-- `@ARCHITECTURE.md` – System design and core concepts (docs/architecture/README.md)
-- `@QUICK_REFERENCE.md` – Authoritative variable names and field mappings (docs/reference/QUICK_REFERENCE.md)
-- `@OPERATIONS.md` – Deployment, monitoring, and version control (docs/dev-guides/OPERATIONS.md)
+- `@docs/README.md` – Documentation index and architecture overview
+- `@docs/architecture/output.md` – Runflow directory structure (Issue #466)
+- `@docs/reference/QUICK_REFERENCE.md` – Authoritative variable names and field mappings
+- `@docs/DOCKER_DEV.md` – Development workflow and commands
 
 ---
 

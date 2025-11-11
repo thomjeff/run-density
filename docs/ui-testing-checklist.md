@@ -1,29 +1,27 @@
 # UI Testing Checklist
 
-**Version:** 1.0  
-**Last Updated:** 2025-10-28  
-**Purpose:** Comprehensive UI testing steps for verifying deployments and issue fixes
+**Version:** 2.0  
+**Last Updated:** 2025-11-11  
+**Purpose:** Comprehensive UI testing steps for verifying local deployments and issue fixes
 
-This document provides a systematic approach to testing local and cloud deployments, ensuring all functionality works correctly after code changes. Use this checklist for any local or cloud deployment for functional verification and issue resolution testing.
+This document provides a systematic approach to testing local Docker deployments, ensuring all functionality works correctly after code changes. Use this checklist for local deployment verification and issue resolution testing.
 
 ---
 
 ## Prerequisites
 
-- Local environment is running and health (for local)
-- Cloud Run service deployed and accessible (for cloud)
-- For Cloud: CI Pipeline completed successfully and all 4 stages passed (Build, E2E, Bin Datasets, Release)
-- No critical errors in local start-up logs or Cloud Run logs for cloud
+- Local Docker environment is running and healthy
+- Container accessible at `http://localhost:8080`
+- No critical errors in startup logs
+- E2E tests have completed successfully
 
 ---
 
 ## Testing Environment
 
-**Cloud Run URL:** `http://localhost:8081`
+**Local Docker URL:** `http://localhost:8080`
 
-**Cloud Run URL:** `https://run-density-ln4r3sfkha-uc.a.run.app`
-
-**Browser Tool:** Use Playwright browser automation for consistent testing
+**Browser Tool:** Use browser automation for consistent testing
 
 ---
 
@@ -219,37 +217,34 @@ Download the following reports created from your E2E test:
 
 ## Testing Tools and Commands
 
-### Browser Automation
+### Docker Logs Monitoring
 ```bash
-# Use Playwright browser tool for consistent testing
-mcp_cursor-playwright_browser_navigate
-mcp_cursor-playwright_browser_click
-mcp_cursor-playwright_browser_wait_for
-```
-
-### Cloud Run Logs Monitoring
-```bash
-# Check for errors
-gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=run-density AND severity>=ERROR" --limit=10
+# Check container logs for errors
+docker logs run-density-dev | grep -iE "error|exception|failed"
 
 # Check for warnings
-gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=run-density AND severity>=WARNING" --limit=10
+docker logs run-density-dev | grep -i "warning"
 
-# Check recent activity
-gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=run-density" --limit=10 --freshness=15m
+# View recent logs
+docker logs run-density-dev --tail 50
+
+# Follow logs in real-time
+docker logs run-density-dev --follow
 ```
 
-### CI Pipeline Monitoring
+### API Testing
 ```bash
-# Check workflow status
-gh run list --limit 5
+# Health check
+curl -s http://localhost:8080/health | jq .
 
-# View specific run
-gh run view <run-id>
+# Dashboard API
+curl -s http://localhost:8080/api/dashboard/summary | jq .
 
-# Check job status
-gh run view --job=<job-id>
-```
+# Latest run_id
+docker exec run-density-dev cat /app/runflow/latest.json | jq .
+
+# List reports
+curl -s http://localhost:8080/api/reports/list | jq .
 
 ---
 
@@ -271,35 +266,29 @@ A deployment is considered successful when:
 
 ## Issue-Specific Testing Notes
 
-### For Issue #389 (Import Scoping Patterns)
-- **Primary Focus**: Verify flags displaying correctly on Density page
-- **Key Test**: A1 heatmap loading and displaying
-- **Data Validation**: Reports generated from latest E2E run
-- **Success Indicator**: No import-related errors in console or logs
-
-### For Future Issues
-- Adapt this checklist based on the specific changes made
-- Focus testing on areas most likely affected by the changes
+### General Testing Approach
+- Focus testing on areas most likely affected by code changes
 - Always verify core functionality remains intact
-- Document any new testing requirements discovered
+- Check that latest run_id is consistent across all APIs
+- Verify heatmaps and reports are in correct locations (`runflow/<uuid>/`)
 
 ---
 
 ## Troubleshooting
 
 ### Common Issues
-1. **Page not loading**: Check Cloud Run service status
-2. **Missing data**: Verify E2E run completed successfully
-3. **Heatmap not loading**: Check GCS permissions and signed URLs
-4. **Reports missing**: Verify report generation in CI pipeline
-5. **Flags not showing**: Check flags.json file in GCS
+1. **Page not loading**: Check Docker container status (`docker ps`)
+2. **Missing data**: Verify E2E run completed successfully (`make e2e-local`)
+3. **Heatmap not loading**: Check `runflow/<uuid>/ui/heatmaps/` directory
+4. **Reports missing**: Verify reports in `runflow/<uuid>/reports/`
+5. **Flags not showing**: Check `runflow/<uuid>/ui/flags.json`
 
 ### Debugging Steps
-1. Check Cloud Run logs for errors
-2. Verify CI pipeline completed successfully
+1. Check Docker logs: `docker logs run-density-dev --tail 100`
+2. Verify container is running: `docker ps`
 3. Check browser console for JavaScript errors
-4. Verify API endpoints responding correctly
-5. Check GCS bucket contents for missing files
+4. Verify API endpoints: `curl http://localhost:8080/health`
+5. Check latest run_id: `docker exec run-density-dev cat /app/runflow/latest.json`
 
 ---
 
@@ -309,8 +298,8 @@ This checklist should be updated when:
 - New pages or features are added
 - Testing requirements change
 - New error patterns are discovered
-- Cloud Run configuration changes
+- Docker configuration changes
 
-**Last Updated:** 2025-10-28  
-**Updated By:** AI Assistant (Issue #389 verification)  
+**Last Updated:** 2025-11-11  
+**Updated By:** AI Assistant (Issue #466 Phase 2 - Documentation Refresh)  
 **Next Review:** When new testing requirements are identified
