@@ -64,6 +64,14 @@ test: ## Run smoke tests (health checks + API validation)
 	@curl -fsS "http://localhost:$(PORT)/api/density/segments" | jq -e 'length > 0' >/dev/null && echo "✅ Density API OK" || (echo "❌ Density API FAILED" && exit 1)
 	@echo "🎉 All smoke tests passed"
 
+validate-output: ## Validate output integrity for latest run
+	@echo "🔍 Validating output integrity..."
+	@docker exec run-density-dev python -m app.tests.validate_output
+
+validate-all: ## Validate all runs in index.json
+	@echo "🔍 Validating all runs..."
+	@docker exec run-density-dev python -m app.tests.validate_output --all
+
 # ============================================================================
 # Legacy Aliases (Issue #466 Step 4: Maintained for backwards compatibility)
 # ============================================================================

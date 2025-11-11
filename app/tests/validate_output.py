@@ -1,0 +1,437 @@
+"""
+Output Validation Module - Issue #467 Phase 3
+
+This module provides automated validation for run outputs, ensuring:
+- All expected files are present
+- Files conform to expected schemas
+- APIs serve from correct run_id directories
+- latest.json points to valid run
+
+Automates the manual checks from docs/ui-testing-checklist.md at the API layer.
+"""
+
+import json
+import sys
+from pathlib import Path
+from typing import Dict, List, Any, Optional
+from datetime import datetime, timezone
+import logging
+
+import yaml
+import pandas as pd
+import requests
+
+# Configure logging
+logging.basicConfig(
+    format='%(levelname)s:%(name)s:%(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Add stderr handler for errors
+error_handler = logging.StreamHandler(sys.stderr)
+error_handler.setLevel(logging.ERROR)
+error_handler.setFormatter(logging.Formatter('[ERROR] %(name)s: %(message)s'))
+logger.addHandler(error_handler)
+
+VALIDATOR_VERSION = "1.0.0"
+
+
+def load_validation_config() -> Dict[str, Any]:
+    """Load validation configuration from config/reporting.yml"""
+    config_path = Path("config/reporting.yml")
+    
+    if not config_path.exists():
+        logger.error(f"❌ Config Missing — File: {config_path}")
+        raise FileNotFoundError(f"Validation config not found: {config_path}")
+    
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    return config
+
+
+def get_latest_run_id() -> str:
+    """Get the latest run_id from runflow/latest.json"""
+    latest_path = Path("runflow/latest.json")
+    
+    if not latest_path.exists():
+        logger.error(f"❌ latest.json Missing — File: {latest_path}")
+        raise FileNotFoundError("runflow/latest.json not found")
+    
+    try:
+        latest = json.loads(latest_path.read_text())
+        run_id = latest.get('run_id')
+        
+        if not run_id:
+            logger.error(f"❌ latest.json Invalid — Missing 'run_id' field")
+            raise ValueError("latest.json missing 'run_id' field")
+        
+        return run_id
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ latest.json Corrupt — Error: {e}")
+        raise
+
+
+def validate_latest_pointer() -> Dict[str, Any]:
+    """
+    Verify latest.json points to the most recent valid run.
+    
+    Checks:
+    1. latest.json exists and is valid JSON
+    2. run_id in latest.json exists as directory
+    3. run_id matches most recent entry in index.json
+    """
+    logger.info("🔍 Validating latest.json integrity...")
+    
+    # Read latest.json
+    latest_run_id = get_latest_run_id()
+    
+    # Verify directory exists
+    run_dir = Path(f"runflow/{latest_run_id}")
+    if not run_dir.exists():
+        logger.error(f"❌ Run Directory Missing — Run: {latest_run_id} — Path: {run_dir}")
+        return {
+            'status': 'FAIL',
+            'error': f'Directory not found: {run_dir}',
+            'run_id': latest_run_id
+        }
+    
+    # Verify matches index.json (most recent entry)
+    index_path = Path("runflow/index.json")
+    if index_path.exists():
+        try:
+            index = json.loads(index_path.read_text())
+            if index and len(index) > 0:
+                most_recent = index[-1]['run_id']
+                
+                if latest_run_id != most_recent:
+                    logger.error(
+                        f"❌ latest.json Mismatch — "
+                        f"latest.json: {latest_run_id} — "
+                        f"index.json: {most_recent}"
+                    )
+                    return {
+                        'status': 'FAIL',
+                        'error': 'latest.json out of sync with index.json',
+                        'latest_json': latest_run_id,
+                        'index_json': most_recent
+                    }
+        except (json.JSONDecodeError, KeyError, IndexError) as e:
+            logger.warning(f"⚠️ Could not validate against index.json: {e}")
+    
+    logger.info(f"✅ latest.json Valid — Run: {latest_run_id}")
+    return {'status': 'PASS', 'run_id': latest_run_id}
+
+
+def validate_file_presence(run_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Verify all expected files exist in runflow/{run_id}/.
+    
+    Uses config/reporting.yml for expected file lists.
+    Returns dict with status, missing files list.
+    """
+    logger.info(f"🔍 Validating file presence — Run: {run_id}")
+    
+    run_dir = Path(f"runflow/{run_id}")
+    missing = []
+    found_counts = {'reports': 0, 'bins': 0, 'maps': 0, 'heatmaps': 0, 'ui': 0}
+    
+    validation_config = config.get('validation', {})
+    
+    # Check critical files
+    critical = validation_config.get('critical', {})
+    for category, files in critical.items():
+        if isinstance(files, list):
+            for file_name in files:
+                file_path = run_dir / category / file_name
+                if file_path.exists():
+                    found_counts[category] = found_counts.get(category, 0) + 1
+                else:
+                    missing.append(str(file_path))
+                    logger.error(f"❌ Critical File Missing — File: {file_path} — Run: {run_id}")
+    
+    # Check required files
+    required = validation_config.get('required', {})
+    for category, files in required.items():
+        if isinstance(files, list):
+            for file_name in files:
+                file_path = run_dir / category / file_name
+                if file_path.exists():
+                    found_counts[category] = found_counts.get(category, 0) + 1
+                else:
+                    missing.append(str(file_path))
+                    logger.warning(f"⚠️ Required File Missing — File: {file_path} — Run: {run_id}")
+        elif isinstance(files, dict):
+            # Handle heatmaps with count
+            if category == 'heatmaps':
+                heatmap_dir = run_dir / 'ui' / 'heatmaps'
+                if heatmap_dir.exists():
+                    png_files = list(heatmap_dir.glob('*.png'))
+                    found_counts['heatmaps'] = len(png_files)
+                    expected_count = files.get('count', 0)
+                    if len(png_files) < expected_count:
+                        logger.warning(
+                            f"⚠️ Heatmap Count Mismatch — "
+                            f"Expected: {expected_count} — Found: {len(png_files)} — Run: {run_id}"
+                        )
+                else:
+                    missing.append(str(heatmap_dir))
+                    logger.warning(f"⚠️ Heatmaps Directory Missing — Path: {heatmap_dir} — Run: {run_id}")
+    
+    # Determine status
+    if missing and any(str(m) for m in missing if 'critical' in str(m).lower()):
+        status = 'FAIL'
+    elif missing:
+        status = 'PARTIAL'
+    else:
+        status = 'PASS'
+    
+    expected_counts = config.get('expected_counts', {})
+    
+    if status == 'PASS':
+        logger.info(f"✅ File Presence — Status: PASS — Files: {sum(found_counts.values())} — Run: {run_id}")
+    elif status == 'PARTIAL':
+        logger.warning(f"⚠️ File Presence — Status: PARTIAL — Missing: {len(missing)} — Run: {run_id}")
+    
+    return {
+        'status': status,
+        'missing': missing,
+        'found_counts': found_counts,
+        'expected_counts': expected_counts
+    }
+
+
+def validate_api_consistency(run_id: str, base_url: str = 'http://localhost:8080') -> Dict[str, Any]:
+    """
+    Verify all APIs serve from correct runflow/{run_id}/ directories.
+    
+    Checks:
+    1. APIs return correct run_id
+    2. File paths in responses contain run_id
+    3. Files at those paths are accessible
+    """
+    logger.info(f"🔍 Validating API consistency — Run: {run_id}")
+    
+    errors = []
+    
+    # APIs to check
+    api_checks = [
+        {
+            'name': 'Dashboard API',
+            'endpoint': '/api/dashboard/summary',
+            'check_type': 'run_id_field',
+            'field': 'run_id'
+        },
+        {
+            'name': 'Reports API',
+            'endpoint': '/api/reports/list',
+            'check_type': 'paths_contain_run_id',
+            'field': 'path'
+        }
+    ]
+    
+    apis_checked = 0
+    
+    for api in api_checks:
+        try:
+            response = requests.get(f"{base_url}{api['endpoint']}", timeout=5)
+            
+            if response.status_code != 200:
+                errors.append(f"{api['name']}: HTTP {response.status_code}")
+                logger.error(
+                    f"❌ API Error — API: {api['name']} — "
+                    f"Status: {response.status_code} — Run: {run_id}"
+                )
+                continue
+            
+            data = response.json()
+            
+            # Check run_id field
+            if api['check_type'] == 'run_id_field':
+                actual_run_id = data.get(api['field'])
+                if actual_run_id != run_id:
+                    errors.append(
+                        f"{api['name']}: run_id mismatch (got {actual_run_id}, expected {run_id})"
+                    )
+                    logger.error(
+                        f"❌ API Mismatch — API: {api['name']} — "
+                        f"Expected: {run_id} — Got: {actual_run_id}"
+                    )
+                else:
+                    apis_checked += 1
+            
+            # Check paths contain run_id
+            elif api['check_type'] == 'paths_contain_run_id':
+                if isinstance(data, list) and len(data) > 0:
+                    # Filter to only report files (exclude data files which are static)
+                    report_items = [item for item in data if item.get('type') == 'report']
+                    paths = [item.get(api['field']) for item in report_items if api['field'] in item]
+                    
+                    # Check if all report paths contain the run_id
+                    invalid_paths = [p for p in paths if p and run_id not in str(p)]
+                    
+                    if invalid_paths:
+                        errors.append(f"{api['name']}: {len(invalid_paths)} paths missing run_id")
+                        logger.error(
+                            f"❌ API Path Mismatch — API: {api['name']} — "
+                            f"Invalid paths: {invalid_paths} — Run: {run_id}"
+                        )
+                    else:
+                        apis_checked += 1
+        
+        except requests.RequestException as e:
+            errors.append(f"{api['name']}: {str(e)}")
+            logger.error(f"❌ API Request Failed — API: {api['name']} — Error: {e} — Run: {run_id}")
+        except Exception as e:
+            errors.append(f"{api['name']}: {str(e)}")
+            logger.error(f"❌ API Check Failed — API: {api['name']} — Error: {e} — Run: {run_id}")
+    
+    # Verify key files are accessible
+    files_to_check = [
+        f'runflow/{run_id}/ui/segment_metrics.json',
+        f'runflow/{run_id}/ui/flags.json',
+        f'runflow/{run_id}/reports/Density.md',
+    ]
+    
+    for file_path in files_to_check:
+        if not Path(file_path).exists():
+            errors.append(f"File not accessible: {file_path}")
+            logger.error(f"❌ File Not Accessible — File: {file_path} — Run: {run_id}")
+    
+    status = 'PASS' if len(errors) == 0 else 'FAIL'
+    
+    if status == 'PASS':
+        logger.info(f"✅ API Consistency — Status: PASS — APIs: {apis_checked} — Run: {run_id}")
+    else:
+        logger.error(f"❌ API Consistency — Status: FAIL — Errors: {len(errors)} — Run: {run_id}")
+    
+    return {
+        'status': status,
+        'apis_checked': apis_checked,
+        'errors': errors,
+        'all_paths_valid': len(errors) == 0
+    }
+
+
+def validate_run(run_id: Optional[str] = None, config: Optional[Dict] = None) -> Dict[str, Any]:
+    """
+    Validate a complete run's outputs.
+    
+    Args:
+        run_id: Run ID to validate (defaults to latest from latest.json)
+        config: Validation config (defaults to config/reporting.yml)
+    
+    Returns:
+        Validation results with status, missing files, errors
+    """
+    # Load config if not provided
+    if config is None:
+        config = load_validation_config()
+    
+    # Get run_id if not provided
+    if run_id is None:
+        run_id = get_latest_run_id()
+    
+    logger.info(f"{'=' * 60}")
+    logger.info(f"Output Validation")
+    logger.info(f"Run ID: {run_id}")
+    logger.info(f"{'=' * 60}")
+    
+    validation_results = {
+        'status': 'PASS',
+        'run_id': run_id,
+        'validated_at': datetime.now(timezone.utc).isoformat(),
+        'validator_version': VALIDATOR_VERSION,
+        'missing': [],
+        'schema_errors': [],
+        'invalid_artifacts': [],
+        'checks': {}
+    }
+    
+    # 1. Validate latest.json pointer
+    latest_check = validate_latest_pointer()
+    validation_results['checks']['latest_json'] = latest_check
+    if latest_check['status'] != 'PASS':
+        validation_results['status'] = 'FAIL'
+    
+    # 2. Validate file presence
+    file_check = validate_file_presence(run_id, config)
+    validation_results['checks']['file_presence'] = file_check
+    validation_results['missing'] = file_check.get('missing', [])
+    
+    if file_check['status'] == 'FAIL':
+        validation_results['status'] = 'FAIL'
+    elif file_check['status'] == 'PARTIAL' and validation_results['status'] == 'PASS':
+        validation_results['status'] = 'PARTIAL'
+    
+    # 3. Validate API consistency
+    api_check = validate_api_consistency(run_id)
+    validation_results['checks']['api_consistency'] = api_check
+    
+    if api_check['status'] != 'PASS':
+        validation_results['status'] = 'FAIL'
+    
+    # TODO: Step 3 - Schema validation will be added here
+    
+    # Summary
+    logger.info(f"")
+    logger.info(f"{'=' * 60}")
+    logger.info(f"Validation Summary")
+    logger.info(f"{'=' * 60}")
+    
+    if validation_results['status'] == 'PASS':
+        logger.info(f"✅ Overall Status: PASS — Run: {run_id}")
+    elif validation_results['status'] == 'PARTIAL':
+        logger.warning(f"⚠️ Overall Status: PARTIAL — Run: {run_id}")
+        logger.warning(f"   Missing: {len(validation_results['missing'])} non-critical files")
+    else:
+        logger.error(f"❌ Overall Status: FAIL — Run: {run_id}")
+        logger.error(f"   Missing: {len(validation_results['missing'])} files")
+    
+    return validation_results
+
+
+def main():
+    """CLI entry point for output validation"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(
+        description='Validate run outputs for completeness and integrity'
+    )
+    parser.add_argument(
+        '--run-id',
+        help='Specific run ID to validate (defaults to latest from latest.json)'
+    )
+    parser.add_argument(
+        '--strict',
+        action='store_true',
+        help='Strict mode: treat required files as critical'
+    )
+    
+    args = parser.parse_args()
+    
+    try:
+        results = validate_run(run_id=args.run_id)
+        
+        # Exit code based on status
+        if results['status'] == 'PASS':
+            sys.exit(0)
+        elif results['status'] == 'PARTIAL':
+            # In strict mode, PARTIAL is failure
+            if args.strict:
+                logger.error(f"❌ Strict Mode — PARTIAL not allowed — Run: {results['run_id']}")
+                sys.exit(1)
+            else:
+                sys.exit(0)  # PARTIAL is acceptable in default mode
+        else:  # FAIL
+            sys.exit(1)
+    
+    except Exception as e:
+        logger.error(f"❌ Validation Failed — Error: {e}")
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()
+
