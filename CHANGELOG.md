@@ -1,5 +1,223 @@
 # Changelog
 
+## [v1.8.5] - 2025-11-11
+
+### Issue #467: Phase 3 Output Integrity & Verification
+
+**Major Feature: Automated validation system ensuring output completeness, schema integrity, and API consistency for every run.**
+
+#### Overview
+Implemented comprehensive output verification framework that automatically validates all artifacts, schemas, and API consistency, embedding results directly into metadata.json and index.json for observability and audit trails.
+
+---
+
+#### Step 1: Declarative Output Config (commit `a097af7`)
+
+**Extended `config/reporting.yml`** with validation configuration:
+- Added `validation.critical` - Files required for system to function
+- Added `validation.required` - Expected files (warnings if missing)
+- Added `validation.optional` - Optional outputs (tracked but not required)
+- Added `expected_counts` - File count expectations per category
+- Added `schemas` - JSON/Parquet/CSV schema validation rules
+
+**Files Changed:** 1 | **Changes:** +99
+
+---
+
+#### Step 2: Output Validation Framework (commit `adb9f61`)
+
+**Created `app/tests/validate_output.py`** (668 lines) - Core validation engine:
+- `validate_latest_json_integrity()` - Verifies latest.json pointer validity
+- `validate_file_presence()` - Checks all expected files exist
+- `validate_api_consistency()` - Verifies APIs serve from correct run_id
+- `validate_schemas()` - Validates JSON/Parquet/CSV/PNG/Markdown structures
+- Structured logging with ✅/❌/⚠️ patterns
+
+**Updated `Makefile`:**
+- Added `validate-output` - Validate latest run
+- Added `validate-all` - Validate all runs in index.json
+
+**Files Changed:** 3 | **Changes:** +451
+
+---
+
+#### Step 3: Schema Validation (commit `fa92567`)
+
+**Implemented detailed schema validators in `validate_output.py`:**
+- `_validate_json_schema()` - Checks required fields in JSON files
+- `_validate_parquet_schema()` - Validates Parquet column structure
+- `_validate_png_files()` - Confirms PNG format and validity
+- `_validate_csv_schema()` - Checks CSV column structure
+- `_validate_markdown_files()` - Ensures non-empty markdown
+
+**Updated `config/reporting.yml`** schemas to match actual file structures:
+- Fixed `segment_metrics.json` fields
+- Fixed `flags.json` structure
+- Fixed `bins.parquet` columns
+- Fixed `Flow.csv` columns
+
+**Files Changed:** 2 | **Changes:** +227, -15
+
+---
+
+#### Step 4 & 5: Metadata & Index Status Injection (commit `573fac2`)
+
+**Extended `metadata.json`** with verification results:
+```json
+"output_verification": {
+  "status": "PASS",
+  "validated_at": "2025-11-11T18:39:48Z",
+  "validator_version": "1.0.0",
+  "checks": {
+    "latest_json": {"status": "PASS"},
+    "file_presence": {"status": "PASS", "found": 32, "expected": 32},
+    "api_consistency": {"status": "PASS", "apis_checked": 2},
+    "schema_validation": {"status": "PASS", "files_checked": 9}
+  }
+}
+```
+
+**Updated `index.json`** entries with status field:
+```json
+{"uuid": "...", "timestamp": "...", "status": "PASS"}
+```
+
+**Status Values:** `PASS`, `PARTIAL` (non-critical missing), `FAIL` (critical errors)
+
+**Files Changed:** 1 | **Changes:** +101, -1
+
+---
+
+#### Step 6: Error Path Testing Framework (commit `6810da9`)
+
+**Created `app/tests/test_error_paths.py`** (138 lines):
+- Test structure for missing inputs
+- Test structure for malformed configs
+- Test structure for unmounted volumes
+- Documents expected error behaviors
+
+**Files Changed:** 1 | **Changes:** +138
+
+---
+
+#### Step 7: Logging Standardization (commit `5c5aa9a`)
+
+**Created `docs/LOGGING.md`** (128 lines) - Logging standards and patterns:
+- Success format: `✅ [Stage] completed — Output: [path]`
+- Error format: `❌ [Stage] FAILED — Error: [message] — Run: [run_id]`
+- stderr routing for all errors with `[ERROR]` prefix
+- Structured logging examples for all stages
+
+**Step 7 Enhancements (commits `b6a59ca`, `e7bff13`):**
+- Fixed rulebook version logging (unknown → 2.2)
+- Clarified optional endpoint 404 handling
+- Added structured heatmap summaries
+- Updated LOGGING.md with new patterns
+
+**Files Changed:** 4 | **Changes:** +141, -5
+
+---
+
+#### Step 8: Contributor Guide (commit `9af812c`)
+
+**Created `CONTRIBUTING.md`** (431 lines) - Comprehensive contributor onboarding:
+- Quick start setup instructions
+- Development workflow (branch naming, commits, PRs)
+- Testing requirements (smoke, E2E, validation)
+- Code standards and conventions
+- Pull request checklist
+- Troubleshooting common issues
+
+**Files Changed:** 1 | **Changes:** +431
+
+---
+
+#### Integration & Fixes (commits `e29cf4d`, `183754c`, `230eae9`)
+
+**Integrated validation into E2E workflow:**
+- `e2e.py` now automatically runs validation after heatmap generation
+- Exit code 1 on validation failure
+- metadata.json and index.json updated on every E2E run
+
+**Fixed docker-compose.yml version warning:**
+- Removed obsolete `version: '3.8'` field
+
+**Fixed optional maps file counting:**
+- Added logic to count optional files without treating them as missing
+- Maps now correctly counted (1/1 not 0/1)
+
+**Files Changed:** 4 | **Changes:** +35, -7
+
+---
+
+#### Documentation Updates (commit `37d8c32`)
+
+**Updated `docs/architecture/output.md`:**
+- Added "Output Verification" section
+- Documented automated validation process
+- Documented metadata and index status structure
+
+**Updated `docs/DOCKER_DEV.md`:**
+- Added `validate-output` and `validate-all` to available commands
+- Updated pre-commit workflow to include validation
+
+**Updated `docs/README.md` and `README.md`:**
+- Added references to CONTRIBUTING.md and LOGGING.md
+- Added "Contributing" section with quick start
+
+**Files Changed:** 4 | **Changes:** +105, -8
+
+---
+
+#### Makefile Cleanup (commit `76538fc`)
+
+**Cleaned up Makefile per architecture review:**
+- Removed 6 legacy alias targets (dev-docker, stop-docker, etc.)
+- Added e2e-local to help output (was missing)
+- Added --help and usage aliases for make help
+- Updated header to "Post-Phase 2 Architecture"
+- Clean 8-command CLI (down from 11)
+
+**Files Changed:** 1 | **Changes:** +11, -16
+
+---
+
+#### Summary
+
+**Commits:** 16  
+**Files Changed:** 15  
+**Lines Added:** +1,718  
+**Lines Removed:** -28  
+**Net Impact:** +1,690 lines
+
+**New Files Created:**
+- `CONTRIBUTING.md` (431 lines)
+- `app/tests/__init__.py` (6 lines)
+- `app/tests/validate_output.py` (755 lines)
+- `app/tests/test_error_paths.py` (138 lines)
+- `docs/LOGGING.md` (128 lines)
+
+**Key Features:**
+- ✅ Automated validation system (`make validate-output`)
+- ✅ Self-validating runs (metadata.json contains verification)
+- ✅ Quick status scanning (index.json includes status)
+- ✅ API consistency checks (Dashboard & Reports APIs verified)
+- ✅ Schema validation (9 file types validated)
+- ✅ Comprehensive contributor guide (CONTRIBUTING.md)
+- ✅ Standardized logging (LOGGING.md)
+
+**Before Phase 3:**
+- Manual UI testing required
+- No automated validation
+- No verification audit trail
+
+**After Phase 3:**
+- ✅ Automated validation every E2E run
+- ✅ Self-documenting runs with status
+- ✅ Observable, auditable, maintainable
+
+---
+
 ## [v1.8.4] - 2025-11-11
 
 ### Issue #466: Phase 2 Architecture Refinement - Post-GCP Cleanup
