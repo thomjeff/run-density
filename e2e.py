@@ -187,7 +187,7 @@ def run_heatmaps_if_local(reports_dir, run_id):
     print("   Generating heatmaps...")
     try:
         from app.core.artifacts.heatmaps import export_heatmaps_and_captions
-        from app.storage_service import get_storage_service
+        from app.storage import create_storage_from_env
         
         # Determine reports directory for this run
         run_reports_dir = Path(reports_dir) / run_id
@@ -196,8 +196,8 @@ def run_heatmaps_if_local(reports_dir, run_id):
             print(f"   ⚠️ Reports directory not found: {run_reports_dir}")
             return
         
-        # Create storage abstraction using modern StorageService
-        storage = get_storage_service()
+        # Issue #466 Step 4 Cleanup: Use consolidated storage from app.storage
+        storage = create_storage_from_env()
         
         # Generate heatmaps
         heatmaps_generated, captions_generated = export_heatmaps_and_captions(

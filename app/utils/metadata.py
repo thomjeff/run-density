@@ -320,41 +320,30 @@ def update_latest_pointer(run_id: str) -> None:
         update_latest_pointer("G4FAdzseZT3G2gFizftHXX")
         # Writes: { "run_id": "G4FAdzseZT3G2gFizftHXX" }
     """
-    from app.utils.env import detect_storage_target
-    from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER, GCS_BUCKET_RUNFLOW
+    # Issue #466 Step 4 Cleanup: Removed GCS imports (local-only)
+    from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER
     import tempfile
     import shutil
     
-    storage_target = detect_storage_target()
+    # Issue #466 Step 4 Cleanup: Local-only, dead GCS branch removed
     latest_data = {"run_id": run_id}
     
-    if storage_target == "filesystem":
-        # Local mode: Use atomic write (temp → rename)
-        # Use container root if in Docker, otherwise use local root
-        if Path(RUNFLOW_ROOT_CONTAINER).exists():
-            runflow_root = Path(RUNFLOW_ROOT_CONTAINER)
-        else:
-            runflow_root = Path(RUNFLOW_ROOT_LOCAL)
-        runflow_root.mkdir(parents=True, exist_ok=True)
-        latest_path = runflow_root / "latest.json"
-        
-        # Write to temp file first
-        with tempfile.NamedTemporaryFile(mode='w', dir=runflow_root, delete=False, suffix='.tmp') as f:
-            json.dump(latest_data, f, indent=2)
-            temp_path = f.name
-        
-        # Atomic rename
-        shutil.move(temp_path, latest_path)
-        print(f"   📌 Updated latest.json → {run_id}")
+    # Use container root if in Docker, otherwise use local root
+    if Path(RUNFLOW_ROOT_CONTAINER).exists():
+        runflow_root = Path(RUNFLOW_ROOT_CONTAINER)
     else:
-        # GCS mode: Direct write (GCS operations are atomic)
-        from google.cloud import storage as gcs
-        
-        bucket_name = os.getenv("GCS_BUCKET_RUNFLOW", GCS_BUCKET_RUNFLOW)
-        client = gcs.Client()
-        bucket = client.bucket(bucket_name)
-        blob = bucket.blob("latest.json")
-        blob.upload_from_string(json.dumps(latest_data, indent=2), content_type='application/json')
+        runflow_root = Path(RUNFLOW_ROOT_LOCAL)
+    runflow_root.mkdir(parents=True, exist_ok=True)
+    latest_path = runflow_root / "latest.json"
+    
+    # Write to temp file first
+    with tempfile.NamedTemporaryFile(mode='w', dir=runflow_root, delete=False, suffix='.tmp') as f:
+        json.dump(latest_data, f, indent=2)
+        temp_path = f.name
+    
+    # Atomic rename
+    shutil.move(temp_path, latest_path)
+    print(f"   📌 Updated latest.json → {run_id}")
 
 
 def append_to_run_index(metadata: Dict[str, Any]) -> None:
@@ -375,10 +364,9 @@ def append_to_run_index(metadata: Dict[str, Any]) -> None:
           { "run_id": "...", "created_at": "...", "file_counts": {...}, ... }
         ]
     """
-    from app.utils.env import detect_storage_target
-    from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER, GCS_BUCKET_RUNFLOW
+    # Issue #466 Step 4 Cleanup: Local-only, dead GCS branch removed
+    from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER
     
-    storage_target = detect_storage_target()
     run_id = metadata.get("run_id")
     
     # Extract summary for index (subset of full metadata)
@@ -393,67 +381,35 @@ def append_to_run_index(metadata: Dict[str, Any]) -> None:
         "status": metadata.get("status", "complete")
     }
     
-    if storage_target == "filesystem":
-        # Local mode: Read → Append → Write
-        # Use container root if in Docker, otherwise use local root
-        if Path(RUNFLOW_ROOT_CONTAINER).exists():
-            runflow_root = Path(RUNFLOW_ROOT_CONTAINER)
-        else:
-            runflow_root = Path(RUNFLOW_ROOT_LOCAL)
-        runflow_root.mkdir(parents=True, exist_ok=True)
-        index_path = runflow_root / "index.json"
-        
-        # Read existing index
-        if index_path.exists():
-            try:
-                index_data = json.loads(index_path.read_text())
-                if not isinstance(index_data, list):
-                    index_data = []
-            except (json.JSONDecodeError, Exception):
-                index_data = []
-        else:
-            index_data = []
-        
-        # Deduplication: Check if run_id already exists
-        if any(entry.get("run_id") == run_id for entry in index_data):
-            return  # Already indexed, skip
-        
-        # Append new entry
-        index_data.append(index_entry)
-        
-        # Write back
-        index_path.write_text(json.dumps(index_data, indent=2, default=str))
-        print(f"   📊 Appended to index.json ({len(index_data)} total runs)")
+    # Use container root if in Docker, otherwise use local root
+    if Path(RUNFLOW_ROOT_CONTAINER).exists():
+        runflow_root = Path(RUNFLOW_ROOT_CONTAINER)
     else:
-        # GCS mode: Read → Append → Write
-        from google.cloud import storage as gcs
-        
-        bucket_name = os.getenv("GCS_BUCKET_RUNFLOW", GCS_BUCKET_RUNFLOW)
-        client = gcs.Client()
-        bucket = client.bucket(bucket_name)
-        blob = bucket.blob("index.json")
-        
-        # Read existing index
-        if blob.exists():
-            try:
-                index_data = json.loads(blob.download_as_text())
-                if not isinstance(index_data, list):
-                    index_data = []
-            except (json.JSONDecodeError, Exception):
+        runflow_root = Path(RUNFLOW_ROOT_LOCAL)
+    runflow_root.mkdir(parents=True, exist_ok=True)
+    index_path = runflow_root / "index.json"
+    
+    # Read existing index
+    if index_path.exists():
+        try:
+            index_data = json.loads(index_path.read_text())
+            if not isinstance(index_data, list):
                 index_data = []
-        else:
+        except (json.JSONDecodeError, Exception):
             index_data = []
-        
-        # Deduplication: Check if run_id already exists
-        if any(entry.get("run_id") == run_id for entry in index_data):
-            return  # Already indexed, skip
-        
-        # Append new entry
-        index_data.append(index_entry)
-        
-        # Write back
-        blob.upload_from_string(json.dumps(index_data, indent=2, default=str), content_type='application/json')
-        print(f"   📊 Appended to GCS index.json ({len(index_data)} total runs)")
+    else:
+        index_data = []
+    
+    # Deduplication: Check if run_id already exists
+    if any(entry.get("run_id") == run_id for entry in index_data):
+        return  # Already indexed, skip
+    
+    # Append new entry
+    index_data.append(index_entry)
+    
+    # Write back
+    index_path.write_text(json.dumps(index_data, indent=2, default=str))
+    print(f"   📊 Appended to index.json ({len(index_data)} total runs)")
 
 
 # ===== Phase 5: API Read Helpers (Issue #460) =====
@@ -497,41 +453,25 @@ def get_run_index() -> List[Dict[str, Any]]:
         recent_runs = runs[:10]  # Last 10 runs
         return [{"run_id": r["run_id"], "created_at": r["created_at"], ...} for r in recent_runs]
     """
-    from app.utils.env import detect_storage_target
-    from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER, GCS_BUCKET_RUNFLOW
+    # Issue #466 Step 4 Cleanup: Local-only, dead GCS branch removed
+    from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER
     import logging
     
     logger = logging.getLogger(__name__)
-    storage_target = detect_storage_target()
     
     try:
-        if storage_target == "filesystem":
-            # Local mode: Read from filesystem
-            if Path(RUNFLOW_ROOT_CONTAINER).exists():
-                runflow_root = Path(RUNFLOW_ROOT_CONTAINER)
-            else:
-                runflow_root = Path(RUNFLOW_ROOT_LOCAL)
-            
-            index_path = runflow_root / "index.json"
-            if not index_path.exists():
-                logger.warning(f"index.json not found at {index_path}, returning empty list")
-                return []
-            
-            index_data = json.loads(index_path.read_text())
+        # Use container root if in Docker, otherwise use local root
+        if Path(RUNFLOW_ROOT_CONTAINER).exists():
+            runflow_root = Path(RUNFLOW_ROOT_CONTAINER)
         else:
-            # GCS mode: Read from GCS
-            from google.cloud import storage as gcs
-            
-            bucket_name = os.getenv("GCS_BUCKET_RUNFLOW", GCS_BUCKET_RUNFLOW)
-            client = gcs.Client()
-            bucket = client.bucket(bucket_name)
-            blob = bucket.blob("index.json")
-            
-            if not blob.exists():
-                logger.warning(f"index.json not found in gs://{bucket_name}/, returning empty list")
-                return []
-            
-            index_data = json.loads(blob.download_as_text())
+            runflow_root = Path(RUNFLOW_ROOT_LOCAL)
+        
+        index_path = runflow_root / "index.json"
+        if not index_path.exists():
+            logger.warning(f"index.json not found at {index_path}, returning empty list")
+            return []
+        
+        index_data = json.loads(index_path.read_text())
         
         # Validate structure
         if not isinstance(index_data, list):
