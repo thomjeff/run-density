@@ -743,8 +743,8 @@ def export_ui_artifacts(reports_dir: Path, run_id: str, overtaking_segments: int
     # Issue #415 Phase 3: Upload UI artifacts to GCS when enabled
     if os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
         try:
-            from app.storage_service import get_storage_service
-            storage_service = get_storage_service()
+            # Issue #466 Step 2: Storage consolidated to app.storage
+            # Issue #466 Step 2: storage_service removed
             
             # Upload all JSON artifacts to GCS
             ui_artifacts = [
@@ -772,13 +772,13 @@ def export_ui_artifacts(reports_dir: Path, run_id: str, overtaking_segments: int
     # Issue #334: Also generate heatmaps and captions to ensure UI completeness
     try:
         from app.core.artifacts.heatmaps import export_heatmaps_and_captions
-        from app.storage_service import get_storage_service
-        storage = get_storage_service()
+        # Issue #466 Step 2: Storage consolidated to app.storage
+        # Issue #466 Step 2: storage_service removed
         print("\n============================================================")
         print("Generating Heatmaps")
         print("============================================================")
         print("   Generating heatmaps...")
-        export_heatmaps_and_captions(run_id, reports_dir, storage)
+        export_heatmaps_and_captions(run_id, reports_dir, None)
     except Exception as e:
         print(f"   ⚠️  Skipping heatmaps/captions generation: {e}")
 
@@ -888,8 +888,8 @@ def update_latest_pointer(run_id: str) -> None:
     # Upload to GCS if enabled (Issue #415 Phase 3)
     if os.getenv("GCS_UPLOAD", "true").lower() in {"1", "true", "yes", "on"}:
         try:
-            from app.storage_service import get_storage_service
-            storage_service = get_storage_service()
+            # Issue #466 Step 2: Storage consolidated to app.storage
+            # Issue #466 Step 2: storage_service removed
             
             # Use save_artifact_json to upload to GCS at artifacts/latest.json path
             gcs_path = storage_service.save_artifact_json("artifacts/latest.json", pointer)

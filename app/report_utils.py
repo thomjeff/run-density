@@ -327,63 +327,6 @@ def write_runflow_file(
     return str(local_path)
 
 
-def upload_runflow_to_gcs(run_id: str) -> None:
-    """
-    Upload all files in a runflow directory to GCS (Issue #455 Phase 3).
-    
-    Called after all local files have been generated. Recursively uploads
-    the entire runflow/<run_id>/ directory to gs://runflow/<run_id>/.
-    
-    Only performs upload if detect_storage_target() == "gcs".
-    
-    Args:
-        run_id: UUID for the run
-    
-    Example:
-        # Generate all files locally
-        write_density_report(...)
-        write_flow_report(...)
-        generate_heatmaps(...)
-        
-        # Upload everything to GCS if enabled
-        upload_runflow_to_gcs(run_id)
-    """
-    from app.utils.env import detect_storage_target
-    from app.storage import create_runflow_storage
-    import os
-    
-    storage_target = detect_storage_target()
-    if storage_target != "gcs":
-        return  # Skip upload in local mode
-    
-    # Get local run directory
-    local_run_dir = Path(get_run_folder_path(run_id))
-    if not local_run_dir.exists():
-        print(f"⚠️  Runflow directory not found: {local_run_dir}")
-        return
-    
-    print(f"📤 Uploading runflow/{run_id}/ to GCS...")
-    
-    storage = create_runflow_storage(run_id)
-    uploaded_count = 0
-    
-    # Walk through all files in the run directory
-    for root, dirs, files in os.walk(local_run_dir):
-        for filename in files:
-            if filename.startswith('.'):
-                continue  # Skip hidden files
-            
-            local_file = Path(root) / filename
-            
-            # Calculate relative path from run directory
-            rel_path = local_file.relative_to(local_run_dir)
-            
-            # Upload file
-            try:
-                gcs_path = storage.copy_file(local_file, str(rel_path))
-                uploaded_count += 1
-            except Exception as e:
-                print(f"   ⚠️  Failed to upload {rel_path}: {e}")
-    
-    print(f"✅ Uploaded {uploaded_count} files to gs://runflow/{run_id}/")
+# Issue #466 Step 3: Dead GCS upload function removed (Phase 1 declouding)
+# upload_runflow_to_gcs() archived (60 lines) - no longer needed for local-only architecture
 

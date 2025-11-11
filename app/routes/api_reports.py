@@ -14,7 +14,7 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 import logging
 
-from app.storage_service import get_storage_service
+# Issue #466 Step 2: Storage consolidated to app.storage
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -40,28 +40,8 @@ def _get_file_description_from_extension(filename: str) -> str:
         return ""
 
 
-def _get_file_metadata_from_gcs(storage_service, file_path: str) -> tuple[Optional[float], Optional[int]]:
-    """Get file metadata (mtime, size) from GCS."""
-    try:
-        # Normalize path for GCS (remove reports/ prefix if present)
-        gcs_path = file_path
-        if file_path.startswith("reports/"):
-            gcs_path = file_path[len("reports/"):]
-        
-        bucket = storage_service._client.bucket(storage_service.config.bucket_name)
-        blob = bucket.blob(gcs_path)
-        
-        if blob.exists():
-            blob.reload()  # Ensure we have latest metadata
-            mtime = blob.time_created.timestamp() if blob.time_created else None
-            size = blob.size if blob.size else None
-            return mtime, size
-        else:
-            logger.warning(f"GCS blob not found: {gcs_path}")
-            return None, None
-    except Exception as gcs_error:
-        logger.warning(f"Could not get GCS metadata for {file_path}: {gcs_error}")
-        return None, None
+# Issue #466 Step 4 Cleanup: GCS metadata function removed (archived storage_service dependency)
+# _get_file_metadata_from_gcs archived - local-only architecture uses direct filesystem access
 
 
 def _get_file_metadata_from_local(file_path: str) -> tuple[Optional[float], Optional[int]]:
@@ -81,14 +61,10 @@ def _get_file_metadata_from_local(file_path: str) -> tuple[Optional[float], Opti
 
 
 def _get_file_metadata(storage, file_path: str) -> tuple[Optional[float], Optional[int]]:
-    """Get file metadata (mtime, size) based on storage type."""
-    # Issue #460: Storage class uses .mode instead of .config.use_cloud_storage
-    if storage.mode == "gcs":
-        return _get_file_metadata_from_gcs(storage, file_path)
-    else:
-        # For local mode, need to construct full path from storage root
-        full_path = storage._full_local(file_path)
-        return _get_file_metadata_from_local(str(full_path))
+    """Get file metadata (mtime, size) from local filesystem."""
+    # Issue #466 Step 4 Cleanup: Local-only, GCS branch removed
+    full_path = storage._full_local(file_path)
+    return _get_file_metadata_from_local(str(full_path))
 
 
 def _add_core_data_files(reports: list) -> None:

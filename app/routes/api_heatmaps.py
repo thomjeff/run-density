@@ -14,7 +14,7 @@ from pathlib import Path
 import logging
 
 from app.heatmap_generator import generate_heatmaps_for_run, get_heatmap_files
-from app.storage_service import get_storage_service
+# Issue #466 Step 2: Storage consolidated to app.storage
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -32,41 +32,16 @@ class HeatmapGenerationRequest:
         extra = "forbid"
 
 
-def upload_binary_to_gcs(local_file_path: Path, gcs_dest_path: str) -> bool:
-    """
-    Upload binary file (PNG) to GCS.
-    
-    Args:
-        local_file_path: Path to local file
-        gcs_dest_path: GCS destination path
-        
-    Returns:
-        True if successful, False otherwise
-    """
-    try:
-        storage_service = get_storage_service()
-        
-        # Read binary file
-        with open(local_file_path, 'rb') as f:
-            file_content = f.read()
-        
-        # Upload using StorageService client
-        bucket = storage_service._client.bucket(storage_service.config.bucket_name)
-        blob = bucket.blob(gcs_dest_path)
-        blob.upload_from_string(file_content, content_type='image/png')
-        
-        logger.info(f"Uploaded {local_file_path.name} to GCS: {gcs_dest_path}")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Failed to upload {local_file_path.name} to GCS: {e}")
-        return False
+# Issue #466 Step 3: Dead GCS upload function removed (Phase 1 declouding)
+# upload_binary_to_gcs() archived - no longer needed for local-only architecture
 
 
 @router.post("/heatmaps")
 async def generate_heatmaps(request: Dict[str, Any]):
     """
-    Generate heatmaps for a specified run and upload to GCS.
+    Generate heatmaps for a specified run (local-only).
+    
+    Issue #466 Step 3: Removed GCS upload logic (Phase 1 declouding).
     
     Args:
         request: Dict with 'run_id' (required) and 'force' (optional)
@@ -100,7 +75,7 @@ async def generate_heatmaps(request: Dict[str, Any]):
         
         return JSONResponse(content={
             "status": "success",
-            "message": f"Heatmaps generated and uploaded successfully",
+            "message": f"Heatmaps generated successfully",  # Issue #466 Step 3: Removed "uploaded"
             "heatmap_count": uploaded_count,
             "segments": segments,
             "run_id": run_id

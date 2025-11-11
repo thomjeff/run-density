@@ -17,7 +17,7 @@ import pandas as pd
 from app.core.flow.flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
 from app.utils.constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 from app.report_utils import get_report_paths, format_decimal_places
-from app.storage_service import get_storage_service
+# Issue #466 Step 2: Storage consolidated to app.storage
 from app.flow_density_correlation import analyze_flow_density_correlation
 
 # Get app version from main.py to ensure consistency
@@ -147,9 +147,8 @@ def generate_temporal_flow_report(
             from app.utils.metadata import update_latest_pointer
             update_latest_pointer(run_id)
             
-            # Issue #455 Phase 3: Upload to GCS if enabled
-            from app.report_utils import upload_runflow_to_gcs
-            upload_runflow_to_gcs(run_id)
+            # Issue #466 Step 3: GCS upload removed (Phase 1 declouding)
+            # upload_runflow_to_gcs() archived - local-only architecture
         except Exception as e:
             print(f"⚠️ Failed to write metadata.json: {e}")
     

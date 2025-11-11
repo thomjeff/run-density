@@ -7,8 +7,7 @@ from typing import List, Dict, Optional
 import os, mimetypes
 from datetime import datetime
 
-# Import storage service for Cloud Storage integration
-from app.storage_service import get_storage_service
+# Issue #466 Step 4 Cleanup: Removed storage_service imports (archived)
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 templates = Jinja2Templates(directory="app/templates")
@@ -133,64 +132,9 @@ def _scan_reports(limit: int = 20) -> List[Dict]:
     rows.sort(key=lambda r: (r["mtime"] or datetime.min), reverse=True)
     return rows[:limit]
 
-def _latest(kind: str) -> Optional[Dict]:
-    """Get the latest report of a specific kind from storage or local files."""
-    try:
-        from datetime import datetime, timedelta
-        from app.storage_service import get_storage_service
-        
-        storage_service = get_storage_service()
-        today = datetime.now().date()
-        
-        # Check the last 7 days for reports
-        for days_back in range(7):
-            check_date = today - timedelta(days=days_back)
-            date_str = check_date.strftime("%Y-%m-%d")
-            
-            # List files for this date - files are saved directly in YYYY-MM-DD/ not reports/YYYY-MM-DD/
-            if storage_service._detect_environment():
-                # For Cloud Storage, we need to call the private method with the correct path
-                files = storage_service._list_gcs_files(date_str)
-            else:
-                # For local, use the public interface
-                files = storage_service.list_files(date=date_str)
-            print(f"DEBUG: _latest() checking date {date_str}, found {len(files)} files: {files}")
-            
-            # Find the latest file of the requested kind
-            matching_files = []
-            print(f"DEBUG: _latest() looking for kind '{kind}' in {len(files)} files")
-            for file_path in files:
-                file_name = file_path.split('/')[-1]  # Get just the filename
-                if any(file_name.lower().endswith(ext) for ext in ALLOWED_EXTS):
-                    lower = file_name.lower()
-                    print(f"DEBUG: _latest() checking file '{file_name}' (lower: '{lower}')")
-                    if kind == "density" and "density" in lower:
-                        print(f"DEBUG: _latest() found density match: {file_name}")
-                        matching_files.append((date_str, file_name))
-                    elif kind == "flow" and "flow" in lower:
-                        print(f"DEBUG: _latest() found flow match: {file_name}")
-                        matching_files.append((date_str, file_name))
-            
-            if matching_files:
-                # Sort by filename to get the latest
-                matching_files.sort(key=lambda x: x[1], reverse=True)
-                latest_date, latest_filename = matching_files[0]
-                
-                # Issue #464: Local-only after Phase 1 declouding
-                result = {
-                    "rel": latest_filename,
-                    "kind": kind,
-                    "date": latest_date,
-                    "source": "local"
-                }
-                print(f"DEBUG: _latest() returning: {result}")
-                return result
-        
-        return None
-        
-    except Exception as e:
-        print(f"Error in _latest: {e}")
-        return None
+# Issue #466 Step 4 Cleanup: Legacy date-based report functions removed
+# _latest(), density_latest(), flow_latest() archived - used old date-based structure
+# Modern API uses /api/reports/list endpoint with runflow/<uuid>/reports/ structure
 
 def _safe_join(rel: str) -> Path:
     candidate = (REPORTS_DIR / rel).resolve()
@@ -207,123 +151,33 @@ def reports_list(request: Request, limit: int = 15):
     items = _scan_reports(limit=limit)
     return templates.TemplateResponse("_reports_list.html", {"request": request, "items": items})
 
-@router.get("/density/latest")
-def density_latest():
-    file_info = _latest("density")
-    if not file_info:
-        raise HTTPException(status_code=404, detail="No density report found")
-    
-    try:
-        storage_service = get_storage_service()
-        
-        # Load content from storage service (Cloud Storage or local)
-        if file_info["source"] == "cloud":
-            # Files are saved directly in YYYY-MM-DD/ not reports/YYYY-MM-DD/
-            file_path = f"{file_info.get('date')}/{file_info['rel']}"
-            print(f"DEBUG: density_latest() loading file from path: {file_path}")
-            content = storage_service._load_from_gcs(file_path)
-            if content is None:
-                raise HTTPException(status_code=404, detail="Density report file not found in storage")
-        else:
-            # Local file system fallback - construct full path with date directory
-            file_path = REPORTS_DIR / file_info["date"] / file_info["rel"]
-            print(f"DEBUG: density_latest() loading local file from path: {file_path}")
-            if not file_path.exists():
-                raise HTTPException(status_code=404, detail=f"Density report file not found at {file_path}")
-            content = file_path.read_text(encoding="utf-8", errors="ignore")
-        
-        # Return content as response
-        from fastapi.responses import Response
-        media_type = mimetypes.guess_type(file_info["rel"])[0] or "text/plain"
-        return Response(
-            content=content,
-            media_type=media_type,
-            headers={"Content-Disposition": f"attachment; filename={file_info['rel']}"}
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error loading density report: {str(e)}")
-
-@router.get("/flow/latest")
-def flow_latest():
-    file_info = _latest("flow")
-    if not file_info:
-        raise HTTPException(status_code=404, detail="No flow report found")
-    
-    try:
-        storage_service = get_storage_service()
-        
-        # Load content from storage service (Cloud Storage or local)
-        if file_info["source"] == "cloud":
-            # Files are saved directly in YYYY-MM-DD/ not reports/YYYY-MM-DD/
-            file_path = f"{file_info.get('date')}/{file_info['rel']}"
-            print(f"DEBUG: flow_latest() loading file from path: {file_path}")
-            content = storage_service._load_from_gcs(file_path)
-            if content is None:
-                raise HTTPException(status_code=404, detail="Flow report file not found in storage")
-        else:
-            # Local file system fallback - construct full path with date directory
-            file_path = REPORTS_DIR / file_info["date"] / file_info["rel"]
-            print(f"DEBUG: flow_latest() loading local file from path: {file_path}")
-            if not file_path.exists():
-                raise HTTPException(status_code=404, detail=f"Flow report file not found at {file_path}")
-            content = file_path.read_text(encoding="utf-8", errors="ignore")
-        
-        # Return content as response
-        from fastapi.responses import Response
-        media_type = mimetypes.guess_type(file_info["rel"])[0] or "text/plain"
-        return Response(
-            content=content,
-            media_type=media_type,
-            headers={"Content-Disposition": f"attachment; filename={file_info['rel']}"}
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error loading flow report: {str(e)}")
+# Issue #466 Step 4 Cleanup: Legacy endpoints removed - not used by current UI
+# Use /api/reports/list and /api/reports/download endpoints instead
 
 @router.get("/open")
 def open_report(path: str):
-    """Open a specific report file from storage or local files."""
+    """Open a specific report file from local filesystem."""
     try:
-        storage_service = get_storage_service()
-        content = storage_service.load_file(path)
-        if content is None:
-            # Fallback to local file system
-            p = _safe_join(path)
-            return FileResponse(p, filename=p.name, media_type=mimetypes.guess_type(p.name)[0])
-        
-        # Return content from storage
-        from fastapi.responses import Response
-        media_type = mimetypes.guess_type(path)[0] or "text/plain"
-        return Response(
-            content=content,
-            media_type=media_type,
-            headers={"Content-Disposition": f"attachment; filename={path}"}
-        )
-    except Exception as e:
-        # Fallback to local file system
+        # Issue #466 Step 4 Cleanup: Local-only filesystem access
         p = _safe_join(path)
         return FileResponse(p, filename=p.name, media_type=mimetypes.guess_type(p.name)[0])
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Report not found: {path}")
 
 @router.get("/preview", response_class=HTMLResponse)
 def preview_report(request: Request, path: str):
-    """Preview a report file from storage or local files."""
+    """Preview a report file from local filesystem."""
     try:
-        storage_service = get_storage_service()
-        content = storage_service.load_file(path)
-        if content is None:
-            # Fallback to local file system
-            p = _safe_join(path)
-            return _preview_local_file(request, p)
-        
-        # Preview content from storage
-        return _preview_storage_content(request, path, content)
-        
-    except Exception as e:
-        # Fallback to local file system
+        # Issue #466 Step 4 Cleanup: Local-only filesystem access
         p = _safe_join(path)
         return _preview_local_file(request, p)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Report not found: {path}")
 
-def _preview_storage_content(request: Request, filename: str, content: str) -> HTMLResponse:
-    """Preview content loaded from storage."""
+# Issue #466 Step 4 Cleanup: _preview_storage_content removed (GCS-specific, not needed for local-only)
+
+def _preview_storage_content_archived(request: Request, filename: str, content: str) -> HTMLResponse:
+    """Archived: Preview content loaded from storage (GCS-specific)."""
     ext = Path(filename).suffix.lower()
     
     if ext in {".html", ".htm"}:

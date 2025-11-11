@@ -172,15 +172,15 @@ try:
 except Exception as e:
     print(f"Warning: Could not mount static directory: {e}")
 
-# Mount artifacts directory for local development only (legacy)
-# In Cloud Run, heatmaps are served via signed URLs from GCS
+# Issue #466 Bonus: Legacy artifacts directory mount (kept for backward compat)
+# Modern heatmaps served from /heatmaps/<run_id>/<seg_id>.png via runflow/ mount
 if os.path.exists("artifacts"):
     try:
         app.mount("/artifacts", StaticFiles(directory="artifacts"), name="artifacts")
     except Exception as e:
         print(f"Warning: Could not mount artifacts directory: {e}")
 else:
-    print("Info: Artifacts directory not found - using GCS storage mode")
+    print("Info: Artifacts directory not found - heatmaps served from runflow/")
 
 # Issue #460 Phase 5: Mount runflow directory for local development
 # Heatmaps are now at /heatmaps/<run_id>/<seg_id>.png
@@ -193,7 +193,7 @@ if os.path.exists(runflow_root):
     except Exception as e:
         print(f"Warning: Could not mount runflow directory for heatmaps: {e}")
 else:
-    print(f"Info: Runflow directory not found at {runflow_root} - using GCS storage mode")
+    print(f"Info: Runflow directory not found at {runflow_root} - local storage only")
 
 @app.get("/")
 async def root():
@@ -738,7 +738,7 @@ async def check_pdf_status():
 def _find_latest_density_report_file(storage) -> Optional[Tuple[str, str]]:
     """Find the latest density report file from the last 7 days."""
     from datetime import timedelta
-    from app.storage_service import get_storage_service
+    # Issue #466 Step 2: Storage consolidated to app.storage
     
     all_files = []
     
@@ -853,7 +853,7 @@ def _extract_current_segment(line: str) -> Optional[str]:
 
 def parse_latest_density_report():
     """Parse the latest density report to extract summary data without running new analysis."""
-    from app.storage_service import get_storage_service
+    # Issue #466 Step 2: Storage consolidated to app.storage
     
     # Use unified storage service that works in both local and Cloud Run
     storage = get_storage_service()
@@ -1087,7 +1087,7 @@ def parse_latest_density_report_segments():
     import re
     from pathlib import Path
     from datetime import datetime
-    from app.storage_service import get_storage_service
+    # Issue #466 Step 2: Storage consolidated to app.storage
     
     # Use unified storage service that works in both local and Cloud Run
     storage = get_storage_service()

@@ -261,8 +261,9 @@ class FileSystemCacheManager(CacheManager):
         logger.info(f"Cleaned up {cleaned_count} old cache entries")
         return cleaned_count
 
-class CloudStorageCacheManager(CacheManager):
-    """Google Cloud Storage cache manager for Cloud Run."""
+# Issue #466 Step 4 Cleanup: CloudStorageCacheManager archived (GCS-specific, local-only)
+class CloudStorageCacheManager_archived(CacheManager):
+    """Archived: Google Cloud Storage cache manager (GCS-specific)."""
     
     def __init__(self, bucket_name: str = None):
         self.bucket_name = bucket_name or os.getenv('CACHE_BUCKET_NAME', 'run-density-cache')
@@ -376,14 +377,12 @@ class CloudStorageCacheManager(CacheManager):
 
 def get_cache_manager() -> CacheManager:
     """Get appropriate cache manager based on environment."""
-    # Issue #447: Check GCS_UPLOAD flag first (staging mode)
-    if os.getenv('GCS_UPLOAD', '').lower() == 'true':
-        # Staging mode - use Cloud Storage
-        return CloudStorageCacheManager()
-    elif os.getenv('GOOGLE_CLOUD_PROJECT'):
-        # Cloud Run environment
-        return CloudStorageCacheManager()
-    else:
+    # Issue #466 Step 4 Cleanup: Cloud Storage cache disabled (local-only architecture)
+    # Always use filesystem cache regardless of environment variables
+    if os.getenv('GCS_UPLOAD', '').lower() == 'true' or os.getenv('GOOGLE_CLOUD_PROJECT'):
+        logger.warning("GCS cache requested but disabled in local-only architecture - using filesystem cache")
+    
+    if True:  # Always use filesystem
         # Local development environment
         return FileSystemCacheManager()
 

@@ -14,7 +14,7 @@ from typing import Dict, Any, List
 import json
 import logging
 
-from app.storage_service import get_storage_service
+# Issue #466 Step 2: Storage consolidated to app.storage
 from app.common.config import load_reporting
 
 # Configure logging
@@ -23,8 +23,7 @@ logger = logging.getLogger(__name__)
 # Create router
 router = APIRouter()
 
-# Initialize storage service
-storage = get_storage_service()
+# Issue #466 Step 2: Removed legacy storage singleton (not needed)
 
 
 def enrich_segment_features(segments_geojson: Dict[str, Any], 

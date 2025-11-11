@@ -16,8 +16,8 @@ import pandas as pd
 from pathlib import Path
 import json
 
-from app.storage_service import get_storage_service
-from app.storage_service import StorageService
+# Issue #466 Step 2: Storage consolidated to app.storage
+
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -25,8 +25,7 @@ logger = logging.getLogger(__name__)
 # Create router
 router = APIRouter()
 
-# Initialize storage service
-storage_service = StorageService()
+# Issue #466 Step 2: Removed legacy storage singleton (not needed)
 
 
 def load_density_metrics_from_bins():

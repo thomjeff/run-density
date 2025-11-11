@@ -19,30 +19,30 @@ It provides comprehensive reporting capabilities with both Markdown and CSV outp
 
 ## Quick Start (Local Development)
 
-### Docker Development (Recommended)
+### Docker Development (Local-Only)
 
-**New in v1.6.50:** Docker-first development workflow.
+**Issue #466:** Simplified to 3 core commands for local-only Docker development.
 
 Start the development container:
 ```bash
-make dev-docker
+make dev
 ```
 
 The container runs on `http://localhost:8080` with hot-reload enabled.
 
-Run smoke tests:
+Run end-to-end tests:
 ```bash
-make smoke-docker
+make e2e-local
 ```
 
-Run full E2E tests:
+Run smoke tests:
 ```bash
-make e2e-docker
+make test
 ```
 
 Stop the container:
 ```bash
-make stop-docker
+make stop
 ```
 
 **📖 Full Documentation:** See [`docs/DOCKER_DEV.md`](docs/DOCKER_DEV.md) for complete Docker development guide.
@@ -89,13 +89,13 @@ make smoke-local
 - **Real-time Monitoring**: Health checks and API status monitoring
 
 ### Heatmap Display
-- **Local Storage**: Heatmaps stored in local filesystem
+- **Local Storage**: Heatmaps stored in `runflow/<uuid>/ui/heatmaps/`
 - **Interactive Segments**: Click on segments to view detailed heatmap visualizations
 - **Auto-Captions**: Text summaries for each heatmap generated automatically
+- **UUID-Based Runs**: Each analysis run has a unique ID for tracking
 
 ### Access the Web UI
 - **Local (Docker)**: http://localhost:8080/dashboard
-- **Local (Legacy)**: http://localhost:8081/frontend/
 
 ## Report Generation
 
@@ -151,19 +151,21 @@ curl -X POST "http://localhost:8080/api/density-report" \
 
 ---
 
-## Makefile Shortcuts
+## Makefile Commands
 
-### Docker Commands (Recommended)
-- `make dev-docker` – start Docker container on `http://localhost:8080` with hot-reload
-- `make smoke-docker` – run smoke tests against Docker container
-- `make e2e-docker` – run full E2E tests inside Docker container
-- `make stop-docker` – stop and remove Docker container
-- `make build-docker` – build Docker image (no start)
+### Core Commands (Issue #466)
+- `make dev` – start Docker container on `http://localhost:8080` with hot-reload
+- `make e2e-local` – run end-to-end tests (local-only mode)
+- `make test` – run smoke tests (health checks + API validation)
+- `make stop` – stop and remove Docker container
+- `make build` – build Docker image (no start)
 
-### Legacy Commands (Deprecated)
-- `make bootstrap` – install runtime dependencies  
-- `make run-local` – start service via venv on `http://localhost:8081`
-- `make smoke-local` – hit `/health`, `/ready`, and test endpoints  
+### Legacy Aliases (Backward Compatibility)
+- `make dev-docker` – alias for `make dev`
+- `make e2e-local-docker` – alias for `make e2e-local`
+- `make smoke-docker` – alias for `make test`
+- `make stop-docker` – alias for `make stop`
+- `make build-docker` – alias for `make build`  
 
 ---
 
@@ -195,13 +197,13 @@ Run end-to-end tests locally using Docker:
 
 ```bash
 # Start container
-make dev-docker
+make dev
 
 # Run E2E tests
-make e2e-local-docker
+make e2e-local
 
 # Run smoke tests
-make smoke-docker
+make test
 ```
 
 ### Test Coverage

@@ -1,15 +1,20 @@
 """
-Run ID Generator for UUID-based Run Tracking
+Run ID Management for UUID-based Run Tracking
 
-Generates short, unique identifiers for each analysis run to replace date-based
-folder naming. Uses shortuuid library for collision-resistant IDs.
+Centralized module for all run_id generation, validation, and retrieval operations.
+Provides local-only filesystem operations for runflow structure.
 
 Epic: #444 - Refactor Report Run ID System
-Phase: 1 - UUID Infrastructure
+Issue: #466 - Phase 2: Architecture Refinement (Step 1 - Centralize Run ID Logic)
 """
 
 import shortuuid
+import json
+import logging
+from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 def generate_run_id(length: Optional[int] = None) -> str:
@@ -121,4 +126,90 @@ def is_legacy_date_format(run_id: str) -> bool:
                 pass
     
     return False
+
+
+def get_runflow_root() -> Path:
+    """
+    Get the runflow root directory path for local filesystem.
+    
+    Issue #466 Step 1: Centralized path resolution for local-only architecture.
+    Detects if running in Docker container vs native host.
+    
+    Returns:
+        Path to runflow root directory
+    
+    Examples:
+        >>> root = get_runflow_root()
+        >>> # In Docker: Path("/app/runflow")
+        >>> # On host: Path("/Users/username/Documents/runflow")
+    """
+    from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER
+    
+    # Prefer container path if it exists (running in Docker)
+    if Path(RUNFLOW_ROOT_CONTAINER).exists():
+        return Path(RUNFLOW_ROOT_CONTAINER)
+    else:
+        return Path(RUNFLOW_ROOT_LOCAL)
+
+
+def get_latest_run_id() -> str:
+    """
+    Get the most recent run_id from runflow/latest.json.
+    
+    Issue #466 Step 1: Centralized, local-only implementation.
+    Removed all GCS/cloud fallback logic from Phase 1 declouding.
+    
+    Returns:
+        run_id string (UUID format, e.g., "abc123xyz")
+        
+    Raises:
+        FileNotFoundError: If latest.json doesn't exist
+        ValueError: If latest.json is invalid or missing run_id field
+        
+    Examples:
+        >>> run_id = get_latest_run_id()
+        >>> print(run_id)
+        'NucS5yBhmcYHpjcyXviFFU'
+    """
+    runflow_root = get_runflow_root()
+    latest_path = runflow_root / "latest.json"
+    
+    if not latest_path.exists():
+        raise FileNotFoundError(
+            f"latest.json not found at {latest_path}. "
+            f"No runs have been completed yet."
+        )
+    
+    try:
+        latest_data = json.loads(latest_path.read_text())
+    except json.JSONDecodeError as e:
+        raise ValueError(f"latest.json is not valid JSON: {e}")
+    
+    run_id = latest_data.get("run_id")
+    if not run_id:
+        raise ValueError("latest.json missing 'run_id' field")
+    
+    logger.info(f"Loaded latest run_id: {run_id} from {latest_path}")
+    return run_id
+
+
+def get_run_directory(run_id: str) -> Path:
+    """
+    Get the full directory path for a specific run.
+    
+    Issue #466 Step 1: Centralized path resolution.
+    
+    Args:
+        run_id: The run identifier
+    
+    Returns:
+        Full path to run directory (e.g., /app/runflow/abc123xyz/)
+    
+    Examples:
+        >>> path = get_run_directory("abc123xyz")
+        >>> print(path)
+        Path('/app/runflow/abc123xyz')
+    """
+    runflow_root = get_runflow_root()
+    return runflow_root / run_id
 

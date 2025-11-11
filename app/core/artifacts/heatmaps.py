@@ -27,7 +27,7 @@ import sys
 # Add parent directory to path for imports
 
 from app.common.config import load_rulebook, load_reporting
-from app.storage_service import get_storage_service
+# Issue #466 Step 2: Storage consolidated to app.storage=None
 
 
 def create_los_colormap(los_colors: Dict[str, str]) -> mcolors.LinearSegmentedColormap:
@@ -621,7 +621,7 @@ def _determine_heatmap_output_dir(run_id: str):
         return Path(get_runflow_category_path(run_id, "heatmaps"))
 
 
-def _save_captions_json(run_id: str, captions: dict, storage):
+def _save_captions_json(run_id: str, captions: dict, storage=None):
     """Save captions.json to appropriate location based on run ID format."""
     from pathlib import Path
     from app.utils.run_id import is_legacy_date_format
@@ -648,7 +648,7 @@ def _save_captions_json(run_id: str, captions: dict, storage):
 def export_heatmaps_and_captions(
     run_id: str, 
     reports_dir: Path, 
-    storage
+    storage=None
 ) -> Tuple[int, int]:
     """
     Generate heatmaps and captions for all segments.
@@ -764,11 +764,11 @@ def main():
         sys.exit(1)
     
     # Create storage abstraction using modern StorageService
-    storage = get_storage_service()
+    # Issue #466 Step 2: storage_service removed
     
     # Generate heatmaps and captions
     heatmaps_generated, captions_generated = export_heatmaps_and_captions(
-        run_id, reports_dir, storage
+        run_id, reports_dir, storage=None
     )
     
     print(f"🎉 Export complete! Generated {heatmaps_generated} heatmaps and {captions_generated} captions.")

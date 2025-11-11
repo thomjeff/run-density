@@ -15,8 +15,6 @@ import json
 import logging
 from datetime import datetime
 
-from app.storage_service import get_storage_service
-from app.storage_service import StorageService
 from app.common.config import load_rulebook, load_reporting
 
 # Issue #283: Import SSOT for flagging logic parity
@@ -28,8 +26,7 @@ logger = logging.getLogger(__name__)
 # Create router
 router = APIRouter()
 
-# Initialize storage service
-storage_service = StorageService()
+# Issue #466 Step 2: Removed legacy storage_service singleton (not needed)
 
 
 def load_runners_data() -> Dict[str, Any]:

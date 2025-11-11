@@ -1,10 +1,10 @@
 # Docker Development Guide
 
-**Version:** 2.0  
-**Last Updated:** 2025-11-10  
-**Issues:** #464 (Phase 1 Declouding), #465 (Phase 0 - Disable Cloud CI)
+**Version:** 3.0  
+**Last Updated:** 2025-11-11  
+**Issues:** #466 (Phase 2 Architecture Refinement), #464 (Phase 1 Declouding)
 
-This guide covers local development using Docker containers for the run-density application.
+This guide covers local-only development using Docker containers for the run-density application.
 
 ---
 
@@ -13,7 +13,7 @@ This guide covers local development using Docker containers for the run-density 
 ### 1. Start Development Container
 
 ```bash
-make dev-docker
+make dev
 ```
 
 This will:
@@ -25,18 +25,19 @@ This will:
 ### 2. Verify Container is Running
 
 ```bash
-make smoke-docker
+make test
 ```
 
-This runs quick smoke tests to verify:
-- Health endpoint responding
-- Ready endpoint showing loaded data
-- Core API endpoints functional
+This runs smoke tests to verify:
+- Health endpoint responding (`/health`)
+- Ready endpoint showing loaded data (`/ready`)
+- Core API endpoints functional (Dashboard, Density, Reports)
+- All checks pass in under 5 seconds
 
 ### 3. Run E2E Tests
 
 ```bash
-make e2e-local-docker
+make e2e-local
 ```
 
 This restarts the container and runs the complete E2E test suite with local filesystem storage.
@@ -44,37 +45,48 @@ This restarts the container and runs the complete E2E test suite with local file
 ### 4. Stop Container
 
 ```bash
-make stop-docker
+make stop
 ```
 
 ---
 
 ## Available Make Targets
 
-### Development Commands
+### Core Commands (Issue #466)
 
 | Command | Description |
 |---------|-------------|
-| `make dev-docker` | Start development container with hot-reload |
-| `make stop-docker` | Stop and remove the container |
-| `make build-docker` | Build the Docker image (no start) |
-| `make smoke-docker` | Run smoke tests against running container |
-| `make e2e-local-docker` | Run full E2E tests (restarts container automatically) |
-| `make e2e-docker` | Run E2E tests in running container |
+| `make dev` | Start development container with hot-reload |
+| `make e2e-local` | Run end-to-end tests (restarts container automatically) |
+| `make test` | Run smoke tests (health checks + API validation) |
+| `make stop` | Stop and remove the container |
+| `make build` | Build the Docker image (no start) |
+
+### Legacy Aliases (Backward Compatibility)
+
+| Command | Alias For | Status |
+|---------|-----------|---------|
+| `make dev-docker` | `make dev` | ✅ Supported |
+| `make e2e-local-docker` | `make e2e-local` | ✅ Supported |
+| `make smoke-docker` | `make test` | ✅ Supported |
+| `make e2e-docker` | `make e2e-local` | ✅ Supported |
+| `make stop-docker` | `make stop` | ✅ Supported |
+| `make build-docker` | `make build` | ✅ Supported |
 
 ---
 
 ## E2E Testing
 
-### `e2e-local-docker` - Full E2E Testing (Recommended)
+### `e2e-local` - Full E2E Testing (Recommended)
 
 **Purpose:** Comprehensive local testing with clean container restart
 
 **Behavior:**
 - Restarts container with `GCS_UPLOAD=false`
-- Saves all files to local filesystem (`./reports/`, `./artifacts/`)
+- Saves all files to local filesystem (`./runflow/<uuid>/`)
 - Runs complete E2E test suite
 - Uses `e2e.py --local` flag
+- Generates unique run ID for each test
 
 **When to Use:**
 - ✅ Before committing code changes
@@ -84,41 +96,42 @@ make stop-docker
 
 **Example:**
 ```bash
-make e2e-local-docker
-# Check results in ./reports/ and ./artifacts/
+make e2e-local
+# Check results in ./runflow/<uuid>/
 ```
 
 **Expected Output:**
 ```
 ✅ Health: OK
 ✅ Ready: OK
-✅ Density Report: OK
-✅ Map Manifest: OK
+✅ Density Report: OK (run_id: abc123...)
 ✅ Temporal Flow Report: OK
 ✅ UI Artifacts: 7 files exported
 ✅ Heatmaps: 17 PNG files + 17 captions
+✅ All tests passed!
 ```
 
 ---
 
-### `e2e-docker` - Quick E2E Testing
+### `test` - Smoke Tests
 
-**Purpose:** Run E2E tests without container restart
+**Purpose:** Quick validation that all core APIs are responding
 
 **Behavior:**
-- Uses already running container
-- Faster than `e2e-local-docker` (no restart)
-- Good for rapid iteration
+- Runs health checks
+- Validates API endpoints
+- Checks data integrity
+- Completes in under 5 seconds
 
 **When to Use:**
 - ✅ Quick validation during development
 - ✅ After small code changes
-- ✅ When container is already configured correctly
+- ✅ Verifying container is healthy
 
 **Example:**
 ```bash
-make dev-docker    # Start container first
-make e2e-docker    # Run tests in existing container
+make dev    # Start container first
+make test   # Run smoke tests
 ```
 
 ---
@@ -173,10 +186,8 @@ The container automatically mounts these directories:
 | `./app` | `/app/app` | Application code (hot-reload) |
 | `./data` | `/app/data` | Input CSV and GPX files |
 | `./config` | `/app/config` | YAML configuration files |
-| `./reports` | `/app/reports` | Generated reports |
-| `./artifacts` | `/app/artifacts` | UI artifacts (JSON, GeoJSON, heatmaps) |
+| `./runflow` | `/app/runflow` | All run outputs (reports, bins, UI artifacts) |
 | `./e2e.py` | `/app/e2e.py` | E2E test script |
-| `/Users/jthompson/Documents/runflow` | `/app/runflow` | Run ID storage (Issue #455) |
 
 ### Hot Reload Behavior
 
@@ -191,52 +202,47 @@ Changes to Python files in mounted directories trigger automatic reload:
 
 ## File Structure
 
-### Local Filesystem Organization
+### Runflow Output Structure (Issue #466)
 
-After running E2E tests, the following structure is created:
+After running E2E tests, all outputs are organized under `runflow/<uuid>/`:
 
 ```
 run-density/
-├── artifacts/
-│   ├── latest.json              # Pointer to latest run_id
-│   ├── index.json               # Run history
-│   └── {run_id}/
-│       └── ui/
-│           ├── meta.json
-│           ├── segment_metrics.json
-│           ├── flags.json
-│           ├── flow.json
-│           ├── segments.geojson
-│           ├── schema_density.json
-│           ├── health.json
-│           ├── captions.json
-│           └── heatmaps/
-│               └── *.png (17 files)
-├── reports/
-│   └── {date}/
-│       ├── Density.md
-│       ├── Flow.md
-│       └── Flow.csv
 └── runflow/
-    ├── latest.json
-    ├── index.json
-    └── {run_id}/
-        ├── metadata.json
-        ├── reports/
+    ├── latest.json              # Pointer to latest run_id
+    ├── index.json               # Run history (all runs)
+    └── {run_id}/                # UUID-based run directory
+        ├── metadata.json        # Run metadata
+        ├── reports/             # Markdown + CSV reports
         │   ├── Density.md
         │   ├── Flow.md
         │   └── Flow.csv
-        ├── bins/
-        │   ├── bins.parquet
-        │   ├── bins.geojson.gz
-        │   └── bin_summary.json
-        ├── maps/
+        ├── bins/                # Bin-level analysis data
+        │   ├── bins.parquet     # Binary dataset
+        │   ├── bins.geojson.gz  # Compressed geospatial
+        │   └── bin_summary.json # Summary stats
+        ├── maps/                # Map data (if enabled)
         │   └── map_data.json
-        ├── heatmaps/
-        │   └── *.png (17 files)
-        └── ui/
-            └── (7 JSON files)
+        └── ui/                  # Frontend artifacts
+            ├── meta.json
+            ├── segment_metrics.json
+            ├── flags.json
+            ├── flow.json
+            ├── segments.geojson
+            ├── schema_density.json
+            ├── health.json
+            ├── captions.json
+            └── heatmaps/
+                └── *.png (17 files)
 ```
+
+**Key Concepts:**
+- **Single Source of Truth:** All outputs under `runflow/<uuid>/`
+- **UUID-based:** Each run has a unique short ID (e.g., `kPJMRTxUE3rHPPcTbvWBYV`)
+- **Pointer Files:** `latest.json` points to most recent run
+- **Index File:** `index.json` contains history of all runs
+
+**📖 Full Documentation:** See [`docs/architecture/output.md`](../architecture/output.md) for complete output structure details.
 
 ---
 
@@ -344,41 +350,43 @@ generate_density_report('data/runners.csv', 'data/segments.csv', {'Full': 420, '
 
 ```bash
 # 1. Start container
-make dev-docker
+make dev
 
 # 2. Edit code (auto-reloads)
 # Open app/main.py in your editor and make changes
 
 # 3. Test changes quickly
-make smoke-docker
+make test
 
 # 4. Run full E2E tests
-make e2e-local-docker     # Restarts container, runs complete test suite
+make e2e-local     # Restarts container, runs complete test suite
 
 # 5. Stop container when done
-make stop-docker
+make stop
 ```
 
 ### Pre-Commit Workflow
 
 ```bash
 # 1. Test locally with full E2E
-make e2e-local-docker
+make e2e-local
 
 # 2. Verify all artifacts generated
-ls -la artifacts/
-ls -la reports/
 ls -la runflow/
 
-# 3. Check for any errors in logs
+# 3. Check latest run outputs
+cat runflow/latest.json
+ls -la runflow/$(cat runflow/latest.json | jq -r '.run_id')/
+
+# 4. Check for any errors in logs
 docker logs run-density-dev | grep -i "error\|failed"
 
-# 4. Commit changes
+# 5. Commit changes
 git add .
 git commit -m "your commit message"
 
-# 5. Stop container
-make stop-docker
+# 6. Stop container
+make stop
 ```
 
 ---
@@ -448,6 +456,13 @@ make dev-docker
 
 ## Implementation History
 
+### Phase 2 Architecture Refinement (Issue #466) - 2025-11-11
+- ✅ Simplified Makefile to 3 core commands (`dev`, `e2e-local`, `test`)
+- ✅ Consolidated all outputs to `runflow/<uuid>/` structure
+- ✅ Removed all lingering GCS/cloud references
+- ✅ Streamlined storage abstraction (single unified layer)
+- ✅ Centralized run ID logic in `app.utils.run_id`
+
 ### Phase 1 Declouding (Issue #464) - 2025-11-10
 - ✅ Removed all GCS upload configurations
 - ✅ Simplified to local-only Docker development
@@ -471,10 +486,10 @@ make dev-docker
 
 After mastering Docker development:
 
-1. **Review architecture** → See `docs/architecture/env-detection.md`
-2. **Understand testing** → See `docs/ui-testing-checklist.md`
-3. **Read guardrails** → See `docs/GUARDRAILS.md`
-4. **Learn about operations** → See `docs/dev-guides/OPERATIONS.md`
+1. **Understand output structure** → See `docs/architecture/output.md`
+2. **Review architecture** → See `docs/architecture/env-detection.md`
+3. **Understand testing** → See `docs/ui-testing-checklist.md`
+4. **Read guardrails** → See `docs/GUARDRAILS.md`
 
 ---
 
@@ -493,6 +508,6 @@ After mastering Docker development:
 
 ---
 
-**Last Updated:** 2025-11-10  
-**Updated By:** AI Assistant (Issue #464 - Phase 1 Declouding)  
-**Architecture:** Local-only, filesystem-based development
+**Last Updated:** 2025-11-11  
+**Updated By:** AI Assistant (Issue #466 - Phase 2 Architecture Refinement)  
+**Architecture:** Local-only, UUID-based runflow structure
