@@ -2,12 +2,8 @@ name: Code Quality
 
 on:
   pull_request:
-    branches: [ main ]
-    types: [opened, synchronize, reopened]
     paths:
-      - '**/*.py'
-    paths-ignore:
-      - 'archive/**'
+      - '**.py'
 
 jobs:
   lint-and-complexity:
