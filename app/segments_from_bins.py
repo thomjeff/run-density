@@ -45,8 +45,9 @@ def _bins_to_segments(df_bins: pd.DataFrame) -> pd.DataFrame:
             "n_bins": len(g)
         })
 
+    # Issue #466 Bonus: Silence FutureWarning about grouping columns
     out = (df.groupby(["segment_id","t_start","t_end"], as_index=False)
-             .apply(_agg)
+             .apply(_agg, include_groups=False)
              .reset_index(drop=True))
     return out
 

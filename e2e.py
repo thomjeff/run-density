@@ -32,10 +32,10 @@ Examples:
         """
     )
     
-    # Mutually exclusive group for target selection
+    # Issue #466 Bonus: --cloud flag deprecated after Phase 1 declouding
     target_group = parser.add_mutually_exclusive_group()
     target_group.add_argument('--cloud', action='store_true',
-                             help='Test against Cloud Run production environment')
+                             help='[DEPRECATED] Cloud testing disabled after Phase 1 declouding')
     target_group.add_argument('--local', action='store_true',
                              help='Test against local server (default behavior)')
     
@@ -218,26 +218,14 @@ def main():
     # Parse command line arguments
     args = parse_arguments()
     
-    # Determine target URL and enable GCS uploads for cloud testing
+    # Issue #466 Bonus: Cloud testing deprecated after Phase 1 declouding
     if args.cloud:
-        base_url = CLOUD_RUN_URL
-        environment = "Cloud Run Production"
-        print("🌐 Testing against Cloud Run production")
-        
-        # Enable GCS uploads for cloud testing (Issues #439, #440)
-        # This ensures artifacts are uploaded to GCS, not just written locally
-        os.environ["GCS_UPLOAD"] = "true"
-        os.environ["GOOGLE_CLOUD_PROJECT"] = "run-density"
-        
-        # Set GCS credentials if service account key exists
-        # (Docker container mounts ./keys to /tmp/keys)
-        sa_key_path = "/tmp/keys/gcs-sa.json"
-        if Path(sa_key_path).exists():
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = sa_key_path
-            print("☁️  GCS uploads enabled with service account authentication")
-        else:
-            print("☁️  GCS uploads enabled (requires service account key at /tmp/keys/gcs-sa.json)")
-            print("    See keys/README.md for setup instructions")
+        print("❌ ERROR: Cloud testing is not supported in local-only architecture")
+        print("   The --cloud flag was deprecated in Issue #464 (Phase 1 Declouding)")
+        print("   Use --local flag instead (default behavior)")
+        print("")
+        print("   See archive/declouding-2025/ for historical cloud infrastructure")
+        sys.exit(1)
     else:
         base_url = LOCAL_URL
         environment = "Local Server"
@@ -315,49 +303,70 @@ def main():
         print("Exporting UI Artifacts")
         print("=" * 60)
         
-        # Hotfix #447: Split logic - cloud mode uses API, local mode uses filesystem
-        if args.cloud:
-            # Cloud mode: Call remote API to export artifacts from Cloud Run's fresh data
-            try:
-                print("☁️ Calling Cloud Run API to export UI artifacts...")
-                response = requests.post(f"{base_url}/api/export-ui-artifacts", timeout=180)
+        # Issue #466 Bonus: Simplified to local-only (cloud branch removed after early exit)
+        # Use local filesystem to export artifacts
+        reports_dir = None
+        run_id = None
+        
+        try:
+            from app.core.artifacts.frontend import export_ui_artifacts
+            import re
                 
-                if response.status_code == 200:
-                    result = response.json()
-                    run_id = result.get('run_id', 'unknown')
-                    print(f"✅ UI artifacts exported remotely for {run_id}")
-                    print(f"   Artifacts saved to GCS: artifacts/{run_id}/ui/")
+            # Issue #455: Check runflow directory first for UUID runs
+            runflow_dir = Path("runflow")
+            if runflow_dir.exists():
+                uuid_dirs = sorted(
+                    [d for d in runflow_dir.iterdir() 
+                     if d.is_dir() and not d.name.endswith('.json') and d.name != '.DS_Store'],
+                    key=lambda x: x.stat().st_mtime,
+                    reverse=True
+                )
+                if uuid_dirs:
+                    latest_run_dir = uuid_dirs[0]
+                    run_id = latest_run_dir.name
+                    print(f"Exporting artifacts from runflow: {latest_run_dir}")
+                    export_ui_artifacts(latest_run_dir, run_id)
+                        
+                    # Issue #455: Refresh metadata after UI export
+                    try:
+                        from app.utils.metadata import create_run_metadata, write_metadata_json, update_latest_pointer, append_to_run_index
+                        # Issue #466 Step 3: upload_runflow_to_gcs removed
+                        metadata = create_run_metadata(run_id, latest_run_dir, status="complete")
+                        write_metadata_json(latest_run_dir, metadata)
+                        
+                        # Issue #456 Phase 4: Update latest.json and index.json
+                        update_latest_pointer(run_id)
+                        append_to_run_index(metadata)
+                        
+                        # Issue #466 Step 3: GCS upload removed (Phase 1 declouding)
+                        
+                        print("✅ UI artifacts exported and metadata updated")
+                    except Exception as e:
+                        print(f"✅ UI artifacts exported (metadata update failed: {e})")
+                    
+                    reports_dir = runflow_dir  # For heatmap generation
                 else:
-                    print(f"⚠️ Failed to export UI artifacts: {response.status_code}")
-                    print(f"   Response: {response.text[:200]}")
-            except Exception as e:
-                print(f"⚠️ Warning: Could not export UI artifacts via API: {e}")
-                print("   Dashboard may show warnings for missing data")
-        else:
-            # Local mode: Use local filesystem to export artifacts
-            reports_dir = None
-            run_id = None
-            
-            try:
-                from app.core.artifacts.frontend import export_ui_artifacts
-                import re
+                    print("⚠️ No UUID run directories found in runflow/")
                 
-                # Issue #455: Check runflow directory first for UUID runs
-                runflow_dir = Path("runflow")
-                if runflow_dir.exists():
-                    uuid_dirs = sorted(
-                        [d for d in runflow_dir.iterdir() 
-                         if d.is_dir() and not d.name.endswith('.json') and d.name != '.DS_Store'],
-                        key=lambda x: x.stat().st_mtime,
+            # Fallback to legacy reports/ directory if runflow not found
+            if not run_id:
+                reports_dir = Path("reports")
+                if reports_dir.exists():
+                    # Get the most recent date-based report directory (YYYY-MM-DD format only)
+                    date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+                    run_dirs = sorted(
+                        [d for d in reports_dir.iterdir() 
+                         if d.is_dir() and date_pattern.match(d.name)],
                         reverse=True
                     )
-                    if uuid_dirs:
-                        latest_run_dir = uuid_dirs[0]
+                    if run_dirs:
+                        latest_run_dir = run_dirs[0]
                         run_id = latest_run_dir.name
-                        print(f"Exporting artifacts from runflow: {latest_run_dir}")
+                        
+                        print(f"Exporting artifacts from legacy reports: {latest_run_dir}")
                         export_ui_artifacts(latest_run_dir, run_id)
                         
-                        # Issue #455: Refresh metadata after UI export
+                        # Issue #455: Refresh metadata after UI export (legacy mode)
                         try:
                             from app.utils.metadata import create_run_metadata, write_metadata_json, update_latest_pointer, append_to_run_index
                             # Issue #466 Step 3: upload_runflow_to_gcs removed
@@ -373,69 +382,26 @@ def main():
                             print("✅ UI artifacts exported and metadata updated")
                         except Exception as e:
                             print(f"✅ UI artifacts exported (metadata update failed: {e})")
-                        
-                        reports_dir = runflow_dir  # For heatmap generation
                     else:
-                        print("⚠️ No UUID run directories found in runflow/")
-                
-                # Fallback to legacy reports/ directory if runflow not found
-                if not run_id:
-                    reports_dir = Path("reports")
-                    if reports_dir.exists():
-                        # Get the most recent date-based report directory (YYYY-MM-DD format only)
-                        date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
-                        run_dirs = sorted(
-                            [d for d in reports_dir.iterdir() 
-                             if d.is_dir() and date_pattern.match(d.name)],
-                            reverse=True
-                        )
-                        if run_dirs:
-                            latest_run_dir = run_dirs[0]
-                            run_id = latest_run_dir.name
-                            
-                            print(f"Exporting artifacts from legacy reports: {latest_run_dir}")
-                            export_ui_artifacts(latest_run_dir, run_id)
-                            
-                            # Issue #455: Refresh metadata after UI export (legacy mode)
-                            try:
-                                from app.utils.metadata import create_run_metadata, write_metadata_json, update_latest_pointer, append_to_run_index
-                                # Issue #466 Step 3: upload_runflow_to_gcs removed
-                                metadata = create_run_metadata(run_id, latest_run_dir, status="complete")
-                                write_metadata_json(latest_run_dir, metadata)
-                                
-                                # Issue #456 Phase 4: Update latest.json and index.json
-                                update_latest_pointer(run_id)
-                                append_to_run_index(metadata)
-                                
-                                # Issue #466 Step 3: GCS upload removed (Phase 1 declouding)
-                                
-                                print("✅ UI artifacts exported and metadata updated")
-                            except Exception as e:
-                                print(f"✅ UI artifacts exported (metadata update failed: {e})")
-                        else:
-                            print("⚠️ No report directories found in reports/")
-                    else:
-                        print("⚠️ No runflow or reports directories found")
-            except Exception as e:
-                print(f"⚠️ Warning: Could not export UI artifacts: {e}")
-                print("   Dashboard will show warnings for missing data")
-        
-        # Generate heatmaps for local testing (skip in cloud mode)
-        # Hotfix #447: Cloud mode heatmaps are generated by Cloud Run API, not locally
-        if not args.cloud:
-            print("\n" + "=" * 60)
-            print("Generating Heatmaps")
-            print("=" * 60)
-            try:
-                if reports_dir and run_id:
-                    run_heatmaps_if_local(reports_dir, run_id)
+                        print("⚠️ No report directories found in reports/")
                 else:
-                    print("   ⚠️ No run data available for heatmap generation")
-            except Exception as e:
-                print(f"⚠️ Warning: Could not generate heatmaps: {e}")
-                print("   Heatmaps are optional for local testing")
-        else:
-            print("\n☁️ Heatmaps generated by Cloud Run API (already complete)")
+                    print("⚠️ No runflow or reports directories found")
+        except Exception as e:
+            print(f"⚠️ Warning: Could not export UI artifacts: {e}")
+            print("   Dashboard will show warnings for missing data")
+        
+        # Issue #466 Bonus: Simplified heatmap generation (local-only)
+        print("\n" + "=" * 60)
+        print("Generating Heatmaps")
+        print("=" * 60)
+        try:
+            if reports_dir and run_id:
+                run_heatmaps_if_local(reports_dir, run_id)
+            else:
+                print("   ⚠️ No run data available for heatmap generation")
+        except Exception as e:
+            print(f"⚠️ Warning: Could not generate heatmaps: {e}")
+            print("   Heatmaps are optional for local testing")
         
         sys.exit(0)
     else:
