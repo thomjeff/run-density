@@ -403,6 +403,28 @@ def main():
             print(f"⚠️ Warning: Could not generate heatmaps: {e}")
             print("   Heatmaps are optional for local testing")
         
+        # Issue #467: Validate output integrity
+        print("\n" + "=" * 60)
+        print("Output Validation")
+        print("=" * 60)
+        try:
+            from app.tests.validate_output import validate_run
+            validation_results = validate_run(run_id=run_id, update_metadata=True)
+            
+            if validation_results['status'] == 'PASS':
+                print(f"✅ Output Validation: PASS")
+            elif validation_results['status'] == 'PARTIAL':
+                print(f"⚠️ Output Validation: PARTIAL")
+                print(f"   Missing: {len(validation_results['missing'])} non-critical files")
+            else:
+                print(f"❌ Output Validation: FAIL")
+                print(f"   Missing: {len(validation_results['missing'])} files")
+                print(f"   Schema errors: {len(validation_results.get('schema_errors', []))}")
+                sys.exit(1)  # Fail E2E on validation failure
+        except Exception as e:
+            print(f"⚠️ Warning: Could not run output validation: {e}")
+            print("   Continuing without validation (non-fatal)")
+        
         sys.exit(0)
     else:
         print("❌ SOME TESTS FAILED!")
