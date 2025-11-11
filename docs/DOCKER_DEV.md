@@ -59,6 +59,8 @@ make stop
 | `make dev` | Start development container with hot-reload |
 | `make e2e-local` | Run end-to-end tests (restarts container automatically) |
 | `make test` | Run smoke tests (health checks + API validation) |
+| `make validate-output` | Validate output integrity for latest run (Issue #467) |
+| `make validate-all` | Validate all runs in index.json (Issue #467) |
 | `make stop` | Stop and remove the container |
 | `make build` | Build the Docker image (no start) |
 
@@ -371,21 +373,24 @@ make stop
 # 1. Test locally with full E2E
 make e2e-local
 
-# 2. Verify all artifacts generated
+# 2. Validate output integrity (Issue #467)
+make validate-output
+
+# 3. Verify all artifacts generated
 ls -la runflow/
 
-# 3. Check latest run outputs
+# 4. Check latest run outputs
 cat runflow/latest.json
 ls -la runflow/$(cat runflow/latest.json | jq -r '.run_id')/
 
-# 4. Check for any errors in logs
+# 5. Check for any errors in logs
 docker logs run-density-dev | grep -i "error\|failed"
 
-# 5. Commit changes
+# 6. Commit changes
 git add .
 git commit -m "your commit message"
 
-# 6. Stop container
+# 7. Stop container
 make stop
 ```
 

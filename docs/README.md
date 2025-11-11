@@ -33,9 +33,11 @@ This documentation is organized for three primary audiences: **Product Managers*
 
 | Document | Purpose |
 |----------|---------|
-| [DOCKER_DEV.md](DOCKER_DEV.md) | **START HERE** - Complete Docker development guide |
+| [CONTRIBUTING.md](../CONTRIBUTING.md) | **START HERE** - Contributor guide and workflow |
+| [DOCKER_DEV.md](DOCKER_DEV.md) | Complete Docker development guide |
 | [Developer Checklist](onboarding/developer-checklist.md) | Onboarding steps for new developers |
 | [GUARDRAILS.md](GUARDRAILS.md) | Non-negotiable development rules |
+| [Logging Standards](LOGGING.md) | Logging patterns and conventions (Issue #467) |
 | [Quick Reference](reference/QUICK_REFERENCE.md) | Variable names, terminology, standards |
 | [ADR-002: Naming Normalization](adr/ADR-002%20Naming%20Normalization.md) | Naming conventions and field mappings |
 
