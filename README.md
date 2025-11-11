@@ -209,7 +209,28 @@ make test
 ### Test Coverage
 - **E2E Tests**: Full workflow validation with `e2e.py`
 - **Smoke Tests**: Health checks and API endpoint validation
+- **Output Validation**: Automated integrity checks (Issue #467)
 - **Code Quality**: Automated linting and formatting checks
+
+---
+
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
+- Development setup
+- Testing requirements
+- Branch naming and commit conventions
+- Pull request process
+
+**Quick Start for Contributors:**
+```bash
+git clone https://github.com/thomjeff/run-density.git
+cd run-density
+make dev           # Start container
+make test          # Run smoke tests
+make e2e-local     # Run E2E tests
+make validate-output  # Validate output integrity
+```
 
 ---
 

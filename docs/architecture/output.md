@@ -464,7 +464,76 @@ def update_latest_pointer(run_id: str) -> None:
 
 ---
 
+---
+
+## 🔍 Output Verification (Issue #467 - Phase 3)
+
+### Automated Validation
+
+Every run is automatically validated for completeness and integrity using `tests/validate_output.py`.
+
+**Validation Command:**
+```bash
+make validate-output              # Validate latest run
+make validate-output RUN_ID=xyz   # Validate specific run
+make validate-all                 # Validate all runs
+```
+
+### What Gets Validated
+
+1. **File Presence** - All expected files exist (per `config/reporting.yml`)
+2. **Schema Integrity** - JSON, Parquet, PNG, CSV files are valid
+3. **API Consistency** - APIs serve from correct `runflow/{run_id}/` directories
+4. **latest.json Integrity** - Points to most recent valid run
+
+### Validation Results in metadata.json
+
+**Extended Structure (after file_counts):**
+```json
+{
+  "run_id": "jBsYHSLUVhcBtECqJZP6tv",
+  "status": "PASS",
+  "file_counts": {
+    "reports": 3,
+    "bins": 5,
+    "heatmaps": 17,
+    "ui": 8
+  },
+  
+  "output_verification": {
+    "status": "PASS",
+    "validated_at": "2025-11-11T16:47:01Z",
+    "validator_version": "1.0.0",
+    "missing": [],
+    "schema_errors": [],
+    "invalid_artifacts": [],
+    "checks": {
+      "latest_json": {"status": "PASS"},
+      "file_presence": {"status": "PASS", "found": 36, "expected": 36},
+      "api_consistency": {"status": "PASS", "apis_checked": 2},
+      "schema_validation": {"status": "PASS", "files_checked": 9}
+    }
+  }
+}
+```
+
+### Validation Status Values
+
+- **PASS** - All validations passed
+- **PARTIAL** - Required (non-critical) files missing, but critical files present
+- **FAIL** - Critical files missing or schema validation failed
+
+### Configuration
+
+**Validation expectations defined in `config/reporting.yml`:**
+- `validation.critical` - Must exist (FAIL if missing)
+- `validation.required` - Should exist (PARTIAL if missing)
+- `validation.optional` - Nice to have (informational)
+- `schemas` - Structure validation rules
+
+---
+
 **Last Updated:** 2025-11-11  
-**Updated By:** AI Assistant (Issue #466 - Phase 2 Step 5)  
-**Architecture:** Local-only, UUID-based runflow structure
+**Updated By:** AI Assistant (Issue #467 - Phase 3)  
+**Architecture:** Local-only, UUID-based runflow structure with automated validation
 
