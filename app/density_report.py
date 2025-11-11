@@ -25,7 +25,7 @@ from app.bin_summary import generate_bin_summary_artifact
 from app.canonical_density_report import generate_tooltips_json
 from app.bin_intelligence import get_flagged_bins
 from app.heatmap_generator import generate_heatmaps_for_run
-from app.routes.api_heatmaps import upload_binary_to_gcs
+# Issue #466 Step 3: Removed upload_binary_to_gcs import (dead code)
 from app.geo_utils import generate_bins_geojson
 from pathlib import Path
 
