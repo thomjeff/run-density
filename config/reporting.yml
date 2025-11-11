@@ -117,3 +117,102 @@ logging:
   log_performance_metrics: true
   log_memory_usage: true
 
+# ============================================================================
+# Issue #467 - Output Verification Configuration
+# Phase 3: Output Integrity & Verification
+# ============================================================================
+
+# Output validation rules - defines expected outputs for each run
+validation:
+  # Critical outputs - run FAILS without these (exit 1)
+  critical:
+    reports:
+      - Flow.md
+      - Density.md
+      - Flow.csv
+    ui:
+      - segment_metrics.json
+      - flags.json
+      - flow.json
+  
+  # Required outputs - WARNING if missing (exit 0, status=PARTIAL)
+  required:
+    bins:
+      - bins.parquet
+      - bins.geojson.gz
+      - bin_summary.json
+    ui:
+      - captions.json
+      - segments.geojson
+      - schema_density.json
+      - health.json
+      - meta.json
+    heatmaps:
+      count: 17
+      format: png
+  
+  # Optional outputs - informational only (no warnings)
+  optional:
+    maps:
+      - map_data.json
+
+# Expected file counts for validation
+expected_counts:
+  reports: 3
+  bins: 3
+  maps: 1
+  heatmaps: 17
+  ui: 8
+
+# Schema validation rules
+schemas:
+  segment_metrics:
+    type: json
+    required_fields:
+      - segments
+      - summary
+  
+  flags:
+    type: json
+    required_fields:
+      - flagged_segments
+  
+  flow:
+    type: json
+    required_fields:
+      - flow_data
+  
+  captions:
+    type: json
+    required_fields:
+      - A1  # At least one segment caption required
+  
+  bins_parquet:
+    type: parquet
+    required_columns:
+      - seg_id
+      - km_start
+      - km_end
+      - time_start
+      - time_end
+      - density_p_m2
+      - los
+      - flag
+  
+  flow_csv:
+    type: csv
+    required_columns:
+      - seg_id
+      - event_a
+      - event_b
+      - flow_type
+      - convergence_point_km
+
+# Validation behavior
+validation_options:
+  fail_on_critical_missing: true     # Exit 1 if critical files missing
+  warn_on_required_missing: true     # Log warning but continue (status=PARTIAL)
+  strict_mode: false                 # If true, required = critical (no partial pass)
+  validate_api_consistency: true     # Check APIs serve from correct run_id
+  validate_latest_json: true         # Verify latest.json matches index.json
+
