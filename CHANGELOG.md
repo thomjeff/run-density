@@ -1,5 +1,246 @@
 # Changelog
 
+## [v1.8.4] - 2025-11-11
+
+### Issue #466: Phase 2 Architecture Refinement - Post-GCP Cleanup
+
+**Major Refactor: Simplified local-only architecture with unified storage, centralized run ID logic, and streamlined developer experience.**
+
+#### Overview
+Completed comprehensive architecture refinement following Phase 1 declouding, eliminating all remaining cloud complexity and establishing clean, maintainable patterns for local-only development.
+
+---
+
+#### Step 1: Centralize Run ID Generation (commit `bef5c6d`)
+
+**Created `app/utils/run_id.py`** - Single module for all UUID operations:
+- `generate_run_id()` - Generate short UUID
+- `validate_run_id()` - Validate UUID format
+- `is_legacy_date_format()` - Check for old date-based IDs
+- `get_runflow_root()` - Resolve Docker vs. host paths
+- `get_latest_run_id()` - Read from `runflow/latest.json` (no GCS fallback)
+- `get_run_directory()` - Get full path to run directory
+
+**Updated `app/utils/metadata.py`:**
+- Simplified `get_latest_run_id()` to forward to centralized implementation
+- Removed all legacy GCS fallback logic
+
+**Benefits:**
+- Single source of truth for run ID operations
+- Consistent path resolution across all modules
+- No scattered UUID logic
+
+**Files Changed:** 8 | **Changes:** +172, -35
+
+---
+
+#### Step 2: Storage Flattening (commit `ff79c6f`)
+
+**Archived `app/storage_service.py`** → `archive/declouding-2025/app-storage_service.py`
+
+**Enhanced `app/storage.py`** as single unified I/O layer:
+- Added `read_parquet()` for reading binary datasets
+- Added `read_csv()` for CSV files
+- Added `read_geojson()` for geospatial data
+- Updated `create_runflow_storage()` to use centralized run_id
+- Updated `create_storage_from_env()` to use centralized run_id
+- Simplified `load_latest_run_id()` to use `app.utils.run_id`
+
+**Removed module-level storage singletons from:**
+- `app/routes/api_dashboard.py`
+- `app/routes/api_segments.py`
+- `app/routes/api_bins.py`
+- `app/routes/api_density.py`
+- `app/api/flow.py`
+
+**Updated `app/core/artifacts/`:**
+- `heatmaps.py` - Fixed `storage` parameter usage
+- `frontend.py` - Updated to pass storage correctly
+
+**Benefits:**
+- Single storage abstraction (no duplication)
+- Cleaner imports across codebase
+- Better encapsulation of I/O operations
+
+**Files Changed:** 12 | **Changes:** +84, -145
+
+---
+
+#### Step 3: Streamline Report Generation (commit `ef62a32`)
+
+**Removed dead GCS upload functions:**
+- `upload_runflow_to_gcs()` from `app/report_utils.py` (60 lines)
+- `upload_binary_to_gcs()` from `app/routes/api_heatmaps.py`
+
+**Removed dead imports:**
+- `app/density_report.py` - Removed `upload_binary_to_gcs` import
+- `app/flow_report.py` - Removed `upload_runflow_to_gcs` import
+- `app/routes/api_e2e.py` - Removed GCS upload call
+- `e2e.py` - Removed GCS upload references
+
+**Fixed heatmap/caption paths:**
+- `app/heatmap_generator.py` - Use `runflow/<uuid>/ui/heatmaps/`
+- `app/core/artifacts/heatmaps.py` - Fixed `captions.json` generation
+
+**Benefits:**
+- No dead code paths
+- Correct file locations
+- Cleaner function signatures
+
+**Files Changed:** 5 | **Changes:** +52, -73
+
+---
+
+#### Step 4: Makefile Cleanup (commit `7f8b8b0`)
+
+**Simplified to 3 core commands:**
+- `make dev` - Start development container
+- `make e2e-local` - Run end-to-end tests
+- `make test` - Run smoke tests
+
+**Legacy aliases maintained for backward compatibility:**
+- `make dev-docker` → `make dev`
+- `make e2e-local-docker` → `make e2e-local`
+- `make smoke-docker` → `make test`
+- `make e2e-docker` → `make e2e-local`
+- `make stop-docker` → `make stop`
+- `make build-docker` → `make build`
+
+**Removed targets:**
+- All cloud deployment targets
+- Legacy test modes
+- Staging/production commands
+
+**Benefits:**
+- Cleaner developer experience
+- Easier onboarding
+- Reduced cognitive load
+
+**Files Changed:** 1 | **Changes:** +60, -52
+
+---
+
+#### Step 4 Cleanup: Remove Lingering GCS/Archived References (commit `77f07bb`)
+
+**Critical fixes:**
+- `e2e.py` - Replaced archived `storage_service` import with `app.storage`
+- `app/routes/reports.py` - Removed legacy `/density/latest` and `/flow/latest` endpoints
+- `app/routes/api_reports.py` - Removed `_get_file_metadata_from_gcs()` function
+
+**Dead code removal:**
+- `app/utils/metadata.py` - Removed unreachable GCS branches:
+  * `update_latest_pointer()` - Always filesystem (removed 10 lines)
+  * `append_to_run_index()` - Always filesystem (removed 33 lines)
+  * `get_all_runs()` - Always filesystem (removed 17 lines)
+- `app/cache_manager.py` - Archived `CloudStorageCacheManager` class
+
+**Benefits:**
+- 100% GCS-free codebase
+- No archived code references
+- No unreachable branches
+
+**Files Changed:** 5 | **Changes:** +95, -326
+
+---
+
+#### Step 5: Documentation Refresh (commit `a51ef27`)
+
+**README.md:**
+- Updated Quick Start to 3 core commands
+- Updated Makefile section with new commands + legacy aliases
+- Added UUID-based run tracking
+- Removed legacy port 8081 references
+
+**docs/DOCKER_DEV.md:**
+- Upgraded to version 3.0
+- Complete rewrite for Phase 2 architecture
+- Updated file structure to `runflow/` only
+- Removed `artifacts/` and `reports/` legacy references
+- Updated volume mounts
+- Added Phase 2 implementation history
+
+**docs/architecture/output.md (NEW):**
+- 470-line comprehensive guide
+- Complete `runflow/` structure documentation
+- File-by-file descriptions with formats
+- API usage examples
+- Migration notes (Phase 1 → Phase 2)
+- Troubleshooting guides
+- Best practices for developers and operators
+
+**Benefits:**
+- Clear onboarding documentation
+- Comprehensive output structure guide
+- Migration guidance for legacy systems
+- Troubleshooting references
+
+**Files Changed:** 3 | **Changes:** +602, -115
+
+---
+
+#### Bonus: Log Hygiene (commit `91612d0`)
+
+**Fixed warnings:**
+- `app/segments_from_bins.py` - Added `include_groups=False` to silence FutureWarning
+- `app/main.py` - Replaced "using GCS storage mode" → "heatmaps served from runflow/"
+- `app/main.py` - Replaced "using GCS storage mode" → "local storage only"
+- `e2e.py` - Added clear error for deprecated `--cloud` flag
+- `e2e.py` - Simplified heatmap generation (removed cloud conditionals)
+
+**Results:**
+- FutureWarning: 0 occurrences (was 1)
+- Misleading GCS messages: 0 occurrences (was 2)
+- Clean console output
+
+**Files Changed:** 3 | **Changes:** +89, -122
+
+---
+
+#### Overall Impact
+
+**Code Quality:**
+- **868 lines removed** (dead code, duplicates, complexity)
+- **1,154 lines added** (improvements, documentation)
+- **Net: +286 lines** (quality improvements)
+
+**Architecture:**
+- ✅ Single storage layer (`app.storage.py`)
+- ✅ Centralized run ID logic (`app.utils.run_id.py`)
+- ✅ Unified output structure (`runflow/<uuid>/`)
+- ✅ 3-command developer workflow
+- ✅ 100% local-only, no GCS dependencies
+
+**Developer Experience:**
+- Simplified Makefile (3 core commands)
+- Clear documentation (new output.md guide)
+- Clean logs (no warnings)
+- Fast onboarding (easier to understand)
+
+---
+
+#### Testing
+
+**E2E Tests:** ✅ All passed at each step
+**UI Testing:** ✅ Complete checklist verified
+**Log Quality:** ✅ No warnings or errors
+
+---
+
+#### Migration Notes
+
+**From Phase 1 to Phase 2:**
+- Run IDs now centralized in `app.utils.run_id`
+- Storage operations use single `app.storage` module
+- All outputs under `runflow/<uuid>/` (no more scattered directories)
+- Use 3 core commands: `make dev`, `make e2e-local`, `make test`
+
+**Backward Compatibility:**
+- Legacy Makefile aliases maintained
+- No breaking changes to external APIs
+- Existing runs still accessible
+
+---
+
 ## [v1.8.3] - 2025-11-10
 
 ### Issue #470: Fix Dual latest.json Causing Null run_id
