@@ -137,8 +137,9 @@ def test_map_manifest(base_url):
             print(f"⚠️ Map Manifest: Invalid response structure (non-blocking)")
             return True  # Non-blocking - don't fail pipeline
     elif response.status_code == 404:
-        print(f"⚠️ Map Manifest: Endpoint not implemented yet (404) - skipping")
-        return True  # Non-blocking - endpoint may not exist yet
+        # Issue #467: Clarify that 404 is expected for optional endpoint
+        print("⚠️ Map Manifest: Endpoint not available (404) - Optional feature, skipping")
+        return True  # Not a failure - this endpoint is optional
     else:
         print(f"❌ Map Manifest: FAILED (status: {response.status_code})")
         return False

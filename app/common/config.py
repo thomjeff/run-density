@@ -56,7 +56,9 @@ def load_rulebook() -> Dict[str, Any]:
     
     with path.open("r", encoding="utf-8") as f:
         rulebook = yaml.safe_load(f)
-        logger.info(f"Successfully loaded rulebook with version: {rulebook.get('version', 'unknown')}")
+        # Version is nested under meta.version, not top-level
+        version = rulebook.get('meta', {}).get('version', 'unspecified')
+        logger.info(f"Successfully loaded rulebook with version: {version}")
         return rulebook
 
 

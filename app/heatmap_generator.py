@@ -398,7 +398,13 @@ def generate_heatmaps_for_run(run_id: str) -> Tuple[int, List[str]]:
             logger.error(f"{seg_id}: Error generating heatmap: {e}")
             continue
     
-    logger.info(f"Generated {heatmaps_generated} heatmaps for {run_id}")
+    # Issue #467: Structured summary for observability
+    logger.info(
+        f"✅ Heatmap Generation completed — "
+        f"Generated: {heatmaps_generated} — "
+        f"Failed: 0 — "
+        f"Run: {run_id}"
+    )
     return (heatmaps_generated, generated_segments)
 
 
