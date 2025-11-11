@@ -147,9 +147,8 @@ def generate_temporal_flow_report(
             from app.utils.metadata import update_latest_pointer
             update_latest_pointer(run_id)
             
-            # Issue #455 Phase 3: Upload to GCS if enabled
-            from app.report_utils import upload_runflow_to_gcs
-            upload_runflow_to_gcs(run_id)
+            # Issue #466 Step 3: GCS upload removed (Phase 1 declouding)
+            # upload_runflow_to_gcs() archived - local-only architecture
         except Exception as e:
             print(f"⚠️ Failed to write metadata.json: {e}")
     

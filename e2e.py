@@ -360,7 +360,7 @@ def main():
                         # Issue #455: Refresh metadata after UI export
                         try:
                             from app.utils.metadata import create_run_metadata, write_metadata_json, update_latest_pointer, append_to_run_index
-                            from app.report_utils import upload_runflow_to_gcs
+                            # Issue #466 Step 3: upload_runflow_to_gcs removed
                             metadata = create_run_metadata(run_id, latest_run_dir, status="complete")
                             write_metadata_json(latest_run_dir, metadata)
                             
@@ -368,8 +368,7 @@ def main():
                             update_latest_pointer(run_id)
                             append_to_run_index(metadata)
                             
-                            # Issue #455 Phase 3: Upload to GCS if enabled
-                            upload_runflow_to_gcs(run_id)
+                            # Issue #466 Step 3: GCS upload removed (Phase 1 declouding)
                             
                             print("✅ UI artifacts exported and metadata updated")
                         except Exception as e:
@@ -400,7 +399,7 @@ def main():
                             # Issue #455: Refresh metadata after UI export (legacy mode)
                             try:
                                 from app.utils.metadata import create_run_metadata, write_metadata_json, update_latest_pointer, append_to_run_index
-                                from app.report_utils import upload_runflow_to_gcs
+                                # Issue #466 Step 3: upload_runflow_to_gcs removed
                                 metadata = create_run_metadata(run_id, latest_run_dir, status="complete")
                                 write_metadata_json(latest_run_dir, metadata)
                                 
@@ -408,8 +407,7 @@ def main():
                                 update_latest_pointer(run_id)
                                 append_to_run_index(metadata)
                                 
-                                # Issue #455 Phase 3: Upload to GCS if enabled
-                                upload_runflow_to_gcs(run_id)
+                                # Issue #466 Step 3: GCS upload removed (Phase 1 declouding)
                                 
                                 print("✅ UI artifacts exported and metadata updated")
                             except Exception as e:

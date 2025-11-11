@@ -440,9 +440,8 @@ async def export_ui_artifacts_endpoint():
                     # Issue #456 Phase 4: Update index.json (latest.json already called above)
                     append_to_run_index(metadata)
                     
-                    # Issue #455 Phase 3: Upload to GCS if enabled
-                    from app.report_utils import upload_runflow_to_gcs
-                    upload_runflow_to_gcs(run_id)
+                    # Issue #466 Step 3: GCS upload removed (Phase 1 declouding)
+                    # upload_runflow_to_gcs() archived - local-only architecture
                 except Exception as e:
                     logger.warning(f"Failed to update metadata.json after UI export: {e}")
                 
