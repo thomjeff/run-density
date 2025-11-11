@@ -7,7 +7,7 @@
 PORT ?= 8080
 
 # -------- Phony targets --------
-.PHONY: help dev e2e-local test stop build validate-output validate-all
+.PHONY: help usage --help dev e2e-local test stop build validate-output validate-all
 
 # -------- Use same shell for multi-line targets --------
 .ONESHELL:
@@ -15,14 +15,20 @@ PORT ?= 8080
 # -------- Help --------
 .DEFAULT_GOAL := help
 
-help: ## Show this help message
+help usage --help: ## Show this help message
 	@echo ""
 	@echo "🐳 Run-Density - Local Docker Development"
 	@echo ""
-	@echo "Core Commands (Issue #466 Step 4):"
+	@echo "Core Commands (Post-Phase 2 Architecture):"
 	@echo ""
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@echo "  help                Show this help message"
+	@echo "  dev                 Start local development server (hot reload enabled)"
+	@echo "  stop                Stop Docker container"
+	@echo "  build               Build Docker image"
+	@echo "  test                Run smoke tests (health checks + API validation)"
+	@echo "  e2e-local           Run full end-to-end test suite (generates all artifacts)"
+	@echo "  validate-output     Validate output integrity for latest run"
+	@echo "  validate-all        Validate output for all runs in index.json"
 	@echo ""
 	@echo "Configuration:"
 	@echo "  PORT=$(PORT)  (Docker container port)"
@@ -71,14 +77,3 @@ validate-output: ## Validate output integrity for latest run
 validate-all: ## Validate all runs in index.json
 	@echo "🔍 Validating all runs..."
 	@docker exec run-density-dev python -m app.tests.validate_output --all
-
-# ============================================================================
-# Legacy Aliases (Issue #466 Step 4: Maintained for backwards compatibility)
-# ============================================================================
-
-dev-docker: dev  ## Alias for 'make dev'
-stop-docker: stop  ## Alias for 'make stop'
-build-docker: build  ## Alias for 'make build'
-e2e-local-docker: e2e-local  ## Alias for 'make e2e-local'
-smoke-docker: test  ## Alias for 'make test'
-e2e-docker: e2e-local  ## Alias for 'make e2e-local'
