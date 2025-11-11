@@ -179,6 +179,16 @@ def validate_file_presence(run_id: str, config: Dict[str, Any]) -> Dict[str, Any
                     missing.append(str(heatmap_dir))
                     logger.warning(f"⚠️ Heatmaps Directory Missing — Path: {heatmap_dir} — Run: {run_id}")
     
+    # Check optional files (informational only)
+    optional = validation_config.get('optional', {})
+    for category, files in optional.items():
+        if isinstance(files, list):
+            for file_name in files:
+                file_path = run_dir / category / file_name
+                if file_path.exists():
+                    found_counts[category] = found_counts.get(category, 0) + 1
+                # Don't add to missing for optional files, just count
+    
     # Determine status
     if missing and any(str(m) for m in missing if 'critical' in str(m).lower()):
         status = 'FAIL'

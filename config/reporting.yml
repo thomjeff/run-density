@@ -160,7 +160,7 @@ validation:
 expected_counts:
   reports: 3
   bins: 3
-  maps: 0  # Optional - not always generated
+  maps: 1  # map_data.json (optional but expected if generated)
   heatmaps: 17
   ui: 8
 
