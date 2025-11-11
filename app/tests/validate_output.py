@@ -314,6 +314,208 @@ def validate_api_consistency(run_id: str, base_url: str = 'http://localhost:8080
     }
 
 
+def validate_json_schema(file_path: Path, schema_config: Dict) -> Dict[str, Any]:
+    """Validate JSON file structure against schema"""
+    try:
+        data = json.loads(file_path.read_text())
+        
+        # Check required fields
+        required_fields = schema_config.get('required_fields', [])
+        missing_fields = [f for f in required_fields if f not in data]
+        
+        if missing_fields:
+            return {
+                'status': 'FAIL',
+                'file': str(file_path),
+                'error': f"Missing fields: {missing_fields}"
+            }
+        
+        return {'status': 'PASS', 'file': str(file_path)}
+    
+    except json.JSONDecodeError as e:
+        return {'status': 'FAIL', 'file': str(file_path), 'error': f"Invalid JSON: {e}"}
+    except Exception as e:
+        return {'status': 'FAIL', 'file': str(file_path), 'error': str(e)}
+
+
+def validate_parquet_schema(file_path: Path, schema_config: Dict) -> Dict[str, Any]:
+    """Validate Parquet file structure and columns"""
+    try:
+        df = pd.read_parquet(file_path)
+        
+        # Check required columns
+        required_cols = schema_config.get('required_columns', [])
+        missing_cols = [c for c in required_cols if c not in df.columns]
+        
+        if missing_cols:
+            return {
+                'status': 'FAIL',
+                'file': str(file_path),
+                'error': f"Missing columns: {missing_cols}"
+            }
+        
+        if len(df) == 0:
+            return {'status': 'FAIL', 'file': str(file_path), 'error': "Empty parquet file"}
+        
+        return {'status': 'PASS', 'file': str(file_path), 'rows': len(df)}
+    
+    except Exception as e:
+        return {'status': 'FAIL', 'file': str(file_path), 'error': str(e)}
+
+
+def validate_csv_schema(file_path: Path, schema_config: Dict) -> Dict[str, Any]:
+    """Validate CSV file structure"""
+    try:
+        df = pd.read_csv(file_path)
+        
+        # Check required columns
+        required_cols = schema_config.get('required_columns', [])
+        missing_cols = [c for c in required_cols if c not in df.columns]
+        
+        if missing_cols:
+            return {
+                'status': 'FAIL',
+                'file': str(file_path),
+                'error': f"Missing columns: {missing_cols}"
+            }
+        
+        if len(df) == 0:
+            return {'status': 'FAIL', 'file': str(file_path), 'error': "Empty CSV file"}
+        
+        return {'status': 'PASS', 'file': str(file_path), 'rows': len(df)}
+    
+    except Exception as e:
+        return {'status': 'FAIL', 'file': str(file_path), 'error': str(e)}
+
+
+def validate_png_file(file_path: Path) -> Dict[str, Any]:
+    """Validate PNG is readable and not corrupt"""
+    try:
+        from PIL import Image
+        img = Image.open(file_path)
+        
+        if img.format != 'PNG':
+            return {'status': 'FAIL', 'file': str(file_path), 'error': f"Not PNG format: {img.format}"}
+        
+        if img.size[0] == 0 or img.size[1] == 0:
+            return {'status': 'FAIL', 'file': str(file_path), 'error': "Invalid image size"}
+        
+        return {'status': 'PASS', 'file': str(file_path), 'size': img.size}
+    
+    except Exception as e:
+        return {'status': 'FAIL', 'file': str(file_path), 'error': str(e)}
+
+
+def validate_markdown_file(file_path: Path) -> Dict[str, Any]:
+    """Validate Markdown file is non-empty"""
+    try:
+        content = file_path.read_text()
+        
+        if len(content) < 100:
+            return {'status': 'FAIL', 'file': str(file_path), 'error': "File too short (<100 chars)"}
+        
+        return {'status': 'PASS', 'file': str(file_path), 'size': len(content)}
+    
+    except Exception as e:
+        return {'status': 'FAIL', 'file': str(file_path), 'error': str(e)}
+
+
+def validate_schemas(run_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Validate all file schemas according to config/reporting.yml.
+    
+    Returns:
+        Dict with status, files_checked, errors list
+    """
+    logger.info(f"🔍 Validating schemas — Run: {run_id}")
+    
+    run_dir = Path(f"runflow/{run_id}")
+    schemas = config.get('schemas', {})
+    errors = []
+    files_checked = 0
+    
+    # Validate JSON files
+    json_files = {
+        'segment_metrics': run_dir / 'ui' / 'segment_metrics.json',
+        'flags': run_dir / 'ui' / 'flags.json',
+        'flow': run_dir / 'ui' / 'flow.json',
+        'captions': run_dir / 'ui' / 'captions.json',
+    }
+    
+    for name, file_path in json_files.items():
+        if file_path.exists() and name in schemas:
+            result = validate_json_schema(file_path, schemas[name])
+            files_checked += 1
+            if result['status'] != 'PASS':
+                errors.append(result)
+                logger.error(
+                    f"❌ Schema Error — File: {file_path.name} — "
+                    f"Error: {result.get('error')} — Run: {run_id}"
+                )
+    
+    # Validate Parquet files
+    bins_parquet = run_dir / 'bins' / 'bins.parquet'
+    if bins_parquet.exists() and 'bins_parquet' in schemas:
+        result = validate_parquet_schema(bins_parquet, schemas['bins_parquet'])
+        files_checked += 1
+        if result['status'] != 'PASS':
+            errors.append(result)
+            logger.error(
+                f"❌ Schema Error — File: bins.parquet — "
+                f"Error: {result.get('error')} — Run: {run_id}"
+            )
+    
+    # Validate CSV files
+    flow_csv = run_dir / 'reports' / 'Flow.csv'
+    if flow_csv.exists() and 'flow_csv' in schemas:
+        result = validate_csv_schema(flow_csv, schemas['flow_csv'])
+        files_checked += 1
+        if result['status'] != 'PASS':
+            errors.append(result)
+            logger.error(
+                f"❌ Schema Error — File: Flow.csv — "
+                f"Error: {result.get('error')} — Run: {run_id}"
+            )
+    
+    # Validate PNG files (sample check - just A1.png)
+    a1_heatmap = run_dir / 'ui' / 'heatmaps' / 'A1.png'
+    if a1_heatmap.exists():
+        result = validate_png_file(a1_heatmap)
+        files_checked += 1
+        if result['status'] != 'PASS':
+            errors.append(result)
+            logger.error(
+                f"❌ Schema Error — File: A1.png — "
+                f"Error: {result.get('error')} — Run: {run_id}"
+            )
+    
+    # Validate Markdown files
+    for md_file in ['Density.md', 'Flow.md']:
+        md_path = run_dir / 'reports' / md_file
+        if md_path.exists():
+            result = validate_markdown_file(md_path)
+            files_checked += 1
+            if result['status'] != 'PASS':
+                errors.append(result)
+                logger.error(
+                    f"❌ Schema Error — File: {md_file} — "
+                    f"Error: {result.get('error')} — Run: {run_id}"
+                )
+    
+    status = 'PASS' if len(errors) == 0 else 'FAIL'
+    
+    if status == 'PASS':
+        logger.info(f"✅ Schema Validation — Status: PASS — Files: {files_checked} — Run: {run_id}")
+    else:
+        logger.error(f"❌ Schema Validation — Status: FAIL — Errors: {len(errors)} — Run: {run_id}")
+    
+    return {
+        'status': status,
+        'files_checked': files_checked,
+        'errors': errors
+    }
+
+
 def validate_run(run_id: Optional[str] = None, config: Optional[Dict] = None) -> Dict[str, Any]:
     """
     Validate a complete run's outputs.
@@ -372,7 +574,13 @@ def validate_run(run_id: Optional[str] = None, config: Optional[Dict] = None) ->
     if api_check['status'] != 'PASS':
         validation_results['status'] = 'FAIL'
     
-    # TODO: Step 3 - Schema validation will be added here
+    # 4. Validate schemas (Step 3)
+    schema_check = validate_schemas(run_id, config)
+    validation_results['checks']['schema_validation'] = schema_check
+    validation_results['schema_errors'] = schema_check.get('errors', [])
+    
+    if schema_check['status'] != 'PASS':
+        validation_results['status'] = 'FAIL'
     
     # Summary
     logger.info(f"")

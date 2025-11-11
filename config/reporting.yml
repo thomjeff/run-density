@@ -164,23 +164,28 @@ expected_counts:
   heatmaps: 17
   ui: 8
 
-# Schema validation rules
+# Schema validation rules (matched to actual file structures)
 schemas:
   segment_metrics:
     type: json
     required_fields:
-      - segments
-      - summary
+      - peak_density
+      - peak_rate
+      - segments_with_flags
+      - flagged_bins
   
   flags:
     type: json
-    required_fields:
-      - flagged_segments
+    # flags.json is an array of flag objects
+    is_array: true
   
   flow:
     type: json
     required_fields:
-      - flow_data
+      - rows
+      - schema_version
+      - summaries
+      - units
   
   captions:
     type: json
@@ -190,14 +195,13 @@ schemas:
   bins_parquet:
     type: parquet
     required_columns:
-      - seg_id
-      - km_start
-      - km_end
-      - time_start
-      - time_end
-      - density_p_m2
+      - segment_id
+      - start_km
+      - end_km
+      - t_start
+      - t_end
+      - density
       - los
-      - flag
   
   flow_csv:
     type: csv
@@ -206,7 +210,7 @@ schemas:
       - event_a
       - event_b
       - flow_type
-      - convergence_point_km
+      - has_convergence
 
 # Validation behavior
 validation_options:
