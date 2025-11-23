@@ -35,3 +35,13 @@ M2a,Trail/Aberdeen to Finish,10K,Half,9.75,10,20.85,21.1,uni,3,n,,,Aberdeen Stre
 M2b,Trail/Aberdeen to Finish (Full QS Loop),10K,Full,9.75,10,20.3,20.55,uni,3,n,,M2a,Aberdeen Street to Finish
 M2c,Trail/Aberdeen to Finish (Full QS Loop),Half,Full,20.85,21.1,20.3,20.55,uni,3,n,,M2a,Aberdeen Street to Finish
 M2d,Trail/Aberdeen to Finish,Full,Full,41.95,42.2,41.95,42.2,uni,3,n,,M2a,Aberdeen Street to Finish
+N1,5K Elite Lap 1 (Start to Queen/York),elite,elite,0,2.58,0,2.58,uni,5,y,overtake,,5K Elite Lap 1 (Start to Queen/York)
+N2,5K Elite Lap 2 (Queen/York to Queen/York),elite,elite,2.58,4.81,2.58,4.81,uni,5,y,overtake,N1,5K Elite Lap 2 (Queen/York to Queen/York)
+N2a,5K Elite Lap 2 overtake Lap 1,elite,elite,2.58,4.81,0,2.58,uni,5,y,overtake,N1,5K Elite Lap 2 overtake Lap 1
+N3,5K Elite Finish (Queen/York to Finish),elite,elite,4.81,5,4.81,5,uni,5,y,overtake,N2,5K Elite Finish (Queen/York to Finish)
+N3a,5K Elite Finish ovetake Lap 2,elite,elite,4.81,5,2.58,4.81,uni,5,y,overtake,N2,5K Elite Finish ovetake Lap 2
+O1,5K Open Lap 1 (Start to Queen/York),open,open,0,2.58,0,2.58,uni,5,y,overtake,,5K Open Lap 1 (Start to Queen/York)
+O2,5K Open Lap 2 (Queen/York to Queen/York),open,open,2.58,4.81,2.58,4.81,uni,5,y,overtake,O1,5K Open Lap 2 (Queen/York to Queen/York)
+O2a,5K Open Lap 2 overtake Lap 1,open,open,2.58,4.81,0,2.58,uni,5,y,overtake,N1,5K Open Lap 2 overtake Lap 1
+O3,5K Open Finish (Queen/York to Finish),open,open,4.81,5,4.81,5,uni,5,y,overtake,O2,5K Open Finish (Queen/York to Finish)
+O3a,5K Open Finish ovetake Lap 2,open,open,4.81,5,2.58,4.81,uni,5,y,overtake,N2,5K Open Finish ovetake Lap 2
