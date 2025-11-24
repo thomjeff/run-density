@@ -21,7 +21,7 @@ from app.segments_from_bins import write_segments_from_bins
 from app.utils.constants import HOTSPOT_SEGMENTS
 from app.save_bins import save_bin_artifacts
 from app.report_utils import get_date_folder_path, get_run_folder_path
-from app.bin_summary import generate_bin_summary_artifact
+from app.core.bin.summary import generate_bin_summary_artifact
 from app.canonical_density_report import generate_tooltips_json
 from app.bin_intelligence import get_flagged_bins
 from app.heatmap_generator import generate_heatmaps_for_run
@@ -2515,7 +2515,7 @@ def _add_geometries_to_bin_features(
     geom_start = time.monotonic()
     
     try:
-        from app.bin_geometries import generate_bin_polygon
+        from app.core.bin.geometry import generate_bin_polygon
         from app.core.gpx.processor import load_all_courses, generate_segment_coordinates
         from app.io.loader import load_segments
         import pandas as pd

@@ -71,33 +71,56 @@ All pages need drop-down selectors to filter by day:
 
 ## 📋 Implementation Checklist
 
-### Phase 1: Core Infrastructure
+### Phase 1: Critical Fixes (Do First) 🔴
+- [x] ~~Fix `app/conversion_audit.py`~~ - **ARCHIVED** (not used in runtime)
+- [ ] Fix `app/core/flow/flow.py` - `_get_segment_events()` (lines 63-80)
+- [ ] Fix `app/density_report.py` - Add elite/open + 5K_from_km/5K_to_km (lines 2534-2548)
+- [ ] Fix `app/core/artifacts/frontend.py` - Add Elite/Open to events list (lines 510, 547)
+- [ ] Fix `app/core/artifacts/frontend.py` - Add 5K_length to length_km (lines 509, 546)
+
+### Phase 2: Core Infrastructure 🟡
 - [ ] Create `5KElite.gpx` and `5KOpen.gpx` files (copy from 5K.gpx)
 - [ ] Update GPX processor to load both files
 - [ ] Update constants: Add `"Elite": 480, "Open": 510` to DEFAULT_START_TIMES
 - [ ] Update event recognition in density analysis
 
-### Phase 2: Analysis Engines
+### Phase 3: Analysis Engines 🟡
 - [ ] Update density analysis: Recognize "Elite" and "Open" events
 - [ ] Update flow analysis: Add Elite/Open pair only (no cross-day pairs)
 - [ ] Update conversion audit: Event detection for Elite/Open
 
-### Phase 3: Integration & Testing
+### Phase 4: Integration & Testing 🟢
 - [ ] Update E2E test configuration
 - [ ] Verify flow pairs = 4 total (3 Sunday + 1 Saturday)
 - [ ] Test API endpoints accept new events
+- [ ] Verify segments.geojson includes Elite/Open in events property
 
-### Phase 4: UI Updates
+### Phase 5: UI Updates 🟢
 - [ ] Add day selector to Dashboard
 - [ ] Add day selector to Segments page
 - [ ] Add day selector to Density page
 - [ ] Add day selector to Flow page
 - [ ] Update backend APIs to accept day filter parameter
 
-### Phase 5: Documentation
+### Phase 6: Documentation 🟢
 - [ ] Update README.md
 - [ ] Update QUICK_REFERENCE.md
 - [ ] Update event lists throughout docs
+
+---
+
+## 🔍 Runtime Discovery Notes
+
+**Artifact Generation Location Confirmed:**
+- File: `app/core/artifacts/frontend.py` (exists, filtered by .cursorignore)
+- Runtime: Called during E2E test execution via `export_ui_artifacts()`
+- Function: `generate_segments_geojson()` → `_create_segment_feature()` / `_build_segment_feature_properties()`
+- Logs: "5️⃣ Generating segments.geojson..." appears in E2E output
+
+**Key Finding:**
+- Events property generated at lines 510 and 547 using list comprehension
+- Logic already handles lowercase CSV columns correctly
+- Need to add `"Elite"` and `"Open"` to the events list in both locations
 
 ---
 

@@ -10,18 +10,15 @@
 
 ### 1. Event Detection Functions (Multiple Files)
 
-#### `app/conversion_audit.py`
-- **Function:** `get_segment_events()` (lines 13-30)
-- **Current:** Only checks `full`, `half`, `10K` columns
-- **Fix:** Add checks for `elite` and `open` columns
-- **Code Change:**
-  ```python
-  if segment.get('elite') == 'y':
-      events.append('Elite')
-  if segment.get('open') == 'y':
-      events.append('Open')
-  ```
-- **Priority:** 🔴 **CRITICAL** - Used by audit/conversion scripts
+#### `app/conversion_audit.py` ⚠️ **ARCHIVED - NO ACTION NEEDED**
+
+**Status:** ✅ **File moved to archive/** - Not used in runtime
+
+**Analysis:**
+- No runtime imports found in codebase
+- Legacy audit utility for `segments_new.csv` (file no longer exists)
+- Standalone CLI tool, not part of application runtime
+- **Action:** File archived - removed from Phase 1 critical fixes
 
 #### `app/core/flow/flow.py`
 - **Function:** `_get_segment_events()` (lines 63-80)
@@ -50,10 +47,16 @@
       "10K": segment.get('10K', 'n'),
       "half": segment.get('half', 'n'),
       "full": segment.get('full', 'n'),
-      # MISSING: elite, open columns!
+      "10K_from_km": segment.get('10K_from_km'),
+      "10K_to_km": segment.get('10K_to_km'),
+      "half_from_km": segment.get('half_from_km'),
+      "half_to_km": segment.get('half_to_km'),
+      "full_from_km": segment.get('full_from_km'),
+      "full_to_km": segment.get('full_to_km')
+      # MISSING: elite, open columns + 5K_from_km, 5K_to_km!
   })
   ```
-- **Fix:** Add `elite` and `open` columns to segments_list dict
+- **Fix:** Add `elite`, `open` columns AND `5K_from_km`, `5K_to_km` fields
 - **Code Change:**
   ```python
   segments_list.append({
@@ -62,46 +65,62 @@
       "10K": segment.get('10K', 'n'),
       "half": segment.get('half', 'n'),
       "full": segment.get('full', 'n'),
-      "elite": segment.get('elite', 'n'),  # ADD THIS
-      "open": segment.get('open', 'n'),    # ADD THIS
-      # ... rest of fields
+      "elite": segment.get('elite', 'n'),      # ADD THIS
+      "open": segment.get('open', 'n'),        # ADD THIS
+      "10K_from_km": segment.get('10K_from_km'),
+      "10K_to_km": segment.get('10K_to_km'),
+      "half_from_km": segment.get('half_from_km'),
+      "half_to_km": segment.get('half_to_km'),
+      "full_from_km": segment.get('full_from_km'),
+      "full_to_km": segment.get('full_to_km'),
+      "5K_from_km": segment.get('5K_from_km'),  # ADD THIS
+      "5K_to_km": segment.get('5K_to_km'),     # ADD THIS
   })
   ```
 - **Priority:** 🔴 **CRITICAL** - Affects segment coordinate generation
 
 ---
 
-### 3. Artifact Generation - Events Property Population
+### 3. Artifact Generation - Events Property Population ✅ **LOCATION CONFIRMED**
 
 **CRITICAL GAP:** segments.geojson must include `events: ["Elite"]` or `events: ["Open"]` per segment.
 
-#### Find & Fix: Artifact Export Module
-- **File:** `app/core/artifacts/frontend.py` (if accessible) OR artifact export logic
-- **Task:** Locate where segments.geojson is created from segments.csv
-- **Requirement:** Must populate `events` property array from CSV columns:
-  - Read `elite` and `open` columns from segments.csv
-  - For each segment, build `events` array:
-    ```python
-    events = []
-    if segment.get('full') == 'y':
-        events.append('Full')
-    if segment.get('half') == 'y':
-        events.append('Half')
-    if segment.get('10K') == 'y':
-        events.append('10K')
-    if segment.get('elite') == 'y':  # ADD THIS
-        events.append('Elite')        # ADD THIS
-    if segment.get('open') == 'y':   # ADD THIS
-        events.append('Open')         # ADD THIS
-    
-    properties["events"] = events
-    ```
-- **Priority:** 🔴 **CRITICAL** - UI filtering depends on this
+#### ✅ CONFIRMED: Artifact Export Module Location
+- **File:** `app/core/artifacts/frontend.py` (exists, filtered by .cursorignore)
+- **Function:** `export_ui_artifacts()` → `generate_segments_geojson()` → `_create_segment_feature()` / `_build_segment_feature_properties()`
+- **Runtime:** Called during E2E test execution (see logs: "5️⃣ Generating segments.geojson...")
 
-#### Verify: Segment GeoJSON Generation Functions
-- **File:** `app/geo_utils.py` - `generate_segments_geojson()`
-- **Status:** Check if this function needs events property added
-- **Note:** May need to load segments.csv to populate events property
+#### Fix Required: TWO Locations in frontend.py
+
+**Location 1: `_create_segment_feature()` function (Line 510)**
+- **Current Code:**
+  ```python
+  "events": [event for event in ["Full", "Half", "10K"] 
+             if dims.get(event.lower() if event != "10K" else "10K", "") == "y"],
+  ```
+- **Fix:** Add `"Elite"` and `"Open"` to list:
+  ```python
+  "events": [event for event in ["Full", "Half", "10K", "Elite", "Open"] 
+             if dims.get(event.lower() if event != "10K" else "10K", "") == "y"],
+  ```
+- **Note:** Logic already handles lowercase CSV columns (`elite`, `open`) correctly
+
+**Location 2: `_build_segment_feature_properties()` function (Line 547)**
+- **Current Code:** Same as Location 1
+- **Fix:** Same change as Location 1
+
+**Additional Fix: length_km Calculation (Lines 509 and 546)**
+- **Current Code:**
+  ```python
+  "length_km": float(dims.get("full_length", dims.get("half_length", dims.get("10K_length", 0.0)))),
+  ```
+- **Fix:** Add `5K_length` fallback:
+  ```python
+  "length_km": float(dims.get("full_length", dims.get("half_length", dims.get("10K_length", dims.get("5K_length", 0.0))))),
+  ```
+- **Apply to:** Both `_create_segment_feature()` (line 509) and `_build_segment_feature_properties()` (line 546)
+
+- **Priority:** 🔴 **CRITICAL** - UI filtering depends on events array
 
 ---
 
@@ -370,10 +389,11 @@
 ## 📋 Summary Checklist
 
 ### Phase 1: Critical Fixes (Do First) 🔴
-- [ ] Fix `app/conversion_audit.py` - `get_segment_events()`
-- [ ] Fix `app/core/flow/flow.py` - `_get_segment_events()`
-- [ ] Fix `app/density_report.py` - Add elite/open to segments_list (line 2534-2548)
-- [ ] **FIND & FIX** artifact export module - Populate events property in segments.geojson
+- [x] ~~Fix `app/conversion_audit.py`~~ - **ARCHIVED** (not used in runtime)
+- [ ] Fix `app/core/flow/flow.py` - `_get_segment_events()` (lines 63-80)
+- [ ] Fix `app/density_report.py` - Add elite/open + 5K_from_km/5K_to_km to segments_list (lines 2534-2548)
+- [ ] Fix `app/core/artifacts/frontend.py` - Add Elite/Open to events list (lines 510 and 547)
+- [ ] Fix `app/core/artifacts/frontend.py` - Add 5K_length to length_km calculation (lines 509 and 546)
 
 ### Phase 2: Core Infrastructure 🟡
 - [ ] Update `app/core/gpx/processor.py` - Load 5KElite.gpx and 5KOpen.gpx
