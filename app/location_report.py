@@ -316,24 +316,34 @@ def calculate_arrival_times_for_location(
                 )
                 continue
             
-            matches_segment = False
-            matched_segment_distance = None
-            
-            # First, check if full course distance matches any segment range
-            # This is the primary check - if it matches, use it
+            # For locations with multiple segments, calculate arrival times for ALL listed segments
+            # This handles cases like location 12 (H1, L1, L2) where runners pass multiple times
+            # We use the projected distance if it matches, otherwise use the segment midpoint
+            matching_segments = []
             TOLERANCE_KM = 0.1  # 100m tolerance
+            
+            # Check all listed segments - if projected distance matches, use it; otherwise use segment midpoint
             for seg_id, from_km, to_km in segment_ranges:
                 if (from_km - TOLERANCE_KM) <= distance_km <= (to_km + TOLERANCE_KM):
-                    matches_segment = True
-                    matched_segment_distance = max(from_km, min(distance_km, to_km))
+                    # Projected distance matches this segment - use it
+                    matched_distance = max(from_km, min(distance_km, to_km))
+                    matching_segments.append((seg_id, matched_distance))
                     logger.info(
-                        f"Location {location.get('loc_id')} ({event}): Full course distance {distance_km:.3f}km matches segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km (clamped to {matched_segment_distance:.3f}km)"
+                        f"Location {location.get('loc_id')} ({event}): Full course distance {distance_km:.3f}km matches segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km (clamped to {matched_distance:.3f}km)"
                     )
-                    break
+                else:
+                    # Projected distance doesn't match, but segment is listed - use segment midpoint
+                    # This handles cases where location is at one distance but runners also pass at another
+                    segment_midpoint = (from_km + to_km) / 2.0
+                    matching_segments.append((seg_id, segment_midpoint))
+                    logger.info(
+                        f"Location {location.get('loc_id')} ({event}): Segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km listed but projected distance {distance_km:.3f}km doesn't match - using midpoint {segment_midpoint:.3f}km"
+                    )
             
-            # If full course distance doesn't match, try segment centerline approach
-            # This handles cases where location is slightly off the course but close to a segment
-            if not matches_segment:
+            # If no segments match the projected distance, try segment centerline approach
+            if not matching_segments:
+                matches_segment = False
+                matched_segment_distance = None
                 logger.debug(f"Location {location.get('loc_id')} ({event}): Full course distance {distance_km:.3f}km doesn't match any segment, trying centerline approach")
                 
                 # Get event column name for GPX generation
@@ -414,9 +424,45 @@ def calculate_arrival_times_for_location(
                     )
                     continue
             
-            # Use the matched segment distance for arrival calculations
-            distance_km = matched_segment_distance
-            logger.debug(f"Location {location.get('loc_id')} ({event}): Using distance {distance_km:.3f}km for arrival calculations")
+            # Calculate arrival times for ALL matching segments
+            # This handles multiple crossings (e.g., L1 outbound and L2 return for Full)
+            if matching_segments:
+                logger.debug(f"Location {location.get('loc_id')} ({event}): Found {len(matching_segments)} matching segments: {[s[0] for s in matching_segments]}")
+                
+                # Get runners for this event
+                event_runners = runners_df[runners_df["event"] == event].copy()
+                
+                if event_runners.empty:
+                    logger.warning(f"Location {location.get('loc_id')} ({event}): No runners found for event {event}")
+                    continue
+                
+                # Calculate arrival times for each matching segment
+                event_start_sec = start_times.get(event, 0) * SECONDS_PER_MINUTE
+                
+                for seg_id, seg_distance_km in matching_segments:
+                    logger.debug(f"Location {location.get('loc_id')} ({event}): Calculating arrivals for segment {seg_id} at {seg_distance_km:.3f}km")
+                    
+                    for _, runner in event_runners.iterrows():
+                        start_offset = runner.get("start_offset", 0)
+                        if pd.isna(start_offset):
+                            start_offset = 0
+                        
+                        pace_min_per_km = runner.get("pace", 0)
+                        if pd.isna(pace_min_per_km) or pace_min_per_km <= 0:
+                            continue
+                        
+                        pace_sec_per_km = pace_min_per_km * SECONDS_PER_MINUTE
+                        
+                        # Arrival time = start_time + offset + pace * distance
+                        arrival_time = event_start_sec + start_offset * SECONDS_PER_MINUTE + pace_sec_per_km * seg_distance_km
+                        arrival_times.append(arrival_time)
+                
+                logger.debug(f"Location {location.get('loc_id')} ({event}): Calculated {len(arrival_times)} total arrival times across {len(matching_segments)} segments")
+                continue  # Skip the single-segment calculation below
+            else:
+                # No segments matched, try centerline approach
+                matches_segment = False
+                matched_segment_distance = None
         else:
             # Fallback: find nearest segment
             nearest = find_nearest_segment(location_point_utm, segments_df, courses, event)
