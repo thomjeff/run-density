@@ -454,6 +454,15 @@ def calculate_arrival_times_for_location(
                         if pd.isna(start_offset):
                             start_offset = 0
                         
+                        # Filter out invalid start offsets (>120 minutes = 2 hours seems unreasonable)
+                        # Runner 1529 has start_offset=983 minutes, causing last_runner=24:43:15
+                        if start_offset > 120:
+                            logger.debug(
+                                f"Location {location.get('loc_id')} ({event}): Skipping runner {runner.get('runner_id')} "
+                                f"with invalid start_offset {start_offset} minutes"
+                            )
+                            continue
+                        
                         pace_min_per_km = runner.get("pace", 0)
                         if pd.isna(pace_min_per_km) or pace_min_per_km <= 0:
                             continue
@@ -463,14 +472,6 @@ def calculate_arrival_times_for_location(
                         # Arrival time = start_time + offset + pace * distance
                         arrival_time = event_start_sec + start_offset * SECONDS_PER_MINUTE + pace_sec_per_km * seg_distance_km
                         arrival_times.append(arrival_time)
-                        
-                        # Debug: log if arrival time seems wrong
-                        if arrival_time > 24 * 3600:  # More than 24 hours
-                            logger.warning(
-                                f"Location {location.get('loc_id')} ({event}): Unusual arrival time {arrival_time/3600:.2f}h "
-                                f"for runner {runner.get('runner_id')} at segment {seg_id} distance {seg_distance_km:.3f}km "
-                                f"(start={event_start_sec/3600:.2f}h, offset={start_offset}min, pace={pace_min_per_km:.2f}min/km)"
-                            )
                 
                 logger.debug(f"Location {location.get('loc_id')} ({event}): Calculated {len(arrival_times)} total arrival times across {len(matching_segments)} segments")
                 continue  # Skip the single-segment calculation below
