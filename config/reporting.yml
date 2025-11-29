@@ -130,6 +130,7 @@ validation:
       - Flow.md
       - Density.md
       - Flow.csv
+      - Locations.csv
     ui:
       - segment_metrics.json
       - flags.json
@@ -158,7 +159,7 @@ validation:
 
 # Expected file counts for validation
 expected_counts:
-  reports: 3
+  reports: 4
   bins: 3
   maps: 1  # map_data.json (optional but expected if generated)
   heatmaps: 17
