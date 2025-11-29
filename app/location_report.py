@@ -322,7 +322,10 @@ def calculate_arrival_times_for_location(
             matching_segments = []
             TOLERANCE_KM = 0.1  # 100m tolerance
             
-            # Check all listed segments - if projected distance matches, use it; otherwise use segment midpoint
+            # Check all listed segments - only include if projected distance matches OR segment is clearly a return leg
+            # Return leg detection: segment is significantly further (>5km) than projected distance
+            RETURN_LEG_THRESHOLD_KM = 5.0
+            
             for seg_id, from_km, to_km in segment_ranges:
                 if (from_km - TOLERANCE_KM) <= distance_km <= (to_km + TOLERANCE_KM):
                     # Projected distance matches this segment - use it
@@ -331,14 +334,17 @@ def calculate_arrival_times_for_location(
                     logger.info(
                         f"Location {location.get('loc_id')} ({event}): Full course distance {distance_km:.3f}km matches segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km (clamped to {matched_distance:.3f}km)"
                     )
-                else:
-                    # Projected distance doesn't match, but segment is listed
-                    # This handles cases where location is at one distance but runners also pass at another
+                elif from_km > (distance_km + RETURN_LEG_THRESHOLD_KM):
+                    # Segment is significantly further - likely a return leg (e.g., L2 for Full)
                     # Use the segment's end point (to_km) to get the latest arrival time
-                    # This is more conservative and matches user expectations for "last runner"
                     matching_segments.append((seg_id, to_km))
                     logger.info(
-                        f"Location {location.get('loc_id')} ({event}): Segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km listed but projected distance {distance_km:.3f}km doesn't match - using end point {to_km:.3f}km"
+                        f"Location {location.get('loc_id')} ({event}): Segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km is return leg (>{RETURN_LEG_THRESHOLD_KM}km beyond projected {distance_km:.3f}km) - using end point {to_km:.3f}km"
+                    )
+                else:
+                    # Segment doesn't match and isn't a clear return leg - skip it
+                    logger.debug(
+                        f"Location {location.get('loc_id')} ({event}): Segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km listed but doesn't match projected {distance_km:.3f}km and isn't a return leg - skipping"
                     )
             
             # If no segments match the projected distance, try segment centerline approach
