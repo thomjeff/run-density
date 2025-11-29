@@ -123,6 +123,36 @@ def test_temporal_flow_report(base_url, run_id=None):
         print(f"❌ Temporal Flow Report: FAILED (status: {response.status_code})")
         return False
 
+def test_locations_report(base_url, run_id=None):
+    """Test locations report generation (Issue #277)"""
+    print("🔍 Testing /api/locations/generate...")
+    
+    # Issue #277: Use provided run_id for combined runs
+    params = {}
+    if run_id:
+        params['run_id'] = run_id
+        print(f"   Using shared run_id: {run_id}")
+    
+    response = requests.post(f'{base_url}/api/locations/generate', 
+                           params=params, timeout=600)
+    
+    if response.status_code == 200:
+        try:
+            result = response.json()
+            if result.get('ok'):
+                locations_count = result.get('locations_processed', 0)
+                print(f"✅ Locations Report: OK ({locations_count} locations processed)")
+                return True
+            else:
+                print(f"❌ Locations Report: FAILED (ok=False)")
+                return False
+        except:
+            print("✅ Locations Report: OK")
+            return True
+    else:
+        print(f"❌ Locations Report: FAILED (status: {response.status_code})")
+        return False
+
 def test_map_manifest(base_url):
     """Test map manifest endpoint (Issue #249) - Optional test"""
     print("🔍 Testing /api/map/manifest...")
@@ -264,8 +294,8 @@ def main():
         all_passed = False
     
     print()
-    print("⏳ Waiting for resource cleanup (10s)...")
-    time.sleep(10)
+    print("⏳ Waiting for resource cleanup (5s)...")
+    time.sleep(5)
     print()
     
     # Test 4: Map manifest (Issue #249)
@@ -279,8 +309,8 @@ def main():
         all_passed = False
     
     print()
-    print("⏳ Waiting for resource cleanup (30s)...")
-    time.sleep(30)
+    print("⏳ Waiting for resource cleanup (5s)...")
+    time.sleep(5)
     print()
     
     # Test 4: Temporal flow report (heavy operation)
