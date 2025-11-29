@@ -447,6 +447,8 @@ def calculate_arrival_times_for_location(
             # Arrival time = start_time + offset + pace * distance
             arrival_time = event_start_sec + start_offset + pace_sec_per_km * distance_km
             arrival_times.append(arrival_time)
+        
+        logger.debug(f"Location {location.get('loc_id')} ({event}): Calculated {len(arrival_times)} arrival times for {len(event_runners)} runners at distance {distance_km:.3f}km")
     
     return arrival_times
 
