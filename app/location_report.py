@@ -325,6 +325,8 @@ def calculate_arrival_times_for_location(
             event_col_gpx = event.lower() if event != "10K" else "10K"
             
             for seg_id, from_km, to_km in segment_ranges:
+                logger.debug(f"Location {location.get('loc_id')} ({event}): Trying segment {seg_id} range [{from_km:.3f}, {to_km:.3f}]km, projected distance={distance_km:.3f}km")
+                
                 # Get segment centerline for this event
                 segments_for_gpx = [{
                     "seg_id": seg_id,
@@ -335,15 +337,17 @@ def calculate_arrival_times_for_location(
                 seg_coords = generate_segment_coordinates(courses, segments_for_gpx)
                 
                 if not seg_coords or not seg_coords[0].get("line_coords"):
-                    logger.debug(f"Location {location.get('loc_id')} ({event}): No centerline for segment {seg_id}")
+                    logger.warning(f"Location {location.get('loc_id')} ({event}): No centerline for segment {seg_id}, trying fallback")
                     # Fallback: check if full course distance matches
                     if (from_km - 0.1) <= distance_km <= (to_km + 0.1):
                         matches_segment = True
                         matched_segment_distance = max(from_km, min(distance_km, to_km))
-                        logger.debug(
-                            f"Location {location.get('loc_id')} ({event}): Using full course distance {distance_km:.3f}km for segment {seg_id} (no centerline)"
+                        logger.info(
+                            f"Location {location.get('loc_id')} ({event}): Using full course distance {distance_km:.3f}km for segment {seg_id} (no centerline, clamped to {matched_segment_distance:.3f}km)"
                         )
                         break
+                    else:
+                        logger.debug(f"Location {location.get('loc_id')} ({event}): Full course distance {distance_km:.3f}km not within segment {seg_id} range [{from_km - 0.1:.3f}, {to_km + 0.1:.3f}]km")
                     continue
                 
                 # Project location onto segment centerline
@@ -368,18 +372,26 @@ def calculate_arrival_times_for_location(
                     if from_km <= absolute_distance_km <= to_km:
                         matches_segment = True
                         matched_segment_distance = absolute_distance_km
-                        logger.debug(
+                        logger.info(
                             f"Location {location.get('loc_id')} ({event}): Projected onto segment {seg_id} centerline: {absolute_distance_km:.3f}km (from_km={from_km:.3f} + seg_dist={seg_distance_km:.3f}km)"
                         )
                         break
                     else:
-                        logger.debug(
+                        logger.warning(
                             f"Location {location.get('loc_id')} ({event}): Segment {seg_id} centerline distance {absolute_distance_km:.3f}km outside range [{from_km:.3f}, {to_km:.3f}]"
                         )
                 else:
-                    logger.debug(
-                        f"Location {location.get('loc_id')} ({event}): Location {distance_to_seg_m:.1f}m from segment {seg_id} centerline (threshold: {LOCATION_SNAP_THRESHOLD_M}m)"
+                    logger.warning(
+                        f"Location {location.get('loc_id')} ({event}): Location {distance_to_seg_m:.1f}m from segment {seg_id} centerline (threshold: {LOCATION_SNAP_THRESHOLD_M}m), trying fallback"
                     )
+                    # Try fallback immediately for this segment
+                    if (from_km - 0.1) <= distance_km <= (to_km + 0.1):
+                        matches_segment = True
+                        matched_segment_distance = max(from_km, min(distance_km, to_km))
+                        logger.info(
+                            f"Location {location.get('loc_id')} ({event}): Using full course distance {distance_km:.3f}km for segment {seg_id} (too far from centerline, clamped to {matched_segment_distance:.3f}km)"
+                        )
+                        break
             
             if not matches_segment:
                 # Fallback: try full course distance with tolerance
