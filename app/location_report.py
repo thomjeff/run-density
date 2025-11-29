@@ -332,12 +332,13 @@ def calculate_arrival_times_for_location(
                         f"Location {location.get('loc_id')} ({event}): Full course distance {distance_km:.3f}km matches segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km (clamped to {matched_distance:.3f}km)"
                     )
                 else:
-                    # Projected distance doesn't match, but segment is listed - use segment midpoint
+                    # Projected distance doesn't match, but segment is listed
                     # This handles cases where location is at one distance but runners also pass at another
-                    segment_midpoint = (from_km + to_km) / 2.0
-                    matching_segments.append((seg_id, segment_midpoint))
+                    # Use the segment's end point (to_km) to get the latest arrival time
+                    # This is more conservative and matches user expectations for "last runner"
+                    matching_segments.append((seg_id, to_km))
                     logger.info(
-                        f"Location {location.get('loc_id')} ({event}): Segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km listed but projected distance {distance_km:.3f}km doesn't match - using midpoint {segment_midpoint:.3f}km"
+                        f"Location {location.get('loc_id')} ({event}): Segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km listed but projected distance {distance_km:.3f}km doesn't match - using end point {to_km:.3f}km"
                     )
             
             # If no segments match the projected distance, try segment centerline approach
