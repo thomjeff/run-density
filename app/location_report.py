@@ -427,10 +427,10 @@ def calculate_arrival_times_for_location(
             logger.debug(f"Location {location.get('loc_id')} ({event}): Using nearest segment distance {distance_km:.3f}km")
         
         # Get runners for this event
-        event_lower = event.lower() if event != "10K" else "10K"
-        event_runners = runners_df[runners_df["event"] == event_lower].copy()
+        # Note: runners.csv uses capitalized event names ("Full", "Half", "10K")
+        event_runners = runners_df[runners_df["event"] == event].copy()
         
-        logger.debug(f"Location {location.get('loc_id')} ({event}): Found {len(event_runners)} runners for event {event_lower}")
+        logger.debug(f"Location {location.get('loc_id')} ({event}): Found {len(event_runners)} runners for event {event}")
         
         if event_runners.empty:
             logger.warning(f"Location {location.get('loc_id')} ({event}): No runners found for event {event_lower}")
