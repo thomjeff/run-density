@@ -317,14 +317,29 @@ def calculate_arrival_times_for_location(
                 continue
             
             matches_segment = False
-            # For locations with listed segments, project directly onto segment centerline
-            # This is more accurate than using full course polyline
             matched_segment_distance = None
             
-            # Get event column name for GPX generation
-            event_col_gpx = event.lower() if event != "10K" else "10K"
-            
+            # First, check if full course distance matches any segment range
+            # This is the primary check - if it matches, use it
+            TOLERANCE_KM = 0.1  # 100m tolerance
             for seg_id, from_km, to_km in segment_ranges:
+                if (from_km - TOLERANCE_KM) <= distance_km <= (to_km + TOLERANCE_KM):
+                    matches_segment = True
+                    matched_segment_distance = max(from_km, min(distance_km, to_km))
+                    logger.info(
+                        f"Location {location.get('loc_id')} ({event}): Full course distance {distance_km:.3f}km matches segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km (clamped to {matched_segment_distance:.3f}km)"
+                    )
+                    break
+            
+            # If full course distance doesn't match, try segment centerline approach
+            # This handles cases where location is slightly off the course but close to a segment
+            if not matches_segment:
+                logger.debug(f"Location {location.get('loc_id')} ({event}): Full course distance {distance_km:.3f}km doesn't match any segment, trying centerline approach")
+                
+                # Get event column name for GPX generation
+                event_col_gpx = event.lower() if event != "10K" else "10K"
+                
+                for seg_id, from_km, to_km in segment_ranges:
                 logger.debug(f"Location {location.get('loc_id')} ({event}): Trying segment {seg_id} range [{from_km:.3f}, {to_km:.3f}]km, projected distance={distance_km:.3f}km")
                 
                 # Get segment centerline for this event
@@ -393,18 +408,6 @@ def calculate_arrival_times_for_location(
                         )
                         break
             
-            if not matches_segment:
-                # Fallback: try full course distance with tolerance
-                TOLERANCE_KM = 0.1  # 100m tolerance
-                for seg_id, from_km, to_km in segment_ranges:
-                    if (from_km - TOLERANCE_KM) <= distance_km <= (to_km + TOLERANCE_KM):
-                        matches_segment = True
-                        matched_segment_distance = max(from_km, min(distance_km, to_km))
-                        logger.debug(
-                            f"Location {location.get('loc_id')} ({event}): Using full course distance {distance_km:.3f}km (clamped to {matched_segment_distance:.3f}km) for segment {seg_id}"
-                        )
-                        break
-                
                 if not matches_segment:
                     logger.warning(
                         f"Location {location.get('loc_id')} ({event}): Distance {distance_km:.3f}km does not match any segment ranges: {[(s, f, t) for s, f, t in segment_ranges]}"
