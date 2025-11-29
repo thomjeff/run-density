@@ -305,14 +305,15 @@ def calculate_arrival_times_for_location(
                 continue
             
             matches_segment = False
-            # Use tolerance matching the snapping threshold (50m = 0.05km)
-            # This handles cases where location is slightly off-course but within snapping distance
-            TOLERANCE_KM = LOCATION_SNAP_THRESHOLD_M / METERS_PER_KM  # 0.05km = 50m
+            # For locations with listed segments, use more lenient tolerance (100m)
+            # This handles cases where projection is slightly off due to course geometry
+            # If segments are explicitly listed, we trust the user's intent
+            TOLERANCE_KM = 0.1  # 100m tolerance for listed segments
             matched_segment_distance = None
             
             for seg_id, from_km, to_km in segment_ranges:
                 # Check if distance is within range with tolerance
-                # Allow distance to be slightly outside segment range if within snapping threshold
+                # Allow distance to be slightly outside segment range if within tolerance
                 if (from_km - TOLERANCE_KM) <= distance_km <= (to_km + TOLERANCE_KM):
                     matches_segment = True
                     # Clamp distance to segment bounds for arrival calculation
