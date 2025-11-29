@@ -102,14 +102,31 @@ def get_segment_ranges_for_event(
     
     for seg_id in segment_ids:
         seg_row = segments_df[segments_df["seg_id"] == seg_id]
-        if not seg_row.empty:
-            row = seg_row.iloc[0]
-            if pd.notna(row.get(from_col)) and pd.notna(row.get(to_col)):
-                ranges.append((
-                    seg_id,
-                    float(row[from_col]),
-                    float(row[to_col])
-                ))
+        if seg_row.empty:
+            logger.warning(f"Segment {seg_id} not found in segments.csv")
+            continue
+        
+        row = seg_row.iloc[0]
+        from_km = row.get(from_col)
+        to_km = row.get(to_col)
+        
+        # Check if segment is used by this event
+        event_flag = row.get(event_col, "").lower() if event_col in row.index else ""
+        if event_flag != "y":
+            logger.debug(f"Segment {seg_id} not used by event {event} (flag={event_flag})")
+            continue
+        
+        if pd.notna(from_km) and pd.notna(to_km):
+            ranges.append((
+                seg_id,
+                float(from_km),
+                float(to_km)
+            ))
+        else:
+            logger.warning(
+                f"Segment {seg_id} missing {from_col} or {to_col} for event {event} "
+                f"(from_km={from_km}, to_km={to_km})"
+            )
     
     return ranges
 
@@ -274,19 +291,31 @@ def calculate_arrival_times_for_location(
         # Project location onto course
         distance_km = project_point_to_course(location_point_utm, course_line_utm)
         if distance_km is None:
+            logger.debug(f"Location {location.get('loc_id')} ({event}): Projection failed")
             continue
         
         # Check if distance falls within any listed segment
         if segments_list:
             segment_ranges = get_segment_ranges_for_event(segments_df, segments_list, event)
-            matches_segment = False
+            if not segment_ranges:
+                logger.warning(
+                    f"Location {location.get('loc_id')} ({event}): No valid segment ranges found for segments {segments_list}"
+                )
+                continue
             
+            matches_segment = False
             for seg_id, from_km, to_km in segment_ranges:
                 if from_km <= distance_km <= to_km:
                     matches_segment = True
+                    logger.debug(
+                        f"Location {location.get('loc_id')} ({event}): Distance {distance_km:.3f}km matches segment {seg_id} [{from_km:.3f}, {to_km:.3f}]"
+                    )
                     break
             
             if not matches_segment:
+                logger.warning(
+                    f"Location {location.get('loc_id')} ({event}): Distance {distance_km:.3f}km does not match any segment ranges: {[(s, f, t) for s, f, t in segment_ranges]}"
+                )
                 continue
         else:
             # Fallback: find nearest segment
