@@ -68,35 +68,35 @@ async def get_locations_report(
             df = pd.read_csv(io.StringIO(csv_data))
             report_data = df.to_dict('records')
         elif generate:
-                # Generate new report
-                logger.info(f"Generating locations report for run_id={run_id}")
-                result = generate_location_report(
-                    locations_csv="data/locations.csv",
-                    runners_csv="data/runners.csv",
-                    segments_csv="data/segments.csv",
-                    start_times=DEFAULT_START_TIMES,
-                    run_id=run_id
+            # Generate new report
+            logger.info(f"Generating locations report for run_id={run_id}")
+            result = generate_location_report(
+                locations_csv="data/locations.csv",
+                runners_csv="data/runners.csv",
+                segments_csv="data/segments.csv",
+                start_times=DEFAULT_START_TIMES,
+                run_id=run_id
+            )
+            
+            if not result.get("ok"):
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to generate report: {result.get('error', 'Unknown error')}"
                 )
-                
-                if not result.get("ok"):
-                    raise HTTPException(
-                        status_code=500,
-                        detail=f"Failed to generate report: {result.get('error', 'Unknown error')}"
-                    )
-                
-                # Read the generated CSV
-                if storage.exists(report_path):
-                    import pandas as pd
-                    import io
-                    csv_data = storage.read_text(report_path)
-                    df = pd.read_csv(io.StringIO(csv_data))
-                    report_data = df.to_dict('records')
-                else:
-                    raise HTTPException(
-                        status_code=500,
-                        detail="Report generated but file not found"
-                    )
+            
+            # Read the generated CSV
+            if storage.exists(report_path):
+                import pandas as pd
+                import io
+                csv_data = storage.read_text(report_path)
+                df = pd.read_csv(io.StringIO(csv_data))
+                report_data = df.to_dict('records')
             else:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Report generated but file not found"
+                )
+        else:
                 raise HTTPException(
                     status_code=404,
                     detail=f"Locations report not found for run_id={run_id}. Use ?generate=true to create it."
