@@ -319,13 +319,16 @@ def calculate_arrival_times_for_location(
             # This is more accurate than using full course polyline
             matched_segment_distance = None
             
+            # Get event column name for GPX generation
+            event_col_gpx = event.lower() if event != "10K" else "10K"
+            
             for seg_id, from_km, to_km in segment_ranges:
                 # Get segment centerline for this event
                 segments_for_gpx = [{
                     "seg_id": seg_id,
-                    event_col: "y",
-                    f"{event_col}_from_km": from_km,
-                    f"{event_col}_to_km": to_km
+                    event_col_gpx: "y",
+                    f"{event_col_gpx}_from_km": from_km,
+                    f"{event_col_gpx}_to_km": to_km
                 }]
                 seg_coords = generate_segment_coordinates(courses, segments_for_gpx)
                 
