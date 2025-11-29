@@ -463,6 +463,14 @@ def calculate_arrival_times_for_location(
                         # Arrival time = start_time + offset + pace * distance
                         arrival_time = event_start_sec + start_offset * SECONDS_PER_MINUTE + pace_sec_per_km * seg_distance_km
                         arrival_times.append(arrival_time)
+                        
+                        # Debug: log if arrival time seems wrong
+                        if arrival_time > 24 * 3600:  # More than 24 hours
+                            logger.warning(
+                                f"Location {location.get('loc_id')} ({event}): Unusual arrival time {arrival_time/3600:.2f}h "
+                                f"for runner {runner.get('runner_id')} at segment {seg_id} distance {seg_distance_km:.3f}km "
+                                f"(start={event_start_sec/3600:.2f}h, offset={start_offset}min, pace={pace_min_per_km:.2f}min/km)"
+                            )
                 
                 logger.debug(f"Location {location.get('loc_id')} ({event}): Calculated {len(arrival_times)} total arrival times across {len(matching_segments)} segments")
                 continue  # Skip the single-segment calculation below
