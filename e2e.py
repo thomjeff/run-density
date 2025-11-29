@@ -319,6 +319,16 @@ def main():
         all_passed = False
     
     print()
+    print("⏳ Waiting for resource cleanup (5s)...")
+    time.sleep(5)
+    print()
+    
+    # Test 5: Locations report (Issue #277)
+    # Use same run_id to ensure all reports are in the same runflow folder
+    if not test_locations_report(base_url, run_id=run_id):
+        all_passed = False
+    
+    print()
     test_end_time = datetime.now()
     print("=" * 60)
     print("E2E TEST RESULTS")
