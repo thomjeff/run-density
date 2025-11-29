@@ -416,18 +416,24 @@ def calculate_arrival_times_for_location(
             
             # Use the matched segment distance for arrival calculations
             distance_km = matched_segment_distance
+            logger.debug(f"Location {location.get('loc_id')} ({event}): Using distance {distance_km:.3f}km for arrival calculations")
         else:
             # Fallback: find nearest segment
             nearest = find_nearest_segment(location_point_utm, segments_df, courses, event)
             if not nearest:
+                logger.warning(f"Location {location.get('loc_id')} ({event}): No nearest segment found")
                 continue
             # distance_km already set from projection
+            logger.debug(f"Location {location.get('loc_id')} ({event}): Using nearest segment distance {distance_km:.3f}km")
         
         # Get runners for this event
         event_lower = event.lower() if event != "10K" else "10K"
         event_runners = runners_df[runners_df["event"] == event_lower].copy()
         
+        logger.debug(f"Location {location.get('loc_id')} ({event}): Found {len(event_runners)} runners for event {event_lower}")
+        
         if event_runners.empty:
+            logger.warning(f"Location {location.get('loc_id')} ({event}): No runners found for event {event_lower}")
             continue
         
         # Calculate arrival times
