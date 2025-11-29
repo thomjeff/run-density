@@ -25,18 +25,20 @@ router = APIRouter()
 
 # Issue #466 Step 2: Removed legacy storage singleton (not needed)
 
-# Issue #477: Coordinate system conversion (UTM Zone 19N → WGS84)
+# Issue #477: Coordinate system conversion (Web Mercator → WGS84)
 from pyproj import Transformer
 
-# Create transformer (UTM Zone 19N → WGS84)
-utm_to_wgs84 = Transformer.from_crs("EPSG:32619", "EPSG:4326", always_xy=True)
+# Create transformer (Web Mercator → WGS84)
+# segments.geojson contains Web Mercator coordinates (EPSG:3857)
+# but GeoJSON standard requires WGS84 (EPSG:4326)
+webmerc_to_wgs84 = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
 
 
 def convert_geometry_to_wgs84(geometry: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Convert geometry coordinates from UTM Zone 19N to WGS84.
+    Convert geometry coordinates from Web Mercator to WGS84.
     
-    Issue #477: segments.geojson contains UTM coordinates but GeoJSON standard
+    Issue #477: segments.geojson contains Web Mercator coordinates but GeoJSON standard
     requires WGS84. This function converts before serving to frontend.
     
     Args:
@@ -53,13 +55,13 @@ def convert_geometry_to_wgs84(geometry: Dict[str, Any]) -> Dict[str, Any]:
         coords = geometry.get("coordinates", [])
         if coords:
             geometry["coordinates"] = [
-                list(utm_to_wgs84.transform(x, y)) for x, y in coords
+                list(webmerc_to_wgs84.transform(x, y)) for x, y in coords
             ]
     elif geom_type == "MultiLineString":
         coords = geometry.get("coordinates", [])
         if coords:
             geometry["coordinates"] = [
-                [list(utm_to_wgs84.transform(x, y)) for x, y in line]
+                [list(webmerc_to_wgs84.transform(x, y)) for x, y in line]
                 for line in coords
             ]
     # Other geometry types (Point, Polygon, etc.) not expected for segments
