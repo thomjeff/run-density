@@ -268,8 +268,10 @@ def calculate_arrival_times_for_location(
             eligible_events.append(event_name)
     
     if not eligible_events:
-        logger.debug(f"Location {location.get('loc_id')}: No eligible events (full={location.get('full')}, half={location.get('half')}, 10K={location.get('10K')})")
+        logger.warning(f"Location {location.get('loc_id')}: No eligible events (full={location.get('full')}, half={location.get('half')}, 10K={location.get('10K')})")
         return arrival_times
+    
+    logger.debug(f"Location {location.get('loc_id')}: Processing {len(eligible_events)} eligible events: {eligible_events}")
     
     # Convert location point to UTM
     lat = location.get("lat")
