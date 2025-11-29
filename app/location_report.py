@@ -305,6 +305,8 @@ def calculate_arrival_times_for_location(
         
         # Check if distance falls within any listed segment
         if segments_list:
+            from app.core.gpx.processor import generate_segment_coordinates
+            
             segment_ranges = get_segment_ranges_for_event(segments_df, segments_list, event)
             if not segment_ranges:
                 logger.warning(
@@ -313,34 +315,84 @@ def calculate_arrival_times_for_location(
                 continue
             
             matches_segment = False
-            # For locations with listed segments, use more lenient tolerance (100m)
-            # This handles cases where projection is slightly off due to course geometry
-            # If segments are explicitly listed, we trust the user's intent
-            TOLERANCE_KM = 0.1  # 100m tolerance for listed segments
+            # For locations with listed segments, project directly onto segment centerline
+            # This is more accurate than using full course polyline
             matched_segment_distance = None
             
             for seg_id, from_km, to_km in segment_ranges:
-                # Check if distance is within range with tolerance
-                # Allow distance to be slightly outside segment range if within tolerance
-                if (from_km - TOLERANCE_KM) <= distance_km <= (to_km + TOLERANCE_KM):
-                    matches_segment = True
-                    # Clamp distance to segment bounds for arrival calculation
-                    clamped_distance = max(from_km, min(distance_km, to_km))
-                    matched_segment_distance = clamped_distance
-                    if clamped_distance != distance_km:
+                # Get segment centerline for this event
+                segments_for_gpx = [{
+                    "seg_id": seg_id,
+                    event_col: "y",
+                    f"{event_col}_from_km": from_km,
+                    f"{event_col}_to_km": to_km
+                }]
+                seg_coords = generate_segment_coordinates(courses, segments_for_gpx)
+                
+                if not seg_coords or not seg_coords[0].get("line_coords"):
+                    logger.debug(f"Location {location.get('loc_id')} ({event}): No centerline for segment {seg_id}")
+                    # Fallback: check if full course distance matches
+                    if (from_km - 0.1) <= distance_km <= (to_km + 0.1):
+                        matches_segment = True
+                        matched_segment_distance = max(from_km, min(distance_km, to_km))
                         logger.debug(
-                            f"Location {location.get('loc_id')} ({event}): Distance {distance_km:.3f}km clamped to {clamped_distance:.3f}km for segment {seg_id}"
+                            f"Location {location.get('loc_id')} ({event}): Using full course distance {distance_km:.3f}km for segment {seg_id} (no centerline)"
                         )
+                        break
+                    continue
+                
+                # Project location onto segment centerline
+                seg_line_coords = seg_coords[0]["line_coords"]
+                seg_points_utm = [
+                    WGS84_TO_UTM.transform(lon, lat) for lon, lat in seg_line_coords
+                ]
+                seg_line_utm = LineString(seg_points_utm)
+                
+                # Check distance from location to segment centerline
+                distance_to_seg_m = location_point_utm.distance(seg_line_utm)
+                
+                if distance_to_seg_m <= LOCATION_SNAP_THRESHOLD_M:
+                    # Project onto segment centerline to get distance along segment
+                    seg_distance_m = seg_line_utm.project(location_point_utm)
+                    seg_distance_km = seg_distance_m / METERS_PER_KM
+                    
+                    # Convert to absolute course distance: from_km + distance_along_segment
+                    absolute_distance_km = from_km + seg_distance_km
+                    
+                    # Verify it's within segment bounds
+                    if from_km <= absolute_distance_km <= to_km:
+                        matches_segment = True
+                        matched_segment_distance = absolute_distance_km
+                        logger.debug(
+                            f"Location {location.get('loc_id')} ({event}): Projected onto segment {seg_id} centerline: {absolute_distance_km:.3f}km (from_km={from_km:.3f} + seg_dist={seg_distance_km:.3f}km)"
+                        )
+                        break
+                    else:
+                        logger.debug(
+                            f"Location {location.get('loc_id')} ({event}): Segment {seg_id} centerline distance {absolute_distance_km:.3f}km outside range [{from_km:.3f}, {to_km:.3f}]"
+                        )
+                else:
                     logger.debug(
-                        f"Location {location.get('loc_id')} ({event}): Distance {distance_km:.3f}km matches segment {seg_id} [{from_km:.3f}, {to_km:.3f}]"
+                        f"Location {location.get('loc_id')} ({event}): Location {distance_to_seg_m:.1f}m from segment {seg_id} centerline (threshold: {LOCATION_SNAP_THRESHOLD_M}m)"
                     )
-                    break
             
             if not matches_segment:
-                logger.warning(
-                    f"Location {location.get('loc_id')} ({event}): Distance {distance_km:.3f}km does not match any segment ranges: {[(s, f, t) for s, f, t in segment_ranges]}"
-                )
-                continue
+                # Fallback: try full course distance with tolerance
+                TOLERANCE_KM = 0.1  # 100m tolerance
+                for seg_id, from_km, to_km in segment_ranges:
+                    if (from_km - TOLERANCE_KM) <= distance_km <= (to_km + TOLERANCE_KM):
+                        matches_segment = True
+                        matched_segment_distance = max(from_km, min(distance_km, to_km))
+                        logger.debug(
+                            f"Location {location.get('loc_id')} ({event}): Using full course distance {distance_km:.3f}km (clamped to {matched_segment_distance:.3f}km) for segment {seg_id}"
+                        )
+                        break
+                
+                if not matches_segment:
+                    logger.warning(
+                        f"Location {location.get('loc_id')} ({event}): Distance {distance_km:.3f}km does not match any segment ranges: {[(s, f, t) for s, f, t in segment_ranges]}"
+                    )
+                    continue
             
             # Use the matched segment distance for arrival calculations
             distance_km = matched_segment_distance
