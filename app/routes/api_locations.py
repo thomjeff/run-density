@@ -64,8 +64,11 @@ async def get_locations_report(
             # Read CSV and convert to JSON
             import pandas as pd
             import io
+            import numpy as np
             csv_data = storage.read_text(report_path)
             df = pd.read_csv(io.StringIO(csv_data))
+            # Replace NaN/Inf values with None for JSON serialization
+            df = df.replace([np.nan, np.inf, -np.inf], None)
             report_data = df.to_dict('records')
         elif generate:
             # Generate new report
@@ -97,10 +100,10 @@ async def get_locations_report(
                     detail="Report generated but file not found"
                 )
         else:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Locations report not found for run_id={run_id}. Use ?generate=true to create it."
-                )
+            raise HTTPException(
+                status_code=404,
+                detail=f"Locations report not found for run_id={run_id}. Use ?generate=true to create it."
+            )
         
         return JSONResponse(content={
             "ok": True,
