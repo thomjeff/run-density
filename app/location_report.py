@@ -530,7 +530,16 @@ def generate_location_report(
         )
         
         if not arrival_times:
-            logger.warning(f"No arrival times calculated for location {loc_id}")
+            loc_row = locations_df[locations_df['loc_id'] == loc_id]
+            if not loc_row.empty:
+                loc = loc_row.iloc[0]
+                logger.warning(
+                    f"No arrival times calculated for location {loc_id} ({loc.get('loc_label', 'unknown')}). "
+                    f"Event flags: full={loc.get('full')}, half={loc.get('half')}, 10K={loc.get('10K')}, "
+                    f"seg_id={loc.get('seg_id')}"
+                )
+            else:
+                logger.warning(f"No arrival times calculated for location {loc_id}")
             report_rows.append(report_row)
             continue
         
