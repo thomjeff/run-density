@@ -18,3 +18,41 @@ def load_segments(path="data/segments.csv"):
 
 def load_runners(path="data/runners.csv"):
     return pd.read_csv(path)
+
+def load_locations(path="data/locations.csv"):
+    """
+    Load locations.csv with validation and normalization.
+    
+    Issue #277: Locations report input file.
+    
+    Args:
+        path: Path to locations.csv file
+        
+    Returns:
+        DataFrame with normalized location data
+    """
+    df = pd.read_csv(path)
+    
+    # Normalize event flags (y/n)
+    for ev in ["full", "half", "10K", "elite", "open"]:
+        if ev in df.columns:
+            df[ev] = df[ev].map(_yn)
+    
+    # Ensure numeric columns are numeric
+    if "lat" in df.columns:
+        df["lat"] = pd.to_numeric(df["lat"], errors="coerce")
+    if "lon" in df.columns:
+        df["lon"] = pd.to_numeric(df["lon"], errors="coerce")
+    if "buffer" in df.columns:
+        df["buffer"] = pd.to_numeric(df["buffer"], errors="coerce")
+    if "interval" in df.columns:
+        df["interval"] = pd.to_numeric(df["interval"], errors="coerce")
+    
+    # Parse segments field (comma-separated)
+    if "segments" in df.columns:
+        df["segments"] = df["segments"].fillna("").astype(str)
+        df["segments_list"] = df["segments"].apply(
+            lambda x: [s.strip() for s in str(x).split(",") if s.strip()] if x else []
+        )
+    
+    return df
