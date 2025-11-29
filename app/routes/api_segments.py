@@ -25,6 +25,47 @@ router = APIRouter()
 
 # Issue #466 Step 2: Removed legacy storage singleton (not needed)
 
+# Issue #477: Coordinate system conversion (UTM Zone 19N → WGS84)
+from pyproj import Transformer
+
+# Create transformer (UTM Zone 19N → WGS84)
+utm_to_wgs84 = Transformer.from_crs("EPSG:32619", "EPSG:4326", always_xy=True)
+
+
+def convert_geometry_to_wgs84(geometry: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Convert geometry coordinates from UTM Zone 19N to WGS84.
+    
+    Issue #477: segments.geojson contains UTM coordinates but GeoJSON standard
+    requires WGS84. This function converts before serving to frontend.
+    
+    Args:
+        geometry: GeoJSON geometry object (LineString or MultiLineString)
+        
+    Returns:
+        Geometry with coordinates converted to WGS84 [lon, lat]
+    """
+    if not geometry or not isinstance(geometry, dict):
+        return geometry
+    
+    geom_type = geometry.get("type")
+    if geom_type == "LineString":
+        coords = geometry.get("coordinates", [])
+        if coords:
+            geometry["coordinates"] = [
+                list(utm_to_wgs84.transform(x, y)) for x, y in coords
+            ]
+    elif geom_type == "MultiLineString":
+        coords = geometry.get("coordinates", [])
+        if coords:
+            geometry["coordinates"] = [
+                [list(utm_to_wgs84.transform(x, y)) for x, y in line]
+                for line in coords
+            ]
+    # Other geometry types (Point, Polygon, etc.) not expected for segments
+    # but handle gracefully if encountered
+    return geometry
+
 
 def enrich_segment_features(segments_geojson: Dict[str, Any], 
                           segment_metrics: Dict[str, Any],
@@ -122,6 +163,12 @@ async def get_segments_geojson():
                 content={"type": "FeatureCollection", "features": []},
                 headers={"Cache-Control": "public, max-age=60"}
             )
+        
+        # Issue #477: Convert geometry coordinates from UTM Zone 19N to WGS84
+        # GeoJSON standard requires WGS84, and frontend expects WGS84
+        for feature in segments_geojson.get("features", []):
+            if "geometry" in feature:
+                feature["geometry"] = convert_geometry_to_wgs84(feature["geometry"])
         
         # Read segment_metrics.json from runflow UI artifacts
         segment_metrics = storage.read_json("ui/segment_metrics.json")

@@ -17,37 +17,6 @@ const losColors = {
 };
 
 /**
- * Convert coordinates - try different approaches
- * @param {number} x - X coordinate
- * @param {number} y - Y coordinate
- * @returns {Array} [lng, lat] in WGS84
- */
-function convertCoordinates(x, y) {
-    // Convert Web Mercator (EPSG:3857) to WGS84 (EPSG:4326)
-    // Using the correct Earth radius constant
-    const R = 6378137.0;
-    const lng = (x / R) * 180 / Math.PI;
-    const lat = (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) * 180 / Math.PI;
-    
-    console.log(`Converting Web Mercator: ${x}, ${y} -> WGS84: ${lng}, ${lat}`);
-    return [lng, lat];
-}
-
-/**
- * Convert GeoJSON coordinates from Web Mercator to WGS84
- * @param {Array} coordinates - Array of coordinate pairs
- * @returns {Array} Converted coordinates
- */
-function convertCoordinateArray(coordinates) {
-    return coordinates.map(coord => {
-        if (Array.isArray(coord) && typeof coord[0] === 'number') {
-            return convertCoordinates(coord[0], coord[1]);
-        }
-        return coord;
-    });
-}
-
-/**
  * TEMP FIX (Sydney milestone):
  * Deduplicate segment coordinates client-side to avoid visual jitter.
  * Backend geometry simplification will be handled post-Sydney (#330 planned).
@@ -175,36 +144,20 @@ async function renderSegments(map) {
 
     console.log(`🔄 Rendering ${data.features.length} segments...`);
 
-    // Debug: Log first few segment coordinates
-    console.log('🔍 Sample segment coordinates (before conversion):');
-    data.features.slice(0, 3).forEach((feature, index) => {
-        if (feature.geometry && feature.geometry.coordinates) {
-            console.log(`  Segment ${index + 1}:`, feature.geometry.coordinates.slice(0, 2));
-        }
-    });
-    
-    // Clean and convert coordinates to WGS84 lat/lng
+    // Issue #477: Coordinates are already in WGS84 from backend API
+    // No conversion needed - backend handles UTM → WGS84 transformation
+    // Only clean duplicate coordinates to avoid visual jitter
     data.features.forEach(feature => {
         if (feature.geometry && feature.geometry.coordinates) {
             const originalCount = feature.geometry.coordinates.length;
-            // First clean duplicate coordinates
+            // Clean duplicate coordinates (still needed for visual quality)
             feature = cleanFeature(feature);
             const cleanedCount = feature.geometry.coordinates.length;
-            // Then convert to WGS84
-            feature.geometry.coordinates = convertCoordinateArray(feature.geometry.coordinates);
             
             // Log deduplication effect for segments with significant reduction
             if (originalCount > cleanedCount && originalCount > 10) {
                 console.log(`🧹 Cleaned ${feature.properties.seg_id}: ${originalCount} → ${cleanedCount} coordinates (${((originalCount - cleanedCount) / originalCount * 100).toFixed(1)}% reduction)`);
             }
-        }
-    });
-    
-    // Debug: Log converted coordinates
-    console.log('🔍 Sample segment coordinates (after conversion):');
-    data.features.slice(0, 3).forEach((feature, index) => {
-        if (feature.geometry && feature.geometry.coordinates) {
-            console.log(`  Segment ${index + 1}:`, feature.geometry.coordinates.slice(0, 2));
         }
     });
 
