@@ -497,6 +497,7 @@ def calculate_arrival_times_for_location(
             start_offset = runner.get("start_offset", 0)
             if pd.isna(start_offset):
                 start_offset = 0
+            # start_offset is in seconds, not minutes
             
             pace_min_per_km = runner.get("pace", 0)
             if pd.isna(pace_min_per_km) or pace_min_per_km <= 0:
@@ -504,7 +505,7 @@ def calculate_arrival_times_for_location(
             
             pace_sec_per_km = pace_min_per_km * SECONDS_PER_MINUTE
             
-            # Arrival time = start_time + offset + pace * distance
+            # Arrival time = start_time + offset (seconds) + pace * distance
             arrival_time = event_start_sec + start_offset + pace_sec_per_km * distance_km
             arrival_times.append(arrival_time)
         
