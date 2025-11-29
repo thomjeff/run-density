@@ -553,72 +553,86 @@ def _build_segment_feature_properties(seg_id, segment_dims, schema_keys):
 
 def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
     """
-    Generate segments.geojson from bins.geojson.gz by aggregating bins into segment polylines.
+    Generate segments.geojson from GPX course coordinates.
+    
+    Issue #477: Previously used bin centroids which resulted in:
+    - Only 5 unique coordinates per segment (repeated 80 times)
+    - Segments not starting at official start line
+    - Gaps between segments (e.g., 153m gap between A1 and A2)
+    
+    Now uses real GPX coordinates from generate_segment_coordinates().
     
     Args:
         reports_dir: Path to reports/<run_id>/ directory
     
     Returns:
-        GeoJSON FeatureCollection
+        GeoJSON FeatureCollection with real course coordinates in Web Mercator (EPSG:3857)
     """
-    bins_geojson_path = reports_dir / "bins" / "bins.geojson.gz"
+    from app.core.gpx.processor import load_all_courses, generate_segment_coordinates, create_geojson_from_segments
+    from app.io.loader import load_segments
+    from pyproj import Transformer
     
-    if not bins_geojson_path.exists():
-        print(f"Warning: {bins_geojson_path} not found, returning empty GeoJSON")
+    # Load GPX courses
+    courses = load_all_courses("data")
+    if not courses:
+        print("Warning: No GPX courses found, returning empty GeoJSON")
         return {"type": "FeatureCollection", "features": []}
     
-    # Read bins GeoJSON
-    with gzip.open(bins_geojson_path, 'rt') as f:
-        bins_data = json.load(f)
+    # Load segments data to get segment definitions
+    try:
+        segments_df = load_segments("data/segments.csv")
+        segments_list = segments_df.to_dict('records')
+    except Exception as e:
+        print(f"Warning: Could not load segments.csv: {e}")
+        return {"type": "FeatureCollection", "features": []}
     
-    # Load dimensions for segment metadata
+    # Generate real coordinates for all segments from GPX (returns WGS84)
+    segments_with_coords = generate_segment_coordinates(courses, segments_list)
+    
+    # Convert to GeoJSON (coordinates are in WGS84 [lon, lat])
+    geojson = create_geojson_from_segments(segments_with_coords)
+    
+    # Issue #477: Convert coordinates from WGS84 to Web Mercator (EPSG:3857)
+    # segments.geojson is stored in Web Mercator, API converts to WGS84 when serving
+    wgs84_to_webmerc = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+    
+    for feature in geojson.get("features", []):
+        geom = feature.get("geometry", {})
+        if geom.get("type") == "LineString":
+            coords = geom.get("coordinates", [])
+            # Convert each coordinate from WGS84 [lon, lat] to Web Mercator [x, y]
+            geom["coordinates"] = [
+                list(wgs84_to_webmerc.transform(lon, lat)) for lon, lat in coords
+            ]
+        elif geom.get("type") == "MultiLineString":
+            coords = geom.get("coordinates", [])
+            geom["coordinates"] = [
+                [list(wgs84_to_webmerc.transform(lon, lat)) for lon, lat in line]
+                for line in coords
+            ]
+    
+    # Load dimensions for segment metadata enrichment
     segment_dims = _load_segment_dimensions()
-    
-    # Load schema_key from bins.parquet (Issue #285)
     schema_keys = _load_schema_keys(reports_dir)
     
-    # Group bins by seg_id and create simplified polylines
-    segments_features = {}
+    # Enrich features with metadata from segments.csv
+    for feature in geojson.get("features", []):
+        seg_id = feature.get("properties", {}).get("seg_id")
+        if seg_id and seg_id in segment_dims:
+            dims = segment_dims[seg_id]
+            props = feature["properties"]
+            
+            # Update properties with dimensions
+            props["label"] = dims.get("seg_label", dims.get("name", seg_id))
+            props["length_km"] = float(dims.get("full_length", dims.get("half_length", dims.get("10K_length", 0.0))))
+            props["width_m"] = float(dims.get("width_m", 0.0))
+            props["direction"] = dims.get("direction", "uni")
+            props["events"] = [event for event in ["Full", "Half", "10K"] 
+                              if dims.get(event.lower() if event != "10K" else "10K", "") == "y"]
+            props["schema"] = schema_keys.get(seg_id, "on_course_open")
+            props["description"] = dims.get("description", "No description available")
     
-    for feature in bins_data.get("features", []):
-        props = feature.get("properties", {})
-        seg_id = props.get("seg_id") or props.get("segment_id")
-        
-        if not seg_id:
-            continue
-        
-        # Get or create segment feature
-        if seg_id not in segments_features:
-            segments_features[seg_id] = _create_segment_feature(seg_id, segment_dims, schema_keys)
-        
-        # Add bin centroid to segment's coordinate list
-        geom = feature.get("geometry")
-        if geom and geom.get("type") == "Polygon":
-            # Compute centroid (simple average of coordinates)
-            coords = geom.get("coordinates", [[]])[0]
-            if coords:
-                lon = sum(c[0] for c in coords) / len(coords)
-                lat = sum(c[1] for c in coords) / len(coords)
-                segments_features[seg_id]["geometry"]["coordinates"].append([lon, lat])
-    
-    # Simplify polylines (remove duplicates, order by distance)
-    features = []
-    for seg_id, feature in segments_features.items():
-        coords = feature["geometry"]["coordinates"]
-        
-        # Remove duplicate points
-        unique_coords = []
-        for coord in coords:
-            if not unique_coords or coord != unique_coords[-1]:
-                unique_coords.append(coord)
-        
-        feature["geometry"]["coordinates"] = unique_coords
-        features.append(feature)
-    
-    return {
-        "type": "FeatureCollection",
-        "features": features
-    }
+    return geojson
 
 
 def export_ui_artifacts(reports_dir: Path, run_id: str, overtaking_segments: int = 0, co_presence_segments: int = 0, environment: str = "local") -> Path:
