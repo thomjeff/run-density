@@ -262,6 +262,7 @@ def calculate_arrival_times_for_location(
             eligible_events.append(event_name)
     
     if not eligible_events:
+        logger.debug(f"Location {location.get('loc_id')}: No eligible events (full={location.get('full')}, half={location.get('half')}, 10K={location.get('10K')})")
         return arrival_times
     
     # Convert location point to UTM
@@ -304,8 +305,11 @@ def calculate_arrival_times_for_location(
                 continue
             
             matches_segment = False
+            # Use small tolerance (10m) for boundary matching to handle floating point precision
+            TOLERANCE_KM = 0.01
             for seg_id, from_km, to_km in segment_ranges:
-                if from_km <= distance_km <= to_km:
+                # Check if distance is within range with tolerance
+                if (from_km - TOLERANCE_KM) <= distance_km <= (to_km + TOLERANCE_KM):
                     matches_segment = True
                     logger.debug(
                         f"Location {location.get('loc_id')} ({event}): Distance {distance_km:.3f}km matches segment {seg_id} [{from_km:.3f}, {to_km:.3f}]"
