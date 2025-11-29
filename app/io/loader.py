@@ -48,8 +48,15 @@ def load_locations(path="data/locations.csv"):
     if "interval" in df.columns:
         df["interval"] = pd.to_numeric(df["interval"], errors="coerce")
     
-    # Parse segments field (comma-separated)
-    if "segments" in df.columns:
+    # Parse seg_id field (comma-separated) - Issue #277: CSV uses "seg_id" column
+    if "seg_id" in df.columns:
+        df["seg_id"] = df["seg_id"].fillna("").astype(str)
+        # Handle quoted values like "A1,G1" by removing quotes and splitting
+        df["segments_list"] = df["seg_id"].apply(
+            lambda x: [s.strip().strip('"') for s in str(x).replace('"', '').split(",") if s.strip()] if x else []
+        )
+    elif "segments" in df.columns:
+        # Fallback to "segments" if present
         df["segments"] = df["segments"].fillna("").astype(str)
         df["segments_list"] = df["segments"].apply(
             lambda x: [s.strip() for s in str(x).split(",") if s.strip()] if x else []
