@@ -30,7 +30,20 @@ def load_locations(path="data/locations.csv"):
         
     Returns:
         DataFrame with normalized location data
+        
+    Raises:
+        FileNotFoundError: If locations.csv file does not exist
     """
+    from pathlib import Path
+    
+    file_path = Path(path)
+    if not file_path.exists():
+        raise FileNotFoundError(
+            f"locations.csv not found at {file_path.absolute()}. "
+            f"Issue #277 requires locations.csv in the data/ directory. "
+            f"Please ensure the file exists with columns: loc_id, loc_label, loc_type, lat, lon, seg_id, zone, full, half, 10K, elite, open, buffer, interval, notes"
+        )
+    
     df = pd.read_csv(path)
     
     # Normalize event flags (y/n)

@@ -361,9 +361,12 @@ def generate_location_report(
         runners_df = load_runners(runners_csv)
         segments_df = load_segments(segments_csv)
         courses = load_all_courses("data")
+    except FileNotFoundError as e:
+        logger.error(f"Required input file not found: {e}")
+        return {"ok": False, "error": str(e), "error_type": "file_not_found"}
     except Exception as e:
         logger.error(f"Failed to load input data: {e}")
-        return {"ok": False, "error": str(e)}
+        return {"ok": False, "error": str(e), "error_type": "load_error"}
     
     if locations_df.empty:
         logger.warning("No locations found in locations.csv")
