@@ -453,15 +453,7 @@ def calculate_arrival_times_for_location(
                         start_offset = runner.get("start_offset", 0)
                         if pd.isna(start_offset):
                             start_offset = 0
-                        
-                        # Filter out invalid start offsets (>120 minutes = 2 hours seems unreasonable)
-                        # Runner 1529 has start_offset=983 minutes, causing last_runner=24:43:15
-                        if start_offset > 120:
-                            logger.debug(
-                                f"Location {location.get('loc_id')} ({event}): Skipping runner {runner.get('runner_id')} "
-                                f"with invalid start_offset {start_offset} minutes"
-                            )
-                            continue
+                        # start_offset is in seconds, not minutes
                         
                         pace_min_per_km = runner.get("pace", 0)
                         if pd.isna(pace_min_per_km) or pace_min_per_km <= 0:
@@ -469,8 +461,8 @@ def calculate_arrival_times_for_location(
                         
                         pace_sec_per_km = pace_min_per_km * SECONDS_PER_MINUTE
                         
-                        # Arrival time = start_time + offset + pace * distance
-                        arrival_time = event_start_sec + start_offset * SECONDS_PER_MINUTE + pace_sec_per_km * seg_distance_km
+                        # Arrival time = start_time + offset (seconds) + pace * distance
+                        arrival_time = event_start_sec + start_offset + pace_sec_per_km * seg_distance_km
                         arrival_times.append(arrival_time)
                 
                 logger.debug(f"Location {location.get('loc_id')} ({event}): Calculated {len(arrival_times)} total arrival times across {len(matching_segments)} segments")
