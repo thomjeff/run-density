@@ -340,7 +340,7 @@ def calculate_arrival_times_for_location(
                 event_col_gpx = event.lower() if event != "10K" else "10K"
                 
                 for seg_id, from_km, to_km in segment_ranges:
-                logger.debug(f"Location {location.get('loc_id')} ({event}): Trying segment {seg_id} range [{from_km:.3f}, {to_km:.3f}]km, projected distance={distance_km:.3f}km")
+                    logger.debug(f"Location {location.get('loc_id')} ({event}): Trying segment {seg_id} range [{from_km:.3f}, {to_km:.3f}]km, projected distance={distance_km:.3f}km")
                 
                 # Get segment centerline for this event
                 segments_for_gpx = [{
