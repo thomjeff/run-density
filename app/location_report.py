@@ -116,15 +116,21 @@ def get_segment_ranges_for_event(
             logger.debug(f"Segment {seg_id} not used by event {event} (flag={event_flag})")
             continue
         
-        if pd.notna(from_km) and pd.notna(to_km):
-            ranges.append((
-                seg_id,
-                float(from_km),
-                float(to_km)
-            ))
+        if pd.notna(from_km) and pd.notna(to_km) and from_km != to_km:
+            # Only add if segment is actually used by this event
+            if event_flag == "y":
+                ranges.append((
+                    seg_id,
+                    float(from_km),
+                    float(to_km)
+                ))
+            else:
+                logger.debug(
+                    f"Segment {seg_id} has range [{from_km}, {to_km}] but not used by event {event} (flag={event_flag})"
+                )
         else:
             logger.warning(
-                f"Segment {seg_id} missing {from_col} or {to_col} for event {event} "
+                f"Segment {seg_id} missing or invalid {from_col}/{to_col} for event {event} "
                 f"(from_km={from_km}, to_km={to_km})"
             )
     
@@ -292,8 +298,10 @@ def calculate_arrival_times_for_location(
         # Project location onto course
         distance_km = project_point_to_course(location_point_utm, course_line_utm)
         if distance_km is None:
-            logger.debug(f"Location {location.get('loc_id')} ({event}): Projection failed")
+            logger.warning(f"Location {location.get('loc_id')} ({event}): Projection failed - could not project point to course")
             continue
+        
+        logger.debug(f"Location {location.get('loc_id')} ({event}): Projected distance = {distance_km:.3f}km")
         
         # Check if distance falls within any listed segment
         if segments_list:
