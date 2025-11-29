@@ -305,12 +305,23 @@ def calculate_arrival_times_for_location(
                 continue
             
             matches_segment = False
-            # Use small tolerance (10m) for boundary matching to handle floating point precision
-            TOLERANCE_KM = 0.01
+            # Use tolerance matching the snapping threshold (50m = 0.05km)
+            # This handles cases where location is slightly off-course but within snapping distance
+            TOLERANCE_KM = LOCATION_SNAP_THRESHOLD_M / METERS_PER_KM  # 0.05km = 50m
+            matched_segment_distance = None
+            
             for seg_id, from_km, to_km in segment_ranges:
                 # Check if distance is within range with tolerance
+                # Allow distance to be slightly outside segment range if within snapping threshold
                 if (from_km - TOLERANCE_KM) <= distance_km <= (to_km + TOLERANCE_KM):
                     matches_segment = True
+                    # Clamp distance to segment bounds for arrival calculation
+                    clamped_distance = max(from_km, min(distance_km, to_km))
+                    matched_segment_distance = clamped_distance
+                    if clamped_distance != distance_km:
+                        logger.debug(
+                            f"Location {location.get('loc_id')} ({event}): Distance {distance_km:.3f}km clamped to {clamped_distance:.3f}km for segment {seg_id}"
+                        )
                     logger.debug(
                         f"Location {location.get('loc_id')} ({event}): Distance {distance_km:.3f}km matches segment {seg_id} [{from_km:.3f}, {to_km:.3f}]"
                     )
@@ -321,6 +332,9 @@ def calculate_arrival_times_for_location(
                     f"Location {location.get('loc_id')} ({event}): Distance {distance_km:.3f}km does not match any segment ranges: {[(s, f, t) for s, f, t in segment_ranges]}"
                 )
                 continue
+            
+            # Use the matched segment distance for arrival calculations
+            distance_km = matched_segment_distance
         else:
             # Fallback: find nearest segment
             nearest = find_nearest_segment(location_point_utm, segments_df, courses, event)
