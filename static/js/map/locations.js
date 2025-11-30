@@ -39,6 +39,7 @@ function convertToGeoJSON(locations) {
                 peak_start: loc.peak_start,
                 peak_end: loc.peak_end,
                 zone: loc.zone,
+                timing_source: loc.timing_source,
                 notes: loc.notes
             }
         }));
