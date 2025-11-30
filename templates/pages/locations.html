@@ -2,11 +2,72 @@
 
 {% block title %}Locations Report{% endblock %}
 
+{% block extra_head %}
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+    #locations-map {
+        height: 500px;
+        border-radius: 4px;
+        overflow: hidden;
+        position: relative;
+        background: transparent !important;
+    }
+    
+    .map-loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(255, 255, 255, 0.9);
+        padding: 1rem 2rem;
+        border-radius: 4px;
+        font-weight: 500;
+        color: #666;
+        z-index: 1000;
+    }
+    
+    .location-tooltip {
+        font-size: 0.875rem;
+        line-height: 1.4;
+    }
+    
+    .location-popup {
+        font-size: 0.875rem;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-header">
     <h2>Locations Report</h2>
     {% if meta %}
     {% endif %}
+</div>
+
+<!-- Map Container -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Course Map</h3>
+    <div id="locations-map" aria-label="Course locations map" style="position: relative;">
+        <div class="map-loading">Loading map data...</div>
+        
+        <!-- Filter Controls Overlay -->
+        <div id="map-filter-controls" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(255, 255, 255, 0.95); padding: 0.75rem; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); display: none; max-width: 300px;">
+            <div style="display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-end;">
+                <button id="clear-filter-btn" onclick="clearMapFilter()" style="padding: 0.4rem 0.8rem; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem;">
+                    Clear Filter
+                </button>
+                <span id="filter-status" style="color: #495057; font-size: 0.85rem; text-align: right; line-height: 1.3;"></span>
+            </div>
+        </div>
+        
+        <!-- Reset View Button -->
+        <div style="position: absolute; top: 10px; left: 10px; z-index: 1000;">
+            <button id="reset-view-btn" onclick="resetMapView()" style="padding: 0.4rem 0.8rem; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                Reset View
+            </button>
+        </div>
+    </div>
 </div>
 
 <!-- Locations Table -->
@@ -77,12 +138,26 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- External JavaScript modules -->
+<script src="/static/js/map/base_map.js"></script>
+<script src="/static/js/map/locations.js"></script>
+
+<!-- Table interaction script -->
 <script>
     let locationsData = [];
+    let tableDataLoaded = false;
     
-    // Load locations data on page load
+    // Load locations data on page load (only if map hasn't loaded it yet)
     document.addEventListener('DOMContentLoaded', function() {
-        loadLocationsData();
+        // Wait a bit to see if map script loads data first
+        setTimeout(() => {
+            if (!tableDataLoaded) {
+                loadLocationsData();
+            }
+        }, 200);
     });
     
     function loadLocationsData() {
@@ -97,6 +172,7 @@
                 if (data.ok && data.locations) {
                     locationsData = data.locations;
                     renderLocationsTable(data.locations);
+                    tableDataLoaded = true;
                 } else {
                     showLocationsError('Invalid response format');
                 }
@@ -105,6 +181,36 @@
                 console.error('Error loading locations data:', error);
                 showLocationsError('Failed to load locations data');
             });
+    }
+    
+    /**
+     * Update locations table with data (called from locations.js after map renders)
+     * @param {Array} features - GeoJSON features array
+     */
+    function updateLocationsTable(features) {
+        if (!features || features.length === 0) {
+            return;
+        }
+        
+        // Mark that data has been loaded to prevent duplicate loading
+        tableDataLoaded = true;
+        
+        // Convert features back to locations format for table rendering
+        const locations = features.map(feature => ({
+            loc_id: feature.properties.loc_id,
+            loc_label: feature.properties.loc_label,
+            loc_type: feature.properties.loc_type,
+            loc_start: feature.properties.loc_start,
+            loc_end: feature.properties.loc_end,
+            duration: feature.properties.duration,
+            peak_start: feature.properties.peak_start,
+            peak_end: feature.properties.peak_end
+        }));
+        
+        // Store for later use
+        locationsData = locations;
+        
+        renderLocationsTable(locations);
     }
     
     function renderLocationsTable(locations) {
@@ -157,6 +263,37 @@
                 <td>${peakWindow}</td>
             `;
             
+            // Add click handler for table-to-map filtering
+            row.addEventListener('click', function() {
+                const locationId = location.loc_id;
+                
+                // Check if this row is already selected
+                if (row.classList.contains('selected-row')) {
+                    // If already selected, clear the filter
+                    if (window.clearMapFilter) {
+                        window.clearMapFilter();
+                    }
+                } else {
+                    // If not selected, filter map to this location
+                    if (window.filterMapToLocation) {
+                        window.filterMapToLocation(locationId);
+                    }
+                }
+            });
+            
+            // Add hover effects
+            row.addEventListener('mouseenter', function() {
+                if (!row.classList.contains('selected-row')) {
+                    row.style.backgroundColor = '#f5f5f5';
+                }
+            });
+            
+            row.addEventListener('mouseleave', function() {
+                if (!row.classList.contains('selected-row')) {
+                    row.style.backgroundColor = '';
+                }
+            });
+            
             tbody.appendChild(row);
         });
     }
@@ -165,7 +302,26 @@
         const tbody = document.getElementById('locations-tbody');
         tbody.innerHTML = `<tr><td colspan="6" class="placeholder">${message}</td></tr>`;
     }
+    
+    // Make updateLocationsTable globally available for locations.js
+    window.updateLocationsTable = updateLocationsTable;
 </script>
+
+<style>
+    /* Table row highlighting */
+    #locations-table tr.selected-row {
+        background-color: #e3f2fd !important;
+        border-left: 4px solid #2196f3;
+    }
+    
+    #locations-table tbody tr {
+        cursor: pointer;
+    }
+    
+    #locations-table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+</style>
 {% endblock %}
 
 {% block extra_styles %}
