@@ -688,11 +688,18 @@ def generate_location_report(
         location = location_row.iloc[0]
         proxy_loc_id = location.get("proxy_loc_id")
         
+        # Debug logging for proxy_loc_id
+        logger.debug(
+            f"Traffic location {loc_id}: proxy_loc_id={proxy_loc_id}, type={type(proxy_loc_id)}, "
+            f"isna={pd.isna(proxy_loc_id) if hasattr(pd, 'isna') else 'N/A'}"
+        )
+        
         # Skip if no proxy_loc_id provided
         # Handle both pandas NaN and empty string cases
         if pd.isna(proxy_loc_id) or (isinstance(proxy_loc_id, str) and proxy_loc_id.strip() == ""):
             # Traffic location without proxy should keep default "modeled" or could be set to something else
             # For now, keep as "modeled" to indicate it wasn't proxy-based
+            logger.debug(f"Traffic location {loc_id}: No proxy_loc_id, keeping timing_source as 'modeled'")
             continue
         
         # Convert proxy_loc_id to int for lookup (handle string/numeric)
