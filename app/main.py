@@ -31,6 +31,7 @@ from app.routes.api_reports import router as api_reports_router
 from app.routes.api_bins import router as api_bins_router
 from app.routes.api_e2e import router as api_e2e_router
 from app.routes.api_heatmaps import router as api_heatmaps_router
+from app.routes.api_locations import router as api_locations_router
 from app.utils.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
 # Pydantic models for request bodies
@@ -139,6 +140,7 @@ app.include_router(api_reports_router)
 app.include_router(api_bins_router)
 app.include_router(api_e2e_router)
 app.include_router(api_heatmaps_router, prefix="/api/generate", tags=["heatmaps"])
+app.include_router(api_locations_router)
 
 # CSV Data Endpoints for Reports Page
 @app.get("/data/runners.csv")
