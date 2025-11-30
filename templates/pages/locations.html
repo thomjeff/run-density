@@ -83,6 +83,7 @@
                     <th>ID</th>
                     <th>Location</th>
                     <th>Type</th>
+                    <th>Zone</th>
                     <th>Operational Window</th>
                     <th>Duration</th>
                     <th>Peak Window</th>
@@ -91,7 +92,7 @@
             </thead>
             <tbody id="locations-tbody">
                 <tr>
-                    <td colspan="7" class="placeholder">Loading locations data...</td>
+                    <td colspan="8" class="placeholder">Loading locations data...</td>
                 </tr>
             </tbody>
         </table>
@@ -271,6 +272,9 @@
             // Get loc_id
             const locId = location.loc_id !== null && location.loc_id !== undefined ? location.loc_id : "—";
             
+            // Format zone
+            const zone = location.zone && location.zone !== "NA" && location.zone !== "" ? location.zone : "—";
+            
             // Format timing source (Issue #479)
             let timingSource = "Modeled";
             const timingSourceRaw = location.timing_source;
@@ -291,6 +295,7 @@
                 <td>${locId}</td>
                 <td>${locLabel}</td>
                 <td>${locType}</td>
+                <td>${zone}</td>
                 <td>${operationalWindow}</td>
                 <td>${duration}</td>
                 <td>${peakWindow}</td>
