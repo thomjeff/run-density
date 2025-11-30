@@ -609,6 +609,7 @@ def generate_location_report(
             )
         
         # Skip arrival modeling for traffic locations
+        # Note: timing_source will be updated later in proxy processing loop
         if loc_type == "traffic":
             report_rows.append(report_row)
             continue
@@ -688,7 +689,10 @@ def generate_location_report(
         proxy_loc_id = location.get("proxy_loc_id")
         
         # Skip if no proxy_loc_id provided
-        if pd.isna(proxy_loc_id) or proxy_loc_id == "":
+        # Handle both pandas NaN and empty string cases
+        if pd.isna(proxy_loc_id) or (isinstance(proxy_loc_id, str) and proxy_loc_id.strip() == ""):
+            # Traffic location without proxy should keep default "modeled" or could be set to something else
+            # For now, keep as "modeled" to indicate it wasn't proxy-based
             continue
         
         # Convert proxy_loc_id to int for lookup (handle string/numeric)

@@ -133,6 +133,10 @@
                 <td><strong>Peak Window</strong></td>
                 <td>The time window from <em>peak_start</em> (25th percentile arrival) to <em>peak_end</em> (75th percentile arrival), representing when the majority of runners pass this location. For traffic locations, this will be null/NA.</td>
             </tr>
+            <tr>
+                <td><strong>Source</strong></td>
+                <td>Indicates how the timing data was derived: <em>Modeled</em> (calculated from runner arrival times), <em>Proxy: {id}</em> (end time derived from another location's timing), or <em>Error: proxy not found</em> (proxy location was not available).</td>
+            </tr>
         </tbody>
     </table>
 </div>
