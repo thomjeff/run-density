@@ -274,35 +274,17 @@ async function renderLocations(map) {
     window.resetMapView = resetMapView;
     
     // Store initial bounds for reset functionality
-    // Wait for markers to be added, then get bounds
-    try {
-        const bounds = markersLayer.getBounds();
-        if (bounds && bounds.isValid && bounds.isValid()) {
-            window.locationsInitialBounds = bounds;
-            
-            // Fit map to all locations bounds with padding
-            map.fitBounds(bounds, { 
-                padding: [20, 20],
-                maxZoom: 16
-            });
-            console.log('✅ Fitted map to all locations');
-        } else {
-            console.warn('⚠️ Invalid bounds, skipping fitBounds');
-        }
-    } catch (error) {
-        console.error('❌ Error getting bounds:', error);
-        // Calculate bounds manually from coordinates as fallback
-        if (data.features.length > 0) {
-            const lats = data.features.map(f => f.geometry.coordinates[1]);
-            const lons = data.features.map(f => f.geometry.coordinates[0]);
-            const bounds = L.latLngBounds(
-                [Math.min(...lats), Math.min(...lons)],
-                [Math.max(...lats), Math.max(...lons)]
-            );
-            window.locationsInitialBounds = bounds;
-            map.fitBounds(bounds, { padding: [20, 20], maxZoom: 16 });
-            console.log('✅ Fitted map using manual bounds calculation');
-        }
+    // Calculate bounds manually from coordinates (more reliable than getBounds)
+    if (data.features.length > 0) {
+        const lats = data.features.map(f => f.geometry.coordinates[1]);
+        const lons = data.features.map(f => f.geometry.coordinates[0]);
+        const bounds = L.latLngBounds(
+            [Math.min(...lats), Math.min(...lons)],
+            [Math.max(...lats), Math.max(...lons)]
+        );
+        window.locationsInitialBounds = bounds;
+        map.fitBounds(bounds, { padding: [20, 20], maxZoom: 16 });
+        console.log('✅ Fitted map to all locations using manual bounds calculation');
     }
     
     console.log(`✅ Rendered ${data.features.length} locations with type-based colors`);
