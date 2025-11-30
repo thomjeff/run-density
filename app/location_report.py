@@ -596,8 +596,17 @@ def generate_location_report(
             "loc_start": format_time_hhmmss(loc_start_base_sec),
             "loc_end": None,
             "duration": None,
+            "timing_source": "modeled",  # Default to modeled, will be updated for proxy-based traffic locations
             "notes": location.get("notes", "")
         }
+        
+        # Validate proxy_loc_id usage (Issue #479)
+        proxy_loc_id = location.get("proxy_loc_id")
+        if pd.notna(proxy_loc_id) and proxy_loc_id != "" and loc_type != "traffic":
+            logger.warning(
+                f"Location {loc_id} ({loc_label}): proxy_loc_id={proxy_loc_id} provided but loc_type={loc_type} is not 'traffic'. "
+                f"Ignoring proxy_loc_id for non-traffic locations."
+            )
         
         # Skip arrival modeling for traffic locations
         if loc_type == "traffic":
@@ -658,6 +667,94 @@ def generate_location_report(
             report_row["duration"] = int(duration_minutes) if duration_minutes > 0 else 0
         
         report_rows.append(report_row)
+    
+    # Issue #479: Process proxy_loc_id for traffic locations
+    # Build lookup dictionary for all processed locations
+    locations_by_id = {row["loc_id"]: row for row in report_rows}
+    
+    # Iterate through report_rows to update traffic locations with proxy data
+    for report_row in report_rows:
+        if report_row["loc_type"] != "traffic":
+            continue
+        
+        # Get original location data to access proxy_loc_id
+        loc_id = report_row["loc_id"]
+        location_row = locations_df[locations_df['loc_id'] == loc_id]
+        
+        if location_row.empty:
+            continue
+        
+        location = location_row.iloc[0]
+        proxy_loc_id = location.get("proxy_loc_id")
+        
+        # Skip if no proxy_loc_id provided
+        if pd.isna(proxy_loc_id) or proxy_loc_id == "":
+            continue
+        
+        # Convert proxy_loc_id to int for lookup (handle string/numeric)
+        try:
+            proxy_id = int(proxy_loc_id)
+        except (ValueError, TypeError):
+            logger.error(
+                f"Location {loc_id} ({report_row.get('loc_label', 'unknown')}): "
+                f"Invalid proxy_loc_id value '{proxy_loc_id}'. Expected numeric loc_id."
+            )
+            report_row["timing_source"] = "error:proxy_not_found"
+            continue
+        
+        # Look up proxy location
+        proxy_location = locations_by_id.get(proxy_id)
+        
+        if not proxy_location:
+            logger.error(
+                f"Location {loc_id} ({report_row.get('loc_label', 'unknown')}): "
+                f"Proxy location {proxy_id} not found in processed locations."
+            )
+            report_row["timing_source"] = "error:proxy_not_found"
+            continue
+        
+        # Check if proxy location has loc_end
+        proxy_loc_end = proxy_location.get("loc_end")
+        if not proxy_loc_end or proxy_loc_end == "NA" or pd.isna(proxy_loc_end):
+            logger.error(
+                f"Location {loc_id} ({report_row.get('loc_label', 'unknown')}): "
+                f"Proxy location {proxy_id} ({proxy_location.get('loc_label', 'unknown')}) has no loc_end value."
+            )
+            report_row["timing_source"] = "error:proxy_not_found"
+            continue
+        
+        # Copy loc_end from proxy location
+        report_row["loc_end"] = proxy_loc_end
+        
+        # Calculate duration: loc_end - loc_start (in minutes)
+        # Parse loc_end time string (hh:mm:ss) to seconds
+        try:
+            loc_end_parts = proxy_loc_end.split(":")
+            loc_end_sec = (
+                int(loc_end_parts[0]) * 3600 +
+                int(loc_end_parts[1]) * 60 +
+                int(loc_end_parts[2])
+            )
+            
+            # Calculate duration in minutes
+            duration_minutes = (loc_end_sec - loc_start_base_sec) / SECONDS_PER_MINUTE
+            report_row["duration"] = int(duration_minutes) if duration_minutes > 0 else 0
+            
+            # Set timing_source
+            report_row["timing_source"] = f"proxy:{proxy_id}"
+            
+            logger.info(
+                f"Location {loc_id} ({report_row.get('loc_label', 'unknown')}): "
+                f"Set loc_end={proxy_loc_end} and duration={report_row['duration']} from proxy location {proxy_id}"
+            )
+        except (ValueError, IndexError) as e:
+            logger.error(
+                f"Location {loc_id} ({report_row.get('loc_label', 'unknown')}): "
+                f"Failed to parse proxy loc_end '{proxy_loc_end}': {e}"
+            )
+            report_row["timing_source"] = "error:proxy_not_found"
+            report_row["loc_end"] = None
+            report_row["duration"] = None
     
     # Create DataFrame and save
     report_df = pd.DataFrame(report_rows)

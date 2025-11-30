@@ -70,6 +70,14 @@ function createLocationTooltip(properties) {
     const locEnd = props.loc_end && props.loc_end !== 'NA' ? props.loc_end : null;
     const duration = props.duration != null && props.duration !== 'NA' ? props.duration : null;
     
+    // Format timing source for tooltip (Issue #479) - shorter format for tooltip
+    let timingSourceTooltip = "";
+    const timingSourceRaw = props.timing_source;
+    if (timingSourceRaw && timingSourceRaw.startsWith("proxy:")) {
+        const proxyId = timingSourceRaw.replace("proxy:", "");
+        timingSourceTooltip = `<br><span style="font-size: 11px; color: #666;">From loc ${proxyId}</span>`;
+    }
+    
     let tooltip = `
         <div style="font-family: Arial, sans-serif; font-size: 14px;">
             <strong>${props.loc_label || 'Unknown'}</strong><br>
@@ -82,6 +90,10 @@ function createLocationTooltip(properties) {
     
     if (duration != null) {
         tooltip += `<br>Duration: ${duration} min`;
+    }
+    
+    if (timingSourceTooltip) {
+        tooltip += timingSourceTooltip;
     }
     
     tooltip += '</div>';
@@ -101,6 +113,29 @@ function createLocationPopup(properties) {
     const duration = props.duration != null && props.duration !== 'NA' ? props.duration : null;
     const peakStart = props.peak_start && props.peak_start !== 'NA' ? props.peak_start : null;
     const peakEnd = props.peak_end && props.peak_end !== 'NA' ? props.peak_end : null;
+    
+    // Format timing source (Issue #479)
+    let timingSourceDisplay = "Modeled";
+    const timingSourceRaw = props.timing_source;
+    if (timingSourceRaw) {
+        if (timingSourceRaw.startsWith("proxy:")) {
+            const proxyId = timingSourceRaw.replace("proxy:", "");
+            timingSourceDisplay = `End time derived from location ${proxyId}`;
+        } else if (timingSourceRaw === "error:proxy_not_found") {
+            timingSourceDisplay = "Error: proxy not found";
+        } else if (timingSourceRaw === "modeled") {
+            timingSourceDisplay = "Modeled";
+        } else {
+            timingSourceDisplay = timingSourceRaw;
+        }
+    } else {
+        // Fallback: infer from loc_type and runner fields
+        if (locType === "traffic" && !props.first_runner && !props.last_runner) {
+            timingSourceDisplay = "Proxy-based or inferred";
+        } else {
+            timingSourceDisplay = "Modeled";
+        }
+    }
     
     let popup = `
         <div style="font-family: Arial, sans-serif; font-size: 14px; min-width: 200px;">
@@ -129,6 +164,9 @@ function createLocationPopup(properties) {
     if (props.zone) {
         popup += `<div style="margin-bottom: 0.5rem;"><strong>Zone:</strong> ${props.zone}</div>`;
     }
+    
+    // Add timing source (Issue #479)
+    popup += `<div style="margin-bottom: 0.5rem; font-size: 12px; color: #666;"><strong>Source:</strong> ${timingSourceDisplay}</div>`;
     
     popup += '</div>';
     return popup;

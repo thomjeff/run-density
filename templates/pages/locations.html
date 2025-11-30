@@ -86,11 +86,12 @@
                     <th>Operational Window</th>
                     <th>Duration</th>
                     <th>Peak Window</th>
+                    <th>Source</th>
                 </tr>
             </thead>
             <tbody id="locations-tbody">
                 <tr>
-                    <td colspan="6" class="placeholder">Loading locations data...</td>
+                    <td colspan="7" class="placeholder">Loading locations data...</td>
                 </tr>
             </tbody>
         </table>
@@ -254,6 +255,29 @@
             // Get loc_id
             const locId = location.loc_id !== null && location.loc_id !== undefined ? location.loc_id : "—";
             
+            // Format timing source (Issue #479)
+            let timingSource = "Modeled";
+            const timingSourceRaw = location.timing_source;
+            if (timingSourceRaw) {
+                if (timingSourceRaw.startsWith("proxy:")) {
+                    const proxyId = timingSourceRaw.replace("proxy:", "");
+                    timingSource = `End time derived from location ${proxyId}`;
+                } else if (timingSourceRaw === "error:proxy_not_found") {
+                    timingSource = "Error: proxy not found";
+                } else if (timingSourceRaw === "modeled") {
+                    timingSource = "Modeled";
+                } else {
+                    timingSource = timingSourceRaw; // Fallback to raw value
+                }
+            } else {
+                // Fallback: infer from loc_type and runner fields
+                if (locType === "traffic" && !location.first_runner && !location.last_runner) {
+                    timingSource = "Proxy-based or inferred";
+                } else {
+                    timingSource = "Modeled";
+                }
+            }
+            
             row.innerHTML = `
                 <td>${locId}</td>
                 <td>${locLabel}</td>
@@ -261,6 +285,7 @@
                 <td>${operationalWindow}</td>
                 <td>${duration}</td>
                 <td>${peakWindow}</td>
+                <td>${timingSource}</td>
             `;
             
             // Add click handler for table-to-map filtering
