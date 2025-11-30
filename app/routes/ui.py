@@ -184,6 +184,23 @@ async def flow(request: Request):
     )
 
 
+@router.get("/locations", response_class=HTMLResponse)
+async def locations(request: Request):
+    """
+    Locations report page with course resource timing table.
+    
+    Issue #277: Phase 3 - UI Report Page
+    
+    Returns:
+        HTML: Location operational timing windows and peak flow periods
+    """
+    meta = get_stub_meta()
+    return templates.TemplateResponse(
+        "pages/locations.html",
+        {"request": request, "meta": meta}
+    )
+
+
 # Issue #374: Bins page moved to archive (functionality moved to Density page)
 # @router.get("/bins", response_class=HTMLResponse)
 # async def bins(request: Request):

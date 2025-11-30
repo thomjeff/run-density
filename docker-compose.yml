@@ -10,6 +10,8 @@ services:
       # Bind mount source code for hot reload during development
       - ./app:/app/app
       - ./e2e.py:/app/e2e.py
+      # Bind mount templates for UI pages
+      - ./templates:/app/templates
       # Bind mount data and config directories
       - ./data:/app/data
       - ./config:/app/config

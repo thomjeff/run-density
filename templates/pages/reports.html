@@ -13,7 +13,7 @@
 <div class="card">
     <h3 style="margin-bottom: 1rem;">Reports</h3>
     <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
-        Generated Density and Flow analysis reports, sorted by most recent first.
+        Generated Density, Flow, and Locations analysis reports, sorted by most recent first.
     </p>
     <div id="reports-list">
         <p class="placeholder">Loading reports...</p>
@@ -64,8 +64,8 @@
         
         // Filter and categorize files
         const relevantReports = reports.filter(r => {
-            // Include only Density and Flow reports (.md and .csv files)
-            const isRelevantReport = (r.name.includes('Density') || r.name.includes('Flow')) && 
+            // Include Density, Flow, and Locations reports (.md and .csv files)
+            const isRelevantReport = (r.name.includes('Density') || r.name.includes('Flow') || r.name.includes('Locations')) && 
                                    (r.name.endsWith('.md') || r.name.endsWith('.csv'));
             
             // Exclude technical files

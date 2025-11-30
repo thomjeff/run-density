@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}Locations Report{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Locations Report</h2>
+    {% if meta %}
+    {% endif %}
+</div>
+
+<!-- Locations Table -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Course Resource Timing</h3>
+    <p style="margin-bottom: 1rem; color: #7f8c8d; font-size: 0.875rem;">
+        Operational timing windows for fixed point locations on the course (traffic control points, water stops, turnarounds).
+    </p>
+    <div style="overflow-x: auto;">
+        <table id="locations-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Location</th>
+                    <th>Type</th>
+                    <th>Operational Window</th>
+                    <th>Duration</th>
+                    <th>Peak Window</th>
+                </tr>
+            </thead>
+            <tbody id="locations-tbody">
+                <tr>
+                    <td colspan="6" class="placeholder">Loading locations data...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Locations Reference -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Locations Reference</h3>
+    <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
+        Definitions for key metrics in the locations report.
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>Column</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Location</strong></td>
+                <td>The name or label of the location (e.g., "Regent & McLeod").</td>
+            </tr>
+            <tr>
+                <td><strong>Type</strong></td>
+                <td>The location type: <em>traffic</em> (traffic control point), <em>course</em> (on-course location), <em>water</em> (water stop), <em>aid</em> (aid station), or <em>marshal</em> (marshal point).</td>
+            </tr>
+            <tr>
+                <td><strong>Operational Window</strong></td>
+                <td>The time window from <em>loc_start</em> to <em>loc_end</em>, indicating when resources should be deployed at this location. <em>loc_start</em> is 45 minutes before the earliest scheduled runner start time.</td>
+            </tr>
+            <tr>
+                <td><strong>Duration</strong></td>
+                <td>The total duration in minutes from <em>loc_start</em> to <em>loc_end</em>.</td>
+            </tr>
+            <tr>
+                <td><strong>Peak Window</strong></td>
+                <td>The time window from <em>peak_start</em> (25th percentile arrival) to <em>peak_end</em> (75th percentile arrival), representing when the majority of runners pass this location. For traffic locations, this will be null/NA.</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    let locationsData = [];
+    
+    // Load locations data on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        loadLocationsData();
+    });
+    
+    function loadLocationsData() {
+        fetch('/api/locations')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.ok && data.locations) {
+                    locationsData = data.locations;
+                    renderLocationsTable(data.locations);
+                } else {
+                    showLocationsError('Invalid response format');
+                }
+            })
+            .catch(error => {
+                console.error('Error loading locations data:', error);
+                showLocationsError('Failed to load locations data');
+            });
+    }
+    
+    function renderLocationsTable(locations) {
+        const tbody = document.getElementById('locations-tbody');
+        tbody.innerHTML = '';
+        
+        if (!locations || locations.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="placeholder">No locations data available</td></tr>';
+            return;
+        }
+        
+        // Sort by loc_id
+        locations.sort((a, b) => {
+            const idA = a.loc_id || 0;
+            const idB = b.loc_id || 0;
+            return idA - idB;
+        });
+        
+        locations.forEach(location => {
+            const row = document.createElement('tr');
+            
+            // Format values with fallback to "—" for null/NA
+            const locLabel = location.loc_label || "—";
+            const locType = location.loc_type || "—";
+            
+            // Format operational window (loc_start → loc_end)
+            const locStart = location.loc_start && location.loc_start !== "NA" ? location.loc_start : null;
+            const locEnd = location.loc_end && location.loc_end !== "NA" ? location.loc_end : null;
+            const operationalWindow = (locStart && locEnd) ? `${locStart} → ${locEnd}` : "—";
+            
+            // Format duration (numeric value only, no "min" suffix)
+            const duration = location.duration !== null && location.duration !== undefined && location.duration !== "NA" 
+                ? location.duration 
+                : "—";
+            
+            // Format peak window (peak_start → peak_end)
+            const peakStart = location.peak_start && location.peak_start !== "NA" ? location.peak_start : null;
+            const peakEnd = location.peak_end && location.peak_end !== "NA" ? location.peak_end : null;
+            const peakWindow = (peakStart && peakEnd) ? `${peakStart} → ${peakEnd}` : "—";
+            
+            // Get loc_id
+            const locId = location.loc_id !== null && location.loc_id !== undefined ? location.loc_id : "—";
+            
+            row.innerHTML = `
+                <td>${locId}</td>
+                <td>${locLabel}</td>
+                <td>${locType}</td>
+                <td>${operationalWindow}</td>
+                <td>${duration}</td>
+                <td>${peakWindow}</td>
+            `;
+            
+            tbody.appendChild(row);
+        });
+    }
+    
+    function showLocationsError(message) {
+        const tbody = document.getElementById('locations-tbody');
+        tbody.innerHTML = `<tr><td colspan="6" class="placeholder">${message}</td></tr>`;
+    }
+</script>
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+    #locations-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    /* Match base template styling for consistency with Flow table */
+    #locations-table th,
+    #locations-table td {
+        padding: 0.875rem 1rem;  /* Match base template: px-4 py-3 equivalent */
+        text-align: left;
+        border-bottom: 1px solid #e0e0e0;  /* Match base template border color */
+    }
+    
+    #locations-table th {
+        background: #f8f9fa;
+        font-weight: 600;
+        color: #2c3e50;
+    }
+    
+    #locations-table tbody tr:hover {
+        background: #f8f9fa;
+    }
+    
+    /* Right-align duration column (now 5th column) */
+    #locations-table td:nth-child(5) {
+        text-align: right;
+    }
+</style>
+{% endblock %}
+
