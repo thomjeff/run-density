@@ -59,6 +59,22 @@ function getLocationMarkerColor(locType) {
 }
 
 /**
+ * Format time from hh:mm:ss to hh:mm
+ * @param {string|null} timeStr - Time string in hh:mm:ss or hh:mm format
+ * @returns {string|null} Formatted time in hh:mm or null
+ */
+function formatTimeToHHMM(timeStr) {
+    if (!timeStr || timeStr === 'NA') return null;
+    // If already in hh:mm format, return as-is
+    if (timeStr.match(/^\d{2}:\d{2}$/)) return timeStr;
+    // If in hh:mm:ss format, drop seconds
+    if (timeStr.match(/^\d{2}:\d{2}:\d{2}$/)) {
+        return timeStr.substring(0, 5); // Take first 5 characters (hh:mm)
+    }
+    return timeStr; // Fallback: return original if format unexpected
+}
+
+/**
  * Create tooltip content for location marker
  * @param {Object} properties - Location properties
  * @returns {string} HTML tooltip content
@@ -68,6 +84,8 @@ function createLocationTooltip(properties) {
     const locType = props.loc_type || 'unknown';
     const locStart = props.loc_start && props.loc_start !== 'NA' ? props.loc_start : null;
     const locEnd = props.loc_end && props.loc_end !== 'NA' ? props.loc_end : null;
+    const locStartFormatted = formatTimeToHHMM(locStart);
+    const locEndFormatted = formatTimeToHHMM(locEnd);
     const duration = props.duration != null && props.duration !== 'NA' ? props.duration : null;
     
     // Format timing source for tooltip (Issue #479) - shorter format for tooltip
@@ -84,8 +102,8 @@ function createLocationTooltip(properties) {
             <span style="color: ${getLocationMarkerColor(locType)}; font-weight: bold;">${locType}</span>
     `;
     
-    if (locStart && locEnd) {
-        tooltip += `<br>${locStart} → ${locEnd}`;
+    if (locStartFormatted && locEndFormatted) {
+        tooltip += `<br>${locStartFormatted} → ${locEndFormatted}`;
     }
     
     if (duration != null) {
@@ -110,9 +128,13 @@ function createLocationPopup(properties) {
     const locType = props.loc_type || 'unknown';
     const locStart = props.loc_start && props.loc_start !== 'NA' ? props.loc_start : null;
     const locEnd = props.loc_end && props.loc_end !== 'NA' ? props.loc_end : null;
+    const locStartFormatted = formatTimeToHHMM(locStart);
+    const locEndFormatted = formatTimeToHHMM(locEnd);
     const duration = props.duration != null && props.duration !== 'NA' ? props.duration : null;
     const peakStart = props.peak_start && props.peak_start !== 'NA' ? props.peak_start : null;
     const peakEnd = props.peak_end && props.peak_end !== 'NA' ? props.peak_end : null;
+    const peakStartFormatted = formatTimeToHHMM(peakStart);
+    const peakEndFormatted = formatTimeToHHMM(peakEnd);
     
     // Format timing source (Issue #479)
     let timingSourceDisplay = "Modeled";
@@ -142,16 +164,16 @@ function createLocationPopup(properties) {
         popup += `<div style="margin-bottom: 0.5rem;"><strong>ID:</strong> ${props.loc_id}</div>`;
     }
     
-    if (locStart && locEnd) {
-        popup += `<div style="margin-bottom: 0.5rem;"><strong>Operational Window:</strong><br>${locStart} → ${locEnd}</div>`;
+    if (locStartFormatted && locEndFormatted) {
+        popup += `<div style="margin-bottom: 0.5rem;"><strong>Operational Window:</strong><br>${locStartFormatted} → ${locEndFormatted}</div>`;
     }
     
     if (duration != null) {
         popup += `<div style="margin-bottom: 0.5rem;"><strong>Duration:</strong> ${duration} minutes</div>`;
     }
     
-    if (peakStart && peakEnd) {
-        popup += `<div style="margin-bottom: 0.5rem;"><strong>Peak Window:</strong><br>${peakStart} → ${peakEnd}</div>`;
+    if (peakStartFormatted && peakEndFormatted) {
+        popup += `<div style="margin-bottom: 0.5rem;"><strong>Peak Window:</strong><br>${peakStartFormatted} → ${peakEndFormatted}</div>`;
     }
     
     if (props.zone) {

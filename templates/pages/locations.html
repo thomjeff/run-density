@@ -237,10 +237,24 @@
             const locLabel = location.loc_label || "—";
             const locType = location.loc_type || "—";
             
+            // Helper function to format time from hh:mm:ss to hh:mm
+            function formatTimeToHHMM(timeStr) {
+                if (!timeStr || timeStr === "NA") return null;
+                // If already in hh:mm format, return as-is
+                if (timeStr.match(/^\d{2}:\d{2}$/)) return timeStr;
+                // If in hh:mm:ss format, drop seconds
+                if (timeStr.match(/^\d{2}:\d{2}:\d{2}$/)) {
+                    return timeStr.substring(0, 5); // Take first 5 characters (hh:mm)
+                }
+                return timeStr; // Fallback: return original if format unexpected
+            }
+            
             // Format operational window (loc_start → loc_end)
             const locStart = location.loc_start && location.loc_start !== "NA" ? location.loc_start : null;
             const locEnd = location.loc_end && location.loc_end !== "NA" ? location.loc_end : null;
-            const operationalWindow = (locStart && locEnd) ? `${locStart} → ${locEnd}` : "—";
+            const locStartFormatted = formatTimeToHHMM(locStart);
+            const locEndFormatted = formatTimeToHHMM(locEnd);
+            const operationalWindow = (locStartFormatted && locEndFormatted) ? `${locStartFormatted} → ${locEndFormatted}` : "—";
             
             // Format duration (numeric value only, no "min" suffix)
             const duration = location.duration !== null && location.duration !== undefined && location.duration !== "NA" 
@@ -250,7 +264,9 @@
             // Format peak window (peak_start → peak_end)
             const peakStart = location.peak_start && location.peak_start !== "NA" ? location.peak_start : null;
             const peakEnd = location.peak_end && location.peak_end !== "NA" ? location.peak_end : null;
-            const peakWindow = (peakStart && peakEnd) ? `${peakStart} → ${peakEnd}` : "—";
+            const peakStartFormatted = formatTimeToHHMM(peakStart);
+            const peakEndFormatted = formatTimeToHHMM(peakEnd);
+            const peakWindow = (peakStartFormatted && peakEndFormatted) ? `${peakStartFormatted} → ${peakEndFormatted}` : "—";
             
             // Get loc_id
             const locId = location.loc_id !== null && location.loc_id !== undefined ? location.loc_id : "—";
