@@ -12,6 +12,8 @@ services:
       - ./e2e.py:/app/e2e.py
       # Bind mount templates for UI pages
       - ./templates:/app/templates
+      # Bind mount static files for hot reload
+      - ./static:/app/static
       # Bind mount data and config directories
       - ./data:/app/data
       - ./config:/app/config
