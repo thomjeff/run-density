@@ -261,20 +261,13 @@
             if (timingSourceRaw) {
                 if (timingSourceRaw.startsWith("proxy:")) {
                     const proxyId = timingSourceRaw.replace("proxy:", "");
-                    timingSource = `End time derived from location ${proxyId}`;
+                    timingSource = `Proxy: ${proxyId}`;
                 } else if (timingSourceRaw === "error:proxy_not_found") {
                     timingSource = "Error: proxy not found";
                 } else if (timingSourceRaw === "modeled") {
                     timingSource = "Modeled";
                 } else {
                     timingSource = timingSourceRaw; // Fallback to raw value
-                }
-            } else {
-                // Fallback: infer from loc_type and runner fields
-                if (locType === "traffic" && !location.first_runner && !location.last_runner) {
-                    timingSource = "Proxy-based or inferred";
-                } else {
-                    timingSource = "Modeled";
                 }
             }
             

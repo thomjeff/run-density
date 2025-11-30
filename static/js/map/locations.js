@@ -75,7 +75,7 @@ function createLocationTooltip(properties) {
     const timingSourceRaw = props.timing_source;
     if (timingSourceRaw && timingSourceRaw.startsWith("proxy:")) {
         const proxyId = timingSourceRaw.replace("proxy:", "");
-        timingSourceTooltip = `<br><span style="font-size: 11px; color: #666;">From loc ${proxyId}</span>`;
+        timingSourceTooltip = `<br><span style="font-size: 11px; color: #666;">Proxy: ${proxyId}</span>`;
     }
     
     let tooltip = `
@@ -120,20 +120,13 @@ function createLocationPopup(properties) {
     if (timingSourceRaw) {
         if (timingSourceRaw.startsWith("proxy:")) {
             const proxyId = timingSourceRaw.replace("proxy:", "");
-            timingSourceDisplay = `End time derived from location ${proxyId}`;
+            timingSourceDisplay = `Proxy: ${proxyId}`;
         } else if (timingSourceRaw === "error:proxy_not_found") {
             timingSourceDisplay = "Error: proxy not found";
         } else if (timingSourceRaw === "modeled") {
             timingSourceDisplay = "Modeled";
         } else {
             timingSourceDisplay = timingSourceRaw;
-        }
-    } else {
-        // Fallback: infer from loc_type and runner fields
-        if (locType === "traffic" && !props.first_runner && !props.last_runner) {
-            timingSourceDisplay = "Proxy-based or inferred";
-        } else {
-            timingSourceDisplay = "Modeled";
         }
     }
     
