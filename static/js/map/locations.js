@@ -190,8 +190,8 @@ async function renderLocations(map) {
 
     console.log(`🔄 Rendering ${data.features.length} locations...`);
 
-    // Create markers layer
-    const markersLayer = L.layerGroup();
+    // Create markers layer (use featureGroup for getBounds support)
+    const markersLayer = L.featureGroup();
     
     // Store markers by loc_id for table interactions
     const markersByLocId = {};
