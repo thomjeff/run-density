@@ -57,8 +57,8 @@ e2e-local: ## Run end-to-end tests (local-only)
 	@echo "GCS_UPLOAD=false" > .env.override
 	@docker-compose --env-file .env.override up -d
 	@rm -f .env.override
-	@echo "⏳ Waiting for container startup (15s)..."
-	@sleep 15
+	@echo "⏳ Waiting for container startup (5s)..."
+	@sleep 5
 	@echo "▶️  Running E2E test suite..."
 	@docker exec run-density-dev python /app/e2e.py --local
 
