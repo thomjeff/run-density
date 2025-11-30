@@ -296,6 +296,9 @@ async function renderLocations(map) {
         console.log('✅ Hidden loading overlay');
     }
     
+    // Store all features globally for bounds filtering
+    window.allLocationsFeatures = data.features;
+    
     // Update the table with location data (if function exists)
     // Wait a bit to ensure the table script has loaded
     setTimeout(() => {
@@ -342,12 +345,17 @@ function filterMapToLocation(locId) {
         weight: 3
     });
     
-    // Pan and zoom to selected location
+    // Pan and zoom to selected location (programmatic move - disable bounds filtering temporarily)
     const latlng = targetMarker.getLatLng();
+    isProgrammaticMapMove = true;
     window.map.setView(latlng, 17, {
         animate: true,
         duration: 0.5
     });
+    // Re-enable bounds filtering after animation completes
+    setTimeout(() => {
+        isProgrammaticMapMove = false;
+    }, 600);
     
     // Open popup
     targetMarker.openPopup();
@@ -395,17 +403,29 @@ function clearMapFilter() {
         marker.closePopup();
     });
     
-    // Fit map to all locations bounds
+    // Fit map to all locations bounds (programmatic move - disable bounds filtering temporarily)
     if (window.locationsInitialBounds && window.locationsInitialBounds.isValid()) {
+        isProgrammaticMapMove = true;
         window.map.fitBounds(window.locationsInitialBounds, { 
             padding: [20, 20],
             maxZoom: 16
         });
+        // Re-enable bounds filtering after animation completes
+        setTimeout(() => {
+            isProgrammaticMapMove = false;
+            // Now filter table based on the new bounds
+            filterTableByMapBounds();
+        }, 600);
     }
     
     // Clear table row highlighting
     if (window.clearLocationTableHighlight) {
         window.clearLocationTableHighlight();
+    }
+    
+    // Restore full table (show all locations)
+    if (window.allLocationsFeatures && window.updateLocationsTable) {
+        window.updateLocationsTable(window.allLocationsFeatures);
     }
     
     // Hide clear filter button and update status
@@ -491,6 +511,55 @@ function updateFilterUI(locId) {
     }
 }
 
+// Flag to track programmatic map movements (to avoid filtering during table row clicks)
+let isProgrammaticMapMove = false;
+
+/**
+ * Filter table rows based on current map bounds
+ * Only shows locations that are currently visible in the map viewport
+ */
+function filterTableByMapBounds() {
+    // Skip filtering if this is a programmatic map movement (e.g., from table row click)
+    if (isProgrammaticMapMove) {
+        return;
+    }
+    
+    if (!window.map || !window.allLocationsFeatures) {
+        return;
+    }
+    
+    const bounds = window.map.getBounds();
+    if (!bounds || !bounds.isValid()) {
+        return;
+    }
+    
+    // Find locations within current map bounds
+    const visibleFeatures = window.allLocationsFeatures.filter(feature => {
+        const [lon, lat] = feature.geometry.coordinates;
+        return bounds.contains([lat, lon]);
+    });
+    
+    console.log(`🔍 Map bounds filter: ${visibleFeatures.length} of ${window.allLocationsFeatures.length} locations visible`);
+    
+    // Update table with filtered locations
+    if (window.updateLocationsTable) {
+        window.updateLocationsTable(visibleFeatures);
+    }
+}
+
+/**
+ * Debounced version of filterTableByMapBounds to avoid excessive updates while panning
+ */
+let boundsFilterTimeout = null;
+function debouncedFilterTableByMapBounds() {
+    if (boundsFilterTimeout) {
+        clearTimeout(boundsFilterTimeout);
+    }
+    boundsFilterTimeout = setTimeout(() => {
+        filterTableByMapBounds();
+    }, 150); // 150ms debounce delay
+}
+
 /**
  * Initialize locations map when DOM is ready
  */
@@ -517,7 +586,11 @@ document.addEventListener('DOMContentLoaded', async function() {
         window.highlightLocationInTable = highlightLocationInTable;
         window.clearLocationTableHighlight = clearLocationTableHighlight;
         
-        console.log('✅ Locations map initialized successfully');
+        // Add event listeners for map pan/zoom to filter table
+        map.on('moveend', debouncedFilterTableByMapBounds);
+        map.on('zoomend', debouncedFilterTableByMapBounds);
+        
+        console.log('✅ Locations map initialized successfully with bounds filtering');
         
     } catch (error) {
         console.error('❌ Failed to initialize locations map:', error);
