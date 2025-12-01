@@ -437,7 +437,7 @@ def calculate_arrival_times_for_location(
         logger.debug(f"Location {location.get('loc_id')} ({event}): Found {len(event_runners)} runners for event {event}")
         
         if event_runners.empty:
-            logger.warning(f"Location {location.get('loc_id')} ({event}): No runners found for event {event_lower}")
+            logger.warning(f"Location {location.get('loc_id')} ({event}): No runners found for event {event}")
             continue
         
         # Calculate arrival times
