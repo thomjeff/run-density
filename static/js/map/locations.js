@@ -521,8 +521,31 @@ function highlightLocationInTable(locId) {
             row.style.backgroundColor = '#e3f2fd';
             row.style.cursor = 'pointer';
             
-            // Scroll into view
-            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Scroll into view within scrollable container (Issue #484)
+            // Find the scrollable container parent
+            const scrollableContainer = row.closest('div[style*="overflow-y"]') || 
+                                       document.querySelector('#locations-table').closest('div[style*="max-height"]');
+            
+            if (scrollableContainer) {
+                // Scroll within the container
+                const containerRect = scrollableContainer.getBoundingClientRect();
+                const rowRect = row.getBoundingClientRect();
+                const scrollTop = scrollableContainer.scrollTop;
+                const rowTop = row.offsetTop;
+                const rowHeight = row.offsetHeight;
+                const containerHeight = scrollableContainer.clientHeight;
+                
+                // Calculate desired scroll position (center the row)
+                const desiredScrollTop = rowTop - (containerHeight / 2) + (rowHeight / 2);
+                
+                scrollableContainer.scrollTo({
+                    top: desiredScrollTop,
+                    behavior: 'smooth'
+                });
+            } else {
+                // Fallback to standard scrollIntoView
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
             
             console.log(`✅ Highlighted table row for location ${locId}`);
         }
