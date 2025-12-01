@@ -12,6 +12,7 @@
         overflow: hidden;
         position: relative;
         background: transparent !important;
+        z-index: 1;
     }
     
     .map-loading {
@@ -956,6 +957,12 @@
         background: #f8f9fa;
         font-weight: 600;
         color: #2c3e50;
+    }
+    
+    /* Scrollable table container (Issue #484) */
+    div[style*="max-height"] {
+        /* Ensure scrollable container doesn't interfere with map events */
+        touch-action: pan-y;
     }
     
     /* Sticky header for scrollable table (Issue #484) */
