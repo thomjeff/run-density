@@ -76,18 +76,80 @@
     <p style="margin-bottom: 1rem; color: #7f8c8d; font-size: 0.875rem;">
         Operational timing windows for fixed point locations on the course (traffic control points, water stops, turnarounds).
     </p>
-    <div style="overflow-x: auto;">
+    
+    <!-- Filter Controls (Issue #483) -->
+    <div class="card" style="margin-bottom: 1rem; padding: 1rem; background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 4px; position: relative; z-index: 100;">
+        <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: end;">
+            <!-- Type Filter -->
+            <div style="position: relative; z-index: 101;">
+                <label for="filter-type" style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.9rem; color: #2c3e50;">Type</label>
+                <select id="filter-type" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem; position: relative; z-index: 102; background: white;">
+                    <option value="">All Types</option>
+                </select>
+            </div>
+            
+            <!-- Visual Separator -->
+            <div style="width: 1px; background-color: #ddd; align-self: stretch; margin: 0 0.5rem;"></div>
+            
+            <!-- Zone Filter -->
+            <div style="position: relative; z-index: 101;">
+                <label for="filter-zone" style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.9rem; color: #2c3e50;">Zone</label>
+                <select id="filter-zone" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem; position: relative; z-index: 102; background: white;">
+                    <option value="">All Zones</option>
+                </select>
+            </div>
+            
+            <!-- Visual Separator -->
+            <div style="width: 1px; background-color: #ddd; align-self: stretch; margin: 0 0.5rem;"></div>
+            
+            <!-- First Runner Filter -->
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.9rem; color: #2c3e50;">First Runner</label>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <input type="text" id="filter-first-runner-min" placeholder="Min (HHMM)" maxlength="4" pattern="[0-9]{4}" style="flex: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem;">
+                    <span style="color: #666;">to</span>
+                    <input type="text" id="filter-first-runner-max" placeholder="Max (HHMM)" maxlength="4" pattern="[0-9]{4}" style="flex: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem;">
+                </div>
+            </div>
+            
+            <!-- Visual Separator -->
+            <div style="width: 1px; background-color: #ddd; align-self: stretch; margin: 0 0.5rem;"></div>
+            
+            <!-- Last Runner Filter -->
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.9rem; color: #2c3e50;">Last Runner</label>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <input type="text" id="filter-last-runner-min" placeholder="Min (HHMM)" maxlength="4" pattern="[0-9]{4}" style="flex: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem;">
+                    <span style="color: #666;">to</span>
+                    <input type="text" id="filter-last-runner-max" placeholder="Max (HHMM)" maxlength="4" pattern="[0-9]{4}" style="flex: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem;">
+                </div>
+            </div>
+            
+            <!-- Visual Separator -->
+            <div style="width: 1px; background-color: #ddd; align-self: stretch; margin: 0 0.5rem;"></div>
+            
+            <!-- Clear Filters Button -->
+            <div style="display: flex; align-items: end;">
+                <button id="clear-filters-btn" style="padding: 0.5rem 1rem; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; width: auto;">
+                    Clear Filters
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Scrollable table container (Issue #484) -->
+    <div id="locations-table-container" style="overflow-x: auto; overflow-y: auto; max-height: 50vh; border: 1px solid #e0e0e0; border-radius: 4px;">
         <table id="locations-table">
             <thead>
                 <tr>
-                    <th>ID</th>
+                    <th class="sortable" data-sort="loc_id">ID <span class="sort-indicator"></span></th>
                     <th>Location</th>
-                    <th>Type</th>
-                    <th>Zone</th>
+                    <th class="sortable" data-sort="loc_type">Type <span class="sort-indicator"></span></th>
+                    <th class="sortable" data-sort="zone">Zone <span class="sort-indicator"></span></th>
+                    <th class="sortable" data-sort="first_runner">First Runner <span class="sort-indicator"></span></th>
+                    <th class="sortable" data-sort="last_runner">Last Runner <span class="sort-indicator"></span></th>
                     <th>Operational Window</th>
-                    <th>Duration</th>
                     <th>Peak Window</th>
-                    <th>Source</th>
                 </tr>
             </thead>
             <tbody id="locations-tbody">
@@ -155,9 +217,16 @@
 <script>
     let locationsData = [];
     let tableDataLoaded = false;
+    let currentSort = { column: null, direction: 'asc' }; // 'asc' or 'desc'
     
     // Load locations data on page load (only if map hasn't loaded it yet)
     document.addEventListener('DOMContentLoaded', function() {
+        // Initialize filter event listeners
+        initializeFilters();
+        
+        // Initialize sortable headers
+        initializeSorting();
+        
         // Wait a bit to see if map script loads data first
         setTimeout(() => {
             if (!tableDataLoaded) {
@@ -177,7 +246,25 @@
             .then(data => {
                 if (data.ok && data.locations) {
                     locationsData = data.locations;
-                    renderLocationsTable(data.locations);
+                    
+                    // Debug: Check first_runner and last_runner in first location
+                    if (data.locations.length > 0) {
+                        console.log('Sample location data:', {
+                            loc_id: data.locations[0].loc_id,
+                            first_runner: data.locations[0].first_runner,
+                            last_runner: data.locations[0].last_runner,
+                            first_runner_type: typeof data.locations[0].first_runner,
+                            last_runner_type: typeof data.locations[0].last_runner
+                        });
+                    }
+                    
+                    // Populate filter dropdowns
+                    populateTypeFilter(data.locations);
+                    populateZoneFilter(data.locations);
+                    
+                    // Apply filters and render
+                    applyFiltersAndRender();
+                    
                     tableDataLoaded = true;
                 } else {
                     showLocationsError('Invalid response format');
@@ -192,8 +279,9 @@
     /**
      * Update locations table with data (called from locations.js after map renders)
      * @param {Array} features - GeoJSON features array
+     * @param {boolean} skipZoneRepopulation - If true, skip zone dropdown repopulation (for map bounds filtering)
      */
-    function updateLocationsTable(features) {
+    function updateLocationsTable(features, skipZoneRepopulation = false) {
         if (!features || features.length === 0) {
             return;
         }
@@ -202,6 +290,7 @@
         tableDataLoaded = true;
         
         // Convert features back to locations format for table rendering
+        // Issue #483: Include first_runner and last_runner
         const locations = features.map(feature => ({
             loc_id: feature.properties.loc_id,
             loc_label: feature.properties.loc_label,
@@ -212,13 +301,599 @@
             duration: feature.properties.duration,
             peak_start: feature.properties.peak_start,
             peak_end: feature.properties.peak_end,
-            timing_source: feature.properties.timing_source
+            timing_source: feature.properties.timing_source,
+            first_runner: feature.properties.first_runner,
+            last_runner: feature.properties.last_runner
         }));
         
-        // Store for later use
-        locationsData = locations;
+        // Store for later use (only update if this is new data, not filtered subset)
+        const isNewData = !locationsData || locations.length >= locationsData.length;
+        if (isNewData) {
+            locationsData = locations;
+        }
         
-        renderLocationsTable(locations);
+        // Populate filter dropdowns only if new data or explicitly requested
+        if (!skipZoneRepopulation && isNewData) {
+            populateTypeFilter(locations);
+            populateZoneFilter(locations);
+        }
+        
+        // Apply current filters and render
+        // If skipZoneRepopulation is true, this is from map bounds filtering - don't fit bounds
+        applyFiltersAndRender(!skipZoneRepopulation);
+    }
+    
+    /**
+     * Update locations table with filtered features (from map bounds) - skips zone repopulation
+     * @param {Array} features - GeoJSON features array
+     */
+    function updateLocationsTableFiltered(features) {
+        if (!features || features.length === 0) {
+            // If no features visible, render empty table
+            renderLocationsTable([]);
+            return;
+        }
+        
+        // Convert features to locations format
+        const locations = features.map(feature => ({
+            loc_id: feature.properties.loc_id,
+            loc_label: feature.properties.loc_label,
+            loc_type: feature.properties.loc_type,
+            zone: feature.properties.zone,
+            loc_start: feature.properties.loc_start,
+            loc_end: feature.properties.loc_end,
+            duration: feature.properties.duration,
+            peak_start: feature.properties.peak_start,
+            peak_end: feature.properties.peak_end,
+            timing_source: feature.properties.timing_source,
+            first_runner: feature.properties.first_runner,
+            last_runner: feature.properties.last_runner
+        }));
+        
+        // Apply UI filters (Type, Zone, First Runner, Last Runner) to the map-bounds-filtered locations
+        const typeFilter = document.getElementById('filter-type')?.value || '';
+        const zoneFilter = document.getElementById('filter-zone')?.value || '';
+        const firstRunnerMin = document.getElementById('filter-first-runner-min')?.value || '';
+        const firstRunnerMax = document.getElementById('filter-first-runner-max')?.value || '';
+        const lastRunnerMin = document.getElementById('filter-last-runner-min')?.value || '';
+        const lastRunnerMax = document.getElementById('filter-last-runner-max')?.value || '';
+        
+        let filtered = locations.filter(location => {
+            // Type filter
+            if (typeFilter && location.loc_type !== typeFilter) {
+                return false;
+            }
+            
+            // Zone filter - compare as numbers to handle type coercion
+            if (zoneFilter) {
+                const locationZone = location.zone != null ? Number(location.zone) : null;
+                const filterZone = Number(zoneFilter);
+                if (locationZone !== filterZone) {
+                    return false;
+                }
+            }
+            
+            // First Runner filter
+            const firstRunnerHHMM = timeToHHMM(location.first_runner);
+            if (firstRunnerMin && (!firstRunnerHHMM || firstRunnerHHMM < firstRunnerMin)) {
+                return false;
+            }
+            if (firstRunnerMax && (!firstRunnerHHMM || firstRunnerHHMM > firstRunnerMax)) {
+                return false;
+            }
+            
+            // Last Runner filter
+            const lastRunnerHHMM = timeToHHMM(location.last_runner);
+            if (lastRunnerMin && (!lastRunnerHHMM || lastRunnerHHMM < lastRunnerMin)) {
+                return false;
+            }
+            if (lastRunnerMax && (!lastRunnerHHMM || lastRunnerHHMM > lastRunnerMax)) {
+                return false;
+            }
+            
+            return true;
+        });
+        
+        // Apply sorting
+        if (currentSort.column) {
+            filtered = sortLocations(filtered, currentSort.column, currentSort.direction);
+        } else {
+            // Default sort by loc_id
+            filtered.sort((a, b) => {
+                const idA = a.loc_id || 0;
+                const idB = b.loc_id || 0;
+                return idA - idB;
+            });
+        }
+        
+        // Update map markers (without fitting bounds - preserve user zoom)
+        filterMapToLocations(filtered.map(loc => loc.loc_id), false);
+        
+        // Render filtered and sorted data
+        renderLocationsTable(filtered);
+    }
+    
+    /**
+     * Helper function to format time from hh:mm:ss to hh:mm
+     * @param {string|null} timeStr - Time string in hh:mm:ss or hh:mm format
+     * @returns {string|null} Formatted time in hh:mm or null
+     */
+    function formatTimeToHHMM(timeStr) {
+        if (!timeStr || timeStr === "NA") return null;
+        // If already in hh:mm format, return as-is
+        if (timeStr.match(/^\d{2}:\d{2}$/)) return timeStr;
+        // If in hh:mm:ss format, drop seconds
+        if (timeStr.match(/^\d{2}:\d{2}:\d{2}$/)) {
+            return timeStr.substring(0, 5); // Take first 5 characters (hh:mm)
+        }
+        return timeStr; // Fallback: return original if format unexpected
+    }
+    
+    /**
+     * Convert HH:MM:SS or HH:MM to HHMM format (for filtering)
+     * @param {string|null} timeStr - Time string
+     * @returns {string|null} Time in HHMM format or null
+     */
+    function timeToHHMM(timeStr) {
+        if (!timeStr || timeStr === "NA") return null;
+        // Remove colons
+        return timeStr.replace(/:/g, '');
+    }
+    
+    /**
+     * Convert HHMM to HH:MM format (for display)
+     * @param {string|null} hhmmStr - Time in HHMM format
+     * @returns {string|null} Time in HH:MM format or null
+     */
+    function hhmmToHHMM(hhmmStr) {
+        if (!hhmmStr || hhmmStr.length !== 4) return null;
+        return hhmmStr.substring(0, 2) + ':' + hhmmStr.substring(2, 4);
+    }
+    
+    let zoneFilterPopulated = false;
+    let typeFilterPopulated = false;
+    
+    /**
+     * Populate type filter dropdown with unique types
+     * @param {Array} locations - Array of location objects
+     */
+    function populateTypeFilter(locations) {
+        const typeSelect = document.getElementById('filter-type');
+        if (!typeSelect) return;
+        
+        // Don't repopulate if dropdown is currently open (has focus)
+        if (document.activeElement === typeSelect) {
+            return;
+        }
+        
+        // Get unique types
+        const types = [...new Set(locations.map(loc => loc.loc_type).filter(t => t != null && t !== "NA" && t !== ""))].sort();
+        
+        // Only populate if dropdown hasn't been populated yet, or if types have changed
+        const existingTypes = Array.from(typeSelect.options)
+            .slice(1) // Skip "All Types" option
+            .map(opt => opt.value)
+            .sort();
+        
+        const typesMatch = existingTypes.length === types.length && 
+            existingTypes.every((t, i) => t === types[i]);
+        
+        if (typeFilterPopulated && typesMatch) {
+            // Already populated with same types, don't reset
+            return;
+        }
+        
+        // Preserve currently selected value
+        const currentValue = typeSelect.value;
+        
+        // Clear existing options except "All Types"
+        typeSelect.innerHTML = '<option value="">All Types</option>';
+        
+        // Add type options
+        types.forEach(type => {
+            const option = document.createElement('option');
+            option.value = type;
+            option.textContent = type.charAt(0).toUpperCase() + type.slice(1); // Capitalize first letter
+            typeSelect.appendChild(option);
+        });
+        
+        // Restore previously selected value if it still exists
+        if (currentValue && types.includes(currentValue)) {
+            typeSelect.value = currentValue;
+        }
+        
+        typeFilterPopulated = true;
+    }
+    
+    /**
+     * Populate zone filter dropdown with unique zones
+     * @param {Array} locations - Array of location objects
+     */
+    function populateZoneFilter(locations) {
+        const zoneSelect = document.getElementById('filter-zone');
+        if (!zoneSelect) return;
+        
+        // Don't repopulate if dropdown is currently open (has focus)
+        if (document.activeElement === zoneSelect) {
+            // Silently skip - don't log to reduce console noise
+            return;
+        }
+        
+        // Get unique zones
+        const zones = [...new Set(locations.map(loc => loc.zone).filter(z => z != null && z !== "NA" && z !== ""))].sort((a, b) => a - b);
+        
+        // Only populate if dropdown hasn't been populated yet, or if zones have changed
+        const existingZones = Array.from(zoneSelect.options)
+            .slice(1) // Skip "All Zones" option
+            .map(opt => Number(opt.value))
+            .sort((a, b) => a - b);
+        
+        const zonesMatch = existingZones.length === zones.length && 
+            existingZones.every((z, i) => z === zones[i]);
+        
+        if (zoneFilterPopulated && zonesMatch) {
+            // Already populated with same zones, don't reset
+            return;
+        }
+        
+        // Preserve currently selected value
+        const currentValue = zoneSelect.value;
+        
+        // Clear existing options except "All Zones"
+        zoneSelect.innerHTML = '<option value="">All Zones</option>';
+        
+        // Add zone options
+        zones.forEach(zone => {
+            const option = document.createElement('option');
+            option.value = zone;
+            option.textContent = zone;
+            zoneSelect.appendChild(option);
+        });
+        
+        // Restore previously selected value if it still exists
+        if (currentValue && zones.includes(Number(currentValue))) {
+            zoneSelect.value = currentValue;
+        }
+        
+        zoneFilterPopulated = true;
+    }
+    
+    /**
+     * Apply filters and render table (Issue #483)
+     * Also updates map to show only filtered locations
+     * @param {boolean} fitBounds - Whether to fit map bounds to filtered locations (default: true)
+     */
+    function applyFiltersAndRender(fitBounds = true) {
+        if (!locationsData || locationsData.length === 0) {
+            return;
+        }
+        
+        // Get filter values
+        const typeFilter = document.getElementById('filter-type')?.value || '';
+        const zoneFilter = document.getElementById('filter-zone')?.value || '';
+        const firstRunnerMin = document.getElementById('filter-first-runner-min')?.value || '';
+        const firstRunnerMax = document.getElementById('filter-first-runner-max')?.value || '';
+        const lastRunnerMin = document.getElementById('filter-last-runner-min')?.value || '';
+        const lastRunnerMax = document.getElementById('filter-last-runner-max')?.value || '';
+        
+        // Filter locations
+        let filtered = locationsData.filter(location => {
+            // Type filter
+            if (typeFilter && location.loc_type !== typeFilter) {
+                return false;
+            }
+            
+            // Zone filter - compare as numbers to handle type coercion
+            if (zoneFilter) {
+                const locationZone = location.zone != null ? Number(location.zone) : null;
+                const filterZone = Number(zoneFilter);
+                if (locationZone !== filterZone) {
+                    return false;
+                }
+            }
+            
+            // First Runner filter
+            const firstRunnerHHMM = timeToHHMM(location.first_runner);
+            if (firstRunnerMin && (!firstRunnerHHMM || firstRunnerHHMM < firstRunnerMin)) {
+                return false;
+            }
+            if (firstRunnerMax && (!firstRunnerHHMM || firstRunnerHHMM > firstRunnerMax)) {
+                return false;
+            }
+            
+            // Last Runner filter
+            const lastRunnerHHMM = timeToHHMM(location.last_runner);
+            if (lastRunnerMin && (!lastRunnerHHMM || lastRunnerHHMM < lastRunnerMin)) {
+                return false;
+            }
+            if (lastRunnerMax && (!lastRunnerHHMM || lastRunnerHHMM > lastRunnerMax)) {
+                return false;
+            }
+            
+            return true;
+        });
+        
+        // Apply sorting
+        if (currentSort.column) {
+            filtered = sortLocations(filtered, currentSort.column, currentSort.direction);
+        } else {
+            // Default sort by loc_id
+            filtered.sort((a, b) => {
+                const idA = a.loc_id || 0;
+                const idB = b.loc_id || 0;
+                return idA - idB;
+            });
+        }
+        
+        // Update map to show only filtered locations (only fit bounds if requested)
+        filterMapToLocations(filtered.map(loc => loc.loc_id), fitBounds);
+        
+        // Render filtered and sorted data
+        renderLocationsTable(filtered);
+    }
+    
+    /**
+     * Filter map markers to show only specified location IDs
+     * @param {Array<number|string>} visibleLocIds - Array of location IDs to show
+     * @param {boolean} fitBounds - Whether to fit map bounds to visible markers (default: true)
+     */
+    function filterMapToLocations(visibleLocIds, fitBounds = true) {
+        if (!window.locationsLayer || !window.locationsMarkersByLocId) {
+            return; // Map not initialized yet
+        }
+        
+        const visibleSet = new Set(visibleLocIds.map(id => String(id)));
+        let hasVisibleMarkers = false;
+        
+        // Show/hide markers based on filter
+        window.locationsLayer.eachLayer(function(marker) {
+            const locId = String(marker.feature?.properties?.loc_id);
+            const isVisible = visibleSet.has(locId);
+            
+            if (isVisible) {
+                hasVisibleMarkers = true;
+                // Show marker with original styling
+                const props = marker.feature?.properties || {};
+                const locType = props.loc_type?.toLowerCase() || 'unknown';
+                const color = getLocationMarkerColor(locType);
+                
+                marker.setStyle({
+                    radius: 8,
+                    fillColor: color,
+                    color: '#ffffff',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.8
+                });
+            } else {
+                // Hide marker by making it transparent
+                marker.setStyle({
+                    opacity: 0,
+                    fillOpacity: 0
+                });
+            }
+        });
+        
+        // Fit map bounds to visible markers if requested and if any visible
+        if (fitBounds && hasVisibleMarkers && visibleLocIds.length > 0) {
+            const visibleMarkers = visibleLocIds
+                .map(id => window.locationsMarkersByLocId[String(id)])
+                .filter(m => m != null);
+            
+            if (visibleMarkers.length > 0) {
+                const group = L.featureGroup(visibleMarkers);
+                if (window.map && group.getBounds().isValid()) {
+                    // Temporarily disable bounds filtering to allow programmatic fit
+                    const wasProgrammatic = window.isProgrammaticMapMove;
+                    window.isProgrammaticMapMove = true;
+                    
+                    window.map.fitBounds(group.getBounds(), {
+                        padding: [20, 20],
+                        maxZoom: 16
+                    });
+                    
+                    // Re-enable bounds filtering after animation
+                    setTimeout(() => {
+                        window.isProgrammaticMapMove = wasProgrammatic;
+                    }, 600);
+                }
+            }
+        }
+    }
+    
+    /**
+     * Get location marker color (helper function for map filtering)
+     * @param {string} locType - Location type
+     * @returns {string} Color hex code
+     */
+    function getLocationMarkerColor(locType) {
+        const locationTypeColors = {
+            'traffic': '#808080',  // Gray
+            'course': '#2196F3',   // Blue
+            'aid': '#F44336',      // Red
+            'water': '#4CAF50',    // Green
+            'marshal': '#FF9800'   // Orange
+        };
+        return locationTypeColors[locType?.toLowerCase()] || '#999999';
+    }
+    
+    /**
+     * Sort locations array
+     * @param {Array} locations - Array of location objects
+     * @param {string} column - Column to sort by
+     * @param {string} direction - 'asc' or 'desc'
+     * @returns {Array} Sorted array
+     */
+    function sortLocations(locations, column, direction) {
+        const sorted = [...locations];
+        
+        sorted.sort((a, b) => {
+            let aVal, bVal;
+            
+            switch(column) {
+                case 'loc_id':
+                    aVal = a.loc_id != null && a.loc_id !== undefined ? Number(a.loc_id) : Infinity;
+                    bVal = b.loc_id != null && b.loc_id !== undefined ? Number(b.loc_id) : Infinity;
+                    break;
+                case 'loc_type':
+                    aVal = (a.loc_type && a.loc_type !== "NA") ? a.loc_type.toLowerCase() : '';
+                    bVal = (b.loc_type && b.loc_type !== "NA") ? b.loc_type.toLowerCase() : '';
+                    break;
+                case 'zone':
+                    aVal = a.zone != null && a.zone !== "NA" && a.zone !== "" ? Number(a.zone) : Infinity;
+                    bVal = b.zone != null && b.zone !== "NA" && b.zone !== "" ? Number(b.zone) : Infinity;
+                    break;
+                case 'first_runner':
+                    aVal = timeToHHMM(a.first_runner) || '';
+                    bVal = timeToHHMM(b.first_runner) || '';
+                    break;
+                case 'last_runner':
+                    aVal = timeToHHMM(a.last_runner) || '';
+                    bVal = timeToHHMM(b.last_runner) || '';
+                    break;
+                default:
+                    return 0;
+            }
+            
+            if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+            if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+        
+        return sorted;
+    }
+    
+    /**
+     * Initialize filter event listeners (Issue #483)
+     */
+    function initializeFilters() {
+        // Type filter
+        const typeFilter = document.getElementById('filter-type');
+        if (typeFilter) {
+            typeFilter.addEventListener('change', function(e) {
+                setTimeout(() => {
+                    applyFiltersAndRender();
+                }, 10);
+            });
+        }
+        
+        // Zone filter
+        const zoneFilter = document.getElementById('filter-zone');
+        if (zoneFilter) {
+            // Use 'change' event which fires after selection is made
+            zoneFilter.addEventListener('change', function(e) {
+                // Small delay to ensure value is set before filtering
+                setTimeout(() => {
+                    applyFiltersAndRender();
+                }, 10);
+            });
+        }
+        
+        // First Runner filters
+        const firstRunnerMin = document.getElementById('filter-first-runner-min');
+        const firstRunnerMax = document.getElementById('filter-first-runner-max');
+        if (firstRunnerMin) {
+            firstRunnerMin.addEventListener('input', function(e) {
+                // Validate HHMM format
+                const value = e.target.value.replace(/\D/g, '');
+                e.target.value = value;
+                applyFiltersAndRender();
+            });
+        }
+        if (firstRunnerMax) {
+            firstRunnerMax.addEventListener('input', function(e) {
+                const value = e.target.value.replace(/\D/g, '');
+                e.target.value = value;
+                applyFiltersAndRender();
+            });
+        }
+        
+        // Last Runner filters
+        const lastRunnerMin = document.getElementById('filter-last-runner-min');
+        const lastRunnerMax = document.getElementById('filter-last-runner-max');
+        if (lastRunnerMin) {
+            lastRunnerMin.addEventListener('input', function(e) {
+                const value = e.target.value.replace(/\D/g, '');
+                e.target.value = value;
+                applyFiltersAndRender();
+            });
+        }
+        if (lastRunnerMax) {
+            lastRunnerMax.addEventListener('input', function(e) {
+                const value = e.target.value.replace(/\D/g, '');
+                e.target.value = value;
+                applyFiltersAndRender();
+            });
+        }
+        
+        // Clear filters button
+        const clearFiltersBtn = document.getElementById('clear-filters-btn');
+        if (clearFiltersBtn) {
+            clearFiltersBtn.addEventListener('click', function() {
+                if (typeFilter) typeFilter.value = '';
+                if (zoneFilter) zoneFilter.value = '';
+                if (firstRunnerMin) firstRunnerMin.value = '';
+                if (firstRunnerMax) firstRunnerMax.value = '';
+                if (lastRunnerMin) lastRunnerMin.value = '';
+                if (lastRunnerMax) lastRunnerMax.value = '';
+                
+                // Clear single-location map filter if active
+                if (window.clearMapFilter) {
+                    window.clearMapFilter();
+                }
+                
+                // Apply filters (will show all locations since filters are cleared)
+                applyFiltersAndRender();
+            });
+        }
+    }
+    
+    /**
+     * Initialize sorting functionality (Issue #483)
+     */
+    function initializeSorting() {
+        const sortableHeaders = document.querySelectorAll('#locations-table th.sortable');
+        sortableHeaders.forEach(header => {
+            header.style.cursor = 'pointer';
+            header.addEventListener('click', function() {
+                const column = this.getAttribute('data-sort');
+                if (!column) return;
+                
+                // Toggle sort direction if same column
+                if (currentSort.column === column) {
+                    currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+                } else {
+                    currentSort.column = column;
+                    currentSort.direction = 'asc';
+                }
+                
+                // Update sort indicators
+                updateSortIndicators();
+                
+                // Apply sorting
+                applyFiltersAndRender();
+            });
+        });
+    }
+    
+    /**
+     * Update sort indicators in table headers
+     */
+    function updateSortIndicators() {
+        const sortableHeaders = document.querySelectorAll('#locations-table th.sortable');
+        sortableHeaders.forEach(header => {
+            const indicator = header.querySelector('.sort-indicator');
+            const column = header.getAttribute('data-sort');
+            
+            if (indicator) {
+                if (currentSort.column === column) {
+                    indicator.textContent = currentSort.direction === 'asc' ? ' ▲' : ' ▼';
+                    indicator.style.color = '#007bff';
+                } else {
+                    indicator.textContent = '';
+                }
+            }
+        });
     }
     
     function renderLocationsTable(locations) {
@@ -226,35 +901,18 @@
         tbody.innerHTML = '';
         
         if (!locations || locations.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="placeholder">No locations data available</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="placeholder">No locations data available</td></tr>';
             return;
         }
-        
-        // Sort by loc_id
-        locations.sort((a, b) => {
-            const idA = a.loc_id || 0;
-            const idB = b.loc_id || 0;
-            return idA - idB;
-        });
         
         locations.forEach(location => {
             const row = document.createElement('tr');
             
             // Format values with fallback to "—" for null/NA
             const locLabel = location.loc_label || "—";
-            const locType = location.loc_type || "—";
             
-            // Helper function to format time from hh:mm:ss to hh:mm
-            function formatTimeToHHMM(timeStr) {
-                if (!timeStr || timeStr === "NA") return null;
-                // If already in hh:mm format, return as-is
-                if (timeStr.match(/^\d{2}:\d{2}$/)) return timeStr;
-                // If in hh:mm:ss format, drop seconds
-                if (timeStr.match(/^\d{2}:\d{2}:\d{2}$/)) {
-                    return timeStr.substring(0, 5); // Take first 5 characters (hh:mm)
-                }
-                return timeStr; // Fallback: return original if format unexpected
-            }
+            // Format location type
+            const locType = location.loc_type && location.loc_type !== "NA" ? location.loc_type : "—";
             
             // Format operational window (loc_start → loc_end)
             const locStart = location.loc_start && location.loc_start !== "NA" ? location.loc_start : null;
@@ -262,11 +920,6 @@
             const locStartFormatted = formatTimeToHHMM(locStart);
             const locEndFormatted = formatTimeToHHMM(locEnd);
             const operationalWindow = (locStartFormatted && locEndFormatted) ? `${locStartFormatted} → ${locEndFormatted}` : "—";
-            
-            // Format duration (numeric value only, no "min" suffix)
-            const duration = location.duration !== null && location.duration !== undefined && location.duration !== "NA" 
-                ? location.duration 
-                : "—";
             
             // Format peak window (peak_start → peak_end)
             const peakStart = location.peak_start && location.peak_start !== "NA" ? location.peak_start : null;
@@ -281,31 +934,30 @@
             // Format zone
             const zone = location.zone && location.zone !== "NA" && location.zone !== "" ? location.zone : "—";
             
-            // Format timing source (Issue #479)
-            let timingSource = "Modeled";
-            const timingSourceRaw = location.timing_source;
-            if (timingSourceRaw) {
-                if (timingSourceRaw.startsWith("proxy:")) {
-                    const proxyId = timingSourceRaw.replace("proxy:", "");
-                    timingSource = `Proxy: ${proxyId}`;
-                } else if (timingSourceRaw === "error:proxy_not_found") {
-                    timingSource = "Error: proxy not found";
-                } else if (timingSourceRaw === "modeled") {
-                    timingSource = "Modeled";
-                } else {
-                    timingSource = timingSourceRaw; // Fallback to raw value
-                }
-            }
+            // Format First Runner (Issue #483)
+            // Handle null, undefined, "NA", or empty string
+            const firstRunnerRaw = location.first_runner;
+            const firstRunnerFormatted = (firstRunnerRaw && firstRunnerRaw !== "NA" && firstRunnerRaw !== "null") 
+                ? formatTimeToHHMM(firstRunnerRaw) || "—"
+                : "—";
             
+            // Format Last Runner (Issue #483)
+            // Handle null, undefined, "NA", or empty string
+            const lastRunnerRaw = location.last_runner;
+            const lastRunnerFormatted = (lastRunnerRaw && lastRunnerRaw !== "NA" && lastRunnerRaw !== "null")
+                ? formatTimeToHHMM(lastRunnerRaw) || "—"
+                : "—";
+            
+            // Updated table structure - includes Type column
             row.innerHTML = `
                 <td>${locId}</td>
                 <td>${locLabel}</td>
                 <td>${locType}</td>
                 <td>${zone}</td>
+                <td>${firstRunnerFormatted}</td>
+                <td>${lastRunnerFormatted}</td>
                 <td>${operationalWindow}</td>
-                <td>${duration}</td>
                 <td>${peakWindow}</td>
-                <td>${timingSource}</td>
             `;
             
             // Add click handler for table-to-map filtering
@@ -345,11 +997,12 @@
     
     function showLocationsError(message) {
         const tbody = document.getElementById('locations-tbody');
-        tbody.innerHTML = `<tr><td colspan="6" class="placeholder">${message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="placeholder">${message}</td></tr>`;
     }
     
     // Make updateLocationsTable globally available for locations.js
     window.updateLocationsTable = updateLocationsTable;
+    window.updateLocationsTableFiltered = updateLocationsTableFiltered;
 </script>
 
 <style>
@@ -390,13 +1043,34 @@
         color: #2c3e50;
     }
     
+    /* Sticky header for scrollable table (Issue #484) */
+    #locations-table thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 10;
+        box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+    }
+    
     #locations-table tbody tr:hover {
         background: #f8f9fa;
     }
     
-    /* Right-align duration column (now 5th column) */
-    #locations-table td:nth-child(5) {
-        text-align: right;
+    /* Sortable column styling (Issue #483) */
+    #locations-table th.sortable {
+        cursor: pointer;
+        user-select: none;
+        position: relative;
+    }
+    
+    #locations-table th.sortable:hover {
+        background: #e9ecef;
+    }
+    
+    #locations-table th.sortable .sort-indicator {
+        color: #007bff;
+        font-size: 0.75rem;
+        margin-left: 0.25rem;
     }
 </style>
 {% endblock %}

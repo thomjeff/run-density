@@ -40,7 +40,9 @@ function convertToGeoJSON(locations) {
                 peak_end: loc.peak_end,
                 zone: loc.zone,
                 timing_source: loc.timing_source,
-                notes: loc.notes
+                notes: loc.notes,
+                first_runner: loc.first_runner,  // Issue #483: Include first_runner
+                last_runner: loc.last_runner     // Issue #483: Include last_runner
             }
         }));
     
@@ -519,8 +521,25 @@ function highlightLocationInTable(locId) {
             row.style.backgroundColor = '#e3f2fd';
             row.style.cursor = 'pointer';
             
-            // Scroll into view
-            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Scroll into view within scrollable container (Issue #484)
+            const tableContainer = document.getElementById('locations-table-container');
+            if (tableContainer) {
+                // Calculate scroll position to center row in container
+                const containerHeight = tableContainer.clientHeight;
+                const rowTop = row.offsetTop;
+                const rowHeight = row.offsetHeight;
+                
+                // Calculate desired scroll position (center the row vertically)
+                const desiredScrollTop = rowTop - (containerHeight / 2) + (rowHeight / 2);
+                
+                tableContainer.scrollTo({
+                    top: Math.max(0, desiredScrollTop),
+                    behavior: 'smooth'
+                });
+            } else {
+                // Fallback to standard scrollIntoView
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
             
             console.log(`✅ Highlighted table row for location ${locId}`);
         }
@@ -593,10 +612,17 @@ function filterTableByMapBounds() {
         return bounds.contains([lat, lon]);
     });
     
-    console.log(`🔍 Map bounds filter: ${visibleFeatures.length} of ${window.allLocationsFeatures.length} locations visible`);
+    // Only log if count changed significantly (reduce console noise)
+    const prevCount = window.lastVisibleCount || 0;
+    if (Math.abs(visibleFeatures.length - prevCount) > 5 || visibleFeatures.length === 0) {
+        console.log(`🔍 Map bounds filter: ${visibleFeatures.length} of ${window.allLocationsFeatures.length} locations visible`);
+        window.lastVisibleCount = visibleFeatures.length;
+    }
     
-    // Update table with filtered locations
-    if (window.updateLocationsTable) {
+    // Update table with filtered locations (skip zone repopulation)
+    if (window.updateLocationsTableFiltered) {
+        window.updateLocationsTableFiltered(visibleFeatures);
+    } else if (window.updateLocationsTable) {
         window.updateLocationsTable(visibleFeatures);
     }
 }
