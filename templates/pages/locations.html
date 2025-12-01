@@ -225,6 +225,17 @@
                 if (data.ok && data.locations) {
                     locationsData = data.locations;
                     
+                    // Debug: Check first_runner and last_runner in first location
+                    if (data.locations.length > 0) {
+                        console.log('Sample location data:', {
+                            loc_id: data.locations[0].loc_id,
+                            first_runner: data.locations[0].first_runner,
+                            last_runner: data.locations[0].last_runner,
+                            first_runner_type: typeof data.locations[0].first_runner,
+                            last_runner_type: typeof data.locations[0].last_runner
+                        });
+                    }
+                    
                     // Populate zone filter dropdown
                     populateZoneFilter(data.locations);
                     
@@ -587,10 +598,18 @@
             const zone = location.zone && location.zone !== "NA" && location.zone !== "" ? location.zone : "—";
             
             // Format First Runner (Issue #483)
-            const firstRunnerFormatted = formatTimeToHHMM(location.first_runner) || "—";
+            // Handle null, undefined, "NA", or empty string
+            const firstRunnerRaw = location.first_runner;
+            const firstRunnerFormatted = (firstRunnerRaw && firstRunnerRaw !== "NA" && firstRunnerRaw !== "null") 
+                ? formatTimeToHHMM(firstRunnerRaw) || "—"
+                : "—";
             
             // Format Last Runner (Issue #483)
-            const lastRunnerFormatted = formatTimeToHHMM(location.last_runner) || "—";
+            // Handle null, undefined, "NA", or empty string
+            const lastRunnerRaw = location.last_runner;
+            const lastRunnerFormatted = (lastRunnerRaw && lastRunnerRaw !== "NA" && lastRunnerRaw !== "null")
+                ? formatTimeToHHMM(lastRunnerRaw) || "—"
+                : "—";
             
             // Issue #483: Updated table structure - removed Type, Duration, Source columns
             row.innerHTML = `
