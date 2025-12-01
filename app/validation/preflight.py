@@ -11,8 +11,7 @@ Usage:
 
 import pandas as pd
 import os
-from typing import Dict, List, Any, Optional
-from pathlib import Path
+from typing import Dict, Any
 
 
 class ValidationError(Exception):
@@ -26,11 +25,11 @@ def _check_required_columns(df: pd.DataFrame, validation_results: Dict[str, Any]
         "seg_id", "seg_label", "width_m", "direction",
         "full", "half", "10K",
         "full_from_km", "full_to_km",
-        "half_from_km", "half_to_km", 
+        "half_from_km", "half_to_km",
         "10K_from_km", "10K_to_km",
         "flow_type"
     ]
-    
+
     missing_columns = [col for col in required_columns if col not in df.columns]
     if missing_columns:
         validation_results["errors"].append(f"❌ Missing required columns: {missing_columns}")
@@ -106,20 +105,20 @@ def _check_event_window_values(df: pd.DataFrame, event: str, validation_results:
     """Check that event window values are valid for flagged segments."""
     if event not in df.columns:
         return
-    
+
     flagged_segments = df[df[event] == "y"]
     for _, row in flagged_segments.iterrows():
         from_col = f"{event}_from_km"
         to_col = f"{event}_to_km"
-        
+
         if from_col not in df.columns or to_col not in df.columns:
             validation_results["errors"].append(f"❌ Missing window columns for {event}: {from_col}, {to_col}")
             validation_results["checks_failed"] += 1
             continue
-        
+
         from_km = row[from_col]
         to_km = row[to_col]
-        
+
         if pd.isna(from_km) or pd.isna(to_km):
             validation_results["errors"].append(f"❌ Missing window values for {row['seg_id']} {event}: {from_col}={from_km}, {to_col}={to_km}")
             validation_results["checks_failed"] += 1
@@ -155,24 +154,24 @@ def _raise_if_validation_failed(validation_results: Dict[str, Any]) -> None:
 def validate_segments_csv(file_path: str = "data/segments.csv") -> Dict[str, Any]:
     """
     Validate segments.csv structure and content.
-    
+
     Args:
         file_path: Path to segments.csv file
-        
+
     Returns:
         Dictionary with validation results
-        
+
     Raises:
         ValidationError: If validation fails with detailed error message
     """
     if not os.path.exists(file_path):
         raise ValidationError(f"❌ File not found: {file_path}")
-    
+
     try:
         df = pd.read_csv(file_path)
     except Exception as e:
         raise ValidationError(f"❌ Cannot read CSV file: {str(e)}")
-    
+
     validation_results = {
         "file_path": file_path,
         "total_rows": len(df),
@@ -182,32 +181,32 @@ def validate_segments_csv(file_path: str = "data/segments.csv") -> Dict[str, Any
         "errors": [],
         "warnings": []
     }
-    
+
     # Run all validation checks
     _check_required_columns(df, validation_results)
     _check_empty_dataframe(df, validation_results)
     _check_seg_id_uniqueness(df, validation_results)
     _check_width_m_values(df, validation_results)
     _check_direction_values(df, validation_results)
-    
+
     # Check event flags and windows
     event_columns = ["full", "half", "10K"]
     for event in event_columns:
         _check_event_flag_values(df, event, validation_results)
         _check_event_window_values(df, event, validation_results)
-    
+
     _check_flow_type_values(df, validation_results)
-    
+
     # Raise error if validation failed
     _raise_if_validation_failed(validation_results)
-    
+
     return validation_results
 
 
 def validate_preflight() -> bool:
     """
     Run preflight validation and return success status.
-    
+
     Returns:
         True if validation passes, False otherwise
     """
