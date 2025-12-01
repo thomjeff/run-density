@@ -129,6 +129,7 @@
                 <tr>
                     <th class="sortable" data-sort="loc_id">ID <span class="sort-indicator"></span></th>
                     <th>Location</th>
+                    <th>Type</th>
                     <th class="sortable" data-sort="zone">Zone <span class="sort-indicator"></span></th>
                     <th class="sortable" data-sort="first_runner">First Runner <span class="sort-indicator"></span></th>
                     <th class="sortable" data-sort="last_runner">Last Runner <span class="sort-indicator"></span></th>
@@ -138,7 +139,7 @@
             </thead>
             <tbody id="locations-tbody">
                 <tr>
-                    <td colspan="7" class="placeholder">Loading locations data...</td>
+                    <td colspan="8" class="placeholder">Loading locations data...</td>
                 </tr>
             </tbody>
         </table>
@@ -724,7 +725,7 @@
         tbody.innerHTML = '';
         
         if (!locations || locations.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="placeholder">No locations data available</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="placeholder">No locations data available</td></tr>';
             return;
         }
         
@@ -733,6 +734,9 @@
             
             // Format values with fallback to "—" for null/NA
             const locLabel = location.loc_label || "—";
+            
+            // Format location type
+            const locType = location.loc_type && location.loc_type !== "NA" ? location.loc_type : "—";
             
             // Format operational window (loc_start → loc_end)
             const locStart = location.loc_start && location.loc_start !== "NA" ? location.loc_start : null;
@@ -768,10 +772,11 @@
                 ? formatTimeToHHMM(lastRunnerRaw) || "—"
                 : "—";
             
-            // Issue #483: Updated table structure - removed Type, Duration, Source columns
+            // Updated table structure - includes Type column
             row.innerHTML = `
                 <td>${locId}</td>
                 <td>${locLabel}</td>
+                <td>${locType}</td>
                 <td>${zone}</td>
                 <td>${firstRunnerFormatted}</td>
                 <td>${lastRunnerFormatted}</td>
@@ -816,7 +821,7 @@
     
     function showLocationsError(message) {
         const tbody = document.getElementById('locations-tbody');
-        tbody.innerHTML = `<tr><td colspan="7" class="placeholder">${message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="placeholder">${message}</td></tr>`;
     }
     
     // Make updateLocationsTable globally available for locations.js
