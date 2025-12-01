@@ -595,10 +595,17 @@ function filterTableByMapBounds() {
         return bounds.contains([lat, lon]);
     });
     
-    console.log(`🔍 Map bounds filter: ${visibleFeatures.length} of ${window.allLocationsFeatures.length} locations visible`);
+    // Only log if count changed significantly (reduce console noise)
+    const prevCount = window.lastVisibleCount || 0;
+    if (Math.abs(visibleFeatures.length - prevCount) > 5 || visibleFeatures.length === 0) {
+        console.log(`🔍 Map bounds filter: ${visibleFeatures.length} of ${window.allLocationsFeatures.length} locations visible`);
+        window.lastVisibleCount = visibleFeatures.length;
+    }
     
-    // Update table with filtered locations
-    if (window.updateLocationsTable) {
+    // Update table with filtered locations (skip zone repopulation)
+    if (window.updateLocationsTableFiltered) {
+        window.updateLocationsTableFiltered(visibleFeatures);
+    } else if (window.updateLocationsTable) {
         window.updateLocationsTable(visibleFeatures);
     }
 }

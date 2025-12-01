@@ -256,8 +256,9 @@
     /**
      * Update locations table with data (called from locations.js after map renders)
      * @param {Array} features - GeoJSON features array
+     * @param {boolean} skipZoneRepopulation - If true, skip zone dropdown repopulation (for map bounds filtering)
      */
-    function updateLocationsTable(features) {
+    function updateLocationsTable(features, skipZoneRepopulation = false) {
         if (!features || features.length === 0) {
             return;
         }
@@ -282,14 +283,27 @@
             last_runner: feature.properties.last_runner
         }));
         
-        // Store for later use
-        locationsData = locations;
+        // Store for later use (only update if this is new data, not filtered subset)
+        const isNewData = !locationsData || locations.length >= locationsData.length;
+        if (isNewData) {
+            locationsData = locations;
+        }
         
-        // Populate zone filter dropdown
-        populateZoneFilter(locations);
+        // Populate zone filter dropdown only if new data or explicitly requested
+        if (!skipZoneRepopulation && isNewData) {
+            populateZoneFilter(locations);
+        }
         
         // Apply current filters and render
         applyFiltersAndRender();
+    }
+    
+    /**
+     * Update locations table with filtered features (from map bounds) - skips zone repopulation
+     * @param {Array} features - GeoJSON features array
+     */
+    function updateLocationsTableFiltered(features) {
+        updateLocationsTable(features, true);
     }
     
     /**
@@ -341,7 +355,7 @@
         
         // Don't repopulate if dropdown is currently open (has focus)
         if (document.activeElement === zoneSelect) {
-            console.log('Zone dropdown is open, skipping repopulation');
+            // Silently skip - don't log to reduce console noise
             return;
         }
         
@@ -801,6 +815,7 @@
     
     // Make updateLocationsTable globally available for locations.js
     window.updateLocationsTable = updateLocationsTable;
+    window.updateLocationsTableFiltered = updateLocationsTableFiltered;
 </script>
 
 <style>
