@@ -337,6 +337,9 @@
         const zoneSelect = document.getElementById('filter-zone');
         if (!zoneSelect) return;
         
+        // Preserve currently selected value
+        const currentValue = zoneSelect.value;
+        
         // Get unique zones
         const zones = [...new Set(locations.map(loc => loc.zone).filter(z => z != null && z !== "NA" && z !== ""))].sort((a, b) => a - b);
         
@@ -350,6 +353,11 @@
             option.textContent = zone;
             zoneSelect.appendChild(option);
         });
+        
+        // Restore previously selected value if it still exists
+        if (currentValue && zones.includes(Number(currentValue))) {
+            zoneSelect.value = currentValue;
+        }
     }
     
     /**
@@ -370,9 +378,13 @@
         
         // Filter locations
         let filtered = locationsData.filter(location => {
-            // Zone filter
-            if (zoneFilter && location.zone != zoneFilter) {
-                return false;
+            // Zone filter - compare as numbers to handle type coercion
+            if (zoneFilter) {
+                const locationZone = location.zone != null ? Number(location.zone) : null;
+                const filterZone = Number(zoneFilter);
+                if (locationZone !== filterZone) {
+                    return false;
+                }
             }
             
             // First Runner filter
