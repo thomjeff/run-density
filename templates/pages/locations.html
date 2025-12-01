@@ -76,23 +76,63 @@
     <p style="margin-bottom: 1rem; color: #7f8c8d; font-size: 0.875rem;">
         Operational timing windows for fixed point locations on the course (traffic control points, water stops, turnarounds).
     </p>
+    
+    <!-- Filter Controls (Issue #483) -->
+    <div class="card" style="margin-bottom: 1rem; padding: 1rem; background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 4px;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; align-items: end;">
+            <!-- Zone Filter -->
+            <div>
+                <label for="filter-zone" style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.9rem; color: #2c3e50;">Zone</label>
+                <select id="filter-zone" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem;">
+                    <option value="">All Zones</option>
+                </select>
+            </div>
+            
+            <!-- First Runner Filter -->
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.9rem; color: #2c3e50;">First Runner</label>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <input type="text" id="filter-first-runner-min" placeholder="Min (HHMM)" maxlength="4" pattern="[0-9]{4}" style="flex: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem;">
+                    <span style="color: #666;">to</span>
+                    <input type="text" id="filter-first-runner-max" placeholder="Max (HHMM)" maxlength="4" pattern="[0-9]{4}" style="flex: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem;">
+                </div>
+            </div>
+            
+            <!-- Last Runner Filter -->
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.9rem; color: #2c3e50;">Last Runner</label>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <input type="text" id="filter-last-runner-min" placeholder="Min (HHMM)" maxlength="4" pattern="[0-9]{4}" style="flex: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem;">
+                    <span style="color: #666;">to</span>
+                    <input type="text" id="filter-last-runner-max" placeholder="Max (HHMM)" maxlength="4" pattern="[0-9]{4}" style="flex: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem;">
+                </div>
+            </div>
+            
+            <!-- Clear Filters Button -->
+            <div>
+                <button id="clear-filters-btn" style="padding: 0.5rem 1rem; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; width: 100%;">
+                    Clear Filters
+                </button>
+            </div>
+        </div>
+    </div>
+    
     <div style="overflow-x: auto;">
         <table id="locations-table">
             <thead>
                 <tr>
                     <th>ID</th>
                     <th>Location</th>
-                    <th>Type</th>
-                    <th>Zone</th>
+                    <th class="sortable" data-sort="zone">Zone <span class="sort-indicator"></span></th>
+                    <th class="sortable" data-sort="first_runner">First Runner <span class="sort-indicator"></span></th>
+                    <th class="sortable" data-sort="last_runner">Last Runner <span class="sort-indicator"></span></th>
                     <th>Operational Window</th>
-                    <th>Duration</th>
                     <th>Peak Window</th>
-                    <th>Source</th>
                 </tr>
             </thead>
             <tbody id="locations-tbody">
                 <tr>
-                    <td colspan="8" class="placeholder">Loading locations data...</td>
+                    <td colspan="7" class="placeholder">Loading locations data...</td>
                 </tr>
             </tbody>
         </table>
@@ -155,9 +195,16 @@
 <script>
     let locationsData = [];
     let tableDataLoaded = false;
+    let currentSort = { column: null, direction: 'asc' }; // 'asc' or 'desc'
     
     // Load locations data on page load (only if map hasn't loaded it yet)
     document.addEventListener('DOMContentLoaded', function() {
+        // Initialize filter event listeners
+        initializeFilters();
+        
+        // Initialize sortable headers
+        initializeSorting();
+        
         // Wait a bit to see if map script loads data first
         setTimeout(() => {
             if (!tableDataLoaded) {
@@ -177,7 +224,13 @@
             .then(data => {
                 if (data.ok && data.locations) {
                     locationsData = data.locations;
-                    renderLocationsTable(data.locations);
+                    
+                    // Populate zone filter dropdown
+                    populateZoneFilter(data.locations);
+                    
+                    // Apply filters and render
+                    applyFiltersAndRender();
+                    
                     tableDataLoaded = true;
                 } else {
                     showLocationsError('Invalid response format');
@@ -202,6 +255,7 @@
         tableDataLoaded = true;
         
         // Convert features back to locations format for table rendering
+        // Issue #483: Include first_runner and last_runner
         const locations = features.map(feature => ({
             loc_id: feature.properties.loc_id,
             loc_label: feature.properties.loc_label,
@@ -212,13 +266,285 @@
             duration: feature.properties.duration,
             peak_start: feature.properties.peak_start,
             peak_end: feature.properties.peak_end,
-            timing_source: feature.properties.timing_source
+            timing_source: feature.properties.timing_source,
+            first_runner: feature.properties.first_runner,
+            last_runner: feature.properties.last_runner
         }));
         
         // Store for later use
         locationsData = locations;
         
-        renderLocationsTable(locations);
+        // Populate zone filter dropdown
+        populateZoneFilter(locations);
+        
+        // Apply current filters and render
+        applyFiltersAndRender();
+    }
+    
+    /**
+     * Helper function to format time from hh:mm:ss to hh:mm
+     * @param {string|null} timeStr - Time string in hh:mm:ss or hh:mm format
+     * @returns {string|null} Formatted time in hh:mm or null
+     */
+    function formatTimeToHHMM(timeStr) {
+        if (!timeStr || timeStr === "NA") return null;
+        // If already in hh:mm format, return as-is
+        if (timeStr.match(/^\d{2}:\d{2}$/)) return timeStr;
+        // If in hh:mm:ss format, drop seconds
+        if (timeStr.match(/^\d{2}:\d{2}:\d{2}$/)) {
+            return timeStr.substring(0, 5); // Take first 5 characters (hh:mm)
+        }
+        return timeStr; // Fallback: return original if format unexpected
+    }
+    
+    /**
+     * Convert HH:MM:SS or HH:MM to HHMM format (for filtering)
+     * @param {string|null} timeStr - Time string
+     * @returns {string|null} Time in HHMM format or null
+     */
+    function timeToHHMM(timeStr) {
+        if (!timeStr || timeStr === "NA") return null;
+        // Remove colons
+        return timeStr.replace(/:/g, '');
+    }
+    
+    /**
+     * Convert HHMM to HH:MM format (for display)
+     * @param {string|null} hhmmStr - Time in HHMM format
+     * @returns {string|null} Time in HH:MM format or null
+     */
+    function hhmmToHHMM(hhmmStr) {
+        if (!hhmmStr || hhmmStr.length !== 4) return null;
+        return hhmmStr.substring(0, 2) + ':' + hhmmStr.substring(2, 4);
+    }
+    
+    /**
+     * Populate zone filter dropdown with unique zones
+     * @param {Array} locations - Array of location objects
+     */
+    function populateZoneFilter(locations) {
+        const zoneSelect = document.getElementById('filter-zone');
+        if (!zoneSelect) return;
+        
+        // Get unique zones
+        const zones = [...new Set(locations.map(loc => loc.zone).filter(z => z != null && z !== "NA" && z !== ""))].sort((a, b) => a - b);
+        
+        // Clear existing options except "All Zones"
+        zoneSelect.innerHTML = '<option value="">All Zones</option>';
+        
+        // Add zone options
+        zones.forEach(zone => {
+            const option = document.createElement('option');
+            option.value = zone;
+            option.textContent = zone;
+            zoneSelect.appendChild(option);
+        });
+    }
+    
+    /**
+     * Apply filters and render table (Issue #483)
+     */
+    function applyFiltersAndRender() {
+        if (!locationsData || locationsData.length === 0) {
+            return;
+        }
+        
+        // Get filter values
+        const zoneFilter = document.getElementById('filter-zone')?.value || '';
+        const firstRunnerMin = document.getElementById('filter-first-runner-min')?.value || '';
+        const firstRunnerMax = document.getElementById('filter-first-runner-max')?.value || '';
+        const lastRunnerMin = document.getElementById('filter-last-runner-min')?.value || '';
+        const lastRunnerMax = document.getElementById('filter-last-runner-max')?.value || '';
+        
+        // Filter locations
+        let filtered = locationsData.filter(location => {
+            // Zone filter
+            if (zoneFilter && location.zone != zoneFilter) {
+                return false;
+            }
+            
+            // First Runner filter
+            const firstRunnerHHMM = timeToHHMM(location.first_runner);
+            if (firstRunnerMin && (!firstRunnerHHMM || firstRunnerHHMM < firstRunnerMin)) {
+                return false;
+            }
+            if (firstRunnerMax && (!firstRunnerHHMM || firstRunnerHHMM > firstRunnerMax)) {
+                return false;
+            }
+            
+            // Last Runner filter
+            const lastRunnerHHMM = timeToHHMM(location.last_runner);
+            if (lastRunnerMin && (!lastRunnerHHMM || lastRunnerHHMM < lastRunnerMin)) {
+                return false;
+            }
+            if (lastRunnerMax && (!lastRunnerHHMM || lastRunnerHHMM > lastRunnerMax)) {
+                return false;
+            }
+            
+            return true;
+        });
+        
+        // Apply sorting
+        if (currentSort.column) {
+            filtered = sortLocations(filtered, currentSort.column, currentSort.direction);
+        } else {
+            // Default sort by loc_id
+            filtered.sort((a, b) => {
+                const idA = a.loc_id || 0;
+                const idB = b.loc_id || 0;
+                return idA - idB;
+            });
+        }
+        
+        // Render filtered and sorted data
+        renderLocationsTable(filtered);
+    }
+    
+    /**
+     * Sort locations array
+     * @param {Array} locations - Array of location objects
+     * @param {string} column - Column to sort by
+     * @param {string} direction - 'asc' or 'desc'
+     * @returns {Array} Sorted array
+     */
+    function sortLocations(locations, column, direction) {
+        const sorted = [...locations];
+        
+        sorted.sort((a, b) => {
+            let aVal, bVal;
+            
+            switch(column) {
+                case 'zone':
+                    aVal = a.zone != null && a.zone !== "NA" && a.zone !== "" ? Number(a.zone) : Infinity;
+                    bVal = b.zone != null && b.zone !== "NA" && b.zone !== "" ? Number(b.zone) : Infinity;
+                    break;
+                case 'first_runner':
+                    aVal = timeToHHMM(a.first_runner) || '';
+                    bVal = timeToHHMM(b.first_runner) || '';
+                    break;
+                case 'last_runner':
+                    aVal = timeToHHMM(a.last_runner) || '';
+                    bVal = timeToHHMM(b.last_runner) || '';
+                    break;
+                default:
+                    return 0;
+            }
+            
+            if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+            if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+        
+        return sorted;
+    }
+    
+    /**
+     * Initialize filter event listeners (Issue #483)
+     */
+    function initializeFilters() {
+        // Zone filter
+        const zoneFilter = document.getElementById('filter-zone');
+        if (zoneFilter) {
+            zoneFilter.addEventListener('change', applyFiltersAndRender);
+        }
+        
+        // First Runner filters
+        const firstRunnerMin = document.getElementById('filter-first-runner-min');
+        const firstRunnerMax = document.getElementById('filter-first-runner-max');
+        if (firstRunnerMin) {
+            firstRunnerMin.addEventListener('input', function(e) {
+                // Validate HHMM format
+                const value = e.target.value.replace(/\D/g, '');
+                e.target.value = value;
+                applyFiltersAndRender();
+            });
+        }
+        if (firstRunnerMax) {
+            firstRunnerMax.addEventListener('input', function(e) {
+                const value = e.target.value.replace(/\D/g, '');
+                e.target.value = value;
+                applyFiltersAndRender();
+            });
+        }
+        
+        // Last Runner filters
+        const lastRunnerMin = document.getElementById('filter-last-runner-min');
+        const lastRunnerMax = document.getElementById('filter-last-runner-max');
+        if (lastRunnerMin) {
+            lastRunnerMin.addEventListener('input', function(e) {
+                const value = e.target.value.replace(/\D/g, '');
+                e.target.value = value;
+                applyFiltersAndRender();
+            });
+        }
+        if (lastRunnerMax) {
+            lastRunnerMax.addEventListener('input', function(e) {
+                const value = e.target.value.replace(/\D/g, '');
+                e.target.value = value;
+                applyFiltersAndRender();
+            });
+        }
+        
+        // Clear filters button
+        const clearFiltersBtn = document.getElementById('clear-filters-btn');
+        if (clearFiltersBtn) {
+            clearFiltersBtn.addEventListener('click', function() {
+                if (zoneFilter) zoneFilter.value = '';
+                if (firstRunnerMin) firstRunnerMin.value = '';
+                if (firstRunnerMax) firstRunnerMax.value = '';
+                if (lastRunnerMin) lastRunnerMin.value = '';
+                if (lastRunnerMax) lastRunnerMax.value = '';
+                applyFiltersAndRender();
+            });
+        }
+    }
+    
+    /**
+     * Initialize sorting functionality (Issue #483)
+     */
+    function initializeSorting() {
+        const sortableHeaders = document.querySelectorAll('#locations-table th.sortable');
+        sortableHeaders.forEach(header => {
+            header.style.cursor = 'pointer';
+            header.addEventListener('click', function() {
+                const column = this.getAttribute('data-sort');
+                if (!column) return;
+                
+                // Toggle sort direction if same column
+                if (currentSort.column === column) {
+                    currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+                } else {
+                    currentSort.column = column;
+                    currentSort.direction = 'asc';
+                }
+                
+                // Update sort indicators
+                updateSortIndicators();
+                
+                // Apply sorting
+                applyFiltersAndRender();
+            });
+        });
+    }
+    
+    /**
+     * Update sort indicators in table headers
+     */
+    function updateSortIndicators() {
+        const sortableHeaders = document.querySelectorAll('#locations-table th.sortable');
+        sortableHeaders.forEach(header => {
+            const indicator = header.querySelector('.sort-indicator');
+            const column = header.getAttribute('data-sort');
+            
+            if (indicator) {
+                if (currentSort.column === column) {
+                    indicator.textContent = currentSort.direction === 'asc' ? ' ▲' : ' ▼';
+                    indicator.style.color = '#007bff';
+                } else {
+                    indicator.textContent = '';
+                }
+            }
+        });
     }
     
     function renderLocationsTable(locations) {
@@ -226,35 +552,15 @@
         tbody.innerHTML = '';
         
         if (!locations || locations.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="placeholder">No locations data available</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="placeholder">No locations data available</td></tr>';
             return;
         }
-        
-        // Sort by loc_id
-        locations.sort((a, b) => {
-            const idA = a.loc_id || 0;
-            const idB = b.loc_id || 0;
-            return idA - idB;
-        });
         
         locations.forEach(location => {
             const row = document.createElement('tr');
             
             // Format values with fallback to "—" for null/NA
             const locLabel = location.loc_label || "—";
-            const locType = location.loc_type || "—";
-            
-            // Helper function to format time from hh:mm:ss to hh:mm
-            function formatTimeToHHMM(timeStr) {
-                if (!timeStr || timeStr === "NA") return null;
-                // If already in hh:mm format, return as-is
-                if (timeStr.match(/^\d{2}:\d{2}$/)) return timeStr;
-                // If in hh:mm:ss format, drop seconds
-                if (timeStr.match(/^\d{2}:\d{2}:\d{2}$/)) {
-                    return timeStr.substring(0, 5); // Take first 5 characters (hh:mm)
-                }
-                return timeStr; // Fallback: return original if format unexpected
-            }
             
             // Format operational window (loc_start → loc_end)
             const locStart = location.loc_start && location.loc_start !== "NA" ? location.loc_start : null;
@@ -262,11 +568,6 @@
             const locStartFormatted = formatTimeToHHMM(locStart);
             const locEndFormatted = formatTimeToHHMM(locEnd);
             const operationalWindow = (locStartFormatted && locEndFormatted) ? `${locStartFormatted} → ${locEndFormatted}` : "—";
-            
-            // Format duration (numeric value only, no "min" suffix)
-            const duration = location.duration !== null && location.duration !== undefined && location.duration !== "NA" 
-                ? location.duration 
-                : "—";
             
             // Format peak window (peak_start → peak_end)
             const peakStart = location.peak_start && location.peak_start !== "NA" ? location.peak_start : null;
@@ -281,31 +582,21 @@
             // Format zone
             const zone = location.zone && location.zone !== "NA" && location.zone !== "" ? location.zone : "—";
             
-            // Format timing source (Issue #479)
-            let timingSource = "Modeled";
-            const timingSourceRaw = location.timing_source;
-            if (timingSourceRaw) {
-                if (timingSourceRaw.startsWith("proxy:")) {
-                    const proxyId = timingSourceRaw.replace("proxy:", "");
-                    timingSource = `Proxy: ${proxyId}`;
-                } else if (timingSourceRaw === "error:proxy_not_found") {
-                    timingSource = "Error: proxy not found";
-                } else if (timingSourceRaw === "modeled") {
-                    timingSource = "Modeled";
-                } else {
-                    timingSource = timingSourceRaw; // Fallback to raw value
-                }
-            }
+            // Format First Runner (Issue #483)
+            const firstRunnerFormatted = formatTimeToHHMM(location.first_runner) || "—";
             
+            // Format Last Runner (Issue #483)
+            const lastRunnerFormatted = formatTimeToHHMM(location.last_runner) || "—";
+            
+            // Issue #483: Updated table structure - removed Type, Duration, Source columns
             row.innerHTML = `
                 <td>${locId}</td>
                 <td>${locLabel}</td>
-                <td>${locType}</td>
                 <td>${zone}</td>
+                <td>${firstRunnerFormatted}</td>
+                <td>${lastRunnerFormatted}</td>
                 <td>${operationalWindow}</td>
-                <td>${duration}</td>
                 <td>${peakWindow}</td>
-                <td>${timingSource}</td>
             `;
             
             // Add click handler for table-to-map filtering
@@ -345,7 +636,7 @@
     
     function showLocationsError(message) {
         const tbody = document.getElementById('locations-tbody');
-        tbody.innerHTML = `<tr><td colspan="6" class="placeholder">${message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="placeholder">${message}</td></tr>`;
     }
     
     // Make updateLocationsTable globally available for locations.js
@@ -394,9 +685,21 @@
         background: #f8f9fa;
     }
     
-    /* Right-align duration column (now 5th column) */
-    #locations-table td:nth-child(5) {
-        text-align: right;
+    /* Sortable column styling (Issue #483) */
+    #locations-table th.sortable {
+        cursor: pointer;
+        user-select: none;
+        position: relative;
+    }
+    
+    #locations-table th.sortable:hover {
+        background: #e9ecef;
+    }
+    
+    #locations-table th.sortable .sort-indicator {
+        color: #007bff;
+        font-size: 0.75rem;
+        margin-left: 0.25rem;
     }
 </style>
 {% endblock %}

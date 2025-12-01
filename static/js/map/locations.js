@@ -40,7 +40,9 @@ function convertToGeoJSON(locations) {
                 peak_end: loc.peak_end,
                 zone: loc.zone,
                 timing_source: loc.timing_source,
-                notes: loc.notes
+                notes: loc.notes,
+                first_runner: loc.first_runner,  // Issue #483: Include first_runner
+                last_runner: loc.last_runner     // Issue #483: Include last_runner
             }
         }));
     
