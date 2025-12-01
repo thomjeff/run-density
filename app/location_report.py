@@ -247,6 +247,8 @@ def calculate_arrival_times_for_location(
     Calculate arrival times for all eligible runners at a location.
     
     Issue #277: Supports multiple crossings (e.g., A1 and G1 for loc_id=8).
+    Issue #480: Processes ALL listed segments independently to capture all crossings
+                (e.g., B1 outbound, B3 return, D1 outbound, D2 return).
     
     Args:
         location: Location row from locations.csv
@@ -256,7 +258,8 @@ def calculate_arrival_times_for_location(
         start_times: Dictionary of event start times in minutes
         
     Returns:
-        List of arrival times in seconds (may include duplicates for multiple crossings)
+        List of arrival times in seconds (may include duplicates for multiple crossings).
+        Same runner may appear multiple times (once per segment crossing).
     """
     arrival_times = []
     
@@ -305,7 +308,7 @@ def calculate_arrival_times_for_location(
         
         logger.debug(f"Location {location.get('loc_id')} ({event}): Projected distance = {distance_km:.3f}km")
         
-        # Check if distance falls within any listed segment
+        # Issue #480: Process ALL listed segments independently for multiple crossings
         if segments_list:
             from app.core.gpx.processor import generate_segment_coordinates
             
@@ -316,48 +319,22 @@ def calculate_arrival_times_for_location(
                 )
                 continue
             
-            # For locations with multiple segments, calculate arrival times for ALL listed segments
-            # This handles cases like location 12 (H1, L1, L2) where runners pass multiple times
-            # We use the projected distance if it matches, otherwise use the segment midpoint
-            matching_segments = []
-            TOLERANCE_KM = 0.1  # 100m tolerance
+            # Get runners for this event
+            event_runners = runners_df[runners_df["event"] == event].copy()
             
-            # Check all listed segments - only include if projected distance matches OR segment is clearly a return leg
-            # Return leg detection: segment is significantly further (>5km) than projected distance
-            RETURN_LEG_THRESHOLD_KM = 5.0
+            if event_runners.empty:
+                logger.warning(f"Location {location.get('loc_id')} ({event}): No runners found for event {event}")
+                continue
+            
+            event_start_sec = start_times.get(event, 0) * SECONDS_PER_MINUTE
+            event_col_gpx = event.lower() if event != "10K" else "10K"
+            
+            # Issue #480: Process ALL listed segments independently
+            # This ensures we capture all crossings (e.g., B1 outbound, B3 return, D1 outbound, D2 return)
+            processed_segments = []
             
             for seg_id, from_km, to_km in segment_ranges:
-                if (from_km - TOLERANCE_KM) <= distance_km <= (to_km + TOLERANCE_KM):
-                    # Projected distance matches this segment - use it
-                    matched_distance = max(from_km, min(distance_km, to_km))
-                    matching_segments.append((seg_id, matched_distance))
-                    logger.info(
-                        f"Location {location.get('loc_id')} ({event}): Full course distance {distance_km:.3f}km matches segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km (clamped to {matched_distance:.3f}km)"
-                    )
-                elif from_km > (distance_km + RETURN_LEG_THRESHOLD_KM):
-                    # Segment is significantly further - likely a return leg (e.g., L2 for Full)
-                    # Use the segment's end point (to_km) to get the latest arrival time
-                    matching_segments.append((seg_id, to_km))
-                    logger.info(
-                        f"Location {location.get('loc_id')} ({event}): Segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km is return leg (>{RETURN_LEG_THRESHOLD_KM}km beyond projected {distance_km:.3f}km) - using end point {to_km:.3f}km"
-                    )
-                else:
-                    # Segment doesn't match and isn't a clear return leg - skip it
-                    logger.debug(
-                        f"Location {location.get('loc_id')} ({event}): Segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km listed but doesn't match projected {distance_km:.3f}km and isn't a return leg - skipping"
-                    )
-            
-            # If no segments match the projected distance, try segment centerline approach
-            if not matching_segments:
-                matches_segment = False
-                matched_segment_distance = None
-                logger.debug(f"Location {location.get('loc_id')} ({event}): Full course distance {distance_km:.3f}km doesn't match any segment, trying centerline approach")
-                
-                # Get event column name for GPX generation
-                event_col_gpx = event.lower() if event != "10K" else "10K"
-                
-                for seg_id, from_km, to_km in segment_ranges:
-                    logger.debug(f"Location {location.get('loc_id')} ({event}): Trying segment {seg_id} range [{from_km:.3f}, {to_km:.3f}]km, projected distance={distance_km:.3f}km")
+                logger.debug(f"Location {location.get('loc_id')} ({event}): Processing segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km")
                 
                 # Get segment centerline for this event
                 segments_for_gpx = [{
@@ -368,109 +345,82 @@ def calculate_arrival_times_for_location(
                 }]
                 seg_coords = generate_segment_coordinates(courses, segments_for_gpx)
                 
-                if not seg_coords or not seg_coords[0].get("line_coords"):
-                    logger.warning(f"Location {location.get('loc_id')} ({event}): No centerline for segment {seg_id}, trying fallback")
-                    # Fallback: check if full course distance matches
+                # Determine distance along segment for this location
+                seg_distance_km = None
+                
+                if seg_coords and seg_coords[0].get("line_coords"):
+                    # Project location onto segment centerline
+                    seg_line_coords = seg_coords[0]["line_coords"]
+                    seg_points_utm = [
+                        WGS84_TO_UTM.transform(lon, lat) for lon, lat in seg_line_coords
+                    ]
+                    seg_line_utm = LineString(seg_points_utm)
+                    
+                    # Check distance from location to segment centerline
+                    distance_to_seg_m = location_point_utm.distance(seg_line_utm)
+                    
+                    if distance_to_seg_m <= LOCATION_SNAP_THRESHOLD_M:
+                        # Project onto segment centerline to get distance along segment
+                        seg_distance_m = seg_line_utm.project(location_point_utm)
+                        seg_distance_relative_km = seg_distance_m / METERS_PER_KM
+                        
+                        # Convert to absolute course distance: from_km + distance_along_segment
+                        absolute_distance_km = from_km + seg_distance_relative_km
+                        
+                        # Verify it's within segment bounds
+                        if from_km <= absolute_distance_km <= to_km:
+                            seg_distance_km = absolute_distance_km
+                            logger.info(
+                                f"Location {location.get('loc_id')} ({event}): Projected onto segment {seg_id} centerline: {absolute_distance_km:.3f}km (from_km={from_km:.3f} + seg_dist={seg_distance_relative_km:.3f}km)"
+                            )
+                        else:
+                            logger.debug(
+                                f"Location {location.get('loc_id')} ({event}): Segment {seg_id} centerline distance {absolute_distance_km:.3f}km outside range [{from_km:.3f}, {to_km:.3f}], trying fallback"
+                            )
+                
+                # Fallback: use full course projection if centerline projection failed or unavailable
+                if seg_distance_km is None:
                     if (from_km - 0.1) <= distance_km <= (to_km + 0.1):
-                        matches_segment = True
-                        matched_segment_distance = max(from_km, min(distance_km, to_km))
+                        seg_distance_km = max(from_km, min(distance_km, to_km))
                         logger.info(
-                            f"Location {location.get('loc_id')} ({event}): Using full course distance {distance_km:.3f}km for segment {seg_id} (no centerline, clamped to {matched_segment_distance:.3f}km)"
+                            f"Location {location.get('loc_id')} ({event}): Using full course distance {distance_km:.3f}km for segment {seg_id} (clamped to {seg_distance_km:.3f}km)"
                         )
-                        break
                     else:
-                        logger.debug(f"Location {location.get('loc_id')} ({event}): Full course distance {distance_km:.3f}km not within segment {seg_id} range [{from_km - 0.1:.3f}, {to_km + 0.1:.3f}]km")
-                    continue
-                
-                # Project location onto segment centerline
-                seg_line_coords = seg_coords[0]["line_coords"]
-                seg_points_utm = [
-                    WGS84_TO_UTM.transform(lon, lat) for lon, lat in seg_line_coords
-                ]
-                seg_line_utm = LineString(seg_points_utm)
-                
-                # Check distance from location to segment centerline
-                distance_to_seg_m = location_point_utm.distance(seg_line_utm)
-                
-                if distance_to_seg_m <= LOCATION_SNAP_THRESHOLD_M:
-                    # Project onto segment centerline to get distance along segment
-                    seg_distance_m = seg_line_utm.project(location_point_utm)
-                    seg_distance_km = seg_distance_m / METERS_PER_KM
-                    
-                    # Convert to absolute course distance: from_km + distance_along_segment
-                    absolute_distance_km = from_km + seg_distance_km
-                    
-                    # Verify it's within segment bounds
-                    if from_km <= absolute_distance_km <= to_km:
-                        matches_segment = True
-                        matched_segment_distance = absolute_distance_km
-                        logger.info(
-                            f"Location {location.get('loc_id')} ({event}): Projected onto segment {seg_id} centerline: {absolute_distance_km:.3f}km (from_km={from_km:.3f} + seg_dist={seg_distance_km:.3f}km)"
-                        )
-                        break
-                    else:
+                        # Segment is listed but location doesn't match full course projection
+                        # This can happen when same physical location is at different distances on different segments
+                        # Use segment midpoint as reasonable approximation for arrival time calculation
+                        seg_distance_km = (from_km + to_km) / 2.0
                         logger.warning(
-                            f"Location {location.get('loc_id')} ({event}): Segment {seg_id} centerline distance {absolute_distance_km:.3f}km outside range [{from_km:.3f}, {to_km:.3f}]"
+                            f"Location {location.get('loc_id')} ({event}): Segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km listed but "
+                            f"centerline projection failed and full course distance {distance_km:.3f}km doesn't match. "
+                            f"Using segment midpoint {seg_distance_km:.3f}km for arrival calculations."
                         )
-                else:
-                    logger.warning(
-                        f"Location {location.get('loc_id')} ({event}): Location {distance_to_seg_m:.1f}m from segment {seg_id} centerline (threshold: {LOCATION_SNAP_THRESHOLD_M}m), trying fallback"
-                    )
-                    # Try fallback immediately for this segment
-                    if (from_km - 0.1) <= distance_km <= (to_km + 0.1):
-                        matches_segment = True
-                        matched_segment_distance = max(from_km, min(distance_km, to_km))
-                        logger.info(
-                            f"Location {location.get('loc_id')} ({event}): Using full course distance {distance_km:.3f}km for segment {seg_id} (too far from centerline, clamped to {matched_segment_distance:.3f}km)"
-                        )
-                        break
-            
-                if not matches_segment:
-                    logger.warning(
-                        f"Location {location.get('loc_id')} ({event}): Distance {distance_km:.3f}km does not match any segment ranges: {[(s, f, t) for s, f, t in segment_ranges]}"
-                    )
-                    continue
-            
-            # Calculate arrival times for ALL matching segments
-            # This handles multiple crossings (e.g., L1 outbound and L2 return for Full)
-            if matching_segments:
-                logger.debug(f"Location {location.get('loc_id')} ({event}): Found {len(matching_segments)} matching segments: {[s[0] for s in matching_segments]}")
                 
-                # Get runners for this event
-                event_runners = runners_df[runners_df["event"] == event].copy()
-                
-                if event_runners.empty:
-                    logger.warning(f"Location {location.get('loc_id')} ({event}): No runners found for event {event}")
-                    continue
-                
-                # Calculate arrival times for each matching segment
-                event_start_sec = start_times.get(event, 0) * SECONDS_PER_MINUTE
-                
-                for seg_id, seg_distance_km in matching_segments:
-                    logger.debug(f"Location {location.get('loc_id')} ({event}): Calculating arrivals for segment {seg_id} at {seg_distance_km:.3f}km")
+                # Calculate arrival times for ALL runners at this segment distance
+                # Issue #480: Same runner can contribute multiple arrival times (once per segment)
+                for _, runner in event_runners.iterrows():
+                    start_offset = runner.get("start_offset", 0)
+                    if pd.isna(start_offset):
+                        start_offset = 0
+                    # start_offset is in seconds, not minutes
                     
-                    for _, runner in event_runners.iterrows():
-                        start_offset = runner.get("start_offset", 0)
-                        if pd.isna(start_offset):
-                            start_offset = 0
-                        # start_offset is in seconds, not minutes
-                        
-                        pace_min_per_km = runner.get("pace", 0)
-                        if pd.isna(pace_min_per_km) or pace_min_per_km <= 0:
-                            continue
-                        
-                        pace_sec_per_km = pace_min_per_km * SECONDS_PER_MINUTE
-                        
-                        # Arrival time = start_time + offset (seconds) + pace * distance
-                        arrival_time = event_start_sec + start_offset + pace_sec_per_km * seg_distance_km
-                        arrival_times.append(arrival_time)
+                    pace_min_per_km = runner.get("pace", 0)
+                    if pd.isna(pace_min_per_km) or pace_min_per_km <= 0:
+                        continue
+                    
+                    pace_sec_per_km = pace_min_per_km * SECONDS_PER_MINUTE
+                    
+                    # Arrival time = start_time + offset (seconds) + pace * distance
+                    arrival_time = event_start_sec + start_offset + pace_sec_per_km * seg_distance_km
+                    arrival_times.append(arrival_time)
                 
-                logger.debug(f"Location {location.get('loc_id')} ({event}): Calculated {len(arrival_times)} total arrival times across {len(matching_segments)} segments")
-                continue  # Skip the single-segment calculation below
-            else:
-                # No segments matched, try centerline approach
-                matches_segment = False
-                matched_segment_distance = None
+                processed_segments.append(seg_id)
+            
+            logger.info(
+                f"Location {location.get('loc_id')} ({event}): Processed {len(processed_segments)} segments: {processed_segments}, "
+                f"calculated arrival times for {len(event_runners)} runners across {len(processed_segments)} segments"
+            )
+            continue  # Skip the single-segment calculation below
         else:
             # Fallback: find nearest segment
             nearest = find_nearest_segment(location_point_utm, segments_df, courses, event)
