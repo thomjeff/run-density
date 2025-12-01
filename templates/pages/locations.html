@@ -83,14 +83,16 @@
                     <th>ID</th>
                     <th>Location</th>
                     <th>Type</th>
+                    <th>Zone</th>
                     <th>Operational Window</th>
                     <th>Duration</th>
                     <th>Peak Window</th>
+                    <th>Source</th>
                 </tr>
             </thead>
             <tbody id="locations-tbody">
                 <tr>
-                    <td colspan="6" class="placeholder">Loading locations data...</td>
+                    <td colspan="8" class="placeholder">Loading locations data...</td>
                 </tr>
             </tbody>
         </table>
@@ -130,6 +132,10 @@
             <tr>
                 <td><strong>Peak Window</strong></td>
                 <td>The time window from <em>peak_start</em> (25th percentile arrival) to <em>peak_end</em> (75th percentile arrival), representing when the majority of runners pass this location. For traffic locations, this will be null/NA.</td>
+            </tr>
+            <tr>
+                <td><strong>Source</strong></td>
+                <td>Indicates how the timing data was derived: <em>Modeled</em> (calculated from runner arrival times), <em>Proxy: {id}</em> (end time derived from another location's timing), or <em>Error: proxy not found</em> (proxy location was not available).</td>
             </tr>
         </tbody>
     </table>
@@ -200,11 +206,13 @@
             loc_id: feature.properties.loc_id,
             loc_label: feature.properties.loc_label,
             loc_type: feature.properties.loc_type,
+            zone: feature.properties.zone,
             loc_start: feature.properties.loc_start,
             loc_end: feature.properties.loc_end,
             duration: feature.properties.duration,
             peak_start: feature.properties.peak_start,
-            peak_end: feature.properties.peak_end
+            peak_end: feature.properties.peak_end,
+            timing_source: feature.properties.timing_source
         }));
         
         // Store for later use
@@ -236,10 +244,24 @@
             const locLabel = location.loc_label || "—";
             const locType = location.loc_type || "—";
             
+            // Helper function to format time from hh:mm:ss to hh:mm
+            function formatTimeToHHMM(timeStr) {
+                if (!timeStr || timeStr === "NA") return null;
+                // If already in hh:mm format, return as-is
+                if (timeStr.match(/^\d{2}:\d{2}$/)) return timeStr;
+                // If in hh:mm:ss format, drop seconds
+                if (timeStr.match(/^\d{2}:\d{2}:\d{2}$/)) {
+                    return timeStr.substring(0, 5); // Take first 5 characters (hh:mm)
+                }
+                return timeStr; // Fallback: return original if format unexpected
+            }
+            
             // Format operational window (loc_start → loc_end)
             const locStart = location.loc_start && location.loc_start !== "NA" ? location.loc_start : null;
             const locEnd = location.loc_end && location.loc_end !== "NA" ? location.loc_end : null;
-            const operationalWindow = (locStart && locEnd) ? `${locStart} → ${locEnd}` : "—";
+            const locStartFormatted = formatTimeToHHMM(locStart);
+            const locEndFormatted = formatTimeToHHMM(locEnd);
+            const operationalWindow = (locStartFormatted && locEndFormatted) ? `${locStartFormatted} → ${locEndFormatted}` : "—";
             
             // Format duration (numeric value only, no "min" suffix)
             const duration = location.duration !== null && location.duration !== undefined && location.duration !== "NA" 
@@ -249,18 +271,41 @@
             // Format peak window (peak_start → peak_end)
             const peakStart = location.peak_start && location.peak_start !== "NA" ? location.peak_start : null;
             const peakEnd = location.peak_end && location.peak_end !== "NA" ? location.peak_end : null;
-            const peakWindow = (peakStart && peakEnd) ? `${peakStart} → ${peakEnd}` : "—";
+            const peakStartFormatted = formatTimeToHHMM(peakStart);
+            const peakEndFormatted = formatTimeToHHMM(peakEnd);
+            const peakWindow = (peakStartFormatted && peakEndFormatted) ? `${peakStartFormatted} → ${peakEndFormatted}` : "—";
             
             // Get loc_id
             const locId = location.loc_id !== null && location.loc_id !== undefined ? location.loc_id : "—";
+            
+            // Format zone
+            const zone = location.zone && location.zone !== "NA" && location.zone !== "" ? location.zone : "—";
+            
+            // Format timing source (Issue #479)
+            let timingSource = "Modeled";
+            const timingSourceRaw = location.timing_source;
+            if (timingSourceRaw) {
+                if (timingSourceRaw.startsWith("proxy:")) {
+                    const proxyId = timingSourceRaw.replace("proxy:", "");
+                    timingSource = `Proxy: ${proxyId}`;
+                } else if (timingSourceRaw === "error:proxy_not_found") {
+                    timingSource = "Error: proxy not found";
+                } else if (timingSourceRaw === "modeled") {
+                    timingSource = "Modeled";
+                } else {
+                    timingSource = timingSourceRaw; // Fallback to raw value
+                }
+            }
             
             row.innerHTML = `
                 <td>${locId}</td>
                 <td>${locLabel}</td>
                 <td>${locType}</td>
+                <td>${zone}</td>
                 <td>${operationalWindow}</td>
                 <td>${duration}</td>
                 <td>${peakWindow}</td>
+                <td>${timingSource}</td>
             `;
             
             // Add click handler for table-to-map filtering
