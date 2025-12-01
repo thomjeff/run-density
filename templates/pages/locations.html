@@ -121,7 +121,7 @@
         <table id="locations-table">
             <thead>
                 <tr>
-                    <th>ID</th>
+                    <th class="sortable" data-sort="loc_id">ID <span class="sort-indicator"></span></th>
                     <th>Location</th>
                     <th class="sortable" data-sort="zone">Zone <span class="sort-indicator"></span></th>
                     <th class="sortable" data-sort="first_runner">First Runner <span class="sort-indicator"></span></th>
@@ -414,6 +414,10 @@
             let aVal, bVal;
             
             switch(column) {
+                case 'loc_id':
+                    aVal = a.loc_id != null && a.loc_id !== undefined ? Number(a.loc_id) : Infinity;
+                    bVal = b.loc_id != null && b.loc_id !== undefined ? Number(b.loc_id) : Infinity;
+                    break;
                 case 'zone':
                     aVal = a.zone != null && a.zone !== "NA" && a.zone !== "" ? Number(a.zone) : Infinity;
                     bVal = b.zone != null && b.zone !== "NA" && b.zone !== "" ? Number(b.zone) : Infinity;
