@@ -329,6 +329,8 @@
         return hhmmStr.substring(0, 2) + ':' + hhmmStr.substring(2, 4);
     }
     
+    let zoneFilterPopulated = false;
+    
     /**
      * Populate zone filter dropdown with unique zones
      * @param {Array} locations - Array of location objects
@@ -337,11 +339,25 @@
         const zoneSelect = document.getElementById('filter-zone');
         if (!zoneSelect) return;
         
-        // Preserve currently selected value
-        const currentValue = zoneSelect.value;
-        
         // Get unique zones
         const zones = [...new Set(locations.map(loc => loc.zone).filter(z => z != null && z !== "NA" && z !== ""))].sort((a, b) => a - b);
+        
+        // Only populate if dropdown hasn't been populated yet, or if zones have changed
+        const existingZones = Array.from(zoneSelect.options)
+            .slice(1) // Skip "All Zones" option
+            .map(opt => Number(opt.value))
+            .sort((a, b) => a - b);
+        
+        const zonesMatch = existingZones.length === zones.length && 
+            existingZones.every((z, i) => z === zones[i]);
+        
+        if (zoneFilterPopulated && zonesMatch) {
+            // Already populated with same zones, don't reset
+            return;
+        }
+        
+        // Preserve currently selected value
+        const currentValue = zoneSelect.value;
         
         // Clear existing options except "All Zones"
         zoneSelect.innerHTML = '<option value="">All Zones</option>';
@@ -358,6 +374,8 @@
         if (currentValue && zones.includes(Number(currentValue))) {
             zoneSelect.value = currentValue;
         }
+        
+        zoneFilterPopulated = true;
     }
     
     /**
@@ -560,7 +578,13 @@
         // Zone filter
         const zoneFilter = document.getElementById('filter-zone');
         if (zoneFilter) {
-            zoneFilter.addEventListener('change', applyFiltersAndRender);
+            // Use 'change' event which fires after selection is made
+            zoneFilter.addEventListener('change', function(e) {
+                // Small delay to ensure value is set before filtering
+                setTimeout(() => {
+                    applyFiltersAndRender();
+                }, 10);
+            });
         }
         
         // First Runner filters
