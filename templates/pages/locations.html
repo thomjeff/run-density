@@ -80,6 +80,17 @@
     <!-- Filter Controls (Issue #483) -->
     <div class="card" style="margin-bottom: 1rem; padding: 1rem; background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 4px; position: relative; z-index: 100;">
         <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: end;">
+            <!-- Type Filter -->
+            <div style="position: relative; z-index: 101;">
+                <label for="filter-type" style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.9rem; color: #2c3e50;">Type</label>
+                <select id="filter-type" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem; position: relative; z-index: 102; background: white;">
+                    <option value="">All Types</option>
+                </select>
+            </div>
+            
+            <!-- Visual Separator -->
+            <div style="width: 1px; background-color: #ddd; align-self: stretch; margin: 0 0.5rem;"></div>
+            
             <!-- Zone Filter -->
             <div style="position: relative; z-index: 101;">
                 <label for="filter-zone" style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.9rem; color: #2c3e50;">Zone</label>
@@ -87,6 +98,9 @@
                     <option value="">All Zones</option>
                 </select>
             </div>
+            
+            <!-- Visual Separator -->
+            <div style="width: 1px; background-color: #ddd; align-self: stretch; margin: 0 0.5rem;"></div>
             
             <!-- First Runner Filter -->
             <div>
@@ -129,7 +143,7 @@
                 <tr>
                     <th class="sortable" data-sort="loc_id">ID <span class="sort-indicator"></span></th>
                     <th>Location</th>
-                    <th>Type</th>
+                    <th class="sortable" data-sort="loc_type">Type <span class="sort-indicator"></span></th>
                     <th class="sortable" data-sort="zone">Zone <span class="sort-indicator"></span></th>
                     <th class="sortable" data-sort="first_runner">First Runner <span class="sort-indicator"></span></th>
                     <th class="sortable" data-sort="last_runner">Last Runner <span class="sort-indicator"></span></th>
@@ -243,7 +257,8 @@
                         });
                     }
                     
-                    // Populate zone filter dropdown
+                    // Populate filter dropdowns
+                    populateTypeFilter(data.locations);
                     populateZoneFilter(data.locations);
                     
                     // Apply filters and render
@@ -296,8 +311,9 @@
             locationsData = locations;
         }
         
-        // Populate zone filter dropdown only if new data or explicitly requested
+        // Populate filter dropdowns only if new data or explicitly requested
         if (!skipZoneRepopulation && isNewData) {
+            populateTypeFilter(locations);
             populateZoneFilter(locations);
         }
         
@@ -351,6 +367,59 @@
     }
     
     let zoneFilterPopulated = false;
+    let typeFilterPopulated = false;
+    
+    /**
+     * Populate type filter dropdown with unique types
+     * @param {Array} locations - Array of location objects
+     */
+    function populateTypeFilter(locations) {
+        const typeSelect = document.getElementById('filter-type');
+        if (!typeSelect) return;
+        
+        // Don't repopulate if dropdown is currently open (has focus)
+        if (document.activeElement === typeSelect) {
+            return;
+        }
+        
+        // Get unique types
+        const types = [...new Set(locations.map(loc => loc.loc_type).filter(t => t != null && t !== "NA" && t !== ""))].sort();
+        
+        // Only populate if dropdown hasn't been populated yet, or if types have changed
+        const existingTypes = Array.from(typeSelect.options)
+            .slice(1) // Skip "All Types" option
+            .map(opt => opt.value)
+            .sort();
+        
+        const typesMatch = existingTypes.length === types.length && 
+            existingTypes.every((t, i) => t === types[i]);
+        
+        if (typeFilterPopulated && typesMatch) {
+            // Already populated with same types, don't reset
+            return;
+        }
+        
+        // Preserve currently selected value
+        const currentValue = typeSelect.value;
+        
+        // Clear existing options except "All Types"
+        typeSelect.innerHTML = '<option value="">All Types</option>';
+        
+        // Add type options
+        types.forEach(type => {
+            const option = document.createElement('option');
+            option.value = type;
+            option.textContent = type.charAt(0).toUpperCase() + type.slice(1); // Capitalize first letter
+            typeSelect.appendChild(option);
+        });
+        
+        // Restore previously selected value if it still exists
+        if (currentValue && types.includes(currentValue)) {
+            typeSelect.value = currentValue;
+        }
+        
+        typeFilterPopulated = true;
+    }
     
     /**
      * Populate zone filter dropdown with unique zones
@@ -415,6 +484,7 @@
         }
         
         // Get filter values
+        const typeFilter = document.getElementById('filter-type')?.value || '';
         const zoneFilter = document.getElementById('filter-zone')?.value || '';
         const firstRunnerMin = document.getElementById('filter-first-runner-min')?.value || '';
         const firstRunnerMax = document.getElementById('filter-first-runner-max')?.value || '';
@@ -423,6 +493,11 @@
         
         // Filter locations
         let filtered = locationsData.filter(location => {
+            // Type filter
+            if (typeFilter && location.loc_type !== typeFilter) {
+                return false;
+            }
+            
             // Zone filter - compare as numbers to handle type coercion
             if (zoneFilter) {
                 const locationZone = location.zone != null ? Number(location.zone) : null;
@@ -574,6 +649,10 @@
                     aVal = a.loc_id != null && a.loc_id !== undefined ? Number(a.loc_id) : Infinity;
                     bVal = b.loc_id != null && b.loc_id !== undefined ? Number(b.loc_id) : Infinity;
                     break;
+                case 'loc_type':
+                    aVal = (a.loc_type && a.loc_type !== "NA") ? a.loc_type.toLowerCase() : '';
+                    bVal = (b.loc_type && b.loc_type !== "NA") ? b.loc_type.toLowerCase() : '';
+                    break;
                 case 'zone':
                     aVal = a.zone != null && a.zone !== "NA" && a.zone !== "" ? Number(a.zone) : Infinity;
                     bVal = b.zone != null && b.zone !== "NA" && b.zone !== "" ? Number(b.zone) : Infinity;
@@ -602,6 +681,16 @@
      * Initialize filter event listeners (Issue #483)
      */
     function initializeFilters() {
+        // Type filter
+        const typeFilter = document.getElementById('filter-type');
+        if (typeFilter) {
+            typeFilter.addEventListener('change', function(e) {
+                setTimeout(() => {
+                    applyFiltersAndRender();
+                }, 10);
+            });
+        }
+        
         // Zone filter
         const zoneFilter = document.getElementById('filter-zone');
         if (zoneFilter) {
@@ -655,6 +744,7 @@
         const clearFiltersBtn = document.getElementById('clear-filters-btn');
         if (clearFiltersBtn) {
             clearFiltersBtn.addEventListener('click', function() {
+                if (typeFilter) typeFilter.value = '';
                 if (zoneFilter) zoneFilter.value = '';
                 if (firstRunnerMin) firstRunnerMin.value = '';
                 if (firstRunnerMax) firstRunnerMax.value = '';
