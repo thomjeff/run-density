@@ -327,7 +327,89 @@
      * @param {Array} features - GeoJSON features array
      */
     function updateLocationsTableFiltered(features) {
-        updateLocationsTable(features, true);
+        if (!features || features.length === 0) {
+            // If no features visible, render empty table
+            renderLocationsTable([]);
+            return;
+        }
+        
+        // Convert features to locations format
+        const locations = features.map(feature => ({
+            loc_id: feature.properties.loc_id,
+            loc_label: feature.properties.loc_label,
+            loc_type: feature.properties.loc_type,
+            zone: feature.properties.zone,
+            loc_start: feature.properties.loc_start,
+            loc_end: feature.properties.loc_end,
+            duration: feature.properties.duration,
+            peak_start: feature.properties.peak_start,
+            peak_end: feature.properties.peak_end,
+            timing_source: feature.properties.timing_source,
+            first_runner: feature.properties.first_runner,
+            last_runner: feature.properties.last_runner
+        }));
+        
+        // Apply UI filters (Type, Zone, First Runner, Last Runner) to the map-bounds-filtered locations
+        const typeFilter = document.getElementById('filter-type')?.value || '';
+        const zoneFilter = document.getElementById('filter-zone')?.value || '';
+        const firstRunnerMin = document.getElementById('filter-first-runner-min')?.value || '';
+        const firstRunnerMax = document.getElementById('filter-first-runner-max')?.value || '';
+        const lastRunnerMin = document.getElementById('filter-last-runner-min')?.value || '';
+        const lastRunnerMax = document.getElementById('filter-last-runner-max')?.value || '';
+        
+        let filtered = locations.filter(location => {
+            // Type filter
+            if (typeFilter && location.loc_type !== typeFilter) {
+                return false;
+            }
+            
+            // Zone filter - compare as numbers to handle type coercion
+            if (zoneFilter) {
+                const locationZone = location.zone != null ? Number(location.zone) : null;
+                const filterZone = Number(zoneFilter);
+                if (locationZone !== filterZone) {
+                    return false;
+                }
+            }
+            
+            // First Runner filter
+            const firstRunnerHHMM = timeToHHMM(location.first_runner);
+            if (firstRunnerMin && (!firstRunnerHHMM || firstRunnerHHMM < firstRunnerMin)) {
+                return false;
+            }
+            if (firstRunnerMax && (!firstRunnerHHMM || firstRunnerHHMM > firstRunnerMax)) {
+                return false;
+            }
+            
+            // Last Runner filter
+            const lastRunnerHHMM = timeToHHMM(location.last_runner);
+            if (lastRunnerMin && (!lastRunnerHHMM || lastRunnerHHMM < lastRunnerMin)) {
+                return false;
+            }
+            if (lastRunnerMax && (!lastRunnerHHMM || lastRunnerHHMM > lastRunnerMax)) {
+                return false;
+            }
+            
+            return true;
+        });
+        
+        // Apply sorting
+        if (currentSort.column) {
+            filtered = sortLocations(filtered, currentSort.column, currentSort.direction);
+        } else {
+            // Default sort by loc_id
+            filtered.sort((a, b) => {
+                const idA = a.loc_id || 0;
+                const idB = b.loc_id || 0;
+                return idA - idB;
+            });
+        }
+        
+        // Update map markers (without fitting bounds - preserve user zoom)
+        filterMapToLocations(filtered.map(loc => loc.loc_id), false);
+        
+        // Render filtered and sorted data
+        renderLocationsTable(filtered);
     }
     
     /**
