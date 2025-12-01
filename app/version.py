@@ -229,11 +229,15 @@ CURRENT_VERSION=$(python3 -c "from app.version import get_current_version; print
 echo -e "Current version: ${CURRENT_VERSION}"
 
 # Get next version
-NEXT_VERSION=$(python3 -c "from app.version import get_next_version; print(get_next_version('$BUMP_TYPE'))")
+NEXT_VERSION=$(python3 -c \
+    "from app.version import get_next_version; \
+     print(get_next_version('$BUMP_TYPE'))")
 echo -e "Next version: ${NEXT_VERSION}"
 
 # Update version in code
-if python3 -c "from app.version import update_version_in_code; update_version_in_code('$NEXT_VERSION')"; then
+if python3 -c \
+    "from app.version import update_version_in_code; \
+     update_version_in_code('$NEXT_VERSION')"; then
     echo -e "${GREEN}✅ Version updated in code${NC}"
 else
     echo -e "${RED}❌ Failed to update version in code${NC}"
