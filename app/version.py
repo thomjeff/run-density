@@ -20,26 +20,26 @@ from pathlib import Path
 def get_current_version() -> str:
     """
     Get the current version from app/main.py.
-    
+
     Returns:
         Current version string (e.g., "v1.6.14")
     """
     main_py_path = Path("app/main.py")
     if not main_py_path.exists():
         raise FileNotFoundError("app/main.py not found")
-    
+
     content = main_py_path.read_text()
     match = re.search(r'version="([^"]+)"', content)
     if not match:
         raise ValueError("Version not found in app/main.py")
-    
+
     return match.group(1)
 
 
 def get_latest_git_tag() -> Optional[str]:
     """
     Get the latest git tag.
-    
+
     Returns:
         Latest tag name or None if no tags exist
     """
@@ -59,21 +59,21 @@ def get_latest_git_tag() -> Optional[str]:
 def parse_version(version: str) -> Tuple[int, int, int]:
     """
     Parse version string into major, minor, patch components.
-    
+
     Args:
         version: Version string (e.g., "v1.6.14")
-        
+
     Returns:
         Tuple of (major, minor, patch) integers
     """
     # Remove 'v' prefix if present
     version = version.lstrip('v')
-    
+
     # Split by dots and convert to integers
     parts = version.split('.')
     if len(parts) != 3:
         raise ValueError(f"Invalid version format: {version}")
-    
+
     try:
         return tuple(int(part) for part in parts)
     except ValueError:
@@ -83,12 +83,12 @@ def parse_version(version: str) -> Tuple[int, int, int]:
 def format_version(major: int, minor: int, patch: int) -> str:
     """
     Format version components into version string.
-    
+
     Args:
         major: Major version number
-        minor: Minor version number  
+        minor: Minor version number
         patch: Patch version number
-        
+
     Returns:
         Version string (e.g., "v1.6.14")
     """
@@ -98,16 +98,16 @@ def format_version(major: int, minor: int, patch: int) -> str:
 def get_next_version(bump_type: str = "patch") -> str:
     """
     Get the next version number based on current version and bump type.
-    
+
     Args:
         bump_type: Type of version bump ("major", "minor", "patch")
-        
+
     Returns:
         Next version string
     """
     current_version = get_current_version()
     major, minor, patch = parse_version(current_version)
-    
+
     if bump_type == "major":
         return format_version(major + 1, 0, 0)
     elif bump_type == "minor":
@@ -121,10 +121,10 @@ def get_next_version(bump_type: str = "patch") -> str:
 def update_version_in_code(new_version: str) -> bool:
     """
     Update version in app/main.py.
-    
+
     Args:
         new_version: New version string (e.g., "v1.6.15")
-        
+
     Returns:
         True if successful, False otherwise
     """
@@ -132,23 +132,23 @@ def update_version_in_code(new_version: str) -> bool:
     if not main_py_path.exists():
         print("❌ app/main.py not found")
         return False
-    
+
     try:
         content = main_py_path.read_text()
-        
+
         # Replace version in FastAPI app definition
         pattern = r'version="[^"]+"'
         replacement = f'version="{new_version}"'
         new_content = re.sub(pattern, replacement, content)
-        
+
         if new_content == content:
-            print(f"❌ Version not found or not updated in app/main.py")
+            print("❌ Version not found or not updated in app/main.py")
             return False
-        
+
         main_py_path.write_text(new_content)
         print(f"✅ Updated version in app/main.py to {new_version}")
         return True
-        
+
     except Exception as e:
         print(f"❌ Error updating version: {e}")
         return False
@@ -157,25 +157,25 @@ def update_version_in_code(new_version: str) -> bool:
 def validate_version_consistency() -> bool:
     """
     Validate that version in code matches the latest git tag.
-    
+
     Returns:
         True if versions match, False otherwise
     """
     try:
         code_version = get_current_version()
         git_tag = get_latest_git_tag()
-        
+
         if not git_tag:
             print("⚠️  No git tags found")
             return True  # No tags to compare against
-        
+
         if code_version == git_tag:
             print(f"✅ Version consistency: {code_version} matches git tag")
             return True
         else:
             print(f"❌ Version mismatch: code={code_version}, git_tag={git_tag}")
             return False
-            
+
     except Exception as e:
         print(f"❌ Error validating version consistency: {e}")
         return False
@@ -184,7 +184,7 @@ def validate_version_consistency() -> bool:
 def create_version_bump_script() -> str:
     """
     Create a version bump script for easy use.
-    
+
     Returns:
         Path to the created script
     """
@@ -229,11 +229,15 @@ CURRENT_VERSION=$(python3 -c "from app.version import get_current_version; print
 echo -e "Current version: ${CURRENT_VERSION}"
 
 # Get next version
-NEXT_VERSION=$(python3 -c "from app.version import get_next_version; print(get_next_version('$BUMP_TYPE'))")
+NEXT_VERSION=$(python3 -c \
+    "from app.version import get_next_version; \
+     print(get_next_version('$BUMP_TYPE'))")
 echo -e "Next version: ${NEXT_VERSION}"
 
 # Update version in code
-if python3 -c "from app.version import update_version_in_code; update_version_in_code('$NEXT_VERSION')"; then
+if python3 -c \
+    "from app.version import update_version_in_code; \
+     update_version_in_code('$NEXT_VERSION')"; then
     echo -e "${GREEN}✅ Version updated in code${NC}"
 else
     echo -e "${RED}❌ Failed to update version in code${NC}"
@@ -258,7 +262,7 @@ echo -e "3. Create GitHub release: gh release create $NEXT_VERSION"
     script_path.parent.mkdir(exist_ok=True)
     script_path.write_text(script_content)
     script_path.chmod(0o755)
-    
+
     return str(script_path)
 
 
@@ -273,9 +277,9 @@ if __name__ == "__main__":
         print("  validate         - Validate version consistency")
         print("  create-script    - Create version bump script")
         sys.exit(1)
-    
+
     command = sys.argv[1]
-    
+
     if command == "current":
         print(get_current_version())
     elif command == "next":
