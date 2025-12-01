@@ -12,7 +12,6 @@
         overflow: hidden;
         position: relative;
         background: transparent !important;
-        z-index: 1;
     }
     
     .map-loading {
@@ -138,8 +137,7 @@
         </div>
     </div>
     
-    <!-- Scrollable table container (Issue #484) -->
-    <div style="overflow-x: auto; overflow-y: auto; max-height: 75vh; border: 1px solid #e0e0e0; border-radius: 4px; position: relative;">
+    <div style="overflow-x: auto;">
         <table id="locations-table">
             <thead>
                 <tr>
@@ -959,20 +957,6 @@
         color: #2c3e50;
     }
     
-    /* Scrollable table container (Issue #484) */
-    div[style*="max-height"] {
-        /* Ensure scrollable container doesn't interfere with map events */
-        touch-action: pan-y;
-    }
-    
-    /* Sticky header for scrollable table (Issue #484) */
-    #locations-table thead th {
-        position: sticky;
-        top: 0;
-        background: #f8f9fa;
-        z-index: 10;
-        box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
-    }
     
     #locations-table tbody tr:hover {
         background: #f8f9fa;
