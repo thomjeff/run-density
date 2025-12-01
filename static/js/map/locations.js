@@ -522,12 +522,12 @@ function highlightLocationInTable(locId) {
             row.style.cursor = 'pointer';
             
             // Scroll into view within scrollable container (Issue #484)
-            // Find the scrollable container parent
-            const scrollableContainer = row.closest('div[style*="overflow-y"]') || 
-                                       document.querySelector('#locations-table').closest('div[style*="max-height"]');
+            // Find the scrollable container (parent div with max-height)
+            const table = document.querySelector('#locations-table');
+            const scrollableContainer = table ? table.closest('div[style*="max-height"]') : null;
             
             if (scrollableContainer) {
-                // Scroll within the container
+                // Calculate scroll position to center row in container
                 const containerRect = scrollableContainer.getBoundingClientRect();
                 const rowRect = row.getBoundingClientRect();
                 const scrollTop = scrollableContainer.scrollTop;
@@ -535,16 +535,16 @@ function highlightLocationInTable(locId) {
                 const rowHeight = row.offsetHeight;
                 const containerHeight = scrollableContainer.clientHeight;
                 
-                // Calculate desired scroll position (center the row)
+                // Calculate desired scroll position (center the row vertically)
                 const desiredScrollTop = rowTop - (containerHeight / 2) + (rowHeight / 2);
                 
                 scrollableContainer.scrollTo({
-                    top: desiredScrollTop,
+                    top: Math.max(0, desiredScrollTop),
                     behavior: 'smooth'
                 });
             } else {
-                // Fallback to standard scrollIntoView
-                row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // Fallback to standard scrollIntoView (works with scrollable containers)
+                row.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
             }
             
             console.log(`✅ Highlighted table row for location ${locId}`);
