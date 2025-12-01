@@ -339,6 +339,12 @@
         const zoneSelect = document.getElementById('filter-zone');
         if (!zoneSelect) return;
         
+        // Don't repopulate if dropdown is currently open (has focus)
+        if (document.activeElement === zoneSelect) {
+            console.log('Zone dropdown is open, skipping repopulation');
+            return;
+        }
+        
         // Get unique zones
         const zones = [...new Set(locations.map(loc => loc.zone).filter(z => z != null && z !== "NA" && z !== ""))].sort((a, b) => a - b);
         
