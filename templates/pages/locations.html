@@ -318,7 +318,8 @@
         }
         
         // Apply current filters and render
-        applyFiltersAndRender();
+        // If skipZoneRepopulation is true, this is from map bounds filtering - don't fit bounds
+        applyFiltersAndRender(!skipZoneRepopulation);
     }
     
     /**
@@ -477,8 +478,9 @@
     /**
      * Apply filters and render table (Issue #483)
      * Also updates map to show only filtered locations
+     * @param {boolean} fitBounds - Whether to fit map bounds to filtered locations (default: true)
      */
-    function applyFiltersAndRender() {
+    function applyFiltersAndRender(fitBounds = true) {
         if (!locationsData || locationsData.length === 0) {
             return;
         }
@@ -540,8 +542,8 @@
             });
         }
         
-        // Update map to show only filtered locations
-        filterMapToLocations(filtered.map(loc => loc.loc_id));
+        // Update map to show only filtered locations (only fit bounds if requested)
+        filterMapToLocations(filtered.map(loc => loc.loc_id), fitBounds);
         
         // Render filtered and sorted data
         renderLocationsTable(filtered);
@@ -550,8 +552,9 @@
     /**
      * Filter map markers to show only specified location IDs
      * @param {Array<number|string>} visibleLocIds - Array of location IDs to show
+     * @param {boolean} fitBounds - Whether to fit map bounds to visible markers (default: true)
      */
-    function filterMapToLocations(visibleLocIds) {
+    function filterMapToLocations(visibleLocIds, fitBounds = true) {
         if (!window.locationsLayer || !window.locationsMarkersByLocId) {
             return; // Map not initialized yet
         }
@@ -588,8 +591,8 @@
             }
         });
         
-        // Fit map bounds to visible markers if any
-        if (hasVisibleMarkers && visibleLocIds.length > 0) {
+        // Fit map bounds to visible markers if requested and if any visible
+        if (fitBounds && hasVisibleMarkers && visibleLocIds.length > 0) {
             const visibleMarkers = visibleLocIds
                 .map(id => window.locationsMarkersByLocId[String(id)])
                 .filter(m => m != null);
