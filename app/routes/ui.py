@@ -28,7 +28,7 @@ from app.utils.auth import (
 logger = logging.getLogger(__name__)
 
 # Initialize templates
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory="frontend/templates")
 
 # Create router
 router = APIRouter()

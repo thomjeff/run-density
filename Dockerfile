@@ -15,8 +15,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
     COPY data ./data
     COPY config ./config
-    COPY static ./static
-    COPY templates ./templates
+    COPY frontend/static ./frontend/static
+    COPY frontend/templates ./frontend/templates
 COPY e2e.py ./
 
 EXPOSE 8080

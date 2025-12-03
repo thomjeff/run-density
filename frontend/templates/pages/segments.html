@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+
+{% block title %}Segments{% endblock %}
+
+{% block extra_head %}
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+    #segments-map {
+        height: 500px;
+        border-radius: 4px;
+        overflow: hidden;
+        position: relative;
+        background: transparent !important;
+    }
+    
+    .map-loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(255, 255, 255, 0.9);
+        padding: 1rem 2rem;
+        border-radius: 4px;
+        font-weight: 500;
+        color: #666;
+    }
+    
+    
+    .segment-tooltip {
+        font-size: 0.875rem;
+        line-height: 1.4;
+    }
+    
+    .segment-tooltip .segment-id {
+        font-weight: 600;
+        color: #2c3e50;
+    }
+    
+    .segment-tooltip .segment-metrics {
+        margin-top: 0.25rem;
+        font-size: 0.75rem;
+        color: #666;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Course Segments</h2>
+    {% if meta %}
+    {% endif %}
+</div>
+
+<!-- Map Container -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Course Map</h3>
+    <div id="segments-map" aria-label="Course segments map" style="position: relative;">
+        <div class="map-loading">Loading map data...</div>
+        
+        <!-- Filter Controls Overlay -->
+        <div id="map-filter-controls" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(255, 255, 255, 0.95); padding: 0.75rem; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); display: none; max-width: 300px;">
+            <div style="display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-end;">
+                <button id="clear-filter-btn" onclick="clearMapFilter()" style="padding: 0.4rem 0.8rem; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem;">
+                    Clear Filter
+                </button>
+                <span id="filter-status" style="color: #495057; font-size: 0.85rem; text-align: right; line-height: 1.3;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Segment Metadata Table -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Segment Metadata</h3>
+    <table id="segments-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Length (km)</th>
+                <th>Width (m)</th>
+                <th>Direction</th>
+                <th>Events</th>
+                <th>LOS</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td colspan="8" class="placeholder">Loading segment data...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- Level of Service (LOS) Reference -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Level of Service (LOS) Reference</h3>
+    <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">Defined by areal density (ρ) in persons per square meter (p/m²).</p>
+    <table>
+        <thead>
+            <tr>
+                <th>LOS</th>
+                <th>Density Range (p/m²)</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><span class="badge-los badge-A">A</span></td>
+                <td>0.00 – 0.36</td>
+                <td>Free Flow</td>
+            </tr>
+            <tr>
+                <td><span class="badge-los badge-B">B</span></td>
+                <td>0.36 – 0.54</td>
+                <td>Comfortable</td>
+            </tr>
+            <tr>
+                <td><span class="badge-los badge-C">C</span></td>
+                <td>0.54 – 0.72</td>
+                <td>Moderate</td>
+            </tr>
+            <tr>
+                <td><span class="badge-los badge-D">D</span></td>
+                <td>0.72 – 1.08</td>
+                <td>Dense</td>
+            </tr>
+            <tr>
+                <td><span class="badge-los badge-E">E</span></td>
+                <td>1.08 – 1.63</td>
+                <td>Very Dense</td>
+            </tr>
+            <tr>
+                <td><span class="badge-los badge-F">F</span></td>
+                <td>1.63+</td>
+                <td>Extremely Dense</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- External JavaScript modules -->
+<script src="/static/js/map/base_map.js"></script>
+<script src="/static/js/map/segments.js"></script>
+
+<!-- Table interaction script -->
+<script>
+    // Table interaction functionality (preserved from original)
+    let segmentsLayer;
+    let map;
+    
+    // Get focus parameter from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const focusSegmentId = urlParams.get('focus');
+    
+    // Initialize table interactions when DOM is ready
+    document.addEventListener('DOMContentLoaded', function() {
+        // Wait for map to be initialized by segments.js
+        setTimeout(() => {
+            // Get references to map and segments layer from global scope
+            map = window.map || document.querySelector('#segments-map')._leaflet_id ? L.map('segments-map') : null;
+            segmentsLayer = window.segmentsLayer;
+            
+            if (focusSegmentId) {
+                focusOnSegment(focusSegmentId);
+            }
+        }, 100);
+    });
+    
+    function focusOnSegment(segmentId) {
+        if (!segmentsLayer) return;
+        
+        segmentsLayer.eachLayer(function(layer) {
+            if (layer.feature.properties.seg_id === segmentId) {
+                // Highlight the segment
+                layer.setStyle({
+                    weight: 6,
+                    opacity: 1.0
+                });
+                
+                // Fit bounds to this segment
+                map.fitBounds(layer.getBounds(), { padding: [50, 50] });
+                
+                // Open tooltip
+                layer.openTooltip();
+                
+                // Highlight in table
+                highlightSegmentInTable(segmentId);
+            }
+        });
+    }
+    
+    function highlightSegmentInTable(segmentId) {
+        // Remove existing highlights
+        document.querySelectorAll('#segments-table tr.highlighted').forEach(row => {
+            row.classList.remove('highlighted');
+        });
+        
+        // Find and highlight the row
+        const rows = document.querySelectorAll('#segments-table tbody tr');
+        rows.forEach(row => {
+            const idCell = row.querySelector('td:first-child');
+            if (idCell && idCell.textContent === segmentId) {
+                row.classList.add('highlighted');
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        });
+    }
+    
+    // Make functions globally available for external scripts
+    window.focusOnSegment = focusOnSegment;
+    window.highlightSegmentInTable = highlightSegmentInTable;
+</script>
+
+<style>
+    /* Table row highlighting */
+    #segments-table tr.highlighted {
+        background-color: #e3f2fd !important;
+        border-left: 4px solid #2196f3;
+    }
+    
+    #segments-table tbody tr {
+        cursor: pointer;
+    }
+    
+    #segments-table tbody tr:hover {
+        background-color: #f5f5f5;
+    }
+</style>
+{% endblock %}
+
