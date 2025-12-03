@@ -804,6 +804,7 @@ def calculate_flow_segment_counts(reports_root: Path, run_id: str) -> Tuple[int,
     Calculate overtaking and co-presence segment counts from Flow.csv.
     
     Issue #304: Counts unique segments with overtaking or co-presence activity.
+    Issue #486: Fixed to find Flow.csv in reports/ subdirectory and handle both Flow.csv and *-Flow.csv patterns.
     
     Args:
         reports_root: Root directory containing reports
@@ -813,12 +814,27 @@ def calculate_flow_segment_counts(reports_root: Path, run_id: str) -> Tuple[int,
         Tuple of (overtaking_segments_count, co_presence_segments_count)
     """
     try:
-        # Find the latest Flow.csv file
+        # Issue #486: Find Flow.csv in reports/ subdirectory
+        # Flow.csv is located at: runflow/<run_id>/reports/Flow.csv
         run_dir = reports_root / run_id
-        flow_files = sorted(run_dir.glob("*-Flow.csv"), reverse=True)
+        reports_dir = run_dir / "reports"
+        
+        # Try both patterns: Flow.csv (no prefix) and *-Flow.csv (with prefix, for backward compat)
+        flow_files = []
+        if reports_dir.exists():
+            # Look for Flow.csv (exact match) and *-Flow.csv (pattern match)
+            flow_files.extend(reports_dir.glob("Flow.csv"))
+            flow_files.extend(reports_dir.glob("*-Flow.csv"))
+        
+        # Also check run_dir directly for backward compatibility
+        if not flow_files:
+            flow_files.extend(run_dir.glob("Flow.csv"))
+            flow_files.extend(run_dir.glob("*-Flow.csv"))
+        
+        flow_files = sorted(set(flow_files), reverse=True)  # Remove duplicates and sort
         
         if not flow_files:
-            print(f"⚠️  No Flow.csv found in {run_dir}, returning zero counts")
+            print(f"⚠️  No Flow.csv found in {run_dir} or {reports_dir}, returning zero counts")
             return (0, 0)
         
         flow_path = flow_files[0]  # Get most recent

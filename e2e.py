@@ -350,7 +350,7 @@ def main():
         run_id = None
         
         try:
-            from app.core.artifacts.frontend import export_ui_artifacts
+            from app.core.artifacts.frontend import export_ui_artifacts, calculate_flow_segment_counts
             import re
                 
             # Issue #455: Check runflow directory first for UUID runs
@@ -366,7 +366,11 @@ def main():
                     latest_run_dir = uuid_dirs[0]
                     run_id = latest_run_dir.name
                     print(f"Exporting artifacts from runflow: {latest_run_dir}")
-                    export_ui_artifacts(latest_run_dir, run_id)
+                    
+                    # Issue #486: Calculate flow segment counts before exporting
+                    reports_root = latest_run_dir.parent  # Parent directory (runflow/)
+                    overtaking_segments, co_presence_segments = calculate_flow_segment_counts(reports_root, run_id)
+                    export_ui_artifacts(latest_run_dir, run_id, overtaking_segments, co_presence_segments)
                         
                     # Issue #455: Refresh metadata after UI export
                     try:
@@ -405,7 +409,11 @@ def main():
                         run_id = latest_run_dir.name
                         
                         print(f"Exporting artifacts from legacy reports: {latest_run_dir}")
-                        export_ui_artifacts(latest_run_dir, run_id)
+                        
+                        # Issue #486: Calculate flow segment counts before exporting
+                        reports_root = latest_run_dir.parent  # Parent directory (reports/)
+                        overtaking_segments, co_presence_segments = calculate_flow_segment_counts(reports_root, run_id)
+                        export_ui_artifacts(latest_run_dir, run_id, overtaking_segments, co_presence_segments)
                         
                         # Issue #455: Refresh metadata after UI export (legacy mode)
                         try:
