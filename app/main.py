@@ -170,7 +170,7 @@ async def get_expected_results_csv():
 
 # Mount static files
 try:
-    app.mount("/static", StaticFiles(directory="static"), name="static")
+    app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
 except Exception as e:
     print(f"Warning: Could not mount static directory: {e}")
 

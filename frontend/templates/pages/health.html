@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+
+{% block title %}Health Check{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>System Health</h2>
+</div>
+
+<!-- Loading State -->
+<div id="loading-state" class="card">
+    <div style="text-align: center; padding: 2rem;">
+        <div class="spinner"></div>
+        <p>Loading system health data...</p>
+    </div>
+</div>
+
+<!-- Error State -->
+<div id="error-state" class="card" style="display: none;">
+    <div style="text-align: center; padding: 2rem;">
+        <h3 style="color: #e74c3c; margin-bottom: 1rem;">Health data unavailable</h3>
+        <p style="color: #7f8c8d; margin-bottom: 1rem;">Unable to load system health information for this run.</p>
+        <button onclick="loadHealthData()" class="btn btn-primary">Retry</button>
+    </div>
+</div>
+
+<!-- Health Data Content -->
+<div id="health-content" style="display: none;">
+
+<!-- System Information -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">System Information</h3>
+    <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+        <span style="color: #7f8c8d; font-size: 0.875rem;">
+            <strong>Version:</strong> <span id="version">Loading...</span>
+        </span>
+        <span style="color: #7f8c8d; font-size: 0.875rem;">
+            <strong>Last Updated:</strong> <span id="last-updated">Loading...</span>
+        </span>
+    </div>
+</div>
+
+
+<!-- API Endpoint Checks -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">API Endpoints</h3>
+    <table id="endpoint-status-table">
+        <thead>
+            <tr>
+                <th>Endpoint</th>
+                <th>Status</th>
+                <th>Latency</th>
+            </tr>
+        </thead>
+        <tbody id="endpoint-status-tbody">
+            <tr>
+                <td colspan="3" class="placeholder">Loading endpoint status...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Real-time health monitoring using existing API endpoints
+    document.addEventListener('DOMContentLoaded', function() {
+        loadHealthData();
+    });
+    
+    async function testEndpoint(url) {
+        try {
+            const response = await fetch(url, { cache: 'no-store' });
+            const data = await response.json();
+            return {
+                status: response.ok ? 'up' : 'down',
+                statusCode: response.status,
+                data: data
+            };
+        } catch (error) {
+            return {
+                status: 'error',
+                error: error.message
+            };
+        }
+    }
+    
+    async function loadHealthData() {
+        // Show loading state
+        document.getElementById('loading-state').style.display = 'block';
+        document.getElementById('error-state').style.display = 'none';
+        document.getElementById('health-content').style.display = 'none';
+        
+        try {
+            // Test all API endpoints in parallel
+            const healthChecks = {
+                basic: await testEndpoint('/health'),
+                ready: await testEndpoint('/ready'), 
+                dashboard: await testEndpoint('/api/dashboard/summary'),
+                segments: await testEndpoint('/api/segments/summary'),
+                density: await testEndpoint('/api/density/segments'),
+                flow: await testEndpoint('/api/flow/segments'),
+                reports: await testEndpoint('/api/reports/list')
+            };
+            
+            updateHealthDisplay(healthChecks);
+            document.getElementById('loading-state').style.display = 'none';
+            document.getElementById('health-content').style.display = 'block';
+        } catch (error) {
+            console.error('Error loading health data:', error);
+            showHealthError();
+        }
+    }
+    
+    function updateHealthDisplay(healthChecks) {
+        // Update system information with real-time data
+        if (healthChecks.basic.status === 'up' && healthChecks.basic.data) {
+            document.getElementById('version').textContent = healthChecks.basic.data.version || 'Unknown';
+        }
+        
+        document.getElementById('last-updated').textContent = new Date().toLocaleString();
+        
+        // Update endpoint status table with real-time results
+        updateEndpointStatusTable(healthChecks);
+        
+        // Update overall status
+        updateOverallStatus(healthChecks);
+    }
+    
+    
+    function updateEndpointStatusTable(healthChecks) {
+        const tbody = document.getElementById('endpoint-status-tbody');
+        tbody.innerHTML = '';
+        
+        const endpoints = [
+            { key: 'basic', name: '/health', description: 'Basic health check' },
+            { key: 'ready', name: '/ready', description: 'Service readiness' },
+            { key: 'dashboard', name: '/api/dashboard/summary', description: 'System metrics' },
+            { key: 'segments', name: '/api/segments/summary', description: 'Segment data' },
+            { key: 'density', name: '/api/density/segments', description: 'Density analysis' },
+            { key: 'flow', name: '/api/flow/segments', description: 'Flow analysis' },
+            { key: 'reports', name: '/api/reports/list', description: 'Report generation' }
+        ];
+        
+        endpoints.forEach(endpoint => {
+            const check = healthChecks[endpoint.key];
+            const row = document.createElement('tr');
+            
+            const statusClass = check.status === 'up' ? 'status-ok' : 
+                              check.status === 'down' ? 'status-error' : 'status-unknown';
+            const statusText = check.status === 'up' ? '🟢 Up' : 
+                             check.status === 'down' ? `🔴 Down (${check.statusCode})` : '🟡 Error';
+            const errorText = check.error ? ` - ${check.error}` : '';
+            
+            row.innerHTML = `
+                <td>${endpoint.name}</td>
+                <td class="${statusClass}">${statusText}${errorText}</td>
+                <td>—</td>
+            `;
+            
+            tbody.appendChild(row);
+        });
+    }
+    
+    function updateOverallStatus(healthChecks) {
+        const criticalEndpoints = ['basic', 'ready', 'dashboard'];
+        const criticalDown = criticalEndpoints.some(ep => healthChecks[ep].status !== 'up');
+        
+        let statusClass, statusText;
+        if (criticalDown) {
+            statusClass = 'status-error';
+            statusText = '❌ Critical Issues';
+        } else {
+            const allUp = Object.values(healthChecks).every(check => check.status === 'up');
+            if (allUp) {
+                statusClass = 'status-ok';
+                statusText = '✅ All Systems Operational';
+            } else {
+                statusClass = 'status-unknown';
+                statusText = '⚠️ Some Issues Detected';
+            }
+        }
+        
+        // Update the page header with overall status
+        const header = document.querySelector('.page-header h2');
+        if (header) {
+            header.innerHTML = `System Health <span class="${statusClass}" style="font-size: 0.8em; margin-left: 1rem;">${statusText}</span>`;
+        }
+    }
+    
+    function showHealthError() {
+        document.getElementById('loading-state').style.display = 'none';
+        document.getElementById('error-state').style.display = 'block';
+        document.getElementById('health-content').style.display = 'none';
+    }
+    
+    function formatTimestamp(timestamp) {
+        try {
+            const date = new Date(timestamp);
+            return date.toLocaleString();
+        } catch (e) {
+            return timestamp;
+        }
+    }
+</script>
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+    #env-pill {
+        animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.85; }
+    }
+    
+    .status-ok {
+        color: #2ecc71;
+        font-weight: 600;
+    }
+    
+    .status-error {
+        color: #e74c3c;
+        font-weight: 600;
+    }
+    
+    .status-unknown {
+        color: #f39c12;
+        font-weight: 600;
+    }
+    
+    .spinner {
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #3498db;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1rem;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    .btn {
+        padding: 0.5rem 1rem;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: 600;
+        text-decoration: none;
+        display: inline-block;
+    }
+    
+    .btn-primary {
+        background-color: #3498db;
+        color: white;
+    }
+    
+    .btn-primary:hover {
+        background-color: #2980b9;
+    }
+</style>
+{% endblock %}
+

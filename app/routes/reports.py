@@ -10,7 +10,7 @@ from datetime import datetime
 # Issue #466 Step 4 Cleanup: Removed storage_service imports (archived)
 
 router = APIRouter(prefix="/reports", tags=["reports"])
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory="frontend/templates")
 
 REPORTS_DIR = Path(os.getenv("RUNFLOW_REPORTS_DIR", "reports")).resolve()
 ALLOWED_EXTS = {".html", ".htm", ".md", ".pdf", ".csv"}
