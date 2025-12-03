@@ -112,50 +112,6 @@ def load_bins_flagged_count() -> int:
         return 0
 
 
-def load_flow_data() -> Dict[str, int]:
-    """
-    Load flow data for overtaking and co-presence counts.
-    
-    Returns:
-        Dict with segments_overtaking and segments_copresence counts
-    """
-    try:
-        # Use StorageService to load flow data
-        storage = get_storage_service()
-        flow_data = storage.load_ui_artifact("flow.json")
-        
-        if not flow_data:
-            logger.warning("flow.json not found in storage")
-            return {"segments_overtaking": 0, "segments_copresence": 0}
-        
-        # Count segments with overtaking and co-presence
-        segments_overtaking = 0
-        segments_copresence = 0
-        
-        # flow.json is a simple object with segment IDs as keys
-        for seg_id, values in flow_data.items():
-            # Check for overtaking (any non-zero overtake counts)
-            overtaking_a = values.get("overtaking_a", 0)
-            overtaking_b = values.get("overtaking_b", 0)
-            if overtaking_a > 0 or overtaking_b > 0:
-                segments_overtaking += 1
-            
-            # Check for co-presence
-            copresence_a = values.get("copresence_a", 0)
-            copresence_b = values.get("copresence_b", 0)
-            if copresence_a > 0 or copresence_b > 0:
-                segments_copresence += 1
-        
-        return {
-            "segments_overtaking": segments_overtaking,
-            "segments_copresence": segments_copresence
-        }
-        
-    except Exception as e:
-        logger.error(f"Error loading flow data: {e}")
-        return {"segments_overtaking": 0, "segments_copresence": 0}
-
-
 def calculate_peak_density_los(peak_density: float) -> str:
     """
     Calculate LOS for peak density using rulebook thresholds.
@@ -252,9 +208,8 @@ async def get_dashboard_summary():
         
     Sources:
         - meta.json → run_timestamp, environment
-        - segment_metrics.json → segments_total, peak_density, peak_rate
+        - segment_metrics.json → segments_total, peak_density, peak_rate, segments_overtaking, segments_copresence
         - flags.json → bins_flagged, segments_flagged
-        - flow.json → segments_overtaking, segments_copresence
         - runners.csv → total_runners, cohorts
     """
     try:
@@ -274,10 +229,24 @@ async def get_dashboard_summary():
         environment = meta.get("environment", "local")
         
         # Load segment metrics
-        segment_metrics = _load_ui_artifact_safe(storage, "ui/segment_metrics.json", warnings) or {}
+        # Issue #485: Extract summary fields BEFORE filtering segment-level data
+        raw_segment_metrics = _load_ui_artifact_safe(storage, "ui/segment_metrics.json", warnings) or {}
+        
+        # Extract summary-level fields (these are top-level keys, not segment IDs)
+        summary_fields = ['peak_density', 'peak_rate', 'segments_with_flags', 'flagged_bins', 
+                         'overtaking_segments', 'co_presence_segments']
+        segments_overtaking = raw_segment_metrics.get("overtaking_segments", 0)
+        segments_copresence = raw_segment_metrics.get("co_presence_segments", 0)
+        
+        # Filter out summary fields to get only segment-level data
+        # Segment-level data has segment IDs as keys (not in summary_fields list)
+        segment_metrics = {k: v for k, v in raw_segment_metrics.items() 
+                          if k not in summary_fields}
         segments_total = len(segment_metrics)
         
-        # Calculate peak density and rate
+        logger.info(f"Loaded flow metrics from segment_metrics.json: overtaking={segments_overtaking}, co-presence={segments_copresence}")
+        
+        # Calculate peak density and rate from segment-level data
         peak_density, peak_rate = _calculate_peak_metrics(segment_metrics)
         peak_density_los = calculate_peak_density_los(peak_density)
         
@@ -297,19 +266,6 @@ async def get_dashboard_summary():
         runners_data = load_runners_data()
         total_runners = runners_data["total_runners"]
         cohorts = runners_data["cohorts"]
-        
-        # Issue #304: Load flow metrics from segment_metrics.json
-        # Summary-level metrics are now in segment_metrics.json alongside per-segment data
-        segments_overtaking = 0
-        segments_copresence = 0
-        
-        # Extract from segment_metrics if available
-        if segment_metrics:
-            segments_overtaking = segment_metrics.get("overtaking_segments", 0)
-            segments_copresence = segment_metrics.get("co_presence_segments", 0)
-            logger.info(f"Loaded flow metrics from segment_metrics.json: overtaking={segments_overtaking}, co-presence={segments_copresence}")
-        else:
-            logger.warning("segment_metrics.json not available, flow metrics will be zero")
         
         # Determine status
         status = "normal"
