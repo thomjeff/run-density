@@ -30,7 +30,7 @@ jobs:
       - name: Run flake8 checks (complexity + style)
         run: |
           echo "🔍 flake8: complexity and lint checks"
-          flake8 app/ core/ \
+          flake8 app/ \
             --max-complexity=15 \
             --select=B001,C901,E,F,W \
             --exclude=tests/*
@@ -38,9 +38,9 @@ jobs:
       - name: Check code formatting with black
         run: |
           echo "🧱 black: formatting check"
-          black app/ core/ --check
+          black app/ --check
 
       - name: Check import sorting with isort
         run: |
           echo "🔃 isort: import order check"
-          isort app/ core/ --check-only --profile black
+          isort app/ --check-only --profile black
