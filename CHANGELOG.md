@@ -1,5 +1,16 @@
 # Changelog
 
+## [v1.8.1] - 2025-12-07
+
+### Summary
+- Added the new Locations report (Issue #277) with GPX-based segment matching, robust arrival-time calculations, and safeguards for invalid inputs, plus CSV validation and debug logging.
+- Delivered interactive map-to-table filtering (Issue #478) so pan/zoom updates the table with reliable bounds handling and hot-reload-friendly static mounting.
+- Overhauled the Locations table UX (Issues #483/484): added timing columns, sorting/filtering (ID/Type/zone/first/last runner), replaced pagination with a scrollable sticky-header table, improved padding/z-index, and reduced log noise.
+- Fixed dashboard flow metrics and `segment_metrics.json` population (Issues #485/486) to restore accurate dashboard reporting.
+- Improved course data fidelity: segments.geojson now uses real GPX coordinates with Web Mercator projection and gap fixes (Issue #477); added elite/open start times, event-day constants, updated buffer/interval timings, and refreshed locations/5K datasets.
+- Frontend cleanup: consolidated templates/static into `/frontend` (Issue #432) and removed legacy directories; added Type column back with sorting/filtering; prevented zone dropdown churn.
+- CI/quality hardening: removed the non-existent `core/` path from `code-quality.yaml`, fixed flake8 lint failures, and added docker-compose static mount for dev reliability.
+
 ## [v1.8.5] - 2025-11-11
 
 ### Issue #467: Phase 3 Output Integrity & Verification
