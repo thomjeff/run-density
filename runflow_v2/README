@@ -1,0 +1,8 @@
+# Runflow V2
+
+This folder contains:
+Files related to a proposal to modify run-density (runflow is the application name) to support multi-day race operations. The current system was only designed with a single day in mind. 
+
+/data - proposed inputs files, like segments.csv, for use during an analysis.
+/docs - documentation related to the proposed vs.
+2025-12-09 Codex Review - a report from a Codex session
