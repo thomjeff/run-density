@@ -1,4 +1,4 @@
-﻿loc_id,loc_label,loc_type,lat,lon,proxy_loc_id,seg_id,day,zone,full,half,10K,elite,open,buffer,interval,notes
+﻿loc_id,loc_label,loc_type,lat,lon,proxy_loc_id,seg_id,day,zone,full,half,10k,elite,open,buffer,interval,notes
 1,Regent Street and McLeod Street,traffic,45.95435,-66.644418,2,,sun,7,n,n,n,n,n,10,5,Barricade closing McLeod @ Regent. No thru traffic -- local only when no runners. Apartment residents on McLeod and Church attendees (Atkins Pewter bldg.) can access parking lot before St John street when no runners.
 2,St. John Street and McLeod,course,45.953331,-66.642451,,G1,sun,7,y,n,n,n,n,10,5,Barricade closing McLeod and St John Streets. No traffic until last marathon runner has complete the Queen Sq. loop. Re-open once gantry is down and safe to re-open St. John Street with continued closure at Aberdeen and St John.
 3,Parking Lot 776 McLeod (Apt),course,45.952483,-66.641158,,G1,sun,7,y,n,n,n,n,10,5,Monitor Parking Lot traffic when runners on course. Any vehicles entering or exiting must wait for when there are no runners.  First runner time is for info. only -- closure in place 45-mins before start time. 
