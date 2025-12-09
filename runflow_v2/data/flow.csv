@@ -1,0 +1,47 @@
+﻿seg_id,seg_label,event_a,event_b,from_km_a,to_km_a,from_km_b,to_km_b,direction,width_m,overtake_flag,flow_type,prior_seg_id,notes
+A1a,Start to Queen/Regent (10K/Half),10k,half,0,0.9,0,0.9,uni,5,y,overtake,,Start along St John Street; Overtake unlikely.
+A1b,Queen/Regent to WSB mid-point (10K/Half),10k,half,0.9,1.8,0.9,1.8,uni,5,y,overtake,A1a,Pointe St. Anne Blvd to half-way on WSB; Overtake unlikely.
+A1c,WSB mid-point to Friel (10K/Half),10k,half,1.8,2.7,1.8,2.7,uni,5,y,overtake,A1b,Half-way on WSB; Overtake likely.
+A2a,Start to Queen/Regent (10K/Full),10k,full,0,0.9,0,0.9,uni,5,y,overtake,,Start along St John Street; No Overtake expected
+A2b,Queen/Regent to WSB mid-point (10K/Full),10k,full,0.9,1.8,0.9,1.8,uni,5,y,overtake,A2a,Pointe St. Anne Blvd to half-way on WSB; Overtake unlikely.
+A2c,WSB mid-point to Friel (10K/Full),10k,full,1.8,2.7,1.8,2.7,uni,5,y,overtake,A2b,Half-way on WSB; Overtake possible (Fast 10K / Slow Full).
+A3a,Start to Queen/Regent (Half/Full),half,full,0,0.9,0,0.9,uni,5,y,overtake,,Start along St John Street; Overtake unlikely.
+A3b,Queen/Regent to WSB mid-point (Half/Full),half,full,0.9,1.8,0.9,1.8,uni,5,y,overtake,A3a,Pointe St. Anne Blvd to half-way on WSB; Overtake unlikely.
+A3c,WSB mid-point to Friel (Half/Full),half,full,1.8,2.7,1.8,2.7,uni,5,y,overtake,A3b,Half-way on WSB; Overtake possible (Fast Half / Slow Full).
+B1,Friel to 10K Turn (outbound),10k,full,2.7,4.25,2.7,4.25,bi,1.5,y,overtake,,On Trail (1.5m lane); Overtake expected (Fast 10K / Slow Full).
+B2,Friel to 10K Turn (10K out/return),10k,10k,2.7,4.25,4.25,5.8,bi,1.5,n,,,On Trail (1.5m lane); 10K outbound and return from 10K Turn. No Overtake - simply Density.
+C1,10K Turn to Friel (10K slow vs Full fast),10k,full,4.25,5.8,14.8,16.35,bi,1.5,y,overtake,,On Trail (1.5m lane); Expect Overtake by Fast Full / Slow 10K)
+C2,10K Turn to Friel (10K fast vs. Full slow),10k,full,4.25,5.8,2.7,4.25,bi,1.5,n,,,On Trail (1.5m lane); 10K return from 10K Turn meet Slow Full on their outbound. No Overtake - simply Density.
+D1,10K Turn to Full Turn Blake Crt (out/return),full,full,4.25,9.52,9.52,14.79,bi,1.5,n,,,On Trail (1.5m lane) where this is Full out/back from 10K Turn to Full Turn at Blake Crt.
+E1,Friel to 10K Turn (late overlaps),10k,full,2.7,4.25,14.8,16.35,bi,1.5,n,,,On Trail (1.5m lane) where slow 10K out to 10K Turn meet Fast Full on their return from Blake Crt. Density only as in opposite direction of flow.
+F1,Friel to Station Rd.,10k,half,5.8,8.1,2.7,5,uni,3,y,merge,,"On Trail (3.0m, two lanes); Overtake expected (Fast 10K / Slow Half)."
+F2,Friel to Station Rd.,10k,full,5.8,8.1,16.35,18.65,uni,3,y,merge,F1,"On Trail (3.0m, two lanes); Overtake possible (Slow 10K / Fast Full)."
+F3,Friel to Station Rd.,half,full,2.7,5,16.35,18.65,uni,3,y,merge,F1,"On Trail (3.0m, two lanes); Overtake possible (Slow Half / Fast Full)."
+G1,Full Loop QS to Trail/Aberdeen (Full Only),full,full,20.55,21.65,20.55,21.65,uni,3,n,,,"Full Only on Aberdeen, St John, McLeod, Lincoln Trail (Queen Sq. Loop)"
+G2,Trail/Aberdeen to Station Rd (Full outbound to Station vs 10K finish),full,10k,21.65,23.26,8.1,10,bi,1.5,n,,,Trail at Aberdeen (by water pump station) to Station Rd. where Full runners go right to Gibson Trail. 10K heading southbound to Finish. Shared segment with Half.
+G3,Trail/Aberdeen to Station Rd. (Full outbound to Station vs Half finish),full,half,21.65,23.26,19.35,20.85,bi,1.5,n,,,Trail at Aberdeen (by water pump station) to Station Rd. where Full and Half runners go right to Gibson Trail. Shared segment with 10K.
+H1,Station Rd. to Bridge/Mill (Half + Full co-direction),half,full,5,10.75,23.26,29.01,uni,3,n,,,"On Trail (3.0m, two lanes) Full/Half runners from Station/Rd. on to the Gibson Trail to Marysville. "
+I1,Bridge/Mill to Half Turn (Half + Full co-direction),half,full,10.75,13.43,29.01,31.64,bi,1.5,n,,,On Trial (1.5m lane) Half to Half Turn. Will continue to Full Turn. Shared with Half.
+J1,Half Turn to Full Turn (Full outbound spur),full,full,31.64,33.11,31.64,33.11,uni,1.5,n,,,On Trail (1.5m lane) Full outbound to Full Turn.
+J2,Full Turn to Half Turn (Full returning spur),full,full,33.11,34.34,33.11,34.34,uni,1.5,n,,,On Trail (1.5m lane) Full returning from Full Turn to Half Turn.
+K1,Half Turn to Bridge/Mill (Half + Full co-direction return),half,full,13.43,16.02,34.34,36.93,uni,1.5,n,,,On Trail (1.5m lane) from Half Turn to Bridge/Mill. Full & Half
+K2,Half Turn to Bridge/Mill (Slow Half / Fast Full),full,half,34.34,36.93,10.75,13.43,bi,1.5,n,,,On Trail (1.5m lane) with Slow Half meeting Fast Full on Bridge/Mill to Half Turn.
+L1,Bridge/Mill to Station Rd. (Full and Half),full,half,37.12,40.57,16.02,19.47,bi,3,y,overtake,,"On Trail (3.0m, two lanes), with Full/Half returning from Marysville to Station Rd."
+M1a,Station Rd. to Trail/Aberdeen,10k,half,8.1,9.75,19.2,20.85,bi,1.5,y,merge,,On Trail (1.5m lane) with this segment having runners from all events.
+M1b,Station Rd. to Trail/Aberdeen,10k,full,8.1,9.75,18.65,20.3,uni,1.5,y,merge,M1a,On Trail (1.5m lane) with this segment having runners from all events.
+M1c,Station Rd. to Trail/Aberdeen,half,full,19.2,20.85,18.65,20.3,uni,1.5,y,overtake,M1a,On Trail (1.5m lane) with this segment having runners from all events.
+M1d,Station Rd. to Trail/Aberdeen,full,full,40.57,41.95,40.57,41.95,uni,1.5,n,,M1a,On Trail (1.5m lane) with the Full only on their final leg to Finish.
+M2a,Trail/Aberdeen to Finish,10k,half,9.75,10,20.85,21.1,uni,3,n,,,Aberdeen Street to Finish
+M2b,Trail/Aberdeen to Finish (Full QS Loop),10k,full,9.75,10,20.3,20.55,uni,3,n,,M2a,Aberdeen Street to Finish
+M2c,Trail/Aberdeen to Finish (Full QS Loop),half,full,20.85,21.1,20.3,20.55,uni,3,n,,M2a,Aberdeen Street to Finish
+M2d,Trail/Aberdeen to Finish,full,full,41.95,42.2,41.95,42.2,uni,3,n,,M2a,Aberdeen Street to Finish
+N1,5K Elite Lap 1 (Start to Queen/York),elite,elite,0,2.58,0,2.58,uni,5,y,overtake,,5K Elite Lap 1 (Start to Queen/York)
+N2,5K Elite Lap 2 (Queen/York to Queen/York),elite,elite,2.58,4.81,2.58,4.81,uni,5,y,overtake,N1,5K Elite Lap 2 (Queen/York to Queen/York)
+N2a,5K Elite Lap 2 overtake Lap 1,elite,elite,2.58,4.81,0,2.58,uni,5,y,overtake,N1,5K Elite Lap 2 overtake Lap 1
+N3,5K Elite Finish (Queen/York to Finish),elite,elite,4.81,5,4.81,5,uni,5,y,overtake,N2,5K Elite Finish (Queen/York to Finish)
+N3a,5K Elite Finish ovetake Lap 2,elite,elite,4.81,5,2.58,4.81,uni,5,y,overtake,N2,5K Elite Finish ovetake Lap 2
+O1,5K Open Lap 1 (Start to Queen/York),open,open,0,2.58,0,2.58,uni,5,y,overtake,,5K Open Lap 1 (Start to Queen/York)
+O2,5K Open Lap 2 (Queen/York to Queen/York),open,open,2.58,4.81,2.58,4.81,uni,5,y,overtake,O1,5K Open Lap 2 (Queen/York to Queen/York)
+O2a,5K Open Lap 2 overtake Lap 1,open,open,2.58,4.81,0,2.58,uni,5,y,overtake,N1,5K Open Lap 2 overtake Lap 1
+O3,5K Open Finish (Queen/York to Finish),open,open,4.81,5,4.81,5,uni,5,y,overtake,O2,5K Open Finish (Queen/York to Finish)
+O3a,5K Open Finish ovetake Lap 2,open,open,4.81,5,2.58,4.81,uni,5,y,overtake,N2,5K Open Finish ovetake Lap 2

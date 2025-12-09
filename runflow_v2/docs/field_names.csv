@@ -1,0 +1,131 @@
+﻿field,dtype,description,enum_definitions,file
+seg_id,object,unique identifier for a segment,,/data/flow
+seg_label,object,name for the segment for use in a report or user interface,,/data/flow
+event_a,object,Event or race type corresponding to side A (e.g. full or half) in a comparison with event_b.,,/data/flow
+event_b,object,Event or race type corresponding to side B (e.g. full or half) in a comparison with event_a.,,/data/flow
+from_km_a,float64,Start kilometer mark of this segment for event_a expressed as the actual distance from the official start line of event A (not normalized or scaled).,,/data/flow
+to_km_a,float64,"End kilometer mark of this segment for event_a, expressed as the actual course distance for event A. Represents the true on-course position, not a normalized segment fraction.",,/data/flow
+from_km_b,float64,"Start kilometer mark of this segment for event_b measured from the official start line of event B. This is the real race distance point, not a normalized or relative value.",,/data/flow
+to_km_b,float64,"End kilometer mark of this segment for event_b, measured as the actual cumulative distance of event b. Represents the physical location along the race route.",,/data/flow
+direction,object,,,/data/flow
+width_m,,Width of the course for this segment,,/data/flow
+overtake_flag,,,,/data/flow
+flow_type,object,Indicates flow relationship type between event A and event B.,"""co-flow"": ""Both events move in the same direction along the segment."",
+""counter-flow"": ""Events move in opposite directions along the same segment."",
+""shared"": ""Events overlap in space and/or time with mixed directions."",
+""divergent"": ""Events split into separate routes after this segment."",
+""convergent"": ""Events merge onto the same route, increasing density.""",/data/flow
+prior_seg_id,object,,,/data/flow
+notes,object,,,/data/flow
+seg_id,,,,/data/segments
+seg_label,,,,/data/segments
+width_m,,,,/data/segments
+direction,,,,/data/segments
+full,,,,/data/segments
+half,,,,/data/segments
+10k,,,,/data/segments
+elite,,,,/data/segments
+open,,,,/data/segments
+full_from_km,,,,/data/segments
+full_to_km,,,,/data/segments
+half_from_km,,,,/data/segments
+half_to_km,,,,/data/segments
+10k_from_km,,,,/data/segments
+10k_to_km,,,,/data/segments
+5k_from_km,,,,/data/segments
+5k_to_km,,,,/data/segments
+overtake_flag,,,,/data/segments
+flow_type,,,,/data/segments
+prior_seg_id,,,,/data/segments
+notes,,,,/data/segments
+combines,,,,/data/segments
+5k_length,,,,/data/segments
+full_length,,,,/data/segments
+half_length,,,,/data/segments
+10k_length,,,,/data/segments
+lengths_match,,,,/data/segments
+review_distances,,,,/data/segments
+prior_seg_id_old,,,,/data/segments
+seg_id_old,,,,/data/segments
+seg_id.1,,,,/data/segments
+flow_enabled,,,,/data/segments
+description,,,,/data/segments
+loc_id,,,,/data/locations
+loc_label,,,,/data/locations
+loc_type,,,,/data/locations
+lat,,,,/data/locations
+lon,,,,/data/locations
+proxy_loc_id,,,,/data/locations
+seg_id,,,,/data/locations
+day,,,,/data/locations
+zone,,,,/data/locations
+full,,,,/data/locations
+half,,,,/data/locations
+10K,,,,/data/locations
+elite,,,,/data/locations
+open,,,,/data/locations
+buffer,,,,/data/locations
+interval,,,,/data/locations
+notes,,,,/data/locations
+event,,"Event the runner is participating in and can be one of: full, half, 10K, elite or open",,data/*_runners
+runner_id,,Unique ID for the runner,,data/*_runners
+pace,,The average speed for the runner of the event,,data/*_runners
+distance,,Distance in kilometers for event,,data/*_runners
+start_offset,,The event has a start-time and this offset is the delay for the runner crossing the starting mat.,,data/*_runners
+loc_id,,Unique identifer for the location,,/reports/locations
+loc_label,,Description of the location for use in reporting or in the user interface,,/reports/locations
+loc_type,,"Can be one of traffic, course, aid, water",,/reports/locations
+zone,,Zone is a geographic area of the course for operational planning.,,/reports/locations
+lat,,Latitude of the location for mapping purposes,,/reports/locations
+lon,,Longitude of the location for mappng purposes,,/reports/locations
+first_runner,,Time first runner is expected at this location,,/reports/locations
+peak_start,,Time of the peak window starting where peak is 25th to 75th percentile.,,/reports/locations
+peak_end,,Time of the peak window ending where peak is 25th to 75th percentile.,,/reports/locations
+last_runner,,Time last runner is expected at this location,,/reports/locations
+loc_start,,Time resource to be at location,,/reports/locations
+loc_end,,Time resource can leave location,,/reports/locations
+duration,,Duration resource on location,,/reports/locations
+timing_source,,"Modelled where the system has provided timing, or based on a proxy from another location",,/reports/locations
+notes,,Notes about the location for use in reports or the user interface,,/reports/locations
+seg_id,,,,/reports/flow
+seg_label,,,,/reports/flow
+event_a,,,,/reports/flow
+event_b,,,,/reports/flow
+total_a,,,,/reports/flow
+total_b,,,,/reports/flow
+flow_type,,,,/reports/flow
+from_km_a,,,,/reports/flow
+to_km_a,,,,/reports/flow
+from_km_b,,,,/reports/flow
+to_km_b,,,,/reports/flow
+width_m,,,,/reports/flow
+overtaking_a,,,,/reports/flow
+overtaking_b,,,,/reports/flow
+sample_a,,,,/reports/flow
+sample_b,,,,/reports/flow
+pct_a,,,,/reports/flow
+pct_b,,,,/reports/flow
+copresence_a,,,,/reports/flow
+copresence_b,,,,/reports/flow
+unique_encounters,,,,/reports/flow
+participants_involved,,,,/reports/flow
+overtaking_load_a,,,,/reports/flow
+overtaking_load_b,,,,/reports/flow
+max_overtaking_load_a,,,,/reports/flow
+max_overtaking_load_b,,,,/reports/flow
+spatial_zone_exists,,,,/reports/flow
+temporal_overlap_exists,,,,/reports/flow
+true_pass_exists,,,,/reports/flow
+has_convergence_policy,,,,/reports/flow
+has_convergence,,,,/reports/flow
+convergence_zone_start,,,,/reports/flow
+convergence_zone_end,,,,/reports/flow
+no_pass_reason_code,,,,/reports/flow
+conflict_length_m,,,,/reports/flow
+analysis_timestamp,,,,/reports/flow
+app_version,,,,/reports/flow
+environment,,,,/reports/flow
+data_source,,,,/reports/flow
+start_times,,,,/reports/flow
+min_overlap_duration,,,,/reports/flow
+conflict_length_m,,,,/reports/flow
