@@ -25,6 +25,20 @@ from app.core.v2.loader import (
     load_segments_with_spans,
     group_events_by_day,
 )
+from app.core.v2.timeline import (
+    DayTimeline,
+    generate_day_timelines,
+    get_day_start,
+    normalize_time_to_day,
+)
+from app.core.v2.bins import (
+    calculate_runner_arrival_time,
+    enforce_cross_day_guard,
+    filter_segments_by_events,
+    resolve_segment_spans,
+    create_bins_for_segment_v2,
+    generate_bins_per_day,
+)
 
 __all__ = [
     # Models
@@ -47,5 +61,17 @@ __all__ = [
     "load_runners_for_event",
     "load_segments_with_spans",
     "group_events_by_day",
+    # Timeline
+    "DayTimeline",
+    "generate_day_timelines",
+    "get_day_start",
+    "normalize_time_to_day",
+    # Bins
+    "calculate_runner_arrival_time",
+    "enforce_cross_day_guard",
+    "filter_segments_by_events",
+    "resolve_segment_spans",
+    "create_bins_for_segment_v2",
+    "generate_bins_per_day",
 ]
 

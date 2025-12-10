@@ -149,24 +149,65 @@ def calculate_dataset_hash(pace_csv: str, segments_csv: str, start_times: Dict[s
     content = f"{pace_csv}|{segments_csv}|{start_times}"
     return hashlib.md5(content.encode()).hexdigest()[:16]
 
-def create_bins_for_segment(segment_data: Dict[str, Any], bin_size_km: float) -> List[BinData]:
-    """Create bins for a segment based on its length and bin size."""
+def create_bins_for_segment(
+    segment_data: Dict[str, Any], 
+    bin_size_km: float,
+    events: Optional[List[str]] = None
+) -> List[BinData]:
+    """
+    Create bins for a segment based on its length and bin size.
+    
+    Phase 3 (Issue #497): Updated to accept optional events list instead of hardcoded ['full', 'half', '10K'].
+    If events list is provided, only checks spans for those events. Otherwise falls back to hardcoded list
+    for backward compatibility with v1 code paths.
+    
+    Args:
+        segment_data: Segment row as dictionary
+        bin_size_km: Bin size in kilometers
+        events: Optional list of event names to check spans for (default: ['full', 'half', '10K'] for v1 compatibility)
+    
+    Returns:
+        List of BinData objects
+    """
     # Calculate segment boundaries from event-specific ranges
     max_km = 0.0
     min_km = float('inf')
     
+    # Phase 3: Use provided events list or fall back to hardcoded list for v1 compatibility
+    if events is None:
+        # v1 backward compatibility: use hardcoded event list
+        events_to_check = ['full', 'half', '10K']
+    else:
+        # v2: use provided events list
+        events_to_check = events
+    
     # Check all event ranges to find the overall segment span
-    for event in ['full', 'half', '10K']:
+    for event in events_to_check:
         from_key = f"{event}_from_km"
         to_key = f"{event}_to_km"
         
-        if from_key in segment_data and to_key in segment_data:
-            from_km = segment_data.get(from_key)
-            to_km = segment_data.get(to_key)
+        # Case-insensitive column matching (handles "10K" vs "10k")
+        from_col = None
+        to_col = None
+        for col in segment_data.keys():
+            if col.lower() == from_key.lower():
+                from_col = col
+            elif col.lower() == to_key.lower():
+                to_col = col
+        
+        if from_col and to_col and from_col in segment_data and to_col in segment_data:
+            from_km = segment_data.get(from_col)
+            to_km = segment_data.get(to_col)
             
             if from_km is not None and to_km is not None:
-                min_km = min(min_km, from_km)
-                max_km = max(max_km, to_km)
+                try:
+                    from_km = float(from_km)
+                    to_km = float(to_km)
+                    min_km = min(min_km, from_km)
+                    max_km = max(max_km, to_km)
+                except (ValueError, TypeError):
+                    # Skip invalid values
+                    continue
     
     if min_km == float('inf'):
         min_km = 0.0
