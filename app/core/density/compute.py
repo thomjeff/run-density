@@ -45,7 +45,7 @@ def get_event_intervals(event: str, density_cfg: Dict[str, Any]) -> Optional[Tup
     Supported event types (v1 backward compatibility):
         - "Full"/"full": Uses full_from_km and full_to_km
         - "Half"/"half": Uses half_from_km and half_to_km  
-        - "10K"/"10k": Uses tenk_from_km and tenk_to_km (or 10k_from_km/10k_to_km)
+        - "10K"/"10k": Uses 10k_from_km and 10k_to_km
     
     Supported event types (v2):
         - "elite": Uses elite_from_km and elite_to_km
@@ -58,11 +58,10 @@ def get_event_intervals(event: str, density_cfg: Dict[str, Any]) -> Optional[Tup
         return (density_cfg["full_from_km"], density_cfg["full_to_km"])
     elif event_lower == "half" and density_cfg.get("half_from_km") is not None:
         return (density_cfg["half_from_km"], density_cfg["half_to_km"])
-    elif event_lower in ["10k", "tenk"]:
-        # Support both "tenk_from_km" (v1) and "10k_from_km" (v2)
-        if density_cfg.get("tenk_from_km") is not None:
-            return (density_cfg["tenk_from_km"], density_cfg["tenk_to_km"])
-        elif density_cfg.get("10k_from_km") is not None:
+    elif event_lower == "10k":
+        # Standardized on "10k_from_km"/"10k_to_km" keys (Issue #508)
+        # Handles both "10K_from_km" and "10k_from_km" CSV column formats
+        if density_cfg.get("10k_from_km") is not None:
             return (density_cfg["10k_from_km"], density_cfg["10k_to_km"])
     
     # v2 support: elite, open
@@ -288,6 +287,11 @@ def load_density_cfg(path: str) -> Dict[str, dict]:
         
         events = tuple(events)
         
+        # Standardized on "10k_from_km"/"10k_to_km" keys (Issue #508)
+        # Handles both "10K_from_km" (v1) and "10k_from_km" (v2) CSV column formats
+        tenk_from_val = r.get("10K_from_km") or r.get("10k_from_km")
+        tenk_to_val = r.get("10K_to_km") or r.get("10k_to_km")
+        
         cfg[r["seg_id"]] = dict(
             seg_label=str(r.get("seg_label", "")),
             width_m=float(r["width_m"]),
@@ -300,16 +304,14 @@ def load_density_cfg(path: str) -> Dict[str, dict]:
             full_to_km=float(r.get("full_to_km", 0)) if r.get("full_to_km") != "" else None,
             half_from_km=float(r.get("half_from_km", 0)) if r.get("half_from_km") != "" else None,
             half_to_km=float(r.get("half_to_km", 0)) if r.get("half_to_km") != "" else None,
-            tenk_from_km=float(r.get("10K_from_km", 0)) if r.get("10K_from_km") != "" else None,
-            tenk_to_km=float(r.get("10K_to_km", 0)) if r.get("10K_to_km") != "" else None,
+            # Standardized on "10k_from_km"/"10k_to_km" keys (Issue #508)
+            **{"10k_from_km": float(tenk_from_val) if tenk_from_val != "" and tenk_from_val is not None else None},
+            **{"10k_to_km": float(tenk_to_val) if tenk_to_val != "" and tenk_to_val is not None else None},
             # v2 events
             elite_from_km=float(r.get("elite_from_km", 0)) if r.get("elite_from_km") != "" else None,
             elite_to_km=float(r.get("elite_to_km", 0)) if r.get("elite_to_km") != "" else None,
             open_from_km=float(r.get("open_from_km", 0)) if r.get("open_from_km") != "" else None,
             open_to_km=float(r.get("open_to_km", 0)) if r.get("open_to_km") != "" else None,
-            # Also support "10k_from_km" (lowercase k) for v2
-            tenk_from_km_v2=float(r.get("10k_from_km", 0)) if r.get("10k_from_km") != "" else None,
-            tenk_to_km_v2=float(r.get("10k_to_km", 0)) if r.get("10k_to_km") != "" else None,
             notes=str(r.get("notes", ""))
         )
     
