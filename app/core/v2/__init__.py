@@ -39,6 +39,14 @@ from app.core.v2.bins import (
     create_bins_for_segment_v2,
     generate_bins_per_day,
 )
+from app.core.v2.flow import (
+    generate_event_pairs_v2,
+    enforce_same_day_pairs,
+    get_shared_segments,
+    get_event_distance_range_v2,
+    filter_flow_csv_by_events,
+    analyze_temporal_flow_segments_v2,
+)
 
 __all__ = [
     # Models
@@ -73,5 +81,12 @@ __all__ = [
     "resolve_segment_spans",
     "create_bins_for_segment_v2",
     "generate_bins_per_day",
+    # Flow (Phase 5)
+    "generate_event_pairs_v2",
+    "enforce_same_day_pairs",
+    "get_shared_segments",
+    "get_event_distance_range_v2",
+    "filter_flow_csv_by_events",
+    "analyze_temporal_flow_segments_v2",
 ]
 
