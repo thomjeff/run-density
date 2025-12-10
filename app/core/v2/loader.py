@@ -55,11 +55,17 @@ def load_events_from_payload(
         seg_ids = []
         if "seg_id" in segments_df.columns:
             # Check event flag column (full, half, 10k, elite, open)
-            event_flag_col = event_name
-            if event_flag_col in segments_df.columns:
+            # Match column name case-insensitively (segments.csv may have "10K" vs "10k")
+            event_flag_col = None
+            for col in segments_df.columns:
+                if col.lower() == event_name.lower():
+                    event_flag_col = col
+                    break
+            
+            if event_flag_col and event_flag_col in segments_df.columns:
                 # Filter segments where this event flag is 'y'
                 event_segments = segments_df[
-                    segments_df[event_flag_col].str.lower().isin(['y', 'yes', 'true', '1'])
+                    segments_df[event_flag_col].astype(str).str.lower().isin(['y', 'yes', 'true', '1'])
                 ]
                 seg_ids = event_segments["seg_id"].tolist()
         
