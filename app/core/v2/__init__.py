@@ -31,19 +31,14 @@ from app.core.v2.timeline import (
     get_day_start,
     normalize_time_to_day,
 )
-# Phase 3: Bins module (import only what exists)
-try:
-    from app.core.v2.bins import (
-        calculate_runner_arrival_time,
-        enforce_cross_day_guard,
-        filter_segments_by_events,
-        resolve_segment_spans,
-        create_bins_for_segment_v2,
-        generate_bins_per_day,
-    )
-    _bins_available = True
-except ImportError:
-    _bins_available = False
+from app.core.v2.bins import (
+    calculate_runner_arrival_time,
+    enforce_cross_day_guard,
+    filter_segments_by_events,
+    resolve_segment_spans,
+    create_bins_for_segment_v2,
+    generate_bins_per_day,
+)
 
 __all__ = [
     # Models
@@ -66,12 +61,12 @@ __all__ = [
     "load_runners_for_event",
     "load_segments_with_spans",
     "group_events_by_day",
-    # Timeline (Phase 3)
+    # Timeline
     "DayTimeline",
     "generate_day_timelines",
     "get_day_start",
     "normalize_time_to_day",
-    # Bins (Phase 3)
+    # Bins
     "calculate_runner_arrival_time",
     "enforce_cross_day_guard",
     "filter_segments_by_events",
