@@ -178,6 +178,14 @@ class TestValidateFileExistence:
         data_dir = tmp_path / "data"
         data_dir.mkdir()
         
+        # Create required files first
+        (data_dir / "segments.csv").write_text("seg_id\nA1")
+        (data_dir / "locations.csv").write_text("loc_id\nL1")
+        (data_dir / "flow.csv").write_text("seg_id\nA1")
+        # Create file with wrong extension to test extension validation
+        (data_dir / "full.txt").write_text("runner_id,event,pace,distance,start_offset\n1,full,4,42,0")
+        (data_dir / "full.gpx").write_text("<?xml version='1.0'?><gpx></gpx>")
+        
         events = [
             {"name": "full", "runners_file": "full.txt", "gpx_file": "full.gpx"}  # Wrong extension
         ]
