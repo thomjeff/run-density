@@ -19,6 +19,39 @@ def load_segments(path="data/segments.csv"):
 def load_runners(path="data/runners.csv"):
     return pd.read_csv(path)
 
+def load_runners_by_event(event_name: str, data_dir: str = "data"):
+    """
+    Load runners for a specific event from event-specific CSV file.
+    
+    Phase 1 (Issue #495): Helper function for v2 event-specific runner loading.
+    Normalizes event name to lowercase for consistent file naming.
+    
+    Args:
+        event_name: Event name (e.g., "full", "half", "10k") - will be normalized to lowercase
+        data_dir: Base directory for data files (default: "data")
+        
+    Returns:
+        DataFrame with runner data for the specified event
+        
+    Raises:
+        FileNotFoundError: If runner file doesn't exist
+    """
+    from pathlib import Path
+    
+    # Normalize event name to lowercase
+    event_name = event_name.lower()
+    
+    # Construct filename: {event}_runners.csv
+    runners_file = f"{event_name}_runners.csv"
+    runners_path = Path(data_dir) / runners_file
+    
+    if not runners_path.exists():
+        raise FileNotFoundError(
+            f"Runner file '{runners_file}' not found in {data_dir}/ directory for event '{event_name}'"
+        )
+    
+    return pd.read_csv(runners_path)
+
 def load_locations(path="data/locations.csv"):
     """
     Load locations.csv with validation and normalization.
