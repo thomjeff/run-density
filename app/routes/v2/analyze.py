@@ -20,7 +20,7 @@ from app.api.models.v2 import (
 )
 from app.core.v2.validation import ValidationError, validate_api_payload
 from app.core.v2.loader import load_events_from_payload
-from app.core.v2.pipeline import create_stubbed_pipeline
+from app.core.v2.pipeline import create_stubbed_pipeline, create_full_analysis_pipeline
 
 # Create router
 router = APIRouter()
@@ -71,8 +71,21 @@ async def analyze_v2(request: V2AnalyzeRequest) -> V2AnalyzeResponse:
         # Load events from payload (creates Event objects)
         events = load_events_from_payload(payload_dict)
         
-        # Create stubbed pipeline (directory structure + metadata)
-        pipeline_result = create_stubbed_pipeline(events)
+        # Extract data directory and file names from payload
+        data_dir = payload_dict.get("data_dir", "data")
+        segments_file = payload_dict.get("segments_file", "segments.csv")
+        locations_file = payload_dict.get("locations_file", "locations.csv")
+        flow_file = payload_dict.get("flow_file", "flow.csv")
+        
+        # Run full analysis pipeline (Phase 4 + 5)
+        # This creates directory structure AND runs density + flow analysis
+        pipeline_result = create_full_analysis_pipeline(
+            events=events,
+            segments_file=segments_file,
+            locations_file=locations_file,
+            flow_file=flow_file,
+            data_dir=data_dir
+        )
         
         # Format output paths for response
         output_paths_dict = {}
