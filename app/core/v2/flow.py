@@ -193,7 +193,16 @@ def generate_event_pairs_fallback(
     """
     Generate event pairs using start_time ordering as fallback when flow.csv is not available.
     
-    This is only used when flow.csv doesn't contain the pair.
+    **WARNING**: This function should only be used when flow.csv doesn't contain a specific event pair.
+    flow.csv is the authoritative source for event pair ordering (Issue #512).
+    
+    This fallback is only for:
+    1. Debugging scenarios
+    2. Incomplete metadata scenarios (missing flow.csv entries)
+    3. Rare cases where flow.csv doesn't have a pair
+    
+    **If this fallback is used, a warning is logged** to identify missing flow.csv entries.
+    
     Orders pairs by start time: event_a (earlier) < event_b (later).
     
     Args:
@@ -477,7 +486,10 @@ def analyze_temporal_flow_segments_v2(
         # No flow.csv, use fallback for all pairs
         fallback_pairs = generate_event_pairs_fallback(events)
         all_pairs = fallback_pairs
-        logger.info("flow.csv not available, using fallback pair generation")
+        logger.warning(
+            "flow.csv not available, using fallback pair generation. "
+            "flow.csv should be present and contain event pairs. (Issue #512)"
+        )
     else:
         # Check if we need fallback pairs for any events
         flow_csv_event_names = set()
