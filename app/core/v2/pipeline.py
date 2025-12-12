@@ -309,6 +309,11 @@ def create_full_analysis_pipeline(
             logger.warning(f"No runners found for day {day.value} events {event_names}, using fallback")
             day_runners_df = filter_runners_by_day(all_runners_df, day, day_events)
         
+        # Filter segments to this day's events (Issue #515: Fix bin scoping)
+        from app.core.v2.bins import filter_segments_by_events
+        day_segments_df = filter_segments_by_events(segments_df, day_events)
+        logger.info(f"Filtered segments for day {day.value}: {len(segments_df)} -> {len(day_segments_df)} segments")
+        
         # Prepare start_times for bin generation (minutes as float)
         start_times = {}
         event_name_mapping = {
@@ -322,11 +327,11 @@ def create_full_analysis_pipeline(
             v1_event_name = event_name_mapping.get(event.name.lower(), event.name.capitalize())
             start_times[v1_event_name] = float(event.start_time)
         
-        # Generate bins for this day
+        # Generate bins for this day (Issue #515: Use day-filtered segments)
         bins_dir = generate_bins_v2(
             density_results=day_density,
             start_times=start_times,
-            segments_df=segments_df,
+            segments_df=day_segments_df,  # ✅ Filtered by day events
             runners_df=day_runners_df,
             run_id=run_id,
             day=day,
