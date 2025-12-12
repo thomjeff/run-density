@@ -34,7 +34,6 @@ from app.core.v2.timeline import (
 from app.core.v2.bins import (
     generate_bins_v2,
     filter_segments_by_events,
-    resolve_segment_spans,
     create_bins_for_segment_v2,
     generate_bins_per_day,
 )
@@ -93,7 +92,6 @@ __all__ = [
     # Bins
     "generate_bins_v2",
     "filter_segments_by_events",
-    "resolve_segment_spans",
     "create_bins_for_segment_v2",
     "generate_bins_per_day",
     # Density
