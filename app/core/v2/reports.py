@@ -222,15 +222,24 @@ def generate_density_report_v2(
             raise FileNotFoundError(f"bins.parquet required for Schema 1.0.0 density report not found at {source_bins_parquet}")
         
         # Copy bins files to reports directory
+        # Note: Two versions exist:
+        # 1. /{day}/bins/bins.parquet - Original bin generation output (day-scoped after Issue #515 fix)
+        # 2. /{day}/reports/bins.parquet - Copied and filtered version for report generation
+        # The copy is needed because generate_new_density_report_issue246() expects bins in reports directory
         if source_bins_parquet.exists() and not bins_parquet.exists():
             shutil.copy2(source_bins_parquet, bins_parquet)
-            logger.debug(f"Copied bins.parquet to reports directory")
+            logger.debug(f"Copied bins.parquet from {source_bins_parquet} to {bins_parquet}")
+        elif source_bins_parquet.exists() and bins_parquet.exists():
+            # File already exists, but we'll reload and re-filter to ensure correctness
+            logger.debug(f"bins.parquet already exists in reports, will reload and re-filter")
         
         if source_segment_windows.exists() and not segment_windows_parquet.exists():
             shutil.copy2(source_segment_windows, segment_windows_parquet)
             logger.debug(f"Copied segment_windows_from_bins.parquet to reports directory")
         
         # Load and filter bins by day segments
+        # After Issue #515 fix, bins in /{day}/bins/ should already be day-scoped,
+        # but we filter again as a safety check to ensure only day segments are in reports
         bins_df = pd.read_parquet(bins_parquet)
         segment_windows_df = pd.read_parquet(segment_windows_parquet) if segment_windows_parquet.exists() else pd.DataFrame()
         
@@ -246,8 +255,30 @@ def generate_density_report_v2(
         # Filter bins to only include day segments
         # bins.parquet has 'seg_id' column
         if 'seg_id' in bins_df.columns:
+            # Log segments found in bins before filtering
+            bins_segment_ids = set(bins_df['seg_id'].astype(str).unique())
+            logger.info(
+                f"Bins contain {len(bins_segment_ids)} unique segments before filtering: "
+                f"{sorted(list(bins_segment_ids))[:10]}{'...' if len(bins_segment_ids) > 10 else ''}"
+            )
+            logger.info(
+                f"Day {day.value} expects {len(day_segment_ids)} segments: "
+                f"{sorted(list(day_segment_ids))}"
+            )
+            
             bins_df_filtered = bins_df[bins_df['seg_id'].astype(str).isin(day_segment_ids)].copy()
-            logger.info(f"Filtered bins: {len(bins_df)} -> {len(bins_df_filtered)} for day {day.value} segments")
+            logger.info(
+                f"Filtered bins: {len(bins_df)} -> {len(bins_df_filtered)} rows "
+                f"for day {day.value} ({len(day_segment_ids)} segments)"
+            )
+            
+            # Verify filtering worked correctly
+            filtered_segment_ids = set(bins_df_filtered['seg_id'].astype(str).unique())
+            unexpected_segments = filtered_segment_ids - day_segment_ids
+            if unexpected_segments:
+                logger.warning(
+                    f"⚠️ Filtered bins contain unexpected segments for day {day.value}: {unexpected_segments}"
+                )
         else:
             logger.warning(f"bins.parquet missing 'seg_id' column, cannot filter by day")
             bins_df_filtered = bins_df
