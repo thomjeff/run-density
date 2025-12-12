@@ -455,7 +455,8 @@ class FlowBinsRequest(BaseModel):
 
 @router.get("/bins-data")
 async def get_bins_data(
-    forceRefresh: bool = Query(False, description="Force refresh by running new analysis")
+    forceRefresh: bool = Query(False, description="Force refresh by running new analysis"),
+    startTimes: Optional[str] = Query(None, description="JSON string of start times (required if forceRefresh=true - Issue #512)")
 ):
     """
     Get bin-level visualization data for map display.
@@ -468,10 +469,17 @@ async def get_bins_data(
     try:
         if forceRefresh:
             logger.info("Force refresh requested - running new bin analysis")
-            # Use default data paths and start times from constants
+            # Issue #512: Start times must come from request, not constants
+            if startTimes is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="startTimes query parameter required when forceRefresh=true. (Issue #512)"
+                )
+            
+            import json
+            start_times = json.loads(startTimes)
             pace_csv = DEFAULT_PACE_CSV
             segments_csv = DEFAULT_SEGMENTS_CSV
-            start_times = DEFAULT_START_TIMES
             
             # Run new bin analysis
             all_bins = get_all_segment_bins(
