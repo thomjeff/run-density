@@ -226,16 +226,11 @@ class NewDensityTemplateEngine:
                 runner_count = event_info.get('runner_count', 0)
                 lines.append(f"- **{display_name}** — {start_time_str} ({runner_count:,} runners)")
         else:
-            # Fallback to legacy hardcoded values (for backward compatibility)
-            full_count = context.get('full_runners', 368)
-            tenk_count = context.get('10k_runners', 618)
-            half_count = context.get('half_runners', 912)
-            
-            lines.extend([
-                f"- **Full Marathon** — 07:00 ({full_count:,} runners)",
-                f"- **10K** — 07:20 ({tenk_count:,} runners)",
-                f"- **Half Marathon** — 07:40 ({half_count:,} runners)"
-            ])
+            # Issue #512: No fallback to hardcoded values - events must be provided
+            raise ValueError(
+                "events parameter is required in context. Start times must come from API request, "
+                "not from hardcoded constants. (Issue #512)"
+            )
         
         lines.extend([
             "",

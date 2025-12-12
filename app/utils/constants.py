@@ -99,7 +99,7 @@ ALL_EVENTS = SATURDAY_EVENTS | SUNDAY_EVENTS
 # Map configuration
 DEFAULT_PACE_CSV = "data/runners.csv"
 DEFAULT_SEGMENTS_CSV = "data/segments.csv"
-DEFAULT_START_TIMES = {"Full": 420, "10K": 440, "Half": 460, "Elite": 480, "Open":510}
+# DEFAULT_START_TIMES removed (Issue #512) - Start times must come from API request, not constants
 
 # Bin dataset configuration (Issue #198) - ChatGPT PR1 fixes
 DEFAULT_BIN_SIZE_KM = 0.1  # 100m bins per ChatGPT recommendation

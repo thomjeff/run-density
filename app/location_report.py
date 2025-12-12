@@ -488,11 +488,14 @@ def generate_location_report(
     Returns:
         Dictionary with report results and file path
     """
-    from app.utils.constants import DEFAULT_START_TIMES
     from app.report_utils import get_report_paths, get_runflow_category_path
     
+    # Issue #512: Start times must be provided, not from constants
     if start_times is None:
-        start_times = DEFAULT_START_TIMES
+        raise ValueError(
+            "start_times parameter is required. Start times must come from API request, "
+            "not from hardcoded constants. (Issue #512)"
+        )
     
     logger.info("Starting location report generation...")
     

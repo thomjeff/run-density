@@ -39,22 +39,18 @@ def load_runners_data() -> Dict[str, Any]:
     try:
         # Read runners.csv directly from local filesystem (Docker image includes data/)
         import pandas as pd
-        from app.utils.constants import DEFAULT_START_TIMES
         df = pd.read_csv("data/runners.csv")
         
         # Count runners by event
+        # Note: Start times are no longer available from constants (Issue #512)
+        # Dashboard shows runner counts only; start times must come from v2 API or analysis runs
         cohorts = {}
         for event in df['event'].unique():
             event_runners = df[df['event'] == event]
-            # Get start time from constants (in minutes, convert to HH:MM format)
-            start_minutes = DEFAULT_START_TIMES.get(event, 0)
-            hours = start_minutes // 60
-            minutes = start_minutes % 60
-            start_time = f"{hours:02d}:{minutes:02d}"
             
             cohorts[event] = {
-                "start": start_time,
                 "count": len(event_runners)
+                # "start" field removed - start times must come from API request (Issue #512)
             }
         
         total_runners = len(df)

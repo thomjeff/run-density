@@ -25,9 +25,10 @@ from app.bin_analysis import get_all_segment_bins, analyze_segment_bins, get_cac
 from app.geo_utils import generate_segments_geojson, generate_bins_geojson
 from app.utils.constants import (
     DISTANCE_BIN_SIZE_KM, DEFAULT_PACE_CSV, DEFAULT_SEGMENTS_CSV, 
-    DEFAULT_START_TIMES, MAP_CENTER_LAT, MAP_CENTER_LON,
+    MAP_CENTER_LAT, MAP_CENTER_LON,
     DEFAULT_SEGMENT_WIDTH_M, DEFAULT_FLOW_TYPE, DEFAULT_ZONE
 )
+# DEFAULT_START_TIMES removed (Issue #512) - Start times must come from request
 from app.cache_manager import get_global_cache_manager
 from app.map_data_generator import find_latest_reports
 # Issue #466 Step 2: Storage consolidated to app.storage
@@ -823,11 +824,19 @@ async def compare_segments(request: dict):
         if len(segment_ids) < 2:
             raise HTTPException(status_code=400, detail="At least 2 segment IDs required")
         
+        # Issue #512: startTimes is required, not optional
+        start_times = request.get('startTimes')
+        if start_times is None:
+            raise HTTPException(
+                status_code=400,
+                detail="startTimes parameter required in request body. (Issue #512)"
+            )
+        
         comparison = compare_segments(
             segment_ids=segment_ids,
             pace_csv=request.get('paceCsv', DEFAULT_PACE_CSV),
             segments_csv=request.get('segmentsCsv', DEFAULT_SEGMENTS_CSV),
-            start_times=request.get('startTimes', DEFAULT_START_TIMES),
+            start_times=start_times,
             bin_size_km=request.get('binSizeKm')
         )
         
@@ -855,7 +864,7 @@ async def export_advanced_data(request: dict):
             segment_ids=segment_ids,
             pace_csv=request.get('paceCsv', DEFAULT_PACE_CSV),
             segments_csv=request.get('segmentsCsv', DEFAULT_SEGMENTS_CSV),
-            start_times=request.get('startTimes', DEFAULT_START_TIMES),
+            start_times=request.get('startTimes'),  # Required (Issue #512)
             format=export_format,
             bin_size_km=request.get('binSizeKm')
         )
@@ -914,10 +923,18 @@ async def invalidate_segment_cache(request: dict):
             raise HTTPException(status_code=400, detail="segmentId is required")
         
         # Calculate dataset hash for invalidation
+        # Issue #512: startTimes is required
+        start_times = request.get('startTimes')
+        if start_times is None:
+            raise HTTPException(
+                status_code=400,
+                detail="startTimes parameter required in request body. (Issue #512)"
+            )
+        
         dataset_hash = calculate_dataset_hash(
             request.get('paceCsv', DEFAULT_PACE_CSV),
             request.get('segmentsCsv', DEFAULT_SEGMENTS_CSV),
-            request.get('startTimes', DEFAULT_START_TIMES)
+            start_times
         )
         
         # Invalidate cache for this segment
@@ -939,7 +956,7 @@ async def get_cache_status(
     analysisType: str = Query(..., description="Type of analysis: density, flow, or bins"),
     paceCsv: str = Query(DEFAULT_PACE_CSV, description="Path to pace data CSV"),
     segmentsCsv: str = Query(DEFAULT_SEGMENTS_CSV, description="Path to segments data CSV"),
-    startTimes: str = Query(f'{DEFAULT_START_TIMES}', description="JSON string of start times")
+    startTimes: str = Query(..., description="JSON string of start times (required - Issue #512)")
 ):
     """
     Get cache status for analysis results.
@@ -982,7 +999,7 @@ async def get_cached_analysis(
     analysisType: str = Query(..., description="Type of analysis: density, flow, or bins"),
     paceCsv: str = Query(DEFAULT_PACE_CSV, description="Path to pace data CSV"),
     segmentsCsv: str = Query(DEFAULT_SEGMENTS_CSV, description="Path to segments data CSV"),
-    startTimes: str = Query(f'{DEFAULT_START_TIMES}', description="JSON string of start times")
+    startTimes: str = Query(..., description="JSON string of start times (required - Issue #512)")
 ):
     """
     Get cached analysis results.
