@@ -216,10 +216,7 @@ def generate_new_density_report(
         'rate_warn_threshold': flagging_config.rate_warn_threshold,
         'rate_critical_threshold': flagging_config.rate_critical_threshold,
         'events': events,  # Pass events for dynamic start times (v2)
-        # Legacy defaults (for backward compatibility if events not provided)
-        'full_runners': 368,
-        '10k_runners': 618,
-        'half_runners': 912
+        # Issue #512: Removed hardcoded runner counts - must be calculated from actual data
     }
     
     # Generate report using new template engine

@@ -198,7 +198,8 @@ def build_segment_context_v2(segment_id: str, segment_data: dict, summary_dict: 
         # Use active_peak_concurrency which is the correct field name
         peak_concurrency = summary_dict.get("active_peak_concurrency", 0)
         width_m = segment_data.get("width_m", 1.0)
-        bin_seconds = 60  # Default bin size
+        from app.utils.constants import DEFAULT_BIN_TIME_WINDOW_SECONDS
+        bin_seconds = DEFAULT_BIN_TIME_WINDOW_SECONDS  # Use constant (Issue #512)
         flow_rate = compute_flow_rate(peak_concurrency, width_m, bin_seconds)
         
         # For merge segments, add flow-specific analysis

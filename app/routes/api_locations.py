@@ -15,7 +15,6 @@ import os
 from pathlib import Path
 
 from app.location_report import generate_location_report
-from app.utils.constants import DEFAULT_START_TIMES
 from app.utils.run_id import get_latest_run_id
 from app.storage import create_runflow_storage
 
@@ -72,13 +71,12 @@ async def get_locations_report(
             report_data = df.to_dict('records')
         elif generate:
             # Generate new report
-            logger.info(f"Generating locations report for run_id={run_id}")
-            result = generate_location_report(
-                locations_csv="data/locations.csv",
-                runners_csv="data/runners.csv",
-                segments_csv="data/segments.csv",
-                start_times=DEFAULT_START_TIMES,
-                run_id=run_id
+            # Issue #512: Start times must be provided - cannot use hardcoded constants
+            # For v1 compatibility, try to get from latest run metadata or fail
+            raise HTTPException(
+                status_code=400,
+                detail="start_times parameter required. Use v2 API endpoint /runflow/v2/analyze "
+                       "which provides start times in the request, or provide start_times explicitly. (Issue #512)"
             )
             
             if not result.get("ok"):
@@ -150,12 +148,11 @@ async def generate_locations_report(
         
         logger.info(f"Generating locations report for run_id={run_id}")
         
-        result = generate_location_report(
-            locations_csv="data/locations.csv",
-            runners_csv="data/runners.csv",
-            segments_csv="data/segments.csv",
-            start_times=DEFAULT_START_TIMES,
-            run_id=run_id
+        # Issue #512: Start times must be provided - cannot use hardcoded constants
+        raise HTTPException(
+            status_code=400,
+            detail="start_times parameter required. Use v2 API endpoint /runflow/v2/analyze "
+                   "which provides start times in the request, or provide start_times explicitly. (Issue #512)"
         )
         
         if not result.get("ok"):
