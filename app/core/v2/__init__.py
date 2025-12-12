@@ -34,8 +34,6 @@ from app.core.v2.timeline import (
 from app.core.v2.bins import (
     generate_bins_v2,
     filter_segments_by_events,
-    create_bins_for_segment_v2,
-    generate_bins_per_day,
 )
 from app.core.v2.density import (
     get_event_distance_range_v2,
@@ -92,8 +90,6 @@ __all__ = [
     # Bins
     "generate_bins_v2",
     "filter_segments_by_events",
-    "create_bins_for_segment_v2",
-    "generate_bins_per_day",
     # Density
     "get_event_distance_range_v2",
     "combine_runners_for_events",
