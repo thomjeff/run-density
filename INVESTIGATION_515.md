@@ -75,15 +75,47 @@ Using run_id `Hun6YkmUfgs5xEK2YCJgbM`, there are two versions of `bins.parquet`:
 - Filter might not be working correctly
 - **Check**: Log actual segment IDs being filtered
 
-## Next Steps
+## Root Cause Identified ✅
 
-1. Add logging to verify:
-   - What segments are in `/{day}/bins/bins.parquet`
-   - What segments are in `/{day}/reports/bins.parquet` before filtering
-   - What `day_segment_ids` contains
-   - What segments remain after filtering
+**Problem**: In `app/core/v2/pipeline.py` line 329, `segments_df` (the FULL segments DataFrame with ALL segments) is passed to `generate_bins_v2()` without filtering by day.
 
-2. Check if bins in `/{day}/bins/` are already incorrectly scoped
+**Code Location**: `app/core/v2/pipeline.py:326-335`
+```python
+bins_dir = generate_bins_v2(
+    density_results=day_density,
+    start_times=start_times,
+    segments_df=segments_df,  # ❌ This is ALL segments, not filtered by day!
+    runners_df=day_runners_df,
+    ...
+)
+```
 
-3. Verify the copy operation is reading from the correct day's bins directory
+**Impact**:
+1. Bin generation creates bins for ALL segments (22 segments for both SAT and SUN)
+2. Bins in `/{day}/bins/bins.parquet` contain all segments
+3. When copied to `/{day}/reports/bins.parquet`, filtering tries to reduce it, but:
+   - If filtering works correctly, reports version should be smaller
+   - But reports version is LARGER, suggesting filtering might be adding data or wrong file is copied
+
+**Why Reports Version is Larger**:
+- The filtering at line 249 in `reports.py` filters bins by `day_segment_ids`
+- But if the original bins contain all segments, and filtering is working, it should reduce size
+- **Hypothesis**: The copy operation at line 226 might be copying from wrong day, OR the filtering is not working correctly
+
+## Fix Required
+
+1. **Filter segments_df by day before passing to `generate_bins_v2()`**:
+   ```python
+   from app.core.v2.bins import filter_segments_by_events
+   day_segments_df = filter_segments_by_events(segments_df, day_events)
+   bins_dir = generate_bins_v2(
+       ...
+       segments_df=day_segments_df,  # ✅ Filtered by day
+       ...
+   )
+   ```
+
+2. **Verify filtering logic in `generate_density_report_v2()`** is working correctly
+
+3. **Add validation** to ensure bins only contain day-specific segments
 
