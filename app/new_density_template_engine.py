@@ -203,19 +203,44 @@ class NewDensityTemplateEngine:
     
     def _generate_start_times_cohorts(self, context: Dict[str, Any]) -> str:
         """Generate start times and cohorts section."""
-        # Get runner counts from context if available
-        full_count = context.get('full_runners', 368)
-        tenk_count = context.get('10k_runners', 618)
-        half_count = context.get('half_runners', 912)
+        lines = ["## Start Times & Cohorts"]
         
-        lines = [
-            "## Start Times & Cohorts",
-            f"- **Full Marathon** — 07:00 ({full_count:,} runners)",
-            f"- **10K** — 07:20 ({tenk_count:,} runners)",
-            f"- **Half Marathon** — 07:40 ({half_count:,} runners)",
+        # Use events from context if provided (v2 dynamic events)
+        events = context.get('events')
+        if events:
+            # Sort events by start_time
+            sorted_events = sorted(events.items(), key=lambda x: x[1].get('start_time', 0))
+            
+            # Event name mapping for display
+            event_display_names = {
+                'full': 'Full Marathon',
+                'half': 'Half Marathon',
+                '10k': '10K',
+                'elite': 'Elite 5K',
+                'open': 'Open 5K'
+            }
+            
+            for event_name, event_info in sorted_events:
+                display_name = event_display_names.get(event_name, event_name.capitalize())
+                start_time_str = event_info.get('start_time_formatted', 'N/A')
+                runner_count = event_info.get('runner_count', 0)
+                lines.append(f"- **{display_name}** — {start_time_str} ({runner_count:,} runners)")
+        else:
+            # Fallback to legacy hardcoded values (for backward compatibility)
+            full_count = context.get('full_runners', 368)
+            tenk_count = context.get('10k_runners', 618)
+            half_count = context.get('half_runners', 912)
+            
+            lines.extend([
+                f"- **Full Marathon** — 07:00 ({full_count:,} runners)",
+                f"- **10K** — 07:20 ({tenk_count:,} runners)",
+                f"- **Half Marathon** — 07:40 ({half_count:,} runners)"
+            ])
+        
+        lines.extend([
             "",
             "> Bins may include runners from multiple events as waves overlap in time."
-        ]
+        ])
         return "\n".join(lines)
     
     def _generate_course_overview(self, segments_df: pd.DataFrame, segment_windows_df: pd.DataFrame, bins_df: pd.DataFrame) -> str:
@@ -237,8 +262,9 @@ class NewDensityTemplateEngine:
         segments_sorted['spatial_bins'] = segments_sorted['segment_id'].map(spatial_bins).fillna(0).astype(int)
         
         for _, row in segments_sorted.iterrows():
+            segment_type = row.get('segment_type', 'N/A')
             lines.append(
-                f"| {row['segment_id']} | {row['seg_label']} | {row['segment_type']} | "
+                f"| {row['segment_id']} | {row['seg_label']} | {segment_type} | "
                 f"{row['width_m']} | {row['spatial_bins']} |"
             )
         
@@ -257,9 +283,23 @@ class NewDensityTemplateEngine:
         ]
         
         # Merge with segments to get segment_type for Util% calculation
+        # segment_type is optional - use schema_key from bins if available
+        segment_cols = ['segment_id']
+        if 'segment_type' in segments_df.columns:
+            segment_cols.append('segment_type')
         flagged_with_schema = segment_summary_df[segment_summary_df['flagged_bins'] > 0].merge(
-            segments_df[['segment_id', 'segment_type']], on='segment_id', how='left'
+            segments_df[segment_cols], on='segment_id', how='left'
         ).sort_values('segment_id')
+        
+        # If segment_type not in segments, try to get from schema_key if available
+        if 'segment_type' not in flagged_with_schema.columns and 'schema_key' in flagged_with_schema.columns:
+            # Map schema_key to segment_type (simplified mapping)
+            schema_to_type = {
+                'start_corral': 'start_corral',
+                'on_course_narrow': 'on_course_narrow',
+                'on_course_open': 'on_course_open'
+            }
+            flagged_with_schema['segment_type'] = flagged_with_schema['schema_key'].map(schema_to_type).fillna('on_course_open')
         
         if len(flagged_with_schema) == 0:
             lines.append("| *No flagged segments* | | | | | | | | | | | | |")
@@ -291,7 +331,7 @@ class NewDensityTemplateEngine:
                 worst_rate = f"{row['worst_bin_rate']:.3f}" if row['worst_bin_rate'] > 0 else "N/A"
                 
                 # Calculate Util% based on segment schema
-                segment_type = row['segment_type']
+                segment_type = row.get('segment_type', 'on_course_open')
                 flow_ref_critical = None
                 if segment_type == 'start_corral':
                     flow_ref_critical = 600
@@ -422,7 +462,7 @@ class NewDensityTemplateEngine:
                 peak_rate_ps = summary['peak_rate_per_m_per_min'] / 60.0
                 
                 # Calculate Util% if we have rate thresholds for this schema
-                segment_type = seg_row['segment_type']
+                segment_type = seg_row.get('segment_type', 'on_course_open')
                 flow_ref_critical = None
                 
                 # Get flow_ref.critical from rulebook based on segment_type
@@ -445,20 +485,22 @@ class NewDensityTemplateEngine:
                 if util_pct != "N/A":
                     peaks_line += f", Util {util_pct}"
                 
+                segment_type = seg_row.get('segment_type', 'on_course_open')
                 lines.extend([
                     "",
                     f"### {seg_label} ({seg_id})",
-                    f"- **Schema:** {seg_row['segment_type']} · **Width:** {seg_row['width_m']} m · **Bins:** {summary['total_bins']}",
+                    f"- **Schema:** {segment_type} · **Width:** {seg_row['width_m']} m · **Bins:** {summary['total_bins']}",
                     f"- **Active:** 07:00 → 10:00",  # TODO: Calculate actual active times
                     peaks_line,
                     f"- **Worst Bin:** {worst_km} km at {worst_time} — {summary['worst_severity']} ({summary['worst_reason']})",
-                    f"- **Mitigations:** {self._get_mitigations_for_segment(seg_id, summary['worst_reason'], seg_row['segment_type'])}"
+                    f"- **Mitigations:** {self._get_mitigations_for_segment(seg_id, summary['worst_reason'], segment_type)}"
                 ])
             else:
+                segment_type = seg_row.get('segment_type', 'on_course_open')
                 lines.extend([
                     "",
                     f"### {seg_label} ({seg_id})",
-                    f"- **Schema:** {seg_row['segment_type']} · **Width:** {seg_row['width_m']} m",
+                    f"- **Schema:** {segment_type} · **Width:** {seg_row['width_m']} m",
                     "- **Status:** No operational flags"
                 ])
         

@@ -1,349 +1,280 @@
 """
-Runflow v2 Bin Generation Module
+V2 Bin Generation Module
 
-Provides event-aware, day-scoped bin generation for v2 analysis.
-Replaces hardcoded event lists with dynamic event filtering.
-
-Phase 3: Timeline & Bin Rewrite (Issue #497)
+Wraps v1 bin generation logic to support day-partitioned output structure.
+Also provides segment filtering utilities used by density and flow analysis.
 """
 
-from typing import Dict, List, Any, Optional, Tuple
+import logging
+import os
+import time
+from pathlib import Path
+from typing import Dict, Any, Optional, Tuple, List
 import pandas as pd
+
+from app.density_report import (
+    AnalysisContext,
+    _generate_bin_dataset_with_retry,
+    _save_bin_artifacts_and_metadata,
+    _process_segments_from_bins
+)
+from app.save_bins import save_bin_artifacts
+from app.core.bin.summary import generate_bin_summary_artifact
+from app.utils.constants import BIN_SCHEMA_VERSION
 from app.core.v2.models import Day, Event
-from app.core.v2.timeline import DayTimeline
-from app.utils.constants import DEFAULT_BIN_SIZE_KM, DEFAULT_TIME_BIN_SECONDS, SECONDS_PER_MINUTE
+
+logger = logging.getLogger(__name__)
 
 
-def calculate_runner_arrival_time(
-    event_start_time_minutes: int,
-    runner_start_offset_seconds: int,
-    pace_minutes_per_km: float,
-    segment_distance_km: float
-) -> int:
+def filter_segments_by_events(segments_df: pd.DataFrame, events: List[Event]) -> pd.DataFrame:
     """
-    Calculate runner arrival time at a segment distance.
+    Filter segments to those used by ANY of the requested events.
     
-    Formula matches existing codebase pattern:
-    absolute_time = event.start_time (seconds) + runner.start_offset + (pace * segment_distance)
-    
-    This matches the pattern in location_report.py line 414 and overlap.py line 52.
-    The day_start (t0) is used for day-scoped timeline normalization, not for arrival calculation.
+    This is used for density analysis to find all segments where at least one
+    of the requested events is present. For flow analysis, use get_shared_segments()
+    instead to find segments where BOTH events are present.
     
     Args:
-        event_start_time_minutes: Event start time in minutes after midnight
-        runner_start_offset_seconds: Runner start offset in seconds (already in seconds)
-        pace_minutes_per_km: Runner pace in minutes per kilometer
-        segment_distance_km: Distance to segment in kilometers
+        segments_df: Full segments DataFrame
+        events: List of Event objects to filter by
         
     Returns:
-        Absolute arrival time in seconds from midnight
-        
-    Example:
-        >>> # Event starts at 7:20 AM (440 min = 26400 sec)
-        >>> # Runner offset: 10 seconds
-        >>> # Pace: 4 min/km, Distance: 5 km
-        >>> # Travel time: 4 * 5 * 60 = 1200 seconds
-        >>> calculate_runner_arrival_time(
-        ...     event_start_time_minutes=440,
-        ...     runner_start_offset_seconds=10,
-        ...     pace_minutes_per_km=4.0,
-        ...     segment_distance_km=5.0
-        ... )
-        27610  # 26400 + 10 + 1200 = 27610 seconds from midnight (7:40:10 AM)
-    """
-    # Convert event start time from minutes to seconds
-    event_start_seconds = event_start_time_minutes * SECONDS_PER_MINUTE
-    
-    # Calculate travel time: pace (min/km) * distance (km) * 60 (sec/min)
-    travel_time_seconds = pace_minutes_per_km * segment_distance_km * SECONDS_PER_MINUTE
-    
-    # Calculate absolute arrival time
-    # Pattern matches location_report.py: event_start_sec + start_offset + pace_sec_per_km * seg_distance_km
-    absolute_time = event_start_seconds + runner_start_offset_seconds + travel_time_seconds
-    
-    return int(absolute_time)
-
-
-def enforce_cross_day_guard(events: List[Event]) -> None:
-    """
-    Enforce cross-day guard: ensure events share the same day.
-    
-    Raises error if events from different days are detected.
-    This prevents cross-day contamination in bin generation.
-    
-    Args:
-        events: List of events to validate
-        
-    Raises:
-        ValueError: If events are from different days
-        
-    Example:
-        >>> elite = Event(name="elite", day=Day.SAT, start_time=480, ...)
-        >>> full = Event(name="full", day=Day.SUN, start_time=420, ...)
-        >>> enforce_cross_day_guard([elite, full])  # Should raise ValueError
-        Traceback (most recent call last):
-        ...
-        ValueError: Events must be on the same day
-    """
-    if not events:
-        return
-    
-    first_day = events[0].day
-    for event in events[1:]:
-        if event.day != first_day:
-            raise ValueError(
-                f"Cross-day guard violation: Events must be on the same day. "
-                f"Found {first_day.value} and {event.day.value}"
-            )
-
-
-def filter_segments_by_events(
-    segments_df: pd.DataFrame,
-    events: List[Event]
-) -> pd.DataFrame:
-    """
-    Filter segments DataFrame to only include segments used by requested events.
-    
-    Uses segments.csv event flags (full, half, 10k, elite, open columns)
-    to determine which segments each event uses.
-    
-    Args:
-        segments_df: Full segments DataFrame from segments.csv
-        events: List of Event objects from API payload
-        
-    Returns:
-        Filtered DataFrame with only segments used by requested events
+        Filtered DataFrame containing only segments used by at least one event
         
     Example:
         >>> segments_df = pd.DataFrame({
         ...     "seg_id": ["A1", "A2", "B1"],
-        ...     "full": ["y", "y", "n"],
+        ...     "full": ["y", "n", "y"],
         ...     "half": ["y", "n", "n"],
         ... })
-        >>> events = [Event(name="full", day=Day.SUN, ...)]
+        >>> events = [Event(name="full", day=Day.SUN, ...), Event(name="half", day=Day.SUN, ...)]
         >>> filtered = filter_segments_by_events(segments_df, events)
-        >>> len(filtered) == 2  # A1 and A2 (where full='y')
+        >>> len(filtered) == 2  # A1 (both), B1 (full only)
         True
     """
-    if segments_df.empty:
-        return segments_df
+    if segments_df.empty or not events:
+        return segments_df.copy()
     
-    # Collect all segment IDs used by any requested event
-    used_seg_ids = set()
+    # Build mask for segments used by any event
+    combined_mask = pd.Series([False] * len(segments_df), index=segments_df.index)
     
     for event in events:
         event_name = event.name.lower()
         
-        # Find event flag column (case-insensitive)
-        event_flag_col = None
+        # Find column matching event name (case-insensitive)
         for col in segments_df.columns:
-            if col.lower() == event_name.lower():
-                event_flag_col = col
+            if col.lower() == event_name:
+                event_mask = segments_df[col].astype(str).str.lower().isin(['y', 'yes', 'true', '1'])
+                combined_mask |= event_mask
                 break
-        
-        if event_flag_col and event_flag_col in segments_df.columns:
-            # Filter segments where this event flag is 'y'
-            event_segments = segments_df[
-                segments_df[event_flag_col].astype(str).str.lower().isin(['y', 'yes', 'true', '1'])
-            ]
-            used_seg_ids.update(event_segments["seg_id"].tolist())
     
-    # Return filtered DataFrame
-    if used_seg_ids:
-        return segments_df[segments_df["seg_id"].isin(used_seg_ids)]
-    else:
-        # No segments found for any event - return empty DataFrame
-        return pd.DataFrame(columns=segments_df.columns)
+    filtered_segments = segments_df[combined_mask].copy()
+    
+    logger.debug(
+        f"Filtered segments: {len(segments_df)} -> {len(filtered_segments)} "
+        f"for {len(events)} events: {[e.name for e in events]}"
+    )
+    
+    return filtered_segments
 
 
-def resolve_segment_spans(
-    segment_data: Dict[str, Any],
-    events: List[Event]
-) -> Tuple[float, float]:
-    """
-    Resolve segment boundaries from per-event spans.
-    
-    For each segment, extracts spans for each requested event and calculates
-    min/max boundaries across all event spans.
-    
-    Args:
-        segment_data: Segment row as dictionary (from segments DataFrame)
-        events: List of Event objects (requested events)
-        
-    Returns:
-        Tuple of (min_km, max_km) representing segment boundaries
-        
-    Example:
-        >>> segment_data = {
-        ...     "seg_id": "F1",
-        ...     "full_from_km": 16.35,
-        ...     "full_to_km": 18.65,
-        ...     "half_from_km": 2.7,
-        ...     "half_to_km": 5.0,
-        ... }
-        >>> events = [
-        ...     Event(name="full", day=Day.SUN, ...),
-        ...     Event(name="half", day=Day.SUN, ...),
-        ... ]
-        >>> min_km, max_km = resolve_segment_spans(segment_data, events)
-        >>> min_km == 2.7  # Minimum across all event spans
-        True
-        >>> max_km == 18.65  # Maximum across all event spans
-        True
-    """
-    min_km = float('inf')
-    max_km = 0.0
-    
-    for event in events:
-        event_name = event.name.lower()
-        from_key = f"{event_name}_from_km"
-        to_key = f"{event_name}_to_km"
-        
-        # Find columns case-insensitively
-        from_col = None
-        to_col = None
-        for col in segment_data.keys():
-            if col.lower() == from_key.lower():
-                from_col = col
-            elif col.lower() == to_key.lower():
-                to_col = col
-        
-        if from_col and to_col and from_col in segment_data and to_col in segment_data:
-            from_km = segment_data.get(from_col)
-            to_km = segment_data.get(to_col)
-            
-            if from_km is not None and to_km is not None:
-                try:
-                    from_km = float(from_km)
-                    to_km = float(to_km)
-                    min_km = min(min_km, from_km)
-                    max_km = max(max_km, to_km)
-                except (ValueError, TypeError):
-                    # Skip invalid values
-                    continue
-    
-    if min_km == float('inf'):
-        min_km = 0.0
-    
-    return min_km, max_km
-
-
-def create_bins_for_segment_v2(
-    segment_data: Dict[str, Any],
-    events: List[Event],
-    bin_size_km: float = DEFAULT_BIN_SIZE_KM
-) -> List[Dict[str, Any]]:
-    """
-    Create bins for a segment using event-aware span resolution.
-    
-    Replaces hardcoded event list with dynamic event filtering.
-    Uses per-event spans from segments.csv to determine bin boundaries.
-    
-    Args:
-        segment_data: Segment row as dictionary
-        events: List of Event objects (requested events)
-        bin_size_km: Bin size in kilometers (default: 0.1km)
-        
-    Returns:
-        List of bin dictionaries with start_km, end_km, bin_index
-        
-    Example:
-        >>> segment_data = {
-        ...     "seg_id": "A1",
-        ...     "full_from_km": 0.0,
-        ...     "full_to_km": 0.9,
-        ...     "half_from_km": 0.0,
-        ...     "half_to_km": 0.9,
-        ... }
-        >>> events = [Event(name="full", day=Day.SUN, ...)]
-        >>> bins = create_bins_for_segment_v2(segment_data, events)
-        >>> len(bins) == 9  # 0.9 km / 0.1 km = 9 bins
-        True
-    """
-    # Enforce cross-day guard
-    enforce_cross_day_guard(events)
-    
-    # Resolve segment spans from per-event columns
-    min_km, max_km = resolve_segment_spans(segment_data, events)
-    
-    segment_length = max_km - min_km
-    
-    if segment_length <= 0:
-        return []
-    
-    # Create bins
-    bins = []
-    num_bins = int(segment_length / bin_size_km) + 1
-    
-    for i in range(num_bins):
-        start_km = min_km + (i * bin_size_km)
-        end_km = min(min_km + ((i + 1) * bin_size_km), max_km)
-        
-        if start_km >= max_km:
-            break
-        
-        bins.append({
-            "bin_index": i,
-            "start_km": start_km,
-            "end_km": end_km,
-            "segment_id": segment_data.get("seg_id", "unknown")
-        })
-    
-    return bins
-
-
-def generate_bins_per_day(
+def generate_bins_v2(
+    density_results: Dict[str, Any],
+    start_times: Dict[str, float],
     segments_df: pd.DataFrame,
-    events_by_day: Dict[Day, List[Event]],
-    bin_size_km: float = DEFAULT_BIN_SIZE_KM
-) -> Dict[Day, Dict[str, List[Dict[str, Any]]]]:
+    runners_df: pd.DataFrame,
+    run_id: str,
+    day: Day,
+    events: List[Event],
+    data_dir: str = "data"
+) -> Optional[Path]:
     """
-    Generate bins partitioned by day.
+    Generate bin artifacts for a specific day using v1 bin generation logic.
     
-    Creates bins for each day independently, ensuring no cross-day contamination.
-    Filters segments to only those used by events on each day.
+    This function wraps the v1 bin generation to:
+    1. Create AnalysisContext with v2 data
+    2. Temporarily provide combined runners CSV for build_runner_window_mapping()
+    3. Call v1 bin generation functions
+    4. Save artifacts to day-partitioned structure: runflow/{run_id}/{day}/bins/
     
     Args:
-        segments_df: Full segments DataFrame
-        events_by_day: Dictionary mapping Day to list of Events
-        bin_size_km: Bin size in kilometers
+        density_results: Density analysis results from analyze_density_segments_v2()
+        start_times: Dictionary mapping event names to start times in minutes (float)
+        segments_df: Segments DataFrame
+        runners_df: Runners DataFrame (filtered to day)
+        run_id: Run identifier
+        day: Day enum
+        events: List of events for this day
+        data_dir: Base directory for data files
         
     Returns:
-        Dictionary mapping Day to segment bins: {Day: {seg_id: [bins]}}
-        
-    Example:
-        >>> segments_df = pd.DataFrame({
-        ...     "seg_id": ["A1", "A2"],
-        ...     "full": ["y", "y"],
-        ...     "elite": ["n", "y"],
-        ... })
-        >>> events_by_day = {
-        ...     Day.SUN: [Event(name="full", day=Day.SUN, ...)],
-        ...     Day.SAT: [Event(name="elite", day=Day.SAT, ...)],
-        ... }
-        >>> bins_by_day = generate_bins_per_day(segments_df, events_by_day)
-        >>> Day.SUN in bins_by_day
-        True
-        >>> Day.SAT in bins_by_day
-        True
+        Path to bins directory if successful, None otherwise
     """
-    bins_by_day = {}
+    # Check if bin generation is enabled
+    enable_bins = os.getenv('ENABLE_BIN_DATASET', 'true').lower() == 'true'
+    if not enable_bins:
+        logger.info(f"Bin dataset generation disabled (ENABLE_BIN_DATASET=false) for day {day.value}")
+        return None
     
-    for day, day_events in events_by_day.items():
-        # Filter segments to only those used by events on this day
-        day_segments_df = filter_segments_by_events(segments_df, day_events)
+    logger.info(f"Generating bin artifacts for day {day.value}")
+    
+    try:
+        # Get day-partitioned bins directory
+        from app.core.v2.reports import get_day_output_path
+        bins_dir = get_day_output_path(run_id, day, "bins")
+        bins_dir.mkdir(parents=True, exist_ok=True)
         
-        # Create bins for each segment
-        day_bins = {}
-        for _, segment_row in day_segments_df.iterrows():
-            segment_data = segment_row.to_dict()
-            seg_id = segment_data.get("seg_id")
+        # Map event names to v1 format
+        event_name_mapping = {
+            "full": "Full",
+            "half": "Half",
+            "10k": "10K",
+            "elite": "Elite",
+            "open": "Open"
+        }
+        
+        # Get segments CSV path
+        segments_csv_path = str(Path(data_dir) / "segments.csv")
+        
+        # CRITICAL FIX: build_runner_window_mapping() hardcodes reading from "data/runners.csv"
+        # We need to temporarily replace it with our day-filtered runners
+        # However, build_runner_window_mapping() expects event names like 'Full', '10K', 'Half'
+        # So we need to map our lowercase event names to uppercase for the legacy function
+        import tempfile
+        import shutil
+        
+        # Create temp combined runners CSV with v1 event names (uppercase for legacy compatibility)
+        temp_runners_df = runners_df.copy()
+        if 'event' in temp_runners_df.columns:
+            # Map v2 lowercase event names to v1 uppercase format for build_runner_window_mapping()
+            temp_runners_df['event'] = temp_runners_df['event'].str.lower().map(
+                lambda x: event_name_mapping.get(x, x.capitalize())
+            )
+        
+        # Create temp file
+        temp_runners_csv = tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False)
+        temp_runners_df.to_csv(temp_runners_csv.name, index=False)
+        temp_runners_csv.close()
+        temp_runners_path = temp_runners_csv.name
+        
+        # Temporarily replace "data/runners.csv" with our temp file
+        original_runners_path = Path(data_dir) / "runners.csv"
+        backup_runners_path = None
+        runners_was_replaced = False
+        
+        try:
+            # If "data/runners.csv" exists, back it up
+            if original_runners_path.exists():
+                backup_runners_path = str(original_runners_path) + ".backup"
+                shutil.copy2(original_runners_path, backup_runners_path)
             
-            if seg_id:
-                bins = create_bins_for_segment_v2(segment_data, day_events, bin_size_km)
-                day_bins[seg_id] = bins
+            # Copy our temp file to "data/runners.csv"
+            shutil.copy2(temp_runners_path, original_runners_path)
+            runners_was_replaced = True
+            logger.debug(f"Temporarily replaced data/runners.csv with day-filtered runners ({len(temp_runners_df)} runners)")
+            
+        except Exception as e:
+            logger.warning(f"Failed to temporarily replace data/runners.csv: {e}")
+            # Continue anyway - bin generation might still work
         
-        bins_by_day[day] = day_bins
-    
-    return bins_by_day
-
+        # Create AnalysisContext
+        analysis_context = AnalysisContext(
+            course_id="fredericton_marathon",
+            segments=segments_df,
+            runners=runners_df,
+            params={"start_times": start_times},
+            code_version="v2.0.0",
+            schema_version=BIN_SCHEMA_VERSION,
+            pace_csv_path=str(original_runners_path),
+            segments_csv_path=segments_csv_path
+        )
+        
+        # Call v1 bin generation with retry logic
+        start_time = time.monotonic()
+        temp_output_dir = tempfile.mkdtemp()
+        
+        try:
+            daily_folder_path, bin_metadata, bin_data = _generate_bin_dataset_with_retry(
+                density_results, start_times, temp_output_dir, analysis_context
+            )
+            
+            if not daily_folder_path:
+                logger.error(f"Bin generation returned no folder path for day {day.value}")
+                return None
+            
+            # Move bin artifacts from temp location to day-partitioned bins directory
+            temp_bins_dir = Path(daily_folder_path)
+            if temp_bins_dir.exists():
+                # Copy bin artifacts to day-partitioned location
+                bin_files = [
+                    "bins.parquet",
+                    "bins.geojson.gz",
+                    "bin_summary.json",
+                    "segment_windows_from_bins.parquet"
+                ]
+                
+                for bin_file in bin_files:
+                    src = temp_bins_dir / bin_file
+                    if src.exists():
+                        dst = bins_dir / bin_file
+                        shutil.copy2(src, dst)
+                        logger.debug(f"Copied {bin_file} to {dst}")
+                
+                # Also copy any other parquet/json files
+                for src_file in temp_bins_dir.glob("*.parquet"):
+                    dst = bins_dir / src_file.name
+                    shutil.copy2(src_file, dst)
+                    logger.debug(f"Copied {src_file.name} to {dst}")
+                
+                for src_file in temp_bins_dir.glob("*.json"):
+                    dst = bins_dir / src_file.name
+                    shutil.copy2(src_file, dst)
+                    logger.debug(f"Copied {src_file.name} to {dst}")
+            
+            # Log summary
+            elapsed = time.monotonic() - start_time
+            final_features = len(bin_data.get("geojson", {}).get("features", [])) if bin_data else 0
+            occupied_bins = bin_data.get("geojson", {}).get("metadata", {}).get("occupied_bins", 0) if bin_data else 0
+            logger.info(
+                f"Generated {final_features} bin features for day {day.value} in {elapsed:.1f}s "
+                f"(occupied: {occupied_bins})"
+            )
+            
+            if occupied_bins == 0:
+                logger.warning(f"⚠️ No occupied bins found for day {day.value} - runner mapping may have failed")
+            
+            return bins_dir
+            
+        finally:
+            # Restore original "data/runners.csv" if we replaced it
+            if runners_was_replaced:
+                try:
+                    if backup_runners_path and os.path.exists(backup_runners_path):
+                        shutil.copy2(backup_runners_path, original_runners_path)
+                        os.unlink(backup_runners_path)
+                        logger.debug(f"Restored original data/runners.csv")
+                    elif original_runners_path.exists():
+                        # Remove our temp file (only if we created it)
+                        try:
+                            os.unlink(original_runners_path)
+                        except:
+                            pass
+                except Exception as e:
+                    logger.warning(f"Failed to restore original data/runners.csv: {e}")
+            
+            # Clean up temp files
+            try:
+                shutil.rmtree(temp_output_dir)
+            except Exception as e:
+                logger.warning(f"Failed to clean up temp directory {temp_output_dir}: {e}")
+            
+            # Clean up temp runners CSV
+            try:
+                if os.path.exists(temp_runners_path):
+                    os.unlink(temp_runners_path)
+            except Exception as e:
+                logger.warning(f"Failed to clean up temp runners CSV {temp_runners_path}: {e}")
+        
+    except Exception as e:
+        logger.error(f"Failed to generate bins for day {day.value}: {e}", exc_info=True)
+        return None

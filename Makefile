@@ -7,7 +7,7 @@
 PORT ?= 8080
 
 # -------- Phony targets --------
-.PHONY: help usage --help dev e2e-local test stop build validate-output validate-all
+.PHONY: help usage --help dev e2e-local test stop build validate-output validate-all test-v2
 
 # -------- Use same shell for multi-line targets --------
 .ONESHELL:
@@ -26,6 +26,7 @@ help usage --help: ## Show this help message
 	@echo "  stop                Stop Docker container"
 	@echo "  build               Build Docker image"
 	@echo "  test                Run smoke tests (health checks + API validation)"
+	@echo "  test-v2             Test v2 analysis API (sat + sun events, no reload mode)"
 	@echo "  e2e-local           Run full end-to-end test suite (generates all artifacts)"
 	@echo "  validate-output     Validate output integrity for latest run"
 	@echo "  validate-all        Validate output for all runs in index.json"
@@ -69,6 +70,9 @@ test: ## Run smoke tests (health checks + API validation)
 	@curl -fsS "http://localhost:$(PORT)/api/dashboard/summary" | jq -e '.peak_density >= 0' >/dev/null && echo "✅ Dashboard OK" || (echo "❌ Dashboard FAILED" && exit 1)
 	@curl -fsS "http://localhost:$(PORT)/api/density/segments" | jq -e 'length > 0' >/dev/null && echo "✅ Density API OK" || (echo "❌ Density API FAILED" && exit 1)
 	@echo "🎉 All smoke tests passed"
+
+test-v2: ## Test v2 analysis API (sat + sun events, no reload mode)
+	@bash scripts/test_v2_analysis.sh
 
 validate-output: ## Validate output integrity for latest run
 	@echo "🔍 Validating output integrity..."

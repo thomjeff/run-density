@@ -150,9 +150,12 @@ def _load_and_apply_segment_metadata(
             # Resolve schema using schema_resolver (Issue #254)
             def get_schema(segment_id):
                 segment_type = None
-                if 'segment_type' in segments_df.columns:
-                    lookup = seg_lookup['segment_type'].get(segment_id)
-                    segment_type = lookup if pd.notna(lookup) else None
+                if 'segment_type' in segments_df.columns and segment_id in seg_lookup.index:
+                    try:
+                        lookup = seg_lookup.loc[segment_id, 'segment_type']
+                        segment_type = lookup if pd.notna(lookup) else None
+                    except (KeyError, IndexError):
+                        segment_type = None
                 return resolve_schema(segment_id, segment_type)
             
             result_df['schema_key'] = result_df['segment_id'].apply(get_schema)

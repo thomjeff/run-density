@@ -681,6 +681,19 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
     # Get segments from results
     segments = results.get("segments", [])
     
+    # Sort segments: first by seg_id, then by event pair (normalized)
+    # This ensures sub-segments (A1a, A1b, A1c) are grouped together regardless of event pair
+    def sort_key(segment):
+        """Create sort key: (seg_id, event_pair_normalized)"""
+        seg_id = str(segment.get("seg_id", ""))
+        event_a = str(segment.get("event_a", "")).lower()
+        event_b = str(segment.get("event_b", "")).lower()
+        # Create consistent pair (always alphabetical)
+        pair = tuple(sorted([event_a, event_b]))
+        return (seg_id, pair)
+    
+    segments = sorted(segments, key=sort_key)
+    
     with open(full_path, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         

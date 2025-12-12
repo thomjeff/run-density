@@ -3420,7 +3420,8 @@ def save_bin_dataset(bin_data: Dict[str, Any], output_dir: str) -> str:
 def generate_new_density_report_issue246(
     reports_dir: str,
     output_path: Optional[str] = None,
-    app_version: str = "1.6.42"
+    app_version: str = "1.6.42",
+    events: Optional[Dict[str, Dict[str, Any]]] = None
 ) -> Dict[str, Any]:
     """
     Generate the new density report per Issue #246 specification.
@@ -3432,6 +3433,7 @@ def generate_new_density_report_issue246(
         reports_dir: Directory containing Parquet files
         output_path: Path to save the report (optional)
         app_version: Application version
+        events: Optional dict of event info (name -> {start_time, start_time_formatted, runner_count})
         
     Returns:
         Dictionary with report content and metadata
@@ -3444,7 +3446,7 @@ def generate_new_density_report_issue246(
     output_path_obj = Path(output_path) if output_path else None
     
     # Generate the new report
-    results = generate_new_density_report(reports_path, output_path_obj, app_version)
+    results = generate_new_density_report(reports_path, output_path_obj, app_version, events=events)
     
     # Return in the format expected by the existing API
     return {

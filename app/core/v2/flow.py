@@ -1,89 +1,41 @@
 """
 Runflow v2 Flow Pipeline Module
 
-Refactors flow pipeline to generate event pairs only for same-day events,
-filter segments to those common to both events, and use per-event distance ranges.
-Upholds existing overtake semantics while ensuring no cross-day interactions.
+Refactors flow pipeline to support multi-day, multi-event analysis.
+Uses flow.csv as authoritative source for event pairs, ordering, and distance ranges.
+Upholds existing flow calculations while ensuring no cross-day contamination.
 
 Phase 5: Flow Pipeline Refactor (Issue #499)
+
+Core Principles:
+- flow.csv is the authoritative source for:
+  * Which event pairs to analyze
+  * Event ordering (event_a vs event_b)
+  * Distance ranges (from_km_a, to_km_a, from_km_b, to_km_b)
+  * Flow metadata (flow_type, notes, overtake_flag)
+- Handle sub-segment pattern (e.g., A1 → A1a, A1b, A1c)
+- Only fall back to segments.csv + start_time ordering when flow.csv doesn't contain the pair
+- Do not alter core flow logic (overtake detection, co-presence, convergence)
+- Reuse v1 analyze_temporal_flow_segments() function without modification
 """
 
 from typing import Dict, List, Any, Optional, Tuple
+from pathlib import Path
 import pandas as pd
 import logging
+import tempfile
+import os
+from itertools import combinations
 
 from app.core.v2.models import Day, Event
 from app.core.v2.timeline import DayTimeline
-from app.core.flow.flow import (
-    analyze_temporal_flow_segments,
-    _get_event_distance_range,  # v1 function (deprecated for v2)
-)
-from app.utils.shared import load_pace_csv, load_segments_csv
+from app.core.v2.bins import filter_segments_by_events
+from app.core.v2.density import get_event_distance_range_v2, load_all_runners_for_events, filter_runners_by_day
+from app.core.flow.flow import analyze_temporal_flow_segments
+from app.utils.shared import load_pace_csv
+from app.utils.constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
 logger = logging.getLogger(__name__)
-
-
-def generate_event_pairs_v2(events: List[Event]) -> List[Tuple[Event, Event]]:
-    """
-    Generate event pairs only for events sharing the same day.
-    
-    Phase 5 (Issue #499): Replaces hardcoded Sunday event pairs with dynamic
-    same-day pair generation. Prevents cross-day interactions.
-    
-    Args:
-        events: List of Event objects from API payload
-        
-    Returns:
-        List of (Event, Event) tuples for same-day pairs
-        
-    Examples:
-        Saturday pairs: (elite, elite), (open, open), (elite, open)
-        Sunday pairs: (full, half), (full, 10k), (half, 10k), (full, full), (half, half), (10k, 10k)
-        No cross-day pairs: (elite, full) is rejected
-        
-    Raises:
-        ValueError: If events list is empty
-    """
-    if not events:
-        raise ValueError("Cannot generate event pairs from empty events list")
-    
-    # Group events by day
-    events_by_day: Dict[Day, List[Event]] = {}
-    for event in events:
-        events_by_day.setdefault(event.day, []).append(event)
-    
-    # Generate pairs within each day
-    pairs: List[Tuple[Event, Event]] = []
-    
-    for day, day_events in events_by_day.items():
-        # Generate all valid pairs within this day
-        for i, event_a in enumerate(day_events):
-            for j, event_b in enumerate(day_events):
-                # Include all pairs (including same-event pairs like full-full)
-                # This matches v1 behavior where same-event pairs are analyzed
-                pairs.append((event_a, event_b))
-    
-    logger.info(f"Generated {len(pairs)} event pairs from {len(events)} events across {len(events_by_day)} days")
-    return pairs
-
-
-def enforce_same_day_pairs(event_a: Event, event_b: Event) -> None:
-    """
-    Enforce that event pairs must be from the same day.
-    
-    Args:
-        event_a: First event in pair
-        event_b: Second event in pair
-        
-    Raises:
-        ValueError: If events are from different days
-    """
-    if event_a.day != event_b.day:
-        raise ValueError(
-            f"Cross-day event pair detected: '{event_a.name}' (day: {event_a.day.value}) "
-            f"and '{event_b.name}' (day: {event_b.day.value}) cannot be paired. "
-            f"Flow analysis only supports same-day event pairs."
-        )
 
 
 def get_shared_segments(
@@ -117,7 +69,12 @@ def get_shared_segments(
         >>> len(shared) == 1  # Only A1 is used by both
         True
     """
-    enforce_same_day_pairs(event_a, event_b)
+    if event_a.day != event_b.day:
+        raise ValueError(
+            f"Cross-day event pair detected: '{event_a.name}' (day: {event_a.day.value}) "
+            f"and '{event_b.name}' (day: {event_b.day.value}) cannot be paired. "
+            f"Flow analysis only supports same-day event pairs."
+        )
     
     # Normalize event names to lowercase for column matching
     event_a_name = event_a.name.lower()
@@ -148,28 +105,198 @@ def get_shared_segments(
     return shared_segments
 
 
-def _create_converted_segment_v2(
-    segment: pd.Series,
-    event_a: Event,
-    event_b: Event
-) -> Dict[str, Any]:
+def load_flow_csv(
+    flow_file: str,
+    data_dir: str = "data"
+) -> pd.DataFrame:
     """
-    Create a converted segment with event-specific distance ranges (v2).
-    
-    Uses get_event_distance_range_v2() instead of hardcoded _get_event_distance_range().
+    Load flow.csv as the authoritative source for event pairs, ordering, and distance ranges.
     
     Args:
-        segment: Original segment data row
-        event_a: First Event object
-        event_b: Second Event object
+        flow_file: Name of flow CSV file (default: "flow.csv")
+        data_dir: Base directory for data files (default: "data")
         
     Returns:
-        Dictionary with converted segment data in flow format
+        DataFrame with flow.csv data, or empty DataFrame if file doesn't exist
     """
-    from_km_a, to_km_a = get_event_distance_range_v2(segment, event_a)
-    from_km_b, to_km_b = get_event_distance_range_v2(segment, event_b)
+    flow_path = Path(data_dir) / flow_file
     
-    # Map v2 event names to v1 format for flow analysis compatibility
+    if not flow_path.exists():
+        logger.warning(f"Flow file '{flow_file}' not found in {data_dir}/, proceeding without flow.csv")
+        return pd.DataFrame()
+    
+    try:
+        flow_df = pd.read_csv(flow_path)
+        logger.info(f"Loaded {len(flow_df)} rows from flow.csv")
+        return flow_df
+    except Exception as e:
+        logger.warning(f"Failed to load flow.csv: {e}, proceeding without flow.csv")
+        return pd.DataFrame()
+
+
+def extract_event_pairs_from_flow_csv(
+    flow_df: pd.DataFrame,
+    events: List[Event]
+) -> List[Tuple[Event, Event]]:
+    """
+    Extract event pairs from flow.csv, preserving the intentional ordering.
+    
+    flow.csv defines event_a and event_b with intentional ordering based on race dynamics.
+    This function extracts unique pairs from flow.csv and maps them to Event objects.
+    
+    Args:
+        flow_df: DataFrame from flow.csv
+        events: List of Event objects from API payload
+        
+    Returns:
+        List of (Event, Event) tuples, ordered as specified in flow.csv
+    """
+    if flow_df.empty:
+        return []
+    
+    # Create event lookup by name (case-insensitive)
+    event_lookup = {}
+    for event in events:
+        event_lookup[event.name.lower()] = event
+    
+    # Extract unique event pairs from flow.csv
+    pairs_set = set()
+    pairs_list = []
+    
+    for _, row in flow_df.iterrows():
+        event_a_name = str(row.get('event_a', '')).lower()
+        event_b_name = str(row.get('event_b', '')).lower()
+        
+        # Skip if either event is missing or not in our events list
+        if not event_a_name or not event_b_name:
+            continue
+        
+        event_a_obj = event_lookup.get(event_a_name)
+        event_b_obj = event_lookup.get(event_b_name)
+        
+        if event_a_obj and event_b_obj:
+            # Use tuple of (lowercase_name_a, lowercase_name_b) as key to preserve ordering
+            pair_key = (event_a_name, event_b_name)
+            
+            if pair_key not in pairs_set:
+                pairs_set.add(pair_key)
+                # Preserve flow.csv ordering: (event_a, event_b)
+                pairs_list.append((event_a_obj, event_b_obj))
+    
+    logger.info(f"Extracted {len(pairs_list)} unique event pairs from flow.csv")
+    return pairs_list
+
+
+def generate_event_pairs_fallback(
+    events: List[Event]
+) -> List[Tuple[Event, Event]]:
+    """
+    Generate event pairs using start_time ordering as fallback when flow.csv is not available.
+    
+    This is only used when flow.csv doesn't contain the pair.
+    Orders pairs by start time: event_a (earlier) < event_b (later).
+    
+    Args:
+        events: List of Event objects from API payload
+        
+    Returns:
+        List of (Event, Event) tuples for same-day pairs, ordered by start time
+    """
+    if not events:
+        raise ValueError("Cannot generate event pairs from empty events list")
+    
+    # Group events by day
+    from app.core.v2.loader import group_events_by_day
+    events_by_day = group_events_by_day(events)
+    
+    pairs: List[Tuple[Event, Event]] = []
+    
+    for day, day_events in events_by_day.items():
+        day_combinations = list(combinations(day_events, 2))
+        
+        # Order each pair by start time: (earlier event, later event)
+        for event1, event2 in day_combinations:
+            if event1.start_time <= event2.start_time:
+                pairs.append((event1, event2))
+            else:
+                pairs.append((event2, event1))
+    
+    logger.info(f"Generated {len(pairs)} event pairs using fallback (start_time ordering)")
+    return pairs
+
+
+def find_flow_csv_segments_for_pair(
+    flow_df: pd.DataFrame,
+    event_a: Event,
+    event_b: Event,
+    segments_df: pd.DataFrame
+) -> pd.DataFrame:
+    """
+    Find all segments in flow.csv for a specific event pair, including sub-segments.
+    
+    Handles sub-segment pattern (e.g., A1 → A1a, A1b, A1c) by matching:
+    1. Exact seg_id matches
+    2. Sub-segments where seg_id starts with the base segment ID
+    
+    Args:
+        flow_df: DataFrame from flow.csv
+        event_a: First event in pair (as specified in flow.csv)
+        event_b: Second event in pair (as specified in flow.csv)
+        segments_df: Full segments DataFrame (for fallback)
+        
+    Returns:
+        DataFrame with matching rows from flow.csv
+    """
+    if flow_df.empty:
+        return pd.DataFrame()
+    
+    # Normalize event names for matching
+    event_a_name = event_a.name.lower()
+    event_b_name = event_b.name.lower()
+    
+    # Find rows matching this event pair (case-insensitive)
+    mask = (
+        (flow_df["event_a"].astype(str).str.lower() == event_a_name) &
+        (flow_df["event_b"].astype(str).str.lower() == event_b_name)
+    )
+    
+    matching_rows = flow_df[mask].copy()
+    
+    if not matching_rows.empty:
+        logger.debug(
+            f"Found {len(matching_rows)} flow.csv rows for pair ({event_a.name}, {event_b.name})"
+        )
+        return matching_rows
+    
+    return pd.DataFrame()
+
+
+def create_flow_segments_from_flow_csv(
+    flow_rows: pd.DataFrame,
+    event_a: Event,
+    event_b: Event,
+    segments_df: pd.DataFrame
+) -> pd.DataFrame:
+    """
+    Create flow-format segments DataFrame from flow.csv rows.
+    
+    Uses flow.csv as authoritative source for:
+    - Event ordering (event_a, event_b)
+    - Distance ranges (from_km_a, to_km_a, from_km_b, to_km_b)
+    - Flow metadata (flow_type, notes, overtake_flag, prior_seg_id)
+    
+    Args:
+        flow_rows: DataFrame with matching rows from flow.csv
+        event_a: First event in pair (as Event object)
+        event_b: Second event in pair (as Event object)
+        segments_df: Full segments DataFrame (for additional metadata like width_m, direction)
+        
+    Returns:
+        DataFrame in flow format with columns: seg_id, eventa, eventb, from_km_a, to_km_a, etc.
+    """
+    flow_format_segments = []
+    
+    # Event name mapping from v2 (lowercase) to v1 format
     event_name_mapping = {
         "full": "Full",
         "half": "Half",
@@ -178,132 +305,127 @@ def _create_converted_segment_v2(
         "open": "Open"
     }
     
-    return {
-        "seg_id": segment.get('seg_id', ''),
-        "segment_label": segment.get("seg_label", ""),
-        "eventa": event_name_mapping.get(event_a.name.lower(), event_a.name.capitalize()),
-        "eventb": event_name_mapping.get(event_b.name.lower(), event_b.name.capitalize()),
-        "from_km_a": from_km_a,
-        "to_km_a": to_km_a,
-        "from_km_b": from_km_b,
-        "to_km_b": to_km_b,
-        "direction": segment.get("direction", ""),
-        "width_m": segment.get("width_m", 0),
-        "overtake_flag": segment.get("overtake_flag", ""),
-        "flow_type": segment.get("flow_type", ""),
-        "length_km": segment.get("length_km", 0)
-    }
-
-
-def get_event_distance_range_v2(
-    segment: pd.Series,
-    event: Event
-) -> Tuple[float, float]:
-    """
-    Extract distance range for a specific event from segment data (v2).
+    v1_event_a = event_name_mapping.get(event_a.name.lower(), event_a.name.capitalize())
+    v1_event_b = event_name_mapping.get(event_b.name.lower(), event_b.name.capitalize())
     
-    Replaces hardcoded event name logic in _get_event_distance_range() with dynamic lookup.
-    Supports all event types: full, half, 10k, elite, open (lowercase).
-    
-    Args:
-        segment: Segment data row as pandas Series
-        event: Event object with normalized name (lowercase)
+    for _, flow_row in flow_rows.iterrows():
+        seg_id = flow_row["seg_id"]
         
-    Returns:
-        Tuple of (from_km, to_km) for the event
+        # Get base segment ID (e.g., "A1" from "A1a")
+        base_seg_id = seg_id.rstrip('abcdefghijklmnopqrstuvwxyz')
         
-    Example:
-        >>> segment = pd.Series({
-        ...     "seg_id": "A1",
-        ...     "full_from_km": 0.0,
-        ...     "full_to_km": 0.9,
-        ... })
-        >>> event = Event(name="full", day=Day.SUN, start_time=420, ...)
-        >>> get_event_distance_range_v2(segment, event)
-        (0.0, 0.9)
-    """
-    event_name = event.name.lower()
-    from_key = f"{event_name}_from_km"
-    to_key = f"{event_name}_to_km"
-    
-    # Case-insensitive column matching (handles "10K" vs "10k")
-    from_col = None
-    to_col = None
-    for col in segment.index:
-        if col.lower() == from_key.lower():
-            from_col = col
-        elif col.lower() == to_key.lower():
-            to_col = col
-    
-    if from_col and to_col and from_col in segment.index and to_col in segment.index:
-        from_km = segment.get(from_col)
-        to_km = segment.get(to_col)
+        # Try to find base segment in segments_df for additional metadata
+        seg_metadata = segments_df[segments_df["seg_id"] == base_seg_id]
         
-        if from_km is not None and to_km is not None:
-            try:
-                return (float(from_km), float(to_km))
-            except (ValueError, TypeError):
-                logger.debug(f"Invalid span values for event '{event_name}' in segment '{segment.get('seg_id', 'unknown')}'")
-                return (0.0, 0.0)
+        # Use flow.csv distance ranges (authoritative)
+        from_km_a = float(flow_row.get("from_km_a", 0))
+        to_km_a = float(flow_row.get("to_km_a", 0))
+        from_km_b = float(flow_row.get("from_km_b", 0))
+        to_km_b = float(flow_row.get("to_km_b", 0))
+        
+        # Get additional metadata from segments_df if available
+        width_m = 0
+        direction = ""
+        if not seg_metadata.empty:
+            width_m = seg_metadata.iloc[0].get("width_m", 0)
+            direction = seg_metadata.iloc[0].get("direction", "")
+        
+        # Create flow-format segment using flow.csv data
+        flow_segment = {
+            "seg_id": seg_id,
+            "segment_label": flow_row.get("seg_label", ""),
+            "eventa": v1_event_a,  # Use flow.csv ordering
+            "eventb": v1_event_b,  # Use flow.csv ordering
+            "from_km_a": from_km_a,  # From flow.csv
+            "to_km_a": to_km_a,  # From flow.csv
+            "from_km_b": from_km_b,  # From flow.csv
+            "to_km_b": to_km_b,  # From flow.csv
+            "direction": direction or flow_row.get("direction", ""),
+            "width_m": width_m or flow_row.get("width_m", 0),
+            "flow_type": flow_row.get("flow_type", "none"),
+            "overtake_flag": flow_row.get("overtake_flag", ""),
+            "prior_segment_id": flow_row.get("prior_seg_id", "") if pd.notna(flow_row.get("prior_seg_id", "")) else "",
+            "notes": flow_row.get("notes", ""),
+            "length_km": to_km_a - from_km_a if to_km_a > from_km_a else 0
+        }
+        flow_format_segments.append(flow_segment)
     
-    logger.debug(f"No distance range found for event '{event_name}' in segment '{segment.get('seg_id', 'unknown')}'")
-    return (0.0, 0.0)
+    flow_format_df = pd.DataFrame(flow_format_segments)
+    
+    logger.debug(
+        f"Created {len(flow_format_df)} flow-format segments from flow.csv for pair ({event_a.name}, {event_b.name})"
+    )
+    
+    return flow_format_df
 
 
-def filter_flow_csv_by_events(
-    flow_df: pd.DataFrame,
-    events: List[Event]
+def create_flow_segments_fallback(
+    shared_segments: pd.DataFrame,
+    event_a: Event,
+    event_b: Event
 ) -> pd.DataFrame:
     """
-    Filter flow.csv to only include pairs for requested events.
+    Create flow-format segments DataFrame using fallback logic (segments.csv + start_time ordering).
     
-    Matches event_a and event_b columns to requested event names (case-insensitive).
-    Only processes flow relationships for same-day pairs.
+    This is only used when flow.csv doesn't contain the segment-pair.
+    Uses get_event_distance_range_v2() to extract from segments.csv.
     
     Args:
-        flow_df: Flow DataFrame from flow.csv
-        events: List of Event objects from API payload
+        shared_segments: Segments DataFrame (segments where both events are present)
+        event_a: First event in pair (ordered by start_time)
+        event_b: Second event in pair (ordered by start_time)
         
     Returns:
-        Filtered DataFrame containing only flow relationships for requested events
-        
-    Example:
-        >>> flow_df = pd.DataFrame({
-        ...     "event_a": ["Full", "Half", "Elite"],
-        ...     "event_b": ["Half", "10K", "Open"],
-        ... })
-        >>> events = [
-        ...     Event(name="full", day=Day.SUN, ...),
-        ...     Event(name="half", day=Day.SUN, ...),
-        ... ]
-        >>> filtered = filter_flow_csv_by_events(flow_df, events)
-        >>> len(filtered) == 1  # Only Full-Half pair
-        True
+        DataFrame in flow format with columns: seg_id, eventa, eventb, from_km_a, to_km_a, etc.
     """
-    if flow_df.empty:
-        return flow_df
+    flow_format_segments = []
     
-    # Get normalized event names (lowercase)
-    event_names = {event.name.lower() for event in events}
+    # Event name mapping from v2 (lowercase) to v1 format
+    event_name_mapping = {
+        "full": "Full",
+        "half": "Half",
+        "10k": "10K",
+        "elite": "Elite",
+        "open": "Open"
+    }
     
-    # Filter rows where both event_a and event_b are in requested events
-    # Case-insensitive matching
-    if "event_a" in flow_df.columns and "event_b" in flow_df.columns:
-        mask = (
-            flow_df["event_a"].astype(str).str.lower().isin(event_names) &
-            flow_df["event_b"].astype(str).str.lower().isin(event_names)
-        )
-        filtered = flow_df[mask].copy()
+    v1_event_a = event_name_mapping.get(event_a.name.lower(), event_a.name.capitalize())
+    v1_event_b = event_name_mapping.get(event_b.name.lower(), event_b.name.capitalize())
+    
+    for _, segment_row in shared_segments.iterrows():
+        seg_id = segment_row["seg_id"]
         
-        logger.debug(
-            f"Filtered flow.csv from {len(flow_df)} rows to {len(filtered)} rows "
-            f"for {len(events)} requested events"
-        )
+        # Get distance ranges from segments.csv using get_event_distance_range_v2()
+        from_km_a, to_km_a = get_event_distance_range_v2(segment_row, event_a)
+        from_km_b, to_km_b = get_event_distance_range_v2(segment_row, event_b)
         
-        return filtered
-    else:
-        logger.warning("flow.csv missing 'event_a' or 'event_b' columns, returning original DataFrame")
-        return flow_df
+        # Create flow-format segment
+        flow_segment = {
+            "seg_id": seg_id,
+            "segment_label": segment_row.get("seg_label", ""),
+            "eventa": v1_event_a,
+            "eventb": v1_event_b,
+            "from_km_a": from_km_a,
+            "to_km_a": to_km_a,
+            "from_km_b": from_km_b,
+            "to_km_b": to_km_b,
+            "direction": segment_row.get("direction", ""),
+            "width_m": segment_row.get("width_m", 0),
+            "flow_type": segment_row.get("flow_type", "none"),
+            "overtake_flag": "",
+            "prior_segment_id": "",
+            "notes": "",
+            "length_km": segment_row.get("length_km", 0)
+        }
+        flow_format_segments.append(flow_segment)
+    
+    flow_format_df = pd.DataFrame(flow_format_segments)
+    
+    logger.debug(
+        f"Created {len(flow_format_df)} flow-format segments (fallback) for pair ({event_a.name}, {event_b.name})"
+    )
+    
+    return flow_format_df
 
 
 def analyze_temporal_flow_segments_v2(
@@ -311,88 +433,109 @@ def analyze_temporal_flow_segments_v2(
     timelines: List[DayTimeline],
     segments_df: pd.DataFrame,
     all_runners_df: pd.DataFrame,
-    flow_df: pd.DataFrame,
-    pace_csv: Optional[str] = None,
-    segments_csv: Optional[str] = None,
-    min_overlap_duration: float = 0.0,
-    conflict_length_m: float = 50.0,
+    flow_file: str = "flow.csv",
+    data_dir: str = "data",
+    min_overlap_duration: float = DEFAULT_MIN_OVERLAP_DURATION,
+    conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
 ) -> Dict[Day, Dict[str, Any]]:
     """
     Analyze temporal flow for all segments using v2 Event objects and day-scoped data.
     
     This is the main v2 entry point that:
-    1. Generates same-day event pairs
-    2. Filters segments to those shared by both events
-    3. Filters flow.csv to requested events
-    4. Calls existing flow math functions with filtered data
-    5. Returns results partitioned by day
+    1. Loads flow.csv as authoritative source
+    2. Extracts event pairs from flow.csv (preserving intentional ordering)
+    3. For each pair, finds matching segments in flow.csv (including sub-segments)
+    4. Uses flow.csv distance ranges and event ordering
+    5. Falls back to segments.csv + start_time ordering only when flow.csv doesn't have the pair
+    6. Calls existing v1 analyze_temporal_flow_segments() function
+    7. Returns results partitioned by day
     
     Args:
         events: List of Event objects from API payload
         timelines: List of DayTimeline objects from Phase 3
         segments_df: Full segments DataFrame
         all_runners_df: Full runners DataFrame (all events)
-        flow_df: Flow DataFrame from flow.csv
-        pace_csv: Optional path to pace CSV (if None, will create temporary file from all_runners_df)
-        segments_csv: Optional path to segments CSV (if None, will create temporary file from segments_df)
+        flow_file: Name of flow CSV file (default: "flow.csv")
+        data_dir: Base directory for data files (default: "data")
         min_overlap_duration: Minimum overlap duration for flow analysis
         conflict_length_m: Conflict length in meters for flow analysis
         
     Returns:
-        Dictionary mapping Day to flow analysis results:
-        {
-            Day.SUN: {
-                "ok": True,
-                "segments": {...},
-                "summary": {...},
-                ...
-            },
-            Day.SAT: {...},
-            ...
-        }
+        Dictionary mapping Day to flow analysis results
     """
-    # Generate same-day event pairs
-    pairs = generate_event_pairs_v2(events)
-    
-    if not pairs:
-        logger.warning("No event pairs generated, returning empty results")
-        return {}
-    
-    # Filter flow.csv to requested events
-    filtered_flow_df = filter_flow_csv_by_events(flow_df, events)
-    
-    # Group pairs by day for day-scoped analysis
-    pairs_by_day: Dict[Day, List[Tuple[Event, Event]]] = {}
-    for event_a, event_b in pairs:
-        day = event_a.day  # Both events have same day (enforced in generate_event_pairs_v2)
-        pairs_by_day.setdefault(day, []).append((event_a, event_b))
-    
-    # Analyze flow per day
     results_by_day: Dict[Day, Dict[str, Any]] = {}
     
+    # Load flow.csv as authoritative source
+    flow_df = load_flow_csv(flow_file, data_dir)
+    
+    # Extract event pairs from flow.csv (preserving intentional ordering)
+    flow_csv_pairs = extract_event_pairs_from_flow_csv(flow_df, events) if not flow_df.empty else []
+    
+    # Generate fallback pairs for any events not in flow.csv
+    all_pairs = flow_csv_pairs.copy()
+    if flow_df.empty:
+        # No flow.csv, use fallback for all pairs
+        fallback_pairs = generate_event_pairs_fallback(events)
+        all_pairs = fallback_pairs
+        logger.info("flow.csv not available, using fallback pair generation")
+    else:
+        # Check if we need fallback pairs for any events
+        flow_csv_event_names = set()
+        for pair in flow_csv_pairs:
+            flow_csv_event_names.add(pair[0].name.lower())
+            flow_csv_event_names.add(pair[1].name.lower())
+        
+        requested_event_names = {e.name.lower() for e in events}
+        missing_events = requested_event_names - flow_csv_event_names
+        
+        if missing_events:
+            logger.warning(f"Some events not in flow.csv: {missing_events}, generating fallback pairs")
+            # Generate fallback pairs for missing events
+            missing_event_objs = [e for e in events if e.name.lower() in missing_events]
+            fallback_pairs = generate_event_pairs_fallback(missing_event_objs)
+            all_pairs.extend(fallback_pairs)
+    
+    if not all_pairs:
+        logger.warning("No event pairs generated, returning empty results")
+        return results_by_day
+    
+    # Group pairs by day
+    pairs_by_day: Dict[Day, List[Tuple[Event, Event]]] = {}
+    for event_a, event_b in all_pairs:
+        day = event_a.day  # Both events have same day
+        pairs_by_day.setdefault(day, []).append((event_a, event_b))
+    
+    # Create timeline lookup
+    timeline_by_day = {timeline.day: timeline for timeline in timelines}
+    
+    # Analyze flow per day
     for day, day_pairs in pairs_by_day.items():
+        logger.info(f"Analyzing flow for day {day.value} with {len(day_pairs)} event pairs")
+        
         # Get timeline for this day
-        day_timeline = next((t for t in timelines if t.day == day), None)
-        if not day_timeline:
-            logger.warning(f"No timeline found for day {day.value}, skipping flow analysis")
+        timeline = timeline_by_day.get(day)
+        if not timeline:
+            logger.warning(f"No timeline found for day {day.value}, skipping")
             continue
         
-        # Filter runners to this day
-        day_event_names = {event.name.lower() for pair in day_pairs for event in pair}
-        day_runners_df = all_runners_df[
-            all_runners_df["event"].astype(str).str.lower().isin(day_event_names)
-        ].copy()
+        # Filter runners to only those from events on this day
+        day_events = [event for pair in day_pairs for event in pair]
+        day_events_unique = list({event.name: event for event in day_events}.values())
+        day_runners_df = filter_runners_by_day(all_runners_df, day, day_events_unique)
         
         if day_runners_df.empty:
             logger.warning(f"No runners found for day {day.value}, skipping flow analysis")
             results_by_day[day] = {
                 "ok": False,
-                "error": f"No runners found for day {day.value}"
+                "error": "No runners found for this day",
+                "segments": [],
+                "day": day.value,
+                "events": [e.name for e in day_events_unique]
             }
             continue
         
-        # Prepare start_times dict (convert minutes to datetime for v1 compatibility)
-        # Map v2 event names to v1 format
+        # Prepare start_times dict (in minutes, not datetime, for v1 compatibility)
+        start_times = {}
         event_name_mapping = {
             "full": "Full",
             "half": "Half",
@@ -401,101 +544,114 @@ def analyze_temporal_flow_segments_v2(
             "open": "Open"
         }
         
-        start_times: Dict[str, float] = {}
-        for event in [e for pair in day_pairs for e in pair]:
+        for event in day_events_unique:
             v1_event_name = event_name_mapping.get(event.name.lower(), event.name.capitalize())
-            # start_times expects minutes after midnight (already in Event.start_time)
             start_times[v1_event_name] = float(event.start_time)
         
-        # Map event names in runners DataFrame to v1 format
-        if "event" in day_runners_df.columns:
-            day_runners_df = day_runners_df.copy()
-            day_runners_df["event"] = day_runners_df["event"].str.lower().map(
-                lambda x: event_name_mapping.get(x, x.capitalize())
-            )
+        logger.info(f"Day {day.value}: Analyzing {len(day_pairs)} pairs with {len(day_runners_df)} runners")
         
-        # For each pair, filter segments and analyze flow
-        day_results = {
-            "ok": True,
-            "day": day.value,
-            "pairs": [],
-            "segments": {},
-            "summary": {
-                "total_pairs": len(day_pairs),
-                "processed_pairs": 0,
-            }
-        }
+        # Collect all flow-format segments for all pairs on this day
+        all_flow_segments = []
         
         for event_a, event_b in day_pairs:
-            # Get shared segments for this pair
-            shared_segments = get_shared_segments(event_a, event_b, segments_df)
+            # Try to find segments in flow.csv first (authoritative)
+            flow_csv_rows = find_flow_csv_segments_for_pair(flow_df, event_a, event_b, segments_df)
             
-            if shared_segments.empty:
+            if not flow_csv_rows.empty:
+                # Use flow.csv as authoritative source
+                flow_format_segments = create_flow_segments_from_flow_csv(
+                    flow_csv_rows, event_a, event_b, segments_df
+                )
+                all_flow_segments.append(flow_format_segments)
                 logger.debug(
-                    f"No shared segments found for pair ({event_a.name}, {event_b.name}), skipping"
+                    f"Using flow.csv for pair ({event_a.name}, {event_b.name}): {len(flow_format_segments)} segments"
                 )
-                continue
-            
-            # Create temporary CSV files if needed
-            import tempfile
-            import os
-            
-            temp_pace_csv = pace_csv
-            temp_segments_csv = segments_csv
-            
-            if not temp_pace_csv:
-                # Create temporary pace CSV from day_runners_df
-                temp_fd, temp_pace_csv = tempfile.mkstemp(suffix='.csv', prefix='pace_')
-                os.close(temp_fd)
-                day_runners_df.to_csv(temp_pace_csv, index=False)
-            
-            if not temp_segments_csv:
-                # Convert shared_segments to flow format (long format with event pairs)
-                # This matches what analyze_temporal_flow_segments expects
-                flow_format_segments = []
-                for _, segment in shared_segments.iterrows():
-                    # Create converted segment in flow format using v2 function
-                    converted = _create_converted_segment_v2(segment, event_a, event_b)
-                    flow_format_segments.append(converted)
+            else:
+                # Fallback: use segments.csv + start_time ordering
+                shared_segments = get_shared_segments(event_a, event_b, segments_df)
                 
-                flow_format_df = pd.DataFrame(flow_format_segments)
+                if shared_segments.empty:
+                    logger.debug(
+                        f"No shared segments found for pair ({event_a.name}, {event_b.name}), skipping"
+                    )
+                    continue
                 
-                # Create temporary segments CSV from flow format segments
-                temp_fd, temp_segments_csv = tempfile.mkstemp(suffix='.csv', prefix='segments_')
-                os.close(temp_fd)
-                flow_format_df.to_csv(temp_segments_csv, index=False)
-            
-            try:
-                # Call existing flow analysis function with filtered data
-                # This reuses all existing flow math (overtake detection, co-presence, etc.)
-                pair_results = analyze_temporal_flow_segments(
-                    pace_csv=temp_pace_csv,
-                    segments_csv=temp_segments_csv,
-                    start_times=start_times,
-                    min_overlap_duration=min_overlap_duration,
-                    conflict_length_m=conflict_length_m,
+                flow_format_segments = create_flow_segments_fallback(
+                    shared_segments, event_a, event_b
                 )
-                
-                # Store results for this pair
-                pair_key = f"{event_a.name}_{event_b.name}"
-                day_results["pairs"].append(pair_key)
-                day_results["segments"][pair_key] = pair_results.get("segments", {})
-                day_results["summary"]["processed_pairs"] += 1
-                
-            except Exception as e:
-                logger.error(
-                    f"Error analyzing flow for pair ({event_a.name}, {event_b.name}): {e}",
-                    exc_info=True
+                all_flow_segments.append(flow_format_segments)
+                logger.debug(
+                    f"Using fallback for pair ({event_a.name}, {event_b.name}): {len(flow_format_segments)} segments"
                 )
-                continue
-            finally:
-                # Clean up temporary files if we created them
-                if not pace_csv and os.path.exists(temp_pace_csv):
-                    os.remove(temp_pace_csv)
-                if not segments_csv and os.path.exists(temp_segments_csv):
-                    os.remove(temp_segments_csv)
         
-        results_by_day[day] = day_results
+        if not all_flow_segments:
+            logger.warning(f"No flow segments found for day {day.value}")
+            results_by_day[day] = {
+                "ok": False,
+                "error": "No flow segments found",
+                "segments": [],
+                "day": day.value,
+                "events": [e.name for e in day_events_unique]
+            }
+            continue
+        
+        # Combine all flow segments
+        combined_flow_segments = pd.concat(all_flow_segments, ignore_index=True)
+        
+        logger.info(
+            f"Day {day.value}: Created {len(combined_flow_segments)} flow-format segments "
+            f"for {len(day_pairs)} event pairs"
+        )
+        
+        # Create temporary CSV files for v1 function
+        temp_pace_csv = None
+        temp_segments_csv = None
+        
+        try:
+            # Create temporary pace CSV
+            temp_fd, temp_pace_csv = tempfile.mkstemp(suffix='.csv', prefix='pace_')
+            os.close(temp_fd)
+            day_runners_df.to_csv(temp_pace_csv, index=False)
+            
+            # Create temporary segments CSV
+            temp_fd, temp_segments_csv = tempfile.mkstemp(suffix='.csv', prefix='segments_')
+            os.close(temp_fd)
+            combined_flow_segments.to_csv(temp_segments_csv, index=False)
+            
+            # Call v1 analyze_temporal_flow_segments() function
+            flow_results = analyze_temporal_flow_segments(
+                pace_csv=temp_pace_csv,
+                segments_csv=temp_segments_csv,
+                start_times=start_times,
+                min_overlap_duration=min_overlap_duration,
+                conflict_length_m=conflict_length_m
+            )
+            
+            # Add day and events metadata to results
+            flow_results["day"] = day.value
+            flow_results["events"] = [e.name for e in day_events_unique]
+            
+            results_by_day[day] = flow_results
+            
+            logger.info(
+                f"Day {day.value}: Flow analysis complete. "
+                f"Processed {len(flow_results.get('segments', []))} segments"
+            )
+            
+        except Exception as e:
+            logger.error(f"Day {day.value}: Flow analysis failed: {str(e)}", exc_info=True)
+            results_by_day[day] = {
+                "ok": False,
+                "error": str(e),
+                "segments": [],
+                "day": day.value,
+                "events": [e.name for e in day_events_unique]
+            }
+        finally:
+            # Clean up temporary files
+            if temp_pace_csv and os.path.exists(temp_pace_csv):
+                os.unlink(temp_pace_csv)
+            if temp_segments_csv and os.path.exists(temp_segments_csv):
+                os.unlink(temp_segments_csv)
     
     return results_by_day
-
