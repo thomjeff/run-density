@@ -711,16 +711,16 @@ async def get_map_config():
     """
     try:
         from app.utils.constants import (
-            DEFAULT_START_TIMES, DEFAULT_PACE_CSV, DEFAULT_SEGMENTS_CSV,
+            DEFAULT_PACE_CSV, DEFAULT_SEGMENTS_CSV,
             MAP_CENTER_LAT, MAP_CENTER_LON, MAP_DEFAULT_ZOOM,
             MAP_TILE_URL, MAP_TILE_ATTRIBUTION, MAP_MAX_ZOOM,
             MAP_DENSITY_THRESHOLDS, MAP_ZONE_COLORS
         )
         
+        # Issue #512: startTimes removed from config - must come from request
         return JSONResponse(content={
             "ok": True,
             "config": {
-                "startTimes": DEFAULT_START_TIMES,
                 "paceCsv": DEFAULT_PACE_CSV,
                 "segmentsCsv": DEFAULT_SEGMENTS_CSV,
                 "mapCenter": [MAP_CENTER_LAT, MAP_CENTER_LON],
