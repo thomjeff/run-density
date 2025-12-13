@@ -369,6 +369,31 @@ def create_full_analysis_pipeline(
         locations_df=locations_df
     )
     
+    # Generate UI artifacts (Phase 7 - Issue #501)
+    # Generate artifacts per day with full run scope data
+    from app.core.v2.ui_artifacts import generate_ui_artifacts_per_day
+    artifacts_by_day = {}
+    for day, day_events in events_by_day.items():
+        try:
+            artifacts_path = generate_ui_artifacts_per_day(
+                run_id=run_id,
+                day=day,
+                events=events,  # Pass all events for full run scope
+                density_results=density_results,
+                flow_results=flow_results,
+                segments_df=segments_df,
+                all_runners_df=all_runners_df,
+                data_dir=data_dir,
+                environment="local"
+            )
+            if artifacts_path:
+                artifacts_by_day[day.value] = str(artifacts_path)
+                logger.info(f"Generated UI artifacts for day {day.value}: {artifacts_path}")
+            else:
+                logger.warning(f"UI artifact generation returned None for day {day.value}")
+        except Exception as e:
+            logger.error(f"Failed to generate UI artifacts for day {day.value}: {e}", exc_info=True)
+    
     # Create day-partitioned structure
     output_paths = {}
     days_processed = []
