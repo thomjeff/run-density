@@ -413,9 +413,10 @@ def _export_ui_artifacts_v2(
                 # CRITICAL FIX: Filter features to only include day segments
                 if "features" in segments_geojson:
                     original_count = len(segments_geojson["features"])
+                    # Convert segment_id to string for comparison (handles both str and int)
                     segments_geojson["features"] = [
                         feature for feature in segments_geojson["features"]
-                        if feature.get("properties", {}).get("segment_id") in day_segment_ids
+                        if str(feature.get("properties", {}).get("segment_id", "")) in day_segment_ids
                     ]
                     logger.info(
                         f"   ✅ Filtered segments.geojson: {original_count} -> "
