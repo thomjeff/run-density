@@ -14,10 +14,6 @@ import pandas as pd
 
 from app.core.v2.models import Day, Event
 from app.utils.run_id import get_runflow_root
-from app.core.artifacts.frontend import (
-    export_ui_artifacts,
-    calculate_flow_segment_counts
-)
 
 logger = logging.getLogger(__name__)
 
@@ -320,7 +316,8 @@ def _export_ui_artifacts_v2(
                 
                 # CRITICAL FIX: Filter segment_metrics to only include day segments
                 segment_metrics_filtered = {
-                    seg_id: metrics for seg_id, metrics in segment_metrics.items()
+                    seg_id: metrics
+                    for seg_id, metrics in segment_metrics.items()
                     if str(seg_id) in day_segment_ids
                 }
                 
@@ -409,14 +406,24 @@ def _export_ui_artifacts_v2(
         try:
             if aggregated_bins is not None and not aggregated_bins.empty and temp_reports:
                 segments_geojson = generate_segments_geojson(temp_reports)
-                
+
                 # CRITICAL FIX: Filter features to only include day segments
                 if "features" in segments_geojson:
                     original_count = len(segments_geojson["features"])
-                    # Convert segment_id to string for comparison (handles both str and int)
+
+                    def _feature_segment_id(feature: Dict[str, Any]) -> str:
+                        props = feature.get("properties", {})
+                        return str(
+                            props.get("segment_id")
+                            or props.get("seg_id")
+                            or props.get("id")
+                            or ""
+                        )
+
                     segments_geojson["features"] = [
-                        feature for feature in segments_geojson["features"]
-                        if str(feature.get("properties", {}).get("segment_id", "")) in day_segment_ids
+                        feature
+                        for feature in segments_geojson["features"]
+                        if _feature_segment_id(feature) in day_segment_ids
                     ]
                     logger.info(
                         f"   ✅ Filtered segments.geojson: {original_count} -> "
@@ -484,18 +491,23 @@ def _export_ui_artifacts_v2(
                 if heatmaps_source and heatmaps_source.exists():
                     heatmaps_dest = ui_path / "heatmaps"
                     heatmaps_dest.mkdir(parents=True, exist_ok=True)
-                    
-                    # CRITICAL FIX: Filter heatmap PNGs to only include day segments
-                    import os
+
                     heatmaps_moved = 0
                     for png_file in heatmaps_source.glob("*.png"):
                         # Extract segment_id from filename (e.g., "A1.png" -> "A1")
                         seg_id = png_file.stem
                         if str(seg_id) in day_segment_ids:
                             dest_file = heatmaps_dest / png_file.name
-                            shutil.copy2(png_file, dest_file)
+                            shutil.move(str(png_file), str(dest_file))
                             heatmaps_moved += 1
-                    
+
+                    # Clean up source directory if empty after move
+                    try:
+                        if heatmaps_source.exists() and not any(heatmaps_source.iterdir()):
+                            heatmaps_source.rmdir()
+                    except Exception as cleanup_err:
+                        logger.debug(f"   ⚠️  Could not remove source heatmaps dir: {cleanup_err}")
+
                     logger.info(
                         f"   ✅ Heatmaps filtered and moved: {heatmaps_moved} PNGs "
                         f"for day {day.value} ({len(day_segment_ids)} segments)"
