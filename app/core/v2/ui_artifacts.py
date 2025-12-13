@@ -265,6 +265,14 @@ def _export_ui_artifacts_v2(
         # Aggregate bins from all days for full run scope
         aggregated_bins = _aggregate_bins_from_all_days(run_id)
         if aggregated_bins is not None and not aggregated_bins.empty:
+            # Normalize column names for v1 functions
+            # v1 expects 'rate_p_s' but v2 bins.parquet has 'rate'
+            if 'rate' in aggregated_bins.columns and 'rate_p_s' not in aggregated_bins.columns:
+                aggregated_bins = aggregated_bins.rename(columns={'rate': 'rate_p_s'})
+            # v1 expects 'segment_id' but v2 might have 'seg_id'
+            if 'seg_id' in aggregated_bins.columns and 'segment_id' not in aggregated_bins.columns:
+                aggregated_bins = aggregated_bins.rename(columns={'seg_id': 'segment_id'})
+            
             # Create temporary reports structure for v1 functions
             temp_reports = ui_path.parent / "reports_temp"
             temp_bins_dir = temp_reports / "bins"
@@ -401,24 +409,41 @@ def _export_ui_artifacts_v2(
         try:
             if temp_reports:
                 export_heatmaps_and_captions(run_id, temp_reports, None)
-                # Move heatmaps to ui_path/heatmaps if they were generated elsewhere
-                # Check both possible locations
-                runflow_root = get_runflow_root()
-                heatmaps_source = runflow_root / run_id / "ui" / "heatmaps"
-                if not heatmaps_source.exists():
-                    # Try legacy location
-                    from pathlib import Path
-                    heatmaps_source = Path("artifacts") / run_id / "ui" / "heatmaps"
                 
+                # Move heatmaps and captions to day-scoped UI directory
+                # Check multiple possible source locations
+                import shutil
+                runflow_root = get_runflow_root()
+                
+                # Try runflow/{run_id}/ui/ first (v1 UUID structure)
+                heatmaps_source = runflow_root / run_id / "ui" / "heatmaps"
+                captions_source = runflow_root / run_id / "ui" / "captions.json"
+                
+                # If not found, try legacy artifacts/ location
+                if not heatmaps_source.exists():
+                    from pathlib import Path
+                    heatmaps_source = Path("/app/artifacts") / run_id / "ui" / "heatmaps"
+                    captions_source = Path("/app/artifacts") / run_id / "ui" / "captions.json"
+                
+                # Move heatmaps
                 if heatmaps_source.exists():
-                    import shutil
                     heatmaps_dest = ui_path / "heatmaps"
                     if heatmaps_dest.exists():
                         shutil.rmtree(heatmaps_dest)
                     shutil.move(str(heatmaps_source), str(heatmaps_dest))
                     logger.info(f"   ✅ Heatmaps moved to {heatmaps_dest}")
                 else:
-                    logger.warning(f"   ⚠️  Heatmaps not found at expected location")
+                    logger.warning(f"   ⚠️  Heatmaps not found at {heatmaps_source}")
+                
+                # Move captions.json
+                if captions_source.exists():
+                    captions_dest = ui_path / "captions.json"
+                    if captions_dest.exists():
+                        captions_dest.unlink()
+                    shutil.move(str(captions_source), str(captions_dest))
+                    logger.info(f"   ✅ Captions moved to {captions_dest}")
+                else:
+                    logger.warning(f"   ⚠️  Captions not found at {captions_source}")
             else:
                 logger.warning("   ⚠️  Skipping heatmaps (no temp_reports directory)")
         except Exception as e:
