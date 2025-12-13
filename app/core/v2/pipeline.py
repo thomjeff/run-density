@@ -366,8 +366,51 @@ def create_full_analysis_pipeline(
         flow_results=flow_results,
         segments_df=segments_df,
         all_runners_df=all_runners_df,
-        locations_df=locations_df
+        locations_df=locations_df,
+        data_dir=data_dir
     )
+    
+    # Generate map_data.json per day (for density page map visualization)
+    from app.core.v2.reports import get_day_output_path
+    from app.density_report import generate_map_dataset
+    import json
+    maps_by_day = {}
+    for day, day_events in events_by_day.items():
+        try:
+            maps_dir = get_day_output_path(run_id, day, "maps")
+            maps_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Get density results for this day
+            day_density = density_results.get(day.value, {})
+            if not day_density:
+                logger.warning(f"No density results for day {day.value}, skipping map_data.json")
+                continue
+            
+            # Prepare start_times dict for map generation (v1 format: "Full", "10K", etc.)
+            event_name_mapping = {
+                "full": "Full",
+                "half": "Half",
+                "10k": "10K",
+                "elite": "Elite",
+                "open": "Open"
+            }
+            start_times_for_map = {}
+            for event in day_events:
+                v1_event_name = event_name_mapping.get(event.name.lower(), event.name.capitalize())
+                start_times_for_map[v1_event_name] = float(event.start_time)
+            
+            # Generate map dataset from density results
+            map_data = generate_map_dataset(day_density, start_times_for_map)
+            
+            # Save to day-scoped maps directory
+            map_data_path = maps_dir / "map_data.json"
+            with open(map_data_path, 'w', encoding='utf-8') as f:
+                json.dump(map_data, f, indent=2, default=str)
+            
+            maps_by_day[day.value] = str(maps_dir)
+            logger.info(f"Generated map_data.json for day {day.value}: {map_data_path}")
+        except Exception as e:
+            logger.warning(f"Could not generate map_data.json for day {day.value}: {e}", exc_info=True)
     
     # Generate UI artifacts (Phase 7 - Issue #501)
     # Generate artifacts per day with full run scope data
