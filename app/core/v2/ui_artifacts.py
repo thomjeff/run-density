@@ -257,6 +257,7 @@ def _export_ui_artifacts_v2(
     # Aggregate bins.parquet from all days, then filter by day segments
     aggregated_bins = None
     temp_reports = None
+    heatmap_reports = None
     
     try:
         # Aggregate bins from all days first
@@ -291,6 +292,22 @@ def _export_ui_artifacts_v2(
             temp_bins_dir.mkdir(parents=True, exist_ok=True)
             aggregated_bins.to_parquet(temp_bins_dir / "bins.parquet", index=False)
             logger.info(f"   ✅ Saved {len(aggregated_bins)} day-scoped bins to temp_reports")
+
+            # Prepare a dedicated reports directory for heatmaps so we can
+            # bypass flag-only filtering in v1 load_bin_data when necessary.
+            heatmap_reports = ui_path.parent / "reports_heatmaps"
+            heatmap_bins_dir = heatmap_reports / "bins"
+            heatmap_bins_dir.mkdir(parents=True, exist_ok=True)
+
+            heatmap_bins = aggregated_bins.copy()
+            if "flag_severity" in heatmap_bins.columns and heatmap_bins["flag_severity"].eq("none").all():
+                heatmap_bins = heatmap_bins.drop(columns=["flag_severity"])
+                logger.info(
+                    "   ℹ️ Heatmap bins contain only 'none' flag_severity; dropping column to keep all bins"
+                )
+
+            heatmap_bins.to_parquet(heatmap_bins_dir / "bins.parquet", index=False)
+            logger.info(f"   ✅ Saved {len(heatmap_bins)} bins for heatmap generation")
         else:
             logger.warning("   ⚠️  No bins data available from any day")
     except Exception as e:
@@ -453,8 +470,8 @@ def _export_ui_artifacts_v2(
         # 8. Generate heatmaps and captions
         logger.info("8️⃣  Generating heatmaps and captions...")
         try:
-            if temp_reports:
-                export_heatmaps_and_captions(run_id, temp_reports, None)
+            if heatmap_reports and heatmap_reports.exists():
+                export_heatmaps_and_captions(run_id, heatmap_reports, None)
                 
                 # Move heatmaps and captions to day-scoped UI directory
                 # Check multiple possible source locations
@@ -539,7 +556,7 @@ def _export_ui_artifacts_v2(
                     except Exception as e:
                         logger.warning(f"   ⚠️  Could not remove empty /ui folder: {e}")
             else:
-                logger.warning("   ⚠️  Skipping heatmaps (no temp_reports directory)")
+                logger.warning("   ⚠️  Skipping heatmaps (no heatmap_reports directory)")
         except Exception as e:
             logger.warning(f"   ⚠️  Could not generate heatmaps/captions: {e}")
         
@@ -547,6 +564,10 @@ def _export_ui_artifacts_v2(
         if temp_reports and temp_reports.exists():
             import shutil
             shutil.rmtree(temp_reports)
+
+        if heatmap_reports and heatmap_reports.exists():
+            import shutil
+            shutil.rmtree(heatmap_reports)
         
         logger.info(f"✅ All UI artifacts generated for day {day.value}")
         return ui_path
