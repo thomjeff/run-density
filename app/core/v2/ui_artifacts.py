@@ -312,38 +312,38 @@ def _export_ui_artifacts_v2(
         # 2. Generate segment_metrics.json (day-scoped)
         logger.info("2️⃣  Generating segment_metrics.json...")
         try:
-                    if aggregated_bins is not None and not aggregated_bins.empty and temp_reports:
-                        segment_metrics = generate_segment_metrics_json(temp_reports)
-                        # Compute peak_rate from day-filtered bins
-                        from app.core.artifacts.frontend import _compute_peak_rate_per_segment
-                        peak_rate_map = _compute_peak_rate_per_segment(aggregated_bins)
-                        
-                        # CRITICAL FIX: Filter segment_metrics to only include day segments
-                        segment_metrics_filtered = {
-                            seg_id: metrics for seg_id, metrics in segment_metrics.items()
-                            if str(seg_id) in day_segment_ids
-                        }
-                        
-                        # Merge peak_rate data for filtered segments
-                        for seg_id, seg_metrics in segment_metrics_filtered.items():
-                            if seg_id in peak_rate_map:
-                                seg_metrics["peak_rate"] = peak_rate_map[seg_id]["peak_rate"]
-                                seg_metrics["peak_rate_time"] = peak_rate_map[seg_id]["peak_rate_time"]
-                                seg_metrics["peak_rate_km"] = peak_rate_map[seg_id]["peak_rate_km"]
-                            else:
-                                seg_metrics.setdefault("peak_rate", 0.0)
-                        
-                        segment_metrics = segment_metrics_filtered
-                        logger.info(
-                            f"   ✅ segment_metrics.json: {len(segment_metrics)} segments "
-                            f"(filtered from {len(segment_metrics) + len(segment_metrics) - len(segment_metrics_filtered)})"
-                        )
+            if aggregated_bins is not None and not aggregated_bins.empty and temp_reports:
+                segment_metrics = generate_segment_metrics_json(temp_reports)
+                # Compute peak_rate from day-filtered bins
+                from app.core.artifacts.frontend import _compute_peak_rate_per_segment
+                peak_rate_map = _compute_peak_rate_per_segment(aggregated_bins)
+                
+                # CRITICAL FIX: Filter segment_metrics to only include day segments
+                segment_metrics_filtered = {
+                    seg_id: metrics for seg_id, metrics in segment_metrics.items()
+                    if str(seg_id) in day_segment_ids
+                }
+                
+                # Merge peak_rate data for filtered segments
+                for seg_id, seg_metrics in segment_metrics_filtered.items():
+                    if seg_id in peak_rate_map:
+                        seg_metrics["peak_rate"] = peak_rate_map[seg_id]["peak_rate"]
+                        seg_metrics["peak_rate_time"] = peak_rate_map[seg_id]["peak_rate_time"]
+                        seg_metrics["peak_rate_km"] = peak_rate_map[seg_id]["peak_rate_km"]
                     else:
-                        logger.warning("   ⚠️  No bins data available, generating empty segment_metrics")
-                        segment_metrics = {}
-                except Exception as e:
-                    logger.warning(f"   ⚠️  Could not generate segment_metrics: {e}")
-                    segment_metrics = {}
+                        seg_metrics.setdefault("peak_rate", 0.0)
+                
+                segment_metrics = segment_metrics_filtered
+                logger.info(
+                    f"   ✅ segment_metrics.json: {len(segment_metrics)} segments "
+                    f"(day-scoped to {day.value})"
+                )
+            else:
+                logger.warning("   ⚠️  No bins data available, generating empty segment_metrics")
+                segment_metrics = {}
+        except Exception as e:
+            logger.warning(f"   ⚠️  Could not generate segment_metrics: {e}")
+            segment_metrics = {}
         
         # Calculate summary metrics
         peak_density_overall = max((seg.get("peak_density", 0.0) for seg in segment_metrics.values()), default=0.0)
