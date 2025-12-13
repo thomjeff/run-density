@@ -102,11 +102,6 @@ def generate_ui_artifacts_per_day(
     """
     Generate UI artifacts for a specific day with day-scoped data.
     
-    IMPORTANT: Artifacts must only contain segments for the specified day, not all segments.
-    This function filters all data (bins, metrics, geojson, heatmaps) by day segments.
-    """
-    Generate UI artifacts for a specific day with day-scoped data.
-    
     CRITICAL: Artifacts must only contain segments for the specified day, not all segments.
     This function filters all data (bins, metrics, geojson, heatmaps) by day segments.
     
