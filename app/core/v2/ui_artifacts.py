@@ -404,31 +404,31 @@ def _export_ui_artifacts_v2(
         (ui_path / "flow.json").write_text(json.dumps(flow, indent=2))
         logger.info(f"   ✅ flow.json: {len(flow.get('summaries', []))} segments, {len(flow.get('rows', []))} rows")
         
-                # 5. Generate segments.geojson (day-scoped)
-                logger.info("5️⃣  Generating segments.geojson...")
-                try:
-                    if aggregated_bins is not None and not aggregated_bins.empty and temp_reports:
-                        segments_geojson = generate_segments_geojson(temp_reports)
-                        
-                        # CRITICAL FIX: Filter features to only include day segments
-                        if "features" in segments_geojson:
-                            original_count = len(segments_geojson["features"])
-                            segments_geojson["features"] = [
-                                feature for feature in segments_geojson["features"]
-                                if feature.get("properties", {}).get("segment_id") in day_segment_ids
-                            ]
-                            logger.info(
-                                f"   ✅ Filtered segments.geojson: {original_count} -> "
-                                f"{len(segments_geojson['features'])} features for day {day.value}"
-                            )
-                    else:
-                        segments_geojson = {"type": "FeatureCollection", "features": []}
-                except Exception as e:
-                    logger.warning(f"   ⚠️  Could not generate segments.geojson: {e}")
-                    segments_geojson = {"type": "FeatureCollection", "features": []}
+        # 5. Generate segments.geojson (day-scoped)
+        logger.info("5️⃣  Generating segments.geojson...")
+        try:
+            if aggregated_bins is not None and not aggregated_bins.empty and temp_reports:
+                segments_geojson = generate_segments_geojson(temp_reports)
                 
-                (ui_path / "segments.geojson").write_text(json.dumps(segments_geojson, indent=2))
-                logger.info(f"   ✅ segments.geojson: {len(segments_geojson.get('features', []))} features")
+                # CRITICAL FIX: Filter features to only include day segments
+                if "features" in segments_geojson:
+                    original_count = len(segments_geojson["features"])
+                    segments_geojson["features"] = [
+                        feature for feature in segments_geojson["features"]
+                        if feature.get("properties", {}).get("segment_id") in day_segment_ids
+                    ]
+                    logger.info(
+                        f"   ✅ Filtered segments.geojson: {original_count} -> "
+                        f"{len(segments_geojson['features'])} features for day {day.value}"
+                    )
+            else:
+                segments_geojson = {"type": "FeatureCollection", "features": []}
+        except Exception as e:
+            logger.warning(f"   ⚠️  Could not generate segments.geojson: {e}")
+            segments_geojson = {"type": "FeatureCollection", "features": []}
+        
+        (ui_path / "segments.geojson").write_text(json.dumps(segments_geojson, indent=2))
+        logger.info(f"   ✅ segments.geojson: {len(segments_geojson.get('features', []))} features")
         
         # 6. Generate schema_density.json
         logger.info("6️⃣  Generating schema_density.json...")
