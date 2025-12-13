@@ -217,13 +217,28 @@ async def get_dashboard_summary(
         timestamp = meta.get("run_timestamp", datetime.now().isoformat() + "Z")
         environment = meta.get("environment", "local")
         
-        # Load day metadata for events
-        day_events: List[str] = []
+        # Load day metadata for events (canonical source for event tiles)
+        events_detail: List[Dict[str, Any]] = []
+        day_events_map: Dict[str, Dict[str, Any]] = {}
         try:
             day_meta_path = storage._full_local(f"{selected_day}/metadata.json")
             if day_meta_path.exists():
                 day_meta = json.loads(day_meta_path.read_text())
-                day_events = [e.lower() for e in day_meta.get("events", []) if isinstance(e, str)]
+                events_obj = day_meta.get("events", {}) if isinstance(day_meta.get("events"), dict) else {}
+                for ev_name, ev_info in events_obj.items():
+                    if not isinstance(ev_info, dict):
+                        continue
+                    participants = int(ev_info.get("participants", 0))
+                    start_time = ev_info.get("start_time", "")
+                    events_detail.append({
+                        "name": ev_name,
+                        "start_time": start_time,
+                        "participants": participants
+                    })
+                    day_events_map[ev_name] = {
+                        "count": participants,
+                        "start_time": start_time
+                    }
         except Exception as e:
             logger.warning(f"Could not read day metadata for events: {e}")
         
@@ -257,10 +272,9 @@ async def get_dashboard_summary(
         logger.info(f"Loaded flags data: {type(flags)}, length: {len(flags) if flags else 0}")
         segments_flagged, bins_flagged = _calculate_flags_metrics(flags)
         
-        # Load runners data per day events from data/{event}_runners.csv
-        runners_data = count_runners_for_events(day_events) if day_events else {"total_runners": 0, "cohorts": {}}
-        total_runners = runners_data["total_runners"]
-        cohorts = runners_data["cohorts"]
+        # Runners data: prefer metadata events map; fallback to empty
+        total_runners = sum((v.get("count", 0) for v in day_events_map.values()), 0)
+        cohorts = day_events_map  # cohorts keyed by event name with count/start_time
         
         # Determine status
         status = "normal"
@@ -276,6 +290,7 @@ async def get_dashboard_summary(
             "environment": environment,
             "total_runners": total_runners,
             "cohorts": cohorts,
+            "events_detail": events_detail,
             "segments_total": segments_total,
             "segments_flagged": segments_flagged,
             "bins_flagged": bins_flagged,

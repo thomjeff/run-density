@@ -256,22 +256,21 @@
     }
     
     function updateModelInputs(data) {
-        // Dynamic event tiles based on selected day
+        // Dynamic event tiles based on selected day (using events_detail if present)
         const container = document.getElementById('events-container');
         if (container) {
             container.innerHTML = '';
-            const events = Array.isArray(data.events) ? data.events : [];
-            events.forEach(ev => {
-                const evKey = ev.toLowerCase();
-                const count = (data.cohorts && data.cohorts[evKey] && typeof data.cohorts[evKey].count === 'number')
-                    ? data.cohorts[evKey].count
-                    : 0;
+            const eventsDetail = Array.isArray(data.events_detail) ? data.events_detail : [];
+            eventsDetail.forEach(ev => {
+                const name = (ev.name || '').toString();
+                const count = typeof ev.participants === 'number' ? ev.participants : 0;
+                const start = (ev.start_time || '').toString();
                 const card = document.createElement('div');
                 card.className = 'kpi event-card';
                 card.innerHTML = `
-                    <div class="kpi-label">${ev.toUpperCase()}</div>
+                    <div class="kpi-label">${name.toUpperCase()}</div>
                     <div class="kpi-value">${count.toLocaleString()}</div>
-                    <div class="kpi-subtext">${count === 1 ? 'PARTICIPANT' : 'PARTICIPANTS'}</div>
+                    <div class="kpi-subtext">START ${start || '—'}</div>
                 `;
                 container.appendChild(card);
             });
