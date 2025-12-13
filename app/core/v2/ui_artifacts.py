@@ -14,10 +14,6 @@ import pandas as pd
 
 from app.core.v2.models import Day, Event
 from app.utils.run_id import get_runflow_root
-from app.core.artifacts.frontend import (
-    export_ui_artifacts,
-    calculate_flow_segment_counts
-)
 
 logger = logging.getLogger(__name__)
 
@@ -261,6 +257,7 @@ def _export_ui_artifacts_v2(
     # Aggregate bins.parquet from all days, then filter by day segments
     aggregated_bins = None
     temp_reports = None
+    heatmap_reports = None
     
     try:
         # Aggregate bins from all days first
@@ -295,6 +292,22 @@ def _export_ui_artifacts_v2(
             temp_bins_dir.mkdir(parents=True, exist_ok=True)
             aggregated_bins.to_parquet(temp_bins_dir / "bins.parquet", index=False)
             logger.info(f"   ✅ Saved {len(aggregated_bins)} day-scoped bins to temp_reports")
+
+            # Prepare a dedicated reports directory for heatmaps so we can
+            # bypass flag-only filtering in v1 load_bin_data when necessary.
+            heatmap_reports = ui_path.parent / "reports_heatmaps"
+            heatmap_bins_dir = heatmap_reports / "bins"
+            heatmap_bins_dir.mkdir(parents=True, exist_ok=True)
+
+            heatmap_bins = aggregated_bins.copy()
+            if "flag_severity" in heatmap_bins.columns and heatmap_bins["flag_severity"].eq("none").all():
+                heatmap_bins = heatmap_bins.drop(columns=["flag_severity"])
+                logger.info(
+                    "   ℹ️ Heatmap bins contain only 'none' flag_severity; dropping column to keep all bins"
+                )
+
+            heatmap_bins.to_parquet(heatmap_bins_dir / "bins.parquet", index=False)
+            logger.info(f"   ✅ Saved {len(heatmap_bins)} bins for heatmap generation")
         else:
             logger.warning("   ⚠️  No bins data available from any day")
     except Exception as e:
@@ -320,7 +333,8 @@ def _export_ui_artifacts_v2(
                 
                 # CRITICAL FIX: Filter segment_metrics to only include day segments
                 segment_metrics_filtered = {
-                    seg_id: metrics for seg_id, metrics in segment_metrics.items()
+                    seg_id: metrics
+                    for seg_id, metrics in segment_metrics.items()
                     if str(seg_id) in day_segment_ids
                 }
                 
@@ -409,14 +423,24 @@ def _export_ui_artifacts_v2(
         try:
             if aggregated_bins is not None and not aggregated_bins.empty and temp_reports:
                 segments_geojson = generate_segments_geojson(temp_reports)
-                
+
                 # CRITICAL FIX: Filter features to only include day segments
                 if "features" in segments_geojson:
                     original_count = len(segments_geojson["features"])
-                    # Convert segment_id to string for comparison (handles both str and int)
+
+                    def _feature_segment_id(feature: Dict[str, Any]) -> str:
+                        props = feature.get("properties", {})
+                        return str(
+                            props.get("segment_id")
+                            or props.get("seg_id")
+                            or props.get("id")
+                            or ""
+                        )
+
                     segments_geojson["features"] = [
-                        feature for feature in segments_geojson["features"]
-                        if str(feature.get("properties", {}).get("segment_id", "")) in day_segment_ids
+                        feature
+                        for feature in segments_geojson["features"]
+                        if _feature_segment_id(feature) in day_segment_ids
                     ]
                     logger.info(
                         f"   ✅ Filtered segments.geojson: {original_count} -> "
@@ -446,8 +470,8 @@ def _export_ui_artifacts_v2(
         # 8. Generate heatmaps and captions
         logger.info("8️⃣  Generating heatmaps and captions...")
         try:
-            if temp_reports:
-                export_heatmaps_and_captions(run_id, temp_reports, None)
+            if heatmap_reports and heatmap_reports.exists():
+                export_heatmaps_and_captions(run_id, heatmap_reports, None)
                 
                 # Move heatmaps and captions to day-scoped UI directory
                 # Check multiple possible source locations
@@ -484,18 +508,23 @@ def _export_ui_artifacts_v2(
                 if heatmaps_source and heatmaps_source.exists():
                     heatmaps_dest = ui_path / "heatmaps"
                     heatmaps_dest.mkdir(parents=True, exist_ok=True)
-                    
-                    # CRITICAL FIX: Filter heatmap PNGs to only include day segments
-                    import os
+
                     heatmaps_moved = 0
                     for png_file in heatmaps_source.glob("*.png"):
                         # Extract segment_id from filename (e.g., "A1.png" -> "A1")
                         seg_id = png_file.stem
                         if str(seg_id) in day_segment_ids:
                             dest_file = heatmaps_dest / png_file.name
-                            shutil.copy2(png_file, dest_file)
+                            shutil.move(str(png_file), str(dest_file))
                             heatmaps_moved += 1
-                    
+
+                    # Clean up source directory if empty after move
+                    try:
+                        if heatmaps_source.exists() and not any(heatmaps_source.iterdir()):
+                            heatmaps_source.rmdir()
+                    except Exception as cleanup_err:
+                        logger.debug(f"   ⚠️  Could not remove source heatmaps dir: {cleanup_err}")
+
                     logger.info(
                         f"   ✅ Heatmaps filtered and moved: {heatmaps_moved} PNGs "
                         f"for day {day.value} ({len(day_segment_ids)} segments)"
@@ -527,7 +556,7 @@ def _export_ui_artifacts_v2(
                     except Exception as e:
                         logger.warning(f"   ⚠️  Could not remove empty /ui folder: {e}")
             else:
-                logger.warning("   ⚠️  Skipping heatmaps (no temp_reports directory)")
+                logger.warning("   ⚠️  Skipping heatmaps (no heatmap_reports directory)")
         except Exception as e:
             logger.warning(f"   ⚠️  Could not generate heatmaps/captions: {e}")
         
@@ -535,6 +564,10 @@ def _export_ui_artifacts_v2(
         if temp_reports and temp_reports.exists():
             import shutil
             shutil.rmtree(temp_reports)
+
+        if heatmap_reports and heatmap_reports.exists():
+            import shutil
+            shutil.rmtree(heatmap_reports)
         
         logger.info(f"✅ All UI artifacts generated for day {day.value}")
         return ui_path
