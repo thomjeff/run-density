@@ -415,15 +415,22 @@ def _export_ui_artifacts_v2(
                 import shutil
                 runflow_root = get_runflow_root()
                 
-                # Try runflow/{run_id}/ui/ first (v1 UUID structure)
+                # Try runflow/{run_id}/ui/ first (v1 UUID structure - where they're actually saved)
                 heatmaps_source = runflow_root / run_id / "ui" / "heatmaps"
                 captions_source = runflow_root / run_id / "ui" / "captions.json"
                 
                 # If not found, try legacy artifacts/ location
                 if not heatmaps_source.exists():
                     from pathlib import Path
-                    heatmaps_source = Path("/app/artifacts") / run_id / "ui" / "heatmaps"
-                    captions_source = Path("/app/artifacts") / run_id / "ui" / "captions.json"
+                    artifacts_path = Path("/app/artifacts") / run_id / "ui" / "heatmaps"
+                    if artifacts_path.exists():
+                        heatmaps_source = artifacts_path
+                
+                if not captions_source.exists():
+                    from pathlib import Path
+                    artifacts_captions = Path("/app/artifacts") / run_id / "ui" / "captions.json"
+                    if artifacts_captions.exists():
+                        captions_source = artifacts_captions
                 
                 # Move heatmaps
                 if heatmaps_source.exists():
@@ -433,7 +440,7 @@ def _export_ui_artifacts_v2(
                     shutil.move(str(heatmaps_source), str(heatmaps_dest))
                     logger.info(f"   ✅ Heatmaps moved to {heatmaps_dest}")
                 else:
-                    logger.warning(f"   ⚠️  Heatmaps not found at {heatmaps_source}")
+                    logger.warning(f"   ⚠️  Heatmaps not found at {heatmaps_source} or {runflow_root / run_id / 'ui' / 'heatmaps'}")
                 
                 # Move captions.json
                 if captions_source.exists():
@@ -443,7 +450,7 @@ def _export_ui_artifacts_v2(
                     shutil.move(str(captions_source), str(captions_dest))
                     logger.info(f"   ✅ Captions moved to {captions_dest}")
                 else:
-                    logger.warning(f"   ⚠️  Captions not found at {captions_source}")
+                    logger.warning(f"   ⚠️  Captions not found at {captions_source} or {runflow_root / run_id / 'ui' / 'captions.json'}")
             else:
                 logger.warning("   ⚠️  Skipping heatmaps (no temp_reports directory)")
         except Exception as e:
