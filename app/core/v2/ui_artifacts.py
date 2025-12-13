@@ -14,10 +14,6 @@ import pandas as pd
 
 from app.core.v2.models import Day, Event
 from app.utils.run_id import get_runflow_root
-from app.core.artifacts.frontend import (
-    export_ui_artifacts,
-    calculate_flow_segment_counts
-)
 
 logger = logging.getLogger(__name__)
 
@@ -320,7 +316,8 @@ def _export_ui_artifacts_v2(
                 
                 # CRITICAL FIX: Filter segment_metrics to only include day segments
                 segment_metrics_filtered = {
-                    seg_id: metrics for seg_id, metrics in segment_metrics.items()
+                    seg_id: metrics
+                    for seg_id, metrics in segment_metrics.items()
                     if str(seg_id) in day_segment_ids
                 }
                 
