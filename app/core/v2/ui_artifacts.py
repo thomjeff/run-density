@@ -309,9 +309,9 @@ def _export_ui_artifacts_v2(
         (ui_path / "meta.json").write_text(json.dumps(meta, indent=2))
         logger.info(f"   ✅ meta.json: run_id={meta['run_id']}, day={day.value}")
         
-                # 2. Generate segment_metrics.json (day-scoped)
-                logger.info("2️⃣  Generating segment_metrics.json...")
-                try:
+        # 2. Generate segment_metrics.json (day-scoped)
+        logger.info("2️⃣  Generating segment_metrics.json...")
+        try:
                     if aggregated_bins is not None and not aggregated_bins.empty and temp_reports:
                         segment_metrics = generate_segment_metrics_json(temp_reports)
                         # Compute peak_rate from day-filtered bins
