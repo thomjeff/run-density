@@ -11,6 +11,7 @@ Architecture: Option 3 - Hybrid Approach
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from typing import Dict, Any, List, Optional
+from pathlib import Path
 import json
 import logging
 from datetime import datetime
