@@ -112,82 +112,174 @@ def create_stubbed_pipeline(
     }
 
 
+def _format_start_time(minutes_after_midnight: float) -> str:
+    """Format start time minutes as HH:MM zero-padded."""
+    try:
+        mins = int(float(minutes_after_midnight))
+        h = mins // 60
+        m = mins % 60
+        return f"{h:02d}:{m:02d}"
+    except Exception:
+        return ""
+
+
+def _list_files_by_category(day_path: Path) -> Dict[str, List[str]]:
+    """Build file lists for reports/bins/maps/heatmaps/ui (day-scoped)."""
+    categories = {
+        "reports": day_path / "reports",
+        "bins": day_path / "bins",
+        "maps": day_path / "maps",
+        "ui": day_path / "ui",
+        "heatmaps": day_path / "ui" / "heatmaps",
+    }
+    files_created: Dict[str, List[str]] = {}
+    for cat, p in categories.items():
+        if p.exists():
+            files_created[cat] = sorted([f.name for f in p.iterdir() if f.is_file()])
+        else:
+            files_created[cat] = []
+    return files_created
+
+
+def _file_counts(files_created: Dict[str, List[str]]) -> Dict[str, int]:
+    return {k: len(v) for k, v in files_created.items()}
+
+
+def _verify_outputs(files_created: Dict[str, List[str]]) -> Dict[str, Any]:
+    """Simple verification similar to v1 semantics."""
+    critical = [
+        ("reports", "Density.md"),
+        ("reports", "Flow.csv"),
+        ("reports", "Flow.md"),
+        ("reports", "Locations.csv"),
+        ("bins", "bins.parquet"),
+        ("ui", "segment_metrics.json"),
+        ("ui", "segments.geojson"),
+    ]
+    missing_critical = []
+    for cat, fname in critical:
+        if fname not in files_created.get(cat, []):
+            missing_critical.append(f"{cat}/{fname}")
+    # Heatmaps expected but not critical: at least one heatmap if bins exist
+    missing_required = []
+    if files_created.get("bins") and not files_created.get("heatmaps"):
+        missing_required.append("heatmaps/*")
+    status = "PASS"
+    if missing_critical:
+        status = "FAIL"
+    elif missing_required:
+        status = "PARTIAL"
+    return {
+        "status": status,
+        "missing_critical": missing_critical,
+        "missing_required": missing_required,
+        "checks": {
+            "reports": {"present": files_created.get("reports", [])},
+            "bins": {"present": files_created.get("bins", [])},
+            "ui": {"present": files_created.get("ui", [])},
+            "heatmaps": {"present": files_created.get("heatmaps", [])},
+        },
+    }
+
+
 def create_metadata_json(
     run_id: str,
     day: str,
-    events: List[Event]
+    events: List[Event],
+    day_path: Path,
+    participants_by_event: Dict[str, int]
 ) -> Dict[str, Any]:
     """
-    Create metadata.json for a specific day.
-    
-    Args:
-        run_id: Run identifier
-        day: Day code (fri, sat, sun, mon)
-        events: List of events for this day
-        
-    Returns:
-        Metadata dictionary
+    Create metadata.json for a specific day with v1 parity + v2 day/event details.
     """
     from app.utils.metadata import (
         get_app_version, get_git_sha,
         detect_runtime_environment, detect_storage_target
     )
     
-    event_names = [event.name for event in events]
+    files_created = _list_files_by_category(day_path)
+    verification = _verify_outputs(files_created)
+    event_entries = {}
+    for ev in events:
+        name = ev.name.lower()
+        event_entries[name] = {
+            "start_time": _format_start_time(ev.start_time),
+            "participants": int(participants_by_event.get(name, 0))
+        }
     
     return {
         "run_id": run_id,
         "day": day,
         "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "status": "pending",  # Will be updated to "complete" when pipeline finishes
-        "events": event_names,
+        "status": verification["status"],
+        "events": event_entries,
         "runtime_env": detect_runtime_environment(),
         "storage_target": detect_storage_target(),
         "app_version": get_app_version(),
         "git_sha": get_git_sha(),
-        "file_counts": {
-            "reports": 0,
-            "bins": 0,
-            "maps": 0,
-            "ui": 0
-        }
+        "files_created": files_created,
+        "file_counts": _file_counts(files_created),
+        "output_verification": verification,
     }
 
 
 def create_combined_metadata(
     run_id: str,
     days: List[str],
-    all_events: List[Event]
+    per_day_metadata: Dict[str, Dict[str, Any]]
 ) -> Dict[str, Any]:
     """
-    Create combined metadata for index.json (includes all days).
-    
-    Args:
-        run_id: Run identifier
-        days: List of day codes processed
-        all_events: List of all events across all days
-        
-    Returns:
-        Combined metadata dictionary
+    Create run-level metadata with v1 parity + day awareness.
     """
     from app.utils.metadata import (
         get_app_version, get_git_sha,
         detect_runtime_environment, detect_storage_target
     )
     
-    event_names = [event.name for event in all_events]
+    # Aggregate status: FAIL if any fail; PARTIAL if none fail but any partial; else PASS
+    statuses = [md.get("status", "PASS") for md in per_day_metadata.values()]
+    agg_status = "PASS"
+    if any(s == "FAIL" for s in statuses):
+        agg_status = "FAIL"
+    elif any(s == "PARTIAL" for s in statuses):
+        agg_status = "PARTIAL"
+    
+    # Aggregate files/counts
+    files_created = {}
+    file_counts = {}
+    for day, md in per_day_metadata.items():
+        for cat, files in md.get("files_created", {}).items():
+            files_created.setdefault(cat, []).extend([f"{day}/{cat}/{fn}" for fn in files])
+        for cat, cnt in md.get("file_counts", {}).items():
+            file_counts[cat] = file_counts.get(cat, 0) + cnt
+    
+    # Aggregate verification (simple: list missing across days)
+    missing_critical = []
+    missing_required = []
+    for day, md in per_day_metadata.items():
+        ov = md.get("output_verification", {})
+        for m in ov.get("missing_critical", []):
+            missing_critical.append(f"{day}/{m}")
+        for m in ov.get("missing_required", []):
+            missing_required.append(f"{day}/{m}")
     
     return {
         "run_id": run_id,
         "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "status": "pending",
+        "status": agg_status,
         "days": days,
-        "events": event_names,
+        "day_paths": {day: f"runflow/{run_id}/{day}" for day in days},
         "runtime_env": detect_runtime_environment(),
         "storage_target": detect_storage_target(),
         "app_version": get_app_version(),
         "git_sha": get_git_sha(),
-        "file_counts": {}  # Will be populated when pipeline completes
+        "files_created": files_created,
+        "file_counts": file_counts,
+        "output_verification": {
+            "status": agg_status,
+            "missing_critical": missing_critical,
+            "missing_required": missing_required,
+        },
     }
 
 
@@ -442,6 +534,7 @@ def create_full_analysis_pipeline(
     days_processed = []
     density_summary = {}
     flow_summary_by_day = {}
+    day_metadata_map: Dict[str, Dict[str, Any]] = {}
     
     for day, day_events in events_by_day.items():
         day_code = day.value
@@ -480,13 +573,34 @@ def create_full_analysis_pipeline(
             "has_error": "error" in day_flow or not day_flow.get("ok", False)
         }
         
-        # Create metadata.json per day
-        metadata = create_metadata_json(run_id, day_code, day_events)
+        # Participants per event for this day (re-use combine_runners_for_events)
+        participants_by_event: Dict[str, int] = {}
+        try:
+            from app.core.v2.density import combine_runners_for_events
+            event_names = [e.name.lower() for e in day_events]
+            day_runners_df = combine_runners_for_events(event_names, day_code, data_dir)
+            if not day_runners_df.empty:
+                # event column should be lowercase
+                participants_by_event = (
+                    day_runners_df['event'].str.lower().value_counts().to_dict()
+                )
+        except Exception as e:
+            logger.warning(f"Could not compute participants per event for {day_code}: {e}")
+        
+        # Create metadata.json per day with v1 parity + events
+        metadata = create_metadata_json(
+            run_id=run_id,
+            day=day_code,
+            events=day_events,
+            day_path=day_path,
+            participants_by_event=participants_by_event
+        )
         metadata["density"] = density_summary[day_code]
         metadata["flow"] = flow_summary_by_day[day_code]
         metadata_path = day_path / "metadata.json"
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, indent=2, ensure_ascii=False)
+        day_metadata_map[day_code] = metadata
         
         # Store output paths
         output_paths[day_code] = {
@@ -498,10 +612,18 @@ def create_full_analysis_pipeline(
             "metadata": f"runflow/{run_id}/{day_code}/metadata.json"
         }
     
-    # Create combined metadata
-    combined_metadata = create_combined_metadata(run_id, days_processed, events)
+    # Create combined metadata (run-level)
+    combined_metadata = create_combined_metadata(
+        run_id=run_id,
+        days=days_processed,
+        per_day_metadata=day_metadata_map
+    )
     combined_metadata["density"] = density_summary
     combined_metadata["flow"] = flow_summary_by_day
+    # Write run-level metadata.json
+    run_metadata_path = run_path / "metadata.json"
+    with open(run_metadata_path, 'w', encoding='utf-8') as f:
+        json.dump(combined_metadata, f, indent=2, ensure_ascii=False)
     
     # Update pointer files
     update_pointer_files(run_id, combined_metadata)

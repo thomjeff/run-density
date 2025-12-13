@@ -300,6 +300,12 @@
             <li><a href="/locations" {% if request.url and request.url.path == "/locations" %}class="active"{% endif %}>Locations</a></li>
             <li><a href="/reports" {% if request.url and request.url.path == "/reports" %}class="active"{% endif %}>Reports</a></li>
             <li><a href="/health-check" {% if request.url and request.url.path == "/health-check" %}class="active"{% endif %}>Health</a></li>
+            <li style="margin-left:auto; padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                <label for="day-selector" style="color:#ecf0f1; font-weight:600;">Day</label>
+                <select id="day-selector" style="padding: 0.35rem 0.5rem; border-radius: 4px; border: 1px solid #2c3e50; background: #fff; color: #2c3e50; min-width: 90px;">
+                    <option value="">—</option>
+                </select>
+            </li>
             <li><a href="/logout" style="color: #e74c3c;">Logout</a></li>
         </ul>
     </nav>
@@ -339,6 +345,99 @@
             console.error('Session check failed:', error);
             window.location.href = '/';
         });
+    })();
+    </script>
+
+    <!-- Global Day Selector logic -->
+    <script>
+    (function() {
+        const DAY_ORDER = ["fri","sat","sun","mon"];
+
+        function getDayFromQuery() {
+            const params = new URLSearchParams(window.location.search);
+            const d = params.get("day");
+            return d ? d.toLowerCase() : null;
+        }
+
+        function setQueryDay(url, day) {
+            const u = new URL(url, window.location.origin);
+            if (day) {
+                u.searchParams.set("day", day);
+            } else {
+                u.searchParams.delete("day");
+            }
+            return u.pathname + (u.search ? u.search : "");
+        }
+
+        function updateNavLinks(day) {
+            document.querySelectorAll("nav a").forEach(a => {
+                const href = a.getAttribute("href");
+                if (!href || href === "/logout" || href === "/health-check") return;
+                a.setAttribute("href", setQueryDay(href, day));
+            });
+        }
+
+        function storeDay(day) {
+            if (day) localStorage.setItem("selected_day", day);
+        }
+
+        function getStoredDay() {
+            const d = localStorage.getItem("selected_day");
+            return d ? d.toLowerCase() : null;
+        }
+
+        async function initDaySelector() {
+            const select = document.getElementById("day-selector");
+            if (!select) return;
+
+            const queryDay = getDayFromQuery();
+            const storedDay = getStoredDay();
+            const requestedDay = queryDay || storedDay;
+
+            let selectedDay = requestedDay;
+            let availableDays = [];
+
+            try {
+                const resp = await fetch(requestedDay ? `/api/dashboard/summary?day=${encodeURIComponent(requestedDay)}` : "/api/dashboard/summary");
+                const data = await resp.json();
+                selectedDay = (data && data.selected_day) ? data.selected_day.toLowerCase() : selectedDay;
+                availableDays = (data && Array.isArray(data.available_days)) ? data.available_days.map(d => d.toLowerCase()) : [];
+            } catch (e) {
+                console.warn("Day selector: failed to load dashboard summary for day metadata", e);
+            }
+
+            // Fallback if no available_days returned
+            if (!availableDays.length) {
+                availableDays = DAY_ORDER;
+            }
+            // If selectedDay is invalid, default to first available
+            if (!selectedDay || !availableDays.includes(selectedDay)) {
+                selectedDay = availableDays[0] || null;
+            }
+
+            // Populate dropdown
+            select.innerHTML = "";
+            availableDays.forEach(day => {
+                const opt = document.createElement("option");
+                opt.value = day;
+                opt.textContent = day.toUpperCase();
+                if (day === selectedDay) opt.selected = true;
+                select.appendChild(opt);
+            });
+
+            storeDay(selectedDay);
+            updateNavLinks(selectedDay);
+            window.runflowDay = { selected: selectedDay, available: availableDays };
+
+            select.addEventListener("change", (e) => {
+                const day = e.target.value || "";
+                storeDay(day);
+                const newUrl = setQueryDay(window.location.href, day);
+                window.location.href = newUrl;
+            });
+        }
+
+        document.addEventListener("DOMContentLoaded", initDaySelector);
     })();
     </script>
 </body>

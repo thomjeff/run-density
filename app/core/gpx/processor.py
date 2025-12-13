@@ -283,31 +283,24 @@ def generate_segment_coordinates(
         label = segment.get("segment_label", segment.get("label", seg_id))
         
         # Determine which event to use based on which events use this segment
-        # Priority: 10K (shortest), Half, Full (longest)
+        # Priority: elite, open, 10k, half, full (covering sat/sun events)
         # Note: column names are lowercase in CSV
         gpx_event = None
-        for event in ["10K", "half", "full"]:
+        for event in ["elite", "open", "10k", "half", "full"]:
             if segment.get(event, "").lower() == "y":
                 gpx_event = event
                 break
         
         # Default to 10K if no event is specified
         if gpx_event is None:
-            gpx_event = "10K"
+            gpx_event = "10k"
         
-        # Convert to title case for course lookup
-        course_key = gpx_event.title() if gpx_event != "10K" else "10K"
-        course = courses.get(course_key)
+        # Lookup course (courses dict uses lowercase keys)
+        course = courses.get(gpx_event)
         
         # Get event-specific from_km and to_km fields
-        # Handle case sensitivity for 10K vs 10k
-        if gpx_event == "10K":
-            from_km_key = "10K_from_km"
-            to_km_key = "10K_to_km"
-        else:
-            # For half and full, use lowercase as they are in the CSV
-            from_km_key = f"{gpx_event}_from_km"
-            to_km_key = f"{gpx_event}_to_km"
+        from_km_key = f"{gpx_event}_from_km"
+        to_km_key = f"{gpx_event}_to_km"
         
         from_km = segment.get(from_km_key)
         to_km = segment.get(to_km_key)
@@ -387,19 +380,18 @@ def load_all_courses(gpx_dir: str = "data") -> Dict[str, GPXCourse]:
         Dictionary mapping event names to GPXCourse objects
     """
     import os
+    from pathlib import Path
     
-    courses = {}
-    gpx_files = {
-        "10K": os.path.join(gpx_dir, "10K.gpx"),
-        "Half": os.path.join(gpx_dir, "Half.gpx"),
-        "Full": os.path.join(gpx_dir, "Full.gpx")
-    }
-    
-    for event, filepath in gpx_files.items():
-        if os.path.exists(filepath):
+    # Standardize on lowercase {event}.gpx filenames
+    # Supported events: full, half, 10k, elite, open
+    courses: Dict[str, GPXCourse] = {}
+    for event in ["full", "half", "10k", "elite", "open"]:
+        filepath = Path(gpx_dir) / f"{event}.gpx"
+        if filepath.exists():
             try:
-                courses[event] = parse_gpx_file(filepath)
-                print(f"✅ Loaded {event} course: {courses[event].total_distance_km:.2f} km")
+                course = parse_gpx_file(str(filepath))
+                courses[event] = course
+                print(f"✅ Loaded {event} course: {course.total_distance_km:.2f} km")
             except Exception as e:
                 print(f"❌ Failed to load {event} course: {e}")
         else:
@@ -425,8 +417,8 @@ def create_geojson_from_segments(segments_with_coords: List[Dict]) -> Dict:
                     "to_km": seg["to_km"],
                     "course": seg["course"],
                     "coord_issue": seg.get("coord_issue", False),
-                    "direction": "uni",  # Default, can be updated from overlaps.csv
-                    "width_m": 10.0     # Default, can be updated from overlaps.csv
+                "direction": "uni",  # Default, can be updated from overlaps.csv
+                "width_m": 10.0     # Default, can be updated from overlaps.csv
                 },
                 "geometry": {
                     "type": "LineString",

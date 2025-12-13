@@ -24,23 +24,10 @@
 <!-- Model Inputs Section -->
 <div class="card">
     <h3 style="margin-bottom: 1.5rem; color: #2c3e50;">Model Inputs</h3>
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-        <!-- Event-specific tiles -->
-        <div id="event-full" class="kpi event-card">
-            <div class="kpi-label">FULL MARATHON</div>
-            <div class="kpi-value">—</div>
-            <div class="kpi-subtext">— PARTICIPANTS</div>
-        </div>
-        <div id="event-10k" class="kpi event-card">
-            <div class="kpi-label">10K</div>
-            <div class="kpi-value">—</div>
-            <div class="kpi-subtext">— PARTICIPANTS</div>
-        </div>
-        <div id="event-half" class="kpi event-card">
-            <div class="kpi-label">HALF MARATHON</div>
-            <div class="kpi-value">—</div>
-            <div class="kpi-subtext">— PARTICIPANTS</div>
-        </div>
+    <div id="events-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <!-- Dynamic event tiles injected via JS -->
+    </div>
+    <div style="margin-top: 1rem;">
         <div id="metric-segments" class="kpi">
             <div class="kpi-value">—</div>
             <div class="kpi-label">Course Segments</div>
@@ -153,11 +140,6 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<!-- LOS Colors from SSOT -->
-<script>
-    const LOS_COLORS = {{ los_colors | tojson }};
-</script>
-
 <script>
     // Dashboard data binding
     let dashboardData = null;
@@ -168,11 +150,24 @@
         
     });
     
+    function currentDaySelection() {
+        if (window.runflowDay && window.runflowDay.selected) {
+            return window.runflowDay.selected;
+        }
+        const params = new URLSearchParams(window.location.search);
+        const d = params.get("day");
+        if (d) return d.toLowerCase();
+        const stored = localStorage.getItem("selected_day");
+        return stored ? stored.toLowerCase() : null;
+    }
+    
     function loadDashboardData() {
         // Show loading state
         showLoadingState();
         
-        fetch('/api/dashboard/summary')
+        const day = currentDaySelection();
+        const url = day ? `/api/dashboard/summary?day=${encodeURIComponent(day)}` : '/api/dashboard/summary';
+        fetch(url)
             .then(response => response.json())
             .then(data => {
                 dashboardData = data;
@@ -261,28 +256,25 @@
     }
     
     function updateModelInputs(data) {
-        // Event-specific tiles
-        const cohorts = data.cohorts;
-        
-        // Full Marathon
-        const fullEl = document.querySelector('#event-full');
-        if (fullEl && cohorts.Full) {
-            fullEl.querySelector('.kpi-value').textContent = cohorts.Full.start;
-            fullEl.querySelector('.kpi-subtext').textContent = `${cohorts.Full.count} PARTICIPANTS`;
-        }
-        
-        // 10K
-        const tenKEl = document.querySelector('#event-10k');
-        if (tenKEl && cohorts['10K']) {
-            tenKEl.querySelector('.kpi-value').textContent = cohorts['10K'].start;
-            tenKEl.querySelector('.kpi-subtext').textContent = `${cohorts['10K'].count} PARTICIPANTS`;
-        }
-        
-        // Half Marathon
-        const halfEl = document.querySelector('#event-half');
-        if (halfEl && cohorts.Half) {
-            halfEl.querySelector('.kpi-value').textContent = cohorts.Half.start;
-            halfEl.querySelector('.kpi-subtext').textContent = `${cohorts.Half.count} PARTICIPANTS`;
+        // Dynamic event tiles based on selected day
+        const container = document.getElementById('events-container');
+        if (container) {
+            container.innerHTML = '';
+            const events = Array.isArray(data.events) ? data.events : [];
+            events.forEach(ev => {
+                const evKey = ev.toLowerCase();
+                const count = (data.cohorts && data.cohorts[evKey] && typeof data.cohorts[evKey].count === 'number')
+                    ? data.cohorts[evKey].count
+                    : 0;
+                const card = document.createElement('div');
+                card.className = 'kpi event-card';
+                card.innerHTML = `
+                    <div class="kpi-label">${ev.toUpperCase()}</div>
+                    <div class="kpi-value">${count.toLocaleString()}</div>
+                    <div class="kpi-subtext">${count === 1 ? 'PARTICIPANT' : 'PARTICIPANTS'}</div>
+                `;
+                container.appendChild(card);
+            });
         }
         
         // Segments
