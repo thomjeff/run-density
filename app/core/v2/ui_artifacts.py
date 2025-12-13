@@ -452,14 +452,28 @@ def _export_ui_artifacts_v2(
                     logger.warning(f"   ⚠️  Heatmaps not found at {heatmaps_source} or {runflow_root / run_id / 'ui' / 'heatmaps'}")
                 
                 # Move captions.json
-                if captions_source.exists():
+                if captions_source and captions_source.exists():
                     captions_dest = ui_path / "captions.json"
                     if captions_dest.exists():
                         captions_dest.unlink()
                     shutil.move(str(captions_source), str(captions_dest))
                     logger.info(f"   ✅ Captions moved to {captions_dest}")
                 else:
-                    logger.warning(f"   ⚠️  Captions not found at {captions_source} or {runflow_root / run_id / 'ui' / 'captions.json'}")
+                    logger.warning(f"   ⚠️  Captions not found at expected locations")
+                
+                # Clean up empty /ui folder at run level (Issue #501: Remove empty ui folder)
+                run_level_ui = runflow_root / run_id / "ui"
+                if run_level_ui.exists() and run_level_ui.is_dir():
+                    try:
+                        # Check if folder is empty
+                        contents = list(run_level_ui.iterdir())
+                        if len(contents) == 0:
+                            run_level_ui.rmdir()
+                            logger.info(f"   ✅ Removed empty run-level /ui folder: {run_level_ui}")
+                        else:
+                            logger.debug(f"   Run-level /ui folder not empty, keeping: {contents}")
+                    except Exception as e:
+                        logger.warning(f"   ⚠️  Could not remove empty /ui folder: {e}")
             else:
                 logger.warning("   ⚠️  Skipping heatmaps (no temp_reports directory)")
         except Exception as e:
