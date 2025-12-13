@@ -415,22 +415,31 @@ def _export_ui_artifacts_v2(
                 import shutil
                 runflow_root = get_runflow_root()
                 
-                # Try runflow/{run_id}/ui/ first (v1 UUID structure - where they're actually saved)
-                heatmaps_source = runflow_root / run_id / "ui" / "heatmaps"
-                captions_source = runflow_root / run_id / "ui" / "captions.json"
+                # Heatmaps can be in multiple locations:
+                # 1. runflow/{run_id}/heatmaps/ (run level - most common)
+                # 2. runflow/{run_id}/ui/heatmaps/ (ui subdirectory)
+                # 3. artifacts/{run_id}/ui/heatmaps/ (legacy)
+                heatmaps_source = None
+                for possible_path in [
+                    runflow_root / run_id / "heatmaps",  # Run level (most common)
+                    runflow_root / run_id / "ui" / "heatmaps",  # UI subdirectory
+                    Path("/app/artifacts") / run_id / "ui" / "heatmaps"  # Legacy
+                ]:
+                    if possible_path.exists():
+                        heatmaps_source = possible_path
+                        break
                 
-                # If not found, try legacy artifacts/ location
-                if not heatmaps_source.exists():
-                    from pathlib import Path
-                    artifacts_path = Path("/app/artifacts") / run_id / "ui" / "heatmaps"
-                    if artifacts_path.exists():
-                        heatmaps_source = artifacts_path
-                
-                if not captions_source.exists():
-                    from pathlib import Path
-                    artifacts_captions = Path("/app/artifacts") / run_id / "ui" / "captions.json"
-                    if artifacts_captions.exists():
-                        captions_source = artifacts_captions
+                # Captions can be in:
+                # 1. runflow/{run_id}/ui/captions.json (most common)
+                # 2. artifacts/{run_id}/ui/captions.json (legacy)
+                captions_source = None
+                for possible_path in [
+                    runflow_root / run_id / "ui" / "captions.json",  # UI subdirectory
+                    Path("/app/artifacts") / run_id / "ui" / "captions.json"  # Legacy
+                ]:
+                    if possible_path.exists():
+                        captions_source = possible_path
+                        break
                 
                 # Move heatmaps
                 if heatmaps_source.exists():
