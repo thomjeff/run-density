@@ -196,8 +196,27 @@ function createLocationPopup(properties) {
  */
 async function loadLocations() {
     try {
-        console.log('Loading locations via API...');
-        const response = await fetch('/api/locations');
+        // Get run_id and day from URL or global state
+        const params = new URLSearchParams(window.location.search);
+        const dayParam = params.get('day');
+        const runParam = params.get('run_id');
+        
+        const day = (dayParam || (window.runflowDay && window.runflowDay.selected) || '').toLowerCase().trim();
+        const run_id = (runParam || (window.runflowDay && window.runflowDay.run_id) || '').trim();
+        
+        if (!day || !run_id) {
+            console.error('❌ Refusing to fetch locations without day+run_id', {
+                href: window.location.href,
+                dayParam, runParam,
+                runflowDay: window.runflowDay
+            });
+            return null;
+        }
+        
+        const apiUrl = `/api/locations?run_id=${encodeURIComponent(run_id)}&day=${encodeURIComponent(day)}`;
+        console.log('Loading locations via API...', { apiUrl, day, run_id });
+        
+        const response = await fetch(apiUrl, { cache: 'no-store' });
         
         if (!response.ok) {
             throw new Error(`API returned ${response.status}: ${response.statusText}`);
@@ -211,7 +230,7 @@ async function loadLocations() {
         
         // Convert to GeoJSON
         const geojson = convertToGeoJSON(data.locations);
-        console.log(`✅ Loaded ${geojson.features.length} locations via API`);
+        console.log(`✅ Loaded ${geojson.features.length} locations via API for day ${day}`);
         return geojson;
         
     } catch (error) {

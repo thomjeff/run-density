@@ -213,3 +213,47 @@ def get_run_directory(run_id: str) -> Path:
     runflow_root = get_runflow_root()
     return runflow_root / run_id
 
+
+# ===== Day resolution helpers (v2) =====
+
+DAY_ORDER = ["fri", "sat", "sun", "mon"]
+
+
+def get_available_days(run_id: str) -> list[str]:
+    """
+    List available day subdirectories for a given run_id in priority order.
+    """
+    run_dir = get_run_directory(run_id)
+    available = []
+    for day in DAY_ORDER:
+        if (run_dir / day).is_dir():
+            available.append(day)
+    return available
+
+
+def resolve_selected_day(run_id: str, requested_day: Optional[str] = None) -> tuple[str, list[str]]:
+    """
+    Resolve selected_day and available_days for a run.
+    
+    Args:
+        run_id: run identifier
+        requested_day: optional day code
+    Returns:
+        (selected_day, available_days)
+    Raises:
+        ValueError if requested_day is not available or no days exist
+    """
+    available_days = get_available_days(run_id)
+    if not available_days:
+        raise ValueError(f"No day directories found for run_id={run_id}")
+    
+    if requested_day:
+        day_lower = requested_day.lower()
+        if day_lower not in available_days:
+            raise ValueError(f"Requested day '{requested_day}' not available for run_id={run_id}")
+        selected_day = day_lower
+    else:
+        selected_day = available_days[0]
+    
+    return selected_day, available_days
+

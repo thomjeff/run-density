@@ -92,63 +92,108 @@ def _add_core_data_files(reports: list) -> None:
 
 
 @router.get("/api/reports/list")
-async def get_reports_list():
+async def get_reports_list(
+    run_id: Optional[str] = Query(None, description="Run ID (defaults to latest)"),
+    day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon) - if not provided, shows all days")
+):
     """
-    Get list of available report files for the latest run.
+    Get list of available report files for a run, optionally filtered by day.
+    
+    If day is not provided, returns reports from all available days for the run_id.
     
     Returns:
-        Array of file objects with name, path, mtime, size
+        Array of file objects with name, path, mtime, size, day
     """
     try:
-        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
-        from app.utils.metadata import get_latest_run_id
+        from app.utils.run_id import get_latest_run_id, get_available_days, get_run_directory
         from app.storage import create_runflow_storage
         
-        run_id = get_latest_run_id()
-        storage = create_runflow_storage(run_id)
+        # Get run_id (use latest if not provided)
+        if not run_id:
+            run_id = get_latest_run_id()
         
-        # List report files from runflow structure
+        if not run_id:
+            raise HTTPException(
+                status_code=404,
+                detail="No run ID available. Run analysis first or provide run_id parameter."
+            )
+        
+        # Get available days for this run_id
+        available_days = get_available_days(run_id)
+        
+        if not available_days:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No day directories found for run_id={run_id}"
+            )
+        
+        # Determine which days to list
+        if day:
+            day_lower = day.lower()
+            if day_lower not in available_days:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Requested day '{day}' not available for run_id={run_id}. Available days: {', '.join(available_days)}"
+                )
+            days_to_list = [day_lower]
+        else:
+            # List reports from all available days
+            days_to_list = available_days
+        
+        # List report files from all requested days
         reports = []
-        file_list = storage.list_paths("reports")
+        run_dir = get_run_directory(run_id)
         
-        for relative_path in file_list:
-            # list_paths() returns paths like "reports/Density.md"
-            # Extract just the filename
-            filename = Path(relative_path).name
-            description = _get_file_description_from_extension(filename)
+        for day_code in days_to_list:
+            day_reports_dir = run_dir / day_code / "reports"
             
-            # Get full path for metadata
-            full_path = storage._full_local(relative_path) if storage.mode == "local" else None
-            if full_path and full_path.exists():
-                stat = full_path.stat()
+            if not day_reports_dir.exists():
+                logger.debug(f"Reports directory not found for day {day_code}: {day_reports_dir}")
+                continue
+            
+            # List all files in the day's reports directory
+            for report_file in day_reports_dir.iterdir():
+                if not report_file.is_file():
+                    continue
+                
+                filename = report_file.name
+                description = _get_file_description_from_extension(filename)
+                
+                # Get file metadata
+                stat = report_file.stat()
                 mtime = stat.st_mtime
                 size = stat.st_size
-            else:
-                mtime = None
-                size = None
-            
-            # Path for download should be runflow/<run_id>/reports/<filename>
-            file_path = f"runflow/{run_id}/reports/{filename}"
-            
-            reports.append({
-                "name": filename,
-                "path": file_path,
-                "mtime": mtime,
-                "size": size,
-                "description": description,
-                "type": "report"
-            })
+                
+                # Path for download: runflow/<run_id>/<day>/reports/<filename>
+                file_path = f"runflow/{run_id}/{day_code}/reports/{filename}"
+                
+                reports.append({
+                    "name": filename,
+                    "path": file_path,
+                    "day": day_code,
+                    "mtime": mtime,
+                    "size": size,
+                    "description": description,
+                    "type": "report"
+                })
         
         # Add core data files
         _add_core_data_files(reports)
         
-        response = JSONResponse(content=reports)
+        response = JSONResponse(content={
+            "reports": reports,
+            "run_id": run_id,
+            "available_days": available_days,
+            "days_listed": days_to_list
+        })
         response.headers["Cache-Control"] = "public, max-age=60"
         return response
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error listing reports: {e}")
-        raise HTTPException(status_code=500, detail=f"database to list reports: {str(e)}")
+        logger.error(f"Error listing reports: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to list reports: {str(e)}")
 
 
 @router.get("/api/reports/download")
@@ -157,21 +202,12 @@ def download_report(path: str = Query(..., description="Report file path")):
     Download a specific report file.
     
     Args:
-        path: File path relative to reports/ directory
+        path: File path in format runflow/<run_id>/<day>/reports/<filename> or data/<filename>
         
     Returns:
         File download
     """
     logger.info(f"[Download] Requested path: {path}")
-
-    # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
-    from app.utils.metadata import get_latest_run_id
-    run_id = get_latest_run_id()
-
-    # Allow only: runflow/<run_id>/* or data/*
-    if not (path.startswith(f"runflow/{run_id}") or path.startswith("data/")):
-        logger.warning(f"[Download] Access denied for path: {path}")
-        raise HTTPException(status_code=403, detail="Access denied")
 
     # Case A: Read from local data folder
     if path.startswith("data/"):
@@ -182,19 +218,25 @@ def download_report(path: str = Query(..., description="Report file path")):
             logger.error(f"[Download] Failed to read local file {path}: {e}")
             raise HTTPException(status_code=404, detail="File not found")
 
-    # Case B: Read report files from runflow structure
-    else:
-        # Issue #460: Use Storage abstraction for runflow files
-        # Path is like: runflow/<run_id>/reports/Density.md
-        # Extract the run_id and relative path
+    # Case B: Read report files from runflow structure (v2 day-partitioned)
+    # Path format: runflow/<run_id>/<day>/reports/<filename>
+    elif path.startswith("runflow/"):
         try:
             parts = path.split("/")
-            if parts[0] == "runflow" and len(parts) >= 3:
+            if len(parts) >= 5 and parts[0] == "runflow":
                 report_run_id = parts[1]
-                relative_path = "/".join(parts[2:])  # e.g., "reports/Density.md"
+                day_code = parts[2]
+                relative_path = "/".join(parts[3:])  # e.g., "reports/Density.md"
                 
-                from app.storage import create_runflow_storage
-                storage = create_runflow_storage(report_run_id)
+                # Create storage with root pointing to runflow/<run_id>/<day>/
+                from app.utils.run_id import get_run_directory
+                from app.storage import Storage
+                
+                run_dir = get_run_directory(report_run_id)
+                day_dir = run_dir / day_code
+                storage = Storage(root=str(day_dir))
+                
+                # Read from relative_path (e.g., "reports/Density.md")
                 content = storage.read_text(relative_path)
                 
                 if not content:
@@ -204,10 +246,15 @@ def download_report(path: str = Query(..., description="Report file path")):
                 logger.info(f"[Download] Loaded runflow file: {path}")
             else:
                 logger.error(f"[Download] Invalid path format: {path}")
-                raise HTTPException(status_code=400, detail="Invalid path format")
+                raise HTTPException(status_code=400, detail="Invalid path format. Expected: runflow/<run_id>/<day>/reports/<filename>")
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"[Download] Failed to read file {path}: {e}")
             raise HTTPException(status_code=404, detail="File not found")
+    else:
+        logger.warning(f"[Download] Access denied for path: {path}")
+        raise HTTPException(status_code=403, detail="Access denied. Path must start with 'runflow/' or 'data/'")
 
     # Safe encoding
     try:

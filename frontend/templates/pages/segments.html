@@ -67,6 +67,13 @@
                 <span id="filter-status" style="color: #495057; font-size: 0.85rem; text-align: right; line-height: 1.3;"></span>
             </div>
         </div>
+
+        <!-- Heatmap Preview Overlay -->
+        <div id="heatmap-overlay" style="position: absolute; top: 10px; left: 10px; z-index: 1000; background: rgba(255,255,255,0.95); padding: 0.75rem; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); width: 260px; display: none;">
+            <div style="font-weight: 600; margin-bottom: 0.5rem; color: #2c3e50;">Heatmap</div>
+            <div id="heatmap-status" style="font-size: 0.9rem; color: #555; margin-bottom: 0.5rem;">Select a segment to view heatmap.</div>
+            <img id="heatmap-image" alt="Segment heatmap" style="width: 100%; border-radius: 4px; border: 1px solid #e0e0e0; display: none;" />
+        </div>
     </div>
 </div>
 
@@ -147,32 +154,87 @@
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<!-- External JavaScript modules -->
+<!-- External JavaScript modules (cache-busted for latest fixes) -->
 <script src="/static/js/map/base_map.js"></script>
-<script src="/static/js/map/segments.js"></script>
+<script src="/static/js/map/segments.js?v=2025-12-13T2125Z"></script>
 
 <!-- Table interaction script -->
 <script>
     // Table interaction functionality (preserved from original)
-    let segmentsLayer;
-    let map;
-    
     // Get focus parameter from URL
     const urlParams = new URLSearchParams(window.location.search);
     const focusSegmentId = urlParams.get('focus');
     
+    function currentDayAndRun() {
+        const params = new URLSearchParams(window.location.search);
+        const dayParam = params.get('day');
+        const runParam = params.get('run_id');
+        const day = dayParam ? dayParam.toLowerCase() : (window.runflowDay && window.runflowDay.selected);
+        const run_id = runParam || (window.runflowDay && window.runflowDay.run_id);
+        return { day, run_id };
+    }
+    
+    function rebuildApiUrl(basePath) {
+        const { day, run_id } = currentDayAndRun();
+        const u = new URL(basePath, window.location.origin);
+        if (day) u.searchParams.set('day', day);
+        if (run_id) u.searchParams.set('run_id', run_id);
+        return u.pathname + u.search;
+    }
+    
+    // Ensure run_id is present; if missing, fetch from dashboard summary and rewrite URL
+    async function ensureRunAndDayInUrl() {
+        const params = new URLSearchParams(window.location.search);
+        let runId = params.get('run_id');
+        let dayParam = params.get('day');
+        if (runId) return; // already present
+
+        try {
+            const resp = await fetch('/api/dashboard/summary', { cache: 'no-store' });
+            const data = await resp.json();
+            runId = data.run_id || runId;
+            const selectedDay = (dayParam || data.selected_day || '').toLowerCase();
+            const p = new URLSearchParams(window.location.search);
+            if (runId) p.set('run_id', runId);
+            if (selectedDay) p.set('day', selectedDay);
+            const newUrl = window.location.pathname + (p.toString() ? '?' + p.toString() : '');
+            if (newUrl !== window.location.pathname + window.location.search) {
+                window.location.replace(newUrl);
+            }
+        } catch (e) {
+            console.warn('Failed to resolve run_id for segments page', e);
+        }
+    }
+
     // Initialize table interactions when DOM is ready
     document.addEventListener('DOMContentLoaded', function() {
-        // Wait for map to be initialized by segments.js
-        setTimeout(() => {
-            // Get references to map and segments layer from global scope
-            map = window.map || document.querySelector('#segments-map')._leaflet_id ? L.map('segments-map') : null;
-            segmentsLayer = window.segmentsLayer;
+        ensureRunAndDayInUrl().then(() => {
+            // Wait for map to be initialized by segments.js
+            setTimeout(() => {
+                // Get references to map and segments layer from global scope
+                map = window.map || null;
+                segmentsLayer = window.segmentsLayer;
+                
+                if (focusSegmentId) {
+                    focusOnSegment(focusSegmentId);
+                }
+            }, 100);
             
-            if (focusSegmentId) {
-                focusOnSegment(focusSegmentId);
+            // Force reload of map data with day/run_id when day selector changes
+            const daySelector = document.getElementById('day-selector');
+            if (daySelector) {
+                daySelector.addEventListener('change', () => {
+                    const day = daySelector.value || '';
+                    const params = new URLSearchParams(window.location.search);
+                    if (day) params.set('day', day);
+                    else params.delete('day');
+                    const { run_id } = currentDayAndRun();
+                    if (run_id) params.set('run_id', run_id);
+                    const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+                    window.location.href = newUrl;
+                });
             }
-        }, 100);
+        });
     });
     
     function focusOnSegment(segmentId) {

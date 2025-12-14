@@ -547,7 +547,7 @@ def generate_locations_report_v2(
         from app.location_report import generate_location_report
         from app.core.v2.bins import filter_segments_by_events
         
-        # Filter runners to this day
+        # Filter runners to this day (v2 uses lowercase event names)
         day_event_names = {event.name.lower() for event in day_events}
         day_runners_df = all_runners_df[
             all_runners_df["event"].astype(str).str.lower().isin(day_event_names)
@@ -639,18 +639,12 @@ def generate_locations_report_v2(
             day_locations_df.to_csv(tmp_locations_path, index=False)
             
             # Extract start_times from day_events for location_report
+            # location_report.py now handles lowercase event names
             start_times: Dict[str, float] = {}
-            event_name_mapping = {
-                "full": "Full",
-                "half": "Half",
-                "10k": "10K",
-                "elite": "Elite",
-                "open": "Open"
-            }
             
             for event in day_events:
-                v1_event_name = event_name_mapping.get(event.name.lower(), event.name.capitalize())
-                start_times[v1_event_name] = float(event.start_time)
+                # Use lowercase event names (v2 standard)
+                start_times[event.name.lower()] = float(event.start_time)
             
             # Generate location report using v1 function
             # location_report.py expects CSV file paths

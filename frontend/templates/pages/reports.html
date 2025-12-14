@@ -41,10 +41,33 @@
     });
     
     function loadReports() {
-        fetch('/api/reports/list')
-            .then(response => response.json())
+        // Get run_id and day from URL or global state
+        const params = new URLSearchParams(window.location.search);
+        const dayParam = params.get('day');
+        const runParam = params.get('run_id');
+        
+        const day = (dayParam || (window.runflowDay && window.runflowDay.selected) || '').toLowerCase().trim();
+        const run_id = (runParam || (window.runflowDay && window.runflowDay.run_id) || '').trim();
+        
+        // Build API URL - if day is provided, filter by day; otherwise show all days
+        let apiUrl = '/api/reports/list';
+        const queryParams = [];
+        if (run_id) queryParams.push(`run_id=${encodeURIComponent(run_id)}`);
+        // Note: We don't pass day parameter - we want to show ALL days for the run_id
+        if (queryParams.length) apiUrl += `?${queryParams.join('&')}`;
+        
+        console.log('Loading reports via API...', { apiUrl, run_id });
+        
+        fetch(apiUrl, { cache: 'no-store' })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
             .then(data => {
-                renderReportsList(data);
+                // API now returns {reports, run_id, available_days, days_listed}
+                renderReportsList(data.reports || data, data.available_days || []);
             })
             .catch(error => {
                 console.error('Error loading reports:', error);
@@ -52,7 +75,7 @@
             });
     }
     
-    function renderReportsList(reports) {
+    function renderReportsList(reports, availableDays) {
         const reportsContainer = document.getElementById('reports-list');
         const dataFilesContainer = document.getElementById('data-files-list');
         
@@ -82,31 +105,84 @@
         
         const dataFiles = reports.filter(r => r.type === 'data_file');
         
-        // Sort by modification time (newest first)
-        const sortByNewest = (a, b) => {
+        // Sort by day (fri, sat, sun, mon), then by modification time (newest first)
+        const dayOrder = ['fri', 'sat', 'sun', 'mon'];
+        const sortByDayAndTime = (a, b) => {
+            const dayA = a.day || '';
+            const dayB = b.day || '';
+            const dayIndexA = dayOrder.indexOf(dayA);
+            const dayIndexB = dayOrder.indexOf(dayB);
+            
+            // If both have days, sort by day order
+            if (dayIndexA >= 0 && dayIndexB >= 0) {
+                if (dayIndexA !== dayIndexB) {
+                    return dayIndexA - dayIndexB;
+                }
+            } else if (dayIndexA >= 0) {
+                return -1; // a has day, b doesn't - a comes first
+            } else if (dayIndexB >= 0) {
+                return 1; // b has day, a doesn't - b comes first
+            }
+            
+            // Same day or no day - sort by time
             const timeA = a.mtime || 0;
             const timeB = b.mtime || 0;
             return timeB - timeA; // Descending order (newest first)
         };
         
-        relevantReports.sort(sortByNewest);
-        dataFiles.sort(sortByNewest);
+        relevantReports.sort(sortByDayAndTime);
+        dataFiles.sort((a, b) => {
+            const timeA = a.mtime || 0;
+            const timeB = b.mtime || 0;
+            return timeB - timeA;
+        });
         
-        // Render Reports Section
+        // Group reports by day
+        const reportsByDay = {};
+        relevantReports.forEach(report => {
+            const day = report.day || 'unknown';
+            if (!reportsByDay[day]) {
+                reportsByDay[day] = [];
+            }
+            reportsByDay[day].push(report);
+        });
+        
+        // Render Reports Section - grouped by day
         if (relevantReports.length > 0) {
-            let reportsHtml = '<table style="width: 100%; border-collapse: collapse; table-layout: fixed;">';
-            reportsHtml += '<thead><tr>';
-            reportsHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600; width: 45%;">File</th>';
-            reportsHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600; width: 12%;">Size</th>';
-            reportsHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600; width: 28%;">Modified</th>';
-            reportsHtml += '<th style="text-align: center; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600; width: 15%;">Action</th>';
-            reportsHtml += '</tr></thead><tbody>';
+            let reportsHtml = '';
             
-            relevantReports.forEach(report => {
-                reportsHtml += renderReportTableRow(report);
+            // Sort days in order: fri, sat, sun, mon
+            const sortedDays = Object.keys(reportsByDay).sort((a, b) => {
+                const indexA = dayOrder.indexOf(a);
+                const indexB = dayOrder.indexOf(b);
+                if (indexA >= 0 && indexB >= 0) return indexA - indexB;
+                if (indexA >= 0) return -1;
+                if (indexB >= 0) return 1;
+                return a.localeCompare(b);
             });
             
-            reportsHtml += '</tbody></table>';
+            sortedDays.forEach(day => {
+                const dayReports = reportsByDay[day];
+                const dayLabel = day.toUpperCase();
+                
+                reportsHtml += `<div style="margin-bottom: 2rem;">`;
+                reportsHtml += `<h4 style="margin-bottom: 0.75rem; color: #2c3e50; font-size: 1.1rem; font-weight: 600;">${dayLabel} Reports</h4>`;
+                reportsHtml += '<table style="width: 100%; border-collapse: collapse; table-layout: fixed;">';
+                reportsHtml += '<thead><tr>';
+                reportsHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600; width: 45%;">File</th>';
+                reportsHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600; width: 12%;">Size</th>';
+                reportsHtml += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600; width: 28%;">Modified</th>';
+                reportsHtml += '<th style="text-align: center; padding: 0.75rem; border-bottom: 2px solid #e0e0e0; font-weight: 600; width: 15%;">Action</th>';
+                reportsHtml += '</tr></thead><tbody>';
+                
+                dayReports.forEach(report => {
+                    reportsHtml += renderReportTableRow(report);
+                });
+                
+                reportsHtml += '</tbody></table>';
+                reportsHtml += '</div>';
+            });
+            
             reportsContainer.innerHTML = reportsHtml;
         } else {
             reportsContainer.innerHTML = '<p class="placeholder">No reports available</p>';

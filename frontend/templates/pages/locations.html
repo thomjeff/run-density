@@ -211,7 +211,7 @@
 
 <!-- External JavaScript modules -->
 <script src="/static/js/map/base_map.js"></script>
-<script src="/static/js/map/locations.js"></script>
+<script src="/static/js/map/locations.js?v=2025-12-14T0100Z"></script>
 
 <!-- Table interaction script -->
 <script>
@@ -236,10 +236,31 @@
     });
     
     function loadLocationsData() {
-        fetch('/api/locations')
+        // Get run_id and day from URL or global state
+        const params = new URLSearchParams(window.location.search);
+        const dayParam = params.get('day');
+        const runParam = params.get('run_id');
+        
+        const day = (dayParam || (window.runflowDay && window.runflowDay.selected) || '').toLowerCase().trim();
+        const run_id = (runParam || (window.runflowDay && window.runflowDay.run_id) || '').trim();
+        
+        if (!day || !run_id) {
+            console.error('❌ Refusing to fetch locations data without day+run_id', {
+                href: window.location.href,
+                dayParam, runParam,
+                runflowDay: window.runflowDay
+            });
+            showLocationsError('Failed to load locations data: missing day or run_id');
+            return;
+        }
+        
+        const apiUrl = `/api/locations?run_id=${encodeURIComponent(run_id)}&day=${encodeURIComponent(day)}`;
+        console.log('Loading locations data via API...', { apiUrl, day, run_id });
+        
+        fetch(apiUrl, { cache: 'no-store' })
             .then(response => {
                 if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
                 return response.json();
             })

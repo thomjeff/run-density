@@ -8,14 +8,17 @@ Epic: RF-FE-002 | Issue: #279 | Step: 6
 Architecture: Option 3 - Hybrid Approach
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from typing import Dict, Any, List, Optional
+from pathlib import Path
 import json
 import logging
 from datetime import datetime
 
 from app.common.config import load_rulebook, load_reporting
+from app.utils.run_id import get_latest_run_id, resolve_selected_day
+from app.storage import create_runflow_storage
 
 # Issue #283: Import SSOT for flagging logic parity
 from app import flagging as ssot_flagging
@@ -29,40 +32,29 @@ router = APIRouter()
 # Issue #466 Step 2: Removed legacy storage_service singleton (not needed)
 
 
-def load_runners_data() -> Dict[str, Any]:
+def count_runners_for_events(events: List[str]) -> Dict[str, Any]:
     """
-    Load runners data and aggregate by event.
-    
-    Returns:
-        Dict with total_runners and cohorts data
+    Count runners per event using event-specific runner CSVs: data/{event}_runners.csv.
+    Returns {"total_runners": int, "cohorts": {event: {"count": int}}}
     """
-    try:
-        # Read runners.csv directly from local filesystem (Docker image includes data/)
-        import pandas as pd
-        df = pd.read_csv("data/runners.csv")
-        
-        # Count runners by event
-        # Note: Start times are no longer available from constants (Issue #512)
-        # Dashboard shows runner counts only; start times must come from v2 API or analysis runs
-        cohorts = {}
-        for event in df['event'].unique():
-            event_runners = df[df['event'] == event]
-            
-            cohorts[event] = {
-                "count": len(event_runners)
-                # "start" field removed - start times must come from API request (Issue #512)
-            }
-        
-        total_runners = len(df)
-        
-        return {
-            "total_runners": total_runners,
-            "cohorts": cohorts
-        }
-        
-    except Exception as e:
-        logger.warning(f"Could not read runners.csv: {e}")
-        return {"total_runners": 0, "cohorts": {}}
+    import pandas as pd
+    cohorts: Dict[str, Dict[str, Any]] = {}
+    total = 0
+    for ev in events:
+        path = Path(f"data/{ev}_runners.csv")
+        if not path.exists():
+            logger.warning(f"Runner file missing for event '{ev}': {path}")
+            cohorts[ev] = {"count": 0}
+            continue
+        try:
+            df = pd.read_csv(path)
+            cnt = len(df)
+            cohorts[ev] = {"count": cnt}
+            total += cnt
+        except Exception as e:
+            logger.warning(f"Could not read {path}: {e}")
+            cohorts[ev] = {"count": 0}
+    return {"total_runners": total, "cohorts": cohorts}
 
 
 def load_bins_flagged_count() -> int:
@@ -195,7 +187,10 @@ def _calculate_peak_metrics(segment_metrics: dict) -> tuple:
 
 
 @router.get("/api/dashboard/summary")
-async def get_dashboard_summary():
+async def get_dashboard_summary(
+    run_id: Optional[str] = Query(None, description="Run ID (defaults to latest)"),
+    day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)")
+):
     """
     Get dashboard summary data for KPI tiles.
     
@@ -209,24 +204,48 @@ async def get_dashboard_summary():
         - runners.csv → total_runners, cohorts
     """
     try:
-        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
-        from app.utils.metadata import get_latest_run_id
-        from app.storage import create_runflow_storage
-        
-        run_id = get_latest_run_id()
+        # Resolve run_id and day
+        if not run_id:
+            run_id = get_latest_run_id()
+        selected_day, available_days = resolve_selected_day(run_id, day)
         storage = create_runflow_storage(run_id)
         
         # Track missing files for warnings
         warnings = []
         
         # Load meta data
-        meta = _load_ui_artifact_safe(storage, "ui/meta.json", warnings) or {}
+        meta = _load_ui_artifact_safe(storage, f"{selected_day}/ui/meta.json", warnings) or {}
         timestamp = meta.get("run_timestamp", datetime.now().isoformat() + "Z")
         environment = meta.get("environment", "local")
         
+        # Load day metadata for events (canonical source for event tiles)
+        events_detail: List[Dict[str, Any]] = []
+        day_events_map: Dict[str, Dict[str, Any]] = {}
+        try:
+            day_meta_path = storage._full_local(f"{selected_day}/metadata.json")
+            if day_meta_path.exists():
+                day_meta = json.loads(day_meta_path.read_text())
+                events_obj = day_meta.get("events", {}) if isinstance(day_meta.get("events"), dict) else {}
+                for ev_name, ev_info in events_obj.items():
+                    if not isinstance(ev_info, dict):
+                        continue
+                    participants = int(ev_info.get("participants", 0))
+                    start_time = ev_info.get("start_time", "")
+                    events_detail.append({
+                        "name": ev_name,
+                        "start_time": start_time,
+                        "participants": participants
+                    })
+                    day_events_map[ev_name] = {
+                        "count": participants,
+                        "start_time": start_time
+                    }
+        except Exception as e:
+            logger.warning(f"Could not read day metadata for events: {e}")
+        
         # Load segment metrics
         # Issue #485: Extract summary fields BEFORE filtering segment-level data
-        raw_segment_metrics = _load_ui_artifact_safe(storage, "ui/segment_metrics.json", warnings) or {}
+        raw_segment_metrics = _load_ui_artifact_safe(storage, f"{selected_day}/ui/segment_metrics.json", warnings) or {}
         
         # Extract summary-level fields (these are top-level keys, not segment IDs)
         summary_fields = ['peak_density', 'peak_rate', 'segments_with_flags', 'flagged_bins', 
@@ -247,21 +266,16 @@ async def get_dashboard_summary():
         peak_density_los = calculate_peak_density_los(peak_density)
         
         # Load flags data
-        flags = _load_ui_artifact_safe(storage, "ui/flags.json", warnings)
+        flags = _load_ui_artifact_safe(storage, f"{selected_day}/ui/flags.json", warnings)
         if flags is None:
             flags = []
         
         logger.info(f"Loaded flags data: {type(flags)}, length: {len(flags) if flags else 0}")
         segments_flagged, bins_flagged = _calculate_flags_metrics(flags)
         
-        # Load runners data (from local data/ directory)
-        from pathlib import Path
-        if not Path("data/runners.csv").exists():
-            warnings.append("missing: runners.csv")
-        
-        runners_data = load_runners_data()
-        total_runners = runners_data["total_runners"]
-        cohorts = runners_data["cohorts"]
+        # Runners data: prefer metadata events map; fallback to empty
+        total_runners = sum((v.get("count", 0) for v in day_events_map.values()), 0)
+        cohorts = day_events_map  # cohorts keyed by event name with count/start_time
         
         # Determine status
         status = "normal"
@@ -271,10 +285,13 @@ async def get_dashboard_summary():
         # Build response
         summary = {
             "run_id": run_id,  # Issue #470: Include run_id in response
+            "selected_day": selected_day,
+            "available_days": available_days,
             "timestamp": timestamp,
             "environment": environment,
             "total_runners": total_runners,
             "cohorts": cohorts,
+            "events_detail": events_detail,
             "segments_total": segments_total,
             "segments_flagged": segments_flagged,
             "bins_flagged": bins_flagged,

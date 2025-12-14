@@ -44,9 +44,13 @@ def format_time_for_display(iso_string: str) -> str:
         return iso_string
 
 
-def load_bins_data() -> List[Dict[str, Any]]:
+def load_bins_data(run_id: Optional[str] = None, day: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Load bin-level data from bin_summary.json artifact.
+    
+    Args:
+        run_id: Optional run ID (defaults to latest)
+        day: Optional day code (fri|sat|sun|mon) for day-scoped paths
     
     Returns:
         List of flagged bin records with formatted data for frontend display
@@ -58,14 +62,23 @@ def load_bins_data() -> List[Dict[str, Any]]:
         import json
         
         # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
-        from app.utils.metadata import get_latest_run_id
+        from app.utils.run_id import get_latest_run_id, resolve_selected_day
         from app.storage import create_runflow_storage
         
-        run_id = get_latest_run_id()
+        if not run_id:
+            run_id = get_latest_run_id()
+        
         storage = create_runflow_storage(run_id)
         
-        # Load bin_summary.json from runflow/<run_id>/bins/
-        bin_summary_data = storage.read_json("bins/bin_summary.json")
+        # Resolve day for day-scoped paths
+        if day:
+            selected_day, _ = resolve_selected_day(run_id, day)
+            bin_summary_path = f"{selected_day}/bins/bin_summary.json"
+        else:
+            bin_summary_path = "bins/bin_summary.json"
+        
+        # Load bin_summary.json from day-scoped path
+        bin_summary_data = storage.read_json(bin_summary_path)
         
         if not bin_summary_data or "segments" not in bin_summary_data:
             logger.warning("bin_summary.json is empty or not found")
@@ -103,7 +116,9 @@ def load_bins_data() -> List[Dict[str, Any]]:
 async def get_bins_data(
     segment_id: Optional[str] = Query(None, description="Filter by segment ID"),
     los_class: Optional[str] = Query(None, description="Filter by LOS class"),
-    limit: int = Query(1000, description="Maximum number of records to return", ge=1, le=50000)
+    limit: int = Query(1000, description="Maximum number of records to return", ge=1, le=50000),
+    run_id: Optional[str] = Query(None, description="Run ID (defaults to latest)"),
+    day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)")
 ):
     """
     Get bin-level density and flow data.
@@ -112,13 +127,15 @@ async def get_bins_data(
         segment_id: Optional filter by segment ID
         los_class: Optional filter by LOS class (A, B, C, D, E, F)
         limit: Maximum number of records to return (default: 1000, max: 50000)
+        run_id: Optional run ID (defaults to latest)
+        day: Optional day code (fri|sat|sun|mon) for day-scoped data
         
     Returns:
         JSON response with bin data and metadata
     """
     try:
-        # Load all bin data
-        bins_data = load_bins_data()
+        # Load all bin data (day-scoped)
+        bins_data = load_bins_data(run_id, day)
         
         if not bins_data:
             return JSONResponse({
@@ -158,6 +175,9 @@ async def get_bins_data(
         logger.info(f"Returning {len(filtered_data)} bin records (filtered from {len(bins_data)} total)")
         return JSONResponse(response_data)
         
+    except ValueError as e:
+        # Convert ValueError from resolve_selected_day to HTTPException
+        raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:

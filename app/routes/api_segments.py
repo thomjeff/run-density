@@ -8,14 +8,16 @@ Epic: RF-FE-002 | Issue: #279 | Step: 5
 Architecture: Option 3 - Hybrid Approach
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import json
 import logging
 
 # Issue #466 Step 2: Storage consolidated to app.storage
 from app.common.config import load_reporting
+from app.utils.run_id import get_latest_run_id, resolve_selected_day
+from app.storage import create_runflow_storage
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -136,7 +138,10 @@ def enrich_segment_features(segments_geojson: Dict[str, Any],
 
 
 @router.get("/api/segments/geojson")
-async def get_segments_geojson():
+async def get_segments_geojson(
+    run_id: Optional[str] = Query(None, description="Run ID (defaults to latest)"),
+    day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)")
+):
     """
     Get enriched segments GeoJSON with metrics data.
     
@@ -150,19 +155,23 @@ async def get_segments_geojson():
         - Logs warnings for missing data
     """
     try:
-        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
-        from app.utils.metadata import get_latest_run_id
-        from app.storage import create_runflow_storage
-        
-        run_id = get_latest_run_id()
+        # Resolve run_id and day
+        if not run_id:
+            run_id = get_latest_run_id()
+        selected_day, available_days = resolve_selected_day(run_id, day)
         storage = create_runflow_storage(run_id)
         
         # Read segments.geojson from runflow UI artifacts (GeoJSON is JSON)
-        segments_geojson = storage.read_json("ui/segments.geojson")
+        segments_geojson = storage.read_json(f"{selected_day}/ui/segments.geojson")
         if segments_geojson is None:
-            logger.warning(f"segments.geojson not found in runflow/{run_id}/ui/")
+            logger.warning(f"segments.geojson not found in runflow/{run_id}/{selected_day}/ui/")
             return JSONResponse(
-                content={"type": "FeatureCollection", "features": []},
+                content={
+                    "selected_day": selected_day,
+                    "available_days": available_days,
+                    "type": "FeatureCollection",
+                    "features": []
+                },
                 headers={"Cache-Control": "public, max-age=60"}
             )
         
@@ -173,14 +182,14 @@ async def get_segments_geojson():
                 feature["geometry"] = convert_geometry_to_wgs84(feature["geometry"])
         
         # Read segment_metrics.json from runflow UI artifacts
-        segment_metrics = storage.read_json("ui/segment_metrics.json")
+        segment_metrics = storage.read_json(f"{selected_day}/ui/segment_metrics.json")
         if segment_metrics is None:
-            logger.warning(f"segment_metrics.json not found in runflow/{run_id}/ui/")
+            logger.warning(f"segment_metrics.json not found in runflow/{run_id}/{selected_day}/ui/")
             segment_metrics = {}
         
         # Load flags to mark flagged segments
         flagged_seg_ids = set()
-        flags = storage.read_json("ui/flags.json")
+        flags = storage.read_json(f"{selected_day}/ui/flags.json")
         if flags:
             try:
                 # Handle both dict and array formats
@@ -196,6 +205,8 @@ async def get_segments_geojson():
         
         # Build response
         response_data = {
+            "selected_day": selected_day,
+            "available_days": available_days,
             "type": "FeatureCollection",
             "features": enriched_features
         }
@@ -216,7 +227,10 @@ async def get_segments_geojson():
 
 
 @router.get("/api/segments/summary")
-async def get_segments_summary():
+async def get_segments_summary(
+    run_id: Optional[str] = Query(None, description="Run ID (defaults to latest)"),
+    day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)")
+):
     """
     Get segments summary for dashboard tiles.
     
@@ -224,22 +238,25 @@ async def get_segments_summary():
         Summary statistics about segments and metrics
     """
     try:
-        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
-        from app.utils.metadata import get_latest_run_id
-        from app.storage import create_runflow_storage
-        
-        run_id = get_latest_run_id()
+        # Resolve run_id and day
+        if not run_id:
+            run_id = get_latest_run_id()
+        selected_day, available_days = resolve_selected_day(run_id, day)
         storage = create_runflow_storage(run_id)
         
         # Read segments.geojson from runflow UI artifacts (GeoJSON is JSON)
-        segments_geojson = storage.read_json("ui/segments.geojson")
+        segments_geojson = storage.read_json(f"{selected_day}/ui/segments.geojson")
         if segments_geojson is None:
-            return JSONResponse(content={"error": "segments.geojson not found"})
+            return JSONResponse(content={
+                "error": "segments.geojson not found",
+                "selected_day": selected_day,
+                "available_days": available_days
+            })
         
         features = segments_geojson.get("features", [])
         
         # Read segment_metrics.json from UI artifacts
-        segment_metrics = storage.read_json("ui/segment_metrics.json")
+        segment_metrics = storage.read_json(f"{selected_day}/ui/segment_metrics.json")
         if segment_metrics is None:
             segment_metrics = {}
         
@@ -257,7 +274,7 @@ async def get_segments_summary():
         
         # Count flagged segments (if flags exist)
         flagged_count = 0
-        flags = storage.read_json("ui/flags.json")
+        flags = storage.read_json(f"{selected_day}/ui/flags.json")
         if flags:
             # Handle both dict and array formats
             if isinstance(flags, dict):
@@ -268,6 +285,8 @@ async def get_segments_summary():
                 flagged_count = 0
         
         summary = {
+            "selected_day": selected_day,
+            "available_days": available_days,
             "total_segments": total_segments,
             "los_counts": los_counts,
             "flagged_segments": flagged_count,
