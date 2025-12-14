@@ -6,6 +6,9 @@
  * @description Segment visualization with LOS-based styling and tooltips
  */
 
+// Version stamp to detect stale/cached script loads
+console.log("segments.js VERSION:", "2025-12-13T21:20Z");
+
 // LOS colors from reporting.yml (SSOT)
 const losColors = {
     'A': '#4CAF50',  // Green - excellent
@@ -48,6 +51,20 @@ function cleanFeature(feature) {
     return feature;
 }
 
+function currentDayAndRun() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const dayParam = urlParams.get('day');
+    const runParam = urlParams.get('run_id');
+    const dayFromSelect = document.getElementById('day-selector')?.value;
+
+    // Prefer URL → selector → global → storage fallbacks
+    const day = (dayParam || dayFromSelect || (window.runflowDay && window.runflowDay.selected) || localStorage.getItem('selected_day') || '')
+        .toLowerCase()
+        .trim();
+    const run_id = runParam || (window.runflowDay && window.runflowDay.run_id) || localStorage.getItem('selected_run_id') || '';
+    return { day, run_id };
+}
+
 /**
  * Load segments data with fallback strategy
  * Primary: /api/segments/geojson (cloud/local via StorageService)
@@ -57,15 +74,41 @@ function cleanFeature(feature) {
  */
 async function loadSegments() {
     try {
-        console.log('Loading segments via API...');
-        const response = await fetch('/api/segments/geojson');
+        // Resolve directly from URL to avoid any timing issues
+        const urlParams = new URLSearchParams(window.location.search);
+        const dayParam = urlParams.get("day");
+        const runParam = urlParams.get("run_id");
+
+        let day = (dayParam || '').toLowerCase().trim();
+        let run_id = (runParam || '').trim();
+
+        // Hard guard: refuse to fetch without both values to avoid silent fallbacks
+        if (!run_id || !day) {
+            console.error("❌ Refusing to fetch segments without day+run_id", {
+                href: window.location.href,
+                dayParam,
+                runParam,
+                dayFromSelect: document.getElementById("day-selector")?.value,
+                runflowDay: window.runflowDay
+            });
+            return null;
+        }
+
+        const params = new URLSearchParams();
+        if (run_id) params.set('run_id', run_id);
+        if (day) params.set('day', day);
+        params.set('_', Date.now().toString()); // cache buster during dev
+        const apiUrl = `/api/segments/geojson?${params.toString()}`;
+        
+        console.log('Loading segments via API...', { apiUrl, day, run_id });
+        const response = await fetch(apiUrl, { cache: 'no-store' });
         
         if (!response.ok) {
             throw new Error(`API returned ${response.status}: ${response.statusText}`);
         }
         
         const data = await response.json();
-        console.log(`✅ Loaded ${data.features?.length || 0} segments via API`);
+        console.log(`✅ Loaded ${data.features?.length || 0} segments via API for day=${day || 'default'}`);
         return data;
         
     } catch (error) {
@@ -124,6 +167,9 @@ function createTooltipContent(properties) {
     `;
 }
 
+// Use var to avoid duplicate declaration errors if script is re-evaluated
+var segmentsLayer = window.segmentsLayer || null;
+
 /**
  * Render segments on map with LOS-based styling
  * @param {L.Map} map - Leaflet map instance
@@ -161,8 +207,18 @@ async function renderSegments(map) {
         }
     });
 
+    // Remove prior layer if exists (stale day)
+    if (window.segmentsLayer) {
+        map.removeLayer(window.segmentsLayer);
+    }
+
+    // Remove prior layer if exists (stale day)
+    if (segmentsLayer) {
+        map.removeLayer(segmentsLayer);
+    }
+
     // Create segments layer with styling and interactions
-    const segmentsLayer = L.geoJSON(data, {
+    segmentsLayer = L.geoJSON(data, {
         style: getSegmentStyle,
         onEachFeature: function(feature, layer) {
             // Bind tooltip with segment metadata
@@ -202,12 +258,10 @@ async function renderSegments(map) {
     // Add segments to map
     segmentsLayer.addTo(map);
     
-    // Make segmentsLayer globally available for table interactions
-    window.segmentsLayer = segmentsLayer;
-    
     // Make filtering functions globally available
     window.filterMapToSegment = filterMapToSegment;
     window.clearMapFilter = clearMapFilter;
+    window.segmentsLayer = segmentsLayer;
     
     // Fit map to segments bounds with padding
     if (data.features.length > 0) {
@@ -243,6 +297,19 @@ async function renderSegments(map) {
         losCounts[los] = (losCounts[los] || 0) + 1;
     });
     console.log('📊 LOS distribution:', losCounts);
+}
+
+/**
+ * Re-render segments when day/run_id changes (e.g., selector change)
+ */
+async function refreshSegmentsOnDayChange() {
+    if (!window.map) return;
+    // Clear existing layer
+    if (window.segmentsLayer) {
+        window.segmentsLayer.remove();
+        window.segmentsLayer = null;
+    }
+    await renderSegments(window.map);
 }
 
 /**
@@ -287,6 +354,9 @@ function filterMapToSegment(segmentId) {
     
     // Show clear filter button and update status
     updateFilterUI(segmentId);
+
+    // Show heatmap preview if available
+    showHeatmapPreview(segmentId);
 }
 
 /**
@@ -322,6 +392,9 @@ function clearMapFilter() {
     
     // Hide clear filter button and update status
     updateFilterUI(null);
+
+    // Hide heatmap preview
+    hideHeatmapPreview();
 }
 
 /**
@@ -380,7 +453,90 @@ function updateFilterUI(segmentId) {
         if (filterControls) {
             filterControls.style.display = 'none';
         }
+        if (statusSpan) {
+            statusSpan.textContent = '';
+        }
     }
+}
+
+/**
+ * Attempt to show heatmap preview for a segment
+ * Looks for runflow/{run_id}/{day}/ui/heatmaps/{seg_id}.png
+ */
+async function showHeatmapPreview(segmentId) {
+    const overlay = document.getElementById('heatmap-overlay');
+    const img = document.getElementById('heatmap-image');
+    const status = document.getElementById('heatmap-status');
+
+    if (!overlay || !img || !status) return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const day = (urlParams.get('day') || '').toLowerCase().trim();
+    const runId = (urlParams.get('run_id') || '').trim();
+    if (!day || !runId) {
+        status.textContent = 'Missing day/run context.';
+        img.style.display = 'none';
+        overlay.style.display = 'block';
+        return;
+    }
+
+    const candidates = [
+        `${segmentId}.png`,
+        `${segmentId.toLowerCase()}.png`,
+        `${day}_${segmentId}.png`,
+        `${day}_${segmentId.toLowerCase()}.png`,
+        `${segmentId}_heatmap.png`,
+        `${segmentId.toLowerCase()}_heatmap.png`
+    ];
+
+    let foundUrl = null;
+    const bases = [
+        // Preferred mount: FastAPI mounts RUNFLOW_ROOT at /heatmaps
+        `/heatmaps/${runId}/${day}/ui/heatmaps/`,
+        `/heatmaps/${runId}/heatmaps/`,
+        `/heatmaps/${runId}/ui/heatmaps/`,
+        // Legacy direct paths
+        `/runflow/${runId}/${day}/ui/heatmaps/`,
+        `/runflow/${runId}/heatmaps/`,
+        `/runflow/${runId}/ui/heatmaps/`
+    ];
+
+    for (const base of bases) {
+        for (const name of candidates) {
+            const url = `${base}${name}?_=${Date.now()}`;
+            try {
+                const headResp = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+                if (headResp.ok) {
+                    foundUrl = url;
+                    break;
+                }
+            } catch (e) {
+                // continue to next candidate/base
+            }
+        }
+        if (foundUrl) break;
+    }
+
+    if (!foundUrl) {
+        status.textContent = 'No heatmap available for this segment.';
+        img.style.display = 'none';
+        overlay.style.display = 'block';
+        return;
+    }
+
+    img.src = foundUrl;
+    img.style.display = 'block';
+    status.textContent = `Heatmap for ${segmentId}`;
+    overlay.style.display = 'block';
+}
+
+function hideHeatmapPreview() {
+    const overlay = document.getElementById('heatmap-overlay');
+    const img = document.getElementById('heatmap-image');
+    const status = document.getElementById('heatmap-status');
+    if (overlay) overlay.style.display = 'none';
+    if (img) img.style.display = 'none';
+    if (status) status.textContent = 'Select a segment to view heatmap.';
 }
 
 /**
@@ -457,14 +613,22 @@ document.addEventListener('DOMContentLoaded', async function() {
     try {
         console.log('🚀 Initializing segments map...');
         
-        // Initialize base map
-        const map = initMap('segments-map');
+        // If map already exists (reload), just refresh data; otherwise init
+        if (!window.map) {
+            const map = initMap('segments-map');
+            window.map = map;
+        }
         
-        // Make map globally available for table interactions
-        window.map = map;
+        // Render/refresh segments for current day/run_id
+        await renderSegments(window.map);
         
-        // Render segments
-        await renderSegments(map);
+        // If day selector exists, trigger refresh on change to re-fetch correct day/run_id
+        const daySelector = document.getElementById('day-selector');
+        if (daySelector) {
+            daySelector.addEventListener('change', async () => {
+                await refreshSegmentsOnDayChange();
+            });
+        }
         
         console.log('✅ Segments map initialized successfully');
         
@@ -476,3 +640,17 @@ document.addEventListener('DOMContentLoaded', async function() {
         errorControl.addTo(map);
     }
 });
+
+// Handle bfcache / soft navigation cases: refresh data when page is shown
+window.addEventListener('pageshow', async () => {
+    if (window.map) {
+        await refreshSegmentsOnDayChange();
+    }
+});
+
+// Also trigger a delayed refresh after load to ensure correct day/run_id is used
+setTimeout(async () => {
+    if (window.map) {
+        await refreshSegmentsOnDayChange();
+    }
+}, 200);

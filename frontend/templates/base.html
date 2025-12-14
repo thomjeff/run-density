@@ -280,8 +280,9 @@
             }
         }
         
-        {% block extra_styles %}{% endblock %}
     </style>
+    
+    {% block extra_styles %}{% endblock %}
     
     {% block extra_head %}{% endblock %}
 </head>
@@ -348,91 +349,111 @@
     })();
     </script>
 
-    <!-- Global Day Selector logic -->
+    <!-- Global run_id + Day Selector logic -->
     <script>
     (function() {
         const DAY_ORDER = ["fri","sat","sun","mon"];
 
-        function getDayFromQuery() {
+        function getParamOrStorage(key, storageKey) {
             const params = new URLSearchParams(window.location.search);
-            const d = params.get("day");
-            return d ? d.toLowerCase() : null;
+            const v = params.get(key);
+            if (v) return v;
+            const s = localStorage.getItem(storageKey);
+            return s ? s : null;
         }
 
-        function setQueryDay(url, day) {
+        function setQueryParam(url, key, val) {
             const u = new URL(url, window.location.origin);
-            if (day) {
-                u.searchParams.set("day", day);
-            } else {
-                u.searchParams.delete("day");
-            }
+            if (val) u.searchParams.set(key, val);
+            else u.searchParams.delete(key);
             return u.pathname + (u.search ? u.search : "");
         }
 
-        function updateNavLinks(day) {
+        function updateNavLinks(day, runId) {
             document.querySelectorAll("nav a").forEach(a => {
                 const href = a.getAttribute("href");
                 if (!href || href === "/logout" || href === "/health-check") return;
-                a.setAttribute("href", setQueryDay(href, day));
+                let newHref = href;
+                if (day) newHref = setQueryParam(newHref, "day", day);
+                if (runId) newHref = setQueryParam(newHref, "run_id", runId);
+                a.setAttribute("href", newHref);
             });
         }
 
-        function storeDay(day) {
+        function storeSelection(day, runId) {
             if (day) localStorage.setItem("selected_day", day);
-        }
-
-        function getStoredDay() {
-            const d = localStorage.getItem("selected_day");
-            return d ? d.toLowerCase() : null;
+            if (runId) localStorage.setItem("selected_run_id", runId);
         }
 
         async function initDaySelector() {
             const select = document.getElementById("day-selector");
             if (!select) return;
 
-            const queryDay = getDayFromQuery();
-            const storedDay = getStoredDay();
-            const requestedDay = queryDay || storedDay;
+            const params = new URLSearchParams(window.location.search);
+            const urlDayRaw = params.get("day");
+            const urlRunRaw = params.get("run_id");
+            const hasUrlDay = !!urlDayRaw;
+            const hasUrlRun = !!urlRunRaw;
 
-            let selectedDay = requestedDay;
+            // Start with URL as canonical, then fall back to storage
+            let selectedDay = (urlDayRaw || localStorage.getItem("selected_day") || "").toLowerCase().trim() || null;
+            let runId = (urlRunRaw || localStorage.getItem("selected_run_id") || "").trim() || null;
+
             let availableDays = [];
 
             try {
-                const resp = await fetch(requestedDay ? `/api/dashboard/summary?day=${encodeURIComponent(requestedDay)}` : "/api/dashboard/summary");
+                let url = "/api/dashboard/summary";
+                const qp = [];
+                if (runId) qp.push(`run_id=${encodeURIComponent(runId)}`);
+                if (selectedDay) qp.push(`day=${encodeURIComponent(selectedDay)}`);
+                if (qp.length) url += `?${qp.join("&")}`;
+
+                const resp = await fetch(url, { cache: "no-store" });
                 const data = await resp.json();
-                selectedDay = (data && data.selected_day) ? data.selected_day.toLowerCase() : selectedDay;
-                availableDays = (data && Array.isArray(data.available_days)) ? data.available_days.map(d => d.toLowerCase()) : [];
+
+                // Only fill missing pieces; never override URL-provided values
+                if (!hasUrlRun && !runId && data?.run_id) runId = data.run_id;
+                if (!hasUrlDay && !selectedDay && data?.selected_day) selectedDay = data.selected_day.toLowerCase();
+
+                availableDays = Array.isArray(data?.available_days)
+                    ? data.available_days.map(d => d.toLowerCase())
+                    : [];
             } catch (e) {
                 console.warn("Day selector: failed to load dashboard summary for day metadata", e);
             }
 
-            // Fallback if no available_days returned
+            const DEFAULT_ORDER = ["fri","sat","sun","mon"];
+
+            // Ensure the selector never blanks: include selectedDay even if API returned none
             if (!availableDays.length) {
-                availableDays = DAY_ORDER;
-            }
-            // If selectedDay is invalid, default to first available
-            if (!selectedDay || !availableDays.includes(selectedDay)) {
-                selectedDay = availableDays[0] || null;
+                availableDays = selectedDay ? [selectedDay] : DEFAULT_ORDER;
+            } else if (selectedDay && !availableDays.includes(selectedDay)) {
+                availableDays = [selectedDay, ...availableDays];
             }
 
-            // Populate dropdown
             select.innerHTML = "";
             availableDays.forEach(day => {
                 const opt = document.createElement("option");
-                opt.value = day;
+                opt.value = day; // keep lowercase
                 opt.textContent = day.toUpperCase();
-                if (day === selectedDay) opt.selected = true;
                 select.appendChild(opt);
             });
 
-            storeDay(selectedDay);
-            updateNavLinks(selectedDay);
-            window.runflowDay = { selected: selectedDay, available: availableDays };
+            if (selectedDay) {
+                select.value = selectedDay;
+            }
+
+            // Persist canonical state and update nav links
+            if (selectedDay) localStorage.setItem("selected_day", selectedDay);
+            if (runId) localStorage.setItem("selected_run_id", runId);
+            updateNavLinks(selectedDay, runId);
+            window.runflowDay = { selected: selectedDay, available: availableDays, run_id: runId };
 
             select.addEventListener("change", (e) => {
-                const day = e.target.value || "";
-                storeDay(day);
-                const newUrl = setQueryDay(window.location.href, day);
+                const day = (e.target.value || "").toLowerCase().trim();
+                if (!runId) return; // do not navigate without run_id
+                localStorage.setItem("selected_day", day);
+                const newUrl = setQueryParam(setQueryParam(window.location.href, "day", day), "run_id", runId);
                 window.location.href = newUrl;
             });
         }

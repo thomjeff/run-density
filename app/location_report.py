@@ -90,13 +90,14 @@ def get_segment_ranges_for_event(
     Args:
         segments_df: DataFrame from segments.csv
         segment_ids: List of segment IDs to check
-        event: Event name ("Full", "Half", "10K")
+        event: Event name (lowercase: "full", "half", "10k")
         
     Returns:
         List of (seg_id, from_km, to_km) tuples
     """
     ranges = []
-    event_col = event.lower() if event != "10K" else "10K"
+    # Use lowercase event names (v2 standard)
+    event_col = event.lower()
     from_col = f"{event_col}_from_km"
     to_col = f"{event_col}_to_km"
     
@@ -181,7 +182,8 @@ def find_nearest_segment(
     """
     from app.core.gpx.processor import generate_segment_coordinates
     
-    course = courses.get(event)
+    # GPX courses use lowercase keys
+    course = courses.get(event.lower())
     if not course:
         return None
     
@@ -196,8 +198,8 @@ def find_nearest_segment(
     if distance_km is None:
         return None
     
-    # Find which segment this distance falls within
-    event_col = event.lower() if event != "10K" else "10K"
+    # Find which segment this distance falls within (use lowercase event names)
+    event_col = event.lower()
     from_col = f"{event_col}_from_km"
     to_col = f"{event_col}_to_km"
     
@@ -264,14 +266,14 @@ def calculate_arrival_times_for_location(
     arrival_times = []
     
     # Get eligible events (where flag is 'y')
+    # Use lowercase event names (v2 standard)
     eligible_events = []
-    for event in ["full", "half", "10K"]:
+    for event in ["full", "half", "10k"]:
         if location.get(event, "").lower() == "y":
-            event_name = "Full" if event == "full" else ("Half" if event == "half" else "10K")
-            eligible_events.append(event_name)
+            eligible_events.append(event.lower())
     
     if not eligible_events:
-        logger.warning(f"Location {location.get('loc_id')}: No eligible events (full={location.get('full')}, half={location.get('half')}, 10K={location.get('10K')})")
+        logger.warning(f"Location {location.get('loc_id')}: No eligible events (full={location.get('full')}, half={location.get('half')}, 10k={location.get('10k')})")
         return arrival_times
     
     logger.debug(f"Location {location.get('loc_id')}: Processing {len(eligible_events)} eligible events: {eligible_events}")
@@ -290,7 +292,8 @@ def calculate_arrival_times_for_location(
     
     # Process each eligible event
     for event in eligible_events:
-        course = courses.get(event)
+        # GPX courses use lowercase keys
+        course = courses.get(event.lower())
         if not course:
             continue
         
@@ -319,15 +322,18 @@ def calculate_arrival_times_for_location(
                 )
                 continue
             
-            # Get runners for this event
-            event_runners = runners_df[runners_df["event"] == event].copy()
+            # Get runners for this event (case-insensitive matching)
+            event_runners = runners_df[
+                runners_df["event"].astype(str).str.lower() == event.lower()
+            ].copy()
             
             if event_runners.empty:
                 logger.warning(f"Location {location.get('loc_id')} ({event}): No runners found for event {event}")
                 continue
             
             event_start_sec = start_times.get(event, 0) * SECONDS_PER_MINUTE
-            event_col_gpx = event.lower() if event != "10K" else "10K"
+            # GPX courses use lowercase keys ("10k", not "10K")
+            event_col_gpx = event.lower()
             
             # Issue #480: Process ALL listed segments independently
             # This ensures we capture all crossings (e.g., B1 outbound, B3 return, D1 outbound, D2 return)
@@ -430,9 +436,10 @@ def calculate_arrival_times_for_location(
             # distance_km already set from projection
             logger.debug(f"Location {location.get('loc_id')} ({event}): Using nearest segment distance {distance_km:.3f}km")
         
-        # Get runners for this event
-        # Note: runners.csv uses capitalized event names ("Full", "Half", "10K")
-        event_runners = runners_df[runners_df["event"] == event].copy()
+        # Get runners for this event (case-insensitive matching for v2 lowercase standard)
+        event_runners = runners_df[
+            runners_df["event"].astype(str).str.lower() == event.lower()
+        ].copy()
         
         logger.debug(f"Location {location.get('loc_id')} ({event}): Found {len(event_runners)} runners for event {event}")
         
@@ -628,7 +635,7 @@ def generate_location_report(
                 loc = loc_row.iloc[0]
                 logger.warning(
                     f"No arrival times calculated for location {loc_id} ({loc.get('loc_label', 'unknown')}). "
-                    f"Event flags: full={loc.get('full')}, half={loc.get('half')}, 10K={loc.get('10K')}, "
+                    f"Event flags: full={loc.get('full')}, half={loc.get('half')}, 10k={loc.get('10k')}, "
                     f"seg_id={loc.get('seg_id')}"
                 )
             else:

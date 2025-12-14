@@ -28,6 +28,7 @@ router = APIRouter()
 @router.get("/api/locations")
 async def get_locations_report(
     run_id: Optional[str] = Query(None, description="Run ID for runflow structure"),
+    day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)"),
     generate: bool = Query(False, description="Generate new report if not exists")
 ) -> JSONResponse:
     """
@@ -37,12 +38,15 @@ async def get_locations_report(
     
     Args:
         run_id: Optional run ID (defaults to latest)
+        day: Optional day code (fri|sat|sun|mon) for day-scoped data
         generate: Whether to generate report if not found
         
     Returns:
         JSON response with location report data
     """
     try:
+        from app.utils.run_id import resolve_selected_day
+        
         # Get run_id (use latest if not provided)
         if not run_id:
             run_id = get_latest_run_id()
@@ -53,10 +57,12 @@ async def get_locations_report(
                 detail="No run ID available. Run analysis first or provide run_id parameter."
             )
         
+        # Resolve day for day-scoped paths
+        selected_day, available_days = resolve_selected_day(run_id, day)
         storage = create_runflow_storage(run_id)
         
-        # Try to load existing report
-        report_path = f"reports/Locations.csv"
+        # Try to load existing report from day-scoped path
+        report_path = f"{selected_day}/reports/Locations.csv"
         
         # Check if CSV exists
         if storage.exists(report_path):
@@ -106,10 +112,15 @@ async def get_locations_report(
         return JSONResponse(content={
             "ok": True,
             "run_id": run_id,
+            "selected_day": selected_day,
+            "available_days": available_days,
             "locations": report_data,
             "count": len(report_data) if report_data else 0
         })
         
+    except ValueError as e:
+        # Convert ValueError from resolve_selected_day to HTTPException
+        raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:

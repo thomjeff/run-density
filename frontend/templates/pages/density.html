@@ -340,11 +340,39 @@
     }
     
     function loadDensityData() {
-        fetch('/api/density/segments')
-            .then(response => response.json())
+        // Get run_id and day from URL or global state
+        const params = new URLSearchParams(window.location.search);
+        const dayParam = params.get('day');
+        const runParam = params.get('run_id');
+        
+        const day = (dayParam || (window.runflowDay && window.runflowDay.selected) || '').toLowerCase().trim();
+        const run_id = (runParam || (window.runflowDay && window.runflowDay.run_id) || '').trim();
+        
+        if (!day || !run_id) {
+            console.error('❌ Refusing to fetch density data without day+run_id', {
+                href: window.location.href,
+                dayParam, runParam,
+                runflowDay: window.runflowDay
+            });
+            showDensityError();
+            return;
+        }
+        
+        const apiUrl = `/api/density/segments?run_id=${encodeURIComponent(run_id)}&day=${encodeURIComponent(day)}`;
+        console.log('Loading density data via API...', { apiUrl, day, run_id });
+        
+        fetch(apiUrl, { cache: 'no-store' })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
             .then(data => {
-                densityData = data;
-                renderDensityTable(data);
+                // Handle new response format with selected_day/available_days
+                const segments = data.segments || data;
+                densityData = segments;
+                renderDensityTable(segments);
             })
             .catch(error => {
                 console.error('Error loading density data:', error);
@@ -474,9 +502,28 @@
     }
     
     function showSegmentDetail(seg_id) {
-        // Fetch detailed data
-        fetch(`/api/density/segment/${seg_id}`)
-            .then(response => response.json())
+        // Get run_id and day from URL or global state
+        const params = new URLSearchParams(window.location.search);
+        const dayParam = params.get('day');
+        const runParam = params.get('run_id');
+        
+        const day = (dayParam || (window.runflowDay && window.runflowDay.selected) || '').toLowerCase().trim();
+        const run_id = (runParam || (window.runflowDay && window.runflowDay.run_id) || '').trim();
+        
+        if (!day || !run_id) {
+            console.error('❌ Cannot load segment detail: missing day or run_id');
+            return;
+        }
+        
+        // Fetch detailed data with day/run_id params
+        const apiUrl = `/api/density/segment/${seg_id}?run_id=${encodeURIComponent(run_id)}&day=${encodeURIComponent(day)}`;
+        fetch(apiUrl, { cache: 'no-store' })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
             .then(detail => {
                 renderSegmentDetail(detail);
             })
@@ -569,8 +616,26 @@
         if (loadingDiv) loadingDiv.style.display = 'block';
         if (contentDiv) contentDiv.style.display = 'none';
         
+        // Get run_id and day from URL or global state
+        const params = new URLSearchParams(window.location.search);
+        const dayParam = params.get('day');
+        const runParam = params.get('run_id');
+        
+        const day = (dayParam || (window.runflowDay && window.runflowDay.selected) || '').toLowerCase().trim();
+        const run_id = (runParam || (window.runflowDay && window.runflowDay.run_id) || '').trim();
+        
+        if (!day || !run_id) {
+            console.error('❌ Cannot load bin details: missing day or run_id');
+            if (loadingDiv) {
+                loadingDiv.style.display = 'block';
+                loadingDiv.innerHTML = `<div>Error: Missing day or run_id</div>`;
+            }
+            return;
+        }
+        
         try {
-            const response = await fetch(`/api/bins?segment_id=${segId}&limit=50000`);
+            const apiUrl = `/api/bins?segment_id=${segId}&limit=50000&run_id=${encodeURIComponent(run_id)}&day=${encodeURIComponent(day)}`;
+            const response = await fetch(apiUrl, { cache: 'no-store' });
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }

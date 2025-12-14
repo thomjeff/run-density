@@ -25,9 +25,9 @@ help usage --help: ## Show this help message
 	@echo "  dev                 Start local development server (hot reload enabled)"
 	@echo "  stop                Stop Docker container"
 	@echo "  build               Build Docker image"
-	@echo "  test                Run smoke tests (health checks + API validation)"
 	@echo "  test-v2             Test v2 analysis API (sat + sun events, no reload mode)"
-	@echo "  e2e-local           Run full end-to-end test suite (generates all artifacts)"
+	@echo "  test                Run v1 smoke tests (health checks + API validation)"
+	@echo "  e2e-local           Run v1(legacy) end-to-end test"
 	@echo "  validate-output     Validate output integrity for latest run"
 	@echo "  validate-all        Validate output for all runs in index.json"
 	@echo ""
@@ -52,7 +52,7 @@ build: ## Build Docker image
 	@echo "🔨 Building Docker image..."
 	@docker-compose build
 
-e2e-local: ## Run end-to-end tests (local-only)
+e2e-local: ## VERSION 1 Run end-to-end tests (local-only)
 	@echo "🧪 Running E2E tests (local mode)..."
 	@docker-compose down
 	@echo "GCS_UPLOAD=false" > .env.override
