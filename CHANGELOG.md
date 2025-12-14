@@ -1,5 +1,64 @@
 # Changelog
 
+## [v2.0.0] - 2025-12-14
+
+### Summary
+- **Major Release**: Runflow v2 cutover - Multi-day, multi-event race analysis with day-scoped outputs
+- **Multi-day support**: Analyze Saturday and Sunday events independently or together
+- **Day-scoped runflow outputs**: All artifacts organized by `run_id/{day}/` structure (reports, bins, UI artifacts)
+- **UI day selector**: Global day selector across all pages (Dashboard, Segments, Density, Flow, Locations, Reports)
+- **E2E test suite**: Comprehensive regression testing with golden file comparisons (Issue #502)
+- **Dynamic event configuration**: Events defined in API payload, not hardcoded
+- **Per-event runner files**: Support for `{event}_runners.csv` files (e.g., `elite_runners.csv`, `open_runners.csv`)
+- **Event-relative distances**: Segment spans resolved from `segments.csv` columns (`{event}_from_km`, `{event}_to_km`)
+
+### Breaking Changes
+- **API endpoint**: New v2 endpoint at `POST /runflow/v2/analyze` (v1 endpoints remain for backward compatibility)
+- **Output structure**: Artifacts now organized by `runflow/{run_id}/{day}/` instead of `runflow/{run_id}/`
+- **Event naming**: All event names must be lowercase (e.g., `full`, `half`, `10k`, `elite`, `open`)
+- **Start times**: Must be provided in API request payload (no hardcoded defaults)
+
+### New Features
+
+#### Multi-Day Analysis (Phases 1-6)
+- **Event & Segment Models**: Dataclasses for `Event`, `Segment`, `Runner` with explicit `day` assignment
+- **Configuration-driven event discovery**: Events defined in API payload, not hardcoded lists
+- **Per-event segment spans**: `segments.csv` as single source of truth for event-specific distance ranges
+- **Day-scoped timeline**: Day-partitioned bin generation and analysis
+- **Day-scoped reports**: Density.md, Flow.csv, Flow.md, Locations.csv generated per day
+
+#### UI & API Surface Updates (Phase 7, Issue #501)
+- **Global day selector**: Single UI control in top navigation to switch displayed day across all pages
+- **Dynamic event tiles**: Dashboard shows event name, start time, and participant count based on selected day
+- **Day-scoped UI artifacts**: `segments.geojson`, `heatmaps/*.png`, `segment_metrics.json` contain only day-relevant segments
+- **Metadata enhancement**: Day-level metadata with structured `events` object containing `start_time` and `participants`
+
+#### E2E Test Suite (Phase 8, Issue #502)
+- **Pytest-based E2E suite**: Black-box testing of v2 API, pipeline, and outputs
+- **Golden file regression**: Comparing current outputs against baseline golden files
+- **Test scenarios**: Saturday-only, Sunday-only, Mixed-day scenarios
+- **Output normalization**: Pre-processing files (Markdown, CSV, JSON, GeoJSON, Parquet) to remove non-deterministic elements
+- **Day isolation validation**: Asserting outputs for specific day only contain relevant data
+- **Configurable base URL**: `BASE_URL` env var or `--base-url` pytest option
+- **One-command runner**: `make e2e-v2` for simplified test execution
+
+### Improvements
+- **Removed hardcoded values**: Start times, event lists, and configuration values now come from API request or `constants.py` (Issue #512)
+- **Standardized naming**: Consistent use of `seg_id`, `loc_id`, and lowercase event names
+- **GPX file loading**: Updated to use lowercase `{event}.gpx` files (e.g., `elite.gpx`, `open.gpx`)
+
+### Known Issues
+- None at time of release
+
+### Migration Guide
+For users upgrading from v1 to v2:
+1. Update API calls to use `POST /runflow/v2/analyze` endpoint
+2. Provide `events` array with `day`, `name`, and `start_time` in request payload
+3. Update file paths to expect `runflow/{run_id}/{day}/` structure
+4. Use lowercase event names in all configurations
+
+---
+
 ## [v1.8.1] - 2025-12-07
 
 ### Summary

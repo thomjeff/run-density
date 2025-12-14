@@ -6,7 +6,14 @@
 This service models runner density on shared course segments using a density engine and temporal flow analysis.  
 It provides comprehensive reporting capabilities with both Markdown and CSV outputs, and is containerized for local development.
 
-**Current Version: v1.8.4** - Issue #466: Phase 2 Architecture Refinement - Simplified local-only architecture with unified storage, centralized run ID logic, and 3-command developer workflow
+**v2.0.0 Features:**
+- **Multi-day support**: Analyze Saturday and Sunday events independently or together
+- **Day-scoped outputs**: All artifacts organized by `run_id/{day}/` (reports, bins, UI artifacts)
+- **Dynamic event configuration**: Events defined in API payload, not hardcoded
+- **Day selector UI**: Global day selector across all pages (Dashboard, Segments, Density, Flow, Locations, Reports)
+- **E2E test suite**: Comprehensive regression testing with golden file comparisons
+
+**Current Version: v2.0.0** - Runflow v2: Multi-day, multi-event race analysis with day-scoped outputs, E2E test suite, and enhanced UI with day selector
 
 ## Key Features
 - **Density Analysis**: Spatial concentration analysis with areal and crowd density calculations
@@ -32,8 +39,19 @@ The container runs on `http://localhost:8080` with hot-reload enabled.
 
 Run end-to-end tests:
 ```bash
+# v1 E2E tests (legacy)
 make e2e-local
+
+# v2 E2E tests (recommended)
+make e2e-v2
 ```
+
+**v2 E2E Testing:**
+- Base URL configurable via `BASE_URL` env var or `--base-url` pytest option
+- Default: `http://localhost:8080`
+- Tests three scenarios: Saturday-only, Sunday-only, Mixed-day
+- Golden file regression testing with normalization for Markdown, CSV, JSON, GeoJSON, and Parquet
+- Day isolation validation to ensure no cross-day contamination
 
 Run smoke tests:
 ```bash
