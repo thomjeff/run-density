@@ -437,17 +437,27 @@ def base_url(request):
 
 @pytest.fixture(scope="class")
 def wait_for_server(base_url):
-    """Wait for server to be ready."""
+    """Wait for server to be ready with clear failure message."""
     max_attempts = 30
     for attempt in range(max_attempts):
         try:
             response = requests.get(f"{base_url}/health", timeout=5)
             if response.status_code == 200:
                 return True
-        except requests.exceptions.RequestException:
-            pass
+        except requests.exceptions.RequestException as e:
+            if attempt == max_attempts - 1:
+                # Final attempt failed - provide clear error message
+                pytest.fail(
+                    f"❌ Server not reachable at BASE_URL={base_url}\n"
+                    f"   Error: {e}\n"
+                    f"   Instructions:\n"
+                    f"   1. Start server: make dev (or docker-compose up)\n"
+                    f"   2. Verify server is running: curl {base_url}/health\n"
+                    f"   3. If using docker-compose, use: BASE_URL=http://app:8080 pytest tests/v2/e2e.py\n"
+                    f"   4. Or use: make e2e-v2 (one-command runner)"
+                )
         time.sleep(1)
-    pytest.skip("Server not available")
+    pytest.fail("Server not available after 30 attempts")
 
 
 class TestV2GoldenFileRegression:
@@ -605,27 +615,41 @@ class TestV2GoldenFileRegression:
         
         differences = []
         
-        # Files to compare
-        files_to_compare = ["Density.md", "Flow.csv", "Flow.md"]
+        # Files to compare (Option A: Include UI artifacts)
+        files_to_compare = []
+        
+        # Report files
+        report_files = ["Density.md", "Flow.csv", "Flow.md"]
         if day == "sun":  # Locations.csv may not exist for SAT
-            files_to_compare.append("Locations.csv")
+            report_files.append("Locations.csv")
+        for filename in report_files:
+            files_to_compare.append(("reports", filename))
         
-        # Also compare GeoJSON and Parquet if golden files exist
-        geojson_path = day_dir / "ui" / "segments.geojson"
-        golden_geojson_path = golden_base_path / scenario / day / "segments.geojson"
-        if golden_geojson_path.exists() and geojson_path.exists():
-            files_to_compare.append(("segments.geojson", geojson_path, golden_geojson_path))
+        # UI artifacts (golden regression covers UI contract)
+        ui_files = [
+            "meta.json",
+            "segment_metrics.json",
+            "flags.json",
+            "flow.json",
+            "schema_density.json",
+            "health.json",
+            "segments.geojson",
+            "captions.json"
+        ]
+        for filename in ui_files:
+            files_to_compare.append(("ui", filename))
         
-        bins_path = day_dir / "bins" / "bins.parquet"
-        golden_bins_path = golden_base_path / scenario / day / "bins.parquet"
-        if golden_bins_path.exists() and bins_path.exists():
-            files_to_compare.append(("bins.parquet", bins_path, golden_bins_path))
+        # Bins (optional but useful)
+        files_to_compare.append(("bins", "bins.parquet"))
         
         for file_entry in files_to_compare:
-            if isinstance(file_entry, tuple):
-                # Special handling for GeoJSON/Parquet
-                filename, actual_path, golden_path = file_entry
+            if isinstance(file_entry, tuple) and len(file_entry) == 2:
+                # (subdir, filename) format
+                subdir, filename = file_entry
+                actual_path = day_dir / subdir / filename
+                golden_path = golden_base_path / scenario / day / subdir / filename
             else:
+                # Legacy format (backward compatibility)
                 filename = file_entry
                 actual_path = day_dir / "reports" / filename
                 golden_path = golden_base_path / scenario / day / filename

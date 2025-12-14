@@ -105,8 +105,20 @@ def generate_golden_files(run_id: str, scenario: str = "mixed_day", skip_validat
     scenario_dir.mkdir(exist_ok=True)
     
     # Files to copy per day
+    # Option A (recommended): Include UI artifacts for golden regression
     files_to_copy = {
         "reports": ["Density.md", "Flow.csv", "Flow.md", "Locations.csv"],
+        "ui": [
+            "meta.json",
+            "segment_metrics.json",
+            "flags.json",
+            "flow.json",
+            "schema_density.json",
+            "health.json",
+            "segments.geojson",
+            "captions.json"
+        ],
+        "bins": ["bins.parquet"],  # Optional but useful for regression
     }
     
     # Determine which days to copy based on scenario
@@ -134,9 +146,36 @@ def generate_golden_files(run_id: str, scenario: str = "mixed_day", skip_validat
             for filename in files_to_copy["reports"]:
                 source = reports_dir / filename
                 if source.exists():
-                    dest = golden_day_dir / filename
+                    dest = golden_day_dir / "reports" / filename
+                    dest.parent.mkdir(exist_ok=True)
                     shutil.copy2(source, dest)
-                    print(f"✅ Copied {day}/{filename}")
+                    print(f"✅ Copied {day}/reports/{filename}")
+                else:
+                    print(f"⚠️  File not found: {source}")
+        
+        # Copy UI artifacts
+        ui_dir = day_dir / "ui"
+        if ui_dir.exists():
+            for filename in files_to_copy["ui"]:
+                source = ui_dir / filename
+                if source.exists():
+                    dest = golden_day_dir / "ui" / filename
+                    dest.parent.mkdir(exist_ok=True)
+                    shutil.copy2(source, dest)
+                    print(f"✅ Copied {day}/ui/{filename}")
+                else:
+                    print(f"⚠️  File not found: {source}")
+        
+        # Copy bins (optional)
+        bins_dir = day_dir / "bins"
+        if bins_dir.exists():
+            for filename in files_to_copy["bins"]:
+                source = bins_dir / filename
+                if source.exists():
+                    dest = golden_day_dir / "bins" / filename
+                    dest.parent.mkdir(exist_ok=True)
+                    shutil.copy2(source, dest)
+                    print(f"✅ Copied {day}/bins/{filename}")
                 else:
                     print(f"⚠️  File not found: {source}")
     

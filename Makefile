@@ -74,6 +74,17 @@ test: ## Run smoke tests (health checks + API validation)
 test-v2: ## Test v2 analysis API (sat + sun events, no reload mode)
 	@bash scripts/test_v2_analysis.sh
 
+e2e-v2: ## Run v2 E2E tests (pytest suite with docker-compose)
+	@echo "🧪 Running v2 E2E tests..."
+	@echo "📦 Starting docker-compose services..."
+	@docker-compose up -d --build
+	@echo "⏳ Waiting for server to be ready (10s)..."
+	@sleep 10
+	@echo "▶️  Running pytest tests/v2/e2e.py..."
+	@docker exec run-density-dev pytest tests/v2/e2e.py -v --base-url http://localhost:8080 || (echo "❌ E2E tests failed" && docker-compose down && exit 1)
+	@echo "✅ E2E tests completed"
+	@echo "💡 Container still running. Use 'make stop' to stop it."
+
 validate-output: ## Validate output integrity for latest run
 	@echo "🔍 Validating output integrity..."
 	@docker exec run-density-dev python -m app.tests.validate_output
