@@ -14,21 +14,9 @@ from pathlib import Path
 import sys
 import os
 
-
-def get_runflow_root():
-    """Get runflow root directory."""
-    # Check container path first
-    container_path = Path("/app/runflow")
-    if container_path.exists():
-        return container_path
-    
-    # Fall back to local path
-    local_path = Path(os.path.expanduser("~/Documents/runflow"))
-    if local_path.exists():
-        return local_path
-    
-    # Default to ./runflow
-    return Path("runflow")
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
 
 def validate_scenario_match(run_id: str, scenario: str, run_dir: Path) -> bool:
@@ -87,6 +75,9 @@ def generate_golden_files(run_id: str, scenario: str = "mixed_day", skip_validat
         scenario: Scenario name (saturday_only, sunday_only, mixed_day)
         skip_validation: Skip scenario validation (use with caution)
     """
+    # Use same runflow-root resolver as app/tests
+    from app.utils.run_id import get_runflow_root
+    
     runflow_root = get_runflow_root()
     run_dir = runflow_root / run_id
     
@@ -105,6 +96,12 @@ def generate_golden_files(run_id: str, scenario: str = "mixed_day", skip_validat
     golden_base.mkdir(parents=True, exist_ok=True)
     
     scenario_dir = golden_base / scenario
+    
+    # MUST CHANGE #1: Clean scenario output dir before copy
+    if scenario_dir.exists():
+        print(f"🧹 Cleaning existing golden files for scenario '{scenario}'...")
+        shutil.rmtree(scenario_dir)
+    
     scenario_dir.mkdir(exist_ok=True)
     
     # Files to copy per day
@@ -145,6 +142,7 @@ def generate_golden_files(run_id: str, scenario: str = "mixed_day", skip_validat
     
     print(f"\n✅ Golden files generated for scenario '{scenario}'")
     print(f"📁 Location: {scenario_dir}")
+    print(f"   Days included: {', '.join(days_to_copy)}")
 
 
 def main():
@@ -184,4 +182,3 @@ Examples:
 
 if __name__ == "__main__":
     main()
-
