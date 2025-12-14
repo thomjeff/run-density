@@ -529,8 +529,19 @@ class TestV2GoldenFileRegression:
             # If not JSON, return original
             return content
     
+    def _round_floats(self, obj, decimals=6):
+        """Recursively round all float values in a JSON-like structure."""
+        if isinstance(obj, float):
+            return round(obj, decimals)
+        elif isinstance(obj, dict):
+            return {k: self._round_floats(v, decimals) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._round_floats(item, decimals) for item in obj]
+        else:
+            return obj
+    
     def _normalize_geojson(self, content: str) -> str:
-        """Normalize GeoJSON by sorting features by seg_id."""
+        """Normalize GeoJSON by sorting features by seg_id and rounding coordinates."""
         try:
             data = json.loads(content)
             if "features" in data and isinstance(data["features"], list):
@@ -540,18 +551,28 @@ class TestV2GoldenFileRegression:
                     return str(props.get("seg_id") or props.get("segment_id") or props.get("id") or "")
                 
                 data["features"].sort(key=get_seg_id)
+            
+            # Round all float values (including coordinates) to 6 decimals
+            data = self._round_floats(data, decimals=6)
+            
             # Dump with sorted keys
             return json.dumps(data, sort_keys=True, indent=2)
         except Exception:
             return content
     
     def _normalize_parquet(self, file_path: Path) -> str:
-        """Normalize parquet by loading, sorting, and returning hash or CSV representation.
+        """Normalize parquet by loading, sorting, rounding floats, and returning CSV representation.
         
         Returns a deterministic string representation for comparison.
+        Rounds numeric columns to 6 decimals to prevent false diffs from float noise.
         """
         try:
             df = pd.read_parquet(file_path)
+            
+            # Round numeric columns to 6 decimals to prevent float noise
+            numeric_cols = df.select_dtypes(include=['number']).columns
+            if len(numeric_cols) > 0:
+                df[numeric_cols] = df[numeric_cols].round(6)
             
             # Sort by stable keys (day, seg_id, t, bin_id depending on schema)
             sort_cols = []
