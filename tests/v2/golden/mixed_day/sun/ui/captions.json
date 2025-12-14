@@ -1,0 +1,534 @@
+{
+  "A1": {
+    "seg_id": "A1",
+    "label": "",
+    "summary": "Segment A1 \u2014 . Two distinct waves are visible. The first (07:00\u201307:10) peaks at ~0.35 p/m\u00b2. A subsequent wave (07:40\u201307:48) is heavier and more concentrated. Overall peak near 07:44 around 0.2\u20130.4 km at 0.76 p/m\u00b2 (D). Remains active in window.",
+    "peak": {
+      "density_p_m2": 0.755,
+      "time": "07:44",
+      "km_range": "0.2\u20130.4 km",
+      "los": "D"
+    },
+    "waves": [
+      {
+        "start_time": "07:00",
+        "end_time": "07:10",
+        "peak_density_p_m2": 0.353,
+        "peak_time": "07:02",
+        "peak_km_range": "0.0\u20130.2 km",
+        "bins_count": 16
+      },
+      {
+        "start_time": "07:40",
+        "end_time": "07:48",
+        "peak_density_p_m2": 0.755,
+        "peak_time": "07:44",
+        "peak_km_range": "0.2\u20130.4 km",
+        "bins_count": 12,
+        "qualitative": {
+          "relative_peak": "heavier",
+          "spread": "more concentrated"
+        }
+      }
+    ],
+    "clearance_time": null,
+    "notes": []
+  },
+  "A2": {
+    "seg_id": "A2",
+    "label": "",
+    "summary": "Segment A2 \u2014 . Two distinct waves are visible. The first (07:04\u201307:18) peaks at ~0.19 p/m\u00b2. A subsequent wave (07:44\u201307:56) is heavier and similar spread. Overall peak near 07:48 around 0.0\u20130.2 km at 0.47 p/m\u00b2 (B). Remains active in window.",
+    "peak": {
+      "density_p_m2": 0.46900000000000003,
+      "time": "07:48",
+      "km_range": "0.0\u20130.2 km",
+      "los": "B"
+    },
+    "waves": [
+      {
+        "start_time": "07:04",
+        "end_time": "07:18",
+        "peak_density_p_m2": 0.191,
+        "peak_time": "07:08",
+        "peak_km_range": "0.2\u20130.4 km",
+        "bins_count": 26
+      },
+      {
+        "start_time": "07:44",
+        "end_time": "07:56",
+        "peak_density_p_m2": 0.46900000000000003,
+        "peak_time": "07:48",
+        "peak_km_range": "0.0\u20130.2 km",
+        "bins_count": 19,
+        "qualitative": {
+          "relative_peak": "heavier",
+          "spread": "similar spread"
+        }
+      }
+    ],
+    "clearance_time": null,
+    "notes": []
+  },
+  "A3": {
+    "seg_id": "A3",
+    "label": "",
+    "summary": "Segment A3 \u2014 . Two distinct waves are visible. The first (07:06\u201307:26) peaks at ~0.13 p/m\u00b2. A subsequent wave (07:48\u201308:02) is heavier and more concentrated. Overall peak near 07:52 around 0.0\u20130.2 km at 0.29 p/m\u00b2 (A). Remains active in window.",
+    "peak": {
+      "density_p_m2": 0.291,
+      "time": "07:52",
+      "km_range": "0.0\u20130.2 km",
+      "los": "A"
+    },
+    "waves": [
+      {
+        "start_time": "07:06",
+        "end_time": "07:26",
+        "peak_density_p_m2": 0.134,
+        "peak_time": "07:12",
+        "peak_km_range": "0.2\u20130.4 km",
+        "bins_count": 37
+      },
+      {
+        "start_time": "07:48",
+        "end_time": "08:02",
+        "peak_density_p_m2": 0.291,
+        "peak_time": "07:52",
+        "peak_km_range": "0.0\u20130.2 km",
+        "bins_count": 26,
+        "qualitative": {
+          "relative_peak": "heavier",
+          "spread": "more concentrated"
+        }
+      }
+    ],
+    "clearance_time": null,
+    "notes": []
+  },
+  "B1": {
+    "seg_id": "B1",
+    "label": "",
+    "summary": "Segment B1 \u2014 . A single density wave passes, peaking near 07:16 around 0.0\u20130.2 km at 0.34 p/m\u00b2 (A). Clears by 07:31.",
+    "peak": {
+      "density_p_m2": 0.33666666666666667,
+      "time": "07:16",
+      "km_range": "0.0\u20130.2 km",
+      "los": "A"
+    },
+    "waves": [
+      {
+        "start_time": "07:10",
+        "end_time": "07:42",
+        "peak_density_p_m2": 0.33666666666666667,
+        "peak_time": "07:16",
+        "peak_km_range": "0.0\u20130.2 km",
+        "bins_count": 81
+      }
+    ],
+    "clearance_time": "07:31",
+    "notes": []
+  },
+  "B2": {
+    "seg_id": "B2",
+    "label": "",
+    "summary": "Segment B2 \u2014 . Two distinct waves are visible. The first (07:40\u201307:42) peaks at ~0.08 p/m\u00b2. A subsequent wave (08:10\u201308:32) is heavier and more dispersed. Overall peak near 08:32 around 1.2\u20131.4 km at 0.11 p/m\u00b2 (A). Remains active in window.",
+    "peak": {
+      "density_p_m2": 0.11333333333333334,
+      "time": "08:32",
+      "km_range": "1.2\u20131.4 km",
+      "los": "A"
+    },
+    "waves": [
+      {
+        "start_time": "07:40",
+        "end_time": "07:42",
+        "peak_density_p_m2": 0.08333333333333334,
+        "peak_time": "07:42",
+        "peak_km_range": "0.0\u20130.2 km",
+        "bins_count": 1
+      },
+      {
+        "start_time": "08:10",
+        "end_time": "08:32",
+        "peak_density_p_m2": 0.11333333333333334,
+        "peak_time": "08:32",
+        "peak_km_range": "1.2\u20131.4 km",
+        "bins_count": 52,
+        "qualitative": {
+          "relative_peak": "heavier",
+          "spread": "more dispersed"
+        }
+      }
+    ],
+    "clearance_time": null,
+    "notes": []
+  },
+  "B3": {
+    "seg_id": "B3",
+    "label": "",
+    "summary": "Segment B3 \u2014 . A single density wave passes, peaking near 07:16 around 0.0\u20130.2 km at 0.34 p/m\u00b2 (A). Clears by 07:31.",
+    "peak": {
+      "density_p_m2": 0.33666666666666667,
+      "time": "07:16",
+      "km_range": "0.0\u20130.2 km",
+      "los": "A"
+    },
+    "waves": [
+      {
+        "start_time": "07:10",
+        "end_time": "07:42",
+        "peak_density_p_m2": 0.33666666666666667,
+        "peak_time": "07:16",
+        "peak_km_range": "0.0\u20130.2 km",
+        "bins_count": 81
+      }
+    ],
+    "clearance_time": "07:31",
+    "notes": []
+  },
+  "D1": {
+    "seg_id": "D1",
+    "label": "",
+    "summary": "Segment D1 \u2014 . A single density wave passes, peaking near 07:26 around 0.0\u20130.2 km at 0.23 p/m\u00b2 (A). Does not fully clear in the observed window.",
+    "peak": {
+      "density_p_m2": 0.23333333333333334,
+      "time": "07:26",
+      "km_range": "0.0\u20130.2 km",
+      "los": "A"
+    },
+    "waves": [
+      {
+        "start_time": "07:16",
+        "end_time": "08:04",
+        "peak_density_p_m2": 0.23333333333333334,
+        "peak_time": "07:26",
+        "peak_km_range": "0.0\u20130.2 km",
+        "bins_count": 294
+      }
+    ],
+    "clearance_time": null,
+    "notes": []
+  },
+  "D2": {
+    "seg_id": "D2",
+    "label": "",
+    "summary": "Segment D2 \u2014 . A single density wave passes, peaking near 08:00 around 0.8\u20131.0 km at 0.14 p/m\u00b2 (A). Does not fully clear in the observed window.",
+    "peak": {
+      "density_p_m2": 0.14333333333333334,
+      "time": "08:00",
+      "km_range": "0.8\u20131.0 km",
+      "los": "A"
+    },
+    "waves": [
+      {
+        "start_time": "07:36",
+        "end_time": "08:30",
+        "peak_density_p_m2": 0.14333333333333334,
+        "peak_time": "08:00",
+        "peak_km_range": "0.8\u20131.0 km",
+        "bins_count": 230
+      }
+    ],
+    "clearance_time": null,
+    "notes": []
+  },
+  "F1": {
+    "seg_id": "F1",
+    "label": "",
+    "summary": "Segment F1 \u2014 . A single density wave passes, peaking near 07:58 around 0.0\u20130.2 km at 0.40 p/m\u00b2 (B). Does not fully clear in the observed window.",
+    "peak": {
+      "density_p_m2": 0.4,
+      "time": "07:58",
+      "km_range": "0.0\u20130.2 km",
+      "los": "B"
+    },
+    "waves": [
+      {
+        "start_time": "07:50",
+        "end_time": "08:18",
+        "peak_density_p_m2": 0.4,
+        "peak_time": "07:58",
+        "peak_km_range": "0.0\u20130.2 km",
+        "bins_count": 104
+      }
+    ],
+    "clearance_time": null,
+    "notes": []
+  },
+  "H1": {
+    "seg_id": "H1",
+    "label": "",
+    "summary": "Segment H1 \u2014 . A single density wave passes, peaking near 09:32 around 0.6\u20130.8 km at 0.22 p/m\u00b2 (A). Does not fully clear in the observed window.",
+    "peak": {
+      "density_p_m2": 0.22,
+      "time": "09:32",
+      "km_range": "0.6\u20130.8 km",
+      "los": "A"
+    },
+    "waves": [
+      {
+        "start_time": "09:02",
+        "end_time": "09:40",
+        "peak_density_p_m2": 0.22,
+        "peak_time": "09:32",
+        "peak_km_range": "0.6\u20130.8 km",
+        "bins_count": 121
+      }
+    ],
+    "clearance_time": null,
+    "notes": []
+  },
+  "I1": {
+    "seg_id": "I1",
+    "label": "",
+    "summary": "Segment I1 \u2014 . A single density wave passes, peaking near 08:12 around 0.2\u20130.4 km at 0.27 p/m\u00b2 (A). Does not fully clear in the observed window.",
+    "peak": {
+      "density_p_m2": 0.26666666666666666,
+      "time": "08:12",
+      "km_range": "0.2\u20130.4 km",
+      "los": "A"
+    },
+    "waves": [
+      {
+        "start_time": "08:02",
+        "end_time": "08:46",
+        "peak_density_p_m2": 0.26666666666666666,
+        "peak_time": "08:12",
+        "peak_km_range": "0.2\u20130.4 km",
+        "bins_count": 256
+      }
+    ],
+    "clearance_time": null,
+    "notes": []
+  },
+  "J1": {
+    "seg_id": "J1",
+    "label": "",
+    "summary": "Segment J1 \u2014 . A single density wave passes, peaking near 08:44 around 0.2\u20130.4 km at 0.27 p/m\u00b2 (A). Clears by 09:33.",
+    "peak": {
+      "density_p_m2": 0.26666666666666666,
+      "time": "08:44",
+      "km_range": "0.2\u20130.4 km",
+      "los": "A"
+    },
+    "waves": [
+      {
+        "start_time": "08:24",
+        "end_time": "09:40",
+        "peak_density_p_m2": 0.26666666666666666,
+        "peak_time": "08:44",
+        "peak_km_range": "0.2\u20130.4 km",
+        "bins_count": 252
+      }
+    ],
+    "clearance_time": "09:33",
+    "notes": []
+  },
+  "J2": {
+    "seg_id": "J2",
+    "label": "",
+    "summary": "Segment J2 \u2014 . A single density wave passes, peaking near 07:42 around 0.0\u20130.2 km at 0.08 p/m\u00b2 (A). Does not fully clear in the observed window.",
+    "peak": {
+      "density_p_m2": 0.08333333333333334,
+      "time": "07:42",
+      "km_range": "0.0\u20130.2 km",
+      "los": "A"
+    },
+    "waves": [
+      {
+        "start_time": "07:40",
+        "end_time": "07:42",
+        "peak_density_p_m2": 0.08333333333333334,
+        "peak_time": "07:42",
+        "peak_km_range": "0.0\u20130.2 km",
+        "bins_count": 1
+      }
+    ],
+    "clearance_time": null,
+    "notes": []
+  },
+  "J3": {
+    "seg_id": "J3",
+    "label": "",
+    "summary": "Segment J3 \u2014 . A single density wave passes, peaking near 07:42 around 0.0\u20130.2 km at 0.08 p/m\u00b2 (A). Does not fully clear in the observed window.",
+    "peak": {
+      "density_p_m2": 0.08333333333333334,
+      "time": "07:42",
+      "km_range": "0.0\u20130.2 km",
+      "los": "A"
+    },
+    "waves": [
+      {
+        "start_time": "07:40",
+        "end_time": "07:42",
+        "peak_density_p_m2": 0.08333333333333334,
+        "peak_time": "07:42",
+        "peak_km_range": "0.0\u20130.2 km",
+        "bins_count": 1
+      }
+    ],
+    "clearance_time": null,
+    "notes": []
+  },
+  "J4": {
+    "seg_id": "J4",
+    "label": "",
+    "summary": "Segment J4 \u2014 . A single density wave passes, peaking near 09:00 around 0.0\u20130.2 km at 0.22 p/m\u00b2 (A). Does not fully clear in the observed window.",
+    "peak": {
+      "density_p_m2": 0.22333333333333336,
+      "time": "09:00",
+      "km_range": "0.0\u20130.2 km",
+      "los": "A"
+    },
+    "waves": [
+      {
+        "start_time": "08:42",
+        "end_time": "09:40",
+        "peak_density_p_m2": 0.22333333333333336,
+        "peak_time": "09:00",
+        "peak_km_range": "0.0\u20130.2 km",
+        "bins_count": 238
+      }
+    ],
+    "clearance_time": null,
+    "notes": []
+  },
+  "J5": {
+    "seg_id": "J5",
+    "label": "",
+    "summary": "Segment J5 \u2014 . Two distinct waves are visible. The first (08:24\u201309:16) peaks at ~0.27 p/m\u00b2. A subsequent wave (09:24\u201309:32) is lighter and more concentrated. Overall peak near 08:44 around 0.2\u20130.4 km at 0.27 p/m\u00b2 (A). Remains active in window.",
+    "peak": {
+      "density_p_m2": 0.26666666666666666,
+      "time": "08:44",
+      "km_range": "0.2\u20130.4 km",
+      "los": "A"
+    },
+    "waves": [
+      {
+        "start_time": "08:24",
+        "end_time": "09:16",
+        "peak_density_p_m2": 0.26666666666666666,
+        "peak_time": "08:44",
+        "peak_km_range": "0.2\u20130.4 km",
+        "bins_count": 198
+      },
+      {
+        "start_time": "09:24",
+        "end_time": "09:32",
+        "peak_density_p_m2": 0.12000000000000001,
+        "peak_time": "09:26",
+        "peak_km_range": "1.6\u20131.8 km",
+        "bins_count": 4,
+        "qualitative": {
+          "relative_peak": "lighter",
+          "spread": "more concentrated"
+        }
+      }
+    ],
+    "clearance_time": null,
+    "notes": []
+  },
+  "K1": {
+    "seg_id": "K1",
+    "label": "",
+    "summary": "Segment K1 \u2014 . A single density wave passes, peaking near 09:14 around 0.4\u20130.6 km at 0.10 p/m\u00b2 (A). Clears by 09:15.",
+    "peak": {
+      "density_p_m2": 0.10166666666666667,
+      "time": "09:14",
+      "km_range": "0.4\u20130.6 km",
+      "los": "A"
+    },
+    "waves": [
+      {
+        "start_time": "09:10",
+        "end_time": "09:40",
+        "peak_density_p_m2": 0.10166666666666667,
+        "peak_time": "09:14",
+        "peak_km_range": "0.4\u20130.6 km",
+        "bins_count": 55
+      }
+    ],
+    "clearance_time": "09:15",
+    "notes": []
+  },
+  "L1": {
+    "seg_id": "L1",
+    "label": "",
+    "summary": "Segment L1 \u2014 . Two distinct waves are visible. The first (08:28\u201308:36) peaks at ~0.08 p/m\u00b2. A subsequent wave (09:06\u201309:40) is heavier and more dispersed. Overall peak near 09:32 around 0.6\u20130.8 km at 0.21 p/m\u00b2 (A). Remains active in window.",
+    "peak": {
+      "density_p_m2": 0.2066666666666667,
+      "time": "09:32",
+      "km_range": "0.6\u20130.8 km",
+      "los": "A"
+    },
+    "waves": [
+      {
+        "start_time": "08:28",
+        "end_time": "08:36",
+        "peak_density_p_m2": 0.07666666666666667,
+        "peak_time": "08:36",
+        "peak_km_range": "0.2\u20130.4 km",
+        "bins_count": 6
+      },
+      {
+        "start_time": "09:06",
+        "end_time": "09:40",
+        "peak_density_p_m2": 0.2066666666666667,
+        "peak_time": "09:32",
+        "peak_km_range": "0.6\u20130.8 km",
+        "bins_count": 111,
+        "qualitative": {
+          "relative_peak": "heavier",
+          "spread": "more dispersed"
+        }
+      }
+    ],
+    "clearance_time": null,
+    "notes": []
+  },
+  "L2": {
+    "seg_id": "L2",
+    "label": "",
+    "summary": "Segment L2 \u2014 . A single density wave passes, peaking near 07:42 around 0.0\u20130.2 km at 0.08 p/m\u00b2 (A). Does not fully clear in the observed window.",
+    "peak": {
+      "density_p_m2": 0.08333333333333334,
+      "time": "07:42",
+      "km_range": "0.0\u20130.2 km",
+      "los": "A"
+    },
+    "waves": [
+      {
+        "start_time": "07:40",
+        "end_time": "07:42",
+        "peak_density_p_m2": 0.08333333333333334,
+        "peak_time": "07:42",
+        "peak_km_range": "0.0\u20130.2 km",
+        "bins_count": 1
+      }
+    ],
+    "clearance_time": null,
+    "notes": []
+  },
+  "M1": {
+    "seg_id": "M1",
+    "label": "",
+    "summary": "Segment M1 \u2014 . A single density wave passes, peaking near 09:38 around 0.0\u20130.2 km at 0.09 p/m\u00b2 (A). Does not fully clear in the observed window.",
+    "peak": {
+      "density_p_m2": 0.09333333333333334,
+      "time": "09:38",
+      "km_range": "0.0\u20130.2 km",
+      "los": "A"
+    },
+    "waves": [
+      {
+        "start_time": "09:30",
+        "end_time": "09:40",
+        "peak_density_p_m2": 0.09333333333333334,
+        "peak_time": "09:38",
+        "peak_km_range": "0.0\u20130.2 km",
+        "bins_count": 4
+      }
+    ],
+    "clearance_time": null,
+    "notes": []
+  }
+}

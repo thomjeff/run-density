@@ -95,3 +95,19 @@
 94,Northside Trail at Edgewood,aid,45.985198,-66.664457,,"""D1,D2""",sun,2,y,y,y,n,n,10,5,SJA First Aid (Full)
 95,Station Rd at Barker St,aid,45.959344,-66.619594,,K1,sun,7,y,y,y,n,n,10,5,SJA First Aid (All Runners)
 96,Bridge at Mill St,aid,45.979519,-66.59192,,"""I1,J1,J4,J5""",sun,4,y,y,n,n,n,10,5,SJA First Aid (Full/Half)
+97,Regent / Queen,course,45.961152,-66.638708,,"""N1,N2,O1,O2""",sat,8,n,n,n,y,y,10,5,Westbound on Queen
+98,Carleton at Queen,course,45.96209,-66.640924,,"""N1,N2,O1,O2""",sat,8,n,n,n,y,y,10,5,Southbound from Library / Garrison
+99,Carleton at King,course,45.96119,-66.64169,,"""N1,N2,O1,O2""",sat,8,n,n,n,y,y,10,5,Northbound to Queen
+100,Wilmot Alley at King,course,45.961597,-66.642755,,"""N1,N2,O1,O2""",sat,8,n,n,n,y,y,10,5,Northbound to Queen
+101,York at Queen,course,45.963062,-66.643097,,"""N1,N2,N3,O1,O2,O3""",sat,8,n,n,n,y,y,10,5,Southbound to King
+102,York at King,traffic,45.962135,-66.643915,101,,sat,8,n,n,n,y,y,10,5,Northbound to Queen
+103,Campbell at York,course,45.963779,-66.64262,,"""N3,O3""",sat,8,n,n,n,y,y,10,5,Eastbound to York
+104,Queen at Canabis NB,course,45.963254,-66.643762,,"""N1,N2,O1,O2""",sat,8,n,n,n,y,y,10,5,Traffic exiting  alleys
+105,Westmorland at King,traffic,45.963083,-66.646123,106,,sat,8,n,n,n,y,y,10,5,Northbound to Queen
+106,Westmorland at Queen,course,45.963989,-66.645371,,"""N1,N2,O1,O2""",sat,8,n,n,n,y,y,10,5,Southbound from WSB
+107,Queen at Frederik Sq Garage,course,45.964322,-66.646313,,"""N1,N2,O1,O2""",sat,8,n,n,n,y,y,10,5,Westbound on Queen
+108,Queen at Westpointe,course,45.964628,-66.646724,,"""N1,N2,O1,O2""",sat,8,n,n,n,y,y,10,5,Westbound on Queen
+109,Northumberland at Queen,course,45.96478,-66.647751,,"""N1,N2,O1,O2""",sat,8,n,n,n,y,y,10,5,Traffic apts/senior home lots
+110,Queen at Smythe,course,45.965119,-66.649656,,"""N1,N2,O1,O2""",sat,8,n,n,n,y,y,10,5,Turn onto Sainte Anne Pointe Drive
+111,Victoria Traffic Circle,traffic,45.964298,-66.651403,97,,sat,8,n,n,n,y,y,10,5,Northside Access
+112,WSB Smythe St Exit/Ramp,traffic,45.96684,-66.643575,97,,sat,8,n,n,n,y,y,10,5,Southbound from WSB
