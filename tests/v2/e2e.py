@@ -11,12 +11,17 @@ import pytest
 import requests
 import json
 import time
+import os
+import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import pandas as pd
 
 # Configuration
-LOCAL_URL = "http://localhost:8080"
+# Base URL can be set via BASE_URL environment variable or pytest --base-url
+# Defaults to http://localhost:8080 for local dev
+# Use http://app:8080 when running in docker-compose network
+BASE_URL = os.getenv("BASE_URL", "http://localhost:8080")
 TIMEOUT = 600  # 10 minutes for full analysis
 
 
@@ -302,10 +307,32 @@ class TestV2E2EScenarios:
             assert pairs_found >= 2, f"Expected flow pairs between same-day events, found {pairs_found}"
 
 
+def pytest_addoption(parser):
+    """Add custom pytest command-line options."""
+    parser.addoption(
+        "--base-url",
+        action="store",
+        default=None,
+        help="Base URL for API requests (default: http://localhost:8080 or BASE_URL env var)"
+    )
+
+
 @pytest.fixture(scope="class")
-def base_url():
-    """Base URL for API requests."""
-    return LOCAL_URL
+def base_url(request):
+    """Base URL for API requests.
+    
+    Can be configured via:
+    - --base-url pytest CLI argument
+    - BASE_URL environment variable
+    - Defaults to http://localhost:8080
+    """
+    # Check for CLI argument first
+    base_url_arg = request.config.getoption("--base-url")
+    if base_url_arg:
+        return base_url_arg
+    
+    # Fall back to environment variable or default
+    return os.getenv("BASE_URL", BASE_URL)
 
 
 @pytest.fixture(scope="class")
@@ -425,8 +452,51 @@ class TestV2GoldenFileRegression:
         if all_differences:
             pytest.fail(f"Golden file differences found:\n" + "\n".join(all_differences))
     
+    def _normalize_markdown(self, content: str) -> str:
+        """Normalize markdown content by removing metadata that changes between runs."""
+        # Remove "Generated at" timestamps
+        content = re.sub(r'Generated at:.*?\n', '', content)
+        # Remove run_id references
+        content = re.sub(r'Run ID:.*?\n', '', content)
+        # Remove version/date blocks
+        content = re.sub(r'Version:.*?\n', '', content)
+        content = re.sub(r'Date:.*?\n', '', content)
+        # Normalize whitespace
+        content = re.sub(r'\n\s*\n\s*\n', '\n\n', content)
+        return content.strip()
+    
+    def _normalize_csv(self, content: str) -> str:
+        """Normalize CSV content by loading into pandas and sorting deterministically."""
+        try:
+            from io import StringIO
+            df = pd.read_csv(StringIO(content))
+            # Sort by all columns to ensure deterministic order
+            if len(df) > 0:
+                df = df.sort_values(by=list(df.columns))
+            # Convert back to CSV with consistent formatting
+            return df.to_csv(index=False, lineterminator='\n')
+        except Exception as e:
+            # If normalization fails, return original
+            return content
+    
+    def _normalize_json(self, content: str) -> str:
+        """Normalize JSON content by parsing and dumping with sorted keys."""
+        try:
+            data = json.loads(content)
+            return json.dumps(data, sort_keys=True, indent=2)
+        except Exception:
+            # If not JSON, return original
+            return content
+    
     def _compare_outputs_to_golden(self, run_id: str, day: str, scenario: str, golden_base_path: Path) -> List[str]:
-        """Compare actual outputs to golden files and return list of differences."""
+        """Compare actual outputs to golden files and return list of differences.
+        
+        Uses normalized comparisons to avoid false positives from:
+        - Metadata timestamps
+        - Run ID references
+        - CSV row ordering
+        - JSON key ordering
+        """
         from app.utils.run_id import get_runflow_root
         
         runflow_root = get_runflow_root()
@@ -455,10 +525,23 @@ class TestV2GoldenFileRegression:
             actual_content = actual_path.read_text(encoding="utf-8")
             golden_content = golden_path.read_text(encoding="utf-8")
             
-            if actual_content != golden_content:
-                # For now, just flag as different
-                # In the future, could do more sophisticated diffing
-                differences.append(f"⚠️  {day}/{filename}: Content differs from golden file")
+            # Normalize content based on file type
+            if filename.endswith('.md'):
+                actual_normalized = self._normalize_markdown(actual_content)
+                golden_normalized = self._normalize_markdown(golden_content)
+            elif filename.endswith('.csv'):
+                actual_normalized = self._normalize_csv(actual_content)
+                golden_normalized = self._normalize_csv(golden_content)
+            elif filename.endswith('.json'):
+                actual_normalized = self._normalize_json(actual_content)
+                golden_normalized = self._normalize_json(golden_content)
+            else:
+                # For unknown types, compare as-is
+                actual_normalized = actual_content
+                golden_normalized = golden_content
+            
+            if actual_normalized != golden_normalized:
+                differences.append(f"⚠️  {day}/{filename}: Content differs from golden file (after normalization)")
         
         return differences
 
