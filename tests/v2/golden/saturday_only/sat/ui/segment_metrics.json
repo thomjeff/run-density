@@ -1,0 +1,62 @@
+{
+  "peak_density": 0.0,
+  "peak_rate": 0.0,
+  "segments_with_flags": 0,
+  "flagged_bins": 0,
+  "overtaking_segments": 0,
+  "co_presence_segments": 0,
+  "N1": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.0,
+    "peak_rate": 0.0,
+    "active_window": "07:00\u201309:40",
+    "peak_rate_time": "2025-12-14T07:02:00Z",
+    "peak_rate_km": "0.0-0.2"
+  },
+  "N2": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.0,
+    "peak_rate": 0.0,
+    "active_window": "07:00\u201309:40",
+    "peak_rate_time": "2025-12-14T07:02:00Z",
+    "peak_rate_km": "0.0-0.2"
+  },
+  "N3": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.0,
+    "peak_rate": 0.0,
+    "active_window": "07:00\u201309:40",
+    "peak_rate_time": "2025-12-14T07:02:00Z",
+    "peak_rate_km": "0.0-0.1900000000000004"
+  },
+  "O1": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.0,
+    "peak_rate": 0.0,
+    "active_window": "07:00\u201309:40",
+    "peak_rate_time": "2025-12-14T07:02:00Z",
+    "peak_rate_km": "0.0-0.2"
+  },
+  "O2": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.0,
+    "peak_rate": 0.0,
+    "active_window": "07:00\u201309:40",
+    "peak_rate_time": "2025-12-14T07:02:00Z",
+    "peak_rate_km": "0.0-0.2"
+  },
+  "O3": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.0,
+    "peak_rate": 0.0,
+    "active_window": "07:00\u201309:40",
+    "peak_rate_time": "2025-12-14T07:02:00Z",
+    "peak_rate_km": "0.0-0.1900000000000004"
+  }
+}
