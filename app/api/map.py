@@ -25,9 +25,10 @@ from app.bin_analysis import get_all_segment_bins, analyze_segment_bins, get_cac
 from app.geo_utils import generate_segments_geojson, generate_bins_geojson
 from app.utils.constants import (
     DISTANCE_BIN_SIZE_KM, DEFAULT_PACE_CSV, DEFAULT_SEGMENTS_CSV, 
-    DEFAULT_START_TIMES, MAP_CENTER_LAT, MAP_CENTER_LON,
+    MAP_CENTER_LAT, MAP_CENTER_LON,
     DEFAULT_SEGMENT_WIDTH_M, DEFAULT_FLOW_TYPE, DEFAULT_ZONE
 )
+# DEFAULT_START_TIMES removed (Issue #512) - Start times must come from request
 from app.cache_manager import get_global_cache_manager
 from app.map_data_generator import find_latest_reports
 # Issue #466 Step 2: Storage consolidated to app.storage
@@ -454,7 +455,8 @@ class FlowBinsRequest(BaseModel):
 
 @router.get("/bins-data")
 async def get_bins_data(
-    forceRefresh: bool = Query(False, description="Force refresh by running new analysis")
+    forceRefresh: bool = Query(False, description="Force refresh by running new analysis"),
+    startTimes: Optional[str] = Query(None, description="JSON string of start times (required if forceRefresh=true - Issue #512)")
 ):
     """
     Get bin-level visualization data for map display.
@@ -467,10 +469,17 @@ async def get_bins_data(
     try:
         if forceRefresh:
             logger.info("Force refresh requested - running new bin analysis")
-            # Use default data paths and start times from constants
+            # Issue #512: Start times must come from request, not constants
+            if startTimes is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="startTimes query parameter required when forceRefresh=true. (Issue #512)"
+                )
+            
+            import json
+            start_times = json.loads(startTimes)
             pace_csv = DEFAULT_PACE_CSV
             segments_csv = DEFAULT_SEGMENTS_CSV
-            start_times = DEFAULT_START_TIMES
             
             # Run new bin analysis
             all_bins = get_all_segment_bins(
@@ -702,16 +711,16 @@ async def get_map_config():
     """
     try:
         from app.utils.constants import (
-            DEFAULT_START_TIMES, DEFAULT_PACE_CSV, DEFAULT_SEGMENTS_CSV,
+            DEFAULT_PACE_CSV, DEFAULT_SEGMENTS_CSV,
             MAP_CENTER_LAT, MAP_CENTER_LON, MAP_DEFAULT_ZOOM,
             MAP_TILE_URL, MAP_TILE_ATTRIBUTION, MAP_MAX_ZOOM,
             MAP_DENSITY_THRESHOLDS, MAP_ZONE_COLORS
         )
         
+        # Issue #512: startTimes removed from config - must come from request
         return JSONResponse(content={
             "ok": True,
             "config": {
-                "startTimes": DEFAULT_START_TIMES,
                 "paceCsv": DEFAULT_PACE_CSV,
                 "segmentsCsv": DEFAULT_SEGMENTS_CSV,
                 "mapCenter": [MAP_CENTER_LAT, MAP_CENTER_LON],
@@ -823,11 +832,19 @@ async def compare_segments(request: dict):
         if len(segment_ids) < 2:
             raise HTTPException(status_code=400, detail="At least 2 segment IDs required")
         
+        # Issue #512: startTimes is required, not optional
+        start_times = request.get('startTimes')
+        if start_times is None:
+            raise HTTPException(
+                status_code=400,
+                detail="startTimes parameter required in request body. (Issue #512)"
+            )
+        
         comparison = compare_segments(
             segment_ids=segment_ids,
             pace_csv=request.get('paceCsv', DEFAULT_PACE_CSV),
             segments_csv=request.get('segmentsCsv', DEFAULT_SEGMENTS_CSV),
-            start_times=request.get('startTimes', DEFAULT_START_TIMES),
+            start_times=start_times,
             bin_size_km=request.get('binSizeKm')
         )
         
@@ -855,7 +872,7 @@ async def export_advanced_data(request: dict):
             segment_ids=segment_ids,
             pace_csv=request.get('paceCsv', DEFAULT_PACE_CSV),
             segments_csv=request.get('segmentsCsv', DEFAULT_SEGMENTS_CSV),
-            start_times=request.get('startTimes', DEFAULT_START_TIMES),
+            start_times=request.get('startTimes'),  # Required (Issue #512)
             format=export_format,
             bin_size_km=request.get('binSizeKm')
         )
@@ -914,10 +931,18 @@ async def invalidate_segment_cache(request: dict):
             raise HTTPException(status_code=400, detail="segmentId is required")
         
         # Calculate dataset hash for invalidation
+        # Issue #512: startTimes is required
+        start_times = request.get('startTimes')
+        if start_times is None:
+            raise HTTPException(
+                status_code=400,
+                detail="startTimes parameter required in request body. (Issue #512)"
+            )
+        
         dataset_hash = calculate_dataset_hash(
             request.get('paceCsv', DEFAULT_PACE_CSV),
             request.get('segmentsCsv', DEFAULT_SEGMENTS_CSV),
-            request.get('startTimes', DEFAULT_START_TIMES)
+            start_times
         )
         
         # Invalidate cache for this segment
@@ -939,7 +964,7 @@ async def get_cache_status(
     analysisType: str = Query(..., description="Type of analysis: density, flow, or bins"),
     paceCsv: str = Query(DEFAULT_PACE_CSV, description="Path to pace data CSV"),
     segmentsCsv: str = Query(DEFAULT_SEGMENTS_CSV, description="Path to segments data CSV"),
-    startTimes: str = Query(f'{DEFAULT_START_TIMES}', description="JSON string of start times")
+    startTimes: str = Query(..., description="JSON string of start times (required - Issue #512)")
 ):
     """
     Get cache status for analysis results.
@@ -982,7 +1007,7 @@ async def get_cached_analysis(
     analysisType: str = Query(..., description="Type of analysis: density, flow, or bins"),
     paceCsv: str = Query(DEFAULT_PACE_CSV, description="Path to pace data CSV"),
     segmentsCsv: str = Query(DEFAULT_SEGMENTS_CSV, description="Path to segments data CSV"),
-    startTimes: str = Query(f'{DEFAULT_START_TIMES}', description="JSON string of start times")
+    startTimes: str = Query(..., description="JSON string of start times (required - Issue #512)")
 ):
     """
     Get cached analysis results.

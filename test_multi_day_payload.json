@@ -1,0 +1,44 @@
+{
+  "events": [
+    {
+      "name": "full",
+      "day": "sun",
+      "start_time": 420,
+      "gpx_file": "full.gpx",
+      "runners_file": "full_runners.csv"
+    },
+    {
+      "name": "10k",
+      "day": "sun",
+      "start_time": 440,
+      "gpx_file": "10k.gpx",
+      "runners_file": "10k_runners.csv"
+    },
+    {
+      "name": "half",
+      "day": "sun",
+      "start_time": 460,
+      "gpx_file": "half.gpx",
+      "runners_file": "half_runners.csv"
+    },
+    {
+      "name": "elite",
+      "day": "sat",
+      "start_time": 480,
+      "gpx_file": "elite.gpx",
+      "runners_file": "elite_runners.csv"
+    },
+    {
+      "name": "open",
+      "day": "sat",
+      "start_time": 510,
+      "gpx_file": "open.gpx",
+      "runners_file": "open_runners.csv"
+    }
+  ],
+  "segments_file": "segments.csv",
+  "locations_file": "locations.csv",
+  "flow_file": "flow.csv",
+  "data_dir": "data"
+}
+

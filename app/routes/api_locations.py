@@ -15,7 +15,6 @@ import os
 from pathlib import Path
 
 from app.location_report import generate_location_report
-from app.utils.constants import DEFAULT_START_TIMES
 from app.utils.run_id import get_latest_run_id
 from app.storage import create_runflow_storage
 
@@ -29,6 +28,7 @@ router = APIRouter()
 @router.get("/api/locations")
 async def get_locations_report(
     run_id: Optional[str] = Query(None, description="Run ID for runflow structure"),
+    day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)"),
     generate: bool = Query(False, description="Generate new report if not exists")
 ) -> JSONResponse:
     """
@@ -38,12 +38,15 @@ async def get_locations_report(
     
     Args:
         run_id: Optional run ID (defaults to latest)
+        day: Optional day code (fri|sat|sun|mon) for day-scoped data
         generate: Whether to generate report if not found
         
     Returns:
         JSON response with location report data
     """
     try:
+        from app.utils.run_id import resolve_selected_day
+        
         # Get run_id (use latest if not provided)
         if not run_id:
             run_id = get_latest_run_id()
@@ -54,10 +57,12 @@ async def get_locations_report(
                 detail="No run ID available. Run analysis first or provide run_id parameter."
             )
         
+        # Resolve day for day-scoped paths
+        selected_day, available_days = resolve_selected_day(run_id, day)
         storage = create_runflow_storage(run_id)
         
-        # Try to load existing report
-        report_path = f"reports/Locations.csv"
+        # Try to load existing report from day-scoped path
+        report_path = f"{selected_day}/reports/Locations.csv"
         
         # Check if CSV exists
         if storage.exists(report_path):
@@ -72,13 +77,12 @@ async def get_locations_report(
             report_data = df.to_dict('records')
         elif generate:
             # Generate new report
-            logger.info(f"Generating locations report for run_id={run_id}")
-            result = generate_location_report(
-                locations_csv="data/locations.csv",
-                runners_csv="data/runners.csv",
-                segments_csv="data/segments.csv",
-                start_times=DEFAULT_START_TIMES,
-                run_id=run_id
+            # Issue #512: Start times must be provided - cannot use hardcoded constants
+            # For v1 compatibility, try to get from latest run metadata or fail
+            raise HTTPException(
+                status_code=400,
+                detail="start_times parameter required. Use v2 API endpoint /runflow/v2/analyze "
+                       "which provides start times in the request, or provide start_times explicitly. (Issue #512)"
             )
             
             if not result.get("ok"):
@@ -108,10 +112,15 @@ async def get_locations_report(
         return JSONResponse(content={
             "ok": True,
             "run_id": run_id,
+            "selected_day": selected_day,
+            "available_days": available_days,
             "locations": report_data,
             "count": len(report_data) if report_data else 0
         })
         
+    except ValueError as e:
+        # Convert ValueError from resolve_selected_day to HTTPException
+        raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
@@ -150,12 +159,11 @@ async def generate_locations_report(
         
         logger.info(f"Generating locations report for run_id={run_id}")
         
-        result = generate_location_report(
-            locations_csv="data/locations.csv",
-            runners_csv="data/runners.csv",
-            segments_csv="data/segments.csv",
-            start_times=DEFAULT_START_TIMES,
-            run_id=run_id
+        # Issue #512: Start times must be provided - cannot use hardcoded constants
+        raise HTTPException(
+            status_code=400,
+            detail="start_times parameter required. Use v2 API endpoint /runflow/v2/analyze "
+                   "which provides start times in the request, or provide start_times explicitly. (Issue #512)"
         )
         
         if not result.get("ok"):

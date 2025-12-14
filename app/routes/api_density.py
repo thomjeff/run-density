@@ -8,7 +8,7 @@ Epic: RF-FE-002 | Issue: #279 | Step: 8
 Architecture: Option 3 - Hybrid Approach
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from typing import Dict, Any, List, Optional
 import logging
@@ -28,23 +28,36 @@ router = APIRouter()
 # Issue #466 Step 2: Removed legacy storage singleton (not needed)
 
 
-def load_density_metrics_from_bins():
+def load_density_metrics_from_bins(run_id: Optional[str] = None, day: Optional[str] = None):
     """
     Load and compute density metrics from bins.parquet.
+    
+    Args:
+        run_id: Optional run ID (defaults to latest)
+        day: Optional day code (fri|sat|sun|mon) for day-scoped paths
     
     Returns:
         Dict with segment_id -> {utilization, worst_bin, bin_detail}
     """
     try:
         # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
-        from app.utils.metadata import get_latest_run_id
+        from app.utils.run_id import get_latest_run_id, resolve_selected_day
         from app.storage import create_runflow_storage
         
-        run_id = get_latest_run_id()
+        if not run_id:
+            run_id = get_latest_run_id()
+        
         storage = create_runflow_storage(run_id)
         
+        # Resolve day for day-scoped paths
+        if day:
+            selected_day, _ = resolve_selected_day(run_id, day)
+            bins_path = f"{selected_day}/bins/bins.parquet"
+        else:
+            bins_path = "bins/bins.parquet"
+        
         # Load bins.parquet from runflow structure
-        bins_df = storage.read_parquet("bins/bins.parquet")
+        bins_df = storage.read_parquet(bins_path)
         if bins_df is None:
             return {}
         
@@ -229,9 +242,16 @@ def _build_segment_record(
 
 
 @router.get("/api/density/segments")
-async def get_density_segments():
+async def get_density_segments(
+    run_id: Optional[str] = Query(None, description="Run ID (defaults to latest)"),
+    day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)")
+):
     """
     Get density analysis data for all segments.
+    
+    Args:
+        run_id: Optional run ID (defaults to latest)
+        day: Optional day code (fri|sat|sun|mon) for day-scoped data
     
     Returns:
         Array of segment density records with:
@@ -240,14 +260,17 @@ async def get_density_segments():
     """
     try:
         # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
-        from app.utils.metadata import get_latest_run_id
+        from app.utils.run_id import get_latest_run_id, resolve_selected_day
         from app.storage import create_runflow_storage
         
-        run_id = get_latest_run_id()
+        # Resolve run_id and day
+        if not run_id:
+            run_id = get_latest_run_id()
+        selected_day, available_days = resolve_selected_day(run_id, day)
         storage = create_runflow_storage(run_id)
         
-        # Load segment metrics from runflow structure
-        segment_metrics_raw = storage.read_json("ui/segment_metrics.json")
+        # Load segment metrics from day-scoped path
+        segment_metrics_raw = storage.read_json(f"{selected_day}/ui/segment_metrics.json")
         if not segment_metrics_raw:
             return JSONResponse(
                 content={"detail": "No segment metrics available"},
@@ -258,22 +281,22 @@ async def get_density_segments():
         segment_metrics = {k: v for k, v in segment_metrics_raw.items() 
                           if isinstance(v, dict) and k not in ["peak_density", "peak_rate", "segments_with_flags", "flagged_bins"]}
         
-        # Load segments geojson for labels
-        segments_geojson = storage.read_json("ui/segments.geojson")
+        # Load segments geojson for labels from day-scoped path
+        segments_geojson = storage.read_json(f"{selected_day}/ui/segments.geojson")
         if not segments_geojson:
-            logger.warning("segments.geojson not found")
+            logger.warning(f"segments.geojson not found for day {selected_day}")
         
         # Build label lookup
         label_lookup = _build_label_lookup_from_geojson(segments_geojson or {})
         
-        # Load flags from runflow structure
-        flags_data = storage.read_json("ui/flags.json")
+        # Load flags from day-scoped path
+        flags_data = storage.read_json(f"{selected_day}/ui/flags.json")
         flagged_seg_ids = set()
         if flags_data and isinstance(flags_data, list):
             flagged_seg_ids = {flag.get("segment_id") or flag.get("seg_id") for flag in flags_data}
         
-        # Load density metrics from bins.parquet
-        density_metrics = load_density_metrics_from_bins()
+        # Load density metrics from bins.parquet (day-scoped)
+        density_metrics = load_density_metrics_from_bins(run_id, selected_day)
         
         # Build segments list
         segments_list = []
@@ -292,10 +315,17 @@ async def get_density_segments():
         # Sort by seg_id
         segments_list.sort(key=lambda x: x["seg_id"])
         
-        response = JSONResponse(content=segments_list)
+        response = JSONResponse(content={
+            "selected_day": selected_day,
+            "available_days": available_days,
+            "segments": segments_list
+        })
         response.headers["Cache-Control"] = "public, max-age=60"
         return response
         
+    except ValueError as e:
+        # Convert ValueError from resolve_selected_day to HTTPException
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error generating density segments: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to load density data: {str(e)}")
@@ -414,12 +444,18 @@ def _build_segment_detail_response(
 
 
 @router.get("/api/density/segment/{seg_id}")
-async def get_density_segment_detail(seg_id: str):
+async def get_density_segment_detail(
+    seg_id: str,
+    run_id: Optional[str] = Query(None, description="Run ID (defaults to latest)"),
+    day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)")
+):
     """
     Get detailed density analysis for a specific segment.
     
     Args:
         seg_id: Segment identifier
+        run_id: Optional run ID (defaults to latest)
+        day: Optional day code (fri|sat|sun|mon) for day-scoped data
         
     Returns:
         Detailed segment record with heatmap availability
@@ -427,14 +463,17 @@ async def get_density_segment_detail(seg_id: str):
     logger.info(f"=== UPDATED CODE LOADED === Processing segment detail for {seg_id}")
     try:
         # Issue #460 Phase 5: Use runflow structure
-        from app.utils.metadata import get_latest_run_id
+        from app.utils.run_id import get_latest_run_id, resolve_selected_day
         from app.storage import create_runflow_storage
         
-        run_id = get_latest_run_id()
+        # Resolve run_id and day
+        if not run_id:
+            run_id = get_latest_run_id()
+        selected_day, available_days = resolve_selected_day(run_id, day)
         storage = create_runflow_storage(run_id)
         
-        # Load segment metrics from runflow
-        segment_metrics_raw = storage.read_json("ui/segment_metrics.json")
+        # Load segment metrics from day-scoped path
+        segment_metrics_raw = storage.read_json(f"{selected_day}/ui/segment_metrics.json")
         if not segment_metrics_raw:
             raise HTTPException(status_code=404, detail="Segment metrics not found")
         
@@ -447,8 +486,8 @@ async def get_density_segment_detail(seg_id: str):
         
         metrics = segment_metrics[seg_id]
         
-        # Load segment metadata from geojson
-        segments_geojson = storage.read_json("ui/segments.geojson")
+        # Load segment metadata from day-scoped geojson
+        segments_geojson = storage.read_json(f"{selected_day}/ui/segments.geojson")
         metadata = {}
         if segments_geojson and "features" in segments_geojson:
             for feature in segments_geojson["features"]:
@@ -457,23 +496,23 @@ async def get_density_segment_detail(seg_id: str):
                     metadata = props
                     break
         
-        # Check if flagged
-        flags_data = storage.read_json("ui/flags.json")
+        # Check if flagged from day-scoped path
+        flags_data = storage.read_json(f"{selected_day}/ui/flags.json")
         is_flagged = False
         if flags_data and isinstance(flags_data, list):
             is_flagged = any(f.get("segment_id") == seg_id or f.get("seg_id") == seg_id for f in flags_data)
         
-        # Load heatmap URL and caption from captions.json
-        captions = storage.read_json("ui/captions.json")
+        # Load heatmap URL and caption from day-scoped captions.json
+        captions = storage.read_json(f"{selected_day}/ui/captions.json")
         heatmap_url = None
         caption = ""
         if captions and seg_id in captions:
             caption_data = captions[seg_id]
-            # Build heatmap URL for runflow structure
-            # Files are at: runflow/<run_id>/heatmaps/<seg_id>.png
+            # Build heatmap URL for day-scoped runflow structure
+            # Files are at: runflow/<run_id>/<day>/ui/heatmaps/<seg_id>.png
             # Mounted as: /heatmaps -> /app/runflow
-            # URL path: /heatmaps/<run_id>/heatmaps/<seg_id>.png
-            heatmap_url = f"/heatmaps/{run_id}/heatmaps/{seg_id}.png"
+            # URL path: /heatmaps/<run_id>/<day>/ui/heatmaps/<seg_id>.png
+            heatmap_url = f"/heatmaps/{run_id}/{selected_day}/ui/heatmaps/{seg_id}.png"
             caption = caption_data.get("summary", "")
         
         # Build detail response
@@ -484,6 +523,9 @@ async def get_density_segment_detail(seg_id: str):
         
         return JSONResponse(content=detail)
         
+    except ValueError as e:
+        # Convert ValueError from resolve_selected_day to HTTPException
+        raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:

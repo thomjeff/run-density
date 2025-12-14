@@ -32,6 +32,7 @@ from app.routes.api_bins import router as api_bins_router
 from app.routes.api_e2e import router as api_e2e_router
 from app.routes.api_heatmaps import router as api_heatmaps_router
 from app.routes.api_locations import router as api_locations_router
+from app.routes.v2.analyze import router as v2_analyze_router
 from app.utils.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
 # Pydantic models for request bodies
@@ -141,6 +142,8 @@ app.include_router(api_bins_router)
 app.include_router(api_e2e_router)
 app.include_router(api_heatmaps_router, prefix="/api/generate", tags=["heatmaps"])
 app.include_router(api_locations_router)
+# v2 API routes
+app.include_router(v2_analyze_router, prefix="/runflow/v2", tags=["v2"])
 
 # CSV Data Endpoints for Reports Page
 @app.get("/data/runners.csv")
@@ -209,6 +212,7 @@ async def root():
             "/api/segments.geojson", "/api/flow-bins", "/api/export-bins", "/api/map-status",
             "/api/historical-trends", "/api/compare-segments", "/api/export-advanced",
             "/api/cache-management", "/api/invalidate-segment", "/api/clear-cache",
+            "/runflow/v2/analyze",
             "/health", "/ready"
         ]
     }

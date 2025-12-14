@@ -10,6 +10,8 @@ services:
       # Bind mount source code for hot reload during development
       - ./app:/app/app
       - ./e2e.py:/app/e2e.py
+      # Bind mount tests directory for v2 testing
+      - ./tests:/app/tests
       # Bind mount templates for UI pages
       - ./frontend/templates:/app/frontend/templates
       # Bind mount static files for hot reload

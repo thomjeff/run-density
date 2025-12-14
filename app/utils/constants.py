@@ -77,7 +77,11 @@ FRACTION_CLAMP_REASON_EXCEEDS_ONE = "fraction_exceeds_one_clamped"
 CONVERGENCE_POINT_TOLERANCE_KM = 0.1  # 100m tolerance around convergence points
 DISTANCE_BIN_SIZE_KM = 0.1  # 100m distance bins
 
-# Mapping event names to day of the week (future use)
+# Day short codes for v2 (Issue #495)
+DAY_SHORT_CODES = ['fri', 'sat', 'sun', 'mon']
+
+# Mapping event names to day of the week (DEPRECATED - will be removed in Phase 10)
+# v2 uses Event.day property instead of these constants
 EVENT_DAYS = {
     "Elite": "Saturday",
     "Open": "Saturday",
@@ -86,7 +90,8 @@ EVENT_DAYS = {
     "10K": "Sunday",
 }
 
-# Event groups by day (future use)
+# Event groups by day (DEPRECATED - will be removed in Phase 10)
+# v2 uses Event filtering instead of these constants
 SATURDAY_EVENTS = {"Elite", "Open"}
 SUNDAY_EVENTS = {"Full", "Half", "10K"}
 ALL_EVENTS = SATURDAY_EVENTS | SUNDAY_EVENTS
@@ -94,7 +99,7 @@ ALL_EVENTS = SATURDAY_EVENTS | SUNDAY_EVENTS
 # Map configuration
 DEFAULT_PACE_CSV = "data/runners.csv"
 DEFAULT_SEGMENTS_CSV = "data/segments.csv"
-DEFAULT_START_TIMES = {"Full": 420, "10K": 440, "Half": 460, "Elite": 480, "Open":510}
+# DEFAULT_START_TIMES removed (Issue #512) - Start times must come from API request, not constants
 
 # Bin dataset configuration (Issue #198) - ChatGPT PR1 fixes
 DEFAULT_BIN_SIZE_KM = 0.1  # 100m bins per ChatGPT recommendation

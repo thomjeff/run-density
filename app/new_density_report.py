@@ -65,21 +65,28 @@ def load_parquet_sources(reports_dir: Path) -> Dict[str, pd.DataFrame]:
         print(f"⚠️ segment_windows_from_bins.parquet not found at {segment_windows_path}")
         sources['segment_windows'] = pd.DataFrame()
     
-    # Load segments.parquet (preferred) or fall back to segments.csv
-    segments_parquet_path = Path("data/segments.parquet")
+    # Load segments.parquet from reports_dir (v2 saves day-filtered segments there)
+    # NOTE: Do NOT fall back to data/segments.parquet as it's a legacy file and won't produce valid reports
+    segments_parquet_path = reports_dir / "segments.parquet"
     segments_csv_path = Path("data/segments.csv")
     
     if segments_parquet_path.exists():
+        # v2 saves day-filtered segments.parquet in reports directory
         sources['segments'] = pd.read_parquet(segments_parquet_path)
         print(f"📊 Loaded {len(sources['segments'])} segments from {segments_parquet_path}")
     elif segments_csv_path.exists():
+        # Fallback to CSV only (for v1 compatibility or if parquet generation failed)
         sources['segments'] = pd.read_csv(segments_csv_path)
         # Rename seg_id to segment_id for consistency
         if 'seg_id' in sources['segments'].columns:
             sources['segments'] = sources['segments'].rename(columns={'seg_id': 'segment_id'})
         print(f"📊 Loaded {len(sources['segments'])} segments from {segments_csv_path}")
+        print(f"⚠️  Warning: Using segments.csv instead of day-filtered segments.parquet - report may not be day-scoped correctly")
     else:
-        raise FileNotFoundError(f"Neither segments.parquet nor segments.csv found")
+        raise FileNotFoundError(
+            f"segments.parquet not found at {segments_parquet_path} and segments.csv not found at {segments_csv_path}. "
+            f"v2 pipeline should generate segments.parquet in reports directory."
+        )
     
     return sources
 
@@ -143,7 +150,8 @@ def create_flagging_config(rulebook: Dict[str, Any], bins_df: pd.DataFrame) -> N
 def generate_new_density_report(
     reports_dir: Path,
     output_path: Optional[Path] = None,
-    app_version: str = "1.0.0"
+    app_version: str = "1.0.0",
+    events: Optional[Dict[str, Dict[str, Any]]] = None
 ) -> Dict[str, Any]:
     """
     Generate the new density report per Issue #246 specification.
@@ -207,9 +215,8 @@ def generate_new_density_report(
         'rulebook': rulebook,
         'rate_warn_threshold': flagging_config.rate_warn_threshold,
         'rate_critical_threshold': flagging_config.rate_critical_threshold,
-        'full_runners': 368,  # TODO: Get from actual data
-        '10k_runners': 618,   # TODO: Get from actual data
-        'half_runners': 912   # TODO: Get from actual data
+        'events': events,  # Pass events for dynamic start times (v2)
+        # Issue #512: Removed hardcoded runner counts - must be calculated from actual data
     }
     
     # Generate report using new template engine

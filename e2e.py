@@ -28,6 +28,7 @@ def parse_arguments():
 Examples:
   python e2e.py --cloud     # Test against Cloud Run production
   python e2e.py --local     # Test against local server (default)
+  python e2e.py --v2        # Run v2 E2E tests (pytest)
   python e2e.py --help      # Show this help message
         """
     )
@@ -38,6 +39,10 @@ Examples:
                              help='[DEPRECATED] Cloud testing disabled after Phase 1 declouding')
     target_group.add_argument('--local', action='store_true',
                              help='Test against local server (default behavior)')
+    
+    # Issue #502: Add --v2 flag for v2 E2E tests
+    parser.add_argument('--v2', action='store_true',
+                       help='Run v2 E2E tests using pytest (tests/v2/e2e.py)')
     
     return parser.parse_args()
 
@@ -248,6 +253,21 @@ def main():
     """Run E2E test with proper resource management"""
     # Parse command line arguments
     args = parse_arguments()
+    
+    # Issue #502: Run v2 E2E tests if --v2 flag is set
+    if args.v2:
+        print("=" * 60)
+        print("RUNFLOW V2 END-TO-END TESTS")
+        print("=" * 60)
+        print("Running pytest tests/v2/e2e.py...")
+        print()
+        
+        import subprocess
+        result = subprocess.run(
+            ["pytest", "tests/v2/e2e.py", "-v"],
+            cwd=Path(__file__).parent
+        )
+        sys.exit(result.returncode)
     
     # Issue #466 Bonus: Cloud testing deprecated after Phase 1 declouding
     if args.cloud:

@@ -90,13 +90,14 @@ def get_segment_ranges_for_event(
     Args:
         segments_df: DataFrame from segments.csv
         segment_ids: List of segment IDs to check
-        event: Event name ("Full", "Half", "10K")
+        event: Event name (lowercase: "full", "half", "10k")
         
     Returns:
         List of (seg_id, from_km, to_km) tuples
     """
     ranges = []
-    event_col = event.lower() if event != "10K" else "10K"
+    # Use lowercase event names (v2 standard)
+    event_col = event.lower()
     from_col = f"{event_col}_from_km"
     to_col = f"{event_col}_to_km"
     
@@ -181,7 +182,8 @@ def find_nearest_segment(
     """
     from app.core.gpx.processor import generate_segment_coordinates
     
-    course = courses.get(event)
+    # GPX courses use lowercase keys
+    course = courses.get(event.lower())
     if not course:
         return None
     
@@ -196,8 +198,8 @@ def find_nearest_segment(
     if distance_km is None:
         return None
     
-    # Find which segment this distance falls within
-    event_col = event.lower() if event != "10K" else "10K"
+    # Find which segment this distance falls within (use lowercase event names)
+    event_col = event.lower()
     from_col = f"{event_col}_from_km"
     to_col = f"{event_col}_to_km"
     
@@ -264,14 +266,14 @@ def calculate_arrival_times_for_location(
     arrival_times = []
     
     # Get eligible events (where flag is 'y')
+    # Use lowercase event names (v2 standard)
     eligible_events = []
-    for event in ["full", "half", "10K"]:
+    for event in ["full", "half", "10k"]:
         if location.get(event, "").lower() == "y":
-            event_name = "Full" if event == "full" else ("Half" if event == "half" else "10K")
-            eligible_events.append(event_name)
+            eligible_events.append(event.lower())
     
     if not eligible_events:
-        logger.warning(f"Location {location.get('loc_id')}: No eligible events (full={location.get('full')}, half={location.get('half')}, 10K={location.get('10K')})")
+        logger.warning(f"Location {location.get('loc_id')}: No eligible events (full={location.get('full')}, half={location.get('half')}, 10k={location.get('10k')})")
         return arrival_times
     
     logger.debug(f"Location {location.get('loc_id')}: Processing {len(eligible_events)} eligible events: {eligible_events}")
@@ -290,7 +292,8 @@ def calculate_arrival_times_for_location(
     
     # Process each eligible event
     for event in eligible_events:
-        course = courses.get(event)
+        # GPX courses use lowercase keys
+        course = courses.get(event.lower())
         if not course:
             continue
         
@@ -319,15 +322,18 @@ def calculate_arrival_times_for_location(
                 )
                 continue
             
-            # Get runners for this event
-            event_runners = runners_df[runners_df["event"] == event].copy()
+            # Get runners for this event (case-insensitive matching)
+            event_runners = runners_df[
+                runners_df["event"].astype(str).str.lower() == event.lower()
+            ].copy()
             
             if event_runners.empty:
                 logger.warning(f"Location {location.get('loc_id')} ({event}): No runners found for event {event}")
                 continue
             
             event_start_sec = start_times.get(event, 0) * SECONDS_PER_MINUTE
-            event_col_gpx = event.lower() if event != "10K" else "10K"
+            # GPX courses use lowercase keys ("10k", not "10K")
+            event_col_gpx = event.lower()
             
             # Issue #480: Process ALL listed segments independently
             # This ensures we capture all crossings (e.g., B1 outbound, B3 return, D1 outbound, D2 return)
@@ -430,9 +436,10 @@ def calculate_arrival_times_for_location(
             # distance_km already set from projection
             logger.debug(f"Location {location.get('loc_id')} ({event}): Using nearest segment distance {distance_km:.3f}km")
         
-        # Get runners for this event
-        # Note: runners.csv uses capitalized event names ("Full", "Half", "10K")
-        event_runners = runners_df[runners_df["event"] == event].copy()
+        # Get runners for this event (case-insensitive matching for v2 lowercase standard)
+        event_runners = runners_df[
+            runners_df["event"].astype(str).str.lower() == event.lower()
+        ].copy()
         
         logger.debug(f"Location {location.get('loc_id')} ({event}): Found {len(event_runners)} runners for event {event}")
         
@@ -488,11 +495,14 @@ def generate_location_report(
     Returns:
         Dictionary with report results and file path
     """
-    from app.utils.constants import DEFAULT_START_TIMES
     from app.report_utils import get_report_paths, get_runflow_category_path
     
+    # Issue #512: Start times must be provided, not from constants
     if start_times is None:
-        start_times = DEFAULT_START_TIMES
+        raise ValueError(
+            "start_times parameter is required. Start times must come from API request, "
+            "not from hardcoded constants. (Issue #512)"
+        )
     
     logger.info("Starting location report generation...")
     
@@ -523,6 +533,8 @@ def generate_location_report(
     
     # Process each location
     report_rows = []
+    # Build lookup dictionary for proxy locations (will be populated as we process)
+    locations_by_id = {}
     
     for _, location in locations_df.iterrows():
         loc_id = location.get("loc_id")
@@ -550,6 +562,53 @@ def generate_location_report(
             "notes": location.get("notes", "")
         }
         
+        # Check if timing_source is set to proxy:n in input locations.csv
+        # This handles locations that should copy timing from another location
+        timing_source = location.get("timing_source", "")
+        if pd.notna(timing_source) and isinstance(timing_source, str) and timing_source.startswith("proxy:"):
+            try:
+                proxy_id = int(timing_source.split(":")[1])
+                logger.info(
+                    f"Location {loc_id} ({loc_label}): timing_source={timing_source}, "
+                    f"will copy timing from location {proxy_id}"
+                )
+                
+                # Look up proxy location (must be processed first, so check if it exists)
+                # If not yet processed, we'll handle it in a second pass
+                proxy_location = locations_by_id.get(proxy_id)
+                
+                if proxy_location:
+                    # Copy operational timing from proxy location (loc_start, loc_end, duration)
+                    # Note: first_runner, peak_start, peak_end, last_runner are NOT copied
+                    # because proxy locations don't have runners at that physical location
+                    report_row["loc_start"] = proxy_location.get("loc_start")
+                    report_row["loc_end"] = proxy_location.get("loc_end")
+                    report_row["duration"] = proxy_location.get("duration")
+                    report_row["timing_source"] = timing_source
+                    report_row["notes"] = f"{location.get('notes', '')} (Proxy to location {proxy_id})".strip()
+                    
+                    logger.info(
+                        f"Location {loc_id} ({loc_label}): Copied timing from proxy location {proxy_id}: "
+                        f"loc_end={report_row['loc_end']}, duration={report_row['duration']}"
+                    )
+                    
+                    # Add to report_rows and continue (skip arrival time calculation)
+                    report_rows.append(report_row)
+                    locations_by_id[loc_id] = report_row
+                    continue
+                else:
+                    # Proxy location not yet processed - defer to second pass
+                    logger.debug(
+                        f"Location {loc_id} ({loc_label}): Proxy location {proxy_id} not yet processed, "
+                        f"will handle in second pass"
+                    )
+                    # Continue with normal processing for now, will update in second pass
+            except (ValueError, IndexError) as e:
+                logger.error(
+                    f"Location {loc_id} ({loc_label}): Invalid timing_source format '{timing_source}': {e}"
+                )
+                report_row["timing_source"] = "error:invalid_proxy_format"
+        
         # Validate proxy_loc_id usage (Issue #479)
         proxy_loc_id = location.get("proxy_loc_id")
         if pd.notna(proxy_loc_id) and proxy_loc_id != "" and loc_type != "traffic":
@@ -562,6 +621,7 @@ def generate_location_report(
         # Note: timing_source will be updated later in proxy processing loop
         if loc_type == "traffic":
             report_rows.append(report_row)
+            locations_by_id[loc_id] = report_row
             continue
         
         # Calculate arrival times
@@ -575,12 +635,13 @@ def generate_location_report(
                 loc = loc_row.iloc[0]
                 logger.warning(
                     f"No arrival times calculated for location {loc_id} ({loc.get('loc_label', 'unknown')}). "
-                    f"Event flags: full={loc.get('full')}, half={loc.get('half')}, 10K={loc.get('10K')}, "
+                    f"Event flags: full={loc.get('full')}, half={loc.get('half')}, 10k={loc.get('10k')}, "
                     f"seg_id={loc.get('seg_id')}"
                 )
             else:
                 logger.warning(f"No arrival times calculated for location {loc_id}")
             report_rows.append(report_row)
+            locations_by_id[loc_id] = report_row
             continue
         
         # Calculate statistics
@@ -618,9 +679,65 @@ def generate_location_report(
             report_row["duration"] = int(duration_minutes) if duration_minutes > 0 else 0
         
         report_rows.append(report_row)
+        locations_by_id[loc_id] = report_row
+    
+    # Second pass: Handle locations with timing_source="proxy:n" that referenced locations not yet processed
+    # This ensures proxy locations are available when needed
+    for i, report_row in enumerate(report_rows):
+        loc_id = report_row["loc_id"]
+        location_row = locations_df[locations_df['loc_id'] == loc_id]
+        
+        if location_row.empty:
+            continue
+        
+        location = location_row.iloc[0]
+        timing_source = location.get("timing_source", "")
+        
+        # Check if this location needs proxy timing and wasn't handled in first pass
+        if (pd.notna(timing_source) and isinstance(timing_source, str) and 
+            timing_source.startswith("proxy:") and 
+            report_row.get("timing_source") == "modeled"):  # Only process if not already handled
+            
+            try:
+                proxy_id = int(timing_source.split(":")[1])
+                proxy_location = locations_by_id.get(proxy_id)
+                
+                if proxy_location:
+                    # Copy operational timing from proxy location (loc_start, loc_end, duration)
+                    # Note: first_runner, peak_start, peak_end, last_runner are NOT copied
+                    # because proxy locations don't have runners at that physical location
+                    report_row["loc_start"] = proxy_location.get("loc_start")
+                    report_row["loc_end"] = proxy_location.get("loc_end")
+                    report_row["duration"] = proxy_location.get("duration")
+                    report_row["timing_source"] = timing_source
+                    
+                    original_notes = report_row.get("notes", "")
+                    proxy_note = f"Proxy to location {proxy_id}"
+                    if original_notes:
+                        report_row["notes"] = f"{original_notes} ({proxy_note})"
+                    else:
+                        report_row["notes"] = proxy_note
+                    
+                    logger.info(
+                        f"Location {loc_id} ({report_row.get('loc_label', 'unknown')}): "
+                        f"Copied timing from proxy location {proxy_id} in second pass: "
+                        f"loc_end={report_row['loc_end']}, duration={report_row['duration']}"
+                    )
+                else:
+                    logger.error(
+                        f"Location {loc_id} ({report_row.get('loc_label', 'unknown')}): "
+                        f"Proxy location {proxy_id} not found in processed locations."
+                    )
+                    report_row["timing_source"] = "error:proxy_not_found"
+            except (ValueError, IndexError) as e:
+                logger.error(
+                    f"Location {loc_id} ({report_row.get('loc_label', 'unknown')}): "
+                    f"Invalid timing_source format '{timing_source}': {e}"
+                )
+                report_row["timing_source"] = "error:invalid_proxy_format"
     
     # Issue #479: Process proxy_loc_id for traffic locations
-    # Build lookup dictionary for all processed locations
+    # Build lookup dictionary for all processed locations (refresh after second pass)
     locations_by_id = {row["loc_id"]: row for row in report_rows}
     
     # Iterate through report_rows to update traffic locations with proxy data

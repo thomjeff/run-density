@@ -90,11 +90,39 @@
     });
     
     function loadFlowData() {
-        fetch('/api/flow/segments')
-            .then(response => response.json())
+        // Get run_id and day from URL or global state
+        const params = new URLSearchParams(window.location.search);
+        const dayParam = params.get('day');
+        const runParam = params.get('run_id');
+        
+        const day = (dayParam || (window.runflowDay && window.runflowDay.selected) || '').toLowerCase().trim();
+        const run_id = (runParam || (window.runflowDay && window.runflowDay.run_id) || '').trim();
+        
+        if (!day || !run_id) {
+            console.error('❌ Refusing to fetch flow data without day+run_id', {
+                href: window.location.href,
+                dayParam, runParam,
+                runflowDay: window.runflowDay
+            });
+            showFlowError();
+            return;
+        }
+        
+        const apiUrl = `/api/flow/segments?run_id=${encodeURIComponent(run_id)}&day=${encodeURIComponent(day)}`;
+        console.log('Loading flow data via API...', { apiUrl, day, run_id });
+        
+        fetch(apiUrl, { cache: 'no-store' })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
             .then(data => {
-                flowData = data;
-                renderFlowTable(data);
+                // Handle new response format with selected_day/available_days
+                const flow = data.flow || data;
+                flowData = flow;
+                renderFlowTable(flow);
             })
             .catch(error => {
                 console.error('Error loading flow data:', error);

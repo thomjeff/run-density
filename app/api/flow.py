@@ -8,9 +8,9 @@ Epic: RF-FE-002 | Issue: #279 | Step: 8
 Architecture: Option 3 - Hybrid Approach
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import logging
 from pathlib import Path
 import json
@@ -28,27 +28,37 @@ router = APIRouter()
 
 
 @router.get("/api/flow/segments")
-async def get_flow_segments():
+async def get_flow_segments(
+    run_id: Optional[str] = Query(None, description="Run ID (defaults to latest)"),
+    day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)")
+):
     """
     Get flow analysis data for all segments from Flow CSV.
     
+    Args:
+        run_id: Optional run ID (defaults to latest)
+        day: Optional day code (fri|sat|sun|mon) for day-scoped data
+    
     Returns:
-        Array of flow records with event pairs (29 rows total).
+        Array of flow records with event pairs.
         Each row represents a segment-event_a-event_b combination.
     """
     try:
         # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
         import pandas as pd
-        from app.utils.metadata import get_latest_run_id
+        from app.utils.run_id import get_latest_run_id, resolve_selected_day
         from app.storage import create_runflow_storage
         
-        run_id = get_latest_run_id()
+        # Resolve run_id and day
+        if not run_id:
+            run_id = get_latest_run_id()
+        selected_day, available_days = resolve_selected_day(run_id, day)
         storage = create_runflow_storage(run_id)
         
-        # Load Flow CSV from runflow structure
+        # Load Flow CSV from day-scoped path
         try:
-            # Flow.csv is at: runflow/<run_id>/reports/Flow.csv
-            csv_content = storage.read_text("reports/Flow.csv")
+            # Flow.csv is at: runflow/<run_id>/<day>/reports/Flow.csv
+            csv_content = storage.read_text(f"{selected_day}/reports/Flow.csv")
             
             if not csv_content:
                 logger.error("Failed to read Flow CSV: file is empty")
@@ -84,12 +94,19 @@ async def get_flow_segments():
             }
             flow_records.append(flow_record)
         
-        logger.info(f"Loaded {len(flow_records)} flow records from Cloud Storage")
+        logger.info(f"Loaded {len(flow_records)} flow records for day {selected_day}")
         
-        response = JSONResponse(content=flow_records)
+        response = JSONResponse(content={
+            "selected_day": selected_day,
+            "available_days": available_days,
+            "flow": flow_records
+        })
         response.headers["Cache-Control"] = "public, max-age=60"
         return response
         
+    except ValueError as e:
+        # Convert ValueError from resolve_selected_day to HTTPException
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error generating flow segments: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to load flow data: {str(e)}")

@@ -7,7 +7,7 @@
 PORT ?= 8080
 
 # -------- Phony targets --------
-.PHONY: help usage --help dev e2e-local test stop build validate-output validate-all
+.PHONY: help usage --help dev e2e-local test stop build validate-output validate-all test-v2
 
 # -------- Use same shell for multi-line targets --------
 .ONESHELL:
@@ -25,8 +25,9 @@ help usage --help: ## Show this help message
 	@echo "  dev                 Start local development server (hot reload enabled)"
 	@echo "  stop                Stop Docker container"
 	@echo "  build               Build Docker image"
-	@echo "  test                Run smoke tests (health checks + API validation)"
-	@echo "  e2e-local           Run full end-to-end test suite (generates all artifacts)"
+	@echo "  test-v2             Test v2 analysis API (sat + sun events, no reload mode)"
+	@echo "  test                Run v1 smoke tests (health checks + API validation)"
+	@echo "  e2e-local           Run v1(legacy) end-to-end test"
 	@echo "  validate-output     Validate output integrity for latest run"
 	@echo "  validate-all        Validate output for all runs in index.json"
 	@echo ""
@@ -51,7 +52,7 @@ build: ## Build Docker image
 	@echo "🔨 Building Docker image..."
 	@docker-compose build
 
-e2e-local: ## Run end-to-end tests (local-only)
+e2e-local: ## VERSION 1 Run end-to-end tests (local-only)
 	@echo "🧪 Running E2E tests (local mode)..."
 	@docker-compose down
 	@echo "GCS_UPLOAD=false" > .env.override
@@ -69,6 +70,20 @@ test: ## Run smoke tests (health checks + API validation)
 	@curl -fsS "http://localhost:$(PORT)/api/dashboard/summary" | jq -e '.peak_density >= 0' >/dev/null && echo "✅ Dashboard OK" || (echo "❌ Dashboard FAILED" && exit 1)
 	@curl -fsS "http://localhost:$(PORT)/api/density/segments" | jq -e 'length > 0' >/dev/null && echo "✅ Density API OK" || (echo "❌ Density API FAILED" && exit 1)
 	@echo "🎉 All smoke tests passed"
+
+test-v2: ## Test v2 analysis API (sat + sun events, no reload mode)
+	@bash scripts/test_v2_analysis.sh
+
+e2e-v2: ## Run v2 E2E tests (pytest suite with docker-compose)
+	@echo "🧪 Running v2 E2E tests..."
+	@echo "📦 Starting docker-compose services..."
+	@docker-compose up -d --build
+	@echo "⏳ Waiting for server to be ready (10s)..."
+	@sleep 10
+	@echo "▶️  Running pytest tests/v2/e2e.py..."
+	@docker exec run-density-dev pytest tests/v2/e2e.py -v --base-url http://localhost:8080 || (echo "❌ E2E tests failed" && docker-compose down && exit 1)
+	@echo "✅ E2E tests completed"
+	@echo "💡 Container still running. Use 'make stop' to stop it."
 
 validate-output: ## Validate output integrity for latest run
 	@echo "🔍 Validating output integrity..."

@@ -280,8 +280,9 @@
             }
         }
         
-        {% block extra_styles %}{% endblock %}
     </style>
+    
+    {% block extra_styles %}{% endblock %}
     
     {% block extra_head %}{% endblock %}
 </head>
@@ -300,6 +301,12 @@
             <li><a href="/locations" {% if request.url and request.url.path == "/locations" %}class="active"{% endif %}>Locations</a></li>
             <li><a href="/reports" {% if request.url and request.url.path == "/reports" %}class="active"{% endif %}>Reports</a></li>
             <li><a href="/health-check" {% if request.url and request.url.path == "/health-check" %}class="active"{% endif %}>Health</a></li>
+            <li style="margin-left:auto; padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                <label for="day-selector" style="color:#ecf0f1; font-weight:600;">Day</label>
+                <select id="day-selector" style="padding: 0.35rem 0.5rem; border-radius: 4px; border: 1px solid #2c3e50; background: #fff; color: #2c3e50; min-width: 90px;">
+                    <option value="">—</option>
+                </select>
+            </li>
             <li><a href="/logout" style="color: #e74c3c;">Logout</a></li>
         </ul>
     </nav>
@@ -339,6 +346,119 @@
             console.error('Session check failed:', error);
             window.location.href = '/';
         });
+    })();
+    </script>
+
+    <!-- Global run_id + Day Selector logic -->
+    <script>
+    (function() {
+        const DAY_ORDER = ["fri","sat","sun","mon"];
+
+        function getParamOrStorage(key, storageKey) {
+            const params = new URLSearchParams(window.location.search);
+            const v = params.get(key);
+            if (v) return v;
+            const s = localStorage.getItem(storageKey);
+            return s ? s : null;
+        }
+
+        function setQueryParam(url, key, val) {
+            const u = new URL(url, window.location.origin);
+            if (val) u.searchParams.set(key, val);
+            else u.searchParams.delete(key);
+            return u.pathname + (u.search ? u.search : "");
+        }
+
+        function updateNavLinks(day, runId) {
+            document.querySelectorAll("nav a").forEach(a => {
+                const href = a.getAttribute("href");
+                if (!href || href === "/logout" || href === "/health-check") return;
+                let newHref = href;
+                if (day) newHref = setQueryParam(newHref, "day", day);
+                if (runId) newHref = setQueryParam(newHref, "run_id", runId);
+                a.setAttribute("href", newHref);
+            });
+        }
+
+        function storeSelection(day, runId) {
+            if (day) localStorage.setItem("selected_day", day);
+            if (runId) localStorage.setItem("selected_run_id", runId);
+        }
+
+        async function initDaySelector() {
+            const select = document.getElementById("day-selector");
+            if (!select) return;
+
+            const params = new URLSearchParams(window.location.search);
+            const urlDayRaw = params.get("day");
+            const urlRunRaw = params.get("run_id");
+            const hasUrlDay = !!urlDayRaw;
+            const hasUrlRun = !!urlRunRaw;
+
+            // Start with URL as canonical, then fall back to storage
+            let selectedDay = (urlDayRaw || localStorage.getItem("selected_day") || "").toLowerCase().trim() || null;
+            let runId = (urlRunRaw || localStorage.getItem("selected_run_id") || "").trim() || null;
+
+            let availableDays = [];
+
+            try {
+                let url = "/api/dashboard/summary";
+                const qp = [];
+                if (runId) qp.push(`run_id=${encodeURIComponent(runId)}`);
+                if (selectedDay) qp.push(`day=${encodeURIComponent(selectedDay)}`);
+                if (qp.length) url += `?${qp.join("&")}`;
+
+                const resp = await fetch(url, { cache: "no-store" });
+                const data = await resp.json();
+
+                // Only fill missing pieces; never override URL-provided values
+                if (!hasUrlRun && !runId && data?.run_id) runId = data.run_id;
+                if (!hasUrlDay && !selectedDay && data?.selected_day) selectedDay = data.selected_day.toLowerCase();
+
+                availableDays = Array.isArray(data?.available_days)
+                    ? data.available_days.map(d => d.toLowerCase())
+                    : [];
+            } catch (e) {
+                console.warn("Day selector: failed to load dashboard summary for day metadata", e);
+            }
+
+            const DEFAULT_ORDER = ["fri","sat","sun","mon"];
+
+            // Ensure the selector never blanks: include selectedDay even if API returned none
+            if (!availableDays.length) {
+                availableDays = selectedDay ? [selectedDay] : DEFAULT_ORDER;
+            } else if (selectedDay && !availableDays.includes(selectedDay)) {
+                availableDays = [selectedDay, ...availableDays];
+            }
+
+            select.innerHTML = "";
+            availableDays.forEach(day => {
+                const opt = document.createElement("option");
+                opt.value = day; // keep lowercase
+                opt.textContent = day.toUpperCase();
+                select.appendChild(opt);
+            });
+
+            if (selectedDay) {
+                select.value = selectedDay;
+            }
+
+            // Persist canonical state and update nav links
+            if (selectedDay) localStorage.setItem("selected_day", selectedDay);
+            if (runId) localStorage.setItem("selected_run_id", runId);
+            updateNavLinks(selectedDay, runId);
+            window.runflowDay = { selected: selectedDay, available: availableDays, run_id: runId };
+
+            select.addEventListener("change", (e) => {
+                const day = (e.target.value || "").toLowerCase().trim();
+                if (!runId) return; // do not navigate without run_id
+                localStorage.setItem("selected_day", day);
+                const newUrl = setQueryParam(setQueryParam(window.location.href, "day", day), "run_id", runId);
+                window.location.href = newUrl;
+            });
+        }
+
+        document.addEventListener("DOMContentLoaded", initDaySelector);
     })();
     </script>
 </body>
