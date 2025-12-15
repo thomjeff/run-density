@@ -129,10 +129,27 @@ class TestV2E2EScenarios:
         assert bins_path.exists(), f"bins.parquet missing for {day}"
         bins_df = pd.read_parquet(bins_path)
         assert "event" in bins_df.columns, f"bins.parquet missing 'event' column for {day}"
-        actual_events = bins_df["event"].unique().tolist()
+        
+        # Issue #535: event column is a list (bins can belong to multiple events)
+        # Flatten all events from all bins to get unique event set
+        all_events = set()
+        for event_list in bins_df["event"]:
+            if isinstance(event_list, list):
+                all_events.update([e.lower() if isinstance(e, str) else str(e).lower() for e in event_list])
+            elif pd.notna(event_list):
+                # Handle single value (backward compatibility)
+                all_events.add(str(event_list).lower())
+        
+        actual_events = sorted(all_events)
+        expected_events_lower = [e.lower() for e in expected_events]
+        
+        # Check that all events in bins are expected for this day
         for event in actual_events:
-            assert event.lower() in [e.lower() for e in expected_events], \
+            assert event in expected_events_lower, \
                 f"Unexpected event '{event}' found in {day} bins (expected: {expected_events})"
+        
+        # Verify that bins contain at least some events (not all empty)
+        assert len(actual_events) > 0, f"No events found in {day} bins"
         
         # Check seg_id in bins (if present)
         if "seg_id" in bins_df.columns:
@@ -342,14 +359,23 @@ class TestV2E2EScenarios:
             assert bins_path.exists(), f"bins.parquet missing for {day}"
             bins_df = pd.read_parquet(bins_path)
             assert "event" in bins_df.columns, f"bins.parquet missing 'event' column for {day}"
+            
+            # Issue #535: event column is a list - check all events in bins
+            all_events = set()
+            for event_list in bins_df["event"]:
+                if isinstance(event_list, list):
+                    all_events.update([e.lower() if isinstance(e, str) else str(e).lower() for e in event_list])
+                elif pd.notna(event_list):
+                    all_events.add(str(event_list).lower())
+            
             if day == "sat":
-                # SAT bins should only have elite
-                unexpected = bins_df[~bins_df["event"].str.lower().isin(["elite"])]
-                assert len(unexpected) == 0, f"Found unexpected events in SAT bins: {unexpected['event'].unique()}"
+                # SAT bins should only have elite (and possibly open if both events are present)
+                unexpected = all_events - {"elite", "open"}
+                assert not unexpected, f"Found unexpected events in SAT bins: {unexpected} (expected: elite, open)"
             elif day == "sun":
                 # SUN bins should only have full
-                unexpected = bins_df[~bins_df["event"].str.lower().isin(["full"])]
-                assert len(unexpected) == 0, f"Found unexpected events in SUN bins: {unexpected['event'].unique()}"
+                unexpected = all_events - {"full"}
+                assert not unexpected, f"Found unexpected events in SUN bins: {unexpected} (expected: full)"
         
         # Check Flow.csv (already done in test_mixed_day_scenario, but verify here too)
         sat_flow_path = run_dir / "sat" / "reports" / "Flow.csv"
@@ -385,7 +411,16 @@ class TestV2E2EScenarios:
         assert bins_path.exists(), "bins.parquet missing for sun"
         bins_df = pd.read_parquet(bins_path)
         assert "event" in bins_df.columns, "bins.parquet missing 'event' column"
-        events_in_bins = bins_df["event"].str.lower().unique().tolist()
+        
+        # Issue #535: event column is a list - flatten to get all unique events
+        all_events = set()
+        for event_list in bins_df["event"]:
+            if isinstance(event_list, list):
+                all_events.update([e.lower() if isinstance(e, str) else str(e).lower() for e in event_list])
+            elif pd.notna(event_list):
+                all_events.add(str(event_list).lower())
+        
+        events_in_bins = sorted(all_events)
         # Should have at least 2 events in bins (they share segments)
         assert len([e for e in events_in_bins if e in ["full", "10k", "half"]]) >= 2, \
             f"Expected multiple events in bins, found: {events_in_bins}"

@@ -57,9 +57,14 @@ def _coerce_props(feature: Feature) -> JsonDict:
         props = {}
     return props
 
-def _determine_event_from_time_window(t_start: t.Any, t_end: t.Any, start_times: t.Dict[str, float]) -> t.Optional[str]:
+def _determine_events_from_time_window(t_start: t.Any, t_end: t.Any, start_times: t.Dict[str, float]) -> t.List[str]:
     """
-    Determine which event is active for a bin based on its time window.
+    Determine which events are active for a bin based on its time window.
+    
+    A bin can belong to multiple events when:
+    - Multiple events share the same segment (e.g., A1-A3 for Full, Half, 10K)
+    - Events start close together (within minutes)
+    - The bin's time window overlaps with multiple events' active periods
     
     Args:
         t_start: Bin start time (ISO string or datetime)
@@ -68,10 +73,11 @@ def _determine_event_from_time_window(t_start: t.Any, t_end: t.Any, start_times:
                     (keys may be "Full", "10K", "Half", "Elite", "Open" or lowercase variants)
         
     Returns:
-        Event name (lowercase) or None if no event matches
+        List of event names (lowercase) that are active during this bin's time window.
+        Returns empty list if no events match.
     """
     if not t_start or not t_end or not start_times:
-        return None
+        return []
     
     try:
         from datetime import datetime, timezone
@@ -82,14 +88,14 @@ def _determine_event_from_time_window(t_start: t.Any, t_end: t.Any, start_times:
         elif isinstance(t_start, datetime):
             t_start_dt = t_start
         else:
-            return None
+            return []
             
         if isinstance(t_end, str):
             t_end_dt = datetime.fromisoformat(t_end.replace('Z', '+00:00'))
         elif isinstance(t_end, datetime):
             t_end_dt = t_end
         else:
-            return None
+            return []
         
         # Convert to UTC if timezone-naive
         if t_start_dt.tzinfo is None:
@@ -97,10 +103,10 @@ def _determine_event_from_time_window(t_start: t.Any, t_end: t.Any, start_times:
         if t_end_dt.tzinfo is None:
             t_end_dt = t_end_dt.replace(tzinfo=timezone.utc)
         
-        # Calculate bin center time in minutes since midnight
-        bin_center_dt = t_start_dt + (t_end_dt - t_start_dt) / 2
-        base_date = bin_center_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-        minutes_since_midnight = (bin_center_dt - base_date).total_seconds() / 60.0
+        # Calculate bin time window boundaries in minutes since midnight
+        base_date = t_start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        bin_start_min = (t_start_dt - base_date).total_seconds() / 60.0
+        bin_end_min = (t_end_dt - base_date).total_seconds() / 60.0
         
         # Normalize event name mapping (v1 uses "Full", "10K", "Half" etc., v2 uses lowercase)
         event_name_mapping = {
@@ -112,28 +118,27 @@ def _determine_event_from_time_window(t_start: t.Any, t_end: t.Any, start_times:
             "open": "open"
         }
         
-        # Find the event whose start time is closest to the bin center
-        # Prefer events that are active (started before or at bin center)
-        best_event = None
-        min_time_diff = float('inf')
+        # Find all events that are active during the bin's time window
+        # An event is active if its start time is before or at the bin end time
+        # and the event would have participants in the bin's time range
+        active_events = []
         
         for event_name, event_start_min in start_times.items():
-            # Event is active if it started before or at the bin center
-            if event_start_min <= minutes_since_midnight:
-                time_diff = abs(minutes_since_midnight - event_start_min)
-                if time_diff < min_time_diff:
-                    min_time_diff = time_diff
-                    best_event = event_name
+            # Event is active if it started before or at the bin end time
+            # (participants from this event could be in the bin)
+            if event_start_min <= bin_end_min:
+                # Normalize event name to lowercase (v2 uses lowercase event names)
+                normalized = event_name_mapping.get(event_name.lower(), event_name.lower())
+                if normalized not in active_events:
+                    active_events.append(normalized)
         
-        # Normalize event name to lowercase (v2 uses lowercase event names)
-        if best_event:
-            normalized = event_name_mapping.get(best_event.lower(), best_event.lower())
-            return normalized
+        # Sort events by start time for consistency
+        active_events.sort(key=lambda e: start_times.get(e.capitalize(), start_times.get(e, float('inf'))))
         
-        return None
+        return active_events
     except Exception:
-        # If parsing fails, return None
-        return None
+        # If parsing fails, return empty list
+        return []
 
 
 def _build_parquet_rows_from_features(features: t.List[Feature], metadata: JsonDict) -> t.List[JsonDict]:
@@ -146,10 +151,11 @@ def _build_parquet_rows_from_features(features: t.List[Feature], metadata: JsonD
     for f in features:
         p = _coerce_props(f)
         
-        # Determine event from time window (Issue #535)
-        event = None
+        # Determine events from time window (Issue #535)
+        # A bin can belong to multiple events in shared segments
+        events = []
         if start_times:
-            event = _determine_event_from_time_window(
+            events = _determine_events_from_time_window(
                 p.get("t_start"),
                 p.get("t_end"),
                 start_times
@@ -171,9 +177,14 @@ def _build_parquet_rows_from_features(features: t.List[Feature], metadata: JsonD
             "analysis_hash":        metadata.get("analysis_hash"),
         }
         
-        # Add event column if determined (Issue #535)
-        if event is not None:
-            row["event"] = event
+        # Add event column (Issue #535)
+        # Store as list for multi-event support (parquet supports list types)
+        if events:
+            row["event"] = events
+        else:
+            # If no events determined, set to empty list (rather than None)
+            # This ensures consistent schema
+            row["event"] = []
         
         rows.append(row)
     return rows
