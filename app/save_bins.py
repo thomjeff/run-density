@@ -57,7 +57,7 @@ def _coerce_props(feature: Feature) -> JsonDict:
         props = {}
     return props
 
-def _determine_events_from_time_window(t_start: t.Any, t_end: t.Any, start_times: t.Dict[str, float]) -> t.List[str]:
+def _determine_events_from_time_window(t_start: t.Any, t_end: t.Any, start_times: t.Dict[str, float], logger=None) -> t.List[str]:
     """
     Determine which events are active for a bin based on its time window.
     
@@ -66,11 +66,15 @@ def _determine_events_from_time_window(t_start: t.Any, t_end: t.Any, start_times
     - Events start close together (within minutes)
     - The bin's time window overlaps with multiple events' active periods
     
+    Issue #535: Uses event durations to compute full active windows, not just start times.
+    An event is active from its start time until (start_time + duration).
+    
     Args:
         t_start: Bin start time (ISO string or datetime)
         t_end: Bin end time (ISO string or datetime)
         start_times: Dictionary mapping event names to start times in minutes
                     (keys may be "Full", "10K", "Half", "Elite", "Open" or lowercase variants)
+        logger: Optional logger for warning messages
         
     Returns:
         List of event names (lowercase) that are active during this bin's time window.
@@ -81,6 +85,7 @@ def _determine_events_from_time_window(t_start: t.Any, t_end: t.Any, start_times
     
     try:
         from datetime import datetime, timezone
+        from app.utils.constants import EVENT_DURATION_MINUTES
         
         # Parse t_start and t_end if they're strings
         if isinstance(t_start, str):
@@ -118,15 +123,23 @@ def _determine_events_from_time_window(t_start: t.Any, t_end: t.Any, start_times
             "open": "open"
         }
         
-        # Find all events that are active during the bin's time window
-        # An event is active if its start time is before or at the bin end time
-        # and the event would have participants in the bin's time range
+        # Build event active windows using durations (Issue #535)
+        # Event is active from start_time to (start_time + duration)
         active_events = []
         
         for event_name, event_start_min in start_times.items():
-            # Event is active if it started before or at the bin end time
-            # (participants from this event could be in the bin)
-            if event_start_min <= bin_end_min:
+            # Get event duration (support both lowercase and capitalized keys)
+            event_duration = EVENT_DURATION_MINUTES.get(event_name, EVENT_DURATION_MINUTES.get(event_name.lower(), 0))
+            if event_duration == 0:
+                if logger:
+                    logger.warning(f"Unknown event duration for '{event_name}', skipping event assignment")
+                continue
+            
+            event_end_min = event_start_min + event_duration
+            
+            # Check if bin overlaps with event's active window
+            # Bin overlaps if: bin_start < event_end AND bin_end > event_start
+            if bin_start_min < event_end_min and bin_end_min > event_start_min:
                 # Normalize event name to lowercase (v2 uses lowercase event names)
                 normalized = event_name_mapping.get(event_name.lower(), event_name.lower())
                 if normalized not in active_events:
@@ -136,12 +149,17 @@ def _determine_events_from_time_window(t_start: t.Any, t_end: t.Any, start_times
         active_events.sort(key=lambda e: start_times.get(e.capitalize(), start_times.get(e, float('inf'))))
         
         return active_events
-    except Exception:
-        # If parsing fails, return empty list
+    except Exception as e:
+        # Log the error instead of silently failing (Issue #535)
+        if logger:
+            logger.warning(f"Event assignment failed for bin at {t_start}: {e}")
+        else:
+            import logging
+            logging.warning(f"Event assignment failed for bin at {t_start}: {e}")
         return []
 
 
-def _build_parquet_rows_from_features(features: t.List[Feature], metadata: JsonDict) -> t.List[JsonDict]:
+def _build_parquet_rows_from_features(features: t.List[Feature], metadata: JsonDict, logger=None) -> t.List[JsonDict]:
     """Build parquet rows from features and metadata."""
     rows = []
     
@@ -158,7 +176,8 @@ def _build_parquet_rows_from_features(features: t.List[Feature], metadata: JsonD
             events = _determine_events_from_time_window(
                 p.get("t_start"),
                 p.get("t_end"),
-                start_times
+                start_times,
+                logger=logger
             )
         
         # Pull required fields safely; missing fields become None
@@ -312,7 +331,7 @@ def save_bin_artifacts(
                          occupied_bins, nonzero_density_bins)
 
     # Build parquet rows from features
-    rows = _build_parquet_rows_from_features(features, metadata)
+    rows = _build_parquet_rows_from_features(features, metadata, logger=logger)
     
     # Apply rulebook-based flagging (Issue #254)
     rows = _apply_flagging_to_rows(rows, logger=logger)
