@@ -2676,7 +2676,9 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
         # Issue #249: Add geometry backfill - extracted to helper function to reduce complexity
         _add_geometries_to_bin_features(geojson_features, analysis_context, logger)
         
-        geojson = {"type": "FeatureCollection", "features": geojson_features, "metadata": bin_build.metadata}
+        # Issue #535: Include start_times in metadata for event determination in parquet
+        geojson_metadata = {**bin_build.metadata, "start_times": start_times}
+        geojson = {"type": "FeatureCollection", "features": geojson_features, "metadata": geojson_metadata}
         
         # 6) Safety checks per ChatGPT guidance
         md = geojson.get("metadata", {})
@@ -2703,7 +2705,8 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
                 "analysis_type": "bins",
                 "schema_version": BIN_SCHEMA_VERSION,
                 "generated_by": "bins_accumulator",
-                "dt_seconds": dt_seconds
+                "dt_seconds": dt_seconds,
+                "start_times": start_times  # Issue #535: Include start_times for event determination
             }
         }
         

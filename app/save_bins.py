@@ -57,13 +57,106 @@ def _coerce_props(feature: Feature) -> JsonDict:
         props = {}
     return props
 
+def _determine_event_from_time_window(t_start: t.Any, t_end: t.Any, start_times: t.Dict[str, float]) -> t.Optional[str]:
+    """
+    Determine which event is active for a bin based on its time window.
+    
+    Args:
+        t_start: Bin start time (ISO string or datetime)
+        t_end: Bin end time (ISO string or datetime)
+        start_times: Dictionary mapping event names to start times in minutes
+                    (keys may be "Full", "10K", "Half", "Elite", "Open" or lowercase variants)
+        
+    Returns:
+        Event name (lowercase) or None if no event matches
+    """
+    if not t_start or not t_end or not start_times:
+        return None
+    
+    try:
+        from datetime import datetime, timezone
+        
+        # Parse t_start and t_end if they're strings
+        if isinstance(t_start, str):
+            t_start_dt = datetime.fromisoformat(t_start.replace('Z', '+00:00'))
+        elif isinstance(t_start, datetime):
+            t_start_dt = t_start
+        else:
+            return None
+            
+        if isinstance(t_end, str):
+            t_end_dt = datetime.fromisoformat(t_end.replace('Z', '+00:00'))
+        elif isinstance(t_end, datetime):
+            t_end_dt = t_end
+        else:
+            return None
+        
+        # Convert to UTC if timezone-naive
+        if t_start_dt.tzinfo is None:
+            t_start_dt = t_start_dt.replace(tzinfo=timezone.utc)
+        if t_end_dt.tzinfo is None:
+            t_end_dt = t_end_dt.replace(tzinfo=timezone.utc)
+        
+        # Calculate bin center time in minutes since midnight
+        bin_center_dt = t_start_dt + (t_end_dt - t_start_dt) / 2
+        base_date = bin_center_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        minutes_since_midnight = (bin_center_dt - base_date).total_seconds() / 60.0
+        
+        # Normalize event name mapping (v1 uses "Full", "10K", "Half" etc., v2 uses lowercase)
+        event_name_mapping = {
+            "full": "full",
+            "half": "half",
+            "10k": "10k",
+            "10K": "10k",
+            "elite": "elite",
+            "open": "open"
+        }
+        
+        # Find the event whose start time is closest to the bin center
+        # Prefer events that are active (started before or at bin center)
+        best_event = None
+        min_time_diff = float('inf')
+        
+        for event_name, event_start_min in start_times.items():
+            # Event is active if it started before or at the bin center
+            if event_start_min <= minutes_since_midnight:
+                time_diff = abs(minutes_since_midnight - event_start_min)
+                if time_diff < min_time_diff:
+                    min_time_diff = time_diff
+                    best_event = event_name
+        
+        # Normalize event name to lowercase (v2 uses lowercase event names)
+        if best_event:
+            normalized = event_name_mapping.get(best_event.lower(), best_event.lower())
+            return normalized
+        
+        return None
+    except Exception:
+        # If parsing fails, return None
+        return None
+
+
 def _build_parquet_rows_from_features(features: t.List[Feature], metadata: JsonDict) -> t.List[JsonDict]:
     """Build parquet rows from features and metadata."""
     rows = []
+    
+    # Extract start_times from metadata for event determination (Issue #535)
+    start_times = metadata.get("start_times", {})
+    
     for f in features:
         p = _coerce_props(f)
+        
+        # Determine event from time window (Issue #535)
+        event = None
+        if start_times:
+            event = _determine_event_from_time_window(
+                p.get("t_start"),
+                p.get("t_end"),
+                start_times
+            )
+        
         # Pull required fields safely; missing fields become None
-        rows.append({
+        row = {
             "bin_id":               p.get("bin_id"),
             "segment_id":           p.get("segment_id"),
             "start_km":             _safe_float(p.get("start_km")),
@@ -76,7 +169,13 @@ def _build_parquet_rows_from_features(features: t.List[Feature], metadata: JsonD
             "bin_size_km":          _safe_float(p.get("bin_size_km")),
             "schema_version":       (metadata.get("schema_version") or "1.0.0"),
             "analysis_hash":        metadata.get("analysis_hash"),
-        })
+        }
+        
+        # Add event column if determined (Issue #535)
+        if event is not None:
+            row["event"] = event
+        
+        rows.append(row)
     return rows
 
 
