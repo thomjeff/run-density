@@ -77,6 +77,13 @@ e2e-v2: ## Run v2 E2E tests (pytest suite with docker-compose)
 	@echo "🧪 Running v2 E2E tests..."
 	@echo "🛑 Stopping existing containers (if any)..."
 	@docker-compose down 2>/dev/null || true
+	@echo "🛑 Stopping any containers using port 8080..."
+	@for container in $$(docker ps --filter "publish=8080" --format "{{.Names}}" 2>/dev/null); do \
+		docker stop $$container 2>/dev/null || true; \
+	done
+	@for container in $$(docker ps -a --filter "name=run-density" --format "{{.Names}}" 2>/dev/null); do \
+		docker rm -f $$container 2>/dev/null || true; \
+	done
 	@echo "📦 Starting docker-compose services..."
 	@docker-compose up -d --build
 	@echo "⏳ Waiting for server to be ready (10s)..."
