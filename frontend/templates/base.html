@@ -402,17 +402,38 @@
             let availableDays = [];
 
             try {
+                // Issue #538: Always fetch latest run_id without passing current run_id
+                // This ensures we get the actual latest run_id from the server
                 let url = "/api/dashboard/summary";
                 const qp = [];
-                if (runId) qp.push(`run_id=${encodeURIComponent(runId)}`);
+                // Only pass day if we have it, but never pass run_id to get latest
                 if (selectedDay) qp.push(`day=${encodeURIComponent(selectedDay)}`);
                 if (qp.length) url += `?${qp.join("&")}`;
 
                 const resp = await fetch(url, { cache: "no-store" });
                 const data = await resp.json();
 
-                // Only fill missing pieces; never override URL-provided values
-                if (!hasUrlRun && !runId && data?.run_id) runId = data.run_id;
+                // Issue #538: Always use latest run_id from API, even if URL has old one
+                const latestRunId = data?.run_id;
+                if (latestRunId) {
+                    // If URL has a different (old) run_id, update it
+                    if (hasUrlRun && urlRunRaw !== latestRunId) {
+                        // Update URL to use latest run_id
+                        const newParams = new URLSearchParams(window.location.search);
+                        newParams.set("run_id", latestRunId);
+                        const newUrl = window.location.pathname + "?" + newParams.toString();
+                        window.history.replaceState({}, "", newUrl);
+                        runId = latestRunId;
+                    } else if (!hasUrlRun) {
+                        // No run_id in URL, use latest from API
+                        runId = latestRunId;
+                    } else {
+                        // URL run_id matches latest, keep it
+                        runId = urlRunRaw;
+                    }
+                }
+
+                // Fill missing day if not in URL
                 if (!hasUrlDay && !selectedDay && data?.selected_day) selectedDay = data.selected_day.toLowerCase();
 
                 availableDays = Array.isArray(data?.available_days)
