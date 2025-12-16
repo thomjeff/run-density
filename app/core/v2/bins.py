@@ -205,9 +205,89 @@ def generate_bins_v2(
             # Move bin artifacts from temp location to day-partitioned bins directory
             temp_bins_dir = Path(daily_folder_path)
             if temp_bins_dir.exists():
-                # Copy bin artifacts to day-partitioned location
+                # CRITICAL FIX: Filter bins.parquet by day segments before copying
+                bins_parquet_src = temp_bins_dir / "bins.parquet"
+                if bins_parquet_src.exists():
+                    import pandas as pd
+                    bins_df = pd.read_parquet(bins_parquet_src)
+                    
+                    # Get day segment IDs (check both seg_id and segment_id columns)
+                    seg_id_col = None
+                    if "seg_id" in segments_df.columns:
+                        seg_id_col = "seg_id"
+                    elif "segment_id" in segments_df.columns:
+                        seg_id_col = "segment_id"
+                    
+                    if not seg_id_col:
+                        logger.warning(f"segments_df missing 'seg_id' or 'segment_id' column, cannot filter bins by day")
+                        logger.warning(f"segments_df columns: {list(segments_df.columns)}")
+                        shutil.copy2(bins_parquet_src, bins_dir / "bins.parquet")
+                    else:
+                        day_segment_ids = set(segments_df[seg_id_col].astype(str).unique().tolist())
+                        logger.debug(f"Day {day.value} segments_df has {len(segments_df)} segments with IDs: {sorted(day_segment_ids)}")
+                        
+                        # Normalize sub-segments to base segments (e.g., N2a, N2b -> N2)
+                        # Also include sub-segments that start with base segment IDs
+                        normalized_day_segment_ids = set()
+                        for seg_id in day_segment_ids:
+                            normalized_day_segment_ids.add(seg_id)
+                            # Add base segment (strip trailing letters)
+                            base_seg = seg_id.rstrip('abcdefghijklmnopqrstuvwxyz')
+                            if base_seg != seg_id:
+                                normalized_day_segment_ids.add(base_seg)
+                        
+                        # Filter bins by day segments (check both segment_id and seg_id columns)
+                        segment_col = None
+                        if "segment_id" in bins_df.columns:
+                            segment_col = "segment_id"
+                        elif "seg_id" in bins_df.columns:
+                            segment_col = "seg_id"
+                        
+                        if segment_col:
+                            # Normalize bin segment IDs to base segments for comparison
+                            def normalize_seg_id(seg_id_str):
+                                """Normalize segment ID: N2a -> N2, N2 -> N2"""
+                                return seg_id_str.rstrip('abcdefghijklmnopqrstuvwxyz')
+                            
+                            # Check if bin segment matches any day segment (base or sub-segment)
+                            def matches_day_segment(bin_seg_id):
+                                bin_seg_str = str(bin_seg_id)
+                                # Check exact match
+                                if bin_seg_str in normalized_day_segment_ids:
+                                    return True
+                                # Check if bin segment is a sub-segment of a day segment
+                                bin_base = normalize_seg_id(bin_seg_str)
+                                return bin_base in normalized_day_segment_ids
+                            
+                            bins_df_filtered = bins_df[bins_df[segment_col].astype(str).apply(matches_day_segment)].copy()
+                            
+                            # Debug: Check what segments are actually in bins before/after filtering
+                            before_segments = set(bins_df[segment_col].astype(str).unique().tolist())
+                            after_segments = set(bins_df_filtered[segment_col].astype(str).unique().tolist())
+                            
+                            logger.info(
+                                f"Filtered bins for day {day.value}: {len(bins_df)} -> {len(bins_df_filtered)} "
+                                f"(day segments: {sorted(day_segment_ids)}, "
+                                f"before: {len(before_segments)} segments, after: {len(after_segments)} segments)"
+                            )
+                            
+                            if len(bins_df_filtered) == 0:
+                                logger.warning(
+                                    f"No bins matched day segments for {day.value}. "
+                                    f"Day segments: {sorted(day_segment_ids)}, "
+                                    f"Bin segments before filter: {sorted(before_segments)[:10]}..."
+                                )
+                            # Save filtered bins.parquet
+                            bins_parquet_dst = bins_dir / "bins.parquet"
+                            bins_df_filtered.to_parquet(bins_parquet_dst, compression="zstd", compression_level=3)
+                            logger.debug(f"Saved filtered bins.parquet to {bins_parquet_dst}")
+                        else:
+                            # Fallback: copy without filtering if segment column not found
+                            logger.warning(f"bins.parquet missing 'segment_id' or 'seg_id' column, cannot filter by day")
+                            shutil.copy2(bins_parquet_src, bins_dir / "bins.parquet")
+                
+                # Copy other bin artifacts
                 bin_files = [
-                    "bins.parquet",
                     "bins.geojson.gz",
                     "bin_summary.json",
                     "segment_windows_from_bins.parquet"
@@ -220,8 +300,10 @@ def generate_bins_v2(
                         shutil.copy2(src, dst)
                         logger.debug(f"Copied {bin_file} to {dst}")
                 
-                # Also copy any other parquet/json files
+                # Also copy any other parquet/json files (skip bins.parquet - already filtered and saved above)
                 for src_file in temp_bins_dir.glob("*.parquet"):
+                    if src_file.name == "bins.parquet":
+                        continue  # Skip - already filtered and saved above
                     dst = bins_dir / src_file.name
                     shutil.copy2(src_file, dst)
                     logger.debug(f"Copied {src_file.name} to {dst}")

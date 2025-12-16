@@ -43,6 +43,10 @@ geopandas>=0.14.0
 matplotlib>=3.8.0
 pillow>=10.0.0
 
+# Testing (Issue #535: E2E tests)
+pytest>=7.4.0
+requests>=2.31.0
+
 # NOTE: Heavy dependencies removed from web runtime:
 # - folium (static map generation → Leaflet client-side)
 # - markdown (reports → Jinja templates)
