@@ -81,8 +81,30 @@ e2e-v2: ## Run v2 E2E tests (pytest suite with docker-compose)
 	@echo "⏳ Waiting for server to be ready (10s)..."
 	@sleep 10
 	@echo "▶️  Running pytest tests/v2/e2e.py..."
-	@docker exec run-density-dev pytest tests/v2/e2e.py -v --base-url http://localhost:8080 || (echo "❌ E2E tests failed" && docker-compose down && exit 1)
+	@docker exec run-density-dev python -m pytest tests/v2/e2e.py -v --base-url http://localhost:8080 || (echo "❌ E2E tests failed" && docker-compose down && exit 1)
 	@echo "✅ E2E tests completed"
+	@echo "💡 Container still running. Use 'make stop' to stop it."
+
+e2e-v2-sat: ## Run Saturday-only E2E test
+	@echo "🧪 Running Saturday-only E2E test..."
+	@echo "📦 Starting docker-compose services..."
+	@docker-compose up -d --build
+	@echo "⏳ Waiting for server to be ready (10s)..."
+	@sleep 10
+	@echo "▶️  Running pytest test_saturday_only_scenario..."
+	@docker exec run-density-dev python -m pytest tests/v2/e2e.py::TestV2E2EScenarios::test_saturday_only_scenario -v --base-url http://localhost:8080 || (echo "❌ E2E test failed" && docker-compose down && exit 1)
+	@echo "✅ E2E test completed"
+	@echo "💡 Container still running. Use 'make stop' to stop it."
+
+e2e-v2-sun: ## Run Sunday-only E2E test
+	@echo "🧪 Running Sunday-only E2E test..."
+	@echo "📦 Starting docker-compose services..."
+	@docker-compose up -d --build
+	@echo "⏳ Waiting for server to be ready (10s)..."
+	@sleep 10
+	@echo "▶️  Running pytest test_sunday_only_scenario..."
+	@docker exec run-density-dev python -m pytest tests/v2/e2e.py::TestV2E2EScenarios::test_sunday_only_scenario -v --base-url http://localhost:8080 || (echo "❌ E2E test failed" && docker-compose down && exit 1)
+	@echo "✅ E2E test completed"
 	@echo "💡 Container still running. Use 'make stop' to stop it."
 
 validate-output: ## Validate output integrity for latest run

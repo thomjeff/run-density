@@ -80,6 +80,23 @@ DISTANCE_BIN_SIZE_KM = 0.1  # 100m distance bins
 # Day short codes for v2 (Issue #495)
 DAY_SHORT_CODES = ['fri', 'sat', 'sun', 'mon']
 
+# Event durations in minutes (Issue #535)
+# These represent the typical active duration of each event from start to finish
+# Used for determining which events are active during a bin's time window
+EVENT_DURATION_MINUTES = {
+    "elite": 45,   # Elite marathon ~45 minutes
+    "open": 75,   # Open marathon ~75 minutes
+    "10k": 120,   # 10K race ~2 hours
+    "half": 180,  # Half marathon ~3 hours
+    "full": 390,  # Full marathon ~6.5 hours
+    # Support both lowercase (v2) and capitalized (v1) keys
+    "Elite": 45,
+    "Open": 75,
+    "10K": 120,
+    "Half": 180,
+    "Full": 390,
+}
+
 # Mapping event names to day of the week (DEPRECATED - will be removed in Phase 10)
 # v2 uses Event.day property instead of these constants
 EVENT_DAYS = {

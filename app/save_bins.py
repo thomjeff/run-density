@@ -57,13 +57,131 @@ def _coerce_props(feature: Feature) -> JsonDict:
         props = {}
     return props
 
-def _build_parquet_rows_from_features(features: t.List[Feature], metadata: JsonDict) -> t.List[JsonDict]:
+def _determine_events_from_time_window(t_start: t.Any, t_end: t.Any, start_times: t.Dict[str, float], logger=None) -> t.List[str]:
+    """
+    Determine which events are active for a bin based on its time window.
+    
+    A bin can belong to multiple events when:
+    - Multiple events share the same segment (e.g., A1-A3 for Full, Half, 10K)
+    - Events start close together (within minutes)
+    - The bin's time window overlaps with multiple events' active periods
+    
+    Issue #535: Uses event durations to compute full active windows, not just start times.
+    An event is active from its start time until (start_time + duration).
+    
+    Args:
+        t_start: Bin start time (ISO string or datetime)
+        t_end: Bin end time (ISO string or datetime)
+        start_times: Dictionary mapping event names to start times in minutes
+                    (keys may be "Full", "10K", "Half", "Elite", "Open" or lowercase variants)
+        logger: Optional logger for warning messages
+        
+    Returns:
+        List of event names (lowercase) that are active during this bin's time window.
+        Returns empty list if no events match.
+    """
+    if not t_start or not t_end or not start_times:
+        return []
+    
+    try:
+        from datetime import datetime, timezone
+        from app.utils.constants import EVENT_DURATION_MINUTES
+        
+        # Parse t_start and t_end if they're strings
+        if isinstance(t_start, str):
+            t_start_dt = datetime.fromisoformat(t_start.replace('Z', '+00:00'))
+        elif isinstance(t_start, datetime):
+            t_start_dt = t_start
+        else:
+            return []
+            
+        if isinstance(t_end, str):
+            t_end_dt = datetime.fromisoformat(t_end.replace('Z', '+00:00'))
+        elif isinstance(t_end, datetime):
+            t_end_dt = t_end
+        else:
+            return []
+        
+        # Convert to UTC if timezone-naive
+        if t_start_dt.tzinfo is None:
+            t_start_dt = t_start_dt.replace(tzinfo=timezone.utc)
+        if t_end_dt.tzinfo is None:
+            t_end_dt = t_end_dt.replace(tzinfo=timezone.utc)
+        
+        # Calculate bin time window boundaries in minutes since midnight
+        base_date = t_start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        bin_start_min = (t_start_dt - base_date).total_seconds() / 60.0
+        bin_end_min = (t_end_dt - base_date).total_seconds() / 60.0
+        
+        # Normalize event name mapping (v1 uses "Full", "10K", "Half" etc., v2 uses lowercase)
+        event_name_mapping = {
+            "full": "full",
+            "half": "half",
+            "10k": "10k",
+            "10K": "10k",
+            "elite": "elite",
+            "open": "open"
+        }
+        
+        # Build event active windows using durations (Issue #535)
+        # Event is active from start_time to (start_time + duration)
+        active_events = []
+        
+        for event_name, event_start_min in start_times.items():
+            # Get event duration (support both lowercase and capitalized keys)
+            event_duration = EVENT_DURATION_MINUTES.get(event_name, EVENT_DURATION_MINUTES.get(event_name.lower(), 0))
+            if event_duration == 0:
+                if logger:
+                    logger.warning(f"Unknown event duration for '{event_name}', skipping event assignment")
+                continue
+            
+            event_end_min = event_start_min + event_duration
+            
+            # Check if bin overlaps with event's active window
+            # Bin overlaps if: bin_start < event_end AND bin_end > event_start
+            if bin_start_min < event_end_min and bin_end_min > event_start_min:
+                # Normalize event name to lowercase (v2 uses lowercase event names)
+                normalized = event_name_mapping.get(event_name.lower(), event_name.lower())
+                if normalized not in active_events:
+                    active_events.append(normalized)
+        
+        # Sort events by start time for consistency
+        active_events.sort(key=lambda e: start_times.get(e.capitalize(), start_times.get(e, float('inf'))))
+        
+        return active_events
+    except Exception as e:
+        # Log the error instead of silently failing (Issue #535)
+        if logger:
+            logger.warning(f"Event assignment failed for bin at {t_start}: {e}")
+        else:
+            import logging
+            logging.warning(f"Event assignment failed for bin at {t_start}: {e}")
+        return []
+
+
+def _build_parquet_rows_from_features(features: t.List[Feature], metadata: JsonDict, logger=None) -> t.List[JsonDict]:
     """Build parquet rows from features and metadata."""
     rows = []
+    
+    # Extract start_times from metadata for event determination (Issue #535)
+    start_times = metadata.get("start_times", {})
+    
     for f in features:
         p = _coerce_props(f)
+        
+        # Determine events from time window (Issue #535)
+        # A bin can belong to multiple events in shared segments
+        events = []
+        if start_times:
+            events = _determine_events_from_time_window(
+                p.get("t_start"),
+                p.get("t_end"),
+                start_times,
+                logger=logger
+            )
+        
         # Pull required fields safely; missing fields become None
-        rows.append({
+        row = {
             "bin_id":               p.get("bin_id"),
             "segment_id":           p.get("segment_id"),
             "start_km":             _safe_float(p.get("start_km")),
@@ -76,7 +194,18 @@ def _build_parquet_rows_from_features(features: t.List[Feature], metadata: JsonD
             "bin_size_km":          _safe_float(p.get("bin_size_km")),
             "schema_version":       (metadata.get("schema_version") or "1.0.0"),
             "analysis_hash":        metadata.get("analysis_hash"),
-        })
+        }
+        
+        # Add event column (Issue #535)
+        # Store as list for multi-event support (parquet supports list types)
+        if events:
+            row["event"] = events
+        else:
+            # If no events determined, set to empty list (rather than None)
+            # This ensures consistent schema
+            row["event"] = []
+        
+        rows.append(row)
     return rows
 
 
@@ -202,7 +331,7 @@ def save_bin_artifacts(
                          occupied_bins, nonzero_density_bins)
 
     # Build parquet rows from features
-    rows = _build_parquet_rows_from_features(features, metadata)
+    rows = _build_parquet_rows_from_features(features, metadata, logger=logger)
     
     # Apply rulebook-based flagging (Issue #254)
     rows = _apply_flagging_to_rows(rows, logger=logger)
