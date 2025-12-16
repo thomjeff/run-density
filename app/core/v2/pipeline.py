@@ -359,133 +359,62 @@ def create_full_analysis_pipeline(
         
         # Generate day timelines (Phase 3)
         timelines = generate_day_timelines(events)
-            logger.info(f"Generated {len(timelines)} day timelines")
-    
-            # Load segments DataFrame
-            segments_path = Path(data_dir) / segments_file
-            segments_df = load_segments(str(segments_path))
-            logger.info(f"Loaded {len(segments_df)} segments from {segments_path}")
-    
-            # Load all runners for events (Phase 4)
-            all_runners_df = load_all_runners_for_events(events, data_dir)
-            logger.info(f"Loaded {len(all_runners_df)} total runners from {len(events)} events")
-    
-            # Run density analysis (Phase 4)
-            density_results = analyze_density_segments_v2(
-        events=events,
-        timelines=timelines,
-        segments_df=segments_df,
-        all_runners_df=all_runners_df,
-        density_csv_path=str(segments_path)
-            )
-    
-            # Run flow analysis (Phase 5)
-            flow_results = analyze_temporal_flow_segments_v2(
-        events=events,
-        timelines=timelines,
-        segments_df=segments_df,
-        all_runners_df=all_runners_df,
-        flow_file=flow_file,
-        data_dir=data_dir
-            )
-    
-            # Generate bins per day (after density analysis, before reports)
-            bins_by_day = {}
-            for day, day_events in events_by_day.items():
-        # Get density results for this day
-        day_density = density_results.get(day.value, {})
-        if not day_density:
-            logger.warning(f"No density results for day {day.value}, skipping bin generation")
-            continue
+        logger.info(f"Generated {len(timelines)} day timelines")
         
-        # Filter runners to this day
-        # Use combine_runners_for_events() for proper per-event file loading
-        from app.core.v2.density import combine_runners_for_events
-        event_names = [e.name.lower() for e in day_events]
-        day_runners_df = combine_runners_for_events(event_names, day.value, data_dir)
+        # Load segments DataFrame
+        segments_path = Path(data_dir) / segments_file
+        segments_df = load_segments(str(segments_path))
+        logger.info(f"Loaded {len(segments_df)} segments from {segments_path}")
         
-        if day_runners_df.empty:
-            logger.warning(f"No runners found for day {day.value} events {event_names}, using fallback")
-            day_runners_df = filter_runners_by_day(all_runners_df, day, day_events)
+        # Load all runners for events (Phase 4)
+        all_runners_df = load_all_runners_for_events(events, data_dir)
+        logger.info(f"Loaded {len(all_runners_df)} total runners from {len(events)} events")
         
-        # Filter segments to this day's events (Issue #515: Fix bin scoping)
-        from app.core.v2.bins import filter_segments_by_events
-        day_segments_df = filter_segments_by_events(segments_df, day_events)
-        logger.info(f"Filtered segments for day {day.value}: {len(segments_df)} -> {len(day_segments_df)} segments")
+        # Run density analysis (Phase 4)
+        density_results = analyze_density_segments_v2(
+            events=events,
+            timelines=timelines,
+            segments_df=segments_df,
+            all_runners_df=all_runners_df,
+            density_csv_path=str(segments_path)
+        )
         
-        # Prepare start_times for bin generation (minutes as float)
-        start_times = {}
-        event_name_mapping = {
-            "full": "Full",
-            "half": "Half",
-            "10k": "10K",
-            "elite": "Elite",
-            "open": "Open"
-        }
-        for event in day_events:
-            v1_event_name = event_name_mapping.get(event.name.lower(), event.name.capitalize())
-            start_times[v1_event_name] = float(event.start_time)
-        
-        # Generate bins for this day (Issue #515: Use day-filtered segments)
-        bins_dir = generate_bins_v2(
-            density_results=day_density,
-            start_times=start_times,
-            segments_df=day_segments_df,  # ✅ Filtered by day events
-            runners_df=day_runners_df,
-            run_id=run_id,
-            day=day,
-            events=day_events,
+        # Run flow analysis (Phase 5)
+        flow_results = analyze_temporal_flow_segments_v2(
+            events=events,
+            timelines=timelines,
+            segments_df=segments_df,
+            all_runners_df=all_runners_df,
+            flow_file=flow_file,
             data_dir=data_dir
         )
         
-        if bins_dir:
-            bins_by_day[day.value] = str(bins_dir)
-            logger.info(f"Generated bins for day {day.value}: {bins_dir}")
-        else:
-            logger.warning(f"Bin generation skipped or failed for day {day.value}")
-    
-            # Load locations DataFrame if locations_file is provided
-            locations_df = None
-            if locations_file:
-        from app.io.loader import load_locations
-        locations_path = Path(data_dir) / locations_file
-        if locations_path.exists():
-            locations_df = load_locations(str(locations_path))
-            logger.info(f"Loaded {len(locations_df)} locations from {locations_path}")
-        else:
-            logger.warning(f"Locations file not found: {locations_path}")
-    
-            # Generate reports (Phase 6)
-            # Use day-partitioned bins directories
-            reports_by_day = generate_reports_per_day(
-        run_id=run_id,
-        events=events,
-        timelines=timelines,
-        density_results=density_results,
-        flow_results=flow_results,
-        segments_df=segments_df,
-        all_runners_df=all_runners_df,
-        locations_df=locations_df,
-        data_dir=data_dir
-            )
-    
-            # Generate map_data.json per day (for density page map visualization)
-            from app.core.v2.reports import get_day_output_path
-            from app.density_report import generate_map_dataset
-            import json
-            maps_by_day = {}
-            for day, day_events in events_by_day.items():
-        try:
-            maps_dir = get_day_output_path(run_id, day, "maps")
-            maps_dir.mkdir(parents=True, exist_ok=True)
-            
+        # Generate bins per day (after density analysis, before reports)
+        bins_by_day = {}
+        for day, day_events in events_by_day.items():
             # Get density results for this day
             day_density = density_results.get(day.value, {})
             if not day_density:
-                logger.warning(f"No density results for day {day.value}, skipping map_data.json")
+                logger.warning(f"No density results for day {day.value}, skipping bin generation")
                 continue
             
-            # Prepare start_times dict for map generation (v1 format: "Full", "10K", etc.)
+            # Filter runners to this day
+            # Use combine_runners_for_events() for proper per-event file loading
+            from app.core.v2.density import combine_runners_for_events
+            event_names = [e.name.lower() for e in day_events]
+            day_runners_df = combine_runners_for_events(event_names, day.value, data_dir)
+            
+            if day_runners_df.empty:
+                logger.warning(f"No runners found for day {day.value} events {event_names}, using fallback")
+                day_runners_df = filter_runners_by_day(all_runners_df, day, day_events)
+            
+            # Filter segments to this day's events (Issue #515: Fix bin scoping)
+            from app.core.v2.bins import filter_segments_by_events
+            day_segments_df = filter_segments_by_events(segments_df, day_events)
+            logger.info(f"Filtered segments for day {day.value}: {len(segments_df)} -> {len(day_segments_df)} segments")
+            
+            # Prepare start_times for bin generation (minutes as float)
+            start_times = {}
             event_name_mapping = {
                 "full": "Full",
                 "half": "Half",
@@ -493,157 +422,228 @@ def create_full_analysis_pipeline(
                 "elite": "Elite",
                 "open": "Open"
             }
-            start_times_for_map = {}
             for event in day_events:
                 v1_event_name = event_name_mapping.get(event.name.lower(), event.name.capitalize())
-                start_times_for_map[v1_event_name] = float(event.start_time)
+                start_times[v1_event_name] = float(event.start_time)
             
-            # Generate map dataset from density results
-            map_data = generate_map_dataset(day_density, start_times_for_map)
-            
-            # Save to day-scoped maps directory
-            map_data_path = maps_dir / "map_data.json"
-            with open(map_data_path, 'w', encoding='utf-8') as f:
-                json.dump(map_data, f, indent=2, default=str)
-            
-            maps_by_day[day.value] = str(maps_dir)
-            logger.info(f"Generated map_data.json for day {day.value}: {map_data_path}")
-        except Exception as e:
-            logger.warning(f"Could not generate map_data.json for day {day.value}: {e}", exc_info=True)
-    
-            # Generate UI artifacts (Phase 7 - Issue #501)
-            # Generate artifacts per day with full run scope data
-            from app.core.v2.ui_artifacts import generate_ui_artifacts_per_day
-            artifacts_by_day = {}
-            for day, day_events in events_by_day.items():
-        try:
-            artifacts_path = generate_ui_artifacts_per_day(
+            # Generate bins for this day (Issue #515: Use day-filtered segments)
+            bins_dir = generate_bins_v2(
+                density_results=day_density,
+                start_times=start_times,
+                segments_df=day_segments_df,  # ✅ Filtered by day events
+                runners_df=day_runners_df,
                 run_id=run_id,
                 day=day,
-                events=events,  # Pass all events for full run scope
-                density_results=density_results,
-                flow_results=flow_results,
-                segments_df=segments_df,
-                all_runners_df=all_runners_df,
-                data_dir=data_dir,
-                environment="local"
+                events=day_events,
+                data_dir=data_dir
             )
-            if artifacts_path:
-                artifacts_by_day[day.value] = str(artifacts_path)
-                logger.info(f"Generated UI artifacts for day {day.value}: {artifacts_path}")
+            
+            if bins_dir:
+                bins_by_day[day.value] = str(bins_dir)
+                logger.info(f"Generated bins for day {day.value}: {bins_dir}")
             else:
-                logger.warning(f"UI artifact generation returned None for day {day.value}")
-        except Exception as e:
-            logger.error(f"Failed to generate UI artifacts for day {day.value}: {e}", exc_info=True)
-    
-            # Create day-partitioned structure
-            output_paths = {}
-            days_processed = []
-            density_summary = {}
-            flow_summary_by_day = {}
-            day_metadata_map: Dict[str, Dict[str, Any]] = {}
-    
-            for day, day_events in events_by_day.items():
-        day_code = day.value
-        days_processed.append(day_code)
+                logger.warning(f"Bin generation skipped or failed for day {day.value}")
         
-        # Create day directory
-        day_path = run_path / day_code
-        day_path.mkdir(parents=True, exist_ok=True)
+        # Load locations DataFrame if locations_file is provided
+        locations_df = None
+        if locations_file:
+            from app.io.loader import load_locations
+            locations_path = Path(data_dir) / locations_file
+            if locations_path.exists():
+                locations_df = load_locations(str(locations_path))
+                logger.info(f"Loaded {len(locations_df)} locations from {locations_path}")
+            else:
+                logger.warning(f"Locations file not found: {locations_path}")
         
-        # Create subdirectories
-        reports_dir = day_path / "reports"
-        bins_dir = day_path / "bins"
-        maps_dir = day_path / "maps"
-        ui_dir = day_path / "ui"
-        
-        reports_dir.mkdir(exist_ok=True)
-        bins_dir.mkdir(exist_ok=True)
-        maps_dir.mkdir(exist_ok=True)
-        ui_dir.mkdir(exist_ok=True)
-        
-        # Store density results summary
-        day_density = density_results.get(day, {})
-        density_summary[day_code] = {
-            "processed_segments": day_density.get("summary", {}).get("processed_segments", 0),
-            "skipped_segments": day_density.get("summary", {}).get("skipped_segments", 0),
-            "total_segments": day_density.get("summary", {}).get("total_segments", 0),
-            "has_error": "error" in day_density.get("summary", {})
-        }
-        
-        # Store flow results summary
-        day_flow = flow_results.get(day, {})
-        flow_summary_by_day[day_code] = {
-            "ok": day_flow.get("ok", False),
-            "total_segments": day_flow.get("total_segments", 0),
-            "segments_with_convergence": day_flow.get("segments_with_convergence", 0),
-            "has_error": "error" in day_flow or not day_flow.get("ok", False)
-        }
-        
-        # Participants per event for this day (re-use combine_runners_for_events)
-        participants_by_event: Dict[str, int] = {}
-        try:
-            from app.core.v2.density import combine_runners_for_events
-            event_names = [e.name.lower() for e in day_events]
-            day_runners_df = combine_runners_for_events(event_names, day_code, data_dir)
-            if not day_runners_df.empty:
-                # event column should be lowercase
-                participants_by_event = (
-                    day_runners_df['event'].str.lower().value_counts().to_dict()
-                )
-        except Exception as e:
-            logger.warning(f"Could not compute participants per event for {day_code}: {e}")
-        
-        # Create metadata.json per day with v1 parity + events
-        metadata = create_metadata_json(
+        # Generate reports (Phase 6)
+        # Use day-partitioned bins directories
+        reports_by_day = generate_reports_per_day(
             run_id=run_id,
-            day=day_code,
-            events=day_events,
-            day_path=day_path,
-            participants_by_event=participants_by_event
+            events=events,
+            timelines=timelines,
+            density_results=density_results,
+            flow_results=flow_results,
+            segments_df=segments_df,
+            all_runners_df=all_runners_df,
+            locations_df=locations_df,
+            data_dir=data_dir
         )
-        metadata["density"] = density_summary[day_code]
-        metadata["flow"] = flow_summary_by_day[day_code]
-        metadata_path = day_path / "metadata.json"
-        with open(metadata_path, 'w', encoding='utf-8') as f:
-            json.dump(metadata, f, indent=2, ensure_ascii=False)
-        day_metadata_map[day_code] = metadata
         
-        # Store output paths
-        output_paths[day_code] = {
-            "day": day_code,
-            "reports": f"runflow/{run_id}/{day_code}/reports",
-            "bins": f"runflow/{run_id}/{day_code}/bins",
-            "maps": f"runflow/{run_id}/{day_code}/maps",
-            "ui": f"runflow/{run_id}/{day_code}/ui",
-            "metadata": f"runflow/{run_id}/{day_code}/metadata.json"
-        }
-    
-            # Create combined metadata (run-level)
-            combined_metadata = create_combined_metadata(
-        run_id=run_id,
-        days=days_processed,
-        per_day_metadata=day_metadata_map
-            )
-            combined_metadata["density"] = density_summary
-            combined_metadata["flow"] = flow_summary_by_day
-            # Write run-level metadata.json
-            run_metadata_path = run_path / "metadata.json"
-            with open(run_metadata_path, 'w', encoding='utf-8') as f:
-        json.dump(combined_metadata, f, indent=2, ensure_ascii=False)
-    
-            # Issue #527: Add log file path to metadata
-            if run_log_handler:
-        log_path = run_log_handler.get_log_path()
-        if log_path:
-            # Add logs reference to combined metadata
-            combined_metadata["logs"] = {
-                "app_log": f"logs/app.log"
+        # Generate map_data.json per day (for density page map visualization)
+        from app.core.v2.reports import get_day_output_path
+        from app.density_report import generate_map_dataset
+        import json
+        maps_by_day = {}
+        for day, day_events in events_by_day.items():
+            try:
+                maps_dir = get_day_output_path(run_id, day, "maps")
+                maps_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Get density results for this day
+                day_density = density_results.get(day.value, {})
+                if not day_density:
+                    logger.warning(f"No density results for day {day.value}, skipping map_data.json")
+                    continue
+                
+                # Prepare start_times dict for map generation (v1 format: "Full", "10K", etc.)
+                event_name_mapping = {
+                    "full": "Full",
+                    "half": "Half",
+                    "10k": "10K",
+                    "elite": "Elite",
+                    "open": "Open"
+                }
+                start_times_for_map = {}
+                for event in day_events:
+                    v1_event_name = event_name_mapping.get(event.name.lower(), event.name.capitalize())
+                    start_times_for_map[v1_event_name] = float(event.start_time)
+                
+                # Generate map dataset from density results
+                map_data = generate_map_dataset(day_density, start_times_for_map)
+                
+                # Save to day-scoped maps directory
+                map_data_path = maps_dir / "map_data.json"
+                with open(map_data_path, 'w', encoding='utf-8') as f:
+                    json.dump(map_data, f, indent=2, default=str)
+                
+                maps_by_day[day.value] = str(maps_dir)
+                logger.info(f"Generated map_data.json for day {day.value}: {map_data_path}")
+            except Exception as e:
+                logger.warning(f"Could not generate map_data.json for day {day.value}: {e}", exc_info=True)
+        
+        # Generate UI artifacts (Phase 7 - Issue #501)
+        # Generate artifacts per day with full run scope data
+        from app.core.v2.ui_artifacts import generate_ui_artifacts_per_day
+        artifacts_by_day = {}
+        for day, day_events in events_by_day.items():
+            try:
+                artifacts_path = generate_ui_artifacts_per_day(
+                    run_id=run_id,
+                    day=day,
+                    events=events,  # Pass all events for full run scope
+                    density_results=density_results,
+                    flow_results=flow_results,
+                    segments_df=segments_df,
+                    all_runners_df=all_runners_df,
+                    data_dir=data_dir,
+                    environment="local"
+                )
+                if artifacts_path:
+                    artifacts_by_day[day.value] = str(artifacts_path)
+                    logger.info(f"Generated UI artifacts for day {day.value}: {artifacts_path}")
+                else:
+                    logger.warning(f"UI artifact generation returned None for day {day.value}")
+            except Exception as e:
+                logger.error(f"Failed to generate UI artifacts for day {day.value}: {e}", exc_info=True)
+        
+        # Create day-partitioned structure
+        output_paths = {}
+        days_processed = []
+        density_summary = {}
+        flow_summary_by_day = {}
+        day_metadata_map: Dict[str, Dict[str, Any]] = {}
+        
+        for day, day_events in events_by_day.items():
+            day_code = day.value
+            days_processed.append(day_code)
+            
+            # Create day directory
+            day_path = run_path / day_code
+            day_path.mkdir(parents=True, exist_ok=True)
+            
+            # Create subdirectories
+            reports_dir = day_path / "reports"
+            bins_dir = day_path / "bins"
+            maps_dir = day_path / "maps"
+            ui_dir = day_path / "ui"
+            
+            reports_dir.mkdir(exist_ok=True)
+            bins_dir.mkdir(exist_ok=True)
+            maps_dir.mkdir(exist_ok=True)
+            ui_dir.mkdir(exist_ok=True)
+            
+            # Store density results summary
+            day_density = density_results.get(day, {})
+            density_summary[day_code] = {
+                "processed_segments": day_density.get("summary", {}).get("processed_segments", 0),
+                "skipped_segments": day_density.get("summary", {}).get("skipped_segments", 0),
+                "total_segments": day_density.get("summary", {}).get("total_segments", 0),
+                "has_error": "error" in day_density.get("summary", {})
             }
-            # Update run-level metadata.json with logs reference
-            with open(run_metadata_path, 'w', encoding='utf-8') as f:
-                json.dump(combined_metadata, f, indent=2, ensure_ascii=False)
-    
+            
+            # Store flow results summary
+            day_flow = flow_results.get(day, {})
+            flow_summary_by_day[day_code] = {
+                "ok": day_flow.get("ok", False),
+                "total_segments": day_flow.get("total_segments", 0),
+                "segments_with_convergence": day_flow.get("segments_with_convergence", 0),
+                "has_error": "error" in day_flow or not day_flow.get("ok", False)
+            }
+            
+            # Participants per event for this day (re-use combine_runners_for_events)
+            participants_by_event: Dict[str, int] = {}
+            try:
+                from app.core.v2.density import combine_runners_for_events
+                event_names = [e.name.lower() for e in day_events]
+                day_runners_df = combine_runners_for_events(event_names, day_code, data_dir)
+                if not day_runners_df.empty:
+                    # event column should be lowercase
+                    participants_by_event = (
+                        day_runners_df['event'].str.lower().value_counts().to_dict()
+                    )
+            except Exception as e:
+                logger.warning(f"Could not compute participants per event for {day_code}: {e}")
+            
+            # Create metadata.json per day with v1 parity + events
+            metadata = create_metadata_json(
+                run_id=run_id,
+                day=day_code,
+                events=day_events,
+                day_path=day_path,
+                participants_by_event=participants_by_event
+            )
+            metadata["density"] = density_summary[day_code]
+            metadata["flow"] = flow_summary_by_day[day_code]
+            metadata_path = day_path / "metadata.json"
+            with open(metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, indent=2, ensure_ascii=False)
+            day_metadata_map[day_code] = metadata
+            
+            # Store output paths
+            output_paths[day_code] = {
+                "day": day_code,
+                "reports": f"runflow/{run_id}/{day_code}/reports",
+                "bins": f"runflow/{run_id}/{day_code}/bins",
+                "maps": f"runflow/{run_id}/{day_code}/maps",
+                "ui": f"runflow/{run_id}/{day_code}/ui",
+                "metadata": f"runflow/{run_id}/{day_code}/metadata.json"
+            }
+        
+        # Create combined metadata (run-level)
+        combined_metadata = create_combined_metadata(
+            run_id=run_id,
+            days=days_processed,
+            per_day_metadata=day_metadata_map
+        )
+        combined_metadata["density"] = density_summary
+        combined_metadata["flow"] = flow_summary_by_day
+        # Write run-level metadata.json
+        run_metadata_path = run_path / "metadata.json"
+        with open(run_metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(combined_metadata, f, indent=2, ensure_ascii=False)
+        
+        # Issue #527: Add log file path to metadata
+        if run_log_handler:
+            log_path = run_log_handler.get_log_path()
+            if log_path:
+                # Add logs reference to combined metadata
+                combined_metadata["logs"] = {
+                    "app_log": f"logs/app.log"
+                }
+                # Update run-level metadata.json with logs reference
+                with open(run_metadata_path, 'w', encoding='utf-8') as f:
+                    json.dump(combined_metadata, f, indent=2, ensure_ascii=False)
+        
         # Update pointer files
         update_pointer_files(run_id, combined_metadata)
         
