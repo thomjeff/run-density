@@ -238,8 +238,9 @@ def generate_density_report_v2(
             logger.debug(f"Copied segment_windows_from_bins.parquet to reports directory")
         
         # Load and filter bins by day segments
-        # After Issue #515 fix, bins in /{day}/bins/ should already be day-scoped,
-        # but we filter again as a safety check to ensure only day segments are in reports
+        # After Issue #519 fix, bins in /{day}/bins/ should already be day-scoped
+        # (density_results is filtered before bin generation), but we filter again
+        # as a safety check to ensure only day segments are in reports
         bins_df = pd.read_parquet(bins_parquet)
         segment_windows_df = pd.read_parquet(segment_windows_parquet) if segment_windows_parquet.exists() else pd.DataFrame()
         
