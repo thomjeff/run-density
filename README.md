@@ -171,10 +171,15 @@ curl -X POST "http://localhost:8080/api/density-report" \
 
 ## Makefile Commands
 
-### Core Commands (Issue #466)
+### Core Commands
 - `make dev` – start Docker container on `http://localhost:8080` with hot-reload
-- `make e2e-local` – run end-to-end tests (local-only mode)
-- `make test` – run smoke tests (health checks + API validation)
+- `make e2e` – run sat+sun E2E in a single run_id (fast sat/sun sanity)
+- `make e2e-full` – run full v2 E2E suite (all scenarios, ~30 min)
+- `make e2e-sat` – run Saturday-only E2E (~2 min)
+- `make e2e-sun` – run Sunday-only E2E (~2 min)
+- `make validate-output` – validate latest run outputs
+- `make validate-all` – validate outputs for all runs in index.json
+- `make prune-runs KEEP=n` – prune old run_ids, keeping last n
 - `make stop` – stop and remove Docker container
 - `make build` – build Docker image (no start)
 

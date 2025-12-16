@@ -710,6 +710,109 @@ def validate_run(run_id: Optional[str] = None, config: Optional[Dict] = None,
     return validation_results
 
 
+def validate_all_runs(config: Optional[Dict] = None, update_metadata: bool = True) -> Dict[str, Any]:
+    """
+    Validate all runs in index.json.
+    
+    Args:
+        config: Validation config (defaults to config/reporting.yml)
+        update_metadata: If True, inject results into metadata.json and index.json
+    
+    Returns:
+        Summary dictionary with total runs, passed, failed, partial counts
+    """
+    index_path = Path("runflow/index.json")
+    
+    if not index_path.exists():
+        logger.error(f"❌ index.json Missing — File: {index_path}")
+        raise FileNotFoundError("runflow/index.json not found")
+    
+    try:
+        index = json.loads(index_path.read_text())
+        if not isinstance(index, list) or len(index) == 0:
+            logger.warning(f"⚠️ index.json Empty — No runs to validate")
+            return {
+                'total_runs': 0,
+                'passed': 0,
+                'failed': 0,
+                'partial': 0,
+                'results': []
+            }
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ index.json Corrupt — Error: {e}")
+        raise
+    
+    logger.info(f"{'=' * 60}")
+    logger.info(f"Validating All Runs")
+    logger.info(f"Total runs in index.json: {len(index)}")
+    logger.info(f"{'=' * 60}")
+    
+    results_summary = {
+        'total_runs': len(index),
+        'passed': 0,
+        'failed': 0,
+        'partial': 0,
+        'results': []
+    }
+    
+    # Validate each run
+    for i, entry in enumerate(index, 1):
+        run_id = entry.get('run_id')
+        if not run_id:
+            logger.warning(f"⚠️ Skipping entry {i}: missing run_id")
+            continue
+        
+        logger.info(f"")
+        logger.info(f"[{i}/{len(index)}] Validating run: {run_id}")
+        logger.info(f"-" * 60)
+        
+        try:
+            result = validate_run(run_id=run_id, config=config, update_metadata=update_metadata)
+            
+            # Track results
+            results_summary['results'].append({
+                'run_id': run_id,
+                'status': result['status'],
+                'missing_count': len(result.get('missing', [])),
+                'schema_errors': len(result.get('schema_errors', []))
+            })
+            
+            if result['status'] == 'PASS':
+                results_summary['passed'] += 1
+            elif result['status'] == 'PARTIAL':
+                results_summary['partial'] += 1
+            else:  # FAIL
+                results_summary['failed'] += 1
+        
+        except Exception as e:
+            logger.error(f"❌ Validation Failed — Run: {run_id} — Error: {e}")
+            results_summary['failed'] += 1
+            results_summary['results'].append({
+                'run_id': run_id,
+                'status': 'FAIL',
+                'error': str(e)
+            })
+    
+    # Summary
+    logger.info(f"")
+    logger.info(f"{'=' * 60}")
+    logger.info(f"Validation Summary (All Runs)")
+    logger.info(f"{'=' * 60}")
+    logger.info(f"Total runs: {results_summary['total_runs']}")
+    logger.info(f"✅ Passed: {results_summary['passed']}")
+    logger.info(f"⚠️  Partial: {results_summary['partial']}")
+    logger.info(f"❌ Failed: {results_summary['failed']}")
+    
+    if results_summary['failed'] > 0:
+        logger.info(f"")
+        logger.info(f"Failed runs:")
+        for result in results_summary['results']:
+            if result['status'] == 'FAIL':
+                logger.error(f"  - {result['run_id']}: {result.get('error', 'Validation failed')}")
+    
+    return results_summary
+
+
 def main():
     """CLI entry point for output validation"""
     import argparse
@@ -722,6 +825,11 @@ def main():
         help='Specific run ID to validate (defaults to latest from latest.json)'
     )
     parser.add_argument(
+        '--all',
+        action='store_true',
+        help='Validate all runs in index.json'
+    )
+    parser.add_argument(
         '--strict',
         action='store_true',
         help='Strict mode: treat required files as critical'
@@ -729,6 +837,26 @@ def main():
     
     args = parser.parse_args()
     
+    # Validate all runs if --all flag is set
+    if args.all:
+        try:
+            config = load_validation_config()
+            summary = validate_all_runs(config=config, update_metadata=True)
+            
+            # Exit code based on results
+            if summary['failed'] > 0:
+                sys.exit(1)  # At least one run failed
+            elif args.strict and summary['partial'] > 0:
+                logger.error(f"❌ Strict Mode — {summary['partial']} runs with PARTIAL status")
+                sys.exit(1)
+            else:
+                sys.exit(0)  # All passed or partial (if not strict)
+        
+        except Exception as e:
+            logger.error(f"❌ Validation Failed — Error: {e}")
+            sys.exit(1)
+    
+    # Validate single run (default behavior)
     try:
         results = validate_run(run_id=args.run_id)
         
