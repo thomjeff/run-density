@@ -7,7 +7,7 @@
 PORT ?= 8080
 
 # -------- Phony targets --------
-.PHONY: help usage --help dev e2e-local test stop build validate-output validate-all test-v2
+.PHONY: help usage --help dev e2e e2e-full e2e-sat e2e-sun stop build validate-output validate-all prune-runs
 
 # -------- Use same shell for multi-line targets --------
 .ONESHELL:
@@ -25,11 +25,13 @@ help usage --help: ## Show this help message
 	@echo "  dev                 Start local development server (hot reload enabled)"
 	@echo "  stop                Stop Docker container"
 	@echo "  build               Build Docker image"
-	@echo "  test-v2             Test v2 analysis API (sat + sun events, no reload mode)"
-	@echo "  test                Run v1 smoke tests (health checks + API validation)"
-	@echo "  e2e-local           Run v1(legacy) end-to-end test"
+	@echo "  e2e                 Run sat+sun E2E test (single run_id with both days)"
+	@echo "  e2e-full            Run full E2E test suite (all scenarios)"
+	@echo "  e2e-sat             Run Saturday-only E2E test (~2 min)"
+	@echo "  e2e-sun             Run Sunday-only E2E test (~2 min)"
 	@echo "  validate-output     Validate output integrity for latest run"
 	@echo "  validate-all        Validate output for all runs in index.json"
+	@echo "  prune-runs          Prune old run_ids, keeping last N (KEEP=n, --dry-run for preview)"
 	@echo ""
 	@echo "Configuration:"
 	@echo "  PORT=$(PORT)  (Docker container port)"
@@ -52,30 +54,37 @@ build: ## Build Docker image
 	@echo "🔨 Building Docker image..."
 	@docker-compose build
 
-e2e-local: ## VERSION 1 Run end-to-end tests (local-only)
-	@echo "🧪 Running E2E tests (local mode)..."
-	@docker-compose down
-	@echo "GCS_UPLOAD=false" > .env.override
-	@docker-compose --env-file .env.override up -d
-	@rm -f .env.override
-	@echo "⏳ Waiting for container startup (5s)..."
-	@sleep 5
-	@echo "▶️  Running E2E test suite..."
-	@docker exec run-density-dev python /app/e2e.py --local
+e2e: ## Run sat+sun E2E test (single run_id with both days)
+	@echo "🧪 Running sat+sun E2E test..."
+	@echo "🛑 Stopping existing containers (if any)..."
+	@docker-compose down 2>/dev/null || true
+	@echo "🛑 Stopping any containers using port 8080..."
+	@for container in $$(docker ps --filter "publish=8080" --format "{{.Names}}" 2>/dev/null); do \
+		docker stop $$container 2>/dev/null || true; \
+	done
+	@for container in $$(docker ps -a --filter "name=run-density" --format "{{.Names}}" 2>/dev/null); do \
+		docker rm -f $$container 2>/dev/null || true; \
+	done
+	@echo "📦 Starting docker-compose services..."
+	@docker-compose up -d --build
+	@echo "⏳ Waiting for server to be ready (10s)..."
+	@sleep 10
+	@echo "▶️  Running pytest test_sat_sun_scenario..."
+	@docker exec run-density-dev python -m pytest tests/v2/e2e.py::TestV2E2EScenarios::test_sat_sun_scenario -v --base-url http://localhost:8080 || (echo "❌ E2E test failed" && docker-compose down && exit 1)
+	@echo "✅ E2E test completed"
+	@echo "💡 Container still running. Use 'make stop' to stop it."
 
-test: ## Run smoke tests (health checks + API validation)
-	@echo "🧪 Running smoke tests..."
-	@curl -fsS "http://localhost:$(PORT)/health" | jq -e '.ok==true' >/dev/null && echo "✅ Health OK" || (echo "❌ Health FAILED" && exit 1)
-	@curl -fsS "http://localhost:$(PORT)/ready"  | jq -e '.ok==true' >/dev/null && echo "✅ Ready OK" || (echo "❌ Ready FAILED" && exit 1)
-	@curl -fsS "http://localhost:$(PORT)/api/dashboard/summary" | jq -e '.peak_density >= 0' >/dev/null && echo "✅ Dashboard OK" || (echo "❌ Dashboard FAILED" && exit 1)
-	@curl -fsS "http://localhost:$(PORT)/api/density/segments" | jq -e 'length > 0' >/dev/null && echo "✅ Density API OK" || (echo "❌ Density API FAILED" && exit 1)
-	@echo "🎉 All smoke tests passed"
-
-test-v2: ## Test v2 analysis API (sat + sun events, no reload mode)
-	@bash scripts/test_v2_analysis.sh
-
-e2e-v2: ## Run v2 E2E tests (pytest suite with docker-compose)
+e2e-full: ## Run full E2E test suite (all scenarios)
 	@echo "🧪 Running v2 E2E tests..."
+	@echo "🛑 Stopping existing containers (if any)..."
+	@docker-compose down 2>/dev/null || true
+	@echo "🛑 Stopping any containers using port 8080..."
+	@for container in $$(docker ps --filter "publish=8080" --format "{{.Names}}" 2>/dev/null); do \
+		docker stop $$container 2>/dev/null || true; \
+	done
+	@for container in $$(docker ps -a --filter "name=run-density" --format "{{.Names}}" 2>/dev/null); do \
+		docker rm -f $$container 2>/dev/null || true; \
+	done
 	@echo "📦 Starting docker-compose services..."
 	@docker-compose up -d --build
 	@echo "⏳ Waiting for server to be ready (10s)..."
@@ -85,8 +94,17 @@ e2e-v2: ## Run v2 E2E tests (pytest suite with docker-compose)
 	@echo "✅ E2E tests completed"
 	@echo "💡 Container still running. Use 'make stop' to stop it."
 
-e2e-v2-sat: ## Run Saturday-only E2E test
+e2e-sat: ## Run Saturday-only E2E test
 	@echo "🧪 Running Saturday-only E2E test..."
+	@echo "🛑 Stopping existing containers (if any)..."
+	@docker-compose down 2>/dev/null || true
+	@echo "🛑 Stopping any containers using port 8080..."
+	@for container in $$(docker ps --filter "publish=8080" --format "{{.Names}}" 2>/dev/null); do \
+		docker stop $$container 2>/dev/null || true; \
+	done
+	@for container in $$(docker ps -a --filter "name=run-density" --format "{{.Names}}" 2>/dev/null); do \
+		docker rm -f $$container 2>/dev/null || true; \
+	done
 	@echo "📦 Starting docker-compose services..."
 	@docker-compose up -d --build
 	@echo "⏳ Waiting for server to be ready (10s)..."
@@ -96,8 +114,17 @@ e2e-v2-sat: ## Run Saturday-only E2E test
 	@echo "✅ E2E test completed"
 	@echo "💡 Container still running. Use 'make stop' to stop it."
 
-e2e-v2-sun: ## Run Sunday-only E2E test
+e2e-sun: ## Run Sunday-only E2E test
 	@echo "🧪 Running Sunday-only E2E test..."
+	@echo "🛑 Stopping existing containers (if any)..."
+	@docker-compose down 2>/dev/null || true
+	@echo "🛑 Stopping any containers using port 8080..."
+	@for container in $$(docker ps --filter "publish=8080" --format "{{.Names}}" 2>/dev/null); do \
+		docker stop $$container 2>/dev/null || true; \
+	done
+	@for container in $$(docker ps -a --filter "name=run-density" --format "{{.Names}}" 2>/dev/null); do \
+		docker rm -f $$container 2>/dev/null || true; \
+	done
 	@echo "📦 Starting docker-compose services..."
 	@docker-compose up -d --build
 	@echo "⏳ Waiting for server to be ready (10s)..."
@@ -114,3 +141,10 @@ validate-output: ## Validate output integrity for latest run
 validate-all: ## Validate all runs in index.json
 	@echo "🔍 Validating all runs..."
 	@docker exec run-density-dev python -m app.tests.validate_output --all
+
+prune-runs: ## Prune old run_ids, keeping last N (KEEP=n required, --dry-run for preview)
+	@if [ -z "$(KEEP)" ]; then \
+		echo "❌ Error: KEEP parameter required (e.g., make prune-runs KEEP=10)"; \
+		exit 1; \
+	fi
+	@docker-compose exec app python -m app.utils.prune_runs --keep $(KEEP) $(if $(DRY_RUN),--dry-run,) $(if $(CONFIRM),--confirm,)

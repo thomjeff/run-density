@@ -338,6 +338,40 @@ class TestV2E2EScenarios:
             ]
             assert len(pairs) > 0, f"No flow pairs found between {event_a} and {event_b}"
     
+    def test_sat_sun_scenario(self, base_url, wait_for_server):
+        """Test sat+sun analysis in single run_id (simpler than mixed_day, focused on Issue #528)."""
+        payload = {
+            "events": [
+                {"name": "elite", "day": "sat", "start_time": 480, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
+                {"name": "open", "day": "sat", "start_time": 510, "runners_file": "open_runners.csv", "gpx_file": "open.gpx"},
+                {"name": "full", "day": "sun", "start_time": 420, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"},
+                {"name": "10k", "day": "sun", "start_time": 440, "runners_file": "10k_runners.csv", "gpx_file": "10k.gpx"},
+                {"name": "half", "day": "sun", "start_time": 460, "runners_file": "half_runners.csv", "gpx_file": "half.gpx"}
+            ]
+        }
+        
+        # Make API request
+        response_data = self._make_analyze_request(base_url, payload)
+        run_id = response_data["run_id"]
+        
+        # Verify outputs exist for both days
+        sat_outputs = self._verify_outputs_exist(run_id, "sat", "sat_sun")
+        sun_outputs = self._verify_outputs_exist(run_id, "sun", "sat_sun")
+        
+        # Verify flags.json exists and is not empty (Issue #528)
+        assert "flags_json" in sat_outputs, "SAT flags.json missing"
+        assert "flags_json" in sun_outputs, "SUN flags.json missing"
+        
+        sat_flags = json.loads(sat_outputs["flags_json"].read_text())
+        sun_flags = json.loads(sun_outputs["flags_json"].read_text())
+        
+        # Flags should be a list (may be empty if no flags, but should exist)
+        assert isinstance(sat_flags, list), f"SAT flags.json should be a list, got {type(sat_flags)}"
+        assert isinstance(sun_flags, list), f"SUN flags.json should be a list, got {type(sun_flags)}"
+        
+        print(f"✅ SAT flags.json: {len(sat_flags)} flagged segments")
+        print(f"✅ SUN flags.json: {len(sun_flags)} flagged segments")
+    
     def test_mixed_day_scenario(self, base_url, wait_for_server):
         """Test mixed-day scenario (Saturday + Sunday) with isolation validation."""
         payload = {

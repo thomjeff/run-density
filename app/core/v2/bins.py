@@ -189,13 +189,76 @@ def generate_bins_v2(
             segments_csv_path=segments_csv_path
         )
         
+        # Issue #519: Filter density_results to only include day-specific segments
+        # This prevents bin generation from creating bins for all segments
+        # and eliminates the need for duplicate filtering later
+        filtered_density_results = density_results.copy()
+        if "segments" in filtered_density_results and isinstance(filtered_density_results["segments"], dict):
+            # Get day segment IDs (check both seg_id and segment_id columns)
+            seg_id_col = None
+            if "seg_id" in segments_df.columns:
+                seg_id_col = "seg_id"
+            elif "segment_id" in segments_df.columns:
+                seg_id_col = "segment_id"
+            
+            if seg_id_col:
+                day_segment_ids = set(segments_df[seg_id_col].astype(str).unique().tolist())
+                
+                # Normalize sub-segments to base segments (e.g., N2a, N2b -> N2)
+                normalized_day_segment_ids = set()
+                for seg_id in day_segment_ids:
+                    normalized_day_segment_ids.add(seg_id)
+                    # Add base segment (strip trailing letters)
+                    base_seg = seg_id.rstrip('abcdefghijklmnopqrstuvwxyz')
+                    if base_seg != seg_id:
+                        normalized_day_segment_ids.add(base_seg)
+                
+                # Filter segments dictionary to only include day segments
+                original_segments = filtered_density_results["segments"]
+                filtered_segments = {}
+                
+                for seg_id, seg_data in original_segments.items():
+                    seg_id_str = str(seg_id)
+                    # Check exact match
+                    if seg_id_str in normalized_day_segment_ids:
+                        filtered_segments[seg_id] = seg_data
+                    else:
+                        # Check if segment is a sub-segment of a day segment
+                        base_seg = seg_id_str.rstrip('abcdefghijklmnopqrstuvwxyz')
+                        if base_seg in normalized_day_segment_ids:
+                            filtered_segments[seg_id] = seg_data
+                
+                filtered_density_results["segments"] = filtered_segments
+                
+                logger.info(
+                    f"Filtered density_results for day {day.value}: "
+                    f"{len(original_segments)} -> {len(filtered_segments)} segments "
+                    f"(day segments: {sorted(day_segment_ids)})"
+                )
+                
+                # Update summary counts if present
+                if "summary" in filtered_density_results:
+                    summary = filtered_density_results["summary"]
+                    summary["total_segments"] = len(filtered_segments)
+                    # Recalculate processed_segments count
+                    processed_count = sum(
+                        1 for seg_data in filtered_segments.values()
+                        if isinstance(seg_data, dict) and seg_data.get("summary", {}).get("processed", False)
+                    )
+                    summary["processed_segments"] = processed_count
+                    summary["skipped_segments"] = len(filtered_segments) - processed_count
+            else:
+                logger.warning(f"segments_df missing 'seg_id' or 'segment_id' column, cannot filter density_results")
+        else:
+            logger.warning(f"density_results missing 'segments' dict, cannot filter by day")
+        
         # Call v1 bin generation with retry logic
         start_time = time.monotonic()
         temp_output_dir = tempfile.mkdtemp()
         
         try:
             daily_folder_path, bin_metadata, bin_data = _generate_bin_dataset_with_retry(
-                density_results, start_times, temp_output_dir, analysis_context
+                filtered_density_results, start_times, temp_output_dir, analysis_context
             )
             
             if not daily_folder_path:
@@ -205,7 +268,9 @@ def generate_bins_v2(
             # Move bin artifacts from temp location to day-partitioned bins directory
             temp_bins_dir = Path(daily_folder_path)
             if temp_bins_dir.exists():
-                # CRITICAL FIX: Filter bins.parquet by day segments before copying
+                # Safety check: Filter bins.parquet by day segments before copying
+                # After Issue #519, this should be a no-op since density_results is filtered
+                # before bin generation, but we keep it as a safety check
                 bins_parquet_src = temp_bins_dir / "bins.parquet"
                 if bins_parquet_src.exists():
                     import pandas as pd

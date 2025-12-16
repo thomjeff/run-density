@@ -431,32 +431,12 @@ function clearTableRowHighlight() {
 }
 
 /**
- * Update the filter UI (button visibility and status text)
+ * Update the filter UI (status text only - Issue #532: Clear Filter button removed)
  * @param {string|null} segmentId - ID of the filtered segment, or null if no filter
  */
 function updateFilterUI(segmentId) {
-    const filterControls = document.getElementById('map-filter-controls');
-    const clearBtn = document.getElementById('clear-filter-btn');
-    const statusSpan = document.getElementById('filter-status');
-    
-    if (segmentId) {
-        // Show filter controls overlay and update status
-        if (filterControls) {
-            filterControls.style.display = 'block';
-        }
-        if (statusSpan) {
-            statusSpan.textContent = `Showing only segment ${segmentId}`;
-            statusSpan.style.color = '#007bff';
-        }
-    } else {
-        // Hide filter controls overlay
-        if (filterControls) {
-            filterControls.style.display = 'none';
-        }
-        if (statusSpan) {
-            statusSpan.textContent = '';
-        }
-    }
+    // Issue #532: Clear Filter button removed - users can unselect row to clear filter
+    // No UI updates needed since button is removed
 }
 
 /**
