@@ -256,6 +256,7 @@ def _export_ui_artifacts_v2(
     
     # Aggregate bins.parquet from all days, then filter by day segments
     aggregated_bins = None
+    aggregated_bins_for_flags = None  # Issue #528: Keep original bins with 'rate' column for flagging
     temp_reports = None
     heatmap_reports = None
     
@@ -263,6 +264,9 @@ def _export_ui_artifacts_v2(
         # Aggregate bins from all days first
         aggregated_bins = _aggregate_bins_from_all_days(run_id)
         if aggregated_bins is not None and not aggregated_bins.empty:
+            # Issue #528: Keep a copy with 'rate' column for flagging before renaming
+            aggregated_bins_for_flags = aggregated_bins.copy()
+            
             # Normalize column names for v1 functions
             # v1 expects 'rate_p_s' but v2 bins.parquet has 'rate'
             if 'rate' in aggregated_bins.columns and 'rate_p_s' not in aggregated_bins.columns:
@@ -280,6 +284,11 @@ def _export_ui_artifacts_v2(
                 bins_before = len(aggregated_bins)
                 aggregated_bins = aggregated_bins[
                     aggregated_bins[segment_col].astype(str).isin(day_segment_ids)
+                ].copy()
+                # Also filter the flags copy
+                flags_segment_col = 'segment_id' if 'segment_id' in aggregated_bins_for_flags.columns else ('seg_id' if 'seg_id' in aggregated_bins_for_flags.columns else segment_col)
+                aggregated_bins_for_flags = aggregated_bins_for_flags[
+                    aggregated_bins_for_flags[flags_segment_col].astype(str).isin(day_segment_ids)
                 ].copy()
                 logger.info(
                     f"   ✅ Filtered bins: {bins_before} -> {len(aggregated_bins)} rows "
@@ -366,12 +375,33 @@ def _export_ui_artifacts_v2(
         # 3. Generate flags.json
         logger.info("3️⃣  Generating flags.json...")
         try:
-            if aggregated_bins is not None and not aggregated_bins.empty and temp_reports:
+            # Issue #528: Use bins with 'rate' column (not 'rate_p_s') for flagging
+            if aggregated_bins_for_flags is not None and not aggregated_bins_for_flags.empty and temp_reports:
+                # Ensure bins have required columns for flagging
+                required_cols = {'segment_id', 't_start', 't_end', 'density', 'rate', 'los', 'flag_severity', 'flag_reason'}
+                missing_cols = required_cols - set(aggregated_bins_for_flags.columns)
+                if missing_cols:
+                    logger.warning(f"   ⚠️  Bins DataFrame missing required columns for flagging: {missing_cols}")
+                    flags = []
+                else:
+                    # Save bins with 'rate' column to temp_reports for generate_flags_json
+                    # This overwrites the bins.parquet saved earlier (which had 'rate_p_s')
+                    # Note: temp_reports structure is reports_temp/bins/bins.parquet
+                    temp_bins_path = Path(temp_reports) / "bins" / "bins.parquet"
+                    temp_bins_path.parent.mkdir(parents=True, exist_ok=True)
+                    aggregated_bins_for_flags.to_parquet(temp_bins_path, index=False)
+                    logger.info(f"   📊 Saved {len(aggregated_bins_for_flags)} bins with 'rate' column for flagging")
+                    flags = generate_flags_json(temp_reports, segment_metrics)
+            elif aggregated_bins is not None and not aggregated_bins.empty and temp_reports:
+                # Fallback: try with aggregated_bins if aggregated_bins_for_flags not available
+                logger.warning("   ⚠️  Using aggregated_bins (may have 'rate_p_s' instead of 'rate')")
                 flags = generate_flags_json(temp_reports, segment_metrics)
             else:
                 flags = []
         except Exception as e:
             logger.warning(f"   ⚠️  Could not generate flags: {e}")
+            import traceback
+            logger.debug(f"   Traceback: {traceback.format_exc()}")
             flags = []
         
         segments_with_flags = len(flags)
