@@ -7,7 +7,7 @@
 PORT ?= 8080
 
 # -------- Phony targets --------
-.PHONY: help usage --help dev e2e e2e-full e2e-sat e2e-sun stop build validate-output validate-all
+.PHONY: help usage --help dev e2e e2e-full e2e-sat e2e-sun stop build validate-output validate-all prune-runs
 
 # -------- Use same shell for multi-line targets --------
 .ONESHELL:
@@ -31,6 +31,7 @@ help usage --help: ## Show this help message
 	@echo "  e2e-sun             Run Sunday-only E2E test (~2 min)"
 	@echo "  validate-output     Validate output integrity for latest run"
 	@echo "  validate-all        Validate output for all runs in index.json"
+	@echo "  prune-runs          Prune old run_ids, keeping last N (KEEP=n, --dry-run for preview)"
 	@echo ""
 	@echo "Configuration:"
 	@echo "  PORT=$(PORT)  (Docker container port)"
@@ -140,3 +141,10 @@ validate-output: ## Validate output integrity for latest run
 validate-all: ## Validate all runs in index.json
 	@echo "🔍 Validating all runs..."
 	@docker exec run-density-dev python -m app.tests.validate_output --all
+
+prune-runs: ## Prune old run_ids, keeping last N (KEEP=n required, --dry-run for preview)
+	@if [ -z "$(KEEP)" ]; then \
+		echo "❌ Error: KEEP parameter required (e.g., make prune-runs KEEP=10)"; \
+		exit 1; \
+	fi
+	@docker-compose exec app python -m app.utils.prune_runs --keep $(KEEP) $(if $(DRY_RUN),--dry-run,) $(if $(CONFIRM),--confirm,)
