@@ -267,9 +267,10 @@ def calculate_arrival_times_for_location(
     
     # Get eligible events (where flag is 'y')
     # Use lowercase event names (v2 standard)
+    # Issue #531: include elite/open for Saturday 5K events
     eligible_events = []
-    for event in ["full", "half", "10k"]:
-        if location.get(event, "").lower() == "y":
+    for event in ["full", "half", "10k", "elite", "open"]:
+        if str(location.get(event, "")).lower() == "y":
             eligible_events.append(event.lower())
     
     if not eligible_events:
