@@ -346,45 +346,52 @@ def create_full_analysis_pipeline(
     run_path.mkdir(parents=True, exist_ok=True)
     logger.debug(f"Created run directory: {run_path}")
     
-    # Group events by day
-    from app.core.v2.loader import group_events_by_day
-    events_by_day = group_events_by_day(events)
+    # Issue #527: Set up run-level file logging
+    from app.utils.run_logging import RunLogHandler
+    run_log_handler = None
+    try:
+        run_log_handler = RunLogHandler(run_id, runflow_root)
+        run_log_handler.__enter__()
+        
+        # Group events by day
+        from app.core.v2.loader import group_events_by_day
+        events_by_day = group_events_by_day(events)
+        
+        # Generate day timelines (Phase 3)
+        timelines = generate_day_timelines(events)
+            logger.info(f"Generated {len(timelines)} day timelines")
     
-    # Generate day timelines (Phase 3)
-    timelines = generate_day_timelines(events)
-    logger.info(f"Generated {len(timelines)} day timelines")
+            # Load segments DataFrame
+            segments_path = Path(data_dir) / segments_file
+            segments_df = load_segments(str(segments_path))
+            logger.info(f"Loaded {len(segments_df)} segments from {segments_path}")
     
-    # Load segments DataFrame
-    segments_path = Path(data_dir) / segments_file
-    segments_df = load_segments(str(segments_path))
-    logger.info(f"Loaded {len(segments_df)} segments from {segments_path}")
+            # Load all runners for events (Phase 4)
+            all_runners_df = load_all_runners_for_events(events, data_dir)
+            logger.info(f"Loaded {len(all_runners_df)} total runners from {len(events)} events")
     
-    # Load all runners for events (Phase 4)
-    all_runners_df = load_all_runners_for_events(events, data_dir)
-    logger.info(f"Loaded {len(all_runners_df)} total runners from {len(events)} events")
-    
-    # Run density analysis (Phase 4)
-    density_results = analyze_density_segments_v2(
+            # Run density analysis (Phase 4)
+            density_results = analyze_density_segments_v2(
         events=events,
         timelines=timelines,
         segments_df=segments_df,
         all_runners_df=all_runners_df,
         density_csv_path=str(segments_path)
-    )
+            )
     
-    # Run flow analysis (Phase 5)
-    flow_results = analyze_temporal_flow_segments_v2(
+            # Run flow analysis (Phase 5)
+            flow_results = analyze_temporal_flow_segments_v2(
         events=events,
         timelines=timelines,
         segments_df=segments_df,
         all_runners_df=all_runners_df,
         flow_file=flow_file,
         data_dir=data_dir
-    )
+            )
     
-    # Generate bins per day (after density analysis, before reports)
-    bins_by_day = {}
-    for day, day_events in events_by_day.items():
+            # Generate bins per day (after density analysis, before reports)
+            bins_by_day = {}
+            for day, day_events in events_by_day.items():
         # Get density results for this day
         day_density = density_results.get(day.value, {})
         if not day_density:
@@ -437,9 +444,9 @@ def create_full_analysis_pipeline(
         else:
             logger.warning(f"Bin generation skipped or failed for day {day.value}")
     
-    # Load locations DataFrame if locations_file is provided
-    locations_df = None
-    if locations_file:
+            # Load locations DataFrame if locations_file is provided
+            locations_df = None
+            if locations_file:
         from app.io.loader import load_locations
         locations_path = Path(data_dir) / locations_file
         if locations_path.exists():
@@ -448,9 +455,9 @@ def create_full_analysis_pipeline(
         else:
             logger.warning(f"Locations file not found: {locations_path}")
     
-    # Generate reports (Phase 6)
-    # Use day-partitioned bins directories
-    reports_by_day = generate_reports_per_day(
+            # Generate reports (Phase 6)
+            # Use day-partitioned bins directories
+            reports_by_day = generate_reports_per_day(
         run_id=run_id,
         events=events,
         timelines=timelines,
@@ -460,14 +467,14 @@ def create_full_analysis_pipeline(
         all_runners_df=all_runners_df,
         locations_df=locations_df,
         data_dir=data_dir
-    )
+            )
     
-    # Generate map_data.json per day (for density page map visualization)
-    from app.core.v2.reports import get_day_output_path
-    from app.density_report import generate_map_dataset
-    import json
-    maps_by_day = {}
-    for day, day_events in events_by_day.items():
+            # Generate map_data.json per day (for density page map visualization)
+            from app.core.v2.reports import get_day_output_path
+            from app.density_report import generate_map_dataset
+            import json
+            maps_by_day = {}
+            for day, day_events in events_by_day.items():
         try:
             maps_dir = get_day_output_path(run_id, day, "maps")
             maps_dir.mkdir(parents=True, exist_ok=True)
@@ -504,11 +511,11 @@ def create_full_analysis_pipeline(
         except Exception as e:
             logger.warning(f"Could not generate map_data.json for day {day.value}: {e}", exc_info=True)
     
-    # Generate UI artifacts (Phase 7 - Issue #501)
-    # Generate artifacts per day with full run scope data
-    from app.core.v2.ui_artifacts import generate_ui_artifacts_per_day
-    artifacts_by_day = {}
-    for day, day_events in events_by_day.items():
+            # Generate UI artifacts (Phase 7 - Issue #501)
+            # Generate artifacts per day with full run scope data
+            from app.core.v2.ui_artifacts import generate_ui_artifacts_per_day
+            artifacts_by_day = {}
+            for day, day_events in events_by_day.items():
         try:
             artifacts_path = generate_ui_artifacts_per_day(
                 run_id=run_id,
@@ -529,14 +536,14 @@ def create_full_analysis_pipeline(
         except Exception as e:
             logger.error(f"Failed to generate UI artifacts for day {day.value}: {e}", exc_info=True)
     
-    # Create day-partitioned structure
-    output_paths = {}
-    days_processed = []
-    density_summary = {}
-    flow_summary_by_day = {}
-    day_metadata_map: Dict[str, Dict[str, Any]] = {}
+            # Create day-partitioned structure
+            output_paths = {}
+            days_processed = []
+            density_summary = {}
+            flow_summary_by_day = {}
+            day_metadata_map: Dict[str, Dict[str, Any]] = {}
     
-    for day, day_events in events_by_day.items():
+            for day, day_events in events_by_day.items():
         day_code = day.value
         days_processed.append(day_code)
         
@@ -612,21 +619,41 @@ def create_full_analysis_pipeline(
             "metadata": f"runflow/{run_id}/{day_code}/metadata.json"
         }
     
-    # Create combined metadata (run-level)
-    combined_metadata = create_combined_metadata(
+            # Create combined metadata (run-level)
+            combined_metadata = create_combined_metadata(
         run_id=run_id,
         days=days_processed,
         per_day_metadata=day_metadata_map
-    )
-    combined_metadata["density"] = density_summary
-    combined_metadata["flow"] = flow_summary_by_day
-    # Write run-level metadata.json
-    run_metadata_path = run_path / "metadata.json"
-    with open(run_metadata_path, 'w', encoding='utf-8') as f:
+            )
+            combined_metadata["density"] = density_summary
+            combined_metadata["flow"] = flow_summary_by_day
+            # Write run-level metadata.json
+            run_metadata_path = run_path / "metadata.json"
+            with open(run_metadata_path, 'w', encoding='utf-8') as f:
         json.dump(combined_metadata, f, indent=2, ensure_ascii=False)
     
-    # Update pointer files
-    update_pointer_files(run_id, combined_metadata)
+            # Issue #527: Add log file path to metadata
+            if run_log_handler:
+        log_path = run_log_handler.get_log_path()
+        if log_path:
+            # Add logs reference to combined metadata
+            combined_metadata["logs"] = {
+                "app_log": f"logs/app.log"
+            }
+            # Update run-level metadata.json with logs reference
+            with open(run_metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(combined_metadata, f, indent=2, ensure_ascii=False)
+    
+        # Update pointer files
+        update_pointer_files(run_id, combined_metadata)
+        
+    finally:
+        # Issue #527: Clean up run logging
+        if run_log_handler:
+            try:
+                run_log_handler.__exit__(None, None, None)
+            except Exception as e:
+                logger.warning(f"Error closing run log handler: {e}")
     
     return {
         "run_id": run_id,
