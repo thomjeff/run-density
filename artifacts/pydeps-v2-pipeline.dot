@@ -1,0 +1,29 @@
+digraph G {
+	graph [bb="0,0,73.962,145",
+		concentrate=true,
+		rankdir=TB,
+		start=1
+	];
+	node [fillcolor="#ffffff",
+		fontcolor="#000000",
+		fontname=Helvetica,
+		fontsize=10,
+		label="\N",
+		style=filled
+	];
+	app	[fillcolor="#f91010",
+		fontcolor="#ffffff",
+		height=0.5,
+		pos="36.981,127",
+		shape=folder,
+		width=0.75];
+	pipeline_py	[fillcolor="#356363",
+		fontcolor="#ffffff",
+		height=0.5,
+		label="pipeline.py",
+		pos="36.981,18",
+		width=1.0273];
+	app -> pipeline_py	[fillcolor="#f91010",
+		minlen=2,
+		pos="e,36.981,36.149 36.981,108.81 36.981,92.273 36.981,66.976 36.981,47.439"];
+}

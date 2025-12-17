@@ -1,0 +1,398 @@
+digraph G {
+rankdir=LR;
+node [shape=box, style=filled, fillcolor=lightgray];
+"app.api.density" [label="density
+app.api.density"]
+"app.api.flow" [label="flow
+app.api.flow"]
+"app.api.map" [label="map
+app.api.map"]
+"app.api.models.density" [label="density
+app.api.models.density"]
+"app.api.models.v2" [label="v2
+app.api.models.v2"]
+"app.api.report" [label="report
+app.api.report"]
+"app.bin_analysis" [label="bin_analysis
+app.bin_analysis"]
+"app.bin_intelligence" [label="bin_intelligence
+app.bin_intelligence"]
+"app.bins_accumulator" [label="bins_accumulator
+app.bins_accumulator"]
+"app.cache_manager" [label="cache_manager
+app.cache_manager"]
+"app.canonical_density_report" [label="canonical_density_report
+app.canonical_density_report"]
+"app.canonical_segments" [label="canonical_segments
+app.canonical_segments"]
+"app.common.config" [label="config
+app.common.config"]
+"app.config_algo_consistency" [label="config_algo_consistency
+app.config_algo_consistency"]
+"app.core.artifacts.frontend" [label="frontend
+app.core.artifacts.frontend"]
+"app.core.artifacts.heatmaps" [label="heatmaps
+app.core.artifacts.heatmaps"]
+"app.core.bin.geometry" [label="geometry
+app.core.bin.geometry"]
+"app.core.bin.summary" [label="summary
+app.core.bin.summary"]
+"app.core.density.compute" [label="compute
+app.core.density.compute"]
+"app.core.density.models" [label="models
+app.core.density.models"]
+"app.core.flow.flow" [label="flow
+app.core.flow.flow"]
+"app.core.gpx.processor" [label="processor
+app.core.gpx.processor"]
+"app.core.v2.bins" [label="bins
+app.core.v2.bins"]
+"app.core.v2.density" [label="density
+app.core.v2.density"]
+"app.core.v2.flow" [label="flow
+app.core.v2.flow"]
+"app.core.v2.loader" [label="loader
+app.core.v2.loader"]
+"app.core.v2.models" [label="models
+app.core.v2.models"]
+"app.core.v2.pipeline" [label="pipeline
+app.core.v2.pipeline"]
+"app.core.v2.reports" [label="reports
+app.core.v2.reports"]
+"app.core.v2.timeline" [label="timeline
+app.core.v2.timeline"]
+"app.core.v2.ui_artifacts" [label="ui_artifacts
+app.core.v2.ui_artifacts"]
+"app.core.v2.validation" [label="validation
+app.core.v2.validation"]
+"app.density_report" [label="density_report
+app.density_report"]
+"app.density_template_engine" [label="density_template_engine
+app.density_template_engine"]
+"app.flow_density_correlation" [label="flow_density_correlation
+app.flow_density_correlation"]
+"app.flow_report" [label="flow_report
+app.flow_report"]
+"app.geo_utils" [label="geo_utils
+app.geo_utils"]
+"app.heatmap_generator" [label="heatmap_generator
+app.heatmap_generator"]
+"app.io.loader" [label="loader
+app.io.loader"]
+"app.io_bins" [label="io_bins
+app.io_bins"]
+"app.location_report" [label="location_report
+app.location_report"]
+"app.los" [label="los
+app.los"]
+"app.main" [label="main
+app.main"]
+"app.map_data_generator" [label="map_data_generator
+app.map_data_generator"]
+"app.new_density_report" [label="new_density_report
+app.new_density_report"]
+"app.new_density_template_engine" [label="new_density_template_engine
+app.new_density_template_engine"]
+"app.new_flagging" [label="new_flagging
+app.new_flagging"]
+"app.normalization" [label="normalization
+app.normalization"]
+"app.overlap" [label="overlap
+app.overlap"]
+"app.paths" [label="paths
+app.paths"]
+"app.pdf_generator" [label="pdf_generator
+app.pdf_generator"]
+"app.report_utils" [label="report_utils
+app.report_utils"]
+"app.routes.api_bins" [label="api_bins
+app.routes.api_bins"]
+"app.routes.api_dashboard" [label="api_dashboard
+app.routes.api_dashboard"]
+"app.routes.api_density" [label="api_density
+app.routes.api_density"]
+"app.routes.api_e2e" [label="api_e2e
+app.routes.api_e2e"]
+"app.routes.api_flow" [label="api_flow
+app.routes.api_flow"]
+"app.routes.api_health" [label="api_health
+app.routes.api_health"]
+"app.routes.api_heatmaps" [label="api_heatmaps
+app.routes.api_heatmaps"]
+"app.routes.api_locations" [label="api_locations
+app.routes.api_locations"]
+"app.routes.api_reports" [label="api_reports
+app.routes.api_reports"]
+"app.routes.api_segments" [label="api_segments
+app.routes.api_segments"]
+"app.routes.reports" [label="reports
+app.routes.reports"]
+"app.routes.ui" [label="ui
+app.routes.ui"]
+"app.routes.v2.analyze" [label="analyze
+app.routes.v2.analyze"]
+"app.rulebook" [label="rulebook
+app.rulebook"]
+"app.save_bins" [label="save_bins
+app.save_bins"]
+"app.schema_resolver" [label="schema_resolver
+app.schema_resolver"]
+"app.segments_from_bins" [label="segments_from_bins
+app.segments_from_bins"]
+"app.selector" [label="selector
+app.selector"]
+"app.storage" [label="storage
+app.storage"]
+"app.telemetry" [label="telemetry
+app.telemetry"]
+"app.utilization" [label="utilization
+app.utilization"]
+"app.utils.auth" [label="auth
+app.utils.auth"]
+"app.utils.constants" [label="constants
+app.utils.constants"]
+"app.utils.env" [label="env
+app.utils.env"]
+"app.utils.metadata" [label="metadata
+app.utils.metadata"]
+"app.utils.run_id" [label="run_id
+app.utils.run_id"]
+"app.utils.run_logging" [label="run_logging
+app.utils.run_logging"]
+"app.utils.shared" [label="shared
+app.utils.shared"]
+"app.version" [label="version
+app.version"]
+"app.utils.run_logging" -> "app.utils.run_id"
+"app.api.map" -> "app.core.gpx.processor"
+"app.api.map" -> "app.utils.constants"
+"app.api.map" -> "app.rulebook"
+"app.api.map" -> "app.map_data_generator"
+"app.api.map" -> "app.geo_utils"
+"app.api.map" -> "app.bin_analysis"
+"app.api.map" -> "app.cache_manager"
+"app.api.map" -> "app.io.loader"
+"app.core.artifacts.heatmaps" -> "app.report_utils"
+"app.core.artifacts.heatmaps" -> "app.utils.run_id"
+"app.core.artifacts.heatmaps" -> "app.common.config"
+"app.utils.run_id" -> "app.utils.constants"
+"app.core.bin.summary" -> "app.bin_intelligence"
+"app.core.bin.summary" -> "app.common.config"
+"app.utils.metadata" -> "app.utils.constants"
+"app.utils.metadata" -> "app.main"
+"app.utils.metadata" -> "app.utils.env"
+"app.utils.metadata" -> "app.utils.run_id"
+"app.routes.api_locations" -> "app.storage"
+"app.routes.api_locations" -> "app.location_report"
+"app.routes.api_locations" -> "app.utils.run_id"
+"app.core.v2.density" -> "app.core.v2.bins"
+"app.core.v2.density" -> "app.core.density.compute"
+"app.core.v2.density" -> "app.core.v2.loader"
+"app.core.v2.density" -> "app.core.v2.timeline"
+"app.core.v2.density" -> "app.io.loader"
+"app.core.v2.density" -> "app.core.v2.models"
+"app.storage" -> "app.utils.run_id"
+"app.core.v2.timeline" -> "app.core.v2.loader"
+"app.core.v2.timeline" -> "app.core.v2.models"
+"app.core.v2.reports" -> "app.flow_report"
+"app.core.v2.reports" -> "app.core.v2.bins"
+"app.core.v2.reports" -> "app.new_density_report"
+"app.core.v2.reports" -> "app.density_report"
+"app.core.v2.reports" -> "app.location_report"
+"app.core.v2.reports" -> "app.core.v2.timeline"
+"app.core.v2.reports" -> "app.io.loader"
+"app.core.v2.reports" -> "app.utils.metadata"
+"app.core.v2.reports" -> "app.utils.run_id"
+"app.core.v2.reports" -> "app.core.v2.models"
+"app.utils.auth" -> "app.utils.env"
+"app.heatmap_generator" -> "app.report_utils"
+"app.heatmap_generator" -> "app.utils.run_id"
+"app.heatmap_generator" -> "app.common.config"
+"app.utils.shared" -> "app.utils.constants"
+"app.selector" -> "app.normalization"
+"app.selector" -> "app.config_algo_consistency"
+"app.core.artifacts.frontend" -> "app.core.gpx.processor"
+"app.core.artifacts.frontend" -> "app.core.artifacts.heatmaps"
+"app.core.artifacts.frontend" -> "app.utils.run_id"
+"app.core.artifacts.frontend" -> "app.common.config"
+"app.core.artifacts.frontend" -> "app.report_utils"
+"app.core.artifacts.frontend" -> "app.version"
+"app.core.artifacts.frontend" -> "app.io.loader"
+"app.routes.ui" -> "app.utils.auth"
+"app.routes.ui" -> "app.utils.metadata"
+"app.routes.ui" -> "app.common.config"
+"app.core.v2.ui_artifacts" -> "app.core.artifacts.heatmaps"
+"app.core.v2.ui_artifacts" -> "app.core.v2.bins"
+"app.core.v2.ui_artifacts" -> "app.core.artifacts.frontend"
+"app.core.v2.ui_artifacts" -> "app.utils.run_id"
+"app.core.v2.ui_artifacts" -> "app.core.v2.models"
+"app.new_flagging" -> "app.schema_resolver"
+"app.new_flagging" -> "app.utilization"
+"app.routes.api_bins" -> "app.storage"
+"app.routes.api_bins" -> "app.utils.run_id"
+"app.core.v2.validation" -> "app.core.v2.models"
+"app.flow_report" -> "app.report_utils"
+"app.flow_report" -> "app.flow_density_correlation"
+"app.flow_report" -> "app.utils.constants"
+"app.flow_report" -> "app.version"
+"app.flow_report" -> "app.core.flow.flow"
+"app.flow_report" -> "app.utils.metadata"
+"app.report_utils" -> "app.paths"
+"app.report_utils" -> "app.utils.constants"
+"app.report_utils" -> "app.storage"
+"app.report_utils" -> "app.utils.env"
+"app.routes.api_segments" -> "app.storage"
+"app.routes.api_segments" -> "app.utils.run_id"
+"app.routes.api_segments" -> "app.common.config"
+"app.main" -> "app.routes.api_dashboard"
+"app.main" -> "app.routes.api_flow"
+"app.main" -> "app.utils.env"
+"app.main" -> "app.routes.api_reports"
+"app.main" -> "app.api.map"
+"app.main" -> "app.core.density.compute"
+"app.main" -> "app.utils.constants"
+"app.main" -> "app.routes.v2.analyze"
+"app.main" -> "app.config_algo_consistency"
+"app.main" -> "app.routes.ui"
+"app.main" -> "app.utils.run_id"
+"app.main" -> "app.routes.api_density"
+"app.main" -> "app.routes.api_bins"
+"app.main" -> "app.flow_report"
+"app.main" -> "app.routes.api_segments"
+"app.main" -> "app.flow_density_correlation"
+"app.main" -> "app.routes.reports"
+"app.main" -> "app.api.report"
+"app.main" -> "app.core.flow.flow"
+"app.main" -> "app.pdf_generator"
+"app.main" -> "app.routes.api_locations"
+"app.main" -> "app.density_report"
+"app.main" -> "app.routes.api_e2e"
+"app.main" -> "app.routes.api_heatmaps"
+"app.main" -> "app.routes.api_health"
+"app.main" -> "app.canonical_segments"
+"app.main" -> "app.io.loader"
+"app.main" -> "app.api.density"
+"app.map_data_generator" -> "app.core.density.compute"
+"app.map_data_generator" -> "app.utils.constants"
+"app.map_data_generator" -> "app.canonical_segments"
+"app.map_data_generator" -> "app.core.flow.flow"
+"app.map_data_generator" -> "app.io.loader"
+"app.save_bins" -> "app.utils.constants"
+"app.save_bins" -> "app.io.loader"
+"app.save_bins" -> "app.new_flagging"
+"app.geo_utils" -> "app.core.gpx.processor"
+"app.geo_utils" -> "app.utils.constants"
+"app.geo_utils" -> "app.bin_analysis"
+"app.geo_utils" -> "app.io.loader"
+"app.bin_analysis" -> "app.utils.constants"
+"app.bin_analysis" -> "app.core.density.compute"
+"app.bin_analysis" -> "app.geo_utils"
+"app.bin_analysis" -> "app.core.flow.flow"
+"app.bin_analysis" -> "app.io.loader"
+"app.routes.api_health" -> "app.storage"
+"app.routes.api_health" -> "app.utils.metadata"
+"app.routes.api_flow" -> "app.api.flow"
+"app.routes.api_reports" -> "app.storage"
+"app.routes.api_reports" -> "app.utils.run_id"
+"app.routes.api_density" -> "app.storage"
+"app.routes.api_density" -> "app.utils.run_id"
+"app.routes.api_e2e" -> "app.core.artifacts.frontend"
+"app.routes.api_e2e" -> "app.utils.metadata"
+"app.api.density" -> "app.api.models.density"
+"app.api.density" -> "app.core.density.compute"
+"app.core.v2.flow" -> "app.core.v2.bins"
+"app.core.v2.flow" -> "app.core.v2.density"
+"app.core.v2.flow" -> "app.utils.constants"
+"app.core.v2.flow" -> "app.core.v2.loader"
+"app.core.v2.flow" -> "app.utils.shared"
+"app.core.v2.flow" -> "app.core.v2.timeline"
+"app.core.v2.flow" -> "app.core.flow.flow"
+"app.core.v2.flow" -> "app.core.v2.models"
+"app.new_density_report" -> "app.new_density_template_engine"
+"app.new_density_report" -> "app.new_flagging"
+"app.core.v2.loader" -> "app.core.v2.validation"
+"app.core.v2.loader" -> "app.core.v2.models"
+"app.routes.api_dashboard" -> "app.storage"
+"app.routes.api_dashboard" -> "app.utils.run_id"
+"app.routes.api_dashboard" -> "app.common.config"
+"app.bin_intelligence" -> "app.los"
+"app.core.v2.pipeline" -> "app.utils.metadata"
+"app.core.v2.pipeline" -> "app.core.v2.bins"
+"app.core.v2.pipeline" -> "app.core.v2.density"
+"app.core.v2.pipeline" -> "app.density_report"
+"app.core.v2.pipeline" -> "app.utils.run_logging"
+"app.core.v2.pipeline" -> "app.core.v2.loader"
+"app.core.v2.pipeline" -> "app.core.v2.flow"
+"app.core.v2.pipeline" -> "app.core.v2.timeline"
+"app.core.v2.pipeline" -> "app.core.v2.reports"
+"app.core.v2.pipeline" -> "app.io.loader"
+"app.core.v2.pipeline" -> "app.utils.run_id"
+"app.core.v2.pipeline" -> "app.core.v2.ui_artifacts"
+"app.core.v2.pipeline" -> "app.core.v2.models"
+"app.overlap" -> "app.utils.constants"
+"app.overlap" -> "app.utils.shared"
+"app.core.density.compute" -> "app.density_template_engine"
+"app.core.density.compute" -> "app.core.density.models"
+"app.core.density.compute" -> "app.utils.constants"
+"app.core.density.compute" -> "app.io.loader"
+"app.routes.v2.analyze" -> "app.core.v2.validation"
+"app.routes.v2.analyze" -> "app.core.v2.loader"
+"app.routes.v2.analyze" -> "app.core.v2.pipeline"
+"app.routes.v2.analyze" -> "app.api.models.v2"
+"app.api.flow" -> "app.storage"
+"app.api.flow" -> "app.utils.run_id"
+"app.core.v2.bins" -> "app.density_report"
+"app.core.v2.bins" -> "app.utils.constants"
+"app.core.v2.bins" -> "app.save_bins"
+"app.core.v2.bins" -> "app.core.bin.summary"
+"app.core.v2.bins" -> "app.core.v2.reports"
+"app.core.v2.bins" -> "app.core.v2.models"
+"app.routes.reports" -> "app.utils.env"
+"app.routes.reports" -> "app.utils.metadata"
+"app.location_report" -> "app.core.gpx.processor"
+"app.location_report" -> "app.report_utils"
+"app.location_report" -> "app.utils.constants"
+"app.location_report" -> "app.io.loader"
+"app.api.report" -> "app.core.density.compute"
+"app.api.report" -> "app.utils.constants"
+"app.api.report" -> "app.core.flow.flow"
+"app.core.flow.flow" -> "app.overlap"
+"app.core.flow.flow" -> "app.utils.constants"
+"app.core.flow.flow" -> "app.normalization"
+"app.core.flow.flow" -> "app.utils.shared"
+"app.core.flow.flow" -> "app.selector"
+"app.core.flow.flow" -> "app.config_algo_consistency"
+"app.core.flow.flow" -> "app.report_utils"
+"app.core.flow.flow" -> "app.telemetry"
+"app.pdf_generator" -> "app.flow_report"
+"app.pdf_generator" -> "app.density_report"
+"app.pdf_generator" -> "app.utils.constants"
+"app.density_report" -> "app.density_template_engine"
+"app.density_report" -> "app.core.gpx.processor"
+"app.density_report" -> "app.new_density_report"
+"app.density_report" -> "app.bin_intelligence"
+"app.density_report" -> "app.bins_accumulator"
+"app.density_report" -> "app.utils.constants"
+"app.density_report" -> "app.heatmap_generator"
+"app.density_report" -> "app.core.density.compute"
+"app.density_report" -> "app.utilization"
+"app.density_report" -> "app.report_utils"
+"app.density_report" -> "app.los"
+"app.density_report" -> "app.segments_from_bins"
+"app.density_report" -> "app.core.bin.summary"
+"app.density_report" -> "app.core.bin.geometry"
+"app.density_report" -> "app.utils.metadata"
+"app.density_report" -> "app.canonical_density_report"
+"app.density_report" -> "app.schema_resolver"
+"app.density_report" -> "app.save_bins"
+"app.density_report" -> "app.io_bins"
+"app.density_report" -> "app.geo_utils"
+"app.density_report" -> "app.version"
+"app.density_report" -> "app.canonical_segments"
+"app.density_report" -> "app.io.loader"
+"app.canonical_density_report" -> "app.los"
+"app.canonical_density_report" -> "app.map_data_generator"
+"app.canonical_density_report" -> "app.io_bins"
+"app.canonical_density_report" -> "app.bin_intelligence"
+"app.routes.api_heatmaps" -> "app.heatmap_generator"
+}
