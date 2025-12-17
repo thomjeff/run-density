@@ -231,6 +231,11 @@ async def readiness_check():
         "version": APP_VERSION
     }
 
+@app.get("/debug")
+def debug_ping():
+    """Debug endpoint to verify coverage instrumentation is working."""
+    return {"ping": "pong"}
+
 @app.get("/api/debug/env")
 async def debug_env():
     """Debug endpoint to verify environment variables for bin dataset generation."""

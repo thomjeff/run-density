@@ -10,6 +10,8 @@ services:
       # Bind mount source code for hot reload during development
       - ./app:/app/app
       - ./e2e.py:/app/e2e.py
+      - ./coverage.rc:/app/coverage.rc
+      - ./sitecustomize.py:/app/sitecustomize.py
       # Bind mount tests directory for v2 testing
       - ./tests:/app/tests
       # Bind mount templates for UI pages
@@ -32,14 +34,14 @@ services:
       # Container-specific environment variables (not in dev.env)
       - PORT=8080
       - PYTHONPATH=/app
+      - COVERAGE_PROCESS_START=/app/coverage.rc
       - MPLBACKEND=Agg
       # Issue #465: GCS environment overrides disabled during Phase 0 (local-only mode)
       # - GCS_UPLOAD=${GCS_UPLOAD}
       # - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
       # - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
-    # Override CMD for development mode with hot reload
-    # Production Dockerfile uses gunicorn; dev mode uses uvicorn --reload
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+    # Override CMD for coverage-enabled dev mode with --parallel-mode to capture server process
+    command: python -m coverage run --parallel-mode --rcfile=/app/coverage.rc -m uvicorn app.main:app --host 0.0.0.0 --port 8080
     stdin_open: true
     tty: true
 

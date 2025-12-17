@@ -37,12 +37,14 @@ EXPECTED_SEG_IDS = {
 class TestV2E2EScenarios:
     """E2E tests for v2 analysis scenarios."""
     
-    def _make_analyze_request(self, base_url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _make_analyze_request(self, base_url: str, payload: Dict[str, Any], timeout: int = None) -> Dict[str, Any]:
         """Make POST request to /runflow/v2/analyze and return response."""
+        if timeout is None:
+            timeout = TIMEOUT
         response = requests.post(
             f"{base_url}/runflow/v2/analyze",
             json=payload,
-            timeout=TIMEOUT
+            timeout=timeout
         )
         
         assert response.status_code == 200, f"Request failed with {response.status_code}: {response.text}"
@@ -53,6 +55,17 @@ class TestV2E2EScenarios:
         assert data["status"] == "success", f"Analysis failed: {data}"
         
         return data
+    
+    def test_debug_ping(self, base_url, wait_for_server):
+        """Debug test to verify coverage instrumentation is working.
+        
+        This simple test hits a minimal route in main.py to confirm
+        that server-side code execution is being captured by coverage.
+        """
+        response = requests.get(f"{base_url}/debug", timeout=10)
+        assert response.status_code == 200, f"Debug ping failed with {response.status_code}: {response.text}"
+        data = response.json()
+        assert data == {"ping": "pong"}, f"Unexpected response: {data}"
     
     def _get_run_directory(self, run_id: str) -> Path:
         """Get run directory path."""
@@ -350,8 +363,8 @@ class TestV2E2EScenarios:
             ]
         }
         
-        # Make API request
-        response_data = self._make_analyze_request(base_url, payload)
+        # Make API request (use longer timeout for multi-day scenario with 5 events)
+        response_data = self._make_analyze_request(base_url, payload, timeout=900)  # 15 minutes
         run_id = response_data["run_id"]
         
         # Verify outputs exist for both days
@@ -384,8 +397,8 @@ class TestV2E2EScenarios:
             ]
         }
         
-        # Make API request
-        response_data = self._make_analyze_request(base_url, payload)
+        # Make API request (use longer timeout for multi-day scenario with 5 events)
+        response_data = self._make_analyze_request(base_url, payload, timeout=900)  # 15 minutes
         run_id = response_data["run_id"]
         
         # Verify outputs exist for both days

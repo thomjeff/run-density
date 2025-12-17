@@ -7,7 +7,7 @@
 PORT ?= 8080
 
 # -------- Phony targets --------
-.PHONY: help usage --help dev e2e e2e-full e2e-sat e2e-sun stop build validate-output validate-all prune-runs
+.PHONY: help usage --help dev e2e e2e-full e2e-sat e2e-sun e2e-coverage-lite stop build validate-output validate-all prune-runs
 
 # -------- Use same shell for multi-line targets --------
 .ONESHELL:
@@ -29,6 +29,7 @@ help usage --help: ## Show this help message
 	@echo "  e2e-full            Run full E2E test suite (all scenarios)"
 	@echo "  e2e-sat             Run Saturday-only E2E test (~2 min)"
 	@echo "  e2e-sun             Run Sunday-only E2E test (~2 min)"
+	@echo "  e2e-coverage-lite   Run E2E with coverage (DAY=sat|sun|both), save to runflow/<run_id>/coverage"
 	@echo "  validate-output     Validate output integrity for latest run"
 	@echo "  validate-all        Validate output for all runs in index.json"
 	@echo "  prune-runs          Prune old run_ids, keeping last N (KEEP=n, --dry-run for preview)"
@@ -133,6 +134,53 @@ e2e-sun: ## Run Sunday-only E2E test
 	@docker exec run-density-dev python -m pytest tests/v2/e2e.py::TestV2E2EScenarios::test_sunday_only_scenario -v --base-url http://localhost:8080 || (echo "❌ E2E test failed" && docker-compose down && exit 1)
 	@echo "✅ E2E test completed"
 	@echo "💡 Container still running. Use 'make stop' to stop it."
+
+e2e-coverage-lite: ## Run E2E with coverage (DAY=sat|sun|both) and save reports under runflow/<run_id>/coverage
+	@echo "🧪 Running coverage-instrumented sat+sun E2E (lite)..."
+	@echo "🛑 Stopping existing containers (if any)..."
+	@docker-compose down 2>/dev/null || true
+	@echo "🛑 Stopping any containers using port 8080..."
+	@for container in $$(docker ps --filter "publish=8080" --format "{{.Names}}" 2>/dev/null); do \
+		docker stop $$container 2>/dev/null || true; \
+	done
+	@for container in $$(docker ps -a --filter "name=run-density" --format "{{.Names}}" 2>/dev/null); do \
+		docker rm -f $$container 2>/dev/null || true; \
+	done
+	@echo "📦 Starting docker-compose services..."
+	@docker-compose up -d --build
+	@echo "⏳ Waiting for server to be ready (10s)..."
+	@sleep 10
+	@echo "📦 Ensuring coverage is available in container..."
+	@docker exec run-density-dev python -m pip install --quiet coverage || (echo "⚠️ Container not ready, waiting..." && sleep 5 && docker exec run-density-dev python -m pip install --quiet coverage)
+	@echo "🔄 Restarting container to launch server under coverage..."
+	@docker-compose restart app || true
+	@echo "⏳ Waiting for server to be ready (15s)..."
+	@sleep 15
+	@echo "🔍 Verifying container is running..."
+	@until docker ps | grep -q run-density-dev; do sleep 1; done
+	@echo "✅ Container is running"
+	@echo "▶️  Selecting scenario based on DAY (sat|sun|both)..."
+	@scenario=$$( \
+		if [ "$${DAY}" = "sat" ]; then \
+			echo "tests/v2/e2e.py::TestV2E2EScenarios::test_saturday_only_scenario"; \
+		elif [ "$${DAY}" = "sun" ]; then \
+			echo "tests/v2/e2e.py::TestV2E2EScenarios::test_sunday_only_scenario"; \
+		else \
+			echo "tests/v2/e2e.py::TestV2E2EScenarios::test_sat_sun_scenario"; \
+		fi \
+	); \
+	echo "▶️  Running pytest $$scenario under coverage..."; \
+	docker exec run-density-dev env COVERAGE_RCFILE=/app/coverage.rc COVERAGE_PROCESS_START=/app/coverage.rc COVERAGE_FILE=/app/runflow/.coverage python -m coverage run -m pytest $$scenario -v --base-url http://localhost:8080 || (echo "❌ Coverage run failed" && docker-compose down && exit 1)
+	@echo "🧮 Combining coverage data..."
+	@docker exec run-density-dev env COVERAGE_RCFILE=/app/coverage.rc COVERAGE_PROCESS_START=/app/coverage.rc COVERAGE_FILE=/app/runflow/.coverage python -m coverage combine
+	@run_id=$$(docker exec run-density-dev python -c "import json, pathlib; latest=pathlib.Path('/app/runflow/latest.json'); data=json.loads(latest.read_text()) if latest.exists() else {}; print(data.get('run_id','latest'))"); \
+	echo "📂 Using run_id=$$run_id for coverage outputs"; \
+	docker exec run-density-dev mkdir -p /app/runflow/$$run_id/coverage ;\
+	docker exec run-density-dev env COVERAGE_RCFILE=/app/coverage.rc COVERAGE_PROCESS_START=/app/coverage.rc COVERAGE_FILE=/app/runflow/.coverage python -m coverage json -o /app/runflow/$$run_id/coverage/e2e-coverage.json ;\
+	docker exec run-density-dev env COVERAGE_RCFILE=/app/coverage.rc COVERAGE_PROCESS_START=/app/coverage.rc COVERAGE_FILE=/app/runflow/.coverage python -m coverage html -d /app/runflow/$$run_id/coverage/html ;\
+	docker exec run-density-dev env COVERAGE_RCFILE=/app/coverage.rc COVERAGE_PROCESS_START=/app/coverage.rc COVERAGE_FILE=/app/runflow/.coverage python -m coverage report -m --skip-empty || true ;\
+	echo "✅ Coverage artifacts written to runflow/$$run_id/coverage"; \
+	echo "💡 Container still running. Use 'make stop' to stop it."
 
 validate-output: ## Validate output integrity for latest run
 	@echo "🔍 Validating output integrity..."

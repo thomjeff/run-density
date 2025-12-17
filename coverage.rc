@@ -1,0 +1,14 @@
+[run]
+branch = True
+source = app
+data_file = runflow/.coverage
+parallel = True
+concurrency = multiprocessing
+
+[report]
+show_missing = True
+skip_covered = False
+
+[html]
+directory = artifacts/coverage-html
+
