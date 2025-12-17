@@ -22,7 +22,8 @@ from app.utils.constants import HOTSPOT_SEGMENTS
 from app.save_bins import save_bin_artifacts
 from app.report_utils import get_date_folder_path, get_run_folder_path
 from app.core.bin.summary import generate_bin_summary_artifact
-from app.canonical_density_report import generate_tooltips_json
+# Lazy import - canonical_density_report depends on io_bins.py which was removed
+# from app.canonical_density_report import generate_tooltips_json
 from app.bin_intelligence import get_flagged_bins
 from app.heatmap_generator import generate_heatmaps_for_run
 # Issue #466 Step 3: Removed upload_binary_to_gcs import (dead code)
@@ -1500,6 +1501,7 @@ def _generate_operational_intelligence_content(
     content = []
     
     try:
+        # Lazy import - will fail if io_bins.py dependencies are missing
         from app.io_bins import load_bins
         from app.bin_intelligence import FlaggingConfig, apply_bin_flagging, summarize_segment_flags, get_flagging_statistics
         
