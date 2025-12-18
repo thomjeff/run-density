@@ -30,6 +30,12 @@
 | app/routes/reports.py | _preview_storage_content_archived() | 0% | ✅ **REMOVED** | GCS-specific, archived, not needed | 2025-12-18 |
 | app/routes/api_bins.py | format_time_for_display() | 0% | ✅ **REMOVED** | Never called | 2025-12-18 |
 | app/routes/api_locations.py | Unreachable code blocks | 0% | ✅ **REMOVED** | Dead code after raise HTTPException | 2025-12-18 |
+| app/bin_analysis.py | analyze_historical_trends() | 3.4% | ✅ **REMOVED** | Imported by /historical-trends endpoint but never called | 2025-12-18 |
+| app/bin_analysis.py | compare_segments() | 2.9% | ✅ **REMOVED** | Imported by /compare-segments endpoint but never called | 2025-12-18 |
+| app/bin_analysis.py | export_bin_data() | 5.3% | ✅ **REMOVED** | Imported by /export-advanced endpoint but never called | 2025-12-18 |
+| app/api/map.py | /historical-trends endpoint | 0% | ✅ **REMOVED** | Endpoint never called by frontend or E2E tests | 2025-12-18 |
+| app/api/map.py | /compare-segments endpoint | 0% | ✅ **REMOVED** | Endpoint never called by frontend or E2E tests | 2025-12-18 |
+| app/api/map.py | /export-advanced endpoint | 0% | ✅ **REMOVED** | Endpoint never called by frontend or E2E tests | 2025-12-18 |
 
 ---
 
