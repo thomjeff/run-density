@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from typing import Dict, Any, List, Optional
 import logging
 import pandas as pd
-from datetime import datetime
+# Phase 3 cleanup: Removed unused datetime import (only used by removed format_time_for_display)
 
 # Issue #466 Step 2: Storage consolidated to app.storage
 
@@ -26,23 +26,7 @@ router = APIRouter()
 # Issue #466 Step 2: Removed legacy storage singleton (not needed)
 
 
-def format_time_for_display(iso_string: str) -> str:
-    """
-    Convert ISO timestamp to HH:MM format for display.
-    
-    Args:
-        iso_string: ISO timestamp string (e.g., "2025-10-23T07:00:00Z")
-        
-    Returns:
-        str: Formatted time string (e.g., "07:00")
-    """
-    try:
-        dt = datetime.fromisoformat(iso_string.replace('Z', '+00:00'))
-        return dt.strftime('%H:%M')
-    except Exception as e:
-        logger.warning(f"Failed to format time '{iso_string}': {e}")
-        return iso_string
-
+# Phase 3 cleanup: Removed unused function format_time_for_display() - never called
 
 def load_bins_data(run_id: Optional[str] = None, day: Optional[str] = None) -> List[Dict[str, Any]]:
     """
