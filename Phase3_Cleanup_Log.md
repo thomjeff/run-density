@@ -40,6 +40,20 @@
 | app/routes/api_segments.py | json import | 0% | ✅ **REMOVED** | Imported but never used | 2025-12-18 |
 | app/geo_utils.py | validate_geojson() | 5.0% | ✅ **REMOVED** | Only used by get_geojson_bounds (also unused) | 2025-12-18 |
 | app/geo_utils.py | get_geojson_bounds() | 2.9% | ✅ **REMOVED** | Never imported or called | 2025-12-18 |
+| app/storage.py | mtime() | 33.3% | ✅ **REMOVED** | Never called, code uses stat.st_mtime directly | 2025-12-18 |
+| app/storage.py | size() | 33.3% | ✅ **REMOVED** | Never called, code uses stat.st_size directly | 2025-12-18 |
+| app/storage.py | list_paths() | 10.0% | ✅ **REMOVED** | Never called | 2025-12-18 |
+| app/storage.py | copy_file() | 16.7% | ✅ **REMOVED** | Never called | 2025-12-18 |
+| app/storage.py | read_csv() | 9.1% | ✅ **REMOVED** | Never called, code uses pd.read_csv() directly | 2025-12-18 |
+| app/storage.py | read_geojson() | 10.0% | ✅ **REMOVED** | Never called, code uses json.loads() directly | 2025-12-18 |
+| app/storage.py | create_storage_from_env() | 7.1% | ✅ **REMOVED** | Never imported | 2025-12-18 |
+| app/storage.py | load_latest_run_id() | 16.7% | ✅ **REMOVED** | Never imported (use get_latest_run_id() directly) | 2025-12-18 |
+| app/storage.py | list_reports() | 7.1% | ✅ **REMOVED** | Never imported | 2025-12-18 |
+| app/storage.py | load_segments_geojson() | 16.7% | ✅ **REMOVED** | Never imported | 2025-12-18 |
+| app/storage.py | load_segment_metrics() | 16.7% | ✅ **REMOVED** | Never imported | 2025-12-18 |
+| app/storage.py | load_flags() | 16.7% | ✅ **REMOVED** | Never imported | 2025-12-18 |
+| app/storage.py | load_meta() | 16.7% | ✅ **REMOVED** | Never imported | 2025-12-18 |
+| app/storage.py | load_bin_details_csv() | 16.7% | ✅ **REMOVED** | Never imported | 2025-12-18 |
 
 ---
 
