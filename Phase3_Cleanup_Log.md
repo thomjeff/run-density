@@ -36,6 +36,8 @@
 | app/api/map.py | /historical-trends endpoint | 0% | ✅ **REMOVED** | Endpoint never called by frontend or E2E tests | 2025-12-18 |
 | app/api/map.py | /compare-segments endpoint | 0% | ✅ **REMOVED** | Endpoint never called by frontend or E2E tests | 2025-12-18 |
 | app/api/map.py | /export-advanced endpoint | 0% | ✅ **REMOVED** | Endpoint never called by frontend or E2E tests | 2025-12-18 |
+| app/routes/api_segments.py | load_reporting import | 0% | ✅ **REMOVED** | Imported but never used | 2025-12-18 |
+| app/routes/api_segments.py | json import | 0% | ✅ **REMOVED** | Imported but never used | 2025-12-18 |
 
 ---
 
