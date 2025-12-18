@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 # Import modules using v1.7 absolute import pattern
 from app.core.density.compute import analyze_density_segments
-from app.api.density import router as density_router
+# app.api.density removed in Phase 3 - router was commented out, endpoints unused
 # Lazy imports for v1 API endpoints (not used by v2 E2E tests)
 # These will fail at runtime if called, but allow server to start
 # from app.density_report import generate_density_report, generate_simple_density_report
@@ -129,7 +129,7 @@ BOOT_ENV = {
 logging.getLogger().info("BOOT_ENV %s", BOOT_ENV)
 
 # Include API routers
-# app.include_router(density_router)  # Disabled - conflicts with api_density_router
+# app.api.density router removed in Phase 3 - was disabled, endpoints unused
 app.include_router(map_router)
 app.include_router(reports_router)
 app.include_router(ui_router)
