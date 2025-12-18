@@ -76,6 +76,18 @@
 - **Pre-existing Errors:** 4 ERROR entries from app.density_report (unrelated)
 - **Date:** 2025-12-18
 
+### Phase 3 Cleanup Batch (bin_analysis.py + map.py + api_segments.py)
+- **E2E Test:** ✅ PASS (Run ID: X4mHKXDk3yX7Q8zbntwiKn, DAY=sat)
+- **Status:** All endpoints UP, no errors/warnings
+- **Coverage:** 40.0% (14,097 statements, 7,936 missing)
+- **Reports:** ✅ Generated successfully
+- **Removed Code:** ✅ No references found in coverage
+- **Files Cleaned:**
+  - `app/bin_analysis.py`: 16% coverage (removed 3 functions, ~290 lines)
+  - `app/api/map.py`: 15% coverage (removed 3 endpoints, ~90 lines)
+  - `app/routes/api_segments.py`: 5% coverage (removed 2 unused imports)
+- **Date:** 2025-12-18
+
 ---
 
 ## Investigation Results
