@@ -29,6 +29,7 @@
 | app/routes/reports.py | _extract_timestamp_from_filename() | 0% | ✅ **REMOVED** | Never called | 2025-12-18 |
 | app/routes/reports.py | _preview_storage_content_archived() | 0% | ✅ **REMOVED** | GCS-specific, archived, not needed | 2025-12-18 |
 | app/routes/api_bins.py | format_time_for_display() | 0% | ✅ **REMOVED** | Never called | 2025-12-18 |
+| app/routes/api_locations.py | Unreachable code blocks | 0% | ✅ **REMOVED** | Dead code after raise HTTPException | 2025-12-18 |
 
 ---
 

@@ -84,25 +84,7 @@ async def get_locations_report(
                 detail="start_times parameter required. Use v2 API endpoint /runflow/v2/analyze "
                        "which provides start times in the request, or provide start_times explicitly. (Issue #512)"
             )
-            
-            if not result.get("ok"):
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Failed to generate report: {result.get('error', 'Unknown error')}"
-                )
-            
-            # Read the generated CSV
-            if storage.exists(report_path):
-                import pandas as pd
-                import io
-                csv_data = storage.read_text(report_path)
-                df = pd.read_csv(io.StringIO(csv_data))
-                report_data = df.to_dict('records')
-            else:
-                raise HTTPException(
-                    status_code=500,
-                    detail="Report generated but file not found"
-                )
+            # Phase 3 cleanup: Removed unreachable code after raise HTTPException
         else:
             raise HTTPException(
                 status_code=404,
@@ -165,20 +147,7 @@ async def generate_locations_report(
             detail="start_times parameter required. Use v2 API endpoint /runflow/v2/analyze "
                    "which provides start times in the request, or provide start_times explicitly. (Issue #512)"
         )
-        
-        if not result.get("ok"):
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to generate report: {result.get('error', 'Unknown error')}"
-            )
-        
-        return JSONResponse(content={
-            "ok": True,
-            "run_id": run_id,
-            "file_path": result.get("file_path"),
-            "locations_processed": result.get("locations_processed", 0),
-            "message": "Locations report generated successfully"
-        })
+        # Phase 3 cleanup: Removed unreachable code after raise HTTPException
         
     except HTTPException:
         raise
