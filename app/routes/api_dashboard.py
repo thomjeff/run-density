@@ -31,73 +31,9 @@ router = APIRouter()
 
 # Issue #466 Step 2: Removed legacy storage_service singleton (not needed)
 
-
-def count_runners_for_events(events: List[str]) -> Dict[str, Any]:
-    """
-    Count runners per event using event-specific runner CSVs: data/{event}_runners.csv.
-    Returns {"total_runners": int, "cohorts": {event: {"count": int}}}
-    """
-    import pandas as pd
-    cohorts: Dict[str, Dict[str, Any]] = {}
-    total = 0
-    for ev in events:
-        path = Path(f"data/{ev}_runners.csv")
-        if not path.exists():
-            logger.warning(f"Runner file missing for event '{ev}': {path}")
-            cohorts[ev] = {"count": 0}
-            continue
-        try:
-            df = pd.read_csv(path)
-            cnt = len(df)
-            cohorts[ev] = {"count": cnt}
-            total += cnt
-        except Exception as e:
-            logger.warning(f"Could not read {path}: {e}")
-            cohorts[ev] = {"count": 0}
-    return {"total_runners": total, "cohorts": cohorts}
-
-
-def load_bins_flagged_count() -> int:
-    """
-    Load bins data and count flagged bins using SSOT (Issue #283 fix).
-    
-    Returns:
-        int: Number of flagged bins
-    """
-    try:
-        import pandas as pd
-        from pathlib import Path
-        
-        # Find the latest reports directory (date-based)
-        reports_base = Path("reports")
-        if not reports_base.exists():
-            logger.warning("No reports directory found")
-            return 0
-        
-        # Get latest date directory
-        date_dirs = [d for d in reports_base.iterdir() if d.is_dir() and d.name.startswith("2025-")]
-        if not date_dirs:
-            logger.warning("No date directories found in reports")
-            return 0
-        
-        latest_dir = max(date_dirs, key=lambda d: d.name)
-        bins_path = latest_dir / "bins.parquet"
-        
-        if not bins_path.exists():
-            logger.warning(f"bins.parquet not found at {bins_path}")
-            return 0
-        
-        # Load bins and use SSOT for flagging count
-        bins_df = pd.read_parquet(bins_path)
-        bin_flags = ssot_flagging.compute_bin_flags(bins_df)
-        
-        flagged_count = len(bin_flags)
-        logger.info(f"SSOT flagged bins count: {flagged_count} from {bins_path}")
-        return flagged_count
-        
-    except Exception as e:
-        logger.error(f"Error loading bins data: {e}")
-        return 0
+# Phase 3 cleanup: Removed unused helper functions:
+# - count_runners_for_events() - Replaced by reading from metadata.json
+# - load_bins_flagged_count() - Replaced by reading from flags.json
 
 
 def calculate_peak_density_los(peak_density: float) -> str:
