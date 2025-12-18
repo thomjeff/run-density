@@ -5,9 +5,12 @@ from starlette.templating import Jinja2Templates
 from pathlib import Path
 from typing import List, Dict, Optional
 import os, mimetypes
+import logging
 from datetime import datetime
 
 # Issue #466 Step 4 Cleanup: Removed storage_service imports (archived)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 templates = Jinja2Templates(directory="frontend/templates")
@@ -26,20 +29,7 @@ def _determine_report_kind(file_name: str) -> str:
         return "other"
 
 
-def _extract_timestamp_from_filename(file_name: str, check_date) -> datetime:
-    """Extract timestamp from filename, falling back to current time."""
-    try:
-        # Extract timestamp from filename like "2025-09-16-0115-Density.md"
-        if len(file_name) >= 19 and file_name[10] == '-':
-            time_str = file_name[10:15]  # "0115"
-            hour = int(time_str[:2])
-            minute = int(time_str[2:])
-            return datetime.combine(check_date, datetime.min.time().replace(hour=hour, minute=minute))
-        else:
-            return datetime.now()
-    except Exception:
-        return datetime.now()
-
+# Phase 3 cleanup: Removed unused function _extract_timestamp_from_filename() - never called
 
 def _build_report_row(file_name: str, file_path: str, ts: datetime, is_cloud: bool) -> Dict:
     """Build report row dictionary."""
@@ -174,53 +164,7 @@ def preview_report(request: Request, path: str):
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Report not found: {path}")
 
-# Issue #466 Step 4 Cleanup: _preview_storage_content removed (GCS-specific, not needed for local-only)
-
-def _preview_storage_content_archived(request: Request, filename: str, content: str) -> HTMLResponse:
-    """Archived: Preview content loaded from storage (GCS-specific)."""
-    ext = Path(filename).suffix.lower()
-    
-    if ext in {".html", ".htm"}:
-        return templates.TemplateResponse("_report_preview.html",
-            {"request": request, "name": filename, "html": content, "is_pdf": False, "is_csv": False})
-    
-    if ext == ".md":
-        try:
-            import pypandoc
-            html = pypandoc.convert_text(content, "html")
-        except Exception:
-            import html as _ht
-            html = "<pre>" + _ht.escape(content) + "</pre>"
-        return templates.TemplateResponse("_report_preview.html",
-            {"request": request, "name": filename, "html": html, "is_pdf": False, "is_csv": False})
-    
-    if ext == ".csv":
-        import csv, html as _ht
-        from io import StringIO
-        rows = []
-        reader = csv.reader(StringIO(content))
-        for i, row in enumerate(reader):
-            rows.append(row)
-            if i >= 2000:
-                break
-        def td(cells, tag):
-            return "".join(f"<{tag}>{_ht.escape(c)}</{tag}>" for c in cells)
-        table_html = "<table class='table w-full'>"
-        if rows:
-            table_html += "<thead><tr>" + td(rows[0], "th") + "</tr></thead>"
-            body = rows[1:] if len(rows) > 1 else []
-            table_html += "<tbody>" + "".join("<tr>" + td(r, "td") + "</tr>" for r in body) + "</tbody>"
-        table_html += "</table>"
-        return templates.TemplateResponse("_report_preview.html",
-            {"request": request, "name": filename, "html": table_html, "is_pdf": False, "is_csv": True,
-             "download_url": f"/reports/open?path={filename}"})
-    
-    if ext == ".pdf":
-        return templates.TemplateResponse("_report_preview.html",
-            {"request": request, "name": filename, "html": "", "is_pdf": True, "is_csv": False,
-             "pdf_url": f"/reports/open?path={filename}"})
-    
-    raise HTTPException(status_code=400, detail="Unsupported preview type")
+# Phase 3 cleanup: Removed unused function _preview_storage_content_archived() - GCS-specific, not needed for local-only
 
 def _preview_local_file(request: Request, p: Path) -> HTMLResponse:
     """Preview content from local file system (fallback)."""
