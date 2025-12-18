@@ -30,7 +30,7 @@ from app.utils.constants import (
 )
 # DEFAULT_START_TIMES removed (Issue #512) - Start times must come from request
 from app.cache_manager import get_global_cache_manager
-from app.map_data_generator import find_latest_reports
+# map_data_generator.py removed in Phase 2B - fallback logic handles missing imports
 # Issue #466 Step 2: Storage consolidated to app.storage
 
 logger = logging.getLogger(__name__)
@@ -503,48 +503,23 @@ async def get_bins_data(
                 }
             })
         else:
-            # Try to load existing bin data from reports
-            try:
-                from app.map_data_generator import find_latest_bin_dataset
-                bin_data = find_latest_bin_dataset()
-                
-                if bin_data and bin_data.get('ok'):
-                    logger.info("Using existing bin data from reports")
-                    return JSONResponse(content=bin_data)
-                else:
-                    logger.info("No existing bin data found - returning empty data")
-                    return JSONResponse(content={
-                        "ok": True,
-                        "source": "placeholder",
-                        "timestamp": datetime.now().isoformat(),
-                        "geojson": {
-                            "type": "FeatureCollection",
-                            "features": []
-                        },
-                        "metadata": {
-                            "total_segments": 0,
-                            "analysis_type": "bins",
-                            "bin_size_km": DISTANCE_BIN_SIZE_KM,
-                            "message": "No bin data available - run analysis first"
-                        }
-                    })
-            except Exception as e:
-                logger.warning(f"Error loading bin data: {e}")
-                return JSONResponse(content={
-                    "ok": True,
-                    "source": "placeholder",
-                    "timestamp": datetime.now().isoformat(),
-                    "geojson": {
-                        "type": "FeatureCollection",
-                        "features": []
-                    },
-                    "metadata": {
-                        "total_segments": 0,
-                        "analysis_type": "bins",
-                        "bin_size_km": DISTANCE_BIN_SIZE_KM,
-                        "message": "Error loading bin data"
-                    }
-                })
+            # map_data_generator.py removed in Phase 2B - return empty data
+            logger.info("No existing bin data found - returning empty data")
+            return JSONResponse(content={
+                "ok": True,
+                "source": "placeholder",
+                "timestamp": datetime.now().isoformat(),
+                "geojson": {
+                    "type": "FeatureCollection",
+                    "features": []
+                },
+                "metadata": {
+                    "total_segments": 0,
+                    "analysis_type": "bins",
+                    "bin_size_km": DISTANCE_BIN_SIZE_KM,
+                    "message": "No bin data available - run analysis first"
+                }
+            })
         
     except Exception as e:
         logger.error(f"Error getting bins data: {e}")

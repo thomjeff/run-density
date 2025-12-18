@@ -357,7 +357,7 @@ async def analyze_single_segment_flow(request: SingleSegmentFlowRequest):
 @app.post("/api/report")
 async def generate_report(request: ReportRequest):
     try:
-        # Lazy import - will fail if dependencies are missing
+        # api/report.py removed in Phase 2B - endpoint will fail
         from app.api.report import generate_combined_report
         results = generate_combined_report(
             pace_csv=request.paceCsv, 
@@ -370,6 +370,7 @@ async def generate_report(request: ReportRequest):
             include_overtake=request.includeOvertake
         )
         if request.format == "text":
+            # api/report.py removed in Phase 2B - endpoint will fail
             from app.api.report import generate_combined_narrative
             narrative = generate_combined_narrative(results)
             return Response(content=narrative, media_type="text/plain")
@@ -562,6 +563,7 @@ async def legacy_overlap_endpoint(request: ReportRequest):
 async def generate_flow_density_correlation_endpoint(request: ReportRequest):
     """Generate Flow↔Density correlation analysis report."""
     try:
+        # flow_density_correlation.py removed in Phase 2B - endpoint will fail
         from app.flow_density_correlation import analyze_flow_density_correlation, export_correlation_report
         from app.core.density.compute import analyze_density_segments, load_density_cfg
         from app.core.flow.flow import analyze_temporal_flow_segments
