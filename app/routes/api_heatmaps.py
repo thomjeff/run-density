@@ -13,7 +13,8 @@ from typing import Dict, Any, Optional
 from pathlib import Path
 import logging
 
-from app.heatmap_generator import generate_heatmaps_for_run, get_heatmap_files
+from app.heatmap_generator import generate_heatmaps_for_run
+# Phase 3 cleanup: Removed unused import get_heatmap_files()
 # Issue #466 Step 2: Storage consolidated to app.storage
 
 # Configure logging

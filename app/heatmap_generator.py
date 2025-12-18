@@ -407,28 +407,7 @@ def generate_heatmaps_for_run(run_id: str) -> Tuple[int, List[str]]:
     )
     return (heatmaps_generated, generated_segments)
 
-
-def get_heatmap_files(run_id: str) -> List[Path]:
-    """
-    Get list of generated heatmap PNG files.
-    
-    Args:
-        run_id: Run identifier
-        
-    Returns:
-        List of Path objects for generated PNG files
-    """
-    # Issue #466 Step 2: Use centralized path resolution for ui/heatmaps
-    from app.utils.run_id import is_legacy_date_format, get_run_directory
-    if is_legacy_date_format(run_id):
-        local_heatmaps_dir = Path("artifacts") / run_id / "ui" / "heatmaps"
-    else:
-        # UUID-based run: heatmaps belong in ui/ subdirectory
-        run_dir = get_run_directory(run_id)
-        local_heatmaps_dir = run_dir / "ui" / "heatmaps"
-    
-    if not local_heatmaps_dir.exists():
-        return []
-    
-    return list(local_heatmaps_dir.glob("*.png"))
+# Phase 3 cleanup: Removed unused function get_heatmap_files()
+# - Was imported by api_heatmaps.py but never called
+# - Functionality can be recreated if needed using Path.glob() directly
 
