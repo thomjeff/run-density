@@ -13,6 +13,8 @@
 |------|---------------|----------|----------|--------|------|
 | app/api/density.py | Entire file | 23.2% | ✅ **REMOVED** | Router imported but commented out, endpoints unused | 2025-12-18 |
 | app/api/flow.py | Entire file | 19.6% | ✅ **RETAINED** | Used via app/routes/api_flow.py wrapper (imports all) | 2025-12-18 |
+| app/paths.py | Entire file | 36.4% | ✅ **RETAINED** | Used by v2 pipeline via report_utils.py → location_report.py | 2025-12-18 |
+| app/utils/auth.py | Entire file | 28.1% | ✅ **RETAINED** | Used by app/routes/ui.py for password protection (require_auth) | 2025-12-18 |
 
 ---
 
