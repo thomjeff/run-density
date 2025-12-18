@@ -54,6 +54,7 @@
 | app/storage.py | load_flags() | 16.7% | ✅ **REMOVED** | Never imported | 2025-12-18 |
 | app/storage.py | load_meta() | 16.7% | ✅ **REMOVED** | Never imported | 2025-12-18 |
 | app/storage.py | load_bin_details_csv() | 16.7% | ✅ **REMOVED** | Never imported | 2025-12-18 |
+| app/cache_manager.py | CloudStorageCacheManager_archived | 13.2% | ✅ **REMOVED** | Already archived, GCS-specific, not used | 2025-12-18 |
 
 ---
 
