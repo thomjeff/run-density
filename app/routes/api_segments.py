@@ -11,11 +11,9 @@ Architecture: Option 3 - Hybrid Approach
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from typing import Dict, Any, List, Optional
-import json
 import logging
 
 # Issue #466 Step 2: Storage consolidated to app.storage
-from app.common.config import load_reporting
 from app.utils.run_id import get_latest_run_id, resolve_selected_day
 from app.storage import create_runflow_storage
 
