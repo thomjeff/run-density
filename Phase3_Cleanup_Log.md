@@ -18,6 +18,14 @@
 | app/routes/api_dashboard.py | count_runners_for_events() | 0% | ✅ **REMOVED** | Never called, replaced by metadata.json reading | 2025-12-18 |
 | app/routes/api_dashboard.py | load_bins_flagged_count() | 0% | ✅ **REMOVED** | Never called, replaced by flags.json reading | 2025-12-18 |
 | app/heatmap_generator.py | get_heatmap_files() | 0% | ✅ **REMOVED** | Imported but never called | 2025-12-18 |
+| app/los.py | get_los_color() | 0% | ✅ **REMOVED** | Not imported (main.py has own _get_los_color) | 2025-12-18 |
+| app/los.py | summarize_los_distribution() | 0% | ✅ **REMOVED** | Not imported anywhere | 2025-12-18 |
+| app/los.py | get_worst_los() | 0% | ✅ **REMOVED** | Not imported anywhere | 2025-12-18 |
+| app/los.py | filter_by_los_threshold() | 0% | ✅ **REMOVED** | Not imported anywhere | 2025-12-18 |
+| app/core/bin/geometry.py | generate_bin_polygons_for_segment() | 0% | ✅ **REMOVED** | Only used by unused generate_all_bin_polygons | 2025-12-18 |
+| app/core/bin/geometry.py | generate_all_bin_polygons() | 0% | ✅ **REMOVED** | Not imported anywhere | 2025-12-18 |
+| app/core/bin/geometry.py | validate_bin_polygon() | 0% | ✅ **REMOVED** | Not imported anywhere | 2025-12-18 |
+| app/core/bin/geometry.py | export_to_geojson() | 0% | ✅ **REMOVED** | Not imported anywhere | 2025-12-18 |
 
 ---
 
