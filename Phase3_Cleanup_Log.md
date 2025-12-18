@@ -38,6 +38,8 @@
 | app/api/map.py | /export-advanced endpoint | 0% | ✅ **REMOVED** | Endpoint never called by frontend or E2E tests | 2025-12-18 |
 | app/routes/api_segments.py | load_reporting import | 0% | ✅ **REMOVED** | Imported but never used | 2025-12-18 |
 | app/routes/api_segments.py | json import | 0% | ✅ **REMOVED** | Imported but never used | 2025-12-18 |
+| app/geo_utils.py | validate_geojson() | 5.0% | ✅ **REMOVED** | Only used by get_geojson_bounds (also unused) | 2025-12-18 |
+| app/geo_utils.py | get_geojson_bounds() | 2.9% | ✅ **REMOVED** | Never imported or called | 2025-12-18 |
 
 ---
 
