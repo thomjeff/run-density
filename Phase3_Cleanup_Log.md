@@ -57,6 +57,20 @@
 | app/cache_manager.py | CloudStorageCacheManager_archived | 13.2% | ✅ **REMOVED** | Already archived, GCS-specific, not used | 2025-12-18 |
 | app/heatmap_generator.py | Legacy date format support in load_bin_data() | 0% | ✅ **REMOVED** | Legacy path never executed, get_storage_service() undefined | 2025-12-18 |
 | **E2E Test Results** | **Run ID: nuvzH9hYnawQrnBAFknZAm** | **43%** | ✅ **PASSED** | All endpoints UP, reports generated successfully | 2025-12-19 |
+| **HIGH PRIORITY BATCH - Phase 3** | | | | | |
+| app/density_report.py | generate_density_report() | 22.1% | ✅ **REMOVED** | v1 API only, not used by v2 E2E tests | 2025-12-19 |
+| app/density_report.py | generate_simple_density_report() | 22.1% | ✅ **REMOVED** | v1 API only, calls generate_density_report() | 2025-12-19 |
+| app/density_report.py | _regenerate_report_with_intelligence() | 0% | ✅ **REMOVED** | Only called by generate_density_report() (v1) | 2025-12-19 |
+| app/density_report.py | _generate_new_report_format() | 0% | ✅ **REMOVED** | Orphaned wrapper, v2 calls generate_new_density_report_issue246() directly | 2025-12-19 |
+| app/density_report.py | _generate_legacy_report_format() | 0% | ✅ **REMOVED** | Only called by _regenerate_report_with_intelligence() (v1) | 2025-12-19 |
+| app/density_report.py | _generate_tooltips_json() | 0% | ✅ **REMOVED** | Only called by _regenerate_report_with_intelligence() (v1) | 2025-12-19 |
+| app/density_report.py | _execute_bin_dataset_generation() | 0% | ✅ **REMOVED** | Only called by generate_density_report() (v1), v2 calls _generate_bin_dataset_with_retry() directly | 2025-12-19 |
+| app/density_report.py | _setup_runflow_output_dir() | 0% | ✅ **REMOVED** | Only called by generate_density_report() (v1) | 2025-12-19 |
+| app/density_report.py | _finalize_run_metadata() | 0% | ✅ **REMOVED** | Only called by generate_density_report() (v1) | 2025-12-19 |
+| app/density_report.py | _generate_and_upload_heatmaps() | 0% | ✅ **REMOVED** | Only called by generate_density_report() (v1) | 2025-12-19 |
+| app/bin_intelligence.py | (entire file) | 20.7% | ✅ **RETAINED** | All functions used by v2 pipeline via app/core/bin/summary.py | 2025-12-19 |
+| app/canonical_segments.py | (entire file) | 20.9% | ✅ **RETAINED** | All functions used by v2 via generate_map_dataset() in density_report.py | 2025-12-19 |
+| **E2E Test Results** | **Run ID: WT6Bcq26F9Tswi3zzj5BU3** | **PASS** | ✅ **PASSED** | All endpoints UP, reports generated, no errors from cleanup | 2025-12-19 |
 
 ---
 
