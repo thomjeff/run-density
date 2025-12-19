@@ -41,7 +41,7 @@ def _validate_import_patterns():
         from app.core.density.compute import analyze_density_segments, DensityConfig
         from app.utils.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, BIN_SCHEMA_VERSION
         from app.report_utils import get_report_paths
-        from app.density_template_engine import DensityTemplateEngine, create_template_context
+        # Phase 3 cleanup: Removed DensityTemplateEngine, create_template_context imports (v1-only, functions removed)
         logger.info("✅ All critical imports resolved successfully at module level")
         return True
     except ImportError as e:
@@ -103,7 +103,7 @@ def coarsen_plan(seg_id: str, current_bin_km: float, current_dt_s: int, peak_los
 from app.core.density.compute import analyze_density_segments, DensityConfig
 from app.utils.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, BIN_SCHEMA_VERSION
 from app.report_utils import get_report_paths
-from app.density_template_engine import DensityTemplateEngine, create_template_context
+# Phase 3 cleanup: Removed DensityTemplateEngine, create_template_context imports (v1-only, functions removed)
 import pandas as pd
 import json
 from datetime import datetime

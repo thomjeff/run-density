@@ -122,15 +122,7 @@ def compute_flow_rate(runners_crossing: int, width_m: float, bin_seconds: int) -
     return runners_crossing / (width_m * minutes)  # runners/min/m
 
 
-def map_los(density: float, los_thresholds: dict) -> str:
-    """Map density value to LOS letter based on thresholds."""
-    for letter in ["A", "B", "C", "D", "E", "F"]:
-        rng = los_thresholds.get(letter, {})
-        mn = rng.get("min", float("-inf"))
-        mx = rng.get("max", float("inf"))
-        if density >= mn and density < mx:
-            return letter
-    return "F"
+# Phase 3 cleanup: Removed map_los() - not imported or used anywhere
 
 
 def resolve_schema(segment_id: str, segment_type: str, rulebook: dict) -> str:
