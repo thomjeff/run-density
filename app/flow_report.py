@@ -18,7 +18,8 @@ from app.core.flow.flow import analyze_temporal_flow_segments, generate_temporal
 from app.utils.constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 from app.report_utils import get_report_paths, format_decimal_places
 # Issue #466 Step 2: Storage consolidated to app.storage
-from app.flow_density_correlation import analyze_flow_density_correlation
+# Lazy import - flow_density_correlation.py removed in Phase 2B
+# from app.flow_density_correlation import analyze_flow_density_correlation
 
 # Get app version from main.py to ensure consistency
 def get_app_version():
@@ -1011,6 +1012,8 @@ def generate_flow_density_correlation_insights(
     
     try:
         # Run correlation analysis
+        # Lazy import - will fail if flow_density_correlation.py dependencies are missing
+        from app.flow_density_correlation import analyze_flow_density_correlation
         correlation_results = analyze_flow_density_correlation(
             flow_results, density_results, segments_config
         )

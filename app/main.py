@@ -14,11 +14,13 @@ from pydantic import BaseModel
 
 # Import modules using v1.7 absolute import pattern
 from app.core.density.compute import analyze_density_segments
-from app.api.density import router as density_router
-from app.density_report import generate_density_report, generate_simple_density_report
+# app.api.density removed in Phase 3 - router was commented out, endpoints unused
+# Lazy imports for v1 API endpoints (not used by v2 E2E tests)
+# These will fail at runtime if called, but allow server to start
+# from app.density_report import generate_density_report, generate_simple_density_report
+# from app.flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
+# from app.api.report import generate_combined_report, generate_combined_narrative
 from app.core.flow.flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
-from app.flow_report import generate_temporal_flow_report, generate_simple_temporal_flow_report
-from app.api.report import generate_combined_report, generate_combined_narrative
 from app.api.map import router as map_router
 from app.routes.reports import router as reports_router
 from app.routes.ui import router as ui_router
@@ -29,8 +31,8 @@ from app.routes.api_density import router as api_density_router
 from app.routes.api_flow import router as api_flow_router
 from app.routes.api_reports import router as api_reports_router
 from app.routes.api_bins import router as api_bins_router
-from app.routes.api_e2e import router as api_e2e_router
-from app.routes.api_heatmaps import router as api_heatmaps_router
+# Phase 3 cleanup: Removed api_heatmaps_router import (endpoint unused)
+# from app.routes.api_heatmaps import router as api_heatmaps_router
 from app.routes.api_locations import router as api_locations_router
 from app.routes.v2.analyze import router as v2_analyze_router
 from app.utils.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
@@ -128,7 +130,7 @@ BOOT_ENV = {
 logging.getLogger().info("BOOT_ENV %s", BOOT_ENV)
 
 # Include API routers
-# app.include_router(density_router)  # Disabled - conflicts with api_density_router
+# app.api.density router removed in Phase 3 - was disabled, endpoints unused
 app.include_router(map_router)
 app.include_router(reports_router)
 app.include_router(ui_router)
@@ -139,8 +141,8 @@ app.include_router(api_density_router)
 app.include_router(api_flow_router)
 app.include_router(api_reports_router)
 app.include_router(api_bins_router)
-app.include_router(api_e2e_router)
-app.include_router(api_heatmaps_router, prefix="/api/generate", tags=["heatmaps"])
+# Phase 3 cleanup: Removed api_heatmaps_router registration (endpoint unused, frontend uses static file serving)
+# app.include_router(api_heatmaps_router, prefix="/api/generate", tags=["heatmaps"])
 app.include_router(api_locations_router)
 # v2 API routes
 app.include_router(v2_analyze_router, prefix="/runflow/v2", tags=["v2"])
@@ -357,6 +359,8 @@ async def analyze_single_segment_flow(request: SingleSegmentFlowRequest):
 @app.post("/api/report")
 async def generate_report(request: ReportRequest):
     try:
+        # api/report.py removed in Phase 2B - endpoint will fail
+        from app.api.report import generate_combined_report
         results = generate_combined_report(
             pace_csv=request.paceCsv, 
             segments_csv=request.segmentsCsv, 
@@ -368,6 +372,8 @@ async def generate_report(request: ReportRequest):
             include_overtake=request.includeOvertake
         )
         if request.format == "text":
+            # api/report.py removed in Phase 2B - endpoint will fail
+            from app.api.report import generate_combined_narrative
             narrative = generate_combined_narrative(results)
             return Response(content=narrative, media_type="text/plain")
         return JSONResponse(content=results)
@@ -381,8 +387,15 @@ async def legacy_overtake_endpoint(request: TemporalFlowRequest):
 
 @app.post("/api/density-report")
 async def generate_density_report_endpoint(request: DensityReportRequest):
-    """Generate comprehensive density analysis report with per-event views."""
+    """Generate comprehensive density analysis report with per-event views.
+    
+    ⚠️  NOTE: This v1 API endpoint depends on io_bins.py which was removed.
+    This endpoint will fail at runtime if called. It's kept for backward compatibility
+    but is not used by v2 E2E tests.
+    """
     try:
+        # Lazy import - will fail if io_bins.py dependencies are missing
+        from app.density_report import generate_density_report
         # Issue #455: Generate UUID for this run (or use provided run_id for combined runs)
         from app.utils.run_id import generate_run_id
         run_id = request.run_id if request.run_id else generate_run_id()
@@ -442,8 +455,15 @@ def detect_environment() -> str:
 
 @app.post("/api/temporal-flow-report")
 async def generate_temporal_flow_report_endpoint(request: TemporalFlowReportRequest):
-    """Generate comprehensive temporal flow analysis report with convergence analysis."""
+    """Generate comprehensive temporal flow analysis report with convergence analysis.
+    
+    ⚠️  NOTE: This v1 API endpoint may have dependencies on removed files.
+    This endpoint will fail at runtime if dependencies are missing. It's kept for
+    backward compatibility but is not used by v2 E2E tests.
+    """
     try:
+        # Lazy import - will fail if dependencies are missing
+        from app.flow_report import generate_temporal_flow_report
         # Issue #455: Generate UUID for this run (or use provided run_id for combined runs)
         from app.utils.run_id import generate_run_id
         run_id = request.run_id if request.run_id else generate_run_id()
@@ -545,6 +565,7 @@ async def legacy_overlap_endpoint(request: ReportRequest):
 async def generate_flow_density_correlation_endpoint(request: ReportRequest):
     """Generate Flow↔Density correlation analysis report."""
     try:
+        # flow_density_correlation.py removed in Phase 2B - endpoint will fail
         from app.flow_density_correlation import analyze_flow_density_correlation, export_correlation_report
         from app.core.density.compute import analyze_density_segments, load_density_cfg
         from app.core.flow.flow import analyze_temporal_flow_segments

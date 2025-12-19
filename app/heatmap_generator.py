@@ -13,7 +13,6 @@ Author: Cursor AI Assistant (per Senior Architect guidance)
 Issue: #365
 """
 
-import json
 import pandas as pd
 import numpy as np
 import matplotlib
@@ -25,7 +24,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Tuple, Optional
 import logging
 
-from app.common.config import load_rulebook, load_reporting
+from app.common.config import load_reporting
 # Issue #466 Step 2: Storage consolidated to app.storage
 
 logger = logging.getLogger(__name__)
@@ -58,29 +57,21 @@ def create_los_colormap(los_colors: Dict[str, str]) -> mcolors.LinearSegmentedCo
 
 def load_bin_data(run_id: str) -> pd.DataFrame:
     """
-    Load bin data from bins.parquet using StorageService (environment-aware).
+    Load bin data from bins.parquet using runflow structure.
     
     Args:
-        run_id: Run identifier (e.g., "2025-10-27" or UUID)
+        run_id: Run identifier (UUID format)
         
     Returns:
         DataFrame with filtered bin-level data (flagged bins only)
     """
     try:
-        # Issue #455: Check runflow structure for UUID run_ids
-        from app.utils.run_id import is_legacy_date_format
-        
-        if is_legacy_date_format(run_id):
-            # Legacy: Use StorageService for environment-aware access
-            storage = get_storage_service()
-            logger.info(f"Loading bins.parquet for run_id: {run_id} (legacy mode)")
-            bins_df = storage.read_parquet(f"reports/{run_id}/bins.parquet")
-        else:
-            # UUID: Use runflow structure
-            from app.report_utils import get_runflow_file_path
-            bins_path = get_runflow_file_path(run_id, "bins", "bins.parquet")
-            logger.info(f"Loading bins.parquet for run_id: {run_id} (runflow mode): {bins_path}")
-            bins_df = pd.read_parquet(bins_path)
+        # Phase 3 cleanup: Removed legacy date format support - all run_ids are UUIDs now
+        # Use runflow structure exclusively
+        from app.report_utils import get_runflow_file_path
+        bins_path = get_runflow_file_path(run_id, "bins", "bins.parquet")
+        logger.info(f"Loading bins.parquet for run_id: {run_id} (runflow mode): {bins_path}")
+        bins_df = pd.read_parquet(bins_path)
         
         if bins_df is None or bins_df.empty:
             raise FileNotFoundError(f"bins.parquet not found or empty for run_id: {run_id}")
@@ -303,31 +294,6 @@ def generate_segment_heatmap(
         return False
 
 
-def load_segments_metadata() -> Dict[str, Dict[str, Any]]:
-    """
-    Load segment metadata from segments.csv.
-    
-    Returns:
-        Dictionary mapping seg_id to metadata
-    """
-    segments_path = Path("data/segments.csv")
-    segments_meta = {}
-    
-    if segments_path.exists():
-        try:
-            df = pd.read_csv(segments_path)
-            for _, row in df.iterrows():
-                segments_meta[row.get('seg_id', '')] = {
-                    'label': row.get('label', ''),
-                    'length_km': row.get('length_km', 0),
-                    'width_m': row.get('width_m', 0)
-                }
-        except Exception as e:
-            logger.warning(f"Could not load segments metadata: {e}")
-    
-    return segments_meta
-
-
 def generate_heatmaps_for_run(run_id: str) -> Tuple[int, List[str]]:
     """
     Generate heatmaps for all segments in a run.
@@ -359,9 +325,6 @@ def generate_heatmaps_for_run(run_id: str) -> Tuple[int, List[str]]:
     except FileNotFoundError as e:
         logger.error(f"Failed to load bins: {e}")
         return (0, [])
-    
-    # Load segment metadata
-    segments_meta = load_segments_metadata()
     
     # Get unique segments
     segments = sorted(bins_df['segment_id'].unique())
@@ -407,28 +370,7 @@ def generate_heatmaps_for_run(run_id: str) -> Tuple[int, List[str]]:
     )
     return (heatmaps_generated, generated_segments)
 
-
-def get_heatmap_files(run_id: str) -> List[Path]:
-    """
-    Get list of generated heatmap PNG files.
-    
-    Args:
-        run_id: Run identifier
-        
-    Returns:
-        List of Path objects for generated PNG files
-    """
-    # Issue #466 Step 2: Use centralized path resolution for ui/heatmaps
-    from app.utils.run_id import is_legacy_date_format, get_run_directory
-    if is_legacy_date_format(run_id):
-        local_heatmaps_dir = Path("artifacts") / run_id / "ui" / "heatmaps"
-    else:
-        # UUID-based run: heatmaps belong in ui/ subdirectory
-        run_dir = get_run_directory(run_id)
-        local_heatmaps_dir = run_dir / "ui" / "heatmaps"
-    
-    if not local_heatmaps_dir.exists():
-        return []
-    
-    return list(local_heatmaps_dir.glob("*.png"))
+# Phase 3 cleanup: Removed unused function get_heatmap_files()
+# - Was imported by api_heatmaps.py but never called
+# - Functionality can be recreated if needed using Path.glob() directly
 

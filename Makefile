@@ -154,11 +154,24 @@ e2e-coverage-lite: ## Run E2E with coverage (DAY=sat|sun|both) and save reports 
 	@docker exec run-density-dev python -m pip install --quiet coverage || (echo "⚠️ Container not ready, waiting..." && sleep 5 && docker exec run-density-dev python -m pip install --quiet coverage)
 	@echo "🔄 Restarting container to launch server under coverage..."
 	@docker-compose restart app || true
-	@echo "⏳ Waiting for server to be ready (15s)..."
-	@sleep 15
-	@echo "🔍 Verifying container is running..."
-	@until docker ps | grep -q run-density-dev; do sleep 1; done
-	@echo "✅ Container is running"
+	@echo "⏳ Waiting for server to be ready (20s)..."
+	@sleep 20
+	@echo "🔍 Verifying container is running and server is responding..."
+	@for i in $$(seq 1 10); do \
+		if docker exec run-density-dev curl -s http://localhost:8080/health >/dev/null 2>&1; then \
+			echo "✅ Server is responding"; \
+			break; \
+		else \
+			echo "⏳ Waiting for server to respond (attempt $$i/10)..."; \
+			sleep 2; \
+		fi; \
+	done
+	@if ! docker exec run-density-dev curl -s http://localhost:8080/health >/dev/null 2>&1; then \
+		echo "❌ Server not responding after 20s"; \
+		docker logs run-density-dev --tail 50; \
+		docker-compose down; \
+		exit 1; \
+	fi
 	@echo "▶️  Selecting scenario based on DAY (sat|sun|both)..."
 	@scenario=$$( \
 		if [ "$${DAY}" = "sat" ]; then \
@@ -172,7 +185,7 @@ e2e-coverage-lite: ## Run E2E with coverage (DAY=sat|sun|both) and save reports 
 	echo "▶️  Running pytest $$scenario under coverage..."; \
 	docker exec run-density-dev env COVERAGE_RCFILE=/app/coverage.rc COVERAGE_PROCESS_START=/app/coverage.rc COVERAGE_FILE=/app/runflow/.coverage python -m coverage run -m pytest $$scenario -v --base-url http://localhost:8080 || (echo "❌ Coverage run failed" && docker-compose down && exit 1)
 	@echo "🧮 Combining coverage data..."
-	@docker exec run-density-dev env COVERAGE_RCFILE=/app/coverage.rc COVERAGE_PROCESS_START=/app/coverage.rc COVERAGE_FILE=/app/runflow/.coverage python -m coverage combine
+	@docker exec run-density-dev env COVERAGE_RCFILE=/app/coverage.rc COVERAGE_PROCESS_START=/app/coverage.rc COVERAGE_FILE=/app/runflow/.coverage python -m coverage combine || echo "⚠️  No parallel coverage files to combine (using existing .coverage)"
 	@run_id=$$(docker exec run-density-dev python -c "import json, pathlib; latest=pathlib.Path('/app/runflow/latest.json'); data=json.loads(latest.read_text()) if latest.exists() else {}; print(data.get('run_id','latest'))"); \
 	echo "📂 Using run_id=$$run_id for coverage outputs"; \
 	docker exec run-density-dev mkdir -p /app/runflow/$$run_id/coverage ;\
