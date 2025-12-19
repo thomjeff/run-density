@@ -185,7 +185,7 @@ e2e-coverage-lite: ## Run E2E with coverage (DAY=sat|sun|both) and save reports 
 	echo "▶️  Running pytest $$scenario under coverage..."; \
 	docker exec run-density-dev env COVERAGE_RCFILE=/app/coverage.rc COVERAGE_PROCESS_START=/app/coverage.rc COVERAGE_FILE=/app/runflow/.coverage python -m coverage run -m pytest $$scenario -v --base-url http://localhost:8080 || (echo "❌ Coverage run failed" && docker-compose down && exit 1)
 	@echo "🧮 Combining coverage data..."
-	@docker exec run-density-dev env COVERAGE_RCFILE=/app/coverage.rc COVERAGE_PROCESS_START=/app/coverage.rc COVERAGE_FILE=/app/runflow/.coverage python -m coverage combine
+	@docker exec run-density-dev env COVERAGE_RCFILE=/app/coverage.rc COVERAGE_PROCESS_START=/app/coverage.rc COVERAGE_FILE=/app/runflow/.coverage python -m coverage combine || echo "⚠️  No parallel coverage files to combine (using existing .coverage)"
 	@run_id=$$(docker exec run-density-dev python -c "import json, pathlib; latest=pathlib.Path('/app/runflow/latest.json'); data=json.loads(latest.read_text()) if latest.exists() else {}; print(data.get('run_id','latest'))"); \
 	echo "📂 Using run_id=$$run_id for coverage outputs"; \
 	docker exec run-density-dev mkdir -p /app/runflow/$$run_id/coverage ;\
