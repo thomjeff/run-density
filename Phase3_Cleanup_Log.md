@@ -69,6 +69,7 @@
 | app/routes/reports.py | _determine_report_kind() | 0% | ✅ **REMOVED** | Only used by removed _build_report_row() | 2025-12-19 |
 | app/routes/reports.py | _safe_join() | 0% | ✅ **REMOVED** | Only used by removed open_report() and preview_report() | 2025-12-19 |
 | app/routes/reports.py | _preview_local_file() | 0% | ✅ **REMOVED** | Only used by removed preview_report() | 2025-12-19 |
+| **INVESTIGATION** | **app/bin_analysis.py** | **12.8%** | ✅ **RETAINED** | All functions used by app/api/map.py and app/geo_utils.py | 2025-12-19 |
 | **E2E Test Results** | **Run ID: nuvzH9hYnawQrnBAFknZAm** | **43%** | ✅ **PASSED** | All endpoints UP, reports generated successfully | 2025-12-19 |
 | **HIGH PRIORITY BATCH - Phase 3** | | | | | |
 | app/density_report.py | generate_density_report() | 22.1% | ✅ **REMOVED** | v1 API only, not used by v2 E2E tests | 2025-12-19 |
