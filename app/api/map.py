@@ -30,6 +30,7 @@ from app.utils.constants import (
 )
 # DEFAULT_START_TIMES removed (Issue #512) - Start times must come from request
 # Phase 3 cleanup: Removed get_global_cache_manager import (only used by removed cache endpoints)
+# Phase 3 cleanup: app/cache_manager.py was removed entirely (unused, ~288 lines)
 # from app.cache_manager import get_global_cache_manager
 # map_data_generator.py removed in Phase 2B - fallback logic handles missing imports
 # Issue #466 Step 2: Storage consolidated to app.storage

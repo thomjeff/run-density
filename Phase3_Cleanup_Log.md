@@ -56,6 +56,7 @@
 | app/storage.py | load_meta() | 16.7% | ✅ **REMOVED** | Never imported | 2025-12-18 |
 | app/storage.py | load_bin_details_csv() | 16.7% | ✅ **REMOVED** | Never imported | 2025-12-18 |
 | app/cache_manager.py | CloudStorageCacheManager_archived | 13.2% | ✅ **REMOVED** | Already archived, GCS-specific, not used | 2025-12-18 |
+| app/cache_manager.py | Entire file | 18.6% | ✅ **REMOVED** | Not imported anywhere, all cache endpoints removed | 2025-12-19 |
 | app/heatmap_generator.py | Legacy date format support in load_bin_data() | 0% | ✅ **REMOVED** | Legacy path never executed, get_storage_service() undefined | 2025-12-18 |
 | app/heatmap_generator.py | load_segments_metadata() | 0% | ✅ **REMOVED** | Called but result never used | 2025-12-19 |
 | app/heatmap_generator.py | json import | 0% | ✅ **REMOVED** | Imported but never used | 2025-12-19 |
