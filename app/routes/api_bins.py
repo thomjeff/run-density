@@ -12,8 +12,8 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from typing import Dict, Any, List, Optional
 import logging
-import pandas as pd
 # Phase 3 cleanup: Removed unused datetime import (only used by removed format_time_for_display)
+# Phase 3 cleanup: Removed unused pandas import (not used in this file)
 
 # Issue #466 Step 2: Storage consolidated to app.storage
 
@@ -172,64 +172,7 @@ async def get_bins_data(
         )
 
 
-@router.get("/api/bins/summary")
-async def get_bins_summary():
-    """
-    Get summary statistics for bin-level data.
-    
-    Returns:
-        JSON response with summary statistics
-    """
-    try:
-        bins_data = load_bins_data()
-        
-        if not bins_data:
-            return JSONResponse({
-                "total_bins": 0,
-                "segments": [],
-                "los_distribution": {},
-                "message": "No bin data available"
-            })
-        
-        # Calculate summary statistics
-        total_bins = len(bins_data)
-        
-        # Get unique segments
-        segments = list(set(bin_record["segment_id"] for bin_record in bins_data))
-        segments.sort()
-        
-        # Calculate LOS distribution
-        los_distribution = {}
-        for bin_record in bins_data:
-            los = bin_record["los_class"]
-            los_distribution[los] = los_distribution.get(los, 0) + 1
-        
-        # Calculate density and rate statistics
-        densities = [bin_record["density"] for bin_record in bins_data]
-        rates = [bin_record["rate"] for bin_record in bins_data]
-        
-        summary = {
-            "total_bins": total_bins,
-            "segments": segments,
-            "los_distribution": los_distribution,
-            "density_stats": {
-                "min": min(densities) if densities else 0,
-                "max": max(densities) if densities else 0,
-                "avg": sum(densities) / len(densities) if densities else 0
-            },
-            "rate_stats": {
-                "min": min(rates) if rates else 0,
-                "max": max(rates) if rates else 0,
-                "avg": sum(rates) / len(rates) if rates else 0
-            }
-        }
-        
-        logger.info(f"Generated summary for {total_bins} bins across {len(segments)} segments")
-        return JSONResponse(summary)
-        
-    except Exception as e:
-        logger.error(f"Failed to generate bins summary: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to generate summary: {str(e)}"
-        )
+# Phase 3 cleanup: Removed unused GET /api/bins/summary endpoint (~60 lines)
+# - Not called by frontend (frontend/templates/pages/density.html only uses /api/bins)
+# - Not called by E2E tests
+# - Summary statistics can be calculated client-side from /api/bins response if needed
