@@ -56,6 +56,9 @@
 | app/storage.py | load_bin_details_csv() | 16.7% | ✅ **REMOVED** | Never imported | 2025-12-18 |
 | app/cache_manager.py | CloudStorageCacheManager_archived | 13.2% | ✅ **REMOVED** | Already archived, GCS-specific, not used | 2025-12-18 |
 | app/heatmap_generator.py | Legacy date format support in load_bin_data() | 0% | ✅ **REMOVED** | Legacy path never executed, get_storage_service() undefined | 2025-12-18 |
+| app/heatmap_generator.py | load_segments_metadata() | 0% | ✅ **REMOVED** | Called but result never used | 2025-12-19 |
+| app/heatmap_generator.py | json import | 0% | ✅ **REMOVED** | Imported but never used | 2025-12-19 |
+| app/heatmap_generator.py | load_rulebook import | 0% | ✅ **REMOVED** | Imported but never used | 2025-12-19 |
 | **E2E Test Results** | **Run ID: nuvzH9hYnawQrnBAFknZAm** | **43%** | ✅ **PASSED** | All endpoints UP, reports generated successfully | 2025-12-19 |
 | **HIGH PRIORITY BATCH - Phase 3** | | | | | |
 | app/density_report.py | generate_density_report() | 22.1% | ✅ **REMOVED** | v1 API only, not used by v2 E2E tests | 2025-12-19 |

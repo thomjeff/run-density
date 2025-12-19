@@ -13,7 +13,6 @@ Author: Cursor AI Assistant (per Senior Architect guidance)
 Issue: #365
 """
 
-import json
 import pandas as pd
 import numpy as np
 import matplotlib
@@ -25,7 +24,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Tuple, Optional
 import logging
 
-from app.common.config import load_rulebook, load_reporting
+from app.common.config import load_reporting
 # Issue #466 Step 2: Storage consolidated to app.storage
 
 logger = logging.getLogger(__name__)
@@ -295,31 +294,6 @@ def generate_segment_heatmap(
         return False
 
 
-def load_segments_metadata() -> Dict[str, Dict[str, Any]]:
-    """
-    Load segment metadata from segments.csv.
-    
-    Returns:
-        Dictionary mapping seg_id to metadata
-    """
-    segments_path = Path("data/segments.csv")
-    segments_meta = {}
-    
-    if segments_path.exists():
-        try:
-            df = pd.read_csv(segments_path)
-            for _, row in df.iterrows():
-                segments_meta[row.get('seg_id', '')] = {
-                    'label': row.get('label', ''),
-                    'length_km': row.get('length_km', 0),
-                    'width_m': row.get('width_m', 0)
-                }
-        except Exception as e:
-            logger.warning(f"Could not load segments metadata: {e}")
-    
-    return segments_meta
-
-
 def generate_heatmaps_for_run(run_id: str) -> Tuple[int, List[str]]:
     """
     Generate heatmaps for all segments in a run.
@@ -351,9 +325,6 @@ def generate_heatmaps_for_run(run_id: str) -> Tuple[int, List[str]]:
     except FileNotFoundError as e:
         logger.error(f"Failed to load bins: {e}")
         return (0, [])
-    
-    # Load segment metadata
-    segments_meta = load_segments_metadata()
     
     # Get unique segments
     segments = sorted(bins_df['segment_id'].unique())
