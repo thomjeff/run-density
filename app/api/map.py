@@ -29,7 +29,8 @@ from app.utils.constants import (
     DEFAULT_SEGMENT_WIDTH_M, DEFAULT_FLOW_TYPE, DEFAULT_ZONE
 )
 # DEFAULT_START_TIMES removed (Issue #512) - Start times must come from request
-from app.cache_manager import get_global_cache_manager
+# Phase 3 cleanup: Removed get_global_cache_manager import (only used by removed cache endpoints)
+# from app.cache_manager import get_global_cache_manager
 # map_data_generator.py removed in Phase 2B - fallback logic handles missing imports
 # Issue #466 Step 2: Storage consolidated to app.storage
 
@@ -741,288 +742,31 @@ async def get_map_status():
         logger.error(f"Error getting map status: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting map status: {e}")
 
-@router.post("/clear-cache")
-async def clear_map_cache():
-    """
-    Clear the map data cache.
-    
-    This endpoint clears all cached bin-level data to force
-    fresh computation on next request.
-    """
-    try:
-        from app.bin_analysis import clear_bin_cache
-        clear_bin_cache()
-        
-        return JSONResponse(content={
-            "ok": True,
-            "message": "Map cache cleared successfully"
-        })
-        
-    except Exception as e:
-        logger.error(f"Error clearing map cache: {e}")
-        raise HTTPException(status_code=500, detail=f"Error clearing map cache: {e}")
-
 # Phase 3 cleanup: Removed unused endpoints (not used by frontend or E2E tests):
 # - /historical-trends - Only 3.4% coverage for analyze_historical_trends(), never called
 # - /compare-segments - Only 2.9% coverage for compare_segments(), never called
 # - /export-advanced - Only 5.3% coverage for export_bin_data(), never called
-
-@router.get("/cache-management")
-async def get_cache_management():
-    """
-    Get detailed cache management information.
-    
-    This endpoint provides comprehensive cache statistics and management
-    capabilities for the map system.
-    """
-    try:
-        from app.bin_analysis import get_cache_stats, clear_bin_cache
-        
-        cache_stats = get_cache_stats()
-        
-        return JSONResponse(content={
-            "ok": True,
-            "cache_stats": cache_stats,
-            "management_actions": [
-                "clear_cache",
-                "get_stats",
-                "invalidate_segment"
-            ],
-            "cache_info": {
-                "description": "Bin-level analysis cache for map visualization",
-                "purpose": "Improve performance by caching computed bin data",
-                "invalidation": "Automatic on dataset changes"
-            }
-        })
-        
-    except Exception as e:
-        logger.error(f"Error getting cache management info: {e}")
-        raise HTTPException(status_code=500, detail=f"Error getting cache management info: {e}")
-
-@router.post("/invalidate-segment")
-async def invalidate_segment_cache(request: dict):
-    """
-    Invalidate cache for a specific segment.
-    
-    This endpoint allows selective cache invalidation for specific segments
-    without clearing the entire cache.
-    """
-    try:
-        from app.bin_analysis import _bin_cache, calculate_dataset_hash
-        
-        segment_id = request.get('segmentId')
-        if not segment_id:
-            raise HTTPException(status_code=400, detail="segmentId is required")
-        
-        # Calculate dataset hash for invalidation
-        # Issue #512: startTimes is required
-        start_times = request.get('startTimes')
-        if start_times is None:
-            raise HTTPException(
-                status_code=400,
-                detail="startTimes parameter required in request body. (Issue #512)"
-            )
-        
-        dataset_hash = calculate_dataset_hash(
-            request.get('paceCsv', DEFAULT_PACE_CSV),
-            request.get('segmentsCsv', DEFAULT_SEGMENTS_CSV),
-            start_times
-        )
-        
-        # Invalidate cache for this segment
-        _bin_cache.invalidate(dataset_hash)
-        
-        return JSONResponse(content={
-            "ok": True,
-            "message": f"Cache invalidated for segment {segment_id}",
-            "segment_id": segment_id,
-            "dataset_hash": dataset_hash
-        })
-        
-    except Exception as e:
-        logger.error(f"Error invalidating segment cache: {e}")
-        raise HTTPException(status_code=500, detail=f"Error invalidating segment cache: {e}")
-
-@router.get("/cache-status")
-async def get_cache_status(
-    analysisType: str = Query(..., description="Type of analysis: density, flow, or bins"),
-    paceCsv: str = Query(DEFAULT_PACE_CSV, description="Path to pace data CSV"),
-    segmentsCsv: str = Query(DEFAULT_SEGMENTS_CSV, description="Path to segments data CSV"),
-    startTimes: str = Query(..., description="JSON string of start times (required - Issue #512)")
-):
-    """
-    Get cache status for analysis results.
-    
-    This endpoint provides information about cached analysis results
-    including timestamps and age of the data.
-    """
-    try:
-        # Parse start times
-        start_times = json.loads(startTimes)
-        
-        # Calculate dataset hash
-        from app.bin_analysis import calculate_dataset_hash
-        dataset_hash = calculate_dataset_hash(paceCsv, segmentsCsv, start_times)
-        
-        # Get cache manager
-        cache_manager = get_global_cache_manager()
-        
-        # Get cache status
-        status = cache_manager.get_cache_status(analysisType, dataset_hash)
-        
-        return JSONResponse(content={
-            "ok": True,
-            "cache_status": status,
-            "analysis_type": analysisType,
-            "dataset_hash": dataset_hash
-        })
-        
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid startTimes JSON: {e}")
-    except Exception as e:
-        logger.error(f"Error getting cache status: {e}")
-        raise HTTPException(status_code=500, detail=f"Error getting cache status: {e}")
+# - POST /api/clear-cache - Admin endpoint, not used
+# - GET /api/cache-management - Admin endpoint, not used
+# - POST /api/invalidate-segment - Admin endpoint, not used
+# - GET /api/cache-status - Admin endpoint, not used
+# - GET /api/cached-analysis - Admin endpoint, not used
 
 # REMOVED: /api/force-refresh endpoint - causes Cloud Run timeouts
 # Maps are now visualization-only and read from existing reports
 
-@router.get("/cached-analysis")
-async def get_cached_analysis(
-    analysisType: str = Query(..., description="Type of analysis: density, flow, or bins"),
-    paceCsv: str = Query(DEFAULT_PACE_CSV, description="Path to pace data CSV"),
-    segmentsCsv: str = Query(DEFAULT_SEGMENTS_CSV, description="Path to segments data CSV"),
-    startTimes: str = Query(..., description="JSON string of start times (required - Issue #512)")
-):
-    """
-    Get cached analysis results.
-    
-    This endpoint returns cached analysis results if available,
-    or indicates if no cached data exists.
-    """
-    try:
-        # Parse start times
-        start_times = json.loads(startTimes)
-        
-        # Calculate dataset hash
-        from app.bin_analysis import calculate_dataset_hash
-        dataset_hash = calculate_dataset_hash(paceCsv, segmentsCsv, start_times)
-        
-        # Get cache manager
-        cache_manager = get_global_cache_manager()
-        
-        # Get cached analysis
-        entry = cache_manager.get_analysis(analysisType, dataset_hash)
-        
-        if entry is None:
-            return JSONResponse(content={
-                "ok": False,
-                "message": f"No cached {analysisType} analysis found",
-                "analysis_type": analysisType,
-                "dataset_hash": dataset_hash
-            })
-        
-        # Handle timezone-aware vs timezone-naive datetime comparison
-        now = datetime.now()
-        if entry.timestamp.tzinfo is not None:
-            # If entry.timestamp is timezone-aware, make now timezone-aware too
-            now = now.replace(tzinfo=entry.timestamp.tzinfo)
-        elif now.tzinfo is not None:
-            # If now is timezone-aware but entry.timestamp is not, make entry.timestamp timezone-aware
-            entry.timestamp = entry.timestamp.replace(tzinfo=now.tzinfo)
-        
-        return JSONResponse(content={
-            "ok": True,
-            "analysis_type": analysisType,
-            "dataset_hash": dataset_hash,
-            "timestamp": entry.timestamp.isoformat(),
-            "age_hours": (now - entry.timestamp).total_seconds() / 3600,
-            "data": entry.data,
-            "metadata": entry.metadata
-        })
-        
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid startTimes JSON: {e}")
-    except Exception as e:
-        logger.error(f"Error getting cached analysis: {e}")
-        raise HTTPException(status_code=500, detail=f"Error getting cached analysis: {e}")
+# Phase 3 cleanup: Removed broken /api/map-data endpoint
+# - Called undefined get_storage_service() function (NameError at runtime)
+# - Not used by frontend (frontend uses /api/segments/geojson from app/routes/api_segments.py)
+# - Maps are visualization-only and read from existing reports via other endpoints
 
-@router.get("/map-data")
-async def get_map_data(date: str = Query(default=None, description="YYYY-MM-DD")):
-    """
-    Get map data for the frontend from storage service (local or Cloud Storage).
-    
-    This endpoint reads map_data.json from persistent storage.
-    Maps are visualization-only and do not run analysis.
-    """
-    try:
-        storage_service = get_storage_service()
-        
-        # Look for map data files in the specified date or latest
-        if date:
-            # Look for map data in specific date
-            map_files = storage_service.list_files(date, "map_data")
-        else:
-            # Look for map data in latest available date
-            # Try today first, then yesterday, etc.
-            from datetime import datetime, timedelta
-            for days_back in range(7):  # Look back up to 7 days
-                check_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
-                map_files = storage_service.list_files(check_date, "map_data")
-                if map_files:
-                    date = check_date
-                    break
-        
-        if not map_files:
-            raise HTTPException(status_code=404, detail={"error": "No map data available. Please generate reports first."})
-        
-        # Get the most recent map data file (prioritize actual map_data files over test files)
-        map_files.sort(reverse=True)  # Sort by filename (includes timestamp)
-        
-        # Filter out test files and prioritize actual map_data files
-        actual_map_files = [f for f in map_files if f.startswith('map_data_') and not f.startswith('test_')]
-        if actual_map_files:
-            latest_map_file = actual_map_files[0]
-        else:
-            latest_map_file = map_files[0]  # Fallback to any file if no actual map data
-        
-        # Load map data from storage
-        map_data = storage_service.load_json(latest_map_file, date)
-        
-        if not map_data:
-            raise HTTPException(status_code=500, detail={"error": "Failed to load map data from storage."})
-        
-        logger.info(f"Loaded map data from storage: {latest_map_file} (date: {date})")
-        return map_data
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting map data from storage: {e}")
-        raise HTTPException(status_code=500, detail=f"Error getting map data: {e}")
+# Phase 3 cleanup: Removed unused cache management endpoints (not used by frontend or E2E tests):
+# - POST /api/clear-cache - Admin endpoint, not used
+# - GET /api/cache-management - Admin endpoint, not used
+# - POST /api/invalidate-segment - Admin endpoint, not used
+# - GET /api/cache-status - Admin endpoint, not used
+# - GET /api/cached-analysis - Admin endpoint, not used
+# - POST /api/cleanup-cache - Admin endpoint, not used
 
-@router.post("/cleanup-cache")
-async def cleanup_cache(
-    maxAgeHours: int = Query(24, description="Maximum age of cache entries in hours")
-):
-    """
-    Clean up old cache entries.
-    
-    This endpoint removes cache entries older than the specified age.
-    """
-    try:
-        # Get cache manager
-        cache_manager = get_global_cache_manager()
-        
-        # Clean up old entries
-        cleaned_count = cache_manager.cleanup_old_entries(maxAgeHours)
-        
-        return JSONResponse(content={
-            "ok": True,
-            "message": f"Cleaned up {cleaned_count} old cache entries",
-            "max_age_hours": maxAgeHours,
-            "cleaned_count": cleaned_count
-        })
-        
-    except Exception as e:
-        logger.error(f"Error cleaning up cache: {e}")
-        raise HTTPException(status_code=500, detail=f"Error cleaning up cache: {e}")
+# Phase 3 cleanup: Removed POST /api/cleanup-cache endpoint
+# - Admin endpoint, not used by frontend or E2E tests

@@ -70,6 +70,14 @@
 | app/routes/reports.py | _safe_join() | 0% | ✅ **REMOVED** | Only used by removed open_report() and preview_report() | 2025-12-19 |
 | app/routes/reports.py | _preview_local_file() | 0% | ✅ **REMOVED** | Only used by removed preview_report() | 2025-12-19 |
 | **INVESTIGATION** | **app/bin_analysis.py** | **12.8%** | ✅ **RETAINED** | All functions used by app/api/map.py and app/geo_utils.py | 2025-12-19 |
+| app/api/map.py | GET /api/map-data endpoint | 0% | ✅ **REMOVED** | Broken (undefined get_storage_service()), not used | 2025-12-19 |
+| app/api/map.py | POST /api/clear-cache endpoint | 0% | ✅ **REMOVED** | Admin endpoint, not used by frontend or E2E tests | 2025-12-19 |
+| app/api/map.py | GET /api/cache-management endpoint | 0% | ✅ **REMOVED** | Admin endpoint, not used by frontend or E2E tests | 2025-12-19 |
+| app/api/map.py | POST /api/invalidate-segment endpoint | 0% | ✅ **REMOVED** | Admin endpoint, not used by frontend or E2E tests | 2025-12-19 |
+| app/api/map.py | GET /api/cache-status endpoint | 0% | ✅ **REMOVED** | Admin endpoint, not used by frontend or E2E tests | 2025-12-19 |
+| app/api/map.py | GET /api/cached-analysis endpoint | 0% | ✅ **REMOVED** | Admin endpoint, not used by frontend or E2E tests | 2025-12-19 |
+| app/api/map.py | POST /api/cleanup-cache endpoint | 0% | ✅ **REMOVED** | Admin endpoint, not used by frontend or E2E tests | 2025-12-19 |
+| app/api/map.py | get_global_cache_manager import | 0% | ✅ **REMOVED** | Only used by removed cache endpoints | 2025-12-19 |
 | **E2E Test Results** | **Run ID: nuvzH9hYnawQrnBAFknZAm** | **43%** | ✅ **PASSED** | All endpoints UP, reports generated successfully | 2025-12-19 |
 | **HIGH PRIORITY BATCH - Phase 3** | | | | | |
 | app/density_report.py | generate_density_report() | 22.1% | ✅ **REMOVED** | v1 API only, not used by v2 E2E tests | 2025-12-19 |
