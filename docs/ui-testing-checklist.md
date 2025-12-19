@@ -103,15 +103,20 @@ This document provides a systematic approach to testing local Docker deployments
 **Expected Reports (from latest E2E run):**
 - Reports are in `runflow/{run_id}/{day}/reports/` directory
 - Check latest E2E run output for actual report filenames and sizes
-- Typical reports: `Flow.csv`, `Flow.md`, `Density.md`
+- Typical reports: `Flow.csv`, `Flow.md`, `Density.md`, `Locations.csv`
+- **Example (Run cyvCJ8CCpuepAhe8gkt3nZ):**
+  - SAT: Density.md (5.8K), Flow.csv (3.8K), Flow.md (13K), Locations.csv (2.1K)
+  - SUN: Density.md (110K), Flow.csv (13K), Flow.md (41K), Locations.csv (18K)
 
 **Download Testing:**
 Download the following reports created from your E2E test:
-- [ ] Download Flow.csv successfully
-- [ ] Download Flow.md successfully
-- [ ] Download Density.md successfully
+- [ ] Download Flow.csv successfully (both SAT and SUN)
+- [ ] Download Flow.md successfully (both SAT and SUN)
+- [ ] Download Density.md successfully (both SAT and SUN)
+- [ ] Download Locations.csv successfully (both SAT and SUN)
 - [ ] Verify downloaded files contain expected content
-- [ ] Verify reports are accessible via `/api/reports/download?path=...`
+- [ ] Verify reports are accessible via `/api/reports/download?path=runflow/{run_id}/{day}/reports/{filename}`
+- [ ] Verify file sizes match expected values (SUN reports typically larger than SAT)
 
 ### 4. ✅ Flow Page Verification
 
@@ -201,6 +206,9 @@ Download the following reports created from your E2E test:
 - [ ] Heatmaps work for both `sat` and `sun` days
 - [ ] Heatmap paths resolve correctly (no 404 errors)
 - [ ] Note: Heatmaps are served via static file mount, not API endpoint (Phase 3 cleanup removed `/api/generate/heatmaps`)
+- [ ] **Expected Counts (Run cyvCJ8CCpuepAhe8gkt3nZ):**
+  - SAT: 6 heatmaps (N1, N2, N3, O1, O2, O3 - Elite/Open segments only)
+  - SUN: 20 heatmaps (all segments with flagged bins)
 
 ### Report Verification
 - [ ] Reports generated from latest E2E run
@@ -353,7 +361,7 @@ This checklist should be updated when:
 - Docker configuration changes
 
 **Last Updated:** 2025-12-19  
-**Updated By:** AI Assistant (Issue #544 Phase 3 - Multi-Day Support & API Updates)  
+**Updated By:** AI Assistant (Issue #544 Phase 3B - E2E Test Review)  
 **Changes in v2.1:**
 - Added multi-day support testing (`?day=sat` and `?day=sun` parameters)
 - Updated API endpoints list (added `/api/health/data`, `/api/segments/geojson`, `/api/density/segment/{seg_id}`, etc.)
@@ -362,5 +370,12 @@ This checklist should be updated when:
 - Added URL parameter testing section
 - Fixed path references to include day subdirectory (`runflow/<uuid>/<day>/`)
 - Updated API testing commands with day and run_id parameters
+
+**Changes in v2.2 (2025-12-19):**
+- Added Locations.csv to expected reports list
+- Added file size examples from Run cyvCJ8CCpuepAhe8gkt3nZ
+- Added heatmap count expectations (SAT: 6, SUN: 20)
+- Updated download testing to include Locations.csv
+- Added note about SUN reports typically being larger than SAT
 
 **Next Review:** When new testing requirements are identified
