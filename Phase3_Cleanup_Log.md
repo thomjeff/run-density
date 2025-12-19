@@ -56,6 +56,7 @@
 | app/storage.py | load_bin_details_csv() | 16.7% | ✅ **REMOVED** | Never imported | 2025-12-18 |
 | app/cache_manager.py | CloudStorageCacheManager_archived | 13.2% | ✅ **REMOVED** | Already archived, GCS-specific, not used | 2025-12-18 |
 | app/heatmap_generator.py | Legacy date format support in load_bin_data() | 0% | ✅ **REMOVED** | Legacy path never executed, get_storage_service() undefined | 2025-12-18 |
+| **E2E Test Results** | **Run ID: nuvzH9hYnawQrnBAFknZAm** | **43%** | ✅ **PASSED** | All endpoints UP, reports generated successfully | 2025-12-19 |
 
 ---
 
