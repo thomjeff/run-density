@@ -59,6 +59,16 @@
 | app/heatmap_generator.py | load_segments_metadata() | 0% | ✅ **REMOVED** | Called but result never used | 2025-12-19 |
 | app/heatmap_generator.py | json import | 0% | ✅ **REMOVED** | Imported but never used | 2025-12-19 |
 | app/heatmap_generator.py | load_rulebook import | 0% | ✅ **REMOVED** | Imported but never used | 2025-12-19 |
+| app/routes/reports.py | reports_list() endpoint | 0% | ✅ **REMOVED** | Legacy endpoint, not used by frontend | 2025-12-19 |
+| app/routes/reports.py | open_report() endpoint | 0% | ✅ **REMOVED** | Legacy endpoint, not used by frontend | 2025-12-19 |
+| app/routes/reports.py | preview_report() endpoint | 0% | ✅ **REMOVED** | Legacy endpoint, not used by frontend | 2025-12-19 |
+| app/routes/reports.py | _scan_reports() | 0% | ✅ **REMOVED** | Only used by removed reports_list() | 2025-12-19 |
+| app/routes/reports.py | _scan_runflow_reports() | 0% | ✅ **REMOVED** | Only used by removed _scan_reports() | 2025-12-19 |
+| app/routes/reports.py | _scan_local_reports() | 0% | ✅ **REMOVED** | Only used by removed _scan_reports() | 2025-12-19 |
+| app/routes/reports.py | _build_report_row() | 0% | ✅ **REMOVED** | Only used by removed scan functions | 2025-12-19 |
+| app/routes/reports.py | _determine_report_kind() | 0% | ✅ **REMOVED** | Only used by removed _build_report_row() | 2025-12-19 |
+| app/routes/reports.py | _safe_join() | 0% | ✅ **REMOVED** | Only used by removed open_report() and preview_report() | 2025-12-19 |
+| app/routes/reports.py | _preview_local_file() | 0% | ✅ **REMOVED** | Only used by removed preview_report() | 2025-12-19 |
 | **E2E Test Results** | **Run ID: nuvzH9hYnawQrnBAFknZAm** | **43%** | ✅ **PASSED** | All endpoints UP, reports generated successfully | 2025-12-19 |
 | **HIGH PRIORITY BATCH - Phase 3** | | | | | |
 | app/density_report.py | generate_density_report() | 22.1% | ✅ **REMOVED** | v1 API only, not used by v2 E2E tests | 2025-12-19 |
