@@ -1332,7 +1332,8 @@ class DensityAnalyzer:
                          smooth_window: str = "120s",
                          min_active_bins: int = 3,
                          min_active_duration_s: int = 120,
-                         tot_from: str = "active") -> DensitySummary:
+                         tot_from: str = "active",
+                         start_times: Optional[Dict[str, datetime]] = None) -> DensitySummary:
         """
         Summarize density analysis results for a segment.
         
@@ -1415,8 +1416,27 @@ class DensityAnalyzer:
         
         if active_results:
             # Calculate active window bounds
-            active_start = min(r.t_start for r in active_results)
-            active_end = max(r.t_end for r in active_results)
+            # Fixed: Filter out buffer period (1 hour before earliest start) from active window
+            # The analysis adds a 1-hour buffer, but active_start should reflect actual runner activity
+            earliest_start_time = min(start_times.values()) if start_times else None
+            buffer_cutoff_time = (earliest_start_time - timedelta(hours=1)).strftime("%H:%M:%S") if earliest_start_time else None
+            
+            # Filter active_results to exclude buffer period (bins before earliest event start)
+            if buffer_cutoff_time and earliest_start_time:
+                earliest_start_str = earliest_start_time.strftime("%H:%M:%S")
+                # Only include bins that start at or after the earliest event start time
+                filtered_active_results = [r for r in active_results if r.t_start >= earliest_start_str]
+                if filtered_active_results:
+                    active_start = min(r.t_start for r in filtered_active_results)
+                    active_end = max(r.t_end for r in active_results)  # Keep original end
+                else:
+                    # Fallback: use all active_results if filtering removes everything
+                    active_start = min(r.t_start for r in active_results)
+                    active_end = max(r.t_end for r in active_results)
+            else:
+                # No start_times available, use original logic
+                active_start = min(r.t_start for r in active_results)
+                active_end = max(r.t_end for r in active_results)
             
             # Convert to datetime objects for duration calculation
             try:
@@ -1650,7 +1670,7 @@ def analyze_density_segments(pace_data: pd.DataFrame,
         
         if density_results:
             # Summarize results
-            summary = analyzer.summarize_density(density_results)
+            summary = analyzer.summarize_density(density_results, start_times=start_times)
             
             # Generate narrative smoothing
             sustained_periods = analyzer.smooth_narrative_transitions(density_results)
