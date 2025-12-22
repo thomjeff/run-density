@@ -9,7 +9,7 @@ def _yn(x):
 def load_segments(path="data/segments.csv"):
     df = pd.read_csv(path)
     # normalize minimal bits required by current code
-    for ev in ["full","half","10K"]:
+    for ev in ["full","half","10K","elite","open"]:
         if ev in df.columns:
             df[ev] = df[ev].map(_yn)
     if "width_m" in df.columns:

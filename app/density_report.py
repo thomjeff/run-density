@@ -1994,6 +1994,9 @@ def _create_time_windows_for_bins(start_times: Dict[str, float], dt_seconds: int
     base_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     
     # Find earliest start time and total duration
+    if not start_times:
+        raise ValueError("start_times dictionary is empty - cannot create time windows")
+    
     earliest_start_min = min(start_times.values())
     latest_end_min = max(start_times.values()) + 120  # Add 2 hours for analysis duration
     
@@ -2270,6 +2273,7 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
             original_bin_size_km=original_bin_size_km,
             dt_seconds=dt_seconds,
             original_dt_seconds=original_dt_seconds,
+            start_times=start_times,  # Pass start_times for coarsening logic
             logger=logger,
         )
         
@@ -2327,7 +2331,7 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
 
 def generate_bin_features_with_coarsening(segments: dict, time_windows: list, runners_by_segment_and_window: dict,
                                         bin_size_km: float, original_bin_size_km: float, dt_seconds: int, 
-                                        original_dt_seconds: int, logger) -> dict:
+                                        original_dt_seconds: int, start_times: Dict[str, float], logger) -> dict:
     """
     Generate bin features with ChatGPT's performance optimization:
     - Temporal-first coarsening for non-hotspots
@@ -2388,9 +2392,15 @@ def generate_bin_features_with_coarsening(segments: dict, time_windows: list, ru
         from datetime import datetime, timezone, timedelta
         base_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         
-        # Use original start times for time window calculation
-        earliest_start_min = 420  # Default start time
-        latest_end_min = 460 + 120  # Default end time + 2 hours
+        # Use actual start_times passed to function instead of hardcoded defaults
+        # Fixed: Was using hardcoded 420 (Full event) which caused timing issues for 5K events
+        if start_times and len(start_times) > 0:
+            earliest_start_min = min(start_times.values())
+            latest_end_min = max(start_times.values()) + 120
+        else:
+            # Fallback only if start_times is empty or None
+            earliest_start_min = 420  # Default start time
+            latest_end_min = 460 + 120  # Default end time + 2 hours
         
         t0_utc = base_date + timedelta(minutes=earliest_start_min)
         total_duration_s = int((latest_end_min - earliest_start_min) * 60)
@@ -2465,22 +2475,9 @@ def generate_bin_features_with_coarsening(segments: dict, time_windows: list, ru
 
 def _build_segment_ranges_per_event(segments_config: pd.DataFrame) -> Dict[str, Dict[str, Tuple[float, float]]]:
     """Build segment km ranges dictionary per event type."""
-    # #region agent log
-    log_path = "/Users/jthompson/Documents/GitHub/run-density/.cursor/debug.log"
-    try:
-        with open(log_path, 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H1","location":"density_report.py:2466","message":"_build_segment_ranges_per_event entry","data":{"segments_count":len(segments_config),"columns":list(segments_config.columns)},"timestamp":int(time.time()*1000)}) + "\n")
-    except: pass
-    # #endregion
     segment_ranges = {}
     for _, seg_row in segments_config.iterrows():
         seg_id = seg_row['seg_id']
-        # #region agent log
-        try:
-            with open(log_path, 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H1","location":"density_report.py:2470","message":"Processing segment","data":{"seg_id":str(seg_id),"has_elite_from":pd.notna(seg_row.get('elite_from_km')),"has_open_from":pd.notna(seg_row.get('open_from_km')),"has_full_from":pd.notna(seg_row.get('full_from_km'))},"timestamp":int(time.time()*1000)}) + "\n")
-        except: pass
-        # #endregion
         segment_ranges[seg_id] = {
             'Full': (seg_row['full_from_km'], seg_row['full_to_km']) if pd.notna(seg_row.get('full_from_km')) else None,
             'Half': (seg_row['half_from_km'], seg_row['half_to_km']) if pd.notna(seg_row.get('half_from_km')) else None,
@@ -2488,17 +2485,6 @@ def _build_segment_ranges_per_event(segments_config: pd.DataFrame) -> Dict[str, 
             'Elite': (seg_row['elite_from_km'], seg_row['elite_to_km']) if pd.notna(seg_row.get('elite_from_km')) else None,
             'Open': (seg_row['open_from_km'], seg_row['open_to_km']) if pd.notna(seg_row.get('open_from_km')) else None,
         }
-    # #region agent log
-    try:
-        sample_5k_seg = None
-        for seg_id in segment_ranges:
-            if seg_id.startswith('N') or seg_id.startswith('O'):
-                sample_5k_seg = seg_id
-                break
-        with open(log_path, 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H1","location":"density_report.py:2478","message":"_build_segment_ranges_per_event exit","data":{"total_segments":len(segment_ranges),"sample_5k_seg":sample_5k_seg,"sample_5k_events":list(segment_ranges.get(sample_5k_seg,{}).keys()) if sample_5k_seg else None},"timestamp":int(time.time()*1000)}) + "\n")
-    except: pass
-    # #endregion
     return segment_ranges
 
 
@@ -2609,10 +2595,22 @@ def _process_event_windows_and_segments(
     WINDOW_SECONDS: int,
     segments_dict: Dict,
     segment_ranges: Dict,
+    segments_config: pd.DataFrame,
     mapping: Dict
 ) -> None:
     """Process all windows and segments for a single event."""
     import numpy as np
+    
+    # Build event-to-segment mapping from CSV columns
+    # Map event names to CSV column names (case-insensitive)
+    event_to_column = {
+        'Full': 'full',
+        'Half': 'half',
+        '10K': '10K',
+        'Elite': 'elite',
+        'Open': 'open'
+    }
+    event_column = event_to_column.get(event, event.lower())
     
     for global_w_idx in range(start_idx, len(time_windows)):
         (t_start, t_end, _) = time_windows[global_w_idx]
@@ -2635,14 +2633,17 @@ def _process_event_windows_and_segments(
                 _ensure_empty_mapping_entry(mapping, seg_id, w_idx)
                 continue
             
+            # Check if this segment is configured for this event using CSV columns
+            # This replaces hardcoded prefix checks with data-driven configuration
+            seg_row = segments_config[segments_config['seg_id'] == seg_id]
+            if len(seg_row) == 0:
+                continue
+            
+            seg_event_flag = seg_row.iloc[0].get(event_column, 'n')
+            if seg_event_flag != 'y':
+                continue  # Segment not configured for this event
+            
             km_range = segment_ranges[seg_id].get(event)
-            # #region agent log
-            if seg_id.startswith('N') or seg_id.startswith('O'):
-                try:
-                    with open("/Users/jthompson/Documents/GitHub/run-density/.cursor/debug.log", 'a') as f:
-                        f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H1,H3","location":"density_report.py:2614","message":"5K segment range lookup","data":{"seg_id":str(seg_id),"event":event,"km_range":str(km_range),"available_events":list(segment_ranges[seg_id].keys())},"timestamp":int(time.time()*1000)}) + "\n")
-                except: pass
-            # #endregion
             if km_range is None:
                 continue
             
@@ -2706,8 +2707,9 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
     
     # Load pace data and segments configuration
     try:
+        from app.io.loader import load_segments
         pace_data = pd.read_csv("data/runners.csv")
-        segments_config = pd.read_csv("data/segments.csv")
+        segments_config = load_segments("data/segments.csv")  # Use loader to normalize elite/open columns
     except Exception as e:
         logger.warning(f"Could not load data for runner mapping: {e}")
         return mapping
@@ -2720,33 +2722,11 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
     WINDOW_SECONDS = _calculate_window_duration_seconds(time_windows)
     earliest_start_min = min(start_times.values())
     
-    # #region agent log
-    log_path = "/Users/jthompson/Documents/GitHub/run-density/.cursor/debug.log"
-    try:
-        unique_events = pace_data['event'].unique().tolist() if 'event' in pace_data.columns else []
-        with open(log_path, 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H2,H4,H5","location":"density_report.py:2723","message":"build_runner_window_mapping entry","data":{"start_times_keys":list(start_times.keys()),"pace_data_events":unique_events,"pace_data_count":len(pace_data)},"timestamp":int(time.time()*1000)}) + "\n")
-    except: pass
-    # #endregion
-    
     # Issue #243 Fix: Loop through events first, then their relevant windows
     # Fixed: Added 'Elite' and 'Open' events for 5K support
-    # #region agent log
-    hardcoded_events = ['Full', '10K', 'Half', 'Elite', 'Open']
-    try:
-        with open(log_path, 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H2","location":"density_report.py:2693","message":"Hardcoded event list","data":{"hardcoded_events":hardcoded_events},"timestamp":int(time.time()*1000)}) + "\n")
-    except: pass
-    # #endregion
     for event in ['Full', '10K', 'Half', 'Elite', 'Open']:
         # Get event start time
         event_min = start_times.get(event)
-        # #region agent log
-        try:
-            with open(log_path, 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H2,H4","location":"density_report.py:2695","message":"Processing event","data":{"event":event,"event_min":event_min,"in_start_times":event in start_times},"timestamp":int(time.time()*1000)}) + "\n")
-        except: pass
-        # #endregion
         if event_min is None:
             continue
         
@@ -2759,12 +2739,6 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
         # CSV files use lowercase event names (elite, open) but code uses capitalized (Elite, Open)
         event_mask = pace_data['event'].str.lower() == event.lower()
         event_runners = pace_data[event_mask]
-        # #region agent log
-        try:
-            with open(log_path, 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H5","location":"density_report.py:2705","message":"Event runners lookup","data":{"event":event,"runners_found":len(event_runners)},"timestamp":int(time.time()*1000)}) + "\n")
-        except: pass
-        # #endregion
         
         if len(event_runners) == 0:
             continue
@@ -2777,18 +2751,9 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
         _process_event_windows_and_segments(
             event, event_start_sec, event_min, earliest_start_min,
             start_idx, event_runners_copy, time_windows, WINDOW_SECONDS,
-            segments_dict, segment_ranges, mapping
+            segments_dict, segment_ranges, segments_config, mapping
         )
     
-    # #region agent log
-    try:
-        total_mapped = sum(len(windows) for windows in mapping.values())
-        sample_5k_segs = [seg_id for seg_id in mapping.keys() if seg_id.startswith('N') or seg_id.startswith('O')]
-        sample_5k_mapped = sum(len(mapping.get(seg_id, {})) for seg_id in sample_5k_segs[:3])
-        with open(log_path, 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H2","location":"density_report.py:2722","message":"build_runner_window_mapping exit","data":{"total_segments_mapped":len(mapping),"total_windows_mapped":total_mapped,"sample_5k_segs":sample_5k_segs[:3],"sample_5k_windows":sample_5k_mapped},"timestamp":int(time.time()*1000)}) + "\n")
-    except: pass
-    # #endregion
     return mapping
 
 def _build_geojson_from_bin_data(bin_data: Dict[str, Any]) -> Dict[str, Any]:
