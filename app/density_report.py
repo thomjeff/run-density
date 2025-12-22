@@ -2465,14 +2465,40 @@ def generate_bin_features_with_coarsening(segments: dict, time_windows: list, ru
 
 def _build_segment_ranges_per_event(segments_config: pd.DataFrame) -> Dict[str, Dict[str, Tuple[float, float]]]:
     """Build segment km ranges dictionary per event type."""
+    # #region agent log
+    log_path = "/Users/jthompson/Documents/GitHub/run-density/.cursor/debug.log"
+    try:
+        with open(log_path, 'a') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H1","location":"density_report.py:2466","message":"_build_segment_ranges_per_event entry","data":{"segments_count":len(segments_config),"columns":list(segments_config.columns)},"timestamp":int(time.time()*1000)}) + "\n")
+    except: pass
+    # #endregion
     segment_ranges = {}
     for _, seg_row in segments_config.iterrows():
         seg_id = seg_row['seg_id']
+        # #region agent log
+        try:
+            with open(log_path, 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H1","location":"density_report.py:2470","message":"Processing segment","data":{"seg_id":str(seg_id),"has_elite_from":pd.notna(seg_row.get('elite_from_km')),"has_open_from":pd.notna(seg_row.get('open_from_km')),"has_full_from":pd.notna(seg_row.get('full_from_km'))},"timestamp":int(time.time()*1000)}) + "\n")
+        except: pass
+        # #endregion
         segment_ranges[seg_id] = {
             'Full': (seg_row['full_from_km'], seg_row['full_to_km']) if pd.notna(seg_row.get('full_from_km')) else None,
             'Half': (seg_row['half_from_km'], seg_row['half_to_km']) if pd.notna(seg_row.get('half_from_km')) else None,
             '10K': (seg_row['10K_from_km'], seg_row['10K_to_km']) if pd.notna(seg_row.get('10K_from_km')) else None,
+            'Elite': (seg_row['elite_from_km'], seg_row['elite_to_km']) if pd.notna(seg_row.get('elite_from_km')) else None,
+            'Open': (seg_row['open_from_km'], seg_row['open_to_km']) if pd.notna(seg_row.get('open_from_km')) else None,
         }
+    # #region agent log
+    try:
+        sample_5k_seg = None
+        for seg_id in segment_ranges:
+            if seg_id.startswith('N') or seg_id.startswith('O'):
+                sample_5k_seg = seg_id
+                break
+        with open(log_path, 'a') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H1","location":"density_report.py:2478","message":"_build_segment_ranges_per_event exit","data":{"total_segments":len(segment_ranges),"sample_5k_seg":sample_5k_seg,"sample_5k_events":list(segment_ranges.get(sample_5k_seg,{}).keys()) if sample_5k_seg else None},"timestamp":int(time.time()*1000)}) + "\n")
+    except: pass
+    # #endregion
     return segment_ranges
 
 
@@ -2610,6 +2636,13 @@ def _process_event_windows_and_segments(
                 continue
             
             km_range = segment_ranges[seg_id].get(event)
+            # #region agent log
+            if seg_id.startswith('N') or seg_id.startswith('O'):
+                try:
+                    with open("/Users/jthompson/Documents/GitHub/run-density/.cursor/debug.log", 'a') as f:
+                        f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H1,H3","location":"density_report.py:2614","message":"5K segment range lookup","data":{"seg_id":str(seg_id),"event":event,"km_range":str(km_range),"available_events":list(segment_ranges[seg_id].keys())},"timestamp":int(time.time()*1000)}) + "\n")
+                except: pass
+            # #endregion
             if km_range is None:
                 continue
             
@@ -2687,10 +2720,33 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
     WINDOW_SECONDS = _calculate_window_duration_seconds(time_windows)
     earliest_start_min = min(start_times.values())
     
+    # #region agent log
+    log_path = "/Users/jthompson/Documents/GitHub/run-density/.cursor/debug.log"
+    try:
+        unique_events = pace_data['event'].unique().tolist() if 'event' in pace_data.columns else []
+        with open(log_path, 'a') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H2,H4,H5","location":"density_report.py:2723","message":"build_runner_window_mapping entry","data":{"start_times_keys":list(start_times.keys()),"pace_data_events":unique_events,"pace_data_count":len(pace_data)},"timestamp":int(time.time()*1000)}) + "\n")
+    except: pass
+    # #endregion
+    
     # Issue #243 Fix: Loop through events first, then their relevant windows
-    for event in ['Full', '10K', 'Half']:
+    # Fixed: Added 'Elite' and 'Open' events for 5K support
+    # #region agent log
+    hardcoded_events = ['Full', '10K', 'Half', 'Elite', 'Open']
+    try:
+        with open(log_path, 'a') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H2","location":"density_report.py:2693","message":"Hardcoded event list","data":{"hardcoded_events":hardcoded_events},"timestamp":int(time.time()*1000)}) + "\n")
+    except: pass
+    # #endregion
+    for event in ['Full', '10K', 'Half', 'Elite', 'Open']:
         # Get event start time
         event_min = start_times.get(event)
+        # #region agent log
+        try:
+            with open(log_path, 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H2,H4","location":"density_report.py:2695","message":"Processing event","data":{"event":event,"event_min":event_min,"in_start_times":event in start_times},"timestamp":int(time.time()*1000)}) + "\n")
+        except: pass
+        # #endregion
         if event_min is None:
             continue
         
@@ -2699,9 +2755,16 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
         # Calculate which global window index this event starts at
         start_idx = int(((event_min - earliest_start_min) * 60) // WINDOW_SECONDS)
         
-        # Get runners for this event
-        event_mask = pace_data['event'] == event
+        # Get runners for this event (case-insensitive matching)
+        # CSV files use lowercase event names (elite, open) but code uses capitalized (Elite, Open)
+        event_mask = pace_data['event'].str.lower() == event.lower()
         event_runners = pace_data[event_mask]
+        # #region agent log
+        try:
+            with open(log_path, 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H5","location":"density_report.py:2705","message":"Event runners lookup","data":{"event":event,"runners_found":len(event_runners)},"timestamp":int(time.time()*1000)}) + "\n")
+        except: pass
+        # #endregion
         
         if len(event_runners) == 0:
             continue
@@ -2717,6 +2780,15 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
             segments_dict, segment_ranges, mapping
         )
     
+    # #region agent log
+    try:
+        total_mapped = sum(len(windows) for windows in mapping.values())
+        sample_5k_segs = [seg_id for seg_id in mapping.keys() if seg_id.startswith('N') or seg_id.startswith('O')]
+        sample_5k_mapped = sum(len(mapping.get(seg_id, {})) for seg_id in sample_5k_segs[:3])
+        with open(log_path, 'a') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H2","location":"density_report.py:2722","message":"build_runner_window_mapping exit","data":{"total_segments_mapped":len(mapping),"total_windows_mapped":total_mapped,"sample_5k_segs":sample_5k_segs[:3],"sample_5k_windows":sample_5k_mapped},"timestamp":int(time.time()*1000)}) + "\n")
+    except: pass
+    # #endregion
     return mapping
 
 def _build_geojson_from_bin_data(bin_data: Dict[str, Any]) -> Dict[str, Any]:
