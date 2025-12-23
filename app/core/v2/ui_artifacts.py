@@ -142,30 +142,55 @@ def generate_ui_artifacts_per_day(
         co_presence_segments = 0
         
         try:
-            # Only count segments from this day's flow results
-            day_flow = flow_results.get(day.value, {})
-            if isinstance(day_flow, dict):
+            # Issue #548 Bug 3: Transform flow_results structure
+            # flow_results from v2 flow analysis has structure: {Day: {"ok": True, "segments": [...], ...}}
+            # Need to convert segments list to dict keyed by seg_id
+            day_flow_result = flow_results.get(day, {})  # Get by Day enum, not day.value
+            if isinstance(day_flow_result, dict) and day_flow_result.get("ok") and "segments" in day_flow_result:
+                # Transform segments list to dict keyed by seg_id
+                segments_list = day_flow_result.get("segments", [])
+                day_flow_dict = {}
+                for segment in segments_list:
+                    if isinstance(segment, dict):
+                        seg_id = segment.get("seg_id")
+                        if seg_id:
+                            day_flow_dict[seg_id] = segment
+                
+                # Now count segments with overtaking/co-presence activity
                 overtaking_segments_set = set()
                 copresence_segments_set = set()
                 
-                for seg_id, flow_data in day_flow.items():
+                for seg_id, flow_data in day_flow_dict.items():
                     if isinstance(flow_data, dict):
                         # Check for overtaking activity
-                        if flow_data.get("overtaking_a", 0) > 0 or flow_data.get("overtaking_b", 0) > 0:
+                        overtaking_a = flow_data.get("overtaking_a", 0)
+                        overtaking_b = flow_data.get("overtaking_b", 0)
+                        if (isinstance(overtaking_a, (int, float)) and overtaking_a > 0) or \
+                           (isinstance(overtaking_b, (int, float)) and overtaking_b > 0):
                             overtaking_segments_set.add(seg_id)
+                        
                         # Check for co-presence activity
-                        if flow_data.get("copresence_a", 0) > 0 or flow_data.get("copresence_b", 0) > 0:
+                        copresence_a = flow_data.get("copresence_a", 0)
+                        copresence_b = flow_data.get("copresence_b", 0)
+                        if (isinstance(copresence_a, (int, float)) and copresence_a > 0) or \
+                           (isinstance(copresence_b, (int, float)) and copresence_b > 0):
                             copresence_segments_set.add(seg_id)
                 
                 overtaking_segments = len(overtaking_segments_set)
                 co_presence_segments = len(copresence_segments_set)
-            
-            logger.info(
-                f"Day {day.value} flow segment counts: {overtaking_segments} overtaking, "
-                f"{co_presence_segments} co-presence"
-            )
+                
+                logger.info(
+                    f"Day {day.value} flow segment counts: {overtaking_segments} overtaking, "
+                    f"{co_presence_segments} co-presence (from {len(segments_list)} segments)"
+                )
+            else:
+                logger.warning(
+                    f"Day {day.value} flow_results structure unexpected: "
+                    f"ok={day_flow_result.get('ok') if isinstance(day_flow_result, dict) else 'N/A'}, "
+                    f"has_segments={'segments' in day_flow_result if isinstance(day_flow_result, dict) else False}"
+                )
         except Exception as e:
-            logger.warning(f"Could not calculate flow segment counts: {e}")
+            logger.warning(f"Could not calculate flow segment counts: {e}", exc_info=True)
         
         # Call the internal function with day-scoped data
         try:
@@ -476,6 +501,33 @@ def _export_ui_artifacts_v2(
                         f"   ✅ Filtered segments.geojson: {original_count} -> "
                         f"{len(segments_geojson['features'])} features for day {day.value}"
                     )
+                    
+                    # Issue #548 Bug 1 & 2: Add events property from segments_df to each feature
+                    # Extract events from segments.csv (lowercase: full, half, 10k, elite, open)
+                    if segments_df is not None and not segments_df.empty:
+                        for feature in segments_geojson["features"]:
+                            seg_id = _feature_segment_id(feature)
+                            if seg_id:
+                                seg_row = segments_df[segments_df['seg_id'] == seg_id]
+                                if not seg_row.empty:
+                                    events = []
+                                    # Issue #548 Bug 1: Use lowercase column names to match CSV format
+                                    if seg_row.iloc[0].get('full') == 'y':
+                                        events.append('full')
+                                    if seg_row.iloc[0].get('half') == 'y':
+                                        events.append('half')
+                                    if seg_row.iloc[0].get('10k') == 'y' or seg_row.iloc[0].get('10K') == 'y':
+                                        events.append('10k')
+                                    if seg_row.iloc[0].get('elite') == 'y':
+                                        events.append('elite')
+                                    if seg_row.iloc[0].get('open') == 'y':
+                                        events.append('open')
+                                    
+                                    # Add events to feature properties
+                                    props = feature.get("properties", {})
+                                    props["events"] = events
+                                    feature["properties"] = props
+                        logger.info(f"   ✅ Added events property to segments.geojson features from segments_df")
             else:
                 segments_geojson = {"type": "FeatureCollection", "features": []}
         except Exception as e:
