@@ -476,6 +476,33 @@ def _export_ui_artifacts_v2(
                         f"   ✅ Filtered segments.geojson: {original_count} -> "
                         f"{len(segments_geojson['features'])} features for day {day.value}"
                     )
+                    
+                    # Issue #548 Bug 1 & 2: Add events property from segments_df to each feature
+                    # Extract events from segments.csv (lowercase: full, half, 10k, elite, open)
+                    if segments_df is not None and not segments_df.empty:
+                        for feature in segments_geojson["features"]:
+                            seg_id = _feature_segment_id(feature)
+                            if seg_id:
+                                seg_row = segments_df[segments_df['seg_id'] == seg_id]
+                                if not seg_row.empty:
+                                    events = []
+                                    # Issue #548 Bug 1: Use lowercase column names to match CSV format
+                                    if seg_row.iloc[0].get('full') == 'y':
+                                        events.append('full')
+                                    if seg_row.iloc[0].get('half') == 'y':
+                                        events.append('half')
+                                    if seg_row.iloc[0].get('10k') == 'y' or seg_row.iloc[0].get('10K') == 'y':
+                                        events.append('10k')
+                                    if seg_row.iloc[0].get('elite') == 'y':
+                                        events.append('elite')
+                                    if seg_row.iloc[0].get('open') == 'y':
+                                        events.append('open')
+                                    
+                                    # Add events to feature properties
+                                    props = feature.get("properties", {})
+                                    props["events"] = events
+                                    feature["properties"] = props
+                        logger.info(f"   ✅ Added events property to segments.geojson features from segments_df")
             else:
                 segments_geojson = {"type": "FeatureCollection", "features": []}
         except Exception as e:

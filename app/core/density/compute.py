@@ -276,6 +276,7 @@ def load_density_cfg(path: str) -> Dict[str, dict]:
     cfg = {}
     for _, r in df.iterrows():
         # Phase 4 (Issue #498): Support all event types dynamically
+        # Issue #548 Bug 1: Use lowercase event names consistently to match CSV columns
         # Check for event flags (full, half, 10k, elite, open) - case-insensitive
         events = []
         event_columns = ["full", "half", "10k", "elite", "open"]
@@ -283,7 +284,8 @@ def load_density_cfg(path: str) -> Dict[str, dict]:
             # Case-insensitive column matching
             for col in r.index:
                 if col.lower() == event_col.lower() and y(r, col):
-                    events.append(event_col.capitalize() if event_col != "10k" else "10K")
+                    # Issue #548 Bug 1: Keep lowercase for internal consistency
+                    events.append(event_col.lower())
                     break
         
         events = tuple(events)
