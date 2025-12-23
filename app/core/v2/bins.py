@@ -124,32 +124,20 @@ def generate_bins_v2(
         bins_dir = get_day_output_path(run_id, day, "bins")
         bins_dir.mkdir(parents=True, exist_ok=True)
         
-        # Map event names to v1 format
-        event_name_mapping = {
-            "full": "Full",
-            "half": "Half",
-            "10k": "10K",
-            "elite": "Elite",
-            "open": "Open"
-        }
-        
         # Get segments CSV path
         segments_csv_path = str(Path(data_dir) / "segments.csv")
         
         # CRITICAL FIX: build_runner_window_mapping() hardcodes reading from "data/runners.csv"
         # We need to temporarily replace it with our day-filtered runners
-        # However, build_runner_window_mapping() expects event names like 'Full', '10K', 'Half'
-        # So we need to map our lowercase event names to uppercase for the legacy function
+        # Issue #548 Bug 1: build_runner_window_mapping() now uses lowercase event names
         import tempfile
         import shutil
         
-        # Create temp combined runners CSV with v1 event names (uppercase for legacy compatibility)
+        # Create temp combined runners CSV (event names are already lowercase)
         temp_runners_df = runners_df.copy()
+        # Ensure event column is lowercase (should already be, but double-check)
         if 'event' in temp_runners_df.columns:
-            # Map v2 lowercase event names to v1 uppercase format for build_runner_window_mapping()
-            temp_runners_df['event'] = temp_runners_df['event'].str.lower().map(
-                lambda x: event_name_mapping.get(x, x.capitalize())
-            )
+            temp_runners_df['event'] = temp_runners_df['event'].str.lower()
         
         # Create temp file
         temp_runners_csv = tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False)
@@ -157,21 +145,18 @@ def generate_bins_v2(
         temp_runners_csv.close()
         temp_runners_path = temp_runners_csv.name
         
-        # Temporarily replace "data/runners.csv" with our temp file
+        # Issue #548: Create temporary "data/runners.csv" from our day-filtered runners
+        # (build_runner_window_mapping hardcodes reading from this path)
         original_runners_path = Path(data_dir) / "runners.csv"
-        backup_runners_path = None
         runners_was_replaced = False
         
         try:
-            # If "data/runners.csv" exists, back it up
-            if original_runners_path.exists():
-                backup_runners_path = str(original_runners_path) + ".backup"
-                shutil.copy2(original_runners_path, backup_runners_path)
-            
-            # Copy our temp file to "data/runners.csv"
+            # Issue #548: runners.csv no longer exists, so we just create it from our temp file
+            # No need to back up since the file doesn't exist
+            # Copy our temp file to "data/runners.csv" (temporary file for build_runner_window_mapping)
             shutil.copy2(temp_runners_path, original_runners_path)
             runners_was_replaced = True
-            logger.debug(f"Temporarily replaced data/runners.csv with day-filtered runners ({len(temp_runners_df)} runners)")
+            logger.debug(f"Created temporary data/runners.csv with day-filtered runners ({len(temp_runners_df)} runners)")
             
         except Exception as e:
             logger.warning(f"Failed to temporarily replace data/runners.csv: {e}")
@@ -393,21 +378,15 @@ def generate_bins_v2(
             return bins_dir
             
         finally:
-            # Restore original "data/runners.csv" if we replaced it
+            # Issue #548: Remove temporary "data/runners.csv" if we created it
             if runners_was_replaced:
                 try:
-                    if backup_runners_path and os.path.exists(backup_runners_path):
-                        shutil.copy2(backup_runners_path, original_runners_path)
-                        os.unlink(backup_runners_path)
-                        logger.debug(f"Restored original data/runners.csv")
-                    elif original_runners_path.exists():
-                        # Remove our temp file (only if we created it)
-                        try:
-                            os.unlink(original_runners_path)
-                        except:
-                            pass
+                    if original_runners_path.exists():
+                        # Remove our temp file (we created it, so just delete it)
+                        os.unlink(original_runners_path)
+                        logger.debug(f"Removed temporary data/runners.csv")
                 except Exception as e:
-                    logger.warning(f"Failed to restore original data/runners.csv: {e}")
+                    logger.warning(f"Failed to remove temporary data/runners.csv: {e}")
             
             # Clean up temp files
             try:

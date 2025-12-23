@@ -403,20 +403,13 @@ def generate_flow_report_v2(
         from app.flow_report import generate_temporal_flow_report
         
         # Extract start_times from day_events
+        # Issue #548 Bug 1: Use lowercase event names consistently (no v1 uppercase compatibility)
         # generate_flow_markdown expects minutes (float), not datetime
         start_times: Dict[str, float] = {}
-        event_name_mapping = {
-            "full": "Full",
-            "half": "Half",
-            "10k": "10K",
-            "elite": "Elite",
-            "open": "Open"
-        }
         
         for event in day_events:
-            v1_event_name = event_name_mapping.get(event.name.lower(), event.name.capitalize())
             # start_times expects minutes after midnight (already in Event.start_time)
-            start_times[v1_event_name] = float(event.start_time)
+            start_times[event.name.lower()] = float(event.start_time)
         
         # Generate flow report using existing function
         # Note: analyze_temporal_flow_segments_v2 returns results with same structure as v1

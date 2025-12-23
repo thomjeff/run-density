@@ -305,17 +305,9 @@ def create_flow_segments_from_flow_csv(
     """
     flow_format_segments = []
     
-    # Event name mapping from v2 (lowercase) to v1 format
-    event_name_mapping = {
-        "full": "Full",
-        "half": "Half",
-        "10k": "10K",
-        "elite": "Elite",
-        "open": "Open"
-    }
-    
-    v1_event_a = event_name_mapping.get(event_a.name.lower(), event_a.name.capitalize())
-    v1_event_b = event_name_mapping.get(event_b.name.lower(), event_b.name.capitalize())
+    # Issue #548 Bug 1: Use lowercase event names consistently (no v1 uppercase compatibility)
+    event_a_lower = event_a.name.lower()
+    event_b_lower = event_b.name.lower()
     
     for _, flow_row in flow_rows.iterrows():
         seg_id = flow_row["seg_id"]
@@ -343,8 +335,8 @@ def create_flow_segments_from_flow_csv(
         flow_segment = {
             "seg_id": seg_id,
             "segment_label": flow_row.get("seg_label", ""),
-            "eventa": v1_event_a,  # Use flow.csv ordering
-            "eventb": v1_event_b,  # Use flow.csv ordering
+            "eventa": event_a_lower,  # Issue #548 Bug 1: Use lowercase consistently
+            "eventb": event_b_lower,  # Issue #548 Bug 1: Use lowercase consistently
             "from_km_a": from_km_a,  # From flow.csv
             "to_km_a": to_km_a,  # From flow.csv
             "from_km_b": from_km_b,  # From flow.csv
@@ -389,17 +381,9 @@ def create_flow_segments_fallback(
     """
     flow_format_segments = []
     
-    # Event name mapping from v2 (lowercase) to v1 format
-    event_name_mapping = {
-        "full": "Full",
-        "half": "Half",
-        "10k": "10K",
-        "elite": "Elite",
-        "open": "Open"
-    }
-    
-    v1_event_a = event_name_mapping.get(event_a.name.lower(), event_a.name.capitalize())
-    v1_event_b = event_name_mapping.get(event_b.name.lower(), event_b.name.capitalize())
+    # Issue #548 Bug 1: Use lowercase event names consistently (no v1 uppercase compatibility)
+    event_a_lower = event_a.name.lower()
+    event_b_lower = event_b.name.lower()
     
     for _, segment_row in shared_segments.iterrows():
         seg_id = segment_row["seg_id"]
@@ -546,19 +530,12 @@ def analyze_temporal_flow_segments_v2(
             }
             continue
         
-        # Prepare start_times dict (in minutes, not datetime, for v1 compatibility)
+        # Prepare start_times dict (in minutes, not datetime)
+        # Issue #548 Bug 1: Use lowercase event names consistently (no v1 uppercase compatibility)
         start_times = {}
-        event_name_mapping = {
-            "full": "Full",
-            "half": "Half",
-            "10k": "10K",
-            "elite": "Elite",
-            "open": "Open"
-        }
         
         for event in day_events_unique:
-            v1_event_name = event_name_mapping.get(event.name.lower(), event.name.capitalize())
-            start_times[v1_event_name] = float(event.start_time)
+            start_times[event.name.lower()] = float(event.start_time)
         
         logger.info(f"Day {day.value}: Analyzing {len(day_pairs)} pairs with {len(day_runners_df)} runners")
         

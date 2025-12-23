@@ -185,8 +185,8 @@ def load_all_runners_for_events(
     """
     Load all runners from event-specific CSV files and combine into a single DataFrame.
     
-    Falls back to v1 runners.csv format if event-specific files don't exist.
-    Maps event names to v1 format (Full, Half, 10K) for compatibility with v1 density functions.
+    Loads runners from individual event-specific CSV files ({event}_runners.csv).
+    Issue #548: Removed fallback to v1 runners.csv format - file no longer exists.
     
     Args:
         events: List of Event objects
@@ -200,22 +200,14 @@ def load_all_runners_for_events(
     all_runners = []
     event_names = {event.name.lower() for event in events}
     
-    # Event name mapping from v2 (lowercase) to v1 format
-    event_name_mapping = {
-        "full": "Full",
-        "half": "Half",
-        "10k": "10K",
-        "elite": "Elite",  # v2 only
-        "open": "Open"     # v2 only
-    }
-    
-    # Try event-specific files first (v2 format)
+    # Issue #548 Bug 1: Use lowercase events consistently (no v1 uppercase compatibility)
+    # Try event-specific files first (v2 format: {event}_runners.csv)
     for event in events:
         try:
             runners_df = load_runners_by_event(event.name, data_dir)
-            # Ensure event column matches v1 format
+            # Ensure event column is lowercase for consistency
             runners_df = runners_df.copy()
-            runners_df["event"] = event_name_mapping.get(event.name.lower(), event.name.capitalize())
+            runners_df["event"] = event.name.lower()
             all_runners.append(runners_df)
             logger.debug(f"Loaded {len(runners_df)} runners from {event.runners_file} for event '{event.name}'")
         except FileNotFoundError:
@@ -223,39 +215,11 @@ def load_all_runners_for_events(
             logger.debug(f"Event-specific file '{event.runners_file}' not found for event '{event.name}', will try v1 format")
             continue
     
-    # If no event-specific files found, try v1 runners.csv format
+    # Issue #548: Removed fallback to v1 runners.csv format - file no longer exists
+    # All events must have individual {event}_runners.csv files
     if not all_runners:
-        v1_runners_path = Path(data_dir) / "runners.csv"
-        if v1_runners_path.exists():
-            logger.info(f"Using v1 runners.csv format (event-specific files not found)")
-            runners_df = load_runners(str(v1_runners_path))
-            # Filter to only requested events and normalize event names
-            if "event" in runners_df.columns:
-                # Normalize event names for comparison
-                runners_df = runners_df.copy()
-                runners_df["event_normalized"] = runners_df["event"].astype(str).str.lower()
-                # Map v1 event names to v1 format (capitalize)
-                event_mapping = {
-                    "full": "Full",
-                    "half": "Half",
-                    "10k": "10K",
-                    "10K": "10K"
-                }
-                # Filter to requested events
-                requested_normalized = {e.lower() for e in event_names}
-                mask = runners_df["event_normalized"].isin(requested_normalized)
-                runners_df = runners_df[mask].copy()
-                # Map to v1 format
-                runners_df["event"] = runners_df["event_normalized"].map(
-                    lambda x: event_mapping.get(x, x.capitalize())
-                )
-                runners_df = runners_df.drop(columns=["event_normalized"])
-            all_runners.append(runners_df)
-        else:
-            logger.warning(f"No runner files found for events: {[e.name for e in events]}")
-    
-    if not all_runners:
-        logger.warning("No runners loaded for any events")
+        logger.warning(f"No runner files found for events: {[e.name for e in events]}")
+        logger.warning("Expected individual event files: {event}_runners.csv (e.g., full_runners.csv, 10k_runners.csv)")
         return pd.DataFrame(columns=["runner_id", "event", "pace", "distance", "start_offset"])
     
     # Combine all runners
@@ -287,18 +251,10 @@ def filter_runners_by_day(
     # Get event names for this day (in v1 format)
     day_event_names = {event.name.lower() for event in events if event.day == day}
     
-    # Map to v1 format for comparison
-    event_name_mapping = {
-        "full": "Full",
-        "half": "Half",
-        "10k": "10K",
-        "elite": "Elite",
-        "open": "Open"
-    }
-    day_event_names_v1 = {event_name_mapping.get(e.lower(), e.capitalize()) for e in day_event_names}
-    
+    # Issue #548 Bug 1: Use lowercase event names consistently (no v1 uppercase compatibility)
+    # day_event_names is already lowercase, and runners_df["event"] should be lowercase too
     if "event" in runners_df.columns:
-        filtered = runners_df[runners_df["event"].isin(day_event_names_v1)].copy()
+        filtered = runners_df[runners_df["event"].isin(day_event_names)].copy()
         logger.debug(f"Filtered runners: {len(runners_df)} -> {len(filtered)} for day {day.value}")
         return filtered
     
@@ -389,16 +345,10 @@ def analyze_density_segments_v2(
             }
             continue
         
-        # Prepare start_times dict (convert minutes to datetime for v1 compatibility)
+        # Prepare start_times dict (convert minutes to datetime)
+        # Issue #548 Bug 1: Use lowercase event names consistently (no v1 uppercase compatibility)
         # Use a reference date (e.g., 2025-01-01) for datetime conversion
         start_times = {}
-        event_name_mapping = {
-            "full": "Full",
-            "half": "Half",
-            "10k": "10K",
-            "elite": "Elite",
-            "open": "Open"
-        }
         
         for event in day_events:
             # Convert minutes after midnight to datetime
@@ -409,9 +359,8 @@ def analyze_density_segments_v2(
                 second=0,
                 microsecond=0
             )
-            # Map v2 event name to v1 format for analyze_density_segments compatibility
-            v1_event_name = event_name_mapping.get(event.name.lower(), event.name.capitalize())
-            start_times[v1_event_name] = start_datetime
+            # Use lowercase event names consistently
+            start_times[event.name.lower()] = start_datetime
         
         logger.info(f"Day {day.value}: Analyzing {len(day_runners_df)} runners with start_times: {[(k, v.strftime('%H:%M')) for k, v in start_times.items()]}")
         

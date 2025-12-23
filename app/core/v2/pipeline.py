@@ -414,17 +414,10 @@ def create_full_analysis_pipeline(
             logger.info(f"Filtered segments for day {day.value}: {len(segments_df)} -> {len(day_segments_df)} segments")
             
             # Prepare start_times for bin generation (minutes as float)
+            # Issue #548 Bug 1: Use lowercase event names consistently (no v1 uppercase compatibility)
             start_times = {}
-            event_name_mapping = {
-                "full": "Full",
-                "half": "Half",
-                "10k": "10K",
-                "elite": "Elite",
-                "open": "Open"
-            }
             for event in day_events:
-                v1_event_name = event_name_mapping.get(event.name.lower(), event.name.capitalize())
-                start_times[v1_event_name] = float(event.start_time)
+                start_times[event.name.lower()] = float(event.start_time)
             
             # Generate bins for this day (Issue #515: Use day-filtered segments)
             bins_dir = generate_bins_v2(
@@ -485,18 +478,11 @@ def create_full_analysis_pipeline(
                     logger.warning(f"No density results for day {day.value}, skipping map_data.json")
                     continue
                 
-                # Prepare start_times dict for map generation (v1 format: "Full", "10K", etc.)
-                event_name_mapping = {
-                    "full": "Full",
-                    "half": "Half",
-                    "10k": "10K",
-                    "elite": "Elite",
-                    "open": "Open"
-                }
+                # Prepare start_times dict for map generation
+                # Issue #548 Bug 1: Use lowercase event names consistently (no v1 uppercase compatibility)
                 start_times_for_map = {}
                 for event in day_events:
-                    v1_event_name = event_name_mapping.get(event.name.lower(), event.name.capitalize())
-                    start_times_for_map[v1_event_name] = float(event.start_time)
+                    start_times_for_map[event.name.lower()] = float(event.start_time)
                 
                 # Generate map dataset from density results
                 map_data = generate_map_dataset(day_density, start_times_for_map)
