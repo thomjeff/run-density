@@ -2145,11 +2145,12 @@ def _add_geometries_to_bin_features(
             segments_list.append({
                 "seg_id": segment['seg_id'],
                 "segment_label": segment.get('seg_label', segment['seg_id']),
-                "10K": segment.get('10K', 'n'),
+                # Issue #548 Bug 1: Use lowercase '10k' to match CSV column format, with fallback
+                "10K": segment.get('10k', segment.get('10K', 'n')),
                 "half": segment.get('half', 'n'),
                 "full": segment.get('full', 'n'),
-                "10K_from_km": segment.get('10K_from_km'),
-                "10K_to_km": segment.get('10K_to_km'),
+                "10K_from_km": segment.get('10k_from_km') or segment.get('10K_from_km'),
+                "10K_to_km": segment.get('10k_to_km') or segment.get('10K_to_km'),
                 "half_from_km": segment.get('half_from_km'),
                 "half_to_km": segment.get('half_to_km'),
                 "full_from_km": segment.get('full_from_km'),
