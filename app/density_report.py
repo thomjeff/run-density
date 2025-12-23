@@ -2481,7 +2481,8 @@ def _build_segment_ranges_per_event(segments_config: pd.DataFrame) -> Dict[str, 
         segment_ranges[seg_id] = {
             'Full': (seg_row['full_from_km'], seg_row['full_to_km']) if pd.notna(seg_row.get('full_from_km')) else None,
             'Half': (seg_row['half_from_km'], seg_row['half_to_km']) if pd.notna(seg_row.get('half_from_km')) else None,
-            '10K': (seg_row['10K_from_km'], seg_row['10K_to_km']) if pd.notna(seg_row.get('10K_from_km')) else None,
+            # Issue #548 Bug 1: Use lowercase '10k' to match CSV column names, with fallback for backward compatibility
+            '10K': (seg_row.get('10k_from_km') or seg_row.get('10K_from_km'), seg_row.get('10k_to_km') or seg_row.get('10K_to_km')) if pd.notna(seg_row.get('10k_from_km') or seg_row.get('10K_from_km')) else None,
             'Elite': (seg_row['elite_from_km'], seg_row['elite_to_km']) if pd.notna(seg_row.get('elite_from_km')) else None,
             'Open': (seg_row['open_from_km'], seg_row['open_to_km']) if pd.notna(seg_row.get('open_from_km')) else None,
         }
@@ -2602,11 +2603,11 @@ def _process_event_windows_and_segments(
     import numpy as np
     
     # Build event-to-segment mapping from CSV columns
-    # Map event names to CSV column names (case-insensitive)
+    # Issue #548 Bug 1: Map event names to CSV column names (use lowercase '10k' to match CSV format)
     event_to_column = {
         'Full': 'full',
         'Half': 'half',
-        '10K': '10K',
+        '10K': '10k',  # Issue #548 Bug 1: Use lowercase '10k' to match CSV column name
         'Elite': 'elite',
         'Open': 'open'
     }
