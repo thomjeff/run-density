@@ -142,30 +142,55 @@ def generate_ui_artifacts_per_day(
         co_presence_segments = 0
         
         try:
-            # Only count segments from this day's flow results
-            day_flow = flow_results.get(day.value, {})
-            if isinstance(day_flow, dict):
+            # Issue #548 Bug 3: Transform flow_results structure
+            # flow_results from v2 flow analysis has structure: {Day: {"ok": True, "segments": [...], ...}}
+            # Need to convert segments list to dict keyed by seg_id
+            day_flow_result = flow_results.get(day, {})  # Get by Day enum, not day.value
+            if isinstance(day_flow_result, dict) and day_flow_result.get("ok") and "segments" in day_flow_result:
+                # Transform segments list to dict keyed by seg_id
+                segments_list = day_flow_result.get("segments", [])
+                day_flow_dict = {}
+                for segment in segments_list:
+                    if isinstance(segment, dict):
+                        seg_id = segment.get("seg_id")
+                        if seg_id:
+                            day_flow_dict[seg_id] = segment
+                
+                # Now count segments with overtaking/co-presence activity
                 overtaking_segments_set = set()
                 copresence_segments_set = set()
                 
-                for seg_id, flow_data in day_flow.items():
+                for seg_id, flow_data in day_flow_dict.items():
                     if isinstance(flow_data, dict):
                         # Check for overtaking activity
-                        if flow_data.get("overtaking_a", 0) > 0 or flow_data.get("overtaking_b", 0) > 0:
+                        overtaking_a = flow_data.get("overtaking_a", 0)
+                        overtaking_b = flow_data.get("overtaking_b", 0)
+                        if (isinstance(overtaking_a, (int, float)) and overtaking_a > 0) or \
+                           (isinstance(overtaking_b, (int, float)) and overtaking_b > 0):
                             overtaking_segments_set.add(seg_id)
+                        
                         # Check for co-presence activity
-                        if flow_data.get("copresence_a", 0) > 0 or flow_data.get("copresence_b", 0) > 0:
+                        copresence_a = flow_data.get("copresence_a", 0)
+                        copresence_b = flow_data.get("copresence_b", 0)
+                        if (isinstance(copresence_a, (int, float)) and copresence_a > 0) or \
+                           (isinstance(copresence_b, (int, float)) and copresence_b > 0):
                             copresence_segments_set.add(seg_id)
                 
                 overtaking_segments = len(overtaking_segments_set)
                 co_presence_segments = len(copresence_segments_set)
-            
-            logger.info(
-                f"Day {day.value} flow segment counts: {overtaking_segments} overtaking, "
-                f"{co_presence_segments} co-presence"
-            )
+                
+                logger.info(
+                    f"Day {day.value} flow segment counts: {overtaking_segments} overtaking, "
+                    f"{co_presence_segments} co-presence (from {len(segments_list)} segments)"
+                )
+            else:
+                logger.warning(
+                    f"Day {day.value} flow_results structure unexpected: "
+                    f"ok={day_flow_result.get('ok') if isinstance(day_flow_result, dict) else 'N/A'}, "
+                    f"has_segments={'segments' in day_flow_result if isinstance(day_flow_result, dict) else False}"
+                )
         except Exception as e:
-            logger.warning(f"Could not calculate flow segment counts: {e}")
+            logger.warning(f"Could not calculate flow segment counts: {e}", exc_info=True)
         
         # Call the internal function with day-scoped data
         try:
