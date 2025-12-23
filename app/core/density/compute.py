@@ -1653,6 +1653,18 @@ def analyze_density_segments(pace_data: pd.DataFrame,
             min_km = 0.0
             max_km = 0.0
         
+        # Issue #548 Bug 1: Normalize event names to v1 format (capitalized) to match pace_data["event"]
+        # pace_data uses v1 format: "Full", "Half", "10K", "Elite", "Open"
+        # segment.events is lowercase: ('full', 'half', '10k', 'elite', 'open')
+        event_name_mapping = {
+            "full": "Full",
+            "half": "Half",
+            "10k": "10K",
+            "elite": "Elite",
+            "open": "Open"
+        }
+        normalized_events = tuple(event_name_mapping.get(e.lower(), e.capitalize()) for e in d["events"])
+        
         # Create segment metadata from segments_new.csv
         segment = SegmentMeta(
             segment_id=seg_id,
@@ -1660,7 +1672,7 @@ def analyze_density_segments(pace_data: pd.DataFrame,
             to_km=max_km,    # Physical segment end
             width_m=d["width_m"],
             direction=d["direction"],
-            events=d["events"],
+            events=normalized_events,  # Issue #548 Bug 1: Use v1 format to match pace_data
             event_a="",  # Not used in density analysis
             event_b=""   # Not used in density analysis
         )
