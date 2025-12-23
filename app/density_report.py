@@ -2476,16 +2476,19 @@ def generate_bin_features_with_coarsening(segments: dict, time_windows: list, ru
 
 def _build_segment_ranges_per_event(segments_config: pd.DataFrame) -> Dict[str, Dict[str, Tuple[float, float]]]:
     """Build segment km ranges dictionary per event type."""
+    # Issue #548 Bug 1: Use lowercase event names consistently (no v1 uppercase compatibility)
     segment_ranges = {}
     for _, seg_row in segments_config.iterrows():
         seg_id = seg_row['seg_id']
         segment_ranges[seg_id] = {
-            'Full': (seg_row['full_from_km'], seg_row['full_to_km']) if pd.notna(seg_row.get('full_from_km')) else None,
-            'Half': (seg_row['half_from_km'], seg_row['half_to_km']) if pd.notna(seg_row.get('half_from_km')) else None,
-            # Issue #548 Bug 1: Use lowercase '10k' to match CSV column names, with fallback for backward compatibility
-            '10K': (seg_row.get('10k_from_km') or seg_row.get('10K_from_km'), seg_row.get('10k_to_km') or seg_row.get('10K_to_km')) if pd.notna(seg_row.get('10k_from_km') or seg_row.get('10K_from_km')) else None,
-            'Elite': (seg_row['elite_from_km'], seg_row['elite_to_km']) if pd.notna(seg_row.get('elite_from_km')) else None,
-            'Open': (seg_row['open_from_km'], seg_row['open_to_km']) if pd.notna(seg_row.get('open_from_km')) else None,
+            'full': (seg_row['full_from_km'], seg_row['full_to_km']) if pd.notna(seg_row.get('full_from_km')) else None,
+            'half': (seg_row['half_from_km'], seg_row['half_to_km']) if pd.notna(seg_row.get('half_from_km')) else None,
+            # Issue #548 Bug: Fix 10k range lookup - use pd.notna() check instead of 'or' to handle 0.0 values correctly
+            # When 10k_from_km is 0.0, 'or' treats it as falsy and returns None, causing km_range to be None
+            '10k': (seg_row.get('10k_from_km') if pd.notna(seg_row.get('10k_from_km')) else seg_row.get('10K_from_km'),
+                    seg_row.get('10k_to_km') if pd.notna(seg_row.get('10k_to_km')) else seg_row.get('10K_to_km')) if pd.notna(seg_row.get('10k_from_km')) or pd.notna(seg_row.get('10K_from_km')) else None,
+            'elite': (seg_row['elite_from_km'], seg_row['elite_to_km']) if pd.notna(seg_row.get('elite_from_km')) else None,
+            'open': (seg_row['open_from_km'], seg_row['open_to_km']) if pd.notna(seg_row.get('open_from_km')) else None,
         }
     return segment_ranges
 
@@ -2544,6 +2547,8 @@ def _calculate_runner_positions_for_segment_window(
         Tuple of (pos_m array, speed_mps array) for runners in segment during window
     """
     import numpy as np
+    import json
+    import time
     
     runner_start_times = event_runners_copy['runner_start_time'].values
     pace_sec_per_km = event_runners_copy['pace_sec_per_km'].values
@@ -2555,6 +2560,34 @@ def _calculate_runner_positions_for_segment_window(
     # Vectorized check: runner in segment during time window (±30s tolerance)
     in_window_mask = (time_at_seg_start <= (t_mid_sec + 30)) & (time_at_seg_end >= (t_mid_sec - 30))
     
+    # #region agent log - Debug A1 10k missing at 07:20
+    try:
+        with open('/app/.cursor/debug.log', 'a') as f:
+            log_entry = {
+                "location": "density_report.py:_calculate_runner_positions_for_segment_window",
+                "message": "Time window filtering",
+                "data": {
+                    "t_mid_sec": t_mid_sec,
+                    "t_mid_time": f"{int(t_mid_sec // 3600):02d}:{int((t_mid_sec % 3600) // 60):02d}:{int(t_mid_sec % 60):02d}",
+                    "from_km": from_km,
+                    "to_km": to_km,
+                    "total_runners": len(event_runners_copy),
+                    "in_window_count": int(in_window_mask.sum()),
+                    "min_start_time": float(runner_start_times.min()) if len(runner_start_times) > 0 else None,
+                    "max_start_time": float(runner_start_times.max()) if len(runner_start_times) > 0 else None,
+                    "min_time_at_seg_start": float(time_at_seg_start.min()) if len(time_at_seg_start) > 0 else None,
+                    "max_time_at_seg_end": float(time_at_seg_end.max()) if len(time_at_seg_end) > 0 else None
+                },
+                "timestamp": int(time.time() * 1000),
+                "sessionId": "debug-session",
+                "runId": "a1-10k-investigation",
+                "hypothesisId": "A1_10k_missing"
+            }
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception:
+        pass
+    # #endregion
+    
     # Filter to runners in window
     valid_runners = event_runners_copy[in_window_mask]
     if len(valid_runners) == 0:
@@ -2563,6 +2596,31 @@ def _calculate_runner_positions_for_segment_window(
     # Vectorized position calculations
     time_since_start = t_mid_sec - valid_runners['runner_start_time'].values
     started_mask = time_since_start >= 0
+    
+    # #region agent log - Debug A1 10k missing at 07:20
+    try:
+        with open('/app/.cursor/debug.log', 'a') as f:
+            log_entry = {
+                "location": "density_report.py:_calculate_runner_positions_for_segment_window",
+                "message": "Started mask filtering",
+                "data": {
+                    "t_mid_sec": t_mid_sec,
+                    "t_mid_time": f"{int(t_mid_sec // 3600):02d}:{int((t_mid_sec % 3600) // 60):02d}:{int(t_mid_sec % 60):02d}",
+                    "valid_runners_count": len(valid_runners),
+                    "started_count": int(started_mask.sum()),
+                    "not_started_count": int((~started_mask).sum()),
+                    "min_runner_start": float(valid_runners['runner_start_time'].min()) if len(valid_runners) > 0 else None,
+                    "max_runner_start": float(valid_runners['runner_start_time'].max()) if len(valid_runners) > 0 else None
+                },
+                "timestamp": int(time.time() * 1000),
+                "sessionId": "debug-session",
+                "runId": "a1-10k-investigation",
+                "hypothesisId": "A1_10k_missing"
+            }
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception:
+        pass
+    # #endregion
     
     if not started_mask.any():
         return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
@@ -2575,6 +2633,32 @@ def _calculate_runner_positions_for_segment_window(
     
     # Check if within segment range (vectorized)
     in_segment_mask = (runner_abs_km >= from_km) & (runner_abs_km <= to_km)
+    
+    # #region agent log - Debug A1 10k missing at 07:20
+    try:
+        with open('/app/.cursor/debug.log', 'a') as f:
+            log_entry = {
+                "location": "density_report.py:_calculate_runner_positions_for_segment_window",
+                "message": "Segment range filtering",
+                "data": {
+                    "t_mid_sec": t_mid_sec,
+                    "t_mid_time": f"{int(t_mid_sec // 3600):02d}:{int((t_mid_sec % 3600) // 60):02d}:{int(t_mid_sec % 60):02d}",
+                    "from_km": from_km,
+                    "to_km": to_km,
+                    "started_count": int(started_mask.sum()),
+                    "in_segment_count": int(in_segment_mask.sum()),
+                    "min_runner_abs_km": float(runner_abs_km.min()) if len(runner_abs_km) > 0 else None,
+                    "max_runner_abs_km": float(runner_abs_km.max()) if len(runner_abs_km) > 0 else None
+                },
+                "timestamp": int(time.time() * 1000),
+                "sessionId": "debug-session",
+                "runId": "a1-10k-investigation",
+                "hypothesisId": "A1_10k_missing"
+            }
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception:
+        pass
+    # #endregion
     
     if not in_segment_mask.any():
         return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
@@ -2604,13 +2688,14 @@ def _process_event_windows_and_segments(
     import numpy as np
     
     # Build event-to-segment mapping from CSV columns
-    # Issue #548 Bug 1: Map event names to CSV column names (use lowercase '10k' to match CSV format)
+    # Issue #548 Bug 1: Use lowercase event names consistently (no v1 uppercase compatibility)
+    # Event names are already lowercase, so mapping is 1:1
     event_to_column = {
-        'Full': 'full',
-        'Half': 'half',
-        '10K': '10k',  # Issue #548 Bug 1: Use lowercase '10k' to match CSV column name
-        'Elite': 'elite',
-        'Open': 'open'
+        'full': 'full',
+        'half': 'half',
+        '10k': '10k',
+        'elite': 'elite',
+        'open': 'open'
     }
     event_column = event_to_column.get(event, event.lower())
     
@@ -2619,6 +2704,36 @@ def _process_event_windows_and_segments(
         w_idx = global_w_idx  # Use global window index for mapping
         
         t_mid_sec = _calculate_window_midpoint_seconds(t_start, t_end)
+        
+        # #region agent log - Debug A1 10k missing at 07:20
+        try:
+            with open('/app/.cursor/debug.log', 'a') as f:
+                log_entry = {
+                    "location": "density_report.py:_process_event_windows_and_segments",
+                    "message": "Window timing check",
+                    "data": {
+                        "seg_id": "ALL",  # Will be filtered to A1 in analysis
+                        "event": event,
+                        "t_start": str(t_start),
+                        "t_end": str(t_end),
+                        "t_mid_sec": t_mid_sec,
+                        "t_mid_time": f"{int(t_mid_sec // 3600):02d}:{int((t_mid_sec % 3600) // 60):02d}:{int(t_mid_sec % 60):02d}",
+                        "event_start_sec": event_start_sec,
+                        "event_start_time": f"{int(event_start_sec // 3600):02d}:{int((event_start_sec % 3600) // 60):02d}:{int(event_start_sec % 60):02d}",
+                        "WINDOW_SECONDS": WINDOW_SECONDS,
+                        "skip_threshold": event_start_sec - WINDOW_SECONDS,
+                        "will_skip": t_mid_sec < (event_start_sec - WINDOW_SECONDS),
+                        "w_idx": w_idx
+                    },
+                    "timestamp": int(time.time() * 1000),
+                    "sessionId": "debug-session",
+                    "runId": "a1-10k-investigation",
+                    "hypothesisId": "A1_10k_missing"
+                }
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception:
+            pass
+        # #endregion
         
         # Skip windows before this event starts
         if t_mid_sec < (event_start_sec - WINDOW_SECONDS):
@@ -2631,6 +2746,31 @@ def _process_event_windows_and_segments(
         
         # For each segment this event uses
         for seg_id in segments_dict.keys():
+            # #region agent log - Debug A1 10k missing at 07:20
+            try:
+                with open('/app/.cursor/debug.log', 'a') as f:
+                    log_entry = {
+                        "location": "density_report.py:_process_event_windows_and_segments",
+                        "message": "Segment filtering checks",
+                        "data": {
+                            "seg_id": seg_id,
+                            "event": event,
+                            "t_mid_sec": t_mid_sec,
+                            "t_mid_time": f"{int(t_mid_sec // 3600):02d}:{int((t_mid_sec % 3600) // 60):02d}:{int(t_mid_sec % 60):02d}",
+                            "in_segment_ranges": seg_id in segment_ranges,
+                            "event_column": event_column,
+                            "w_idx": w_idx
+                        },
+                        "timestamp": int(time.time() * 1000),
+                        "sessionId": "debug-session",
+                        "runId": "a1-10k-investigation",
+                        "hypothesisId": "A1_10k_missing"
+                    }
+                    f.write(json.dumps(log_entry) + "\n")
+            except Exception:
+                pass
+            # #endregion
+            
             if seg_id not in segment_ranges:
                 _ensure_empty_mapping_entry(mapping, seg_id, w_idx)
                 continue
@@ -2642,10 +2782,64 @@ def _process_event_windows_and_segments(
                 continue
             
             seg_event_flag = seg_row.iloc[0].get(event_column, 'n')
+            
+            # #region agent log - Debug A1 10k missing at 07:20
+            try:
+                with open('/app/.cursor/debug.log', 'a') as f:
+                    log_entry = {
+                        "location": "density_report.py:_process_event_windows_and_segments",
+                        "message": "Event flag check",
+                        "data": {
+                            "seg_id": seg_id,
+                            "event": event,
+                            "event_column": event_column,
+                            "seg_event_flag": str(seg_event_flag),
+                            "will_skip": seg_event_flag != 'y',
+                            "t_mid_sec": t_mid_sec,
+                            "t_mid_time": f"{int(t_mid_sec // 3600):02d}:{int((t_mid_sec % 3600) // 60):02d}:{int(t_mid_sec % 60):02d}",
+                            "w_idx": w_idx
+                        },
+                        "timestamp": int(time.time() * 1000),
+                        "sessionId": "debug-session",
+                        "runId": "a1-10k-investigation",
+                        "hypothesisId": "A1_10k_missing"
+                    }
+                    f.write(json.dumps(log_entry) + "\n")
+            except Exception:
+                pass
+            # #endregion
+            
             if seg_event_flag != 'y':
                 continue  # Segment not configured for this event
             
             km_range = segment_ranges[seg_id].get(event)
+            
+            # #region agent log - Debug A1 10k missing at 07:20
+            try:
+                with open('/app/.cursor/debug.log', 'a') as f:
+                    log_entry = {
+                        "location": "density_report.py:_process_event_windows_and_segments",
+                        "message": "Km range lookup",
+                        "data": {
+                            "seg_id": seg_id,
+                            "event": event,
+                            "km_range": str(km_range) if km_range is not None else None,
+                            "km_range_is_none": km_range is None,
+                            "segment_ranges_keys": list(segment_ranges[seg_id].keys()) if seg_id in segment_ranges else [],
+                            "t_mid_sec": t_mid_sec,
+                            "t_mid_time": f"{int(t_mid_sec // 3600):02d}:{int((t_mid_sec % 3600) // 60):02d}:{int(t_mid_sec % 60):02d}",
+                            "w_idx": w_idx
+                        },
+                        "timestamp": int(time.time() * 1000),
+                        "sessionId": "debug-session",
+                        "runId": "a1-10k-investigation",
+                        "hypothesisId": "A1_10k_missing"
+                    }
+                    f.write(json.dumps(log_entry) + "\n")
+            except Exception:
+                pass
+            # #endregion
+            
             if km_range is None:
                 continue
             
@@ -2654,9 +2848,64 @@ def _process_event_windows_and_segments(
                 continue
             
             # Calculate runner positions for this segment/window
+            # #region agent log - Debug A1 10k missing at 07:20
+            import json
+            try:
+                with open('/app/.cursor/debug.log', 'a') as f:
+                    log_entry = {
+                        "location": "density_report.py:_process_event_windows_and_segments",
+                        "message": "Processing segment/window for event",
+                        "data": {
+                            "seg_id": seg_id,
+                            "event": event,
+                            "t_mid_sec": t_mid_sec,
+                            "t_mid_time": f"{int(t_mid_sec // 3600):02d}:{int((t_mid_sec % 3600) // 60):02d}:{int(t_mid_sec % 60):02d}",
+                            "from_km": from_km,
+                            "to_km": to_km,
+                            "event_start_sec": event_start_sec,
+                            "event_start_time": f"{int(event_start_sec // 3600):02d}:{int((event_start_sec % 3600) // 60):02d}:{int(event_start_sec % 60):02d}",
+                            "total_runners": len(event_runners_copy),
+                            "w_idx": w_idx
+                        },
+                        "timestamp": int(time.time() * 1000),
+                        "sessionId": "debug-session",
+                        "runId": "a1-10k-investigation",
+                        "hypothesisId": "A1_10k_missing"
+                    }
+                    f.write(json.dumps(log_entry) + "\n")
+            except Exception:
+                pass
+            # #endregion
+            
             pos_m, speeds = _calculate_runner_positions_for_segment_window(
                 event_runners_copy, t_mid_sec, from_km, to_km
             )
+            
+            # #region agent log - Debug A1 10k missing at 07:20
+            try:
+                with open('/app/.cursor/debug.log', 'a') as f:
+                    log_entry = {
+                        "location": "density_report.py:_process_event_windows_and_segments",
+                        "message": "After calculating runner positions",
+                        "data": {
+                            "seg_id": seg_id,
+                            "event": event,
+                            "t_mid_sec": t_mid_sec,
+                            "t_mid_time": f"{int(t_mid_sec // 3600):02d}:{int((t_mid_sec % 3600) // 60):02d}:{int(t_mid_sec % 60):02d}",
+                            "pos_m_count": len(pos_m),
+                            "speeds_count": len(speeds),
+                            "from_km": from_km,
+                            "to_km": to_km
+                        },
+                        "timestamp": int(time.time() * 1000),
+                        "sessionId": "debug-session",
+                        "runId": "a1-10k-investigation",
+                        "hypothesisId": "A1_10k_missing"
+                    }
+                    f.write(json.dumps(log_entry) + "\n")
+            except Exception:
+                pass
+            # #endregion
             
             if len(pos_m) > 0:
                 # Initialize segment/window in mapping if needed
@@ -2694,7 +2943,10 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
     runners_by_segment_and_window[seg_id][w_idx] = {"pos_m": np.ndarray, "speed_mps": np.ndarray}
     """
     import numpy as np
+    import logging
     from datetime import datetime, timezone, timedelta
+    
+    logger = logging.getLogger(__name__)
     
     # Initialize mapping structure
     mapping = {}
@@ -2708,9 +2960,32 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
         mapping[seg_id] = {}
     
     # Load pace data and segments configuration
+    # Issue #548: Load from individual event files instead of runners.csv (file no longer exists)
     try:
-        from app.io.loader import load_segments
-        pace_data = pd.read_csv("data/runners.csv")
+        from app.io.loader import load_segments, load_runners_by_event
+        from pathlib import Path
+        
+        # Load runners from individual event files based on start_times keys
+        all_runners = []
+        data_dir = "data"
+        for event_name in start_times.keys():
+            try:
+                event_runners = load_runners_by_event(event_name, data_dir)
+                # Ensure event column is lowercase
+                event_runners = event_runners.copy()
+                event_runners["event"] = event_name.lower()
+                all_runners.append(event_runners)
+            except FileNotFoundError:
+                logger.warning(f"Event file {event_name}_runners.csv not found, skipping")
+                continue
+        
+        if not all_runners:
+            logger.warning("No runner files found for any events in start_times")
+            return mapping
+        
+        # Combine all runners
+        pace_data = pd.concat(all_runners, ignore_index=True)
+        
         segments_config = load_segments("data/segments.csv")  # Use loader to normalize elite/open columns
     except Exception as e:
         logger.warning(f"Could not load data for runner mapping: {e}")
@@ -2725,8 +3000,9 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
     earliest_start_min = min(start_times.values())
     
     # Issue #243 Fix: Loop through events first, then their relevant windows
-    # Fixed: Added 'Elite' and 'Open' events for 5K support
-    for event in ['Full', '10K', 'Half', 'Elite', 'Open']:
+    # Issue #548 Bug 1: Use lowercase event names consistently (no v1 uppercase compatibility)
+    # Fixed: Added 'elite' and 'open' events for 5K support
+    for event in ['full', '10k', 'half', 'elite', 'open']:
         # Get event start time
         event_min = start_times.get(event)
         if event_min is None:

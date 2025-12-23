@@ -32,28 +32,26 @@ def get_event_intervals(event: str, density_cfg: Dict[str, Any]) -> Optional[Tup
     """
     Retrieves the (from_km, to_km) interval for a given event from the density configuration.
     
-    Phase 4 (Issue #498): Updated to support both v1 (hardcoded) and v2 (dynamic) event names.
-    Supports: "Full"/"full", "Half"/"half", "10K"/"10k", "elite", "open" (case-insensitive).
+    Issue #548 Bug 1: Updated to use lowercase event names consistently (no v1 uppercase compatibility).
+    Supports: "full", "half", "10k", "elite", "open" (case-insensitive, converts to lowercase).
     
     Args:
-        event: Event type (v1: "Full", "Half", "10K" | v2: "full", "half", "10k", "elite", "open")
+        event: Event type (lowercase: "full", "half", "10k", "elite", "open")
         density_cfg: Density configuration dictionary containing event-specific parameters
         
     Returns:
         Tuple of (from_km, to_km) if event configuration exists, None otherwise
         
-    Supported event types (v1 backward compatibility):
-        - "Full"/"full": Uses full_from_km and full_to_km
-        - "Half"/"half": Uses half_from_km and half_to_km  
-        - "10K"/"10k": Uses 10k_from_km and 10k_to_km
-    
-    Supported event types (v2):
+    Supported event types:
+        - "full": Uses full_from_km and full_to_km
+        - "half": Uses half_from_km and half_to_km  
+        - "10k": Uses 10k_from_km and 10k_to_km
         - "elite": Uses elite_from_km and elite_to_km
         - "open": Uses open_from_km and open_to_km
     """
     event_lower = event.lower()
     
-    # v1 backward compatibility: Full, Half, 10K
+    # Issue #548 Bug 1: Use lowercase event names consistently
     if event_lower == "full" and density_cfg.get("full_from_km") is not None:
         return (density_cfg["full_from_km"], density_cfg["full_to_km"])
     elif event_lower == "half" and density_cfg.get("half_from_km") is not None:
@@ -898,7 +896,57 @@ class DensityAnalyzer:
         if not segment.events:
             logging.debug(f"Segment {segment.segment_id}: No events configured, returning 0 runners")
             return 0
+        
+        # #region agent log - CRITICAL: Debug event name matching regression (ALL segments)
+        import json
+        try:
+            match_mask = pace_data["event"].isin(segment.events) if not pace_data.empty else pd.Series([False])
+            with open('/app/.cursor/debug.log', 'a') as f:
+                f.write(json.dumps({
+                    "sessionId": "debug-session",
+                    "runId": "regression-investigation",
+                    "hypothesisId": "EVENT_MISMATCH",
+                    "location": "compute.py:calculate_concurrent_runners",
+                    "message": "Event format check before filtering - CRITICAL",
+                    "data": {
+                        "segment_id": segment.segment_id,
+                        "segment_events": list(segment.events) if segment.events else [],
+                        "segment_events_repr": repr(segment.events),
+                        "pace_data_event_values": sorted(pace_data["event"].unique().tolist()) if not pace_data.empty else [],
+                        "pace_data_event_sample": pace_data["event"].head(5).tolist() if not pace_data.empty else [],
+                        "pace_data_total": len(pace_data),
+                        "will_match_count": int(match_mask.sum()) if not pace_data.empty else 0,
+                        "time_bin_start": str(time_bin_start)
+                    },
+                    "timestamp": int(datetime.now().timestamp() * 1000)
+                }) + "\n")
+        except Exception as e:
+            pass  # Silently fail to avoid breaking the main logic
+        # #endregion
+        
         filtered_pace_data = pace_data[pace_data["event"].isin(segment.events)]
+        
+        # #region agent log - CRITICAL: Debug event name matching regression (ALL segments)
+        try:
+            with open('/app/.cursor/debug.log', 'a') as f:
+                f.write(json.dumps({
+                    "sessionId": "debug-session",
+                    "runId": "regression-investigation",
+                    "hypothesisId": "EVENT_MISMATCH",
+                    "location": "compute.py:calculate_concurrent_runners",
+                    "message": "Event format check after filtering - CRITICAL",
+                    "data": {
+                        "segment_id": segment.segment_id,
+                        "filtered_count": len(filtered_pace_data),
+                        "filtered_event_values": sorted(filtered_pace_data["event"].unique().tolist()) if not filtered_pace_data.empty else [],
+                        "IS_EMPTY": filtered_pace_data.empty,
+                        "time_bin_start": str(time_bin_start)
+                    },
+                    "timestamp": int(datetime.now().timestamp() * 1000)
+                }) + "\n")
+        except Exception as e:
+            pass  # Silently fail to avoid breaking the main logic
+        # #endregion
         
         # Log physical dimensions and runner counts for debugging
         logging.debug(f"Segment {segment.segment_id}: Physical length={segment.length_m:.1f}m, width={segment.width_m:.1f}m, area={segment.length_m * segment.width_m:.1f}m²")
@@ -919,6 +967,28 @@ class DensityAnalyzer:
             for event_id, start_offset in zip(event_ids, start_offsets)
         ])
         
+        # #region agent log
+        if is_a1_segment:
+            with open('/app/.cursor/debug.log', 'a') as f:
+                unique_events_in_filtered = sorted(filtered_pace_data["event"].unique().tolist())
+                event_counts = {evt: len(filtered_pace_data[filtered_pace_data["event"] == evt]) for evt in unique_events_in_filtered}
+                f.write(json.dumps({
+                    "sessionId": "debug-session",
+                    "runId": "bug1-investigation",
+                    "hypothesisId": "H3,H5",
+                    "location": "compute.py:calculate_concurrent_runners",
+                    "message": "Start times and event breakdown before time filtering",
+                    "data": {
+                        "segment_id": segment.segment_id,
+                        "time_bin_start": str(time_bin_start),
+                        "start_times_dict": {k: str(v) for k, v in start_times.items()},
+                        "filtered_event_counts": event_counts,
+                        "unique_events": unique_events_in_filtered
+                    },
+                    "timestamp": int(datetime.now().timestamp() * 1000)
+                }) + "\n")
+        # #endregion
+        
         # Convert to seconds since epoch for vectorized operations
         time_bin_start_sec = time_bin_start.timestamp()
         time_bin_end_sec = time_bin_end.timestamp()
@@ -930,6 +1000,29 @@ class DensityAnalyzer:
         
         # Filter runners who have started
         started_mask = time_elapsed_start >= 0
+        
+        # #region agent log
+        if is_a1_segment:
+            with open('/app/.cursor/debug.log', 'a') as f:
+                started_count = int(np.sum(started_mask))
+                started_events = sorted(filtered_pace_data.loc[filtered_pace_data.index[started_mask], "event"].unique().tolist()) if started_count > 0 else []
+                f.write(json.dumps({
+                    "sessionId": "debug-session",
+                    "runId": "bug1-investigation",
+                    "hypothesisId": "H3,H5",
+                    "location": "compute.py:calculate_concurrent_runners",
+                    "message": "Runners after started filter",
+                    "data": {
+                        "segment_id": segment.segment_id,
+                        "time_bin_start": str(time_bin_start),
+                        "started_count": started_count,
+                        "started_events": started_events,
+                        "total_filtered": len(filtered_pace_data)
+                    },
+                    "timestamp": int(datetime.now().timestamp() * 1000)
+                }) + "\n")
+        # #endregion
+        
         if not np.any(started_mask):
             return 0
         
@@ -941,9 +1034,48 @@ class DensityAnalyzer:
         if density_cfg:
             total_concurrent = 0
             
+            # #region agent log
+            if segment.segment_id == 'A1':
+                with open('/app/.cursor/debug.log', 'a') as f:
+                    f.write(json.dumps({
+                        "sessionId": "debug-session",
+                        "runId": "bug1-investigation",
+                        "hypothesisId": "H3,H4",
+                        "location": "compute.py:calculate_concurrent_runners",
+                        "message": "Event-specific interval lookup",
+                        "data": {
+                            "segment_id": segment.segment_id,
+                            "time_bin_start": str(time_bin_start),
+                            "segment_events": list(segment.events),
+                            "density_cfg_events": list(density_cfg.get("events", [])) if density_cfg else []
+                        },
+                        "timestamp": int(datetime.now().timestamp() * 1000)
+                    }) + "\n")
+            # #endregion
+            
             # Check each event's specific cumulative distance range
             for event in segment.events:
                 interval = get_event_intervals(event, density_cfg)
+                
+                # #region agent log
+                if segment.segment_id == 'A1':
+                    with open('/app/.cursor/debug.log', 'a') as f:
+                        f.write(json.dumps({
+                            "sessionId": "debug-session",
+                            "runId": "bug1-investigation",
+                            "hypothesisId": "H3,H4",
+                            "location": "compute.py:calculate_concurrent_runners",
+                            "message": "Event interval lookup result",
+                            "data": {
+                                "segment_id": segment.segment_id,
+                                "time_bin_start": str(time_bin_start),
+                                "event": event,
+                                "interval": interval if interval else None
+                            },
+                            "timestamp": int(datetime.now().timestamp() * 1000)
+                        }) + "\n")
+                # #endregion
+                
                 if not interval:
                     continue  # Skip events without km ranges
                 
@@ -951,6 +1083,28 @@ class DensityAnalyzer:
                 
                 # Filter to this event's runners
                 event_mask = event_ids[started_mask] == event
+                
+                # #region agent log
+                if segment.segment_id == 'A1':
+                    with open('/app/.cursor/debug.log', 'a') as f:
+                        f.write(json.dumps({
+                            "sessionId": "debug-session",
+                            "runId": "bug1-investigation",
+                            "hypothesisId": "H3,H4",
+                            "location": "compute.py:calculate_concurrent_runners",
+                            "message": "Event runners after event mask",
+                            "data": {
+                                "segment_id": segment.segment_id,
+                                "time_bin_start": str(time_bin_start),
+                                "event": event,
+                                "event_mask_count": int(np.sum(event_mask)),
+                                "from_km": from_km,
+                                "to_km": to_km
+                            },
+                            "timestamp": int(datetime.now().timestamp() * 1000)
+                        }) + "\n")
+                # #endregion
+                
                 if not np.any(event_mask):
                     continue
                 
@@ -959,7 +1113,28 @@ class DensityAnalyzer:
                 event_positions_end = positions_end_km[event_mask]
                 
                 in_segment_mask = (event_positions_start < to_km) & (event_positions_end > from_km)
-                total_concurrent += int(np.sum(in_segment_mask))
+                event_concurrent = int(np.sum(in_segment_mask))
+                total_concurrent += event_concurrent
+                
+                # #region agent log
+                if segment.segment_id == 'A1':
+                    with open('/app/.cursor/debug.log', 'a') as f:
+                        f.write(json.dumps({
+                            "sessionId": "debug-session",
+                            "runId": "bug1-investigation",
+                            "hypothesisId": "H3,H4",
+                            "location": "compute.py:calculate_concurrent_runners",
+                            "message": "Final concurrent count for event",
+                            "data": {
+                                "segment_id": segment.segment_id,
+                                "time_bin_start": str(time_bin_start),
+                                "event": event,
+                                "event_concurrent": event_concurrent,
+                                "total_concurrent": total_concurrent
+                            },
+                            "timestamp": int(datetime.now().timestamp() * 1000)
+                        }) + "\n")
+                # #endregion
             
             return total_concurrent
         else:
@@ -1653,17 +1828,9 @@ def analyze_density_segments(pace_data: pd.DataFrame,
             min_km = 0.0
             max_km = 0.0
         
-        # Issue #548 Bug 1: Normalize event names to v1 format (capitalized) to match pace_data["event"]
-        # pace_data uses v1 format: "Full", "Half", "10K", "Elite", "Open"
-        # segment.events is lowercase: ('full', 'half', '10k', 'elite', 'open')
-        event_name_mapping = {
-            "full": "Full",
-            "half": "Half",
-            "10k": "10K",
-            "elite": "Elite",
-            "open": "Open"
-        }
-        normalized_events = tuple(event_name_mapping.get(e.lower(), e.capitalize()) for e in d["events"])
+        # Issue #548 Bug 1: Use lowercase events consistently (no v1 uppercase compatibility)
+        # Ensure all events are lowercase for consistency
+        normalized_events = tuple(e.lower() for e in d["events"])
         
         # Create segment metadata from segments_new.csv
         segment = SegmentMeta(
@@ -1672,7 +1839,7 @@ def analyze_density_segments(pace_data: pd.DataFrame,
             to_km=max_km,    # Physical segment end
             width_m=d["width_m"],
             direction=d["direction"],
-            events=normalized_events,  # Issue #548 Bug 1: Use v1 format to match pace_data
+            events=normalized_events,  # Issue #548 Bug 1: Use lowercase consistently
             event_a="",  # Not used in density analysis
             event_b=""   # Not used in density analysis
         )

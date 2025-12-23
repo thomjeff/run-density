@@ -326,12 +326,11 @@ class NewDensityTemplateEngine:
                 worst_rate = f"{row['worst_bin_rate']:.3f}" if row['worst_bin_rate'] > 0 else "N/A"
                 
                 # Calculate Util% based on segment schema
+                # Issue #548 Bug 4: Load flow_ref.critical from rulebook dynamically
+                from app.rulebook import get_thresholds
                 segment_type = row.get('segment_type', 'on_course_open')
-                flow_ref_critical = None
-                if segment_type == 'start_corral':
-                    flow_ref_critical = 600
-                elif segment_type == 'on_course_narrow':
-                    flow_ref_critical = 400
+                thresholds = get_thresholds(segment_type)
+                flow_ref_critical = thresholds.flow_ref.critical if thresholds.flow_ref else None
                 
                 util_display = "N/A"
                 if flow_ref_critical and row['peak_rate_per_m_per_min'] > 0:
@@ -457,15 +456,11 @@ class NewDensityTemplateEngine:
                 peak_rate_ps = summary['peak_rate_per_m_per_min'] / 60.0
                 
                 # Calculate Util% if we have rate thresholds for this schema
+                # Issue #548 Bug 4: Load flow_ref.critical from rulebook dynamically
+                from app.rulebook import get_thresholds
                 segment_type = seg_row.get('segment_type', 'on_course_open')
-                flow_ref_critical = None
-                
-                # Get flow_ref.critical from rulebook based on segment_type
-                if segment_type == 'start_corral':
-                    flow_ref_critical = 600  # runners/min/m
-                elif segment_type == 'on_course_narrow':
-                    flow_ref_critical = 400  # runners/min/m
-                # on_course_open has no flow_ref
+                thresholds = get_thresholds(segment_type)
+                flow_ref_critical = thresholds.flow_ref.critical if thresholds.flow_ref else None
                 
                 util_pct = "N/A"
                 if flow_ref_critical and summary['peak_rate_per_m_per_min'] > 0:
@@ -535,7 +530,7 @@ class NewDensityTemplateEngine:
             "- **Density (ρ):** Areal density in persons per square meter (p/m²)",
             "- **Rate (q):** Throughput rate in persons per second (p/s)",
             "- **Rate per meter per minute:** (rate / width_m) × 60 in persons/m/min",
-            "- **Utilization (%):** Current flow rate / reference flow rate (critical)",
+            "- **Utilization (%):** Current flow rate / reference flow rate (critical). Shows \"N/A\" when \`flow_ref.critical\` is not defined for the segment schema in the rulebook.",
             "- **LOS (Level of Service):** Crowd comfort class (A–F)",
             "- **Bin:** Space–time cell [segment_id, start_km–end_km, t_start–t_end]",
             "",
