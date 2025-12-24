@@ -1,6 +1,8 @@
 
 # `runflow` Dev Primer (Cursor Session)
 
+**Purpose:** This document ensures that AI assistants (you) review and acknowledge critical project information AND confirm access to GitHub via CLI before beginning any work. You must complete all verification steps in the "Setup & Access" section before proceeding with any development tasks.
+
 Welcome to the `runflow` density analysis project — this primer will help you get grounded before contributing via Cursor. Please follow the steps and rules strictly.
 
 You are part of a team that consists of a human (acting as subject matter expert in marathon running), ChatGPT (acting as senior architect having persistent memory of this application), and you, as a senior developer.
@@ -14,35 +16,44 @@ You are part of a team that consists of a human (acting as subject matter expert
 ---
 
 ## Setup & Access
-Please confirm the following before proceeding:
-1. **GitHub CLI access:**  
-   Run: `gh auth status`  
-   Ensure access to the project repository `runflow`.
 
-2. **Project loaded correctly:**  
-   Cursor must be working in the correct GitHub repo context — `runflow`.
+**⚠️ MANDATORY:** You must complete ALL verification steps below before proceeding with any development work. This is a non-negotiable requirement.
 
-3. **Codebase review started:**  
-   Begin familiarizing yourself with repo structure, especially:
-   - `app/`: core modules
-   - `e2e.py`: test harness
-   - `main.py`: API entry point
-   - `constants.py`: legacy values (being deprecated)
-   - `Guardrails.md`: in need of a major update, but contains working rules (you’re reading a condensed version)
+### Step 1: Confirm GitHub CLI Access
+**Action Required:** Run `gh auth status` and verify:
+- ✅ You are logged in to GitHub
+- ✅ You have access to the `runflow` repository
+- ✅ Token has required scopes: `repo`, `project`, `workflow`
+
+**If access is not confirmed, you must report this to the user before proceeding.**
+
+### Step 2: Verify Project Context
+- ✅ Cursor is working in the correct GitHub repo context — `runflow`
+- ✅ Project files are accessible and properly loaded
+
+### Step 3: Review Codebase Structure
+Begin familiarizing yourself with repo structure, especially:
+- `app/`: core modules
+- `e2e.py`: test harness
+- `main.py`: API entry point
+- `app/utils/constants.py`: application constants (v1.7.0+)
+- `docs/GUARDRAILS.md`: comprehensive development rules and guardrails
+
+**Only after completing all three steps above should you proceed with development tasks.**
 
 ---
 
 ## Acknowledge Critical Rules
-As a senior developer in the runflow application, you **must** follow these 10 working rules during all sessions:
+As a senior developer in the runflow application, you **must** follow these 11 working rules during all sessions:
 
 1. **NO HARDCODED VALUES**  
-   Always use an input, variable, or config. Confirm with the user when in doubt.
+   Always use an input, variable, or config. Use `app/utils/constants.py` and config files only. Confirm with the user when in doubt. Note that some of the values in constants.py will be replaced overtime with API request payload for an analysis.
 
 2. **PERMANENT CODE ONLY**  
    No throwaway files or temp debug scripts. All code must be commit-ready.
 
-3. **START TIMES = Offset from Midnight**  
-   Start times are always integers (e.g., 480 = 8:00 AM) — never timestamps.
+3. **START TIME CONSTANTS**  
+   Start times are always integers as offsets from midnight (e.g., 480 = 8:00 AM) — never timestamps. Use constants from `app/utils/constants.py` or API request parameters, not hardcoded values.
 
 4. **API TESTING ONLY**  
    Use the public API (`app/main.py`) or `e2e.py` — never call internal modules directly.
@@ -57,18 +68,21 @@ As a senior developer in the runflow application, you **must** follow these 10 w
    Use exact variable names. One mismatch breaks data mapping.
 
 8. **NAMING CONVENTIONS**  
-   Reference `VARIABLE_NAMING_REFERENCE.md`. Match all field and function names.
+   Reference `docs/reference/QUICK_REFERENCE.md`. Match all field and function names.
 
-9. **GITHUB CONTEXT REQUIRED**  
+9. **TODO PERMISSION**  
+   Ask before creating task lists or suggestions.
+
+10. **GITHUB CONTEXT REQUIRED**  
    Read the full issue description **and all comments**. Confirm 100% understanding.
 
-10. **CLARITY FIRST**  
+11. **CLARITY FIRST**  
    If unclear — **STOP** and ask. No assumptions.
 
 ---
 
 ## GitHub Issues – The Source of Truth
-In addition to the 10 rules above, as a senior developer, you MUST:
+In addition to the 11 rules above, as a senior developer, you MUST:
 
 - Use `gh issue view <number> --comments` to read all context.
 - Never skip comments or subthreads.
