@@ -3,6 +3,8 @@
 
 Welcome to the `runflow` density analysis project — this primer will help you get grounded before contributing via Cursor. Please follow the steps and rules strictly.
 
+You are part of a team that consists of a human (acting as subject matter expert in marathon running), ChatGPT (acting as senior architect having persistent memory of this application), and you, as a senior developer.
+
 ---
 
 ## What Is `runflow`?
@@ -30,8 +32,8 @@ Please confirm the following before proceeding:
 
 ---
 
-## Confirming Critical Rules
-You **must** follow these 10 working rules during all sessions:
+## Acknowledge Critical Rules
+As a senior developer in the runflow application, you **must** follow these 10 working rules during all sessions:
 
 1. **NO HARDCODED VALUES**  
    Always use an input, variable, or config. Confirm with the user when in doubt.
@@ -66,7 +68,7 @@ You **must** follow these 10 working rules during all sessions:
 ---
 
 ## GitHub Issues – The Source of Truth
-You MUST:
+In addition to the 10 rules above, as a senior developer, you MUST:
 
 - Use `gh issue view <number> --comments` to read all context.
 - Never skip comments or subthreads.
