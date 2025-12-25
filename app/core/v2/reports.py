@@ -53,7 +53,10 @@ def generate_reports_per_day(
     segments_df: Any,  # pd.DataFrame
     all_runners_df: Any,  # pd.DataFrame
     locations_df: Optional[Any] = None,  # pd.DataFrame
-    data_dir: str = "data"  # Data directory for loading runner files
+    data_dir: str = "data",  # Data directory for loading runner files
+    segments_file_path: Optional[str] = None,  # Issue #553 Phase 6.2: Path to segments file
+    flow_file_path: Optional[str] = None,  # Issue #553 Phase 6.2: Path to flow file
+    locations_file_path: Optional[str] = None  # Issue #553 Phase 6.2: Path to locations file
 ) -> Dict[Day, Dict[str, str]]:
     """
     Generate all reports per day in day-partitioned structure.
@@ -86,6 +89,14 @@ def generate_reports_per_day(
             ...
         }
     """
+    # Issue #553 Phase 6.2: Default file paths if not provided
+    if segments_file_path is None:
+        segments_file_path = "data/segments.csv"
+    if flow_file_path is None:
+        flow_file_path = "data/flow.csv"
+    if locations_file_path is None:
+        locations_file_path = "data/locations.csv"
+    
     report_paths_by_day: Dict[Day, Dict[str, str]] = {}
     
     for timeline in timelines:
@@ -124,7 +135,8 @@ def generate_reports_per_day(
                 density_results=density_results[day],
                 reports_path=reports_path,
                 segments_df=day_segments_df,
-                data_dir=data_dir
+                data_dir=data_dir,
+                segments_file_path=segments_file_path  # Issue #553 Phase 6.2
             )
             if density_path:
                 day_report_paths["density"] = str(density_path)
@@ -247,7 +259,9 @@ def generate_density_report_v2(
         # Get day-filtered segments
         if segments_df is None:
             from app.io.loader import load_segments
-            all_segments_df = load_segments("data/segments.csv")
+            # Issue #553 Phase 6.2: Use segments_file_path from analysis.json if provided
+            segments_path = segments_file_path if segments_file_path else "data/segments.csv"
+            all_segments_df = load_segments(segments_path)
             segments_df = filter_segments_by_events(all_segments_df, day_events)
         
         # Get list of day segment IDs

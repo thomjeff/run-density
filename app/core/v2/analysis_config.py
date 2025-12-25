@@ -506,3 +506,256 @@ def get_all_start_times(
     
     return start_times
 
+
+def get_segments_file(
+    analysis_config: Optional[Dict[str, Any]] = None,
+    run_path: Optional[Path] = None
+) -> str:
+    """
+    Get segments file path from analysis.json.
+    
+    Issue #553 Phase 6.2: Replace hardcoded file paths with dynamic lookups.
+    
+    Args:
+        analysis_config: Optional pre-loaded analysis.json dict
+        run_path: Optional path to run directory (will load analysis.json if config not provided)
+        
+    Returns:
+        str: Full path to segments file (e.g., "data/segments.csv" or from data_files.segments)
+        
+    Raises:
+        FileNotFoundError: If run_path provided but analysis.json doesn't exist
+        ValueError: If segments_file not found in analysis.json
+    """
+    # Load analysis_config if not provided
+    if analysis_config is None:
+        if run_path is None:
+            raise ValueError(
+                "Either analysis_config or run_path must be provided to get_segments_file"
+            )
+        analysis_config = load_analysis_json(run_path)
+    
+    # Try data_files.segments first (full path)
+    data_files = analysis_config.get("data_files", {})
+    if "segments" in data_files:
+        return data_files["segments"]
+    
+    # Fallback to segments_file + data_dir
+    segments_file = analysis_config.get("segments_file")
+    if segments_file:
+        data_dir = analysis_config.get("data_dir", "data")
+        return f"{data_dir}/{segments_file}"
+    
+    raise ValueError(
+        "segments_file not found in analysis.json. "
+        "This is required per Issue #553."
+    )
+
+
+def get_flow_file(
+    analysis_config: Optional[Dict[str, Any]] = None,
+    run_path: Optional[Path] = None
+) -> str:
+    """
+    Get flow file path from analysis.json.
+    
+    Issue #553 Phase 6.2: Replace hardcoded file paths with dynamic lookups.
+    
+    Args:
+        analysis_config: Optional pre-loaded analysis.json dict
+        run_path: Optional path to run directory (will load analysis.json if config not provided)
+        
+    Returns:
+        str: Full path to flow file (e.g., "data/flow.csv" or from data_files.flow)
+        
+    Raises:
+        FileNotFoundError: If run_path provided but analysis.json doesn't exist
+        ValueError: If flow_file not found in analysis.json
+    """
+    # Load analysis_config if not provided
+    if analysis_config is None:
+        if run_path is None:
+            raise ValueError(
+                "Either analysis_config or run_path must be provided to get_flow_file"
+            )
+        analysis_config = load_analysis_json(run_path)
+    
+    # Try data_files.flow first (full path)
+    data_files = analysis_config.get("data_files", {})
+    if "flow" in data_files:
+        return data_files["flow"]
+    
+    # Fallback to flow_file + data_dir
+    flow_file = analysis_config.get("flow_file")
+    if flow_file:
+        data_dir = analysis_config.get("data_dir", "data")
+        return f"{data_dir}/{flow_file}"
+    
+    raise ValueError(
+        "flow_file not found in analysis.json. "
+        "This is required per Issue #553."
+    )
+
+
+def get_locations_file(
+    analysis_config: Optional[Dict[str, Any]] = None,
+    run_path: Optional[Path] = None
+) -> str:
+    """
+    Get locations file path from analysis.json.
+    
+    Issue #553 Phase 6.2: Replace hardcoded file paths with dynamic lookups.
+    
+    Args:
+        analysis_config: Optional pre-loaded analysis.json dict
+        run_path: Optional path to run directory (will load analysis.json if config not provided)
+        
+    Returns:
+        str: Full path to locations file (e.g., "data/locations.csv" or from data_files.locations)
+        
+    Raises:
+        FileNotFoundError: If run_path provided but analysis.json doesn't exist
+        ValueError: If locations_file not found in analysis.json
+    """
+    # Load analysis_config if not provided
+    if analysis_config is None:
+        if run_path is None:
+            raise ValueError(
+                "Either analysis_config or run_path must be provided to get_locations_file"
+            )
+        analysis_config = load_analysis_json(run_path)
+    
+    # Try data_files.locations first (full path)
+    data_files = analysis_config.get("data_files", {})
+    if "locations" in data_files:
+        return data_files["locations"]
+    
+    # Fallback to locations_file + data_dir
+    locations_file = analysis_config.get("locations_file")
+    if locations_file:
+        data_dir = analysis_config.get("data_dir", "data")
+        return f"{data_dir}/{locations_file}"
+    
+    raise ValueError(
+        "locations_file not found in analysis.json. "
+        "This is required per Issue #553."
+    )
+
+
+def get_runners_file(
+    event_name: str,
+    analysis_config: Optional[Dict[str, Any]] = None,
+    run_path: Optional[Path] = None
+) -> str:
+    """
+    Get runners file path for a specific event from analysis.json.
+    
+    Issue #553 Phase 6.2: Replace hardcoded file paths with dynamic lookups.
+    
+    Args:
+        event_name: Event name (case-insensitive, e.g., "full", "10k", "half")
+        analysis_config: Optional pre-loaded analysis.json dict
+        run_path: Optional path to run directory (will load analysis.json if config not provided)
+        
+    Returns:
+        str: Full path to runners file (e.g., "data/full_runners.csv" or from data_files.runners)
+        
+    Raises:
+        FileNotFoundError: If run_path provided but analysis.json doesn't exist
+        ValueError: If event not found in analysis.json
+    """
+    # Load analysis_config if not provided
+    if analysis_config is None:
+        if run_path is None:
+            raise ValueError(
+                "Either analysis_config or run_path must be provided to get_runners_file"
+            )
+        analysis_config = load_analysis_json(run_path)
+    
+    # Normalize event name to lowercase for lookup
+    event_name_lower = event_name.lower()
+    
+    # Try data_files.runners dictionary first
+    data_files = analysis_config.get("data_files", {})
+    runners_dict = data_files.get("runners", {})
+    if event_name in runners_dict:
+        return runners_dict[event_name]
+    elif event_name_lower in runners_dict:
+        return runners_dict[event_name_lower]
+    
+    # Fallback: search through events list
+    events = analysis_config.get("events", [])
+    for event in events:
+        event_name_in_config = event.get("name", "").lower()
+        if event_name_in_config == event_name_lower:
+            runners_file = event.get("runners_file")
+            if runners_file:
+                data_dir = analysis_config.get("data_dir", "data")
+                return f"{data_dir}/{runners_file}"
+    
+    # Event not found - fail fast per Issue #553 requirements
+    available_events = [e.get("name", "unknown") for e in events]
+    raise ValueError(
+        f"Event '{event_name}' not found in analysis.json. "
+        f"Available events: {available_events}"
+    )
+
+
+def get_gpx_file(
+    event_name: str,
+    analysis_config: Optional[Dict[str, Any]] = None,
+    run_path: Optional[Path] = None
+) -> str:
+    """
+    Get GPX file path for a specific event from analysis.json.
+    
+    Issue #553 Phase 6.2: Replace hardcoded file paths with dynamic lookups.
+    
+    Args:
+        event_name: Event name (case-insensitive, e.g., "full", "10k", "half")
+        analysis_config: Optional pre-loaded analysis.json dict
+        run_path: Optional path to run directory (will load analysis.json if config not provided)
+        
+    Returns:
+        str: Full path to GPX file (e.g., "data/full.gpx" or from data_files.gpx)
+        
+    Raises:
+        FileNotFoundError: If run_path provided but analysis.json doesn't exist
+        ValueError: If event not found in analysis.json
+    """
+    # Load analysis_config if not provided
+    if analysis_config is None:
+        if run_path is None:
+            raise ValueError(
+                "Either analysis_config or run_path must be provided to get_gpx_file"
+            )
+        analysis_config = load_analysis_json(run_path)
+    
+    # Normalize event name to lowercase for lookup
+    event_name_lower = event_name.lower()
+    
+    # Try data_files.gpx dictionary first
+    data_files = analysis_config.get("data_files", {})
+    gpx_dict = data_files.get("gpx", {})
+    if event_name in gpx_dict:
+        return gpx_dict[event_name]
+    elif event_name_lower in gpx_dict:
+        return gpx_dict[event_name_lower]
+    
+    # Fallback: search through events list
+    events = analysis_config.get("events", [])
+    for event in events:
+        event_name_in_config = event.get("name", "").lower()
+        if event_name_in_config == event_name_lower:
+            gpx_file = event.get("gpx_file")
+            if gpx_file:
+                data_dir = analysis_config.get("data_dir", "data")
+                return f"{data_dir}/{gpx_file}"
+    
+    # Event not found - fail fast per Issue #553 requirements
+    available_events = [e.get("name", "unknown") for e in events]
+    raise ValueError(
+        f"Event '{event_name}' not found in analysis.json. "
+        f"Available events: {available_events}"
+    )
+

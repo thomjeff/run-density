@@ -108,8 +108,8 @@ EVENT_DURATION_MINUTES = {
 # Removed per Issue #553: Event configuration now comes from analysis.json.
 
 # Map configuration
-DEFAULT_PACE_CSV = "data/runners.csv"
-DEFAULT_SEGMENTS_CSV = "data/segments.csv"
+# DEFAULT_PACE_CSV and DEFAULT_SEGMENTS_CSV removed (Issue #553 Phase 6.1)
+# File paths now come from API request via analysis.json per Issue #553
 # DEFAULT_START_TIMES removed (Issue #512) - Start times must come from API request, not constants
 
 # Bin dataset configuration (Issue #198) - ChatGPT PR1 fixes

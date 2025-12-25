@@ -509,6 +509,13 @@ def create_full_analysis_pipeline(
         
         # Generate reports (Phase 6)
         # Use day-partitioned bins directories
+        # Issue #553 Phase 6.2: Pass file paths from analysis.json to reports
+        from app.core.v2.analysis_config import load_analysis_json
+        analysis_config = load_analysis_json(run_path)
+        segments_file_path = analysis_config.get("data_files", {}).get("segments", str(segments_path))
+        flow_file_path = analysis_config.get("data_files", {}).get("flow", flow_file)
+        locations_file_path = analysis_config.get("data_files", {}).get("locations", locations_file) if locations_file else None
+        
         reports_by_day = generate_reports_per_day(
             run_id=run_id,
             events=events,
@@ -518,7 +525,10 @@ def create_full_analysis_pipeline(
             segments_df=segments_df,
             all_runners_df=all_runners_df,
             locations_df=locations_df,
-            data_dir=data_dir
+            data_dir=data_dir,
+            segments_file_path=segments_file_path,  # Issue #553 Phase 6.2
+            flow_file_path=flow_file_path,  # Issue #553 Phase 6.2
+            locations_file_path=locations_file_path  # Issue #553 Phase 6.2
         )
         
         # Generate map_data.json per day (for density page map visualization)
