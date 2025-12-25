@@ -362,12 +362,16 @@ class TestV2E2EScenarios:
     def test_sat_sun_scenario(self, base_url, wait_for_server):
         """Test sat+sun analysis in single run_id (simpler than mixed_day, focused on Issue #528)."""
         payload = {
+            "description": "Sat+Sun analysis test",
+            "segments_file": "segments.csv",
+            "flow_file": "flow.csv",
+            "locations_file": "locations.csv",
             "events": [
-                {"name": "elite", "day": "sat", "start_time": 480, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
-                {"name": "open", "day": "sat", "start_time": 510, "runners_file": "open_runners.csv", "gpx_file": "open.gpx"},
-                {"name": "full", "day": "sun", "start_time": 420, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"},
-                {"name": "10k", "day": "sun", "start_time": 440, "runners_file": "10k_runners.csv", "gpx_file": "10k.gpx"},
-                {"name": "half", "day": "sun", "start_time": 460, "runners_file": "half_runners.csv", "gpx_file": "half.gpx"}
+                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
+                {"name": "open", "day": "sat", "start_time": 510, "event_duration_minutes": 75, "runners_file": "open_runners.csv", "gpx_file": "open.gpx"},
+                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"},
+                {"name": "10k", "day": "sun", "start_time": 440, "event_duration_minutes": 120, "runners_file": "10k_runners.csv", "gpx_file": "10k.gpx"},
+                {"name": "half", "day": "sun", "start_time": 460, "event_duration_minutes": 180, "runners_file": "half_runners.csv", "gpx_file": "half.gpx"}
             ]
         }
         
@@ -444,9 +448,13 @@ class TestV2E2EScenarios:
         """Verify no cross-day contamination in bins, flow, density, locations."""
         # Use mixed-day scenario
         payload = {
+            "description": "Cross-day isolation test",
+            "segments_file": "segments.csv",
+            "flow_file": "flow.csv",
+            "locations_file": "locations.csv",
             "events": [
-                {"name": "elite", "day": "sat", "start_time": 480, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
-                {"name": "full", "day": "sun", "start_time": 420, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"}
+                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
+                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"}
             ]
         }
         
@@ -908,12 +916,16 @@ class TestV2GoldenFileRegression:
         """Compare mixed-day outputs against golden files."""
         # Run mixed-day scenario
         payload = {
+            "description": "Mixed day scenario for golden file comparison",
+            "segments_file": "segments.csv",
+            "flow_file": "flow.csv",
+            "locations_file": "locations.csv",
             "events": [
-                {"name": "elite", "day": "sat", "start_time": 480, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
-                {"name": "open", "day": "sat", "start_time": 510, "runners_file": "open_runners.csv", "gpx_file": "open.gpx"},
-                {"name": "full", "day": "sun", "start_time": 420, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"},
-                {"name": "10k", "day": "sun", "start_time": 440, "runners_file": "10k_runners.csv", "gpx_file": "10k.gpx"},
-                {"name": "half", "day": "sun", "start_time": 460, "runners_file": "half_runners.csv", "gpx_file": "half.gpx"}
+                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
+                {"name": "open", "day": "sat", "start_time": 510, "event_duration_minutes": 75, "runners_file": "open_runners.csv", "gpx_file": "open.gpx"},
+                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"},
+                {"name": "10k", "day": "sun", "start_time": 440, "event_duration_minutes": 120, "runners_file": "10k_runners.csv", "gpx_file": "10k.gpx"},
+                {"name": "half", "day": "sun", "start_time": 460, "event_duration_minutes": 180, "runners_file": "half_runners.csv", "gpx_file": "half.gpx"}
             ]
         }
         
