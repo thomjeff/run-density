@@ -268,6 +268,19 @@ def generate_bins_v2(
                 f"Cannot generate bins without event configuration from analysis.json: {e}"
             )
         
+        # Issue #553 Phase 4.3: Filter event_durations to match current day's events
+        # start_times only contains events for the current day, so filter event_durations accordingly
+        day_event_durations = {}
+        for event_name in start_times.keys():
+            event_name_lower = event_name.lower()
+            # Try both original case and lowercase
+            if event_name in event_durations:
+                day_event_durations[event_name] = event_durations[event_name]
+            if event_name_lower in event_durations:
+                day_event_durations[event_name_lower] = event_durations[event_name_lower]
+        
+        logger.debug(f"Filtered event_durations for day {day.value}: {day_event_durations}")
+        
         # Call v1 bin generation with retry logic
         start_time = time.monotonic()
         temp_output_dir = tempfile.mkdtemp()
@@ -275,7 +288,7 @@ def generate_bins_v2(
         try:
             daily_folder_path, bin_metadata, bin_data = _generate_bin_dataset_with_retry(
                 filtered_density_results, start_times, temp_output_dir, analysis_context, 
-                event_durations, event_names
+                day_event_durations, event_names
             )
             
             if not daily_folder_path:
