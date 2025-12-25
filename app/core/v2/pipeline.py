@@ -405,6 +405,26 @@ def create_full_analysis_pipeline(
     run_path.mkdir(parents=True, exist_ok=True)
     logger.debug(f"Using run directory: {run_path}")
     
+    # Issue #553 Phase 7.1: Load analysis.json at pipeline start (single source of truth)
+    # If analysis.json exists, use it; otherwise, use provided parameters (backward compatibility)
+    analysis_config = None
+    analysis_json_path = run_path / "analysis.json"
+    if analysis_json_path.exists():
+        from app.core.v2.analysis_config import load_analysis_json
+        analysis_config = load_analysis_json(run_path)
+        logger.info(f"Loaded analysis.json from {analysis_json_path}")
+        
+        # Override parameters with values from analysis.json (single source of truth)
+        data_dir = analysis_config.get("data_dir", data_dir)
+        segments_file = analysis_config.get("segments_file", segments_file)
+        locations_file = analysis_config.get("locations_file", locations_file)
+        flow_file = analysis_config.get("flow_file", flow_file)
+    else:
+        logger.warning(
+            f"analysis.json not found at {analysis_json_path}. "
+            f"Using provided parameters. This may indicate analysis.json was not generated."
+        )
+    
     # Issue #527: Set up run-level file logging
     from app.utils.run_logging import RunLogHandler
     run_log_handler = None
@@ -421,9 +441,14 @@ def create_full_analysis_pipeline(
         logger.info(f"Generated {len(timelines)} day timelines")
         
         # Load segments DataFrame
-        segments_path = Path(data_dir) / segments_file
-        segments_df = load_segments(str(segments_path))
-        logger.info(f"Loaded {len(segments_df)} segments from {segments_path}")
+        # Issue #553 Phase 7.1: Use file path from analysis.json if available
+        if analysis_config:
+            from app.core.v2.analysis_config import get_segments_file
+            segments_path_str = get_segments_file(analysis_config=analysis_config)
+        else:
+            segments_path_str = str(Path(data_dir) / segments_file)
+        segments_df = load_segments(segments_path_str)
+        logger.info(f"Loaded {len(segments_df)} segments from {segments_path_str}")
         
         # Load all runners for events (Phase 4)
         all_runners_df = load_all_runners_for_events(events, data_dir)
@@ -439,12 +464,18 @@ def create_full_analysis_pipeline(
         )
         
         # Run flow analysis (Phase 5)
+        # Issue #553 Phase 7.1: Use file path from analysis.json if available
+        if analysis_config:
+            from app.core.v2.analysis_config import get_flow_file
+            flow_file_path = get_flow_file(analysis_config=analysis_config)
+        else:
+            flow_file_path = flow_file
         flow_results = analyze_temporal_flow_segments_v2(
             events=events,
             timelines=timelines,
             segments_df=segments_df,
             all_runners_df=all_runners_df,
-            flow_file=flow_file,
+            flow_file=flow_file_path,
             data_dir=data_dir
         )
         
