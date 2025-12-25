@@ -61,8 +61,8 @@ class TestValidateStartTimes:
         """Test valid start times pass validation."""
         events = [
             {"name": "full", "start_time": 420},
-            {"name": "half", "start_time": 0},
-            {"name": "elite", "start_time": 1439},
+            {"name": "half", "start_time": 300},  # Issue #553: Range is 300-1200
+            {"name": "elite", "start_time": 1200},  # Issue #553: Range is 300-1200
         ]
         validate_start_times(events)
     
@@ -79,12 +79,12 @@ class TestValidateStartTimes:
     def test_start_time_out_of_range(self):
         """Test start_time out of range raises ValidationError."""
         events = [
-            {"name": "full", "start_time": 1440},  # Too high
+            {"name": "full", "start_time": 1201},  # Too high (Issue #553: Range is 300-1200)
         ]
         with pytest.raises(ValidationError) as exc_info:
             validate_start_times(events)
         assert exc_info.value.code == 400
-        assert "must be between 0 and 1439" in exc_info.value.message
+        assert "must be between 300 and 1200" in exc_info.value.message
     
     def test_start_time_not_integer(self):
         """Test non-integer start_time raises ValidationError."""
