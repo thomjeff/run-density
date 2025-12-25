@@ -2420,15 +2420,20 @@ def generate_bin_features_with_coarsening(segments: dict, time_windows: list, ru
         from datetime import datetime, timezone, timedelta
         base_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         
-        # Use actual start_times passed to function instead of hardcoded defaults
-        # Fixed: Was using hardcoded 420 (Full event) which caused timing issues for 5K events
-        if start_times and len(start_times) > 0:
-            earliest_start_min = min(start_times.values())
-            latest_end_min = max(start_times.values()) + 120
-        else:
-            # Fallback only if start_times is empty or None
-            earliest_start_min = 420  # Default start time
-            latest_end_min = 460 + 120  # Default end time + 2 hours
+        # Issue #553 Phase 5.2: Use start_times from analysis.json (no hardcoded fallback)
+        # start_times must be provided - fail fast if missing
+        if not start_times or len(start_times) == 0:
+            raise ValueError(
+                "start_times dictionary is required for bin generation. "
+                "Start times must come from analysis.json per Issue #553. "
+                "Cannot proceed with hardcoded fallback values."
+            )
+        
+        earliest_start_min = min(start_times.values())
+        # Calculate latest end time using event durations if available
+        # Otherwise, add 2 hours as conservative estimate
+        latest_start_min = max(start_times.values())
+        latest_end_min = latest_start_min + 120  # Add 2 hours for analysis duration
         
         t0_utc = base_date + timedelta(minutes=earliest_start_min)
         total_duration_s = int((latest_end_min - earliest_start_min) * 60)

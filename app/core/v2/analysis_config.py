@@ -387,3 +387,122 @@ def get_events_by_day(
     
     return day_events
 
+
+def get_start_time(
+    event_name: str,
+    analysis_config: Optional[Dict[str, Any]] = None,
+    run_path: Optional[Path] = None
+) -> int:
+    """
+    Get event start time in minutes from analysis.json.
+    
+    Issue #553 Phase 5.2: Replace hardcoded start times with dynamic lookup.
+    
+    Args:
+        event_name: Event name (case-insensitive, e.g., "full", "10k", "half")
+        analysis_config: Optional pre-loaded analysis.json dict
+        run_path: Optional path to run directory (will load analysis.json if config not provided)
+        
+    Returns:
+        int: Start time in minutes after midnight
+        
+    Raises:
+        ValueError: If event not found in analysis.json and no fallback available
+        FileNotFoundError: If run_path provided but analysis.json doesn't exist
+        
+    Note:
+        This function enforces fail-fast behavior per Issue #553 requirements.
+        No fallback to hardcoded start times.
+    """
+    # Load analysis_config if not provided
+    if analysis_config is None:
+        if run_path is None:
+            raise ValueError(
+                "Either analysis_config or run_path must be provided to get_start_time"
+            )
+        analysis_config = load_analysis_json(run_path)
+    
+    # Normalize event name to lowercase for lookup
+    event_name_lower = event_name.lower()
+    
+    # Try start_times dictionary first (faster lookup)
+    start_times = analysis_config.get("start_times", {})
+    if event_name in start_times:
+        start_time = start_times[event_name]
+    elif event_name_lower in start_times:
+        start_time = start_times[event_name_lower]
+    else:
+        # Fallback: search through events list
+        events = analysis_config.get("events", [])
+        for event in events:
+            event_name_in_config = event.get("name", "").lower()
+            if event_name_in_config == event_name_lower:
+                start_time = event.get("start_time")
+                if start_time is None:
+                    raise ValueError(
+                        f"Event '{event_name}' found in analysis.json but missing 'start_time' field"
+                    )
+                if not isinstance(start_time, int) or not (300 <= start_time <= 1200):
+                    raise ValueError(
+                        f"Event '{event_name}' has invalid start_time: {start_time} (must be integer 300-1200)"
+                    )
+                return start_time
+        
+        # Event not found - fail fast per Issue #553 requirements
+        available_events = [e.get("name", "unknown") for e in events]
+        raise ValueError(
+            f"Event '{event_name}' not found in analysis.json. "
+            f"Available events: {available_events}"
+        )
+    
+    # Validate start_time
+    if not isinstance(start_time, int) or not (300 <= start_time <= 1200):
+        raise ValueError(
+            f"Event '{event_name}' has invalid start_time: {start_time} (must be integer 300-1200)"
+        )
+    
+    return start_time
+
+
+def get_all_start_times(
+    analysis_config: Optional[Dict[str, Any]] = None,
+    run_path: Optional[Path] = None
+) -> Dict[str, int]:
+    """
+    Get all event start times from analysis.json.
+    
+    Issue #553 Phase 5.2: Get all start times as a dictionary.
+    
+    Args:
+        analysis_config: Optional pre-loaded analysis.json dict
+        run_path: Optional path to run directory (will load analysis.json if config not provided)
+        
+    Returns:
+        Dict[str, int]: Dictionary mapping event names to start times in minutes
+        
+    Raises:
+        FileNotFoundError: If run_path provided but analysis.json doesn't exist
+    """
+    # Load analysis_config if not provided
+    if analysis_config is None:
+        if run_path is None:
+            raise ValueError(
+                "Either analysis_config or run_path must be provided to get_all_start_times"
+            )
+        analysis_config = load_analysis_json(run_path)
+    
+    # Return start_times dictionary from analysis.json
+    start_times = analysis_config.get("start_times", {})
+    if not start_times:
+        # Fallback: build from events list
+        events = analysis_config.get("events", [])
+        start_times = {}
+        for event in events:
+            event_name = event.get("name")
+            start_time = event.get("start_time")
+            if event_name and start_time is not None:
+                start_times[event_name] = start_time
+                start_times[event_name.lower()] = start_time
+    
+    return start_times
+
