@@ -343,8 +343,9 @@ def create_full_analysis_pipeline(
     
     runflow_root = get_runflow_root()
     run_path = runflow_root / run_id
+    # Issue #553: Run directory may already exist if analysis.json was generated
     run_path.mkdir(parents=True, exist_ok=True)
-    logger.debug(f"Created run directory: {run_path}")
+    logger.debug(f"Using run directory: {run_path}")
     
     # Issue #527: Set up run-level file logging
     from app.utils.run_logging import RunLogHandler

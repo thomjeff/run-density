@@ -21,6 +21,8 @@ from app.api.models.v2 import (
 from app.core.v2.validation import ValidationError, validate_api_payload
 from app.core.v2.loader import load_events_from_payload
 from app.core.v2.pipeline import create_stubbed_pipeline, create_full_analysis_pipeline
+from app.core.v2.analysis_config import generate_analysis_json
+from app.utils.run_id import generate_run_id, get_runflow_root
 
 # Create router
 router = APIRouter()
@@ -70,14 +72,41 @@ async def analyze_v2(request: V2AnalyzeRequest) -> V2AnalyzeResponse:
                 content=error_response.model_dump()
             )
         
+        # Generate run_id and create run directory
+        run_id = generate_run_id()
+        runflow_root = get_runflow_root()
+        run_path = runflow_root / run_id
+        run_path.mkdir(parents=True, exist_ok=True)
+        
+        # Phase 2: Generate analysis.json (single source of truth)
+        # This must happen before any analysis execution
+        try:
+            analysis_config = generate_analysis_json(
+                request_payload=payload_dict,
+                run_id=run_id,
+                run_path=run_path
+            )
+            logger.info(f"Generated analysis.json for run_id: {run_id}")
+        except Exception as e:
+            logger.error(f"Failed to generate analysis.json: {e}", exc_info=True)
+            error_response = V2ErrorResponse(
+                status="ERROR",
+                code=500,
+                error=f"Failed to generate analysis configuration: {str(e)}"
+            )
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content=error_response.model_dump()
+            )
+        
         # Load events from payload (creates Event objects)
         events = load_events_from_payload(payload_dict)
         
-        # Extract data directory and file names from payload
-        data_dir = payload_dict.get("data_dir", "data")
-        segments_file = payload_dict.get("segments_file", "segments.csv")
-        locations_file = payload_dict.get("locations_file", "locations.csv")
-        flow_file = payload_dict.get("flow_file", "flow.csv")
+        # Extract data directory and file names from analysis.json (single source of truth)
+        data_dir = analysis_config.get("data_dir", "data")
+        segments_file = analysis_config.get("segments_file")
+        locations_file = analysis_config.get("locations_file")
+        flow_file = analysis_config.get("flow_file")
         
         # Run full analysis pipeline (Phase 4 + 5)
         # This creates directory structure AND runs density + flow analysis
@@ -86,7 +115,8 @@ async def analyze_v2(request: V2AnalyzeRequest) -> V2AnalyzeResponse:
             segments_file=segments_file,
             locations_file=locations_file,
             flow_file=flow_file,
-            data_dir=data_dir
+            data_dir=data_dir,
+            run_id=run_id  # Pass run_id to avoid regenerating
         )
         
         # Format output paths for response
