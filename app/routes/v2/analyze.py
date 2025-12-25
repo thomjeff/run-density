@@ -55,17 +55,19 @@ async def analyze_v2(request: V2AnalyzeRequest) -> V2AnalyzeResponse:
         payload_dict = request.model_dump()
         
         # Validate payload using Phase 1 validation layer
-        # This checks all rules from api_v2.md
+        # This checks all rules from Issue #553
         try:
             validate_api_payload(payload_dict)
         except ValidationError as e:
-            # Convert ValidationError to HTTPException with proper status code
-            raise HTTPException(
+            # Convert ValidationError to V2ErrorResponse format (Issue #553)
+            error_response = V2ErrorResponse(
+                status="ERROR",
+                code=e.code,
+                error=e.message
+            )
+            return JSONResponse(
                 status_code=e.code,
-                detail={
-                    "message": e.message,
-                    "code": e.code
-                }
+                content=error_response.model_dump()
             )
         
         # Load events from payload (creates Event objects)
@@ -100,17 +102,16 @@ async def analyze_v2(request: V2AnalyzeRequest) -> V2AnalyzeResponse:
             output_paths=output_paths_dict
         )
         
-    except HTTPException:
-        # Re-raise HTTP exceptions (validation errors)
-        raise
     except Exception as e:
-        # Catch-all for unexpected errors
+        # Catch-all for unexpected errors (Issue #553: use V2ErrorResponse format)
         logger.error(f"Unexpected error in v2 analyze endpoint: {e}", exc_info=True)
-        raise HTTPException(
+        error_response = V2ErrorResponse(
+            status="ERROR",
+            code=500,
+            error=f"Internal processing error: {str(e)}"
+        )
+        return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "message": f"Internal processing error: {str(e)}",
-                "code": 500
-            }
+            content=error_response.model_dump()
         )
 
