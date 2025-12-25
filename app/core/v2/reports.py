@@ -568,16 +568,20 @@ def generate_locations_report_v2(
         if 'seg_id' in locations_df.columns:
             def location_matches_day(row) -> bool:
                 """Check if location's seg_ids overlap with day segments, or if it's a proxy location for this day."""
+                # Issue #553 Phase 4.2: Check 'day' column first (if present) for all locations
+                # This ensures locations are filtered by day, not just by seg_id matching
+                if 'day' in row and pd.notna(row.get('day')):
+                    loc_day = str(row.get('day')).lower()
+                    if loc_day != day.value.lower():
+                        # Location is explicitly marked for a different day, exclude it
+                        return False
+                
                 # Include proxy locations ONLY if they match the requested day
                 if 'proxy_loc_id' in row and pd.notna(row.get('proxy_loc_id')):
-                    # Check if location has a 'day' column and it matches the requested day
-                    if 'day' in row and pd.notna(row.get('day')):
-                        return str(row.get('day')).lower() == day.value.lower()
-                    # If no day column, include proxy locations (backward compatibility)
-                    # but this should be avoided - locations should have day specified
+                    # Day check already done above, so if we get here, day matches
                     return True
                 
-                # Check seg_id match
+                # Check seg_id match for regular locations
                 loc_seg_ids = row.get('seg_id')
                 if pd.isna(loc_seg_ids) or not loc_seg_ids:
                     return False
