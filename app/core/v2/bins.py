@@ -239,29 +239,33 @@ def generate_bins_v2(
         else:
             logger.warning(f"density_results missing 'segments' dict, cannot filter by day")
         
-        # Issue #553 Phase 4.3: Load event durations from analysis.json
+        # Issue #553 Phase 4.2 & 4.3: Load event configuration from analysis.json
         event_durations = {}
+        event_names = []
         try:
             runflow_root = get_runflow_root()
             run_path = runflow_root / run_id
             analysis_config = load_analysis_json(run_path)
             
-            # Extract event durations from analysis.json
+            # Extract event names and durations from analysis.json
             events_list = analysis_config.get("events", [])
             for event in events_list:
                 event_name = event.get("name", "")
                 duration = event.get("event_duration_minutes")
-                if event_name and duration:
-                    # Support both original case and lowercase for lookup
-                    event_durations[event_name] = duration
-                    event_durations[event_name.lower()] = duration
+                if event_name:
+                    event_names.append(event_name.lower())
+                    if duration:
+                        # Support both original case and lowercase for lookup
+                        event_durations[event_name] = duration
+                        event_durations[event_name.lower()] = duration
             
+            logger.debug(f"Loaded event names from analysis.json: {event_names}")
             logger.debug(f"Loaded event durations from analysis.json: {event_durations}")
         except Exception as e:
-            logger.error(f"Failed to load event durations from analysis.json: {e}")
-            # Issue #553: Fail fast - event durations are required
+            logger.error(f"Failed to load event configuration from analysis.json: {e}")
+            # Issue #553: Fail fast - event configuration is required
             raise ValueError(
-                f"Cannot generate bins without event durations from analysis.json: {e}"
+                f"Cannot generate bins without event configuration from analysis.json: {e}"
             )
         
         # Call v1 bin generation with retry logic
@@ -270,7 +274,8 @@ def generate_bins_v2(
         
         try:
             daily_folder_path, bin_metadata, bin_data = _generate_bin_dataset_with_retry(
-                filtered_density_results, start_times, temp_output_dir, analysis_context, event_durations
+                filtered_density_results, start_times, temp_output_dir, analysis_context, 
+                event_durations, event_names
             )
             
             if not daily_folder_path:

@@ -729,7 +729,8 @@ def _try_bin_generation_with_coarsening(
     analysis_context: Any,
     start_time: float,
     strategy_step: int,
-    event_durations: Optional[Dict[str, int]] = None
+    event_durations: Optional[Dict[str, int]] = None,
+    event_names: Optional[List[str]] = None
 ) -> Tuple[Optional[Dict[str, Any]], str, int, float, int]:
     """Try generating bin dataset with adaptive coarsening strategy."""
     from app.utils.constants import MAX_BIN_GENERATION_TIME_SECONDS
@@ -741,7 +742,7 @@ def _try_bin_generation_with_coarsening(
             bin_data = generate_bin_dataset(
                 results, start_times, bin_size_km=bin_size_to_use,
                 analysis_context=analysis_context, dt_seconds=dt_seconds,
-                event_durations=event_durations
+                event_durations=event_durations, event_names=event_names
             )
             
             elapsed = time.monotonic() - start_time
@@ -879,7 +880,8 @@ def _generate_bin_dataset_with_retry(
     start_times: Dict[str, float],
     output_dir: str,
     analysis_context: Any,
-    event_durations: Optional[Dict[str, int]] = None
+    event_durations: Optional[Dict[str, int]] = None,
+    event_names: Optional[List[str]] = None
 ) -> Tuple[Optional[str], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """
     Generate bin dataset with retry logic and adaptive coarsening.
@@ -909,7 +911,7 @@ def _generate_bin_dataset_with_retry(
     strategy_step = 0
     bin_data, bins_status, strategy_step, bin_size_to_use, dt_seconds = _try_bin_generation_with_coarsening(
         results, start_times, bin_size_to_use, dt_seconds,
-        analysis_context, start_time, strategy_step, event_durations
+        analysis_context, start_time, strategy_step, event_durations, event_names
     )
     
     # Check final result
@@ -2235,7 +2237,8 @@ def generate_bin_dataset(
     bin_size_km: float = 0.1, 
     analysis_context: Optional[AnalysisContext] = None, 
     dt_seconds: int = 60,
-    event_durations: Optional[Dict[str, int]] = None
+    event_durations: Optional[Dict[str, int]] = None,
+    event_names: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     Generate bin-level dataset using ChatGPT's vectorized bins_accumulator.py.
@@ -2275,7 +2278,16 @@ def generate_bin_dataset(
         time_windows = _create_time_windows_for_bins(start_times, dt_seconds)
         
         # 3) Build runner→segment/window mapping (adapter to your model)
-        runners_by_segment_and_window = build_runner_window_mapping(results, time_windows, start_times)
+        # Issue #553 Phase 4.2: Pass event_names from analysis.json if available
+        # Use provided event_names, or extract from event_durations, or fallback to start_times keys
+        event_names_for_mapping = event_names
+        if event_names_for_mapping is None and event_durations:
+            # Extract event names from event_durations dict (keys may be mixed case)
+            event_names_for_mapping = [e.lower() for e in event_durations.keys()]
+        
+        runners_by_segment_and_window = build_runner_window_mapping(
+            results, time_windows, start_times, event_names=event_names_for_mapping
+        )
         
         # 4) Generate bin features using ChatGPT's vectorized accumulator with performance optimization
         bin_build = generate_bin_features_with_coarsening(
@@ -2947,7 +2959,12 @@ def _process_event_windows_and_segments(
                 _ensure_empty_mapping_entry(mapping, seg_id, w_idx)
 
 
-def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, start_times: Dict[str, float]) -> Dict[str, Dict[int, Dict[str, Any]]]:
+def build_runner_window_mapping(
+    results: Dict[str, Any], 
+    time_windows: list, 
+    start_times: Dict[str, float],
+    event_names: Optional[List[str]] = None
+) -> Dict[str, Dict[int, Dict[str, Any]]]:
     """
     Build runner→segment/window mapping adapter for bins_accumulator.
     
@@ -3016,10 +3033,18 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
     
     # Issue #243 Fix: Loop through events first, then their relevant windows
     # Issue #548 Bug 1: Use lowercase event names consistently (no v1 uppercase compatibility)
-    # Fixed: Added 'elite' and 'open' events for 5K support
-    for event in ['full', '10k', 'half', 'elite', 'open']:
+    # Issue #553 Phase 4.2: Use dynamic event names from analysis.json instead of hardcoded list
+    # Get event names from parameter or fallback to start_times keys
+    if event_names is None:
+        # Fallback: use events from start_times (for backward compatibility)
+        event_names = [e.lower() for e in start_times.keys()]
+    
+    for event in event_names:
+        # Normalize to lowercase for consistent matching
+        event_lower = event.lower()
+        
         # Get event start time
-        event_min = start_times.get(event)
+        event_min = start_times.get(event_lower) or start_times.get(event)
         if event_min is None:
             continue
         
@@ -3030,7 +3055,7 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
         
         # Get runners for this event (case-insensitive matching)
         # CSV files use lowercase event names (elite, open) but code uses capitalized (Elite, Open)
-        event_mask = pace_data['event'].str.lower() == event.lower()
+        event_mask = pace_data['event'].str.lower() == event_lower
         event_runners = pace_data[event_mask]
         
         if len(event_runners) == 0:
@@ -3042,7 +3067,7 @@ def build_runner_window_mapping(results: Dict[str, Any], time_windows: list, sta
         
         # Process all windows and segments for this event
         _process_event_windows_and_segments(
-            event, event_start_sec, event_min, earliest_start_min,
+            event_lower, event_start_sec, event_min, earliest_start_min,
             start_idx, event_runners_copy, time_windows, WINDOW_SECONDS,
             segments_dict, segment_ranges, segments_config, mapping
         )
