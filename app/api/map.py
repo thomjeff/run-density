@@ -692,8 +692,6 @@ async def get_map_config():
     """
     try:
         from app.utils.constants import (
-            # Issue #553 Phase 6.1: File paths now come from API request via analysis.json
-            "data/runners.csv", "data/segments.csv",
             MAP_CENTER_LAT, MAP_CENTER_LON, MAP_DEFAULT_ZOOM,
             MAP_TILE_URL, MAP_TILE_ATTRIBUTION, MAP_MAX_ZOOM,
             MAP_DENSITY_THRESHOLDS, MAP_ZONE_COLORS
