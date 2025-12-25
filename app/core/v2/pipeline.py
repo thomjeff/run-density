@@ -460,7 +460,7 @@ def create_full_analysis_pipeline(
             timelines=timelines,
             segments_df=segments_df,
             all_runners_df=all_runners_df,
-            density_csv_path=str(segments_path)
+            density_csv_path=segments_path_str
         )
         
         # Run flow analysis (Phase 5)
@@ -528,24 +528,35 @@ def create_full_analysis_pipeline(
                 logger.warning(f"Bin generation skipped or failed for day {day.value}")
         
         # Load locations DataFrame if locations_file is provided
+        # Issue #553 Phase 7.1: Use file path from analysis.json if available
         locations_df = None
         if locations_file:
-            from app.io.loader import load_locations
-            locations_path = Path(data_dir) / locations_file
-            if locations_path.exists():
-                locations_df = load_locations(str(locations_path))
-                logger.info(f"Loaded {len(locations_df)} locations from {locations_path}")
+            if analysis_config:
+                from app.core.v2.analysis_config import get_locations_file
+                locations_path_str = get_locations_file(analysis_config=analysis_config)
             else:
-                logger.warning(f"Locations file not found: {locations_path}")
+                locations_path_str = str(Path(data_dir) / locations_file)
+            
+            locations_path = Path(locations_path_str)
+            if locations_path.exists():
+                from app.io.loader import load_locations
+                locations_df = load_locations(locations_path_str)
+                logger.info(f"Loaded {len(locations_df)} locations from {locations_path_str}")
+            else:
+                logger.warning(f"Locations file not found at {locations_path_str}, skipping locations report")
         
         # Generate reports (Phase 6)
         # Use day-partitioned bins directories
-        # Issue #553 Phase 6.2: Pass file paths from analysis.json to reports
-        from app.core.v2.analysis_config import load_analysis_json
-        analysis_config = load_analysis_json(run_path)
-        segments_file_path = analysis_config.get("data_files", {}).get("segments", str(segments_path))
-        flow_file_path = analysis_config.get("data_files", {}).get("flow", flow_file)
-        locations_file_path = analysis_config.get("data_files", {}).get("locations", locations_file) if locations_file else None
+        # Issue #553 Phase 7.1: Use file paths from analysis.json (already loaded at pipeline start)
+        if analysis_config:
+            segments_file_path = analysis_config.get("data_files", {}).get("segments", segments_path_str)
+            flow_file_path = analysis_config.get("data_files", {}).get("flow", flow_file_path)
+            locations_file_path = analysis_config.get("data_files", {}).get("locations", locations_path_str) if locations_file else None
+        else:
+            # Fallback to constructed paths if analysis.json not available
+            segments_file_path = segments_path_str
+            flow_file_path = flow_file_path
+            locations_file_path = str(Path(data_dir) / locations_file) if locations_file else None
         
         reports_by_day = generate_reports_per_day(
             run_id=run_id,
