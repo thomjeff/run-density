@@ -396,8 +396,8 @@ def create_flow_segments_fallback(
         flow_segment = {
             "seg_id": seg_id,
             "segment_label": segment_row.get("seg_label", ""),
-            "eventa": v1_event_a,
-            "eventb": v1_event_b,
+            "eventa": event_a_lower,  # Issue #548 Bug 1: Use lowercase consistently
+            "eventb": event_b_lower,  # Issue #548 Bug 1: Use lowercase consistently
             "from_km_a": from_km_a,
             "to_km_a": to_km_a,
             "from_km_b": from_km_b,
