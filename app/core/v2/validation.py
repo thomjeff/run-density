@@ -54,7 +54,9 @@ def validate_day_codes(events: List[Dict[str, Any]]) -> None:
 
 def validate_start_times(events: List[Dict[str, Any]]) -> None:
     """
-    Validate start_time is integer between 0 and 1439 (minutes after midnight).
+    Validate start_time is integer between 300 and 1200 (inclusive).
+    
+    Issue #553: Updated range to 300-1200 (5:00 AM to 8:00 PM).
     
     Args:
         events: List of event dictionaries from API payload
@@ -78,9 +80,9 @@ def validate_start_times(events: List[Dict[str, Any]]) -> None:
                 code=400
             )
         
-        if start_time < 0 or start_time >= 1440:
+        if start_time < 300 or start_time > 1200:
             raise ValidationError(
-                f"start_time {start_time} for event '{event_name}' must be between 0 and 1439 (minutes after midnight)",
+                f"start_time {start_time} for event '{event_name}' must be between 300 and 1200 (5:00 AM to 8:00 PM)",
                 code=400
             )
 
@@ -314,6 +316,60 @@ def validate_runner_uniqueness(
             all_runner_ids[runner_id] = event_name
 
 
+def validate_description(description: Optional[str]) -> None:
+    """
+    Validate description field length (max 254 characters).
+    
+    Issue #553: Added description validation.
+    
+    Args:
+        description: Optional description string
+        
+    Raises:
+        ValidationError (400): If description exceeds 254 characters
+    """
+    if description is not None and len(description) > 254:
+        raise ValidationError(
+            f"description exceeds 254 characters (got {len(description)} characters)",
+            code=400
+        )
+
+
+def validate_event_duration_range(events: List[Dict[str, Any]]) -> None:
+    """
+    Validate event_duration_minutes is integer between 1 and 500 (inclusive).
+    
+    Issue #553: Added event_duration_minutes validation.
+    
+    Args:
+        events: List of event dictionaries from API payload
+        
+    Raises:
+        ValidationError (400): If any event_duration_minutes is out of range or not an integer
+    """
+    for event in events:
+        duration = event.get("event_duration_minutes")
+        event_name = event.get("name", "unknown")
+        
+        if duration is None:
+            raise ValidationError(
+                f"Missing required field 'event_duration_minutes' for event '{event_name}'",
+                code=400
+            )
+        
+        if not isinstance(duration, int):
+            raise ValidationError(
+                f"event_duration_minutes must be an integer for event '{event_name}', got {type(duration).__name__}",
+                code=400
+            )
+        
+        if duration < 1 or duration > 500:
+            raise ValidationError(
+                f"event_duration_minutes {duration} for event '{event_name}' must be between 1 and 500 (inclusive)",
+                code=400
+            )
+
+
 def validate_gpx_files(
     events: List[Dict[str, Any]],
     data_dir: str = "data"
@@ -426,11 +482,19 @@ def validate_api_payload(
             code=400
         )
     
-    # Run all validation checks
+    # Run all validation checks (fail-fast order: basic → file existence → file format → event consistency)
+    # Basic structure validation
+    description = payload.get("description")
+    validate_description(description)
     validate_day_codes(events)
     validate_start_times(events)
+    validate_event_duration_range(events)
     validate_event_names(events)
+    
+    # File existence validation
     validate_file_existence(segments_file, locations_file, flow_file, events, data_dir)
+    
+    # File format validation
     validate_segment_spans(segments_file, events, data_dir)
     validate_runner_uniqueness(events, data_dir)
     validate_gpx_files(events, data_dir)
