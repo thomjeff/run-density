@@ -57,7 +57,13 @@ def _coerce_props(feature: Feature) -> JsonDict:
         props = {}
     return props
 
-def _determine_events_from_time_window(t_start: t.Any, t_end: t.Any, start_times: t.Dict[str, float], logger=None) -> t.List[str]:
+def _determine_events_from_time_window(
+    t_start: t.Any, 
+    t_end: t.Any, 
+    start_times: t.Dict[str, float], 
+    event_durations: t.Optional[t.Dict[str, int]] = None,
+    logger=None
+) -> t.List[str]:
     """
     Determine which events are active for a bin based on its time window.
     
@@ -67,6 +73,7 @@ def _determine_events_from_time_window(t_start: t.Any, t_end: t.Any, start_times
     - The bin's time window overlaps with multiple events' active periods
     
     Issue #535: Uses event durations to compute full active windows, not just start times.
+    Issue #553 Phase 4.3: Uses event_durations from analysis.json (no fallback to constant).
     An event is active from its start time until (start_time + duration).
     
     Args:
@@ -74,6 +81,9 @@ def _determine_events_from_time_window(t_start: t.Any, t_end: t.Any, start_times
         t_end: Bin end time (ISO string or datetime)
         start_times: Dictionary mapping event names to start times in minutes
                     (keys may be "Full", "10K", "Half", "Elite", "Open" or lowercase variants)
+        event_durations: Optional dictionary mapping event names to durations in minutes.
+                        If not provided, will attempt to load from analysis.json via metadata.
+                        Required for Issue #553 (no fallback to EVENT_DURATION_MINUTES constant).
         logger: Optional logger for warning messages
         
     Returns:
@@ -85,7 +95,6 @@ def _determine_events_from_time_window(t_start: t.Any, t_end: t.Any, start_times
     
     try:
         from datetime import datetime, timezone
-        from app.utils.constants import EVENT_DURATION_MINUTES
         
         # Parse t_start and t_end if they're strings
         if isinstance(t_start, str):
@@ -123,16 +132,39 @@ def _determine_events_from_time_window(t_start: t.Any, t_end: t.Any, start_times
             "open": "open"
         }
         
-        # Build event active windows using durations (Issue #535)
+        # Build event active windows using durations (Issue #535, Issue #553)
         # Event is active from start_time to (start_time + duration)
         active_events = []
         
+        # Issue #553 Phase 4.3: Require event_durations (no fallback)
+        if event_durations is None:
+            if logger:
+                logger.error(
+                    "event_durations parameter required for _determine_events_from_time_window. "
+                    "Event durations must come from analysis.json per Issue #553."
+                )
+            return []
+        
         for event_name, event_start_min in start_times.items():
-            # Get event duration (support both lowercase and capitalized keys)
-            event_duration = EVENT_DURATION_MINUTES.get(event_name, EVENT_DURATION_MINUTES.get(event_name.lower(), 0))
-            if event_duration == 0:
+            # Get event duration from provided dict (Issue #553: from analysis.json)
+            # Normalize event name for lookup (support both case variants)
+            event_name_lower = event_name.lower()
+            event_duration = event_durations.get(event_name, event_durations.get(event_name_lower))
+            
+            if event_duration is None or event_duration == 0:
                 if logger:
-                    logger.warning(f"Unknown event duration for '{event_name}', skipping event assignment")
+                    logger.warning(
+                        f"Event duration not found for '{event_name}' in event_durations dict. "
+                        f"Available keys: {list(event_durations.keys())}. Skipping event assignment."
+                    )
+                continue
+            
+            if not isinstance(event_duration, int) or event_duration < 1:
+                if logger:
+                    logger.warning(
+                        f"Invalid event duration for '{event_name}': {event_duration} "
+                        f"(must be integer >= 1). Skipping event assignment."
+                    )
                 continue
             
             event_end_min = event_start_min + event_duration
@@ -141,7 +173,7 @@ def _determine_events_from_time_window(t_start: t.Any, t_end: t.Any, start_times
             # Bin overlaps if: bin_start < event_end AND bin_end > event_start
             if bin_start_min < event_end_min and bin_end_min > event_start_min:
                 # Normalize event name to lowercase (v2 uses lowercase event names)
-                normalized = event_name_mapping.get(event_name.lower(), event_name.lower())
+                normalized = event_name_mapping.get(event_name_lower, event_name_lower)
                 if normalized not in active_events:
                     active_events.append(normalized)
         
@@ -163,20 +195,24 @@ def _build_parquet_rows_from_features(features: t.List[Feature], metadata: JsonD
     """Build parquet rows from features and metadata."""
     rows = []
     
-    # Extract start_times from metadata for event determination (Issue #535)
+    # Extract start_times and event_durations from metadata for event determination
+    # Issue #535: Uses event durations to compute full active windows
+    # Issue #553 Phase 4.3: Event durations come from analysis.json (no fallback)
     start_times = metadata.get("start_times", {})
+    event_durations = metadata.get("event_durations", {})
     
     for f in features:
         p = _coerce_props(f)
         
-        # Determine events from time window (Issue #535)
+        # Determine events from time window (Issue #535, Issue #553)
         # A bin can belong to multiple events in shared segments
         events = []
-        if start_times:
+        if start_times and event_durations:
             events = _determine_events_from_time_window(
                 p.get("t_start"),
                 p.get("t_end"),
                 start_times,
+                event_durations=event_durations,
                 logger=logger
             )
         

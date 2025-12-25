@@ -728,7 +728,8 @@ def _try_bin_generation_with_coarsening(
     dt_seconds: int,
     analysis_context: Any,
     start_time: float,
-    strategy_step: int
+    strategy_step: int,
+    event_durations: Optional[Dict[str, int]] = None
 ) -> Tuple[Optional[Dict[str, Any]], str, int, float, int]:
     """Try generating bin dataset with adaptive coarsening strategy."""
     from app.utils.constants import MAX_BIN_GENERATION_TIME_SECONDS
@@ -739,7 +740,8 @@ def _try_bin_generation_with_coarsening(
         try:
             bin_data = generate_bin_dataset(
                 results, start_times, bin_size_km=bin_size_to_use,
-                analysis_context=analysis_context, dt_seconds=dt_seconds
+                analysis_context=analysis_context, dt_seconds=dt_seconds,
+                event_durations=event_durations
             )
             
             elapsed = time.monotonic() - start_time
@@ -876,7 +878,8 @@ def _generate_bin_dataset_with_retry(
     results: Dict[str, Any],
     start_times: Dict[str, float],
     output_dir: str,
-    analysis_context: Any
+    analysis_context: Any,
+    event_durations: Optional[Dict[str, int]] = None
 ) -> Tuple[Optional[str], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """
     Generate bin dataset with retry logic and adaptive coarsening.
@@ -886,6 +889,9 @@ def _generate_bin_dataset_with_retry(
         start_times: Start times mapping
         output_dir: Output directory for artifacts
         analysis_context: Analysis context object
+        event_durations: Optional dictionary mapping event names to durations in minutes.
+                        Issue #553 Phase 4.3: Required for v2 API (from analysis.json).
+                        If None, will attempt to extract from analysis_context if available.
         
     Returns:
         Tuple of (daily_folder_path, bin_metadata_dict, bin_data_dict)
@@ -903,7 +909,7 @@ def _generate_bin_dataset_with_retry(
     strategy_step = 0
     bin_data, bins_status, strategy_step, bin_size_to_use, dt_seconds = _try_bin_generation_with_coarsening(
         results, start_times, bin_size_to_use, dt_seconds,
-        analysis_context, start_time, strategy_step
+        analysis_context, start_time, strategy_step, event_durations
     )
     
     # Check final result
@@ -2223,8 +2229,14 @@ def _add_geometries_to_bin_features(
         # Continue without geometries - bins will still have properties
 
 
-def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float], bin_size_km: float = 0.1, 
-                        analysis_context: Optional[AnalysisContext] = None, dt_seconds: int = 60) -> Dict[str, Any]:
+def generate_bin_dataset(
+    results: Dict[str, Any], 
+    start_times: Dict[str, float], 
+    bin_size_km: float = 0.1, 
+    analysis_context: Optional[AnalysisContext] = None, 
+    dt_seconds: int = 60,
+    event_durations: Optional[Dict[str, int]] = None
+) -> Dict[str, Any]:
     """
     Generate bin-level dataset using ChatGPT's vectorized bins_accumulator.py.
     
@@ -2288,7 +2300,10 @@ def generate_bin_dataset(results: Dict[str, Any], start_times: Dict[str, float],
         _add_geometries_to_bin_features(geojson_features, analysis_context, logger)
         
         # Issue #535: Include start_times in metadata for event determination in parquet
+        # Issue #553 Phase 4.3: Include event_durations in metadata (from analysis.json)
         geojson_metadata = {**bin_build.metadata, "start_times": start_times}
+        if event_durations:
+            geojson_metadata["event_durations"] = event_durations
         geojson = {"type": "FeatureCollection", "features": geojson_features, "metadata": geojson_metadata}
         
         # 6) Safety checks per ChatGPT guidance

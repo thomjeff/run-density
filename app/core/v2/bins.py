@@ -22,6 +22,8 @@ from app.save_bins import save_bin_artifacts
 from app.core.bin.summary import generate_bin_summary_artifact
 from app.utils.constants import BIN_SCHEMA_VERSION
 from app.core.v2.models import Day, Event
+from app.core.v2.analysis_config import load_analysis_json
+from app.utils.run_id import get_runflow_root
 
 logger = logging.getLogger(__name__)
 
@@ -237,13 +239,38 @@ def generate_bins_v2(
         else:
             logger.warning(f"density_results missing 'segments' dict, cannot filter by day")
         
+        # Issue #553 Phase 4.3: Load event durations from analysis.json
+        event_durations = {}
+        try:
+            runflow_root = get_runflow_root()
+            run_path = runflow_root / run_id
+            analysis_config = load_analysis_json(run_path)
+            
+            # Extract event durations from analysis.json
+            events_list = analysis_config.get("events", [])
+            for event in events_list:
+                event_name = event.get("name", "")
+                duration = event.get("event_duration_minutes")
+                if event_name and duration:
+                    # Support both original case and lowercase for lookup
+                    event_durations[event_name] = duration
+                    event_durations[event_name.lower()] = duration
+            
+            logger.debug(f"Loaded event durations from analysis.json: {event_durations}")
+        except Exception as e:
+            logger.error(f"Failed to load event durations from analysis.json: {e}")
+            # Issue #553: Fail fast - event durations are required
+            raise ValueError(
+                f"Cannot generate bins without event durations from analysis.json: {e}"
+            )
+        
         # Call v1 bin generation with retry logic
         start_time = time.monotonic()
         temp_output_dir = tempfile.mkdtemp()
         
         try:
             daily_folder_path, bin_metadata, bin_data = _generate_bin_dataset_with_retry(
-                filtered_density_results, start_times, temp_output_dir, analysis_context
+                filtered_density_results, start_times, temp_output_dir, analysis_context, event_durations
             )
             
             if not daily_folder_path:

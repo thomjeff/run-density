@@ -250,3 +250,140 @@ def load_analysis_json(run_path: Path) -> Dict[str, Any]:
             e.pos
         )
 
+
+def get_event_duration_minutes(
+    event_name: str,
+    analysis_config: Optional[Dict[str, Any]] = None,
+    run_path: Optional[Path] = None
+) -> int:
+    """
+    Get event duration in minutes from analysis.json.
+    
+    Issue #553 Phase 4.3: Replace EVENT_DURATION_MINUTES constant with dynamic lookup.
+    
+    Args:
+        event_name: Event name (case-insensitive, e.g., "full", "10k", "half")
+        analysis_config: Optional pre-loaded analysis.json dict
+        run_path: Optional path to run directory (will load analysis.json if config not provided)
+        
+    Returns:
+        int: Event duration in minutes
+        
+    Raises:
+        ValueError: If event not found in analysis.json and no fallback available
+        FileNotFoundError: If run_path provided but analysis.json doesn't exist
+        
+    Note:
+        This function enforces fail-fast behavior per Issue #553 requirements.
+        No fallback to EVENT_DURATION_MINUTES constant.
+    """
+    # Load analysis_config if not provided
+    if analysis_config is None:
+        if run_path is None:
+            raise ValueError(
+                "Either analysis_config or run_path must be provided to get_event_duration_minutes"
+            )
+        analysis_config = load_analysis_json(run_path)
+    
+    # Normalize event name to lowercase for lookup
+    event_name_lower = event_name.lower()
+    
+    # Search through events list for matching event
+    events = analysis_config.get("events", [])
+    for event in events:
+        event_name_in_config = event.get("name", "").lower()
+        if event_name_in_config == event_name_lower:
+            duration = event.get("event_duration_minutes")
+            if duration is None:
+                raise ValueError(
+                    f"Event '{event_name}' found in analysis.json but missing 'event_duration_minutes' field"
+                )
+            if not isinstance(duration, int) or duration < 1:
+                raise ValueError(
+                    f"Event '{event_name}' has invalid event_duration_minutes: {duration} (must be >= 1)"
+                )
+            return duration
+    
+    # Event not found - fail fast per Issue #553 requirements
+    available_events = [e.get("name", "unknown") for e in events]
+    raise ValueError(
+        f"Event '{event_name}' not found in analysis.json. "
+        f"Available events: {available_events}"
+    )
+
+
+def get_event_names(analysis_config: Optional[Dict[str, Any]] = None, run_path: Optional[Path] = None) -> List[str]:
+    """
+    Get list of event names from analysis.json.
+    
+    Issue #553 Phase 4.2: Replace hardcoded event name lists with dynamic lookup.
+    
+    Args:
+        analysis_config: Optional pre-loaded analysis.json dict
+        run_path: Optional path to run directory (will load analysis.json if config not provided)
+        
+    Returns:
+        List[str]: Sorted list of event names
+        
+    Raises:
+        FileNotFoundError: If run_path provided but analysis.json doesn't exist
+    """
+    # Load analysis_config if not provided
+    if analysis_config is None:
+        if run_path is None:
+            raise ValueError(
+                "Either analysis_config or run_path must be provided to get_event_names"
+            )
+        analysis_config = load_analysis_json(run_path)
+    
+    # Return event_names from analysis.json (already sorted)
+    event_names = analysis_config.get("event_names", [])
+    if not event_names:
+        # Fallback: extract from events list
+        events = analysis_config.get("events", [])
+        event_names = sorted([e.get("name", "") for e in events if e.get("name")])
+    
+    return event_names
+
+
+def get_events_by_day(
+    day: str,
+    analysis_config: Optional[Dict[str, Any]] = None,
+    run_path: Optional[Path] = None
+) -> List[str]:
+    """
+    Get list of event names for a specific day from analysis.json.
+    
+    Issue #553 Phase 4.2: Replace SATURDAY_EVENTS/SUNDAY_EVENTS constants with dynamic lookup.
+    
+    Args:
+        day: Day code (e.g., "sat", "sun", "fri", "mon")
+        analysis_config: Optional pre-loaded analysis.json dict
+        run_path: Optional path to run directory (will load analysis.json if config not provided)
+        
+    Returns:
+        List[str]: List of event names for the specified day
+        
+    Raises:
+        FileNotFoundError: If run_path provided but analysis.json doesn't exist
+    """
+    # Load analysis_config if not provided
+    if analysis_config is None:
+        if run_path is None:
+            raise ValueError(
+                "Either analysis_config or run_path must be provided to get_events_by_day"
+            )
+        analysis_config = load_analysis_json(run_path)
+    
+    # Normalize day code
+    day_lower = day.lower()
+    
+    # Filter events by day
+    events = analysis_config.get("events", [])
+    day_events = [
+        e.get("name") for e in events
+        if e.get("day", "").lower() == day_lower and e.get("name")
+    ]
+    
+    return day_events
+

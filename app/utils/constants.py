@@ -80,9 +80,11 @@ DISTANCE_BIN_SIZE_KM = 0.1  # 100m distance bins
 # Day short codes for v2 (Issue #495)
 DAY_SHORT_CODES = ['fri', 'sat', 'sun', 'mon']
 
-# Event durations in minutes (Issue #535)
-# These represent the typical active duration of each event from start to finish
-# Used for determining which events are active during a bin's time window
+# Event durations in minutes (DEPRECATED - Issue #553 Phase 4.3)
+# Event durations now come from analysis.json per-event configuration.
+# This constant is kept for backward compatibility with v1 API only.
+# v2 API uses event_duration_minutes from request payload → analysis.json.
+# TODO: Remove after v1 API is fully deprecated.
 EVENT_DURATION_MINUTES = {
     "elite": 45,   # Elite marathon ~45 minutes
     "open": 75,   # Open marathon ~75 minutes
@@ -97,21 +99,13 @@ EVENT_DURATION_MINUTES = {
     "Full": 390,
 }
 
-# Mapping event names to day of the week (DEPRECATED - will be removed in Phase 10)
-# v2 uses Event.day property instead of these constants
-EVENT_DAYS = {
-    "Elite": "Saturday",
-    "Open": "Saturday",
-    "Full": "Sunday",
-    "Half": "Sunday",
-    "10K": "Sunday",
-}
+# Mapping event names to day of the week (REMOVED - Issue #553 Phase 4.1)
+# v2 uses Event.day property and analysis.json instead of these constants.
+# Removed per Issue #553: Event configuration now comes from analysis.json.
 
-# Event groups by day (DEPRECATED - will be removed in Phase 10)
-# v2 uses Event filtering instead of these constants
-SATURDAY_EVENTS = {"Elite", "Open"}
-SUNDAY_EVENTS = {"Full", "Half", "10K"}
-ALL_EVENTS = SATURDAY_EVENTS | SUNDAY_EVENTS
+# Event groups by day (REMOVED - Issue #553 Phase 4.1)
+# v2 uses Event filtering and analysis.json instead of these constants.
+# Removed per Issue #553: Event configuration now comes from analysis.json.
 
 # Map configuration
 DEFAULT_PACE_CSV = "data/runners.csv"
