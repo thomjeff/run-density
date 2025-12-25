@@ -189,7 +189,8 @@ def generate_density_report_v2(
     density_results: Dict[str, Any],
     reports_path: Path,
     segments_df: Optional[Any] = None,  # pd.DataFrame - day-filtered segments
-    data_dir: str = "data"  # Data directory for loading runner files
+    data_dir: str = "data",  # Data directory for loading runner files
+    segments_file_path: Optional[str] = None  # Issue #553 Phase 6.2: Path to segments file
 ) -> Optional[Path]:
     """
     Generate day-scoped density report (Density.md).
