@@ -84,7 +84,16 @@ def create_stubbed_pipeline(
         ui_dir.mkdir(exist_ok=True)
         
         # Create metadata.json per day
-        metadata = create_metadata_json(run_id, day_code, day_events)
+        # Note: create_stubbed_pipeline doesn't have request/response, so pass None
+        metadata = create_metadata_json(
+            run_id=run_id,
+            day=day_code,
+            events=day_events,
+            day_path=day_path,
+            participants_by_event={},  # Empty for stubbed pipeline
+            request_payload=None,
+            response_payload=None
+        )
         metadata_path = day_path / "metadata.json"
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, indent=2, ensure_ascii=False)
@@ -100,7 +109,14 @@ def create_stubbed_pipeline(
         }
     
     # Create combined metadata for index.json (includes all days)
-    combined_metadata = create_combined_metadata(run_id, days_processed, events)
+    # Note: create_stubbed_pipeline doesn't have request/response, so pass None
+    combined_metadata = create_combined_metadata(
+        run_id=run_id,
+        days=days_processed,
+        per_day_metadata={day: {} for day in days_processed},  # Empty for stubbed pipeline
+        request_payload=None,
+        response_payload=None
+    )
     
     # Update pointer files
     update_pointer_files(run_id, combined_metadata)
@@ -187,10 +203,23 @@ def create_metadata_json(
     day: str,
     events: List[Event],
     day_path: Path,
-    participants_by_event: Dict[str, int]
+    participants_by_event: Dict[str, int],
+    request_payload: Optional[Dict[str, Any]] = None,
+    response_payload: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Create metadata.json for a specific day with v1 parity + v2 day/event details.
+    
+    Issue #553: Enhanced to include request and response payloads.
+    
+    Args:
+        run_id: Run identifier
+        day: Day code (fri, sat, sun, mon)
+        events: List of Event objects for this day
+        day_path: Path to day directory
+        participants_by_event: Dictionary mapping event names to participant counts
+        request_payload: Optional full request payload (Issue #553)
+        response_payload: Optional full response payload (Issue #553)
     """
     from app.utils.metadata import (
         get_app_version, get_git_sha,
@@ -207,7 +236,7 @@ def create_metadata_json(
             "participants": int(participants_by_event.get(name, 0))
         }
     
-    return {
+    metadata = {
         "run_id": run_id,
         "day": day,
         "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -221,15 +250,34 @@ def create_metadata_json(
         "file_counts": _file_counts(files_created),
         "output_verification": verification,
     }
+    
+    # Issue #553: Add request and response payloads if provided
+    if request_payload is not None:
+        metadata["request"] = request_payload
+    if response_payload is not None:
+        metadata["response"] = response_payload
+    
+    return metadata
 
 
 def create_combined_metadata(
     run_id: str,
     days: List[str],
-    per_day_metadata: Dict[str, Dict[str, Any]]
+    per_day_metadata: Dict[str, Dict[str, Any]],
+    request_payload: Optional[Dict[str, Any]] = None,
+    response_payload: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Create run-level metadata with v1 parity + day awareness.
+    
+    Issue #553: Enhanced to include request and response payloads.
+    
+    Args:
+        run_id: Run identifier
+        days: List of day codes processed
+        per_day_metadata: Dictionary mapping day codes to day metadata
+        request_payload: Optional full request payload (Issue #553)
+        response_payload: Optional full response payload (Issue #553)
     """
     from app.utils.metadata import (
         get_app_version, get_git_sha,
@@ -263,7 +311,7 @@ def create_combined_metadata(
         for m in ov.get("missing_required", []):
             missing_required.append(f"{day}/{m}")
     
-    return {
+    metadata = {
         "run_id": run_id,
         "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "status": agg_status,
@@ -281,6 +329,14 @@ def create_combined_metadata(
             "missing_required": missing_required,
         },
     }
+    
+    # Issue #553: Add request and response payloads if provided
+    if request_payload is not None:
+        metadata["request"] = request_payload
+    if response_payload is not None:
+        metadata["response"] = response_payload
+    
+    return metadata
 
 
 def update_pointer_files(run_id: str, metadata: Dict[str, Any]) -> None:
@@ -306,7 +362,9 @@ def create_full_analysis_pipeline(
     locations_file: str = "locations.csv",
     flow_file: str = "flow.csv",
     data_dir: str = "data",
-    run_id: Optional[str] = None
+    run_id: Optional[str] = None,
+    request_payload: Optional[Dict[str, Any]] = None,
+    response_payload: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Create day-partitioned directory structure and run full analysis (Phase 4 + 5).
@@ -587,7 +645,9 @@ def create_full_analysis_pipeline(
                 day=day_code,
                 events=day_events,
                 day_path=day_path,
-                participants_by_event=participants_by_event
+                participants_by_event=participants_by_event,
+                request_payload=request_payload,
+                response_payload=response_payload
             )
             metadata["density"] = density_summary[day_code]
             metadata["flow"] = flow_summary_by_day[day_code]
@@ -610,7 +670,9 @@ def create_full_analysis_pipeline(
         combined_metadata = create_combined_metadata(
             run_id=run_id,
             days=days_processed,
-            per_day_metadata=day_metadata_map
+            per_day_metadata=day_metadata_map,
+            request_payload=request_payload,
+            response_payload=response_payload
         )
         combined_metadata["density"] = density_summary
         combined_metadata["flow"] = flow_summary_by_day

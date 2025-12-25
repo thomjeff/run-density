@@ -116,13 +116,60 @@ async def analyze_v2(request: V2AnalyzeRequest) -> V2AnalyzeResponse:
             locations_file=locations_file,
             flow_file=flow_file,
             data_dir=data_dir,
-            run_id=run_id  # Pass run_id to avoid regenerating
+            run_id=run_id,  # Pass run_id to avoid regenerating
+            request_payload=payload_dict  # Issue #553: Pass request payload for metadata
         )
         
         # Format output paths for response
         output_paths_dict = {}
         for day_code, paths in pipeline_result["output_paths"].items():
             output_paths_dict[day_code] = V2OutputPaths(**paths)
+        
+        # Create response payload (Issue #553: Include in metadata.json)
+        response_payload = {
+            "status": "success",
+            "code": 200,
+            "run_id": pipeline_result["run_id"],
+            "days": pipeline_result["days"],
+            "output_paths": {
+                day: {
+                    "day": paths.day,
+                    "reports": paths.reports,
+                    "bins": paths.bins,
+                    "maps": paths.maps,
+                    "ui": paths.ui,
+                    "metadata": paths.metadata
+                }
+                for day, paths in output_paths_dict.items()
+            }
+        }
+        
+        # Issue #553: Update metadata.json files with response payload
+        from app.core.v2.analysis_config import load_analysis_json
+        from pathlib import Path
+        import json
+        
+        runflow_root = get_runflow_root()
+        run_path = runflow_root / run_id
+        
+        # Update run-level metadata.json
+        run_metadata_path = run_path / "metadata.json"
+        if run_metadata_path.exists():
+            with open(run_metadata_path, 'r', encoding='utf-8') as f:
+                run_metadata = json.load(f)
+            run_metadata["response"] = response_payload
+            with open(run_metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(run_metadata, f, indent=2, ensure_ascii=False)
+        
+        # Update day-level metadata.json files
+        for day_code in pipeline_result["days"]:
+            day_metadata_path = run_path / day_code / "metadata.json"
+            if day_metadata_path.exists():
+                with open(day_metadata_path, 'r', encoding='utf-8') as f:
+                    day_metadata = json.load(f)
+                day_metadata["response"] = response_payload
+                with open(day_metadata_path, 'w', encoding='utf-8') as f:
+                    json.dump(day_metadata, f, indent=2, ensure_ascii=False)
         
         # Return success response
         return V2AnalyzeResponse(
