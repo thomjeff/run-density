@@ -26,6 +26,7 @@ warnings.warn(
 import os
 import time
 import json
+import functools
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 from pathlib import Path
@@ -91,8 +92,9 @@ def load_parquet_sources(reports_dir: Path) -> Dict[str, pd.DataFrame]:
     return sources
 
 
+@functools.lru_cache(maxsize=1)
 def load_density_rulebook() -> Dict[str, Any]:
-    """Load density rulebook configuration."""
+    """Load density rulebook configuration (cached to prevent repeated loads)."""
     rulebook_path = Path("config/density_rulebook.yml")
     if not rulebook_path.exists():
         # Fallback to data directory

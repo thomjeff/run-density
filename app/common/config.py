@@ -14,12 +14,14 @@ from pathlib import Path
 import yaml
 import os
 import logging
+import functools
 
 logger = logging.getLogger(__name__)
 
 CONFIG_DIR = Path("config")
 
 
+@functools.lru_cache(maxsize=1)
 def load_rulebook() -> Dict[str, Any]:
     """
     Load density_rulebook.yml with no hardcoded defaults.
