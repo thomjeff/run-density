@@ -106,14 +106,26 @@ def calculate_convergence_point(
     entry_times_b = start_b + dfB.get("start_offset", pd.Series([0]*len(dfB))).fillna(0).values.astype(float) + dfB["pace"].values * 60.0 * from_km
     exit_times_b = start_b + dfB.get("start_offset", pd.Series([0]*len(dfB))).fillna(0).values.astype(float) + dfB["pace"].values * 60.0 * to_km
     
+    # Issue #503: Vectorized temporal overlap detection using NumPy broadcasting
     # Check for any temporal overlap between events in the segment
-    for i, (entry_a, exit_a) in enumerate(zip(entry_times_a, exit_times_a)):
-        for j, (entry_b, exit_b) in enumerate(zip(entry_times_b, exit_times_b)):
-            # Check if runners are in segment at same time
-            if (entry_a <= exit_b + tolerance_seconds and 
-                entry_b <= exit_a + tolerance_seconds):
-                # Found temporal overlap - return the segment start
-                return float(from_km)
+    # Entry/exit times are already numpy arrays from .values
+    # Shape: entry_times_a is (n,), exit_times_a is (n,)
+    #        entry_times_b is (m,), exit_times_b is (m,)
+    # Broadcast to check all pairs: (n, 1) vs (1, m) = (n, m) boolean matrix
+    entry_a_2d = entry_times_a[:, np.newaxis]  # (n, 1)
+    exit_a_2d = exit_times_a[:, np.newaxis]    # (n, 1)
+    entry_b_2d = entry_times_b[np.newaxis, :]  # (1, m)
+    exit_b_2d = exit_times_b[np.newaxis, :]    # (1, m)
+    
+    # Check temporal overlap: (entry_a <= exit_b + tolerance) AND (entry_b <= exit_a + tolerance)
+    overlap_condition = (
+        (entry_a_2d <= exit_b_2d + tolerance_seconds) &
+        (entry_b_2d <= exit_a_2d + tolerance_seconds)
+    )
+    
+    if np.any(overlap_condition):
+        # Found temporal overlap - return the segment start
+        return float(from_km)
     
     # No temporal overlaps found
     return None
