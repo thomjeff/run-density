@@ -1768,7 +1768,7 @@ def calculate_convergence_zone_overlaps_original(
         exit_b = time_exit_b_arr[j]
         
         # Calculate overlap duration (already computed, but recalc for clarity)
-        overlap_dur = min(exit_a, exit_b) - max(enter_a, exit_b)
+        overlap_dur = min(exit_a, exit_b) - max(enter_a, enter_b)
         
         if overlap_dur >= min_overlap_duration:
                 # Temporal overlap detected - now check for directional change
