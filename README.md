@@ -63,7 +63,7 @@ Stop the container:
 make stop
 ```
 
-**📖 Full Documentation:** See [`docs/DOCKER_DEV.md`](docs/DOCKER_DEV.md) for complete Docker development guide.
+**📖 Full Documentation:** See [`docs/README.md`](docs/README.md) for complete documentation index.
 
 ### Legacy venv Development (Deprecated)
 

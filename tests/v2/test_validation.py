@@ -2,6 +2,19 @@
 Unit tests for Runflow v2 validation functions.
 
 Phase 1: Models & Validation Layer (Issue #495)
+
+This file contains unit tests for individual validation functions:
+- validate_day_codes() - Day code validation
+- validate_start_times() - Start time range validation
+- validate_event_names() - Event name validation
+- validate_file_existence() - File existence checks
+- validate_segment_spans() - Segment range validation
+- validate_runner_uniqueness() - Runner ID uniqueness
+- validate_gpx_files() - GPX file validation
+- validate_api_payload() - Complete API payload validation
+
+Each test class focuses on testing a single validation function in isolation.
+For error handling and error code tests, see test_validation_errors.py.
 """
 
 import pytest

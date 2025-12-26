@@ -224,13 +224,13 @@ Check `runflow/{run_id}/metadata.json` for details.
 
 **Start Here:**
 - `docs/README.md` - Documentation index by audience
-- `docs/DOCKER_DEV.md` - Complete Docker development guide
-- `docs/architecture/output.md` - Output structure reference
+- `docs/dev-guides/docker-dev.md` - Complete Docker development guide
+- `docs/user-guide/api-user-guide.md` - Output structure reference
 
 **For Developers:**
-- `docs/GUARDRAILS.md` - Non-negotiable development rules
+- `docs/dev-guides/ai-developer-guide.md` - AI assistant onboarding and rules
+- `docs/dev-guides/developer-guide-v2.md` - Complete v2 developer guide
 - `docs/reference/QUICK_REFERENCE.md` - Variable names and standards
-- `docs/onboarding/developer-checklist.md` - Onboarding steps
 
 ---
 
@@ -396,9 +396,9 @@ None - backward compatible
 ### Documentation
 
 - **Architecture** → `docs/architecture/output.md`
-- **Development** → `docs/DOCKER_DEV.md`
-- **Standards** → `docs/GUARDRAILS.md`
-- **Testing** → `docs/ui-testing-checklist.md`
+- **Development** → `docs/dev-guides/docker-dev.md`
+- **AI Assistants** → `docs/dev-guides/ai-developer-guide.md`
+- **Testing** → `docs/testing/testing-guide.md`
 - **Quick Reference** → `docs/reference/QUICK_REFERENCE.md`
 
 ### Getting Help

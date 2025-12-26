@@ -46,7 +46,6 @@ from app.core.v2.flow import (
     get_shared_segments,
     load_flow_csv,
     extract_event_pairs_from_flow_csv,
-    generate_event_pairs_fallback,
     analyze_temporal_flow_segments_v2,
 )
 from app.core.v2.reports import (

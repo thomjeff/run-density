@@ -1,8 +1,16 @@
 """
-Unit tests for Runflow v2 validation error handling.
+Integration tests for Runflow v2 validation error handling.
 
 Phase 1: Validation Layer (Issue #553)
-Tests fail-fast behavior and correct error codes.
+
+This file contains integration tests for validation error handling:
+- Error code validation (404, 400, 422, etc.)
+- Error message format validation
+- Fail-fast behavior verification
+- Complete API payload validation error scenarios
+
+These tests verify that validation errors are returned with correct HTTP status codes
+and clear error messages. For unit tests of individual validation functions, see test_validation.py.
 """
 
 import pytest
@@ -126,36 +134,6 @@ class TestValidationErrorHandling:
         assert "start_time" in exc_info.value.message.lower()
         assert "300" in exc_info.value.message or "1200" in exc_info.value.message
     
-    @pytest.mark.skip(reason="validate_event_name_consistency not yet implemented in validation.py")
-    def test_missing_event_in_segments_400(self, setup_test_data, monkeypatch):
-        """Test missing event in segments.csv returns 400 error.
-        
-        NOTE: This test is skipped because validate_event_name_consistency() is not yet
-        implemented in app/core/v2/validation.py. This validation was planned
-        in Phase 1 but not yet implemented. Currently, validate_segment_spans() will
-        catch missing span columns (422) but not missing event flags.
-        """
-        pass
-    
-    @pytest.mark.skip(reason="validate_flow_event_pairs not yet implemented in validation.py")
-    def test_missing_event_in_flow_400(self, setup_test_data, monkeypatch):
-        """Test missing event in flow.csv returns 400 error.
-        
-        NOTE: This test is skipped because validate_flow_event_pairs() is not yet
-        implemented in app/core/v2/validation.py. This validation was planned
-        in Phase 1 but not yet implemented.
-        """
-        pass
-    
-    @pytest.mark.skip(reason="validate_location_event_flags not yet implemented in validation.py")
-    def test_missing_event_in_locations_400(self, setup_test_data, monkeypatch):
-        """Test event with no locations returns 400 error.
-        
-        NOTE: This test is skipped because validate_location_event_flags() is not yet
-        implemented in app/core/v2/validation.py. This validation was planned
-        in Phase 1 but not yet implemented.
-        """
-        pass
     
     def test_malformed_gpx_406(self, setup_test_data, monkeypatch):
         """Test malformed GPX file returns 406 error."""
@@ -281,13 +259,4 @@ class TestValidationErrorHandling:
         assert "description" in exc_info.value.message.lower()
         assert "254" in exc_info.value.message
     
-    @pytest.mark.skip(reason="Missing required fields caught by Pydantic before validate_api_payload")
-    def test_missing_required_fields_400(self, setup_test_data, monkeypatch):
-        """Test missing required fields returns 400 error.
-        
-        NOTE: This test is skipped because missing required fields (segments_file,
-        locations_file, flow_file) are caught by Pydantic model validation before
-        validate_api_payload() is called. This is tested at the API endpoint level.
-        """
-        pass
 

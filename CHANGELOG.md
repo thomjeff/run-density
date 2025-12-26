@@ -1,5 +1,36 @@
 # Changelog
 
+## [v2.0.2] - 2025-12-25
+
+### Summary
+- **Issue #553 Complete**: All analysis inputs now configurable via API request payload
+- **No hardcoded values**: Eliminated all hardcoded event names, start times, and file paths
+- **Fail-fast validation**: Comprehensive validation layer with clear error messages
+- **analysis.json**: Single source of truth for runtime configuration
+
+### Breaking Changes
+- **Required request fields**: `segments_file`, `flow_file`, `locations_file`, `event_duration_minutes`, `runners_file`, `gpx_file` are now required (no defaults)
+- **Removed constants**: `EVENT_DAYS`, `SATURDAY_EVENTS`, `SUNDAY_EVENTS`, `ALL_EVENTS`, `DEFAULT_PACE_CSV`, `DEFAULT_SEGMENTS_CSV` removed
+- **Flow analysis fail-fast**: No fallback logic - requests fail immediately if `flow.csv` is missing or invalid
+- **No auto-generation**: Event pairs must be defined in `flow.csv` (including same-event pairs)
+
+### New Features
+- **analysis.json**: Runtime configuration file generated from API request
+- **Dynamic event discovery**: Event columns discovered dynamically from `segments.csv`
+- **Per-event configuration**: `event_duration_minutes` configurable per event
+- **Enhanced metadata**: `metadata.json` includes full request/response payloads
+
+### Improvements
+- **Fail-fast validation**: Clear error messages for all validation failures
+- **Dynamic file paths**: All file paths come from `analysis.json`
+- **Dynamic start times**: All start times come from API request
+- **Removed fallback logic**: Eliminated silent fallbacks that masked configuration issues
+
+### Migration
+See `docs/migration-guide-issue-553.md` for detailed migration instructions.
+
+---
+
 ## [v2.0.0] - 2025-12-14
 
 ### Summary
