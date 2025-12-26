@@ -1213,6 +1213,32 @@ def validate_per_runner_entry_exit_f1(
         b_exit_times.append(exit_time)
         b_runner_ids.append(runner_id)
     
+    # Issue #503: Vectorized temporal overlap detection using NumPy broadcasting
+    # Convert lists to numpy arrays for vectorized operations
+    a_entry_arr = np.array(a_entry_times)  # (n,)
+    a_exit_arr = np.array(a_exit_times)     # (n,)
+    b_entry_arr = np.array(b_entry_times)  # (m,)
+    b_exit_arr = np.array(b_exit_times)    # (m,)
+    
+    # Broadcast to compute all pairwise overlaps: (n, 1) vs (1, m) = (n, m)
+    a_entry_2d = a_entry_arr[:, np.newaxis]  # (n, 1)
+    a_exit_2d = a_exit_arr[:, np.newaxis]    # (n, 1)
+    b_entry_2d = b_entry_arr[np.newaxis, :]  # (1, m)
+    b_exit_2d = b_exit_arr[np.newaxis, :]     # (1, m)
+    
+    # Compute overlap start/end/duration for all pairs
+    overlap_start = np.maximum(a_entry_2d, b_entry_2d)  # (n, m)
+    overlap_end = np.minimum(a_exit_2d, b_exit_2d)     # (n, m)
+    overlap_duration = overlap_end - overlap_start      # (n, m)
+    
+    # Find pairs with temporal overlap (duration > 0)
+    has_overlap = overlap_duration > 0  # (n, m) boolean
+    
+    # Check for directional passes
+    a_passes_b = (a_entry_2d > b_entry_2d) & (a_exit_2d < b_exit_2d)  # (n, m)
+    b_passes_a = (b_entry_2d > a_entry_2d) & (b_exit_2d < a_exit_2d)  # (n, m)
+    has_overtake = a_passes_b | b_passes_a  # (n, m)
+    
     # Find temporal overlaps and validate overtaking
     a_overtakes = set()
     b_overtakes = set()
@@ -1221,40 +1247,31 @@ def validate_per_runner_entry_exit_f1(
     
     overlap_pairs = []
     
-    for i, (a_entry, a_exit, a_id) in enumerate(zip(a_entry_times, a_exit_times, a_runner_ids)):
-        for j, (b_entry, b_exit, b_id) in enumerate(zip(b_entry_times, b_exit_times, b_runner_ids)):
-            # Check for temporal overlap
-            overlap_start = max(a_entry, b_entry)
-            overlap_end = min(a_exit, b_exit)
-            overlap_duration = overlap_end - overlap_start
-            
-            if overlap_duration > 0:  # Any temporal overlap
-                a_copresence.add(a_id)
-                b_copresence.add(b_id)
-                
-                # For F1, we need to check if there's actual directional change
-                # Since segments don't intersect, we need to validate if overtaking makes sense
-                
-                # Check if runner A passes runner B (A starts behind B, finishes ahead of B)
-                a_passes_b = (a_entry > b_entry and a_exit < b_exit)
-                # Check if runner B passes runner A (B starts behind A, finishes ahead of A)
-                b_passes_a = (b_entry > a_entry and b_exit < a_exit)
-                
-                if a_passes_b or b_passes_a:
-                    a_overtakes.add(a_id)
-                    b_overtakes.add(b_id)
-                
-                overlap_pairs.append({
-                    "a_id": a_id,
-                    "b_id": b_id,
-                    "a_entry": a_entry,
-                    "a_exit": a_exit,
-                    "b_entry": b_entry,
-                    "b_exit": b_exit,
-                    "overlap_duration": overlap_duration,
-                    "a_passes_b": a_passes_b,
-                    "b_passes_a": b_passes_a
-                })
+    # Iterate only over pairs with overlap (much fewer iterations)
+    overlap_indices = np.argwhere(has_overlap)  # (k, 2) array of [i, j] pairs
+    
+    for i, j in overlap_indices:
+        a_id = a_runner_ids[i]
+        b_id = b_runner_ids[j]
+        
+        a_copresence.add(a_id)
+        b_copresence.add(b_id)
+        
+        if has_overtake[i, j]:
+            a_overtakes.add(a_id)
+            b_overtakes.add(b_id)
+        
+        overlap_pairs.append({
+            "a_id": a_id,
+            "b_id": b_id,
+            "a_entry": a_entry_arr[i],
+            "a_exit": a_exit_arr[i],
+            "b_entry": b_entry_arr[j],
+            "b_exit": b_exit_arr[j],
+            "overlap_duration": overlap_duration[i, j],
+            "a_passes_b": bool(a_passes_b[i, j]),
+            "b_passes_a": bool(b_passes_a[i, j])
+        })
     
     # Calculate validation results
     total_a = len(df_a)
@@ -1718,15 +1735,42 @@ def calculate_convergence_zone_overlaps_original(
     b_bibs_copresence = set()
     unique_pairs = set()
 
+    # Issue #503: Vectorized temporal overlap detection using NumPy broadcasting
+    # Convert to numpy arrays for vectorized operations
+    time_enter_a_arr = np.array(time_enter_a)  # (n,)
+    time_exit_a_arr = np.array(time_exit_a)     # (n,)
+    time_enter_b_arr = np.array(time_enter_b)  # (m,)
+    time_exit_b_arr = np.array(time_exit_b)    # (m,)
+    
+    # Broadcast to compute all pairwise overlaps: (n, 1) vs (1, m) = (n, m)
+    enter_a_2d = time_enter_a_arr[:, np.newaxis]  # (n, 1)
+    exit_a_2d = time_exit_a_arr[:, np.newaxis]    # (n, 1)
+    enter_b_2d = time_enter_b_arr[np.newaxis, :]  # (1, m)
+    exit_b_2d = time_exit_b_arr[np.newaxis, :]    # (1, m)
+    
+    # Compute overlap start/end/duration for all pairs
+    overlap_start = np.maximum(enter_a_2d, enter_b_2d)  # (n, m)
+    overlap_end = np.minimum(exit_a_2d, exit_b_2d)     # (n, m)
+    overlap_duration = overlap_end - overlap_start     # (n, m)
+    
+    # Find pairs with sufficient temporal overlap
+    has_sufficient_overlap = overlap_duration >= min_overlap_duration  # (n, m) boolean
+    
     # TRUE PASS DETECTION: Check for temporal overlap AND directional change
     # This ensures we only count actual overtaking, not just co-presence
-    for i, (enter_a, exit_a) in enumerate(zip(time_enter_a, time_exit_a)):
-        for j, (enter_b, exit_b) in enumerate(zip(time_enter_b, time_exit_b)):
-            overlap_start = max(enter_a, enter_b)
-            overlap_end = min(exit_a, exit_b)
-            overlap_duration = overlap_end - overlap_start
-            
-            if overlap_duration >= min_overlap_duration:
+    # Iterate only over pairs with sufficient overlap (much fewer iterations)
+    overlap_indices = np.argwhere(has_sufficient_overlap)  # (k, 2) array of [i, j] pairs
+    
+    for i, j in overlap_indices:
+        enter_a = time_enter_a_arr[i]
+        exit_a = time_exit_a_arr[i]
+        enter_b = time_enter_b_arr[j]
+        exit_b = time_exit_b_arr[j]
+        
+        # Calculate overlap duration (already computed, but recalc for clarity)
+        overlap_dur = min(exit_a, exit_b) - max(enter_a, exit_b)
+        
+        if overlap_dur >= min_overlap_duration:
                 # Temporal overlap detected - now check for directional change
                 # Calculate arrival times at boundaries to detect passing
                 # Use intersection boundaries if available, otherwise use conflict zone boundaries
