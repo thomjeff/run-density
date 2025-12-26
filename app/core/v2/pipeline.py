@@ -23,6 +23,7 @@ from app.core.v2.density import (
 from app.core.v2.flow import analyze_temporal_flow_segments_v2
 from app.core.v2.reports import generate_reports_per_day
 from app.core.v2.bins import generate_bins_v2
+from app.core.v2.performance import PerformanceMonitor, get_memory_usage_mb
 from app.io.loader import load_segments
 from app.utils.run_id import generate_run_id, get_runflow_root
 from app.utils.metadata import update_latest_pointer, append_to_run_index
@@ -428,6 +429,11 @@ def create_full_analysis_pipeline(
     # Issue #527: Set up run-level file logging
     from app.utils.run_logging import RunLogHandler
     run_log_handler = None
+    
+    # Issue #503: Initialize performance monitoring
+    perf_monitor = PerformanceMonitor(run_id=run_id)
+    perf_monitor.total_memory_mb = get_memory_usage_mb()
+    
     try:
         run_log_handler = RunLogHandler(run_id, runflow_root)
         run_log_handler.__enter__()
@@ -436,9 +442,14 @@ def create_full_analysis_pipeline(
         from app.core.v2.loader import group_events_by_day
         events_by_day = group_events_by_day(events)
         
-        # Generate day timelines (Phase 3)
+        # Phase: Timeline Generation
+        timeline_metrics = perf_monitor.start_phase("timeline_generation")
         timelines = generate_day_timelines(events)
+        timeline_metrics.finish(event_count=len(events))
         logger.info(f"Generated {len(timelines)} day timelines")
+        
+        # Phase: Data Loading
+        data_loading_metrics = perf_monitor.start_phase("data_loading")
         
         # Load segments DataFrame
         # Issue #553 Phase 7.1: Use file path from analysis.json if available
@@ -452,9 +463,16 @@ def create_full_analysis_pipeline(
         
         # Load all runners for events (Phase 4)
         all_runners_df = load_all_runners_for_events(events, data_dir)
+        data_loading_metrics.finish(
+            segment_count=len(segments_df),
+            runner_count=len(all_runners_df),
+            event_count=len(events),
+            memory_mb=get_memory_usage_mb()
+        )
         logger.info(f"Loaded {len(all_runners_df)} total runners from {len(events)} events")
         
-        # Run density analysis (Phase 4)
+        # Phase: Density Analysis
+        density_metrics = perf_monitor.start_phase("density_analysis")
         density_results = analyze_density_segments_v2(
             events=events,
             timelines=timelines,
@@ -462,8 +480,18 @@ def create_full_analysis_pipeline(
             all_runners_df=all_runners_df,
             density_csv_path=segments_path_str
         )
+        # Count segments processed per day
+        total_segments_processed = sum(
+            len(day_result.get("segments", [])) 
+            for day_result in density_results.values()
+        )
+        density_metrics.finish(
+            segment_count=total_segments_processed,
+            memory_mb=get_memory_usage_mb()
+        )
         
-        # Run flow analysis (Phase 5)
+        # Phase: Flow Analysis
+        flow_metrics = perf_monitor.start_phase("flow_analysis")
         # Issue #553 Phase 7.1: Use file path from analysis.json if available
         if analysis_config:
             from app.core.v2.analysis_config import get_flow_file
@@ -478,14 +506,18 @@ def create_full_analysis_pipeline(
             flow_file=flow_file_path,
             data_dir=data_dir
         )
+        flow_metrics.finish(memory_mb=get_memory_usage_mb())
         
-        # Generate bins per day (after density analysis, before reports)
+        # Phase: Bin Generation (per day)
         bins_by_day = {}
         for day, day_events in events_by_day.items():
+            bin_metrics = perf_monitor.start_phase(f"bin_generation_{day.value}")
+            
             # Get density results for this day
             day_density = density_results.get(day.value, {})
             if not day_density:
                 logger.warning(f"No density results for day {day.value}, skipping bin generation")
+                bin_metrics.finish()
                 continue
             
             # Filter runners to this day
@@ -521,6 +553,34 @@ def create_full_analysis_pipeline(
                 data_dir=data_dir
             )
             
+            # Try to get feature count from bins if available
+            feature_count = None
+            if bins_dir:
+                try:
+                    import pandas as pd
+                    bins_parquet = Path(bins_dir) / "bins.parquet"
+                    if bins_parquet.exists():
+                        bins_df = pd.read_parquet(bins_parquet)
+                        feature_count = len(bins_df)
+                except Exception:
+                    pass
+            
+            bin_metrics.finish(
+                feature_count=feature_count,
+                segment_count=len(day_segments_df),
+                runner_count=len(day_runners_df),
+                memory_mb=get_memory_usage_mb()
+            )
+            
+            # Check guardrails for this day's bin generation
+            guardrails = perf_monitor.check_guardrails(bin_metrics)
+            if guardrails["warnings"]:
+                for warning in guardrails["warnings"]:
+                    logger.warning(f"⚠️  {warning}")
+                if guardrails["suggestions"]:
+                    for suggestion in guardrails["suggestions"]:
+                        logger.info(f"💡 {suggestion}")
+            
             if bins_dir:
                 bins_by_day[day.value] = str(bins_dir)
                 logger.info(f"Generated bins for day {day.value}: {bins_dir}")
@@ -545,7 +605,9 @@ def create_full_analysis_pipeline(
             else:
                 logger.warning(f"Locations file not found at {locations_path_str}, skipping locations report")
         
-        # Generate reports (Phase 6)
+        # Phase: Report Generation
+        report_metrics = perf_monitor.start_phase("report_generation")
+        
         # Use day-partitioned bins directories
         # Issue #553 Phase 7.1: Use file paths from analysis.json (already loaded at pipeline start)
         if analysis_config:
@@ -572,6 +634,7 @@ def create_full_analysis_pipeline(
             flow_file_path=flow_file_path,  # Issue #553 Phase 6.2
             locations_file_path=locations_file_path  # Issue #553 Phase 6.2
         )
+        report_metrics.finish(memory_mb=get_memory_usage_mb())
         
         # Generate map_data.json per day (for density page map visualization)
         from app.core.v2.reports import get_day_output_path
@@ -728,10 +791,26 @@ def create_full_analysis_pipeline(
         )
         combined_metadata["density"] = density_summary
         combined_metadata["flow"] = flow_summary_by_day
+        
+        # Issue #503: Add performance metrics to metadata
+        perf_monitor.total_memory_mb = get_memory_usage_mb()
+        combined_metadata["performance"] = perf_monitor.get_summary()
+        
         # Write run-level metadata.json
         run_metadata_path = run_path / "metadata.json"
         with open(run_metadata_path, 'w', encoding='utf-8') as f:
             json.dump(combined_metadata, f, indent=2, ensure_ascii=False)
+        
+        # Issue #503: Log performance summary
+        perf_monitor.log_summary()
+        
+        # Check overall guardrails
+        total_elapsed = perf_monitor.get_total_elapsed()
+        if total_elapsed > 300:  # 5 minutes
+            logger.warning(
+                f"⚠️  Total runtime ({total_elapsed/60:.1f} min) exceeds target (5 min). "
+                f"Consider optimization opportunities."
+            )
         
         # Issue #527: Add log file path to metadata
         if run_log_handler:
