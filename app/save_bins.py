@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pandas as pd
+import numpy as np
 
 JsonDict = t.Dict[str, t.Any]
 Feature = JsonDict
@@ -48,14 +49,30 @@ def _coerce_props(feature: Feature) -> JsonDict:
     """
     Returns a non-None 'properties' dict for a feature.
     We do NOT assume geometry exists; Parquet path doesn't need it.
+    
+    Converts numpy int64/float64 to native Python types for JSON serialization.
     """
+    import numpy as np
     if not isinstance(feature, dict):
         raise TypeError(f"Feature must be a dict, got {type(feature)}")
     props = feature.get("properties") or {}
     if not isinstance(props, dict):
         # Bad structure; treat as empty props
         props = {}
-    return props
+    
+    # Convert numpy types to native Python types for JSON serialization
+    coerced_props = {}
+    for k, v in props.items():
+        if isinstance(v, (int, np.integer)):
+            coerced_props[k] = int(v)
+        elif isinstance(v, (float, np.floating)):
+            coerced_props[k] = float(v)
+        elif pd.isna(v):
+            coerced_props[k] = None
+        else:
+            coerced_props[k] = v
+    
+    return coerced_props
 
 def _determine_events_from_time_window(
     t_start: t.Any, 
