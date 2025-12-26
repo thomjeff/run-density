@@ -436,21 +436,32 @@ class DensityAnalyzer:
         if filtered_pace_data.empty:
             return 0
         
+        # Issue #503: Optimize datetime operations - work directly with timestamps
         # Convert to NumPy arrays for vectorized operations
         event_ids = filtered_pace_data['event'].values
-        start_offsets = filtered_pace_data['start_offset'].values
+        start_offsets = filtered_pace_data['start_offset'].values.astype(float)
         paces = filtered_pace_data['pace'].values
         
-        # Calculate actual start times for all runners
-        actual_starts = np.array([
-            start_times[event_id] + timedelta(seconds=int(start_offset))
+        # Calculate actual start times as timestamps (avoid creating datetime objects)
+        # Build lookup array of event start timestamps
+        event_start_timestamps = np.array([
+            start_times[event_id].timestamp() 
+            for event_id in np.unique(event_ids)
+        ])
+        event_to_timestamp = {
+            event_id: start_times[event_id].timestamp()
+            for event_id in np.unique(event_ids)
+        }
+        
+        # Vectorized calculation: event_start_timestamp + start_offset
+        actual_starts_sec = np.array([
+            event_to_timestamp[event_id] + start_offset
             for event_id, start_offset in zip(event_ids, start_offsets)
         ])
         
-        # Convert to seconds since epoch for vectorized operations
+        # Convert time bin boundaries to seconds since epoch
         time_bin_start_sec = time_bin_start.timestamp()
         time_bin_end_sec = time_bin_end.timestamp()
-        actual_starts_sec = np.array([start.timestamp() for start in actual_starts])
         
         # Calculate time elapsed for each runner
         time_elapsed_start = time_bin_start_sec - actual_starts_sec
@@ -688,16 +699,22 @@ class DensityAnalyzer:
         start_offsets = filtered_pace_data['start_offset'].values
         paces = filtered_pace_data['pace'].values
         
-        # Calculate actual start times
-        actual_starts = np.array([
-            start_times[event_id] + timedelta(seconds=int(start_offset))
+        # Issue #503: Optimize datetime operations - work directly with timestamps
+        # Build lookup dict of event start timestamps (avoid repeated datetime operations)
+        event_to_timestamp = {
+            event_id: start_times[event_id].timestamp()
+            for event_id in np.unique(event_ids)
+        }
+        
+        # Vectorized calculation: event_start_timestamp + start_offset
+        actual_starts_sec = np.array([
+            event_to_timestamp[event_id] + float(start_offset)
             for event_id, start_offset in zip(event_ids, start_offsets)
         ])
         
-        # Convert to seconds since epoch
+        # Convert time bin boundaries to seconds since epoch
         time_bin_start_sec = time_bin_start.timestamp()
         time_bin_end_sec = time_bin_end.timestamp()
-        actual_starts_sec = np.array([start.timestamp() for start in actual_starts])
         
         # Calculate time elapsed
         time_elapsed_start = time_bin_start_sec - actual_starts_sec
@@ -742,16 +759,17 @@ class DensityAnalyzer:
         start_offsets = event_pace_data['start_offset'].values
         paces = event_pace_data['pace'].values
         
-        # Calculate actual start times
-        actual_starts = np.array([
-            start_times[target_event] + timedelta(seconds=int(start_offset))
-            for start_offset in start_offsets
-        ])
+        # Issue #503: Optimize datetime operations - work directly with timestamps
+        # Calculate actual start times as timestamps (avoid creating datetime objects)
+        event_start_timestamp = start_times[target_event].timestamp()
         
-        # Convert to seconds since epoch
+        # Vectorized calculation: event_start_timestamp + start_offset
+        actual_starts_sec = event_start_timestamp + start_offsets.astype(float)
+        
+        # Convert time bin boundaries to seconds since epoch
         time_bin_start_sec = time_bin_start.timestamp()
         time_bin_end_sec = time_bin_end.timestamp()
-        actual_starts_sec = np.array([start.timestamp() for start in actual_starts])
+        # actual_starts_sec already computed above, reuse it
         
         # Calculate time elapsed
         time_elapsed_start = time_bin_start_sec - actual_starts_sec
@@ -961,11 +979,22 @@ class DensityAnalyzer:
         start_offsets = filtered_pace_data['start_offset'].values
         paces = filtered_pace_data['pace'].values
         
-        # Calculate actual start times for all runners
-        actual_starts = np.array([
-            start_times[event_id] + timedelta(seconds=int(start_offset))
+        # Issue #503: Optimize datetime operations - work directly with timestamps
+        # Build lookup dict of event start timestamps (avoid repeated datetime operations)
+        event_to_timestamp = {
+            event_id: start_times[event_id].timestamp()
+            for event_id in np.unique(event_ids)
+        }
+        
+        # Vectorized calculation: event_start_timestamp + start_offset
+        actual_starts_sec = np.array([
+            event_to_timestamp[event_id] + float(start_offset)
             for event_id, start_offset in zip(event_ids, start_offsets)
         ])
+        
+        # Convert time bin boundaries to seconds since epoch
+        time_bin_start_sec = time_bin_start.timestamp()
+        time_bin_end_sec = time_bin_end.timestamp()
         
         # #region agent log
         if is_a1_segment:
@@ -990,9 +1019,10 @@ class DensityAnalyzer:
         # #endregion
         
         # Convert to seconds since epoch for vectorized operations
+        # Issue #503: Optimize - actual_starts_sec already computed above, no need to recompute
         time_bin_start_sec = time_bin_start.timestamp()
         time_bin_end_sec = time_bin_end.timestamp()
-        actual_starts_sec = np.array([start.timestamp() for start in actual_starts])
+        # actual_starts_sec already computed above, reuse it
         
         # Calculate time elapsed for each runner
         time_elapsed_start = time_bin_start_sec - actual_starts_sec
