@@ -43,4 +43,15 @@ services:
     command: python -m coverage run --parallel-mode --rcfile=/app/coverage.rc -m uvicorn app.main:app --host 0.0.0.0 --port 8080
     stdin_open: true
     tty: true
+    # Issue #503: Memory and CPU limits for performance optimization
+    # Increase memory limit to allow better performance during analysis
+    # Default: 4GB (can be increased if needed for larger datasets)
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
 
