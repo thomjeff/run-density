@@ -397,9 +397,15 @@ def calculate_arrival_times_for_location(
                         # This can happen when same physical location is at different distances on different segments
                         # Use segment midpoint as reasonable approximation for arrival time calculation
                         seg_distance_km = (from_km + to_km) / 2.0
+                        segment_length_km = to_km - from_km
+                        projection_error_km = abs(distance_km - seg_distance_km)
+                        
+                        # Enhanced logging with detailed error information (Issue #558)
                         logger.warning(
-                            f"Location {location.get('loc_id')} ({event}): Segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km listed but "
-                            f"centerline projection failed and full course distance {distance_km:.3f}km doesn't match. "
+                            f"Location {location.get('loc_id')} ({event}): Segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km "
+                            f"(length: {segment_length_km:.3f}km) listed but centerline projection failed. "
+                            f"Full course distance: {distance_km:.3f}km, expected range: [{from_km:.3f}, {to_km:.3f}]km, "
+                            f"projection error: {projection_error_km:.3f}km. "
                             f"Using segment midpoint {seg_distance_km:.3f}km for arrival calculations."
                         )
                 
