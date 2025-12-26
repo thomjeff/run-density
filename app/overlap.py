@@ -82,15 +82,20 @@ def calculate_convergence_point(
         from app.utils.constants import TEMPORAL_OVERLAP_TOLERANCE_SECONDS
         tolerance_seconds = TEMPORAL_OVERLAP_TOLERANCE_SECONDS
         
-        # Find if any runners from A and B are present at the same time
-        for time_a in arrival_times_a:
-            for time_b in arrival_times_b:
-                if abs(time_a - time_b) <= tolerance_seconds:
-                    # Found first temporal overlap - return this km point
-                    # BUT ONLY if it's within the segment boundaries
-                    if from_km <= km_point <= to_km:
-                        return float(km_point)
-                    # If convergence is outside segment, continue searching for one inside
+        # Issue #503: Vectorized overlap detection using NumPy broadcasting
+        # Instead of nested loops O(n*m), use broadcasting for O(n*m) but vectorized
+        # Shape: arrival_times_a is (n,), arrival_times_b is (m,)
+        # Broadcast to (n, 1) - (1, m) = (n, m) difference matrix
+        time_diff = np.abs(arrival_times_a[:, np.newaxis] - arrival_times_b[np.newaxis, :])
+        overlaps = time_diff <= tolerance_seconds
+        
+        # Check if any overlap exists
+        if np.any(overlaps):
+            # Found temporal overlap - return this km point
+            # BUT ONLY if it's within the segment boundaries
+            if from_km <= km_point <= to_km:
+                return float(km_point)
+            # If convergence is outside segment, continue searching for one inside
     
     # If no convergence found at specific points, check for general temporal overlap
     # This handles cases where events overlap in time but at different positions
@@ -180,45 +185,44 @@ def calculate_true_pass_detection(
         from app.utils.constants import TRUE_PASS_DETECTION_TOLERANCE_SECONDS
         tolerance_seconds = TRUE_PASS_DETECTION_TOLERANCE_SECONDS
         
+        # Issue #503: Vectorized true pass detection using NumPy broadcasting
         # Check for true passes: temporal overlap AND directional change
-        for i, time_a in enumerate(arrival_times_a):
-            for j, time_b in enumerate(arrival_times_b):
-                if abs(time_a - time_b) <= tolerance_seconds:
-                    # Temporal overlap detected - now check for directional pass
-                    
-                    # Check if this represents a true pass
-                    # Runner A passes Runner B if:
-                    # - At from_km: A arrives after B (A is behind B)
-                    # - At to_km: A arrives before B (A is ahead of B)
-                    # OR vice versa
-                    
-                    start_time_a = arrival_start_a[i]
-                    start_time_b = arrival_start_b[j]
-                    end_time_a = arrival_end_a[i]
-                    end_time_b = arrival_end_b[j]
-                    
-                    # Check for pass A -> B (A overtakes B)
-                    # A starts behind B but finishes ahead of B
-                    if (start_time_a > start_time_b and end_time_a < end_time_b):
-                        return float(km_point)
-                    
-                    # Check for pass B -> A (B overtakes A)  
-                    # B starts behind A but finishes ahead of A
-                    if (start_time_b > start_time_a and end_time_b < end_time_a):
-                        return float(km_point)
-                    
-                    # IMPROVED: Check for convergence where runners meet at the same time
-                    # This handles cases where the directional logic might be too strict
-                    # but temporal overlap still indicates meaningful interaction
-                    if abs(start_time_a - start_time_b) <= tolerance_seconds and \
-                       abs(end_time_a - end_time_b) <= tolerance_seconds:
-                        return float(km_point)
-                    
-                    # ADDITIONAL: Check for runners who are close in time and space
-                    # This catches cases where runners are essentially running together
-                    if abs(start_time_a - start_time_b) <= tolerance_seconds * 2 and \
-                       abs(end_time_a - end_time_b) <= tolerance_seconds * 2:
-                        return float(km_point)
+        # Shape: arrival_times_a is (n,), arrival_times_b is (m,)
+        # Broadcast to (n, 1) - (1, m) = (n, m) difference matrix
+        time_diff = np.abs(arrival_times_a[:, np.newaxis] - arrival_times_b[np.newaxis, :])
+        temporal_overlaps = time_diff <= tolerance_seconds
+        
+        if not np.any(temporal_overlaps):
+            continue  # No temporal overlap at this km_point, skip to next
+        
+        # For pairs with temporal overlap, check directional passes
+        # Broadcast start/end times to (n, m) matrices
+        start_a_2d = arrival_start_a[:, np.newaxis]  # (n, 1)
+        start_b_2d = arrival_start_b[np.newaxis, :]  # (1, m)
+        end_a_2d = arrival_end_a[:, np.newaxis]      # (n, 1)
+        end_b_2d = arrival_end_b[np.newaxis, :]      # (1, m)
+        
+        # Check for pass A -> B (A overtakes B): A starts behind B but finishes ahead of B
+        pass_a_b = (start_a_2d > start_b_2d) & (end_a_2d < end_b_2d)
+        
+        # Check for pass B -> A (B overtakes A): B starts behind A but finishes ahead of A
+        pass_b_a = (start_b_2d > start_a_2d) & (end_b_2d < end_a_2d)
+        
+        # Check for convergence: runners meet at same time at both boundaries
+        start_convergence = np.abs(start_a_2d - start_b_2d) <= tolerance_seconds
+        end_convergence = np.abs(end_a_2d - end_b_2d) <= tolerance_seconds
+        convergence = start_convergence & end_convergence
+        
+        # Check for runners running together (close in time and space)
+        start_close = np.abs(start_a_2d - start_b_2d) <= tolerance_seconds * 2
+        end_close = np.abs(end_a_2d - end_b_2d) <= tolerance_seconds * 2
+        running_together = start_close & end_close
+        
+        # Combine all conditions: temporal overlap AND (pass OR convergence OR running together)
+        true_pass_mask = temporal_overlaps & (pass_a_b | pass_b_a | convergence | running_together)
+        
+        if np.any(true_pass_mask):
+            return float(km_point)
     
     # No true passes found
     return None
