@@ -2079,7 +2079,7 @@ def _apply_flagging_to_bin_features(
                 # Add missing fields for flagging
                 "window_idx": window_idx,
                 "width_m": next((s.width_m for s in segments.values() if s.segment_id == props["segment_id"]), 5.0),
-                "schema_key": resolve_schema(props["segment_id"], segments_dict),
+                "schema_key": resolve_schema(props["segment_id"], None),  # segment_type not available here, use None
             })
         
         flags_df = pd.DataFrame(flag_rows)
