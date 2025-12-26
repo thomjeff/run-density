@@ -1,79 +1,71 @@
 # Run-Density Documentation
 
-**Version:** v1.8.4  
-**Last Updated:** 2025-11-11  
-**Architecture:** Local-only, UUID-based runflow structure
+**Version:** v2.0.2+  
+**Last Updated:** 2025-12-26  
+**Architecture:** Local-only, UUID-based runflow structure, API-driven configuration
 
-This documentation is organized for three primary audiences: **Product Managers**, **Developers**, and **Technical Architects**.
+**Issue #553 Complete:** All analysis inputs (events, start times, file paths) are now configurable via API request. No hardcoded values.
+
+This documentation is organized by audience and topic for easy navigation.
 
 ---
 
 ## 📚 Documentation by Audience
 
-### 👔 For Product Managers
+### 👥 For Users (Race Organizers, Operational Planners)
 
-**Focus:** Features, capabilities, and operational usage
+**Focus:** Using the API to request analyses and understand results
 
 | Document | Purpose |
 |----------|---------|
-| [README.md](../README.md) | Product overview, features, quick start |
-| [UI Testing Checklist](ui-testing-checklist.md) | Comprehensive testing for deployments |
-| [ADR-001: Frontend Stack](adr/ADR-001%20Front-End%20Stack.md) | Technology decisions and rationale |
+| [API User Guide](user-guide/api-user-guide.md) | **START HERE** - Complete API usage guide |
 
 **Quick Start:**
-- Read the main [README.md](../README.md) for product overview
-- Review UI features and capabilities
-- Understand testing process via [UI Testing Checklist](ui-testing-checklist.md)
+1. Read [API User Guide](user-guide/api-user-guide.md) for complete API usage
+2. Review example requests and common use cases
+3. Understand error handling and validation
 
 ---
 
 ### 💻 For Developers
 
-**Focus:** Development workflow, coding standards, and testing
+**Focus:** Development workflow, coding standards, architecture, and testing
 
 | Document | Purpose |
 |----------|---------|
-| [CONTRIBUTING.md](../CONTRIBUTING.md) | **START HERE** - Contributor guide and workflow |
-| [DOCKER_DEV.md](DOCKER_DEV.md) | Complete Docker development guide |
-| [Developer Checklist](onboarding/developer-checklist.md) | Onboarding steps for new developers |
-| [GUARDRAILS.md](GUARDRAILS.md) | Non-negotiable development rules |
-| [Logging Standards](LOGGING.md) | Logging patterns and conventions (Issue #467) |
-| [Quick Reference](reference/QUICK_REFERENCE.md) | Variable names, terminology, standards |
-| [ADR-002: Naming Normalization](adr/ADR-002%20Naming%20Normalization.md) | Naming conventions and field mappings |
+| [Developer Guide v2](dev-guides/developer-guide-v2.md) | **START HERE** - Complete v2 developer guide |
+| [Docker Development](dev-guides/docker-dev.md) | Docker development workflow |
+| [Quick Reference](reference/QUICK_REFERENCE.md) | Variable names, terminology, standards (v2.0.2+) |
+| [Canonical Data Sources](dev-guides/CANONICAL_DATA_SOURCES.md) | Data source specifications (v2.0.2+) |
+| [Testing Guide](testing/testing-guide.md) | Comprehensive testing guide |
+| [UI Testing Checklist](testing/ui-testing-checklist.md) | UI testing procedures |
 
 **Quick Start:**
-1. Read [DOCKER_DEV.md](DOCKER_DEV.md) for development workflow
-2. Follow [Developer Checklist](onboarding/developer-checklist.md) for environment setup
-3. Reference [GUARDRAILS.md](GUARDRAILS.md) for coding standards
-4. Use [Quick Reference](reference/QUICK_REFERENCE.md) for field names and constants
+1. Read [Developer Guide v2](dev-guides/developer-guide-v2.md) for v2 architecture
+2. Follow [Docker Development](dev-guides/docker-dev.md) for development workflow
+3. Reference [Testing Guide](testing/testing-guide.md) for testing procedures
 
 **Core Commands:**
 ```bash
 make dev         # Start development container
-make test        # Run smoke tests
-make e2e-local   # Run end-to-end tests
+make e2e         # Run end-to-end tests
 ```
 
 ---
 
-### 🏗️ For Technical Architects
+### 🤖 For AI Coders (Cursor, ChatGPT, etc.)
 
-**Focus:** System architecture, design decisions, and technical specifications
+**Focus:** AI assistant onboarding and critical rules
 
 | Document | Purpose |
 |----------|---------|
-| [Architecture: Output Structure](architecture/output.md) | **START HERE** - Runflow directory structure |
-| [Architecture: Environment Detection](architecture/env-detection.md) | Environment configuration and detection |
-| [Reference: Density Analysis](reference/DENSITY_ANALYSIS_README.md) | Density calculation algorithms and LOS |
-| [Reference: Global Time Grid](reference/GLOBAL_TIME_GRID_ARCHITECTURE.md) | Time grid architecture for cross-event analysis |
-| [ADR-001: Frontend Stack](adr/ADR-001%20Front-End%20Stack.md) | Frontend technology decisions |
-| [ADR-002: Naming Normalization](adr/ADR-002%20Naming%20Normalization.md) | Naming standards and field mappings |
+| [AI Developer Guide](dev-guides/ai-developer-guide.md) | **START HERE** - Complete AI assistant onboarding and rules |
 
 **Quick Start:**
-1. Read [output.md](architecture/output.md) for current architecture
-2. Review [env-detection.md](architecture/env-detection.md) for environment model
-3. Understand algorithms via reference docs
-4. Review ADRs for historical context
+1. Read [AI Developer Guide](dev-guides/ai-developer-guide.md) - Complete all verification steps
+2. Review mandatory rules and common mistakes
+3. Reference [Developer Guide v2](dev-guides/developer-guide-v2.md) for v2 patterns
+4. Use [Quick Reference](reference/QUICK_REFERENCE.md) for exact field names
 
 ---
 
@@ -81,26 +73,24 @@ make e2e-local   # Run end-to-end tests
 
 ```
 docs/
-├── README.md (this file)           # Documentation index
-├── DOCKER_DEV.md                   # **Developer Guide** - Docker workflow
-├── GUARDRAILS.md                   # Development rules and standards
-├── ui-testing-checklist.md         # UI testing procedures
+├── README.md (this file)              # Documentation index
 │
-├── architecture/                   # **Technical Architecture**
-│   ├── output.md                   # Runflow directory structure
-│   └── env-detection.md            # Environment configuration
+├── user-guide/                        # User Documentation
+│   └── api-user-guide.md              # Complete API usage guide
 │
-├── reference/                      # **Technical Reference**
-│   ├── DENSITY_ANALYSIS_README.md  # Density algorithms and LOS
-│   ├── GLOBAL_TIME_GRID_ARCHITECTURE.md  # Time grid design
-│   └── QUICK_REFERENCE.md          # Variable names and constants
+├── dev-guides/                        # Developer Documentation
+│   ├── ai-developer-guide.md          # AI assistant onboarding and rules
+│   ├── developer-guide-v2.md          # Complete v2 developer guide
+│   ├── docker-dev.md                  # Docker development workflow
+│   └── CANONICAL_DATA_SOURCES.md      # Data source specifications
 │
-├── onboarding/                     # **New Developer Resources**
-│   └── developer-checklist.md      # Setup and onboarding steps
+├── testing/                           # Testing Documentation
+│   ├── testing-guide.md               # Comprehensive testing guide
+│   ├── ui-testing-checklist.md        # UI testing procedures
+│   └── tests-cleanup-report.md        # Test cleanup analysis
 │
-└── adr/                            # **Architecture Decision Records**
-    ├── ADR-001 Front-End Stack.md  # Frontend technology decisions
-    └── ADR-002 Naming Normalization.md  # Naming standards
+└── reference/                         # Technical Reference
+    └── QUICK_REFERENCE.md             # Variable names, terminology, constants
 ```
 
 ---
@@ -109,10 +99,39 @@ docs/
 
 ### Core Guides
 
-#### [DOCKER_DEV.md](DOCKER_DEV.md)
+#### [AI Developer Guide](dev-guides/ai-developer-guide.md)
+**Audience:** AI Assistants  
+**Purpose:** Complete onboarding and critical rules  
+**Updated:** 2025-12-26
+
+Covers:
+- Mandatory setup and verification steps
+- Non-negotiable development rules
+- Common mistakes to avoid
+- Development workflow
+- Project architecture overview
+
+---
+
+#### [Developer Guide v2](dev-guides/developer-guide-v2.md)
 **Audience:** Developers  
-**Purpose:** Complete Docker development workflow  
-**Updated:** Phase 2 (Issue #466)
+**Purpose:** Complete v2 developer guide  
+**Updated:** v2.0.2+
+
+Covers:
+- v2 architecture and design patterns
+- Development environment setup
+- Data sources and naming conventions
+- Testing approach and tools
+- Logging standards
+- Common development tasks
+
+---
+
+#### [Docker Development](dev-guides/docker-dev.md)
+**Audience:** Developers  
+**Purpose:** Docker development workflow  
+**Updated:** Version 3.1
 
 Covers:
 - Quick start (3-command workflow)
@@ -123,151 +142,103 @@ Covers:
 
 ---
 
-#### [GUARDRAILS.md](GUARDRAILS.md)
-**Audience:** Developers, AI Assistants  
-**Purpose:** Non-negotiable development rules  
-**Status:** Active
+#### [API User Guide](user-guide/api-user-guide.md)
+**Audience:** Users (Race Organizers)  
+**Purpose:** Complete API usage guide  
+**Updated:** v2.0.2+
 
 Covers:
-- Mandatory pre-task checks
-- Code quality standards
-- Testing requirements
-- Anti-patterns to avoid
+- API endpoint usage
+- Request/response formats
+- Data file preparation
+- Understanding results
+- Output structure
+- Error handling
 
 ---
 
-### Architecture Documentation
+### Testing Documentation
 
-####[architecture/output.md](architecture/output.md)
-**Audience:** Technical Architects, Developers  
-**Purpose:** Comprehensive runflow/ structure guide  
-**Created:** Phase 2 Step 5
+#### [Testing Guide](testing/testing-guide.md)
+**Audience:** Developers  
+**Purpose:** Comprehensive testing guide  
+**Updated:** 2025-12-26
 
 Covers:
-- Complete directory structure
-- File-by-file descriptions
-- API usage examples
-- Migration notes
-- Best practices and troubleshooting
+- Testing strategy and test pyramid
+- Test organization and file structure
+- How to run tests (unit, integration, E2E)
+- Writing tests (best practices)
+- Test maintenance
 
 ---
 
-#### [architecture/env-detection.md](architecture/env-detection.md)
-**Audience:** Technical Architects  
-**Purpose:** Environment configuration model  
-**Updated:** Phase 1 (Issue #464)
+#### [UI Testing Checklist](testing/ui-testing-checklist.md)
+**Audience:** Developers  
+**Purpose:** UI testing procedures  
+**Updated:** 2025-12-26
 
 Covers:
-- Local-only environment model
-- Configuration variables
-- Path resolution logic
+- Systematic UI testing approach
+- Checklist for UI verification
+- Common UI issues and fixes
 
 ---
 
 ### Reference Documentation
 
-#### [reference/DENSITY_ANALYSIS_README.md](reference/DENSITY_ANALYSIS_README.md)
-**Audience:** Technical Architects, Data Scientists  
-**Purpose:** Density algorithm specifications
-
-Covers:
-- Areal density calculations
-- Level of Service (LOS) classification
-- Time-over-threshold metrics
-- API endpoint specifications
-
----
-
-#### [reference/GLOBAL_TIME_GRID_ARCHITECTURE.md](reference/GLOBAL_TIME_GRID_ARCHITECTURE.md)
-**Audience:** Technical Architects  
-**Purpose:** Time grid design for cross-event analysis
-
-Covers:
-- Global time window creation
-- Per-event index mapping
-- Flow analysis temporal alignment
-- Implementation details
-
----
-
-#### [reference/QUICK_REFERENCE.md](reference/QUICK_REFERENCE.md)
-**Audience:** Developers  
+#### [Quick Reference](reference/QUICK_REFERENCE.md)
+**Audience:** Developers, AI Assistants  
 **Purpose:** Fast lookups for variables, terminology, standards
 
 Covers:
 - Variable naming rules
 - Field name mappings
 - CSV export standards
-- Constants reference
+- Constants reference (v2.0.2+)
 
 ---
 
-### Onboarding
-
-#### [onboarding/developer-checklist.md](onboarding/developer-checklist.md)
-**Audience:** New Developers  
-**Purpose:** Step-by-step onboarding guide
+#### [Canonical Data Sources](dev-guides/CANONICAL_DATA_SOURCES.md)
+**Audience:** Developers  
+**Purpose:** Data source specifications
 
 Covers:
-- Environment setup
-- Running tests
-- Understanding codebase
-- Making first contributions
-
----
-
-### Architecture Decision Records (ADRs)
-
-#### [adr/ADR-001 Front-End Stack.md](adr/ADR-001%20Front-End%20Stack.md)
-**Date:** 2025-10-23  
-**Status:** Accepted
-
-Decision to use Flask + Jinja2 + Vanilla JS for Race-Crew Web UI.
-
----
-
-#### [adr/ADR-002 Naming Normalization.md](adr/ADR-002%20Naming%20Normalization.md)
-**Date:** 2025-10-26  
-**Status:** Accepted
-
-Standards for canonical naming and field mappings (`seg_id` vs `segment_id`).
-
----
-
-## 🔄 Document Lifecycle
-
-### Recently Updated (Phase 2 - November 2025)
-- ✅ `DOCKER_DEV.md` - Version 3.0 (Issue #466)
-- ✅ `architecture/output.md` - NEW comprehensive guide
-- ✅ `architecture/env-detection.md` - Phase 1 update
-
-### Active (Current)
-- ✅ `GUARDRAILS.md` - Development standards
-- ✅ `ui-testing-checklist.md` - Testing procedures
-- ✅ `reference/*` - Technical specifications
-- ✅ `adr/*` - Decision records
-
-### Archived (November 2025)
-See `archive/docs-pre-phase-2-2025-11/` for:
-- v1.7-era architecture planning docs
-- Pre-Phase 2 import dependency audits
-- Outdated testing strategies
-- Cloud Run operations guides
+- Input file formats and requirements
+- Data source naming conventions
+- File structure and column definitions
+- v2.0.2+ API-driven approach
 
 ---
 
 ## 🆘 Getting Help
 
 **Questions about:**
-- **Development workflow?** → See [DOCKER_DEV.md](DOCKER_DEV.md)
-- **Code standards?** → See [GUARDRAILS.md](GUARDRAILS.md)
+- **API usage?** → See [API User Guide](user-guide/api-user-guide.md)
+- **Development workflow?** → See [Docker Development](dev-guides/docker-dev.md)
+- **Code standards?** → See [AI Developer Guide](dev-guides/ai-developer-guide.md)
 - **Field names?** → See [Quick Reference](reference/QUICK_REFERENCE.md)
-- **Architecture decisions?** → See [ADRs](adr/)
-- **Output structure?** → See [output.md](architecture/output.md)
+- **Architecture?** → See [Developer Guide v2](dev-guides/developer-guide-v2.md)
+- **Testing?** → See [Testing Guide](testing/testing-guide.md)
 
 ---
 
-**Last Updated:** 2025-11-11 (Post-Phase 2)  
-**Maintained By:** Development Team  
-**Next Review:** When new architecture changes are planned
+## 🔄 Document Lifecycle
 
+### Recently Updated (v2.0.2+ - December 2025)
+- ✅ `dev-guides/ai-developer-guide.md` - NEW consolidated AI assistant guide
+- ✅ `user-guide/api-user-guide.md` - Complete API usage guide
+- ✅ `dev-guides/developer-guide-v2.md` - Complete v2 developer guide
+- ✅ `dev-guides/docker-dev.md` - Version 3.1
+- ✅ `testing/testing-guide.md` - Comprehensive testing guide
+
+### Active (Current)
+- ✅ All documents in `user-guide/`, `dev-guides/`, `testing/`, `reference/`
+
+### Archived
+- Legacy documentation archived to `archive/docs/` for historical reference
+
+---
+
+**Last Updated:** 2025-12-26  
+**Maintained By:** Development Team

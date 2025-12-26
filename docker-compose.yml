@@ -9,9 +9,8 @@ services:
     volumes:
       # Bind mount source code for hot reload during development
       - ./app:/app/app
-      - ./e2e.py:/app/e2e.py
       - ./coverage.rc:/app/coverage.rc
-      - ./sitecustomize.py:/app/sitecustomize.py
+      - ./app/sitecustomize.py:/app/sitecustomize.py
       # Bind mount tests directory for v2 testing
       - ./tests:/app/tests
       # Bind mount templates for UI pages

@@ -15,18 +15,22 @@ class V2EventRequest(BaseModel):
     """
     Event request model matching api_v2.md event structure.
     
+    Issue #553: Extended to include event_duration_minutes and updated start_time range.
+    
     Attributes:
         name: Event name (lowercase, e.g., "full", "half", "10k")
         day: Day code (fri, sat, sun, mon)
-        start_time: Start time in minutes after midnight (0-1439)
-        runners_file: Path to runners CSV file (relative to /data)
-        gpx_file: Path to GPX file (relative to /data)
+        start_time: Start time in minutes after midnight (300-1200, inclusive)
+        event_duration_minutes: Event duration in minutes (1-500, inclusive)
+        runners_file: Name of runners CSV file (relative to /data)
+        gpx_file: Name of GPX file (relative to /data)
     """
     name: str = Field(..., description="Event name (lowercase)")
     day: str = Field(..., description="Day code (fri, sat, sun, mon)")
-    start_time: int = Field(..., ge=0, le=1439, description="Start time in minutes after midnight")
-    runners_file: str = Field(..., description="Path to runners CSV file")
-    gpx_file: str = Field(..., description="Path to GPX file")
+    start_time: int = Field(..., ge=300, le=1200, description="Start time in minutes after midnight (300-1200)")
+    event_duration_minutes: int = Field(..., ge=1, le=500, description="Event duration in minutes (1-500)")
+    runners_file: str = Field(..., description="Name of runners CSV file")
+    gpx_file: str = Field(..., description="Name of GPX file")
     
     @field_validator('name')
     @classmethod
@@ -45,32 +49,44 @@ class V2AnalyzeRequest(BaseModel):
     """
     Main request model for POST /runflow/v2/analyze.
     
-    Matches the API specification in api_v2.md.
+    Issue #553: Extended to include description field and removed defaults (fail-fast).
     
     Attributes:
-        segments_file: Path to segments.csv file (default: "segments.csv")
-        locations_file: Path to locations.csv file (default: "locations.csv")
-        flow_file: Path to flow.csv file (default: "flow.csv")
+        description: Optional description for the analysis (max 254 characters)
+        segments_file: Name of segments CSV file (required, no default)
+        locations_file: Name of locations CSV file (required, no default)
+        flow_file: Name of flow CSV file (required, no default)
         events: List of event definitions
     """
-    segments_file: str = Field(default="segments.csv", description="Path to segments CSV file")
-    locations_file: str = Field(default="locations.csv", description="Path to locations CSV file")
-    flow_file: str = Field(default="flow.csv", description="Path to flow CSV file")
+    description: Optional[str] = Field(None, max_length=254, description="Optional description for the analysis (max 254 characters)")
+    segments_file: str = Field(..., description="Name of segments CSV file")
+    locations_file: str = Field(..., description="Name of locations CSV file")
+    flow_file: str = Field(..., description="Name of flow CSV file")
     events: List[V2EventRequest] = Field(..., min_length=1, description="List of events to analyze")
     
     model_config = {
         "json_schema_extra": {
             "example": {
+                "description": "Scenario to test 10k on Saturday",
                 "segments_file": "segments.csv",
                 "locations_file": "locations.csv",
                 "flow_file": "flow.csv",
                 "events": [
                     {
-                        "name": "full",
+                        "name": "10k",
+                        "day": "sat",
+                        "start_time": 510,
+                        "event_duration_minutes": 120,
+                        "runners_file": "10k_runners.csv",
+                        "gpx_file": "10k.gpx"
+                    },
+                    {
+                        "name": "half",
                         "day": "sun",
-                        "start_time": 420,
-                        "runners_file": "full_runners.csv",
-                        "gpx_file": "full.gpx"
+                        "start_time": 540,
+                        "event_duration_minutes": 180,
+                        "runners_file": "half_runners.csv",
+                        "gpx_file": "half.gpx"
                     }
                 ]
             }
@@ -106,12 +122,16 @@ class V2AnalyzeResponse(BaseModel):
 
 class V2ErrorResponse(BaseModel):
     """
-    Error response model matching api_v2.md error format.
+    Error response model matching Issue #553 error format.
+    
+    Issue #553: Updated to match error response format with status, code, and error fields.
     
     Attributes:
-        message: Error message
-        code: HTTP error code (400, 404, 422, 500)
+        status: Status string ("ERROR")
+        code: HTTP error code (400, 404, 406, 422, 500)
+        error: Error message with details
     """
-    message: str = Field(..., description="Error message")
-    code: int = Field(..., description="HTTP error code")
+    status: str = Field(default="ERROR", description="Status string")
+    code: int = Field(..., description="HTTP error code (400, 404, 406, 422, 500)")
+    error: str = Field(..., description="Error message with details")
 

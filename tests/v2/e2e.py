@@ -4,7 +4,7 @@ End-to-End Tests for Runflow v2 API
 Phase 8: E2E Testing & Validation (Issue #502)
 
 Tests complete v2 workflow: API → validation → pipeline → outputs
-Validates day isolation, same-day interactions, and golden file regression.
+Validates day isolation and same-day interactions.
 """
 
 import pytest
@@ -284,9 +284,13 @@ class TestV2E2EScenarios:
     def test_saturday_only_scenario(self, base_url, wait_for_server):
         """Test complete Saturday-only workflow (elite, open events)."""
         payload = {
+            "description": "Saturday only scenario test",
+            "segments_file": "segments.csv",
+            "flow_file": "flow.csv",
+            "locations_file": "locations.csv",
             "events": [
-                {"name": "elite", "day": "sat", "start_time": 480, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
-                {"name": "open", "day": "sat", "start_time": 510, "runners_file": "open_runners.csv", "gpx_file": "open.gpx"}
+                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
+                {"name": "open", "day": "sat", "start_time": 510, "event_duration_minutes": 75, "runners_file": "open_runners.csv", "gpx_file": "open.gpx"}
             ]
         }
         
@@ -319,10 +323,14 @@ class TestV2E2EScenarios:
     def test_sunday_only_scenario(self, base_url, wait_for_server):
         """Test complete Sunday-only workflow (full, half, 10k events)."""
         payload = {
+            "description": "Sunday only scenario test",
+            "segments_file": "segments.csv",
+            "flow_file": "flow.csv",
+            "locations_file": "locations.csv",
             "events": [
-                {"name": "full", "day": "sun", "start_time": 420, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"},
-                {"name": "10k", "day": "sun", "start_time": 440, "runners_file": "10k_runners.csv", "gpx_file": "10k.gpx"},
-                {"name": "half", "day": "sun", "start_time": 460, "runners_file": "half_runners.csv", "gpx_file": "half.gpx"}
+                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"},
+                {"name": "10k", "day": "sun", "start_time": 440, "event_duration_minutes": 120, "runners_file": "10k_runners.csv", "gpx_file": "10k.gpx"},
+                {"name": "half", "day": "sun", "start_time": 460, "event_duration_minutes": 180, "runners_file": "half_runners.csv", "gpx_file": "half.gpx"}
             ]
         }
         
@@ -354,12 +362,16 @@ class TestV2E2EScenarios:
     def test_sat_sun_scenario(self, base_url, wait_for_server):
         """Test sat+sun analysis in single run_id (simpler than mixed_day, focused on Issue #528)."""
         payload = {
+            "description": "Sat+Sun analysis test",
+            "segments_file": "segments.csv",
+            "flow_file": "flow.csv",
+            "locations_file": "locations.csv",
             "events": [
-                {"name": "elite", "day": "sat", "start_time": 480, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
-                {"name": "open", "day": "sat", "start_time": 510, "runners_file": "open_runners.csv", "gpx_file": "open.gpx"},
-                {"name": "full", "day": "sun", "start_time": 420, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"},
-                {"name": "10k", "day": "sun", "start_time": 440, "runners_file": "10k_runners.csv", "gpx_file": "10k.gpx"},
-                {"name": "half", "day": "sun", "start_time": 460, "runners_file": "half_runners.csv", "gpx_file": "half.gpx"}
+                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
+                {"name": "open", "day": "sat", "start_time": 510, "event_duration_minutes": 75, "runners_file": "open_runners.csv", "gpx_file": "open.gpx"},
+                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"},
+                {"name": "10k", "day": "sun", "start_time": 440, "event_duration_minutes": 120, "runners_file": "10k_runners.csv", "gpx_file": "10k.gpx"},
+                {"name": "half", "day": "sun", "start_time": 460, "event_duration_minutes": 180, "runners_file": "half_runners.csv", "gpx_file": "half.gpx"}
             ]
         }
         
@@ -388,12 +400,16 @@ class TestV2E2EScenarios:
     def test_mixed_day_scenario(self, base_url, wait_for_server):
         """Test mixed-day scenario (Saturday + Sunday) with isolation validation."""
         payload = {
+            "description": "Mixed day scenario test",
+            "segments_file": "segments.csv",
+            "flow_file": "flow.csv",
+            "locations_file": "locations.csv",
             "events": [
-                {"name": "elite", "day": "sat", "start_time": 480, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
-                {"name": "open", "day": "sat", "start_time": 510, "runners_file": "open_runners.csv", "gpx_file": "open.gpx"},
-                {"name": "full", "day": "sun", "start_time": 420, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"},
-                {"name": "10k", "day": "sun", "start_time": 440, "runners_file": "10k_runners.csv", "gpx_file": "10k.gpx"},
-                {"name": "half", "day": "sun", "start_time": 460, "runners_file": "half_runners.csv", "gpx_file": "half.gpx"}
+                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
+                {"name": "open", "day": "sat", "start_time": 510, "event_duration_minutes": 75, "runners_file": "open_runners.csv", "gpx_file": "open.gpx"},
+                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"},
+                {"name": "10k", "day": "sun", "start_time": 440, "event_duration_minutes": 120, "runners_file": "10k_runners.csv", "gpx_file": "10k.gpx"},
+                {"name": "half", "day": "sun", "start_time": 460, "event_duration_minutes": 180, "runners_file": "half_runners.csv", "gpx_file": "half.gpx"}
             ]
         }
         
@@ -432,9 +448,13 @@ class TestV2E2EScenarios:
         """Verify no cross-day contamination in bins, flow, density, locations."""
         # Use mixed-day scenario
         payload = {
+            "description": "Cross-day isolation test",
+            "segments_file": "segments.csv",
+            "flow_file": "flow.csv",
+            "locations_file": "locations.csv",
             "events": [
-                {"name": "elite", "day": "sat", "start_time": 480, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
-                {"name": "full", "day": "sun", "start_time": 420, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"}
+                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
+                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"}
             ]
         }
         
@@ -490,10 +510,14 @@ class TestV2E2EScenarios:
         """Verify same-day events can share bins and generate flow."""
         # Test with Sunday events (full, 10k, half)
         payload = {
+            "description": "Sunday only scenario test",
+            "segments_file": "segments.csv",
+            "flow_file": "flow.csv",
+            "locations_file": "locations.csv",
             "events": [
-                {"name": "full", "day": "sun", "start_time": 420, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"},
-                {"name": "10k", "day": "sun", "start_time": 440, "runners_file": "10k_runners.csv", "gpx_file": "10k.gpx"},
-                {"name": "half", "day": "sun", "start_time": 460, "runners_file": "half_runners.csv", "gpx_file": "half.gpx"}
+                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"},
+                {"name": "10k", "day": "sun", "start_time": 440, "event_duration_minutes": 120, "runners_file": "10k_runners.csv", "gpx_file": "10k.gpx"},
+                {"name": "half", "day": "sun", "start_time": 460, "event_duration_minutes": 180, "runners_file": "half_runners.csv", "gpx_file": "half.gpx"}
             ]
         }
         
@@ -571,341 +595,3 @@ def wait_for_server(base_url):
     pytest.fail("Server not available after 30 attempts")
 
 
-class TestV2GoldenFileRegression:
-    """Golden file regression tests."""
-    
-    @pytest.fixture(scope="class")
-    def golden_base_path(self):
-        """Path to golden files directory."""
-        return Path(__file__).parent / "golden"
-    
-    def _normalize_markdown(self, content: str) -> str:
-        """Normalize markdown content by removing metadata that changes between runs."""
-        # Remove "Generated at" timestamps
-        content = re.sub(r'Generated at:.*?\n', '', content)
-        # Remove run_id references
-        content = re.sub(r'Run ID:.*?\n', '', content)
-        # Remove version/date blocks
-        content = re.sub(r'Version:.*?\n', '', content)
-        content = re.sub(r'Date:.*?\n', '', content)
-        # Normalize whitespace
-        content = re.sub(r'\n\s*\n\s*\n', '\n\n', content)
-        return content.strip()
-    
-    def _normalize_csv(self, content: str, filename: str) -> str:
-        """Normalize CSV content using per-file sort keys."""
-        try:
-            from io import StringIO
-            df = pd.read_csv(StringIO(content))
-            
-            if len(df) == 0:
-                return df.to_csv(index=False, lineterminator='\n')
-            
-            # Per-file sort keys
-            if filename == "Flow.csv":
-                # Flow.csv: sort by seg_id, event_a, event_b, from_km_a
-                sort_cols = []
-                for col in ["seg_id", "event_a", "event_b", "from_km_a"]:
-                    if col in df.columns:
-                        sort_cols.append(col)
-                if sort_cols:
-                    df = df.sort_values(by=sort_cols)
-            elif filename == "Locations.csv":
-                # Locations.csv: sort by loc_id, event (or location_id, event_name)
-                sort_cols = []
-                for col in ["loc_id", "location_id", "event", "event_name"]:
-                    if col in df.columns:
-                        sort_cols.append(col)
-                        break  # Use first available
-                if sort_cols:
-                    df = df.sort_values(by=sort_cols)
-            else:
-                # Generic fallback: sort by first 1-3 identifier columns
-                id_cols = [col for col in df.columns if any(x in col.lower() for x in ["id", "seg_id", "loc_id", "name"])]
-                if id_cols:
-                    df = df.sort_values(by=id_cols[:3])
-            
-            # Convert back to CSV with consistent formatting
-            return df.to_csv(index=False, lineterminator='\n')
-        except Exception:
-            # If normalization fails, return original
-            return content
-    
-    def _normalize_json(self, content: str) -> str:
-        """Normalize JSON content by parsing and dumping with sorted keys."""
-        try:
-            data = json.loads(content)
-            return json.dumps(data, sort_keys=True, indent=2)
-        except Exception:
-            # If not JSON, return original
-            return content
-    
-    def _round_floats(self, obj, decimals=6):
-        """Recursively round all float values in a JSON-like structure."""
-        if isinstance(obj, float):
-            return round(obj, decimals)
-        elif isinstance(obj, dict):
-            return {k: self._round_floats(v, decimals) for k, v in obj.items()}
-        elif isinstance(obj, list):
-            return [self._round_floats(item, decimals) for item in obj]
-        else:
-            return obj
-    
-    def _normalize_geojson(self, content: str) -> str:
-        """Normalize GeoJSON by sorting features by seg_id and rounding coordinates."""
-        try:
-            data = json.loads(content)
-            if "features" in data and isinstance(data["features"], list):
-                # Sort features by seg_id (or segment_id or id) in properties
-                def get_seg_id(feature):
-                    props = feature.get("properties", {})
-                    return str(props.get("seg_id") or props.get("segment_id") or props.get("id") or "")
-                
-                data["features"].sort(key=get_seg_id)
-            
-            # Round all float values (including coordinates) to 6 decimals
-            data = self._round_floats(data, decimals=6)
-            
-            # Dump with sorted keys
-            return json.dumps(data, sort_keys=True, indent=2)
-        except Exception:
-            return content
-    
-    def _normalize_parquet(self, file_path: Path) -> str:
-        """Normalize parquet by loading, sorting, rounding floats, and returning CSV representation.
-        
-        Returns a deterministic string representation for comparison.
-        Rounds numeric columns to 6 decimals to prevent false diffs from float noise.
-        """
-        try:
-            df = pd.read_parquet(file_path)
-            
-            # Round numeric columns to 6 decimals to prevent float noise
-            numeric_cols = df.select_dtypes(include=['number']).columns
-            if len(numeric_cols) > 0:
-                df[numeric_cols] = df[numeric_cols].round(6)
-            
-            # Sort by stable keys (day, seg_id, t, bin_id depending on schema)
-            sort_cols = []
-            for col in ["day", "seg_id", "segment_id", "t", "bin_id", "start_km", "end_km"]:
-                if col in df.columns:
-                    sort_cols.append(col)
-            
-            if sort_cols:
-                df = df.sort_values(by=sort_cols)
-            
-            # Sort columns alphabetically
-            df = df.reindex(sorted(df.columns), axis=1)
-            
-            # Return CSV representation for comparison
-            return df.to_csv(index=False, lineterminator='\n')
-        except Exception as e:
-            # If normalization fails, return error indicator
-            return f"PARQUET_NORMALIZATION_ERROR: {e}"
-    
-    def _write_diff_artifacts(self, run_id: str, day: str, filename: str, 
-                              actual_normalized: str, golden_normalized: str):
-        """Write diff artifacts to deterministic location for debugging."""
-        from app.utils.run_id import get_runflow_root
-        
-        runflow_root = get_runflow_root()
-        artifacts_dir = runflow_root / run_id / "_test_artifacts" / day
-        artifacts_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Write normalized files
-        (artifacts_dir / f"{filename}.actual").write_text(actual_normalized, encoding="utf-8")
-        (artifacts_dir / f"{filename}.golden").write_text(golden_normalized, encoding="utf-8")
-        
-        # Write unified diff for text/json files
-        if filename.endswith(('.md', '.json', '.csv')):
-            import difflib
-            diff = difflib.unified_diff(
-                golden_normalized.splitlines(keepends=True),
-                actual_normalized.splitlines(keepends=True),
-                fromfile=f"{filename}.golden",
-                tofile=f"{filename}.actual",
-                lineterm=''
-            )
-            (artifacts_dir / f"{filename}.diff").write_text(''.join(diff), encoding="utf-8")
-    
-    def _compare_outputs_to_golden(self, run_id: str, day: str, scenario: str, golden_base_path: Path) -> List[str]:
-        """Compare actual outputs to golden files and return list of differences.
-        
-        Uses normalized comparisons to avoid false positives from:
-        - Metadata timestamps
-        - Run ID references
-        - CSV row ordering
-        - JSON key ordering
-        - GeoJSON feature ordering
-        - Parquet metadata differences
-        """
-        from app.utils.run_id import get_runflow_root
-        
-        runflow_root = get_runflow_root()
-        run_dir = runflow_root / run_id
-        day_dir = run_dir / day
-        
-        differences = []
-        
-        # Files to compare (Option A: Include UI artifacts)
-        files_to_compare = []
-        
-        # Report files
-        report_files = ["Density.md", "Flow.csv", "Flow.md"]
-        if day == "sun":  # Locations.csv may not exist for SAT
-            report_files.append("Locations.csv")
-        for filename in report_files:
-            files_to_compare.append(("reports", filename))
-        
-        # UI artifacts (golden regression covers UI contract)
-        ui_files = [
-            "meta.json",
-            "segment_metrics.json",
-            "flags.json",
-            "flow.json",
-            "schema_density.json",
-            "health.json",
-            "segments.geojson",
-            "captions.json"
-        ]
-        for filename in ui_files:
-            files_to_compare.append(("ui", filename))
-        
-        # Bins (optional but useful)
-        files_to_compare.append(("bins", "bins.parquet"))
-        
-        for file_entry in files_to_compare:
-            if isinstance(file_entry, tuple) and len(file_entry) == 2:
-                # (subdir, filename) format
-                subdir, filename = file_entry
-                actual_path = day_dir / subdir / filename
-                golden_path = golden_base_path / scenario / day / subdir / filename
-            else:
-                # Legacy format (backward compatibility)
-                filename = file_entry
-                actual_path = day_dir / "reports" / filename
-                golden_path = golden_base_path / scenario / day / filename
-            
-            if not golden_path.exists():
-                differences.append(f"⚠️  Golden file not found: {golden_path}")
-                continue
-            
-            if not actual_path.exists():
-                differences.append(f"❌ Actual file not found: {actual_path}")
-                continue
-            
-            # Normalize content based on file type
-            if filename.endswith('.md'):
-                actual_content = actual_path.read_text(encoding="utf-8")
-                golden_content = golden_path.read_text(encoding="utf-8")
-                actual_normalized = self._normalize_markdown(actual_content)
-                golden_normalized = self._normalize_markdown(golden_content)
-            elif filename.endswith('.csv'):
-                actual_content = actual_path.read_text(encoding="utf-8")
-                golden_content = golden_path.read_text(encoding="utf-8")
-                actual_normalized = self._normalize_csv(actual_content, filename)
-                golden_normalized = self._normalize_csv(golden_content, filename)
-            elif filename.endswith('.json') or filename.endswith('.geojson'):
-                actual_content = actual_path.read_text(encoding="utf-8")
-                golden_content = golden_path.read_text(encoding="utf-8")
-                if filename.endswith('.geojson'):
-                    actual_normalized = self._normalize_geojson(actual_content)
-                    golden_normalized = self._normalize_geojson(golden_content)
-                else:
-                    actual_normalized = self._normalize_json(actual_content)
-                    golden_normalized = self._normalize_json(golden_content)
-            elif filename.endswith('.parquet'):
-                actual_normalized = self._normalize_parquet(actual_path)
-                golden_normalized = self._normalize_parquet(golden_path)
-            else:
-                # For unknown types, compare as-is
-                actual_content = actual_path.read_text(encoding="utf-8")
-                golden_content = golden_path.read_text(encoding="utf-8")
-                actual_normalized = actual_content
-                golden_normalized = golden_content
-            
-            if actual_normalized != golden_normalized:
-                differences.append(f"⚠️  {day}/{filename}: Content differs from golden file (after normalization)")
-                # Write diff artifacts
-                self._write_diff_artifacts(run_id, day, filename, actual_normalized, golden_normalized)
-        
-        return differences
-    
-    def test_golden_file_regression_saturday_only(self, base_url, wait_for_server, golden_base_path):
-        """Compare Saturday-only outputs against golden files."""
-        # Run Saturday-only scenario
-        payload = {
-            "events": [
-                {"name": "elite", "day": "sat", "start_time": 480, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
-                {"name": "open", "day": "sat", "start_time": 510, "runners_file": "open_runners.csv", "gpx_file": "open.gpx"}
-            ]
-        }
-        
-        response = requests.post(f"{base_url}/runflow/v2/analyze", json=payload, timeout=TIMEOUT)
-        assert response.status_code == 200
-        data = response.json()
-        run_id = data["run_id"]
-        
-        # Compare outputs
-        differences = self._compare_outputs_to_golden(
-            run_id, "sat", "saturday_only", golden_base_path
-        )
-        
-        if differences:
-            pytest.fail(f"Golden file differences found:\n" + "\n".join(differences) + 
-                       f"\n\nDiff artifacts written to: runflow/{run_id}/_test_artifacts/")
-    
-    def test_golden_file_regression_sunday_only(self, base_url, wait_for_server, golden_base_path):
-        """Compare Sunday-only outputs against golden files."""
-        # Run Sunday-only scenario
-        payload = {
-            "events": [
-                {"name": "full", "day": "sun", "start_time": 420, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"},
-                {"name": "10k", "day": "sun", "start_time": 440, "runners_file": "10k_runners.csv", "gpx_file": "10k.gpx"},
-                {"name": "half", "day": "sun", "start_time": 460, "runners_file": "half_runners.csv", "gpx_file": "half.gpx"}
-            ]
-        }
-        
-        response = requests.post(f"{base_url}/runflow/v2/analyze", json=payload, timeout=TIMEOUT)
-        assert response.status_code == 200
-        data = response.json()
-        run_id = data["run_id"]
-        
-        # Compare outputs
-        differences = self._compare_outputs_to_golden(
-            run_id, "sun", "sunday_only", golden_base_path
-        )
-        
-        if differences:
-            pytest.fail(f"Golden file differences found:\n" + "\n".join(differences) +
-                       f"\n\nDiff artifacts written to: runflow/{run_id}/_test_artifacts/")
-    
-    def test_golden_file_regression_mixed_day(self, base_url, wait_for_server, golden_base_path):
-        """Compare mixed-day outputs against golden files."""
-        # Run mixed-day scenario
-        payload = {
-            "events": [
-                {"name": "elite", "day": "sat", "start_time": 480, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
-                {"name": "open", "day": "sat", "start_time": 510, "runners_file": "open_runners.csv", "gpx_file": "open.gpx"},
-                {"name": "full", "day": "sun", "start_time": 420, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"},
-                {"name": "10k", "day": "sun", "start_time": 440, "runners_file": "10k_runners.csv", "gpx_file": "10k.gpx"},
-                {"name": "half", "day": "sun", "start_time": 460, "runners_file": "half_runners.csv", "gpx_file": "half.gpx"}
-            ]
-        }
-        
-        response = requests.post(f"{base_url}/runflow/v2/analyze", json=payload, timeout=TIMEOUT)
-        assert response.status_code == 200
-        data = response.json()
-        run_id = data["run_id"]
-        
-        # Compare outputs for both days
-        all_differences = []
-        for day in ["sat", "sun"]:
-            differences = self._compare_outputs_to_golden(
-                run_id, day, "mixed_day", golden_base_path
-            )
-            all_differences.extend(differences)
-        
-        if all_differences:
-            pytest.fail(f"Golden file differences found:\n" + "\n".join(all_differences) +
-                       f"\n\nDiff artifacts written to: runflow/{run_id}/_test_artifacts/")

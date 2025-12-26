@@ -1,8 +1,12 @@
 """
-Tests for Issue #512: Hardcoded Values and Missing Constants
+Regression tests to prevent reintroduction of hardcoded values.
 
-Ensures no hardcoded start times, runner counts, or other values are used.
-Validates that all values come from API requests or constants.py.
+Issue #512 + #553: Ensures no hardcoded start times, runner counts, or other values are used.
+Validates that all values come from API requests → analysis.json → helper functions.
+
+This file serves as a regression test to prevent reintroduction of hardcoded values
+that were removed in Issue #512 and Issue #553. All analysis inputs must be
+configurable via API request.
 """
 
 import pytest

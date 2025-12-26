@@ -2,6 +2,19 @@
 Unit tests for Runflow v2 validation functions.
 
 Phase 1: Models & Validation Layer (Issue #495)
+
+This file contains unit tests for individual validation functions:
+- validate_day_codes() - Day code validation
+- validate_start_times() - Start time range validation
+- validate_event_names() - Event name validation
+- validate_file_existence() - File existence checks
+- validate_segment_spans() - Segment range validation
+- validate_runner_uniqueness() - Runner ID uniqueness
+- validate_gpx_files() - GPX file validation
+- validate_api_payload() - Complete API payload validation
+
+Each test class focuses on testing a single validation function in isolation.
+For error handling and error code tests, see test_validation_errors.py.
 """
 
 import pytest
@@ -61,8 +74,8 @@ class TestValidateStartTimes:
         """Test valid start times pass validation."""
         events = [
             {"name": "full", "start_time": 420},
-            {"name": "half", "start_time": 0},
-            {"name": "elite", "start_time": 1439},
+            {"name": "half", "start_time": 300},  # Issue #553: Range is 300-1200
+            {"name": "elite", "start_time": 1200},  # Issue #553: Range is 300-1200
         ]
         validate_start_times(events)
     
@@ -79,12 +92,12 @@ class TestValidateStartTimes:
     def test_start_time_out_of_range(self):
         """Test start_time out of range raises ValidationError."""
         events = [
-            {"name": "full", "start_time": 1440},  # Too high
+            {"name": "full", "start_time": 1201},  # Too high (Issue #553: Range is 300-1200)
         ]
         with pytest.raises(ValidationError) as exc_info:
             validate_start_times(events)
         assert exc_info.value.code == 400
-        assert "must be between 0 and 1439" in exc_info.value.message
+        assert "must be between 300 and 1200" in exc_info.value.message
     
     def test_start_time_not_integer(self):
         """Test non-integer start_time raises ValidationError."""

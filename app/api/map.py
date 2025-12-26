@@ -24,7 +24,9 @@ from pydantic import BaseModel
 from app.bin_analysis import get_all_segment_bins, analyze_segment_bins, get_cache_stats
 from app.geo_utils import generate_segments_geojson, generate_bins_geojson
 from app.utils.constants import (
-    DISTANCE_BIN_SIZE_KM, DEFAULT_PACE_CSV, DEFAULT_SEGMENTS_CSV, 
+    DISTANCE_BIN_SIZE_KM,
+    # DEFAULT_PACE_CSV and DEFAULT_SEGMENTS_CSV removed (Issue #553 Phase 6.1)
+    # File paths now come from API request via analysis.json
     MAP_CENTER_LAT, MAP_CENTER_LON,
     DEFAULT_SEGMENT_WIDTH_M, DEFAULT_FLOW_TYPE, DEFAULT_ZONE
 )
@@ -480,8 +482,10 @@ async def get_bins_data(
             
             import json
             start_times = json.loads(startTimes)
-            pace_csv = DEFAULT_PACE_CSV
-            segments_csv = DEFAULT_SEGMENTS_CSV
+            # Issue #553 Phase 6.1: File paths now come from API request via analysis.json
+            # Use default paths for legacy map endpoints
+            pace_csv = "data/runners.csv"
+            segments_csv = "data/segments.csv"
             
             # Run new bin analysis
             all_bins = get_all_segment_bins(
@@ -688,7 +692,6 @@ async def get_map_config():
     """
     try:
         from app.utils.constants import (
-            DEFAULT_PACE_CSV, DEFAULT_SEGMENTS_CSV,
             MAP_CENTER_LAT, MAP_CENTER_LON, MAP_DEFAULT_ZOOM,
             MAP_TILE_URL, MAP_TILE_ATTRIBUTION, MAP_MAX_ZOOM,
             MAP_DENSITY_THRESHOLDS, MAP_ZONE_COLORS
@@ -698,8 +701,9 @@ async def get_map_config():
         return JSONResponse(content={
             "ok": True,
             "config": {
-                "paceCsv": DEFAULT_PACE_CSV,
-                "segmentsCsv": DEFAULT_SEGMENTS_CSV,
+                # Issue #553 Phase 6.1: File paths now come from API request via analysis.json
+                "paceCsv": "data/runners.csv",
+                "segmentsCsv": "data/segments.csv",
                 "mapCenter": [MAP_CENTER_LAT, MAP_CENTER_LON],
                 "mapZoom": MAP_DEFAULT_ZOOM,
                 "tileUrl": MAP_TILE_URL,

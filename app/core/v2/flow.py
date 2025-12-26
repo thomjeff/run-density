@@ -6,15 +6,16 @@ Uses flow.csv as authoritative source for event pairs, ordering, and distance ra
 Upholds existing flow calculations while ensuring no cross-day contamination.
 
 Phase 5: Flow Pipeline Refactor (Issue #499)
+Issue #553: Removed all fallback logic - fail-fast behavior enforced.
 
 Core Principles:
-- flow.csv is the authoritative source for:
-  * Which event pairs to analyze
+- flow.csv is the ONLY source for:
+  * Which event pairs to analyze (including same-event pairs like elite-elite, open-open)
   * Event ordering (event_a vs event_b)
   * Distance ranges (from_km_a, to_km_a, from_km_b, to_km_b)
   * Flow metadata (flow_type, notes, overtake_flag)
 - Handle sub-segment pattern (e.g., A1 → A1a, A1b, A1c)
-- Only fall back to segments.csv + start_time ordering when flow.csv doesn't contain the pair
+- Issue #553: NO fallbacks - if flow.csv is missing, unreadable, or missing required pairs, the request fails
 - Do not alter core flow logic (overtake detection, co-presence, convergence)
 - Reuse v1 analyze_temporal_flow_segments() function without modification
 """
@@ -396,8 +397,8 @@ def create_flow_segments_fallback(
         flow_segment = {
             "seg_id": seg_id,
             "segment_label": segment_row.get("seg_label", ""),
-            "eventa": v1_event_a,
-            "eventb": v1_event_b,
+            "eventa": event_a_lower,  # Issue #548 Bug 1: Use lowercase consistently
+            "eventb": event_b_lower,  # Issue #548 Bug 1: Use lowercase consistently
             "from_km_a": from_km_a,
             "to_km_a": to_km_a,
             "from_km_b": from_km_b,
@@ -434,12 +435,15 @@ def analyze_temporal_flow_segments_v2(
     """
     Analyze temporal flow for all segments using v2 Event objects and day-scoped data.
     
+    Issue #553: This function enforces fail-fast behavior with no fallbacks.
+    flow.csv is the ONLY source of event pairs - no auto-generation, no inference.
+    
     This is the main v2 entry point that:
-    1. Loads flow.csv as authoritative source
+    1. Loads flow.csv as authoritative source (fails if missing or unreadable)
     2. Extracts event pairs from flow.csv (preserving intentional ordering)
-    3. For each pair, finds matching segments in flow.csv (including sub-segments)
-    4. Uses flow.csv distance ranges and event ordering
-    5. Falls back to segments.csv + start_time ordering only when flow.csv doesn't have the pair
+    3. Validates that all requested events have pairs in flow.csv (fails if missing)
+    4. For each pair, finds matching segments in flow.csv (including sub-segments)
+    5. Uses flow.csv distance ranges and event ordering
     6. Calls existing v1 analyze_temporal_flow_segments() function
     7. Returns results partitioned by day
     
@@ -455,45 +459,93 @@ def analyze_temporal_flow_segments_v2(
         
     Returns:
         Dictionary mapping Day to flow analysis results
+        
+    Raises:
+        FileNotFoundError: If flow.csv file does not exist
+        ValueError: If flow.csv is empty, unreadable, or missing required event pairs
     """
     results_by_day: Dict[Day, Dict[str, Any]] = {}
     
-    # Load flow.csv as authoritative source
-    flow_df = load_flow_csv(flow_file, data_dir)
+    # Load flow.csv as authoritative source (Issue #553: fail-fast, no fallbacks)
+    # Handle both relative and absolute paths
+    # get_flow_file() returns full paths like "data/flow.csv", so check if it already includes data_dir
+    if Path(flow_file).is_absolute():
+        # Absolute path, use as-is
+        flow_path = Path(flow_file)
+    elif flow_file.startswith(f"{data_dir}/") or flow_file.startswith(f"{data_dir}\\"):
+        # flow_file already includes data_dir prefix (e.g., "data/flow.csv")
+        flow_path = Path(flow_file)
+    elif '/' in flow_file or '\\' in flow_file:
+        # flow_file is a relative path but not starting with data_dir, use as-is
+        flow_path = Path(flow_file)
+    else:
+        # flow_file is just a filename (e.g., "flow.csv"), prepend data_dir
+        flow_path = Path(data_dir) / flow_file
+    
+    if not flow_path.exists():
+        error_msg = (
+            f"flow.csv file not found at {flow_path}. "
+            "flow.csv is required for flow analysis and must be provided in the request. "
+            "No fallback or auto-generation of event pairs is allowed per Issue #553."
+        )
+        logger.error(error_msg)
+        raise FileNotFoundError(error_msg)
+    
+    try:
+        flow_df = pd.read_csv(flow_path)
+        logger.info(f"Loaded {len(flow_df)} rows from flow.csv at {flow_path}")
+    except Exception as e:
+        error_msg = (
+            f"Failed to load flow.csv from {flow_path}: {e}. "
+            "flow.csv must be readable and valid. No fallback is allowed per Issue #553."
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg) from e
+    
+    if flow_df.empty:
+        error_msg = (
+            f"flow.csv at {flow_path} is empty. "
+            "flow.csv must contain valid event pairs. No fallback is allowed per Issue #553."
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg)
     
     # Extract event pairs from flow.csv (preserving intentional ordering)
-    flow_csv_pairs = extract_event_pairs_from_flow_csv(flow_df, events) if not flow_df.empty else []
+    # Issue #553: This is the ONLY source of event pairs - no fallback, no auto-generation
+    flow_csv_pairs = extract_event_pairs_from_flow_csv(flow_df, events)
     
-    # Generate fallback pairs for any events not in flow.csv
-    all_pairs = flow_csv_pairs.copy()
-    if flow_df.empty:
-        # No flow.csv, use fallback for all pairs
-        fallback_pairs = generate_event_pairs_fallback(events)
-        all_pairs = fallback_pairs
-        logger.warning(
-            "flow.csv not available, using fallback pair generation. "
-            "flow.csv should be present and contain event pairs. (Issue #512)"
-        )
-    else:
-        # Check if we need fallback pairs for any events
-        flow_csv_event_names = set()
-        for pair in flow_csv_pairs:
-            flow_csv_event_names.add(pair[0].name.lower())
-            flow_csv_event_names.add(pair[1].name.lower())
-        
+    if not flow_csv_pairs:
         requested_event_names = {e.name.lower() for e in events}
-        missing_events = requested_event_names - flow_csv_event_names
-        
-        if missing_events:
-            logger.warning(f"Some events not in flow.csv: {missing_events}, generating fallback pairs")
-            # Generate fallback pairs for missing events
-            missing_event_objs = [e for e in events if e.name.lower() in missing_events]
-            fallback_pairs = generate_event_pairs_fallback(missing_event_objs)
-            all_pairs.extend(fallback_pairs)
+        error_msg = (
+            f"No valid event pairs found in flow.csv for requested events: {sorted(requested_event_names)}. "
+            "flow.csv must contain pairs for all requested events (including same-event pairs like elite-elite, open-open). "
+            "No fallback or auto-generation of event pairs is allowed per Issue #553."
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg)
     
-    if not all_pairs:
-        logger.warning("No event pairs generated, returning empty results")
-        return results_by_day
+    # Validate that all requested events have at least one pair in flow.csv
+    requested_event_names = {e.name.lower() for e in events}
+    flow_csv_event_names = set()
+    for pair in flow_csv_pairs:
+        flow_csv_event_names.add(pair[0].name.lower())
+        flow_csv_event_names.add(pair[1].name.lower())
+    
+    missing_events = requested_event_names - flow_csv_event_names
+    if missing_events:
+        error_msg = (
+            f"Requested events {sorted(missing_events)} have no pairs defined in flow.csv. "
+            f"flow.csv contains pairs for: {sorted(flow_csv_event_names)}. "
+            "All requested events must have at least one pair (including same-event pairs) in flow.csv. "
+            "No fallback or auto-generation of event pairs is allowed per Issue #553."
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+    
+    logger.info(f"Extracted {len(flow_csv_pairs)} event pairs from flow.csv for events: {sorted(requested_event_names)}")
+    
+    # Use only pairs from flow.csv - no fallback, no auto-generation
+    all_pairs = flow_csv_pairs
     
     # Group pairs by day
     pairs_by_day: Dict[Day, List[Tuple[Event, Event]]] = {}

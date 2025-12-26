@@ -18,7 +18,6 @@ COPY app ./app
     COPY config ./config
     COPY frontend/static ./frontend/static
     COPY frontend/templates ./frontend/templates
-COPY e2e.py ./
 
 EXPOSE 8080
 CMD ["sh", "-c", "gunicorn -k uvicorn.workers.UvicornWorker app.main:app -b 0.0.0.0:${PORT:-8080} --timeout 600"]

@@ -641,6 +641,29 @@ def generate_deep_dive_analysis(segment: Dict[str, Any]) -> List[str]:
     return content
 
 
+def _format_start_times_for_csv(start_times: Dict[str, float]) -> str:
+    """
+    Format start times for CSV metadata display.
+    
+    Issue #553 Phase 5.2: Dynamic formatting of start times (no hardcoded fallbacks).
+    
+    Args:
+        start_times: Dictionary mapping event names to start times in minutes
+        
+    Returns:
+        Formatted string like "full:420, 10k:440, half:460"
+    """
+    if not start_times:
+        return "N/A"
+    
+    # Format as "event:time, event:time, ..." (sorted for consistency)
+    formatted_parts = []
+    for event_name, start_time in sorted(start_times.items()):
+        formatted_parts.append(f"{event_name}:{int(start_time)}")
+    
+    return ", ".join(formatted_parts)
+
+
 def generate_simple_temporal_flow_report(
     pace_csv: str,
     segments_csv: str,
@@ -832,7 +855,8 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
                 APP_VERSION,
                 environment,  # Use passed environment parameter
                 "runners.csv, segments.csv",
-                f"Full:{start_times.get('Full', 420) if start_times else 420}, 10K:{start_times.get('10K', 440) if start_times else 440}, Half:{start_times.get('Half', 460) if start_times else 460}",
+                # Issue #553 Phase 5.2: Use dynamic start times from analysis.json (no hardcoded fallbacks)
+                _format_start_times_for_csv(start_times) if start_times else "N/A",
                 min_overlap_duration,
                 conflict_length_m
             ])

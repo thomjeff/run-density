@@ -9,9 +9,18 @@ def _yn(x):
 def load_segments(path="data/segments.csv"):
     df = pd.read_csv(path)
     # normalize minimal bits required by current code
-    for ev in ["full","half","10K","elite","open"]:
+    # Issue #553 Phase 4.2: Normalize known event columns, plus dynamically discover others
+    known_events = ["full","half","10K","elite","open"]
+    for ev in known_events:
         if ev in df.columns:
             df[ev] = df[ev].map(_yn)
+    
+    # Dynamic discovery: normalize any other columns that look like event flags
+    # (columns that match event name pattern and aren't already normalized)
+    for col in df.columns:
+        if col.lower() in ["full", "half", "10k", "elite", "open"] and col not in known_events:
+            df[col] = df[col].map(_yn)
+    
     if "width_m" in df.columns:
         df["width_m"] = pd.to_numeric(df["width_m"], errors="coerce")
     return df
@@ -80,9 +89,16 @@ def load_locations(path="data/locations.csv"):
     df = pd.read_csv(path)
     
     # Normalize event flags (y/n)
-    for ev in ["full", "half", "10K", "elite", "open"]:
+    # Issue #553 Phase 4.2: Normalize known event columns, plus dynamically discover others
+    known_events = ["full", "half", "10K", "elite", "open"]
+    for ev in known_events:
         if ev in df.columns:
             df[ev] = df[ev].map(_yn)
+    
+    # Dynamic discovery: normalize any other columns that look like event flags
+    for col in df.columns:
+        if col.lower() in ["full", "half", "10k", "elite", "open"] and col not in known_events:
+            df[col] = df[col].map(_yn)
     
     # Ensure numeric columns are numeric
     if "lat" in df.columns:

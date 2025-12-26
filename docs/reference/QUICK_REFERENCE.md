@@ -1,10 +1,12 @@
 # Quick Reference Guide
 
-**Last Updated:** November 1, 2025  
-**Version:** v1.7.1  
+**Last Updated:** 2025-12-25  
+**Version:** v2.0.2+  
 **Purpose:** Fast lookups for variables, terminology, standards, and constants
 
 This guide consolidates essential reference information for developers working with the run-density codebase.
+
+**Note:** This guide reflects v2.0.2+ architecture (Issue #553 complete). All analysis inputs are configurable via API request.
 
 ---
 
@@ -33,21 +35,35 @@ This guide consolidates essential reference information for developers working w
 | `width_m` | `width` | float | segments.csv |
 | `flow_type` | `flowType` | str | flow analysis |
 
-### Event Names (Case-Sensitive)
+### Event Names (Lowercase Required)
+
+**Issue #553:** All event names must be lowercase in API requests and data files.
 
 | ✅ CORRECT | ❌ INCORRECT |
 |-----------|-------------|
-| `'Full'` | `'full'`, `'FULL'` |
-| `'Half'` | `'half'`, `'HALF'` |
-| `'10K'` | `'tenk'`, `'10k'` |
+| `'full'` | `'Full'`, `'FULL'` |
+| `'half'` | `'Half'`, `'HALF'` |
+| `'10k'` | `'10K'`, `'tenk'` |
+| `'elite'` | `'Elite'`, `'ELITE'` |
+| `'open'` | `'Open'`, `'OPEN'` |
+
+**File Naming:**
+- Runners: `{event}_runners.csv` (e.g., `elite_runners.csv`)
+- GPX: `{event}.gpx` (e.g., `elite.gpx`)
 
 ### Time Fields
 
-| Field | Units | Example |
-|-------|-------|---------|
-| `start_times` | minutes from midnight | `{'Full': 420, '10K': 440, 'Half': 460}` |
-| `start_offset` | seconds | `30.0` |
-| `pace` | minutes per km | `5.5` |
+**Issue #553:** Start times come from API request → `analysis.json`. Use helper functions from `app/core/v2/analysis_config.py`.
+
+| Field | Units | Example | Source |
+|-------|-------|---------|--------|
+| `start_time` | minutes from midnight | `420` (7:00 AM), `480` (8:00 AM) | API request → `analysis.json` |
+| `start_times` | dict | `{'elite': 480, 'open': 510}` | `analysis.json` → `get_all_start_times()` |
+| `start_offset` | seconds | `30.0` | Runner data |
+| `pace` | minutes per km | `5.5` | Runner data |
+| `event_duration_minutes` | minutes | `45`, `120`, `390` | API request → `analysis.json` |
+
+**Valid Range:** `start_time` must be 300-1200 (5:00 AM - 8:00 PM)
 
 ### Density/Flow Fields
 
@@ -155,19 +171,46 @@ csv_path = export_bins_to_csv("reports/2025-10-15/bins.parquet")
 - `config/captioning.yml` - Caption thresholds
 
 **Code Constants:**
-- `app/utils/constants.py` - Application constants
+- `app/utils/constants.py` - Application-level constants (NOT analysis parameters)
+
+**Analysis Configuration (Issue #553):**
+- `runflow/{run_id}/analysis.json` - Single source of truth for analysis parameters
+- Generated from API request at start of analysis
+- Use helper functions from `app/core/v2/analysis_config.py` to access
 
 ### Loading Configuration
 
 ```python
+# YAML configuration
 from app.common.config import load_rulebook, load_reporting, load_captioning
 
 rulebook = load_rulebook()
 los_thresholds = rulebook['globals']['los_thresholds']
 
-reporting = load_reporting()
-los_colors = reporting['reporting']['los_colors']
+# Analysis configuration (v2.0.2+)
+from app.core.v2.analysis_config import (
+    load_analysis_json,
+    get_start_time,
+    get_event_names,
+    get_flow_file
+)
+
+analysis_config = load_analysis_json(run_path)
+start_time = get_start_time('elite', analysis_config)
+event_names = get_event_names(run_path)
 ```
+
+### Removed Constants (Issue #553)
+
+The following constants have been **removed** - values now come from API request:
+- ❌ `EVENT_DAYS`
+- ❌ `SATURDAY_EVENTS`
+- ❌ `SUNDAY_EVENTS`
+- ❌ `ALL_EVENTS`
+- ❌ `EVENT_DURATION_MINUTES` (deprecated, kept for v1 API only)
+- ❌ `DEFAULT_PACE_CSV`
+- ❌ `DEFAULT_SEGMENTS_CSV`
+- ❌ `DEFAULT_START_TIMES`
 
 ### Common Constants
 
@@ -175,6 +218,8 @@ los_colors = reporting['reporting']['los_colors']
 - Default bin size: 60 seconds
 - Coarsened bin size: 120 seconds
 - Window format: ISO 8601
+- Start time range: 300-1200 minutes (5:00 AM - 8:00 PM)
+- Event duration range: 1-500 minutes
 
 **Spatial:**
 - Default segment width: varies by segment (see segments.csv)
@@ -296,7 +341,7 @@ Flow analysis validation oracle.
 
 ### 5. Path Assumptions
 ❌ **Wrong:** Assume `tests/` exists  
-✅ **Right:** Use E2E testing via `e2e.py`
+✅ **Right:** Use E2E testing via `make e2e` or `pytest tests/v2/e2e.py`
 
 ---
 
@@ -306,12 +351,11 @@ Flow analysis validation oracle.
 - **Module Development:** `docs/architecture/adding-modules.md`
 - **Testing:** `docs/ui-testing-checklist.md`
 - **Operations:** `docs/dev-guides/OPERATIONS.md`
-- **Docker Workflow:** `docs/DOCKER_DEV.md`
-- **Guardrails:** `docs/GUARDRAILS.md`
+- **Docker Workflow:** `docs/dev-guides/docker-dev.md`
+- **AI Developer Guide:** `docs/dev-guides/ai-developer-guide.md`
 
 ---
 
 **For detailed technical architecture, see:**
-- `docs/reference/GLOBAL_TIME_GRID_ARCHITECTURE.md`
-- `docs/reference/DENSITY_ANALYSIS_README.md`
+- `docs/dev-guides/developer-guide-v2.md` - Complete v2 developer guide (includes Global Time Grid Architecture section)
 

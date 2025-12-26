@@ -21,6 +21,8 @@ from app.api.models.v2 import (
 from app.core.v2.validation import ValidationError, validate_api_payload
 from app.core.v2.loader import load_events_from_payload
 from app.core.v2.pipeline import create_stubbed_pipeline, create_full_analysis_pipeline
+from app.core.v2.analysis_config import generate_analysis_json
+from app.utils.run_id import generate_run_id, get_runflow_root
 
 # Create router
 router = APIRouter()
@@ -55,27 +57,56 @@ async def analyze_v2(request: V2AnalyzeRequest) -> V2AnalyzeResponse:
         payload_dict = request.model_dump()
         
         # Validate payload using Phase 1 validation layer
-        # This checks all rules from api_v2.md
+        # This checks all rules from Issue #553
         try:
             validate_api_payload(payload_dict)
         except ValidationError as e:
-            # Convert ValidationError to HTTPException with proper status code
-            raise HTTPException(
+            # Convert ValidationError to V2ErrorResponse format (Issue #553)
+            error_response = V2ErrorResponse(
+                status="ERROR",
+                code=e.code,
+                error=e.message
+            )
+            return JSONResponse(
                 status_code=e.code,
-                detail={
-                    "message": e.message,
-                    "code": e.code
-                }
+                content=error_response.model_dump()
+            )
+        
+        # Generate run_id and create run directory
+        run_id = generate_run_id()
+        runflow_root = get_runflow_root()
+        run_path = runflow_root / run_id
+        run_path.mkdir(parents=True, exist_ok=True)
+        
+        # Phase 2: Generate analysis.json (single source of truth)
+        # This must happen before any analysis execution
+        try:
+            analysis_config = generate_analysis_json(
+                request_payload=payload_dict,
+                run_id=run_id,
+                run_path=run_path
+            )
+            logger.info(f"Generated analysis.json for run_id: {run_id}")
+        except Exception as e:
+            logger.error(f"Failed to generate analysis.json: {e}", exc_info=True)
+            error_response = V2ErrorResponse(
+                status="ERROR",
+                code=500,
+                error=f"Failed to generate analysis configuration: {str(e)}"
+            )
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content=error_response.model_dump()
             )
         
         # Load events from payload (creates Event objects)
         events = load_events_from_payload(payload_dict)
         
-        # Extract data directory and file names from payload
-        data_dir = payload_dict.get("data_dir", "data")
-        segments_file = payload_dict.get("segments_file", "segments.csv")
-        locations_file = payload_dict.get("locations_file", "locations.csv")
-        flow_file = payload_dict.get("flow_file", "flow.csv")
+        # Extract data directory and file names from analysis.json (single source of truth)
+        data_dir = analysis_config.get("data_dir", "data")
+        segments_file = analysis_config.get("segments_file")
+        locations_file = analysis_config.get("locations_file")
+        flow_file = analysis_config.get("flow_file")
         
         # Run full analysis pipeline (Phase 4 + 5)
         # This creates directory structure AND runs density + flow analysis
@@ -84,13 +115,61 @@ async def analyze_v2(request: V2AnalyzeRequest) -> V2AnalyzeResponse:
             segments_file=segments_file,
             locations_file=locations_file,
             flow_file=flow_file,
-            data_dir=data_dir
+            data_dir=data_dir,
+            run_id=run_id,  # Pass run_id to avoid regenerating
+            request_payload=payload_dict  # Issue #553: Pass request payload for metadata
         )
         
         # Format output paths for response
         output_paths_dict = {}
         for day_code, paths in pipeline_result["output_paths"].items():
             output_paths_dict[day_code] = V2OutputPaths(**paths)
+        
+        # Create response payload (Issue #553: Include in metadata.json)
+        response_payload = {
+            "status": "success",
+            "code": 200,
+            "run_id": pipeline_result["run_id"],
+            "days": pipeline_result["days"],
+            "output_paths": {
+                day: {
+                    "day": paths.day,
+                    "reports": paths.reports,
+                    "bins": paths.bins,
+                    "maps": paths.maps,
+                    "ui": paths.ui,
+                    "metadata": paths.metadata
+                }
+                for day, paths in output_paths_dict.items()
+            }
+        }
+        
+        # Issue #553: Update metadata.json files with response payload
+        from app.core.v2.analysis_config import load_analysis_json
+        from pathlib import Path
+        import json
+        
+        runflow_root = get_runflow_root()
+        run_path = runflow_root / run_id
+        
+        # Update run-level metadata.json
+        run_metadata_path = run_path / "metadata.json"
+        if run_metadata_path.exists():
+            with open(run_metadata_path, 'r', encoding='utf-8') as f:
+                run_metadata = json.load(f)
+            run_metadata["response"] = response_payload
+            with open(run_metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(run_metadata, f, indent=2, ensure_ascii=False)
+        
+        # Update day-level metadata.json files
+        for day_code in pipeline_result["days"]:
+            day_metadata_path = run_path / day_code / "metadata.json"
+            if day_metadata_path.exists():
+                with open(day_metadata_path, 'r', encoding='utf-8') as f:
+                    day_metadata = json.load(f)
+                day_metadata["response"] = response_payload
+                with open(day_metadata_path, 'w', encoding='utf-8') as f:
+                    json.dump(day_metadata, f, indent=2, ensure_ascii=False)
         
         # Return success response
         return V2AnalyzeResponse(
@@ -100,17 +179,16 @@ async def analyze_v2(request: V2AnalyzeRequest) -> V2AnalyzeResponse:
             output_paths=output_paths_dict
         )
         
-    except HTTPException:
-        # Re-raise HTTP exceptions (validation errors)
-        raise
     except Exception as e:
-        # Catch-all for unexpected errors
+        # Catch-all for unexpected errors (Issue #553: use V2ErrorResponse format)
         logger.error(f"Unexpected error in v2 analyze endpoint: {e}", exc_info=True)
-        raise HTTPException(
+        error_response = V2ErrorResponse(
+            status="ERROR",
+            code=500,
+            error=f"Internal processing error: {str(e)}"
+        )
+        return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "message": f"Internal processing error: {str(e)}",
-                "code": 500
-            }
+            content=error_response.model_dump()
         )
 

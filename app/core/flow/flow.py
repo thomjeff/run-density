@@ -55,6 +55,8 @@ def _get_event_distance_range(segment: pd.Series, event: str) -> Tuple[float, fl
     # Normalize to lowercase for consistent matching
     event_lower = event.lower()
     
+    # Issue #553 Phase 4.2: Support hardcoded events for backward compatibility,
+    # but add dynamic fallback for any event name
     if event_lower == "full":
         return segment.get("full_from_km", 0), segment.get("full_to_km", 0)
     elif event_lower == "half":
@@ -67,6 +69,19 @@ def _get_event_distance_range(segment: pd.Series, event: str) -> Tuple[float, fl
     elif event_lower == "open":
         return segment.get("open_from_km", 0), segment.get("open_to_km", 0)
     else:
+        # Issue #553 Phase 4.2: Dynamic lookup for any event name
+        # Try dynamic lookup: {event}_from_km and {event}_to_km
+        from_key = f"{event_lower}_from_km"
+        to_key = f"{event_lower}_to_km"
+        
+        # Case-insensitive lookup
+        from_val = segment.get(from_key) or segment.get(from_key.capitalize())
+        to_val = segment.get(to_key) or segment.get(to_key.capitalize())
+        
+        if from_val is not None and to_val is not None:
+            return from_val, to_val
+        
+        # If not found, return 0, 0 (segment not used by this event)
         return 0, 0
 
 
