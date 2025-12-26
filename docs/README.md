@@ -33,7 +33,7 @@ This documentation is organized by audience and topic for easy navigation.
 
 | Document | Purpose |
 |----------|---------|
-| [Developer Guide v2](dev-guides/developer-guide-v2.md) | **START HERE** - Complete v2 developer guide |
+| [Developer Guide](dev-guides/developer-guide.md) | **START HERE** - Complete v2 developer guide |
 | [Docker Development](dev-guides/docker-dev.md) | Docker development workflow |
 | [Quick Reference](reference/QUICK_REFERENCE.md) | Variable names, terminology, standards (v2.0.2+) |
 | [Canonical Data Sources](dev-guides/CANONICAL_DATA_SOURCES.md) | Data source specifications (v2.0.2+) |
@@ -41,7 +41,7 @@ This documentation is organized by audience and topic for easy navigation.
 | [UI Testing Checklist](testing/ui-testing-checklist.md) | UI testing procedures |
 
 **Quick Start:**
-1. Read [Developer Guide v2](dev-guides/developer-guide-v2.md) for v2 architecture
+1. Read [Developer Guide](dev-guides/developer-guide.md) for v2 architecture
 2. Follow [Docker Development](dev-guides/docker-dev.md) for development workflow
 3. Reference [Testing Guide](testing/testing-guide.md) for testing procedures
 
@@ -80,7 +80,7 @@ docs/
 │
 ├── dev-guides/                        # Developer Documentation
 │   ├── ai-developer-guide.md          # AI assistant onboarding and rules
-│   ├── developer-guide-v2.md          # Complete v2 developer guide
+│   ├── developer-guide.md             # Complete developer guide
 │   ├── docker-dev.md                  # Docker development workflow
 │   └── CANONICAL_DATA_SOURCES.md      # Data source specifications
 │
@@ -113,7 +113,7 @@ Covers:
 
 ---
 
-#### [Developer Guide v2](dev-guides/developer-guide-v2.md)
+#### [Developer Guide](dev-guides/developer-guide.md)
 **Audience:** Developers  
 **Purpose:** Complete v2 developer guide  
 **Updated:** v2.0.2+
