@@ -2314,9 +2314,20 @@ def generate_bin_dataset(
         
         # Issue #535: Include start_times in metadata for event determination in parquet
         # Issue #553 Phase 4.3: Include event_durations in metadata (from analysis.json)
-        geojson_metadata = {**bin_build.metadata, "start_times": start_times}
+        # Convert to native Python types to avoid JSON serialization issues with numpy int64
+        import numpy as np
+        # Ensure all metadata values are native Python types
+        safe_metadata = {
+            k: (int(v) if isinstance(v, (int, np.integer)) else (float(v) if isinstance(v, (float, np.floating)) else v))
+            for k, v in bin_build.metadata.items()
+        }
+        geojson_metadata = {**safe_metadata, "start_times": {k: float(v) for k, v in start_times.items()}}
         if event_durations:
-            geojson_metadata["event_durations"] = event_durations
+            # Convert numpy int64/float64 to native Python types for JSON serialization
+            geojson_metadata["event_durations"] = {
+                k: int(v) if isinstance(v, (int, np.integer)) else (float(v) if isinstance(v, (float, np.floating)) else v)
+                for k, v in event_durations.items()
+            }
         geojson = {"type": "FeatureCollection", "features": geojson_features, "metadata": geojson_metadata}
         
         # 6) Safety checks per ChatGPT guidance
@@ -2344,8 +2355,8 @@ def generate_bin_dataset(
                 "analysis_type": "bins",
                 "schema_version": BIN_SCHEMA_VERSION,
                 "generated_by": "bins_accumulator",
-                "dt_seconds": dt_seconds,
-                "start_times": start_times  # Issue #535: Include start_times for event determination
+                "dt_seconds": int(dt_seconds),  # Ensure native Python int
+                "start_times": {k: float(v) for k, v in start_times.items()}  # Issue #535: Include start_times, convert to native types
             }
         }
         
