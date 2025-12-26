@@ -332,13 +332,49 @@ def _write_parquet_file(rows: t.List[JsonDict], output_dir: str, base_name: str)
     return parquet_path
 
 
+def _coerce_metadata(metadata: JsonDict) -> JsonDict:
+    """
+    Convert numpy types in metadata to native Python types for JSON serialization.
+    """
+    import numpy as np
+    coerced = {}
+    for k, v in metadata.items():
+        if isinstance(v, dict):
+            coerced[k] = _coerce_metadata(v)
+        elif isinstance(v, (int, np.integer)):
+            coerced[k] = int(v)
+        elif isinstance(v, (float, np.floating)):
+            coerced[k] = float(v)
+        elif pd.isna(v):
+            coerced[k] = None
+        elif isinstance(v, list):
+            coerced[k] = [
+                int(item) if isinstance(item, (int, np.integer)) else
+                float(item) if isinstance(item, (float, np.floating)) else
+                item
+                for item in v
+            ]
+        else:
+            coerced[k] = v
+    return coerced
+
 def _write_geojson_file(features: t.List[Feature], metadata: JsonDict, output_dir: str, base_name: str) -> str:
     """Write geojson.gz file from features and metadata."""
+    # Coerce all feature properties to native Python types
+    coerced_features = []
+    for feature in features:
+        coerced_feature = feature.copy()
+        coerced_feature["properties"] = _coerce_props(feature)
+        coerced_features.append(coerced_feature)
+    
+    # Coerce metadata to native Python types
+    coerced_metadata = _coerce_metadata(metadata)
+    
     fc = {
         "type": "FeatureCollection",
-        "features": features,
+        "features": coerced_features,
         "metadata": {
-            **metadata,
+            **coerced_metadata,
             "saved_at": datetime.now(timezone.utc).isoformat(),
         },
     }
