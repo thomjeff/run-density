@@ -305,3 +305,4 @@ class TestMetadataGeneration:
         assert "status" in metadata
         assert "files_created" in metadata
 
+

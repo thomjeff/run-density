@@ -224,3 +224,4 @@ class TestReportGeneration:
         assert (tmp_path / run_id / "sun" / "reports" / "Flow.csv").exists()
         assert (tmp_path / run_id / "sun" / "reports" / "Locations.csv").exists()
 
+

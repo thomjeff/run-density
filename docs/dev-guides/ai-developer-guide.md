@@ -48,7 +48,7 @@ Before starting ANY work, you **MUST** reference these documents:
 - `@docs/README.md` – Documentation index and architecture overview
 - `@docs/user-guide/api-user-guide.md` – API user guide (v2.0.2+)
 - `@docs/dev-guides/developer-guide-v2.md` – Developer guide (v2.0.2+)
-- `@docs/reference/QUICK_REFERENCE.md` – Authoritative variable names and field mappings
+- `@docs/reference/quick-reference.md` – Authoritative variable names and field mappings
 - `@docs/dev-guides/docker-dev.md` – Development workflow and commands
 
 ---
@@ -70,8 +70,7 @@ Before any code or tests are written, confirm the following:
 9. TODO PERMISSION – Ask before creating task lists or suggestions
 10. GITHUB CONTEXT – Read entire GitHub issue + all comments
 11. CLARITY FIRST – STOP and ask if any instruction is unclear
-12. FAIL-FAST ONLY – No fallback logic in flow analysis (Issue #553)
-13. analysis.json IS SINGLE SOURCE OF TRUTH – Load once, use throughout (Issue #553)
+12. FAIL-FAST ONLY – No fallback logic in code (Issue #553)
 ```
 
 ---
@@ -199,7 +198,7 @@ analysis_config_2 = load_analysis_json(run_id)  # In function B - NO!
 
 ### 7. STRICT TYPOS & NAMING
 
-**Rule:** Match variable names exactly to references in `QUICK_REFERENCE.md`.
+**Rule:** Match variable names exactly to references in `quick-reference.md`.
 
 **Common Mistakes:**
 - `seg_id` vs `segment_id` (use `seg_id`)
@@ -207,7 +206,7 @@ analysis_config_2 = load_analysis_json(run_id)  # In function B - NO!
 - `start_time` vs `startTime` (use `start_time`)
 
 **Reference:**
-- See `docs/reference/QUICK_REFERENCE.md` for exact field names
+- See `docs/reference/quick-reference.md` for exact field names
 
 ### 8. GITHUB CONTEXT
 
@@ -308,4 +307,3 @@ analysis_config_2 = load_analysis_json(run_id)  # In function B - NO!
 
 **Last Updated:** 2025-12-26  
 **Maintained By:** Development Team
-
