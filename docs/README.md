@@ -2,9 +2,7 @@
 
 **Version:** v2.0.2+  
 **Last Updated:** 2025-12-26  
-**Architecture:** Local-only, UUID-based runflow structure, API-driven configuration
-
-**Issue #553 Complete:** All analysis inputs (events, start times, file paths) are now configurable via API request. No hardcoded values.
+**Architecture:** Local-only, UUID-based runflow structure, API-driven configuration where all analysis parameters are provided via API. 
 
 This documentation is organized by audience and topic for easy navigation.
 
