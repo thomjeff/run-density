@@ -2040,7 +2040,8 @@ def _apply_flagging_to_bin_features(
                 segments_dict[row['seg_id']] = {
                     'seg_label': row.get('seg_label', row['seg_id']),
                     'width_m': row.get('width_m', 3.0),
-                    'flow_type': row.get('flow_type', 'none')
+                    'flow_type': row.get('flow_type', 'none'),
+                    'segment_type': row.get('segment_type')  # For schema resolution (Issue #557)
                 }
         except Exception as e:
             logger.warning(f"Could not load segments CSV for flagging: {e}, using defaults")
@@ -2079,7 +2080,7 @@ def _apply_flagging_to_bin_features(
                 # Add missing fields for flagging
                 "window_idx": window_idx,
                 "width_m": next((s.width_m for s in segments.values() if s.segment_id == props["segment_id"]), 5.0),
-                "schema_key": resolve_schema(props["segment_id"], segments_dict),
+                "schema_key": resolve_schema(props["segment_id"], None),  # segment_type not available in segments_dict, use None
             })
         
         flags_df = pd.DataFrame(flag_rows)
@@ -2313,9 +2314,20 @@ def generate_bin_dataset(
         
         # Issue #535: Include start_times in metadata for event determination in parquet
         # Issue #553 Phase 4.3: Include event_durations in metadata (from analysis.json)
-        geojson_metadata = {**bin_build.metadata, "start_times": start_times}
+        # Convert to native Python types to avoid JSON serialization issues with numpy int64
+        import numpy as np
+        # Ensure all metadata values are native Python types
+        safe_metadata = {
+            k: (int(v) if isinstance(v, (int, np.integer)) else (float(v) if isinstance(v, (float, np.floating)) else v))
+            for k, v in bin_build.metadata.items()
+        }
+        geojson_metadata = {**safe_metadata, "start_times": {k: float(v) for k, v in start_times.items()}}
         if event_durations:
-            geojson_metadata["event_durations"] = event_durations
+            # Convert numpy int64/float64 to native Python types for JSON serialization
+            geojson_metadata["event_durations"] = {
+                k: int(v) if isinstance(v, (int, np.integer)) else (float(v) if isinstance(v, (float, np.floating)) else v)
+                for k, v in event_durations.items()
+            }
         geojson = {"type": "FeatureCollection", "features": geojson_features, "metadata": geojson_metadata}
         
         # 6) Safety checks per ChatGPT guidance
@@ -2343,8 +2355,8 @@ def generate_bin_dataset(
                 "analysis_type": "bins",
                 "schema_version": BIN_SCHEMA_VERSION,
                 "generated_by": "bins_accumulator",
-                "dt_seconds": dt_seconds,
-                "start_times": start_times  # Issue #535: Include start_times for event determination
+                "dt_seconds": int(dt_seconds),  # Ensure native Python int
+                "start_times": {k: float(v) for k, v in start_times.items()}  # Issue #535: Include start_times, convert to native types
             }
         }
         

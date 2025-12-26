@@ -56,6 +56,9 @@ def resolve_schema(segment_id: str, segment_type: Optional[str] = None) -> str:
         
     Returns:
         Schema key: "start_corral", "on_course_narrow", or "on_course_open"
+    
+    Raises:
+        TypeError: If segment_type is not a string (Issue #557)
     """
     # 1) Explicit ID mapping (highest priority)
     if segment_id in EXPLICIT:
@@ -63,6 +66,12 @@ def resolve_schema(segment_id: str, segment_type: Optional[str] = None) -> str:
     
     # 2) Type-based mapping (when segment_type is present)
     if segment_type:
+        # Type guard: ensure segment_type is a string (Issue #557)
+        if not isinstance(segment_type, str):
+            raise TypeError(
+                f"Expected string for segment_type, got {type(segment_type).__name__}. "
+                f"segment_id={segment_id}, segment_type={segment_type}"
+            )
         t = segment_type.lower()
         
         # Narrow/constrained segments

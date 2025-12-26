@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pandas as pd
+import numpy as np
 
 JsonDict = t.Dict[str, t.Any]
 Feature = JsonDict
@@ -48,14 +49,30 @@ def _coerce_props(feature: Feature) -> JsonDict:
     """
     Returns a non-None 'properties' dict for a feature.
     We do NOT assume geometry exists; Parquet path doesn't need it.
+    
+    Converts numpy int64/float64 to native Python types for JSON serialization.
     """
+    import numpy as np
     if not isinstance(feature, dict):
         raise TypeError(f"Feature must be a dict, got {type(feature)}")
     props = feature.get("properties") or {}
     if not isinstance(props, dict):
         # Bad structure; treat as empty props
         props = {}
-    return props
+    
+    # Convert numpy types to native Python types for JSON serialization
+    coerced_props = {}
+    for k, v in props.items():
+        if isinstance(v, (int, np.integer)):
+            coerced_props[k] = int(v)
+        elif isinstance(v, (float, np.floating)):
+            coerced_props[k] = float(v)
+        elif pd.isna(v):
+            coerced_props[k] = None
+        else:
+            coerced_props[k] = v
+    
+    return coerced_props
 
 def _determine_events_from_time_window(
     t_start: t.Any, 
@@ -315,13 +332,66 @@ def _write_parquet_file(rows: t.List[JsonDict], output_dir: str, base_name: str)
     return parquet_path
 
 
+def _coerce_metadata(metadata: JsonDict) -> JsonDict:
+    """
+    Convert numpy types in metadata to native Python types for JSON serialization.
+    """
+    import numpy as np
+    coerced = {}
+    for k, v in metadata.items():
+        if isinstance(v, dict):
+            coerced[k] = _coerce_metadata(v)
+        elif isinstance(v, np.ndarray):
+            # Convert numpy array to list, then coerce each element
+            coerced[k] = [
+                int(item) if isinstance(item, (int, np.integer)) else
+                float(item) if isinstance(item, (float, np.floating)) else
+                item
+                for item in v.tolist()
+            ]
+        elif isinstance(v, (int, np.integer)):
+            coerced[k] = int(v)
+        elif isinstance(v, (float, np.floating)):
+            coerced[k] = float(v)
+        elif isinstance(v, list):
+            coerced[k] = [
+                int(item) if isinstance(item, (int, np.integer)) else
+                float(item) if isinstance(item, (float, np.floating)) else
+                item
+                for item in v
+            ]
+        elif v is None or (isinstance(v, (str, bool)) and not pd.isna(v)):
+            # Handle None, strings, booleans - only check pd.isna for scalar values
+            coerced[k] = v
+        else:
+            # For other types, try pd.isna only if it's a scalar (not array)
+            try:
+                if pd.isna(v):
+                    coerced[k] = None
+                else:
+                    coerced[k] = v
+            except (ValueError, TypeError):
+                # If pd.isna fails (e.g., on arrays), just use the value as-is
+                coerced[k] = v
+    return coerced
+
 def _write_geojson_file(features: t.List[Feature], metadata: JsonDict, output_dir: str, base_name: str) -> str:
     """Write geojson.gz file from features and metadata."""
+    # Coerce all feature properties to native Python types
+    coerced_features = []
+    for feature in features:
+        coerced_feature = feature.copy()
+        coerced_feature["properties"] = _coerce_props(feature)
+        coerced_features.append(coerced_feature)
+    
+    # Coerce metadata to native Python types
+    coerced_metadata = _coerce_metadata(metadata)
+    
     fc = {
         "type": "FeatureCollection",
-        "features": features,
+        "features": coerced_features,
         "metadata": {
-            **metadata,
+            **coerced_metadata,
             "saved_at": datetime.now(timezone.utc).isoformat(),
         },
     }

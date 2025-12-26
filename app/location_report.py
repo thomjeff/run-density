@@ -96,15 +96,27 @@ def get_segment_ranges_for_event(
         List of (seg_id, from_km, to_km) tuples
     """
     ranges = []
+    missing_segments = []
+    invalid_ranges = []
+    not_used_by_event = []
+    
     # Use lowercase event names (v2 standard)
     event_col = event.lower()
     from_col = f"{event_col}_from_km"
     to_col = f"{event_col}_to_km"
     
+    # Validate required columns exist (Issue #559)
+    if from_col not in segments_df.columns or to_col not in segments_df.columns:
+        logger.error(
+            f"Missing required columns for event {event}: {from_col} and/or {to_col} not found in segments.csv"
+        )
+        return ranges
+    
     for seg_id in segment_ids:
         seg_row = segments_df[segments_df["seg_id"] == seg_id]
         if seg_row.empty:
-            logger.warning(f"Segment {seg_id} not found in segments.csv")
+            missing_segments.append(seg_id)
+            logger.warning(f"Segment {seg_id} not found in segments.csv (Issue #559)")
             continue
         
         row = seg_row.iloc[0]
@@ -114,6 +126,7 @@ def get_segment_ranges_for_event(
         # Check if segment is used by this event
         event_flag = row.get(event_col, "").lower() if event_col in row.index else ""
         if event_flag != "y":
+            not_used_by_event.append((seg_id, event_flag))
             logger.debug(f"Segment {seg_id} not used by event {event} (flag={event_flag})")
             continue
         
@@ -130,10 +143,37 @@ def get_segment_ranges_for_event(
                     f"Segment {seg_id} has range [{from_km}, {to_km}] but not used by event {event} (flag={event_flag})"
                 )
         else:
+            invalid_ranges.append((seg_id, from_km, to_km))
             logger.warning(
                 f"Segment {seg_id} missing or invalid {from_col}/{to_col} for event {event} "
-                f"(from_km={from_km}, to_km={to_km})"
+                f"(from_km={from_km}, to_km={to_km}) (Issue #559)"
             )
+    
+    # Enhanced error reporting (Issue #559)
+    if missing_segments:
+        logger.error(
+            f"Event {event}: Segments {missing_segments} are referenced but not found in segments.csv. "
+            f"These segments will be skipped from analysis. Check if segments are mislabeled, "
+            f"missing from GPX, or out of order chronologically."
+        )
+    if invalid_ranges:
+        logger.error(
+            f"Event {event}: Segments {[s[0] for s in invalid_ranges]} have invalid or missing distance ranges. "
+            f"These segments will be skipped from analysis."
+        )
+    # Only warn if ALL segments are invalid for this event (Issue #559)
+    # If some segments are valid and some aren't, it's expected (e.g., location lists segments for multiple events)
+    if not_used_by_event and len(not_used_by_event) == len(segment_ids):
+        logger.warning(
+            f"Event {event}: All segments {[s[0] for s in not_used_by_event]} are not marked as used by this event. "
+            f"This location will be skipped from analysis for event {event}."
+        )
+    elif not_used_by_event:
+        # Some segments invalid, but others are valid - this is expected, log at debug level
+        logger.debug(
+            f"Event {event}: Segments {[s[0] for s in not_used_by_event]} are not marked as used by this event "
+            f"(but other segments are valid, so location will be processed)."
+        )
     
     return ranges
 
@@ -318,8 +358,12 @@ def calculate_arrival_times_for_location(
             
             segment_ranges = get_segment_ranges_for_event(segments_df, segments_list, event)
             if not segment_ranges:
+                # Enhanced error message with validation details (Issue #559)
                 logger.warning(
-                    f"Location {location.get('loc_id')} ({event}): No valid segment ranges found for segments {segments_list}"
+                    f"Location {location.get('loc_id')} ({event}): No valid segment ranges found for segments {segments_list}. "
+                    f"This location will be skipped from analysis. Possible causes: "
+                    f"(1) Segments not found in segments.csv, (2) Missing {event}_from_km/{event}_to_km columns, "
+                    f"(3) Segments not marked as used by event {event}, (4) Invalid distance ranges."
                 )
                 continue
             
@@ -397,9 +441,15 @@ def calculate_arrival_times_for_location(
                         # This can happen when same physical location is at different distances on different segments
                         # Use segment midpoint as reasonable approximation for arrival time calculation
                         seg_distance_km = (from_km + to_km) / 2.0
+                        segment_length_km = to_km - from_km
+                        projection_error_km = abs(distance_km - seg_distance_km)
+                        
+                        # Enhanced logging with detailed error information (Issue #558)
                         logger.warning(
-                            f"Location {location.get('loc_id')} ({event}): Segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km listed but "
-                            f"centerline projection failed and full course distance {distance_km:.3f}km doesn't match. "
+                            f"Location {location.get('loc_id')} ({event}): Segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km "
+                            f"(length: {segment_length_km:.3f}km) listed but centerline projection failed. "
+                            f"Full course distance: {distance_km:.3f}km, expected range: [{from_km:.3f}, {to_km:.3f}]km, "
+                            f"projection error: {projection_error_km:.3f}km. "
                             f"Using segment midpoint {seg_distance_km:.3f}km for arrival calculations."
                         )
                 
