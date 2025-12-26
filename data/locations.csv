@@ -60,9 +60,9 @@
 59,Bridge Street and Mill Street,course,45.978853,-66.592023,,"""I1,J1,J4,J5""",sun,4,y,y,n,n,n,10,5,"Full closure from 08:00 to 10:30 a.m. Afterwards, traffic control at Bridge & Mill as runners cross both directions"
 60,Canada Street and Miller Street,course,45.975221,-66.592053,,K1,sun,6,y,y,n,n,n,10,5,1 TCP Truck Required. Runners cross Canada Street from trail heading to Kaine Street (southerly direction) coming up the trail from Bridge Street.
 61,Kaine Street at trail,course,45.973112,-66.592822,,K1,sun,6,y,y,n,n,n,10,5,Traffic control both directions as runners cross Kaine at trail.
-62,Canada Street and Murray Avenue,course,45.966065,-66.603455,,K1,sun,6,y,y,y,n,n,10,5,"Stop traffic from crossing the trail while runners are there. 10K will be heading northbound to 10K turn-around, then back. All other runners heading southbound to Queen Sq."
+62,Canada Street and Murray Avenue,course,45.966065,-66.603455,,K1,sun,6,y,y,n,n,n,10,5,"Stop traffic from crossing the trail while runners are there. Full and Half runners heading southbound to Queen Sq."
 63,Northside of Walking Bridge at Picaroons,course,45.957934,-66.624561,,"""L1,L2""",sun,6,y,y,y,n,n,10,5,Stop any bike or foot traffic coming from Picaroons Roundhouse. Remind event in progress and mindful or traffic on Walking Bridge (remains open).
-64,Northside Trail meets sidewalk from Union St Cross-walk,course,45.974361,-66.640142,,"""B1,B2,B3""",sun,2,y,y,y,n,n,10,5,Stop non-participant foot & cycle traffic when runners are approaching. Expecting low traffic at this point.
+64,Northside Trail meets sidewalk from Union St Cross-walk,course,45.974361,-66.640142,,"""B1,B2,B3""",sun,2,y,n,y,n,n,10,5,Stop non-participant foot & cycle traffic when runners are approaching. Expecting low traffic at this point.
 65,Northside Trail at Friel St.,course,45.97375,-66.638189,,"""B1,B2,B3,F1""",sun,2,y,y,y,n,n,10,5,Stop traffic from crossing the trail while runners are coming from both directions.
 66,Northside Trail and Douglas Ave,course,45.974816,-66.641483,,"""B1,B2,B3""",sun,2,y,n,y,n,n,10,5,Stop traffic from crossing the trail while runners are coming from both directions.
 67,Northside Trail and Lynn Ave.,course,45.975435,-66.643328,,"""B1,B2,B3""",sun,2,y,n,y,n,n,10,5,Gate that prevents vehicle traffic entering trail. Watch for bikers and walkers from Preston Dr.
@@ -89,11 +89,11 @@
 88,Water Stop: Mill St,water,45.979279,-66.591863,,"""I1,J1,J4,J5""",sun,5,y,y,n,n,n,10,5,Half & Full Marathon runners. First will be Half coming from Gibson. Last Full Marathoner coming back from Tree Farm.
 89,Water Stop: Peniac Bridge,water,45.995937,-66.574436,,"""J1,J4,J5""",sun,5,y,y,n,n,n,10,5,Half & Full Marathon runners. First will be Half coming from Mill St. to the Turn. Last Full Marathoner coming back from Tree Farm.
 90,Water Stop: Chase Xmas Tree Farm,water,46.002755,-66.575984,,"""J2,J3""",sun,5,y,n,n,n,n,10,5,Marathon runners only. Both directions as they are making a turn further out the trail.
-91,Water Stop: Devon Lumber,water,45.959884,-66.618586,,K1,sun,6,y,y,y,n,n,10,5,All runners. First runner will be 10K. Last will be Marathoner.
+91,Water Stop: Devon Lumber,water,45.959884,-66.618586,,K1,sun,6,y,y,n,n,n,10,5,Full and Half runners. First runner will be Half. Last will be Marathoner.
 92,Water Stop: Finish Line,water,45.954291,-66.640752,,"""M1,M2""",sun,7,y,y,y,n,n,10,5,All runners. First runner will be 10K. Last will be Marathoner.
 93,Queen Square (Finish),aid,45.954231,-66.640798,,"""M1,M2""",sun,7,y,y,y,n,n,10,5,SJA First Aid (Finish - All Runners)
 94,Northside Trail at Edgewood,aid,45.985198,-66.664457,,"""D1,D2""",sun,2,y,y,y,n,n,10,5,SJA First Aid (Full)
-95,Station Rd at Barker St,aid,45.959344,-66.619594,,K1,sun,7,y,y,y,n,n,10,5,SJA First Aid (All Runners)
+95,Station Rd at Barker St,aid,45.959344,-66.619594,,"""F1,K1""",sun,7,y,y,y,n,n,10,5,SJA First Aid (All Runners)
 96,Bridge at Mill St,aid,45.979519,-66.59192,,"""I1,J1,J4,J5""",sun,4,y,y,n,n,n,10,5,SJA First Aid (Full/Half)
 97,Regent / Queen,course,45.961152,-66.638708,,"""N1,N2,O1,O2""",sat,8,n,n,n,y,y,10,5,Westbound on Queen
 98,Carleton at Queen,course,45.96209,-66.640924,,"""N1,N2,O1,O2""",sat,8,n,n,n,y,y,10,5,Southbound from Library / Garrison

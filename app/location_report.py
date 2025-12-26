@@ -161,10 +161,18 @@ def get_segment_ranges_for_event(
             f"Event {event}: Segments {[s[0] for s in invalid_ranges]} have invalid or missing distance ranges. "
             f"These segments will be skipped from analysis."
         )
-    if not_used_by_event:
+    # Only warn if ALL segments are invalid for this event (Issue #559)
+    # If some segments are valid and some aren't, it's expected (e.g., location lists segments for multiple events)
+    if not_used_by_event and len(not_used_by_event) == len(segment_ids):
         logger.warning(
-            f"Event {event}: Segments {[s[0] for s in not_used_by_event]} are not marked as used by this event. "
-            f"These segments will be skipped from analysis."
+            f"Event {event}: All segments {[s[0] for s in not_used_by_event]} are not marked as used by this event. "
+            f"This location will be skipped from analysis for event {event}."
+        )
+    elif not_used_by_event:
+        # Some segments invalid, but others are valid - this is expected, log at debug level
+        logger.debug(
+            f"Event {event}: Segments {[s[0] for s in not_used_by_event]} are not marked as used by this event "
+            f"(but other segments are valid, so location will be processed)."
         )
     
     return ranges
