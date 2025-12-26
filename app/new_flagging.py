@@ -202,6 +202,12 @@ def _compute_utilization_percentile(result_df: pd.DataFrame) -> pd.DataFrame:
     try:
         from .utilization import add_utilization_percentile, ensure_rpm
         
+        # Validate required columns before flagging (Issue #556)
+        required_cols = ['rate', 'width_m']
+        missing_cols = [col for col in required_cols if col not in result_df.columns]
+        if missing_cols:
+            raise KeyError(f"Missing required columns for flagging: {missing_cols}. These are required to compute rate_per_m_per_min.")
+        
         # Compute window_idx from t_start (if available)
         if 't_start' in result_df.columns:
             result_df['window_idx'] = result_df['t_start'].apply(_compute_window_idx_from_timestamp)
@@ -210,6 +216,10 @@ def _compute_utilization_percentile(result_df: pd.DataFrame) -> pd.DataFrame:
         
         # First ensure rate_per_m_per_min exists (required by add_utilization_percentile)
         result_df = ensure_rpm(result_df)
+        
+        # Validate rate_per_m_per_min was computed successfully
+        if 'rate_per_m_per_min' not in result_df.columns:
+            raise KeyError("rate_per_m_per_min column was not created by ensure_rpm(). This is required for flagging.")
         
         # Now compute percentile
         result_df = add_utilization_percentile(result_df, cohort="window")

@@ -99,7 +99,12 @@ def add_utilization_percentile(
         bins = add_utilization_percentile(bins, cohort="window")
         # Now bins has util_percentile where top 5% have values >= 95
     """
-    needed = {rpm_col}
+    # Ensure rate_per_m_per_min exists BEFORE checking for required columns
+    # This allows the function to compute it from 'rate' and 'width_m' if missing
+    df = ensure_rpm(df).copy()
+    
+    # Now check for other required columns (excluding rpm_col since ensure_rpm handles it)
+    needed = set()
     if cohort in ("window", "window_schema", "window_segment"):
         needed.add("window_idx")
     if cohort == "window_schema":
@@ -110,8 +115,6 @@ def add_utilization_percentile(
     missing = [c for c in needed if c not in df.columns]
     if missing:
         raise ValueError(f"Missing columns for cohort='{cohort}': {missing}")
-
-    df = ensure_rpm(df).copy()
 
     # Determine grouping keys
     if cohort == "global":
