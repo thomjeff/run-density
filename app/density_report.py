@@ -2040,7 +2040,8 @@ def _apply_flagging_to_bin_features(
                 segments_dict[row['seg_id']] = {
                     'seg_label': row.get('seg_label', row['seg_id']),
                     'width_m': row.get('width_m', 3.0),
-                    'flow_type': row.get('flow_type', 'none')
+                    'flow_type': row.get('flow_type', 'none'),
+                    'segment_type': row.get('segment_type')  # For schema resolution (Issue #557)
                 }
         except Exception as e:
             logger.warning(f"Could not load segments CSV for flagging: {e}, using defaults")
@@ -2064,6 +2065,14 @@ def _apply_flagging_to_bin_features(
                     window_idx = w_idx
                     break
             
+            # Get segment_type from segments_dict for schema resolution (Issue #557)
+            segment_info = segments_dict.get(props["segment_id"], {})
+            segment_type = segment_info.get("segment_type") if isinstance(segment_info, dict) else None
+            # Ensure segment_type is a string (not a dict) before passing to resolve_schema
+            if segment_type is not None and not isinstance(segment_type, str):
+                logger.warning(f"segment_type for {props['segment_id']} is not a string: {type(segment_type).__name__}, using None")
+                segment_type = None
+            
             flag_rows.append({
                 "feature_idx": idx,
                 "segment_id": props["segment_id"],
@@ -2079,7 +2088,7 @@ def _apply_flagging_to_bin_features(
                 # Add missing fields for flagging
                 "window_idx": window_idx,
                 "width_m": next((s.width_m for s in segments.values() if s.segment_id == props["segment_id"]), 5.0),
-                "schema_key": resolve_schema(props["segment_id"], segments_dict),
+                "schema_key": resolve_schema(props["segment_id"], segment_type),
             })
         
         flags_df = pd.DataFrame(flag_rows)
