@@ -820,7 +820,7 @@ def create_full_analysis_pipeline(
                 combined_metadata["logs"] = {
                     "app_log": f"logs/app.log"
                 }
-                # Update run-level metadata.json with logs reference
+                # Re-write metadata.json with logs reference
                 with open(run_metadata_path, 'w', encoding='utf-8') as f:
                     json.dump(combined_metadata, f, indent=2, ensure_ascii=False)
         
