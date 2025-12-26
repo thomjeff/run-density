@@ -277,7 +277,7 @@ analysis_config_2 = load_analysis_json(run_id)  # In function B - NO!
 6. **Loading `analysis.json` multiple times** instead of passing `analysis_config`
 7. **Making large commits** instead of small, testable changes
 8. **Guessing at requirements** instead of asking for clarification
-9. **Using wrong field names** instead of checking `QUICK_REFERENCE.md`
+9. **Using wrong field names** instead of checking `quick-reference.md`
 10. **Skipping verification steps** instead of completing mandatory setup
 
 ---
@@ -287,7 +287,7 @@ analysis_config_2 = load_analysis_json(run_id)  # In function B - NO!
 - **API Usage:** `docs/user-guide/api-user-guide.md`
 - **Developer Guide:** `docs/dev-guides/developer-guide-v2.md`
 - **Docker Workflow:** `docs/dev-guides/docker-dev.md`
-- **Quick Reference:** `docs/reference/QUICK_REFERENCE.md`
+- **Quick Reference:** `docs/reference/quick-reference.md`
 - **Testing Guide:** `docs/testing/testing-guide.md`
 
 ---

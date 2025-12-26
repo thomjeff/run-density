@@ -35,8 +35,8 @@ This documentation is organized by audience and topic for easy navigation.
 |----------|---------|
 | [Developer Guide](dev-guides/developer-guide.md) | **START HERE** - Complete v2 developer guide |
 | [Docker Development](dev-guides/docker-dev.md) | Docker development workflow |
-| [Quick Reference](reference/QUICK_REFERENCE.md) | Variable names, terminology, standards (v2.0.2+) |
-| [Canonical Data Sources](dev-guides/CANONICAL_DATA_SOURCES.md) | Data source specifications (v2.0.2+) |
+| [Quick Reference](reference/quick-reference.md) | Variable names, terminology, standards (v2.0.2+) |
+| [Data Sources](dev-guides/data-sources.md) | Data source specifications (v2.0.2+) |
 | [Testing Guide](testing/testing-guide.md) | Comprehensive testing guide |
 | [UI Testing Checklist](testing/ui-testing-checklist.md) | UI testing procedures |
 
@@ -64,7 +64,7 @@ make e2e         # Run end-to-end tests
 **Quick Start:**
 1. Read [AI Developer Guide](dev-guides/ai-developer-guide.md) - Complete all verification steps
 2. Review mandatory rules and common mistakes
-3. Reference [Developer Guide v2](dev-guides/developer-guide-v2.md) for v2 patterns
+3. Reference [Developer Guide](dev-guides/developer-guide.md) for v2 patterns
 4. Use [Quick Reference](reference/QUICK_REFERENCE.md) for exact field names
 
 ---
@@ -82,7 +82,7 @@ docs/
 │   ├── ai-developer-guide.md          # AI assistant onboarding and rules
 │   ├── developer-guide.md             # Complete developer guide
 │   ├── docker-dev.md                  # Docker development workflow
-│   └── CANONICAL_DATA_SOURCES.md      # Data source specifications
+│   └── data-sources.md                # Data source specifications
 │
 ├── testing/                           # Testing Documentation
 │   ├── testing-guide.md               # Comprehensive testing guide
@@ -90,7 +90,7 @@ docs/
 │   └── tests-cleanup-report.md        # Test cleanup analysis
 │
 └── reference/                         # Technical Reference
-    └── QUICK_REFERENCE.md             # Variable names, terminology, constants
+    └── quick-reference.md             # Variable names, terminology, constants
 ```
 
 ---
@@ -187,7 +187,7 @@ Covers:
 
 ### Reference Documentation
 
-#### [Quick Reference](reference/QUICK_REFERENCE.md)
+#### [Quick Reference](reference/quick-reference.md)
 **Audience:** Developers, AI Assistants  
 **Purpose:** Fast lookups for variables, terminology, standards
 
@@ -199,7 +199,7 @@ Covers:
 
 ---
 
-#### [Canonical Data Sources](dev-guides/CANONICAL_DATA_SOURCES.md)
+#### [Data Sources](dev-guides/data-sources.md)
 **Audience:** Developers  
 **Purpose:** Data source specifications
 
@@ -228,7 +228,7 @@ Covers:
 ### Recently Updated (v2.0.2+ - December 2025)
 - ✅ `dev-guides/ai-developer-guide.md` - NEW consolidated AI assistant guide
 - ✅ `user-guide/api-user-guide.md` - Complete API usage guide
-- ✅ `dev-guides/developer-guide-v2.md` - Complete v2 developer guide
+- ✅ `dev-guides/developer-guide.md` - Complete developer guide
 - ✅ `dev-guides/docker-dev.md` - Version 3.1
 - ✅ `testing/testing-guide.md` - Comprehensive testing guide
 
