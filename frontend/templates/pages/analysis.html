@@ -460,6 +460,31 @@
             input.addEventListener('change', updateSubmitButton);
         });
         
+        // Add time formatting for start_time input
+        const startTimeInput = row.querySelector('input[name*="[start_time]"]');
+        if (startTimeInput) {
+            startTimeInput.addEventListener('input', function(e) {
+                formatTimeInput(e.target);
+            });
+            startTimeInput.addEventListener('keydown', function(e) {
+                // Allow backspace, delete, tab, escape, enter
+                if ([8, 9, 27, 13, 46].indexOf(e.keyCode) !== -1 ||
+                    // Allow Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+                    (e.keyCode === 65 && e.ctrlKey === true) ||
+                    (e.keyCode === 67 && e.ctrlKey === true) ||
+                    (e.keyCode === 86 && e.ctrlKey === true) ||
+                    (e.keyCode === 88 && e.ctrlKey === true) ||
+                    // Allow home, end, left, right
+                    (e.keyCode >= 35 && e.keyCode <= 39)) {
+                    return;
+                }
+                // Ensure that it is a number and stop the keypress
+                if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+                    e.preventDefault();
+                }
+            });
+        }
+        
         updateSubmitButton();
     }
 
@@ -483,7 +508,7 @@
             return null;
         }
         const [hours, minutes] = timeStr.split(':').map(Number);
-        if (isNaN(hours) || isNaN(minutes)) {
+        if (isNaN(hours) || isNaN(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
             return null;
         }
         return hours * 60 + minutes;
@@ -497,6 +522,18 @@
         const hours = Math.floor(minutes / 60);
         const mins = minutes % 60;
         return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+    }
+    
+    // Format time input as user types (add colon automatically)
+    function formatTimeInput(input) {
+        let value = input.value.replace(/[^\d]/g, ''); // Remove non-digits
+        if (value.length >= 2) {
+            value = value.substring(0, 2) + ':' + value.substring(2, 4);
+        }
+        if (value.length > 5) {
+            value = value.substring(0, 5);
+        }
+        input.value = value;
     }
 
     // Make functions global for onclick handlers
