@@ -69,55 +69,58 @@
             <div class="field-error" id="description-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.25rem;"></div>
         </div>
 
-        <!-- Segments File -->
-        <div style="margin-bottom: 1.5rem;">
-            <label for="segments_file" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
-                Segments File <span style="color: #e74c3c;">*</span>
-            </label>
-            <select 
-                id="segments_file" 
-                name="segments_file" 
-                required
-                style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"
-            >
-                <option value="">Select segments file...</option>
-            </select>
-            <small style="color: #7f8c8d; font-size: 0.875rem;">Select the segments CSV file from the data folder.</small>
-            <div class="field-error" id="segments_file-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.25rem;"></div>
-        </div>
+        <!-- File Inputs (on same row) -->
+        <div class="file-inputs-row" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 1.5rem;">
+            <!-- Segments File -->
+            <div>
+                <label for="segments_file" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
+                    Segments File <span style="color: #e74c3c;">*</span>
+                </label>
+                <select 
+                    id="segments_file" 
+                    name="segments_file" 
+                    required
+                    style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"
+                >
+                    <option value="">Select segments file...</option>
+                </select>
+                <small style="color: #7f8c8d; font-size: 0.875rem;">Select the segments CSV file from the data folder.</small>
+                <div class="field-error" id="segments_file-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.25rem;"></div>
+            </div>
 
-        <!-- Flow File -->
-        <div style="margin-bottom: 1.5rem;">
-            <label for="flow_file" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
-                Flow File <span style="color: #e74c3c;">*</span>
-            </label>
-            <select 
-                id="flow_file" 
-                name="flow_file" 
-                required
-                style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"
-            >
-                <option value="">Select flow file...</option>
-            </select>
-            <small style="color: #7f8c8d; font-size: 0.875rem;">Select the flow CSV file from the data folder.</small>
-            <div class="field-error" id="flow_file-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.25rem;"></div>
-        </div>
+            <!-- Flow File -->
+            <div>
+                <label for="flow_file" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
+                    Flow File <span style="color: #e74c3c;">*</span>
+                </label>
+                <select 
+                    id="flow_file" 
+                    name="flow_file" 
+                    required
+                    style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"
+                >
+                    <option value="">Select flow file...</option>
+                </select>
+                <small style="color: #7f8c8d; font-size: 0.875rem;">Select the flow CSV file from the data folder.</small>
+                <div class="field-error" id="flow_file-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.25rem;"></div>
+            </div>
 
-        <!-- Locations File -->
-        <div style="margin-bottom: 1.5rem;">
-            <label for="locations_file" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
-                Locations File <span style="color: #e74c3c;">*</span>
-            </label>
-            <select 
-                id="locations_file" 
-                name="locations_file" 
-                required
-                style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"
-            >
-                <option value="">Select locations file...</option>
-            </select>
-            <small style="color: #7f8c8d; font-size: 0.875rem;">Select the locations CSV file from the data folder.</small>
-            <div class="field-error" id="locations_file-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.25rem;"></div>
+            <!-- Locations File -->
+            <div>
+                <label for="locations_file" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
+                    Locations File <span style="color: #e74c3c;">*</span>
+                </label>
+                <select 
+                    id="locations_file" 
+                    name="locations_file" 
+                    required
+                    style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"
+                >
+                    <option value="">Select locations file...</option>
+                </select>
+                <small style="color: #7f8c8d; font-size: 0.875rem;">Select the locations CSV file from the data folder.</small>
+                <div class="field-error" id="locations_file-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.25rem;"></div>
+            </div>
         </div>
 
         <!-- Events Inputs -->
@@ -282,10 +285,16 @@
         .event-field-narrow {
             max-width: none;
         }
+        .file-inputs-row {
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        }
     }
     
     @media (max-width: 768px) {
         .event-fields {
+            grid-template-columns: 1fr;
+        }
+        .file-inputs-row {
             grid-template-columns: 1fr;
         }
     }
