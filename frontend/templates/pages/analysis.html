@@ -622,12 +622,12 @@
         const events = [];
         const eventRows = document.querySelectorAll('.event-row');
         eventRows.forEach(row => {
-            const day = row.querySelector('select[name*="[day]"]').value;
-            const name = row.querySelector('input[name*="[name]"]').value.trim();
-            const startTime = parseInt(row.querySelector('input[name*="[start_time]"]').value.trim());
-            const duration = parseInt(row.querySelector('input[name*="[event_duration_minutes]"]').value.trim());
-            const runnersFile = row.querySelector('input[name*="[runners_file]"]').value.trim();
-            const gpxFile = row.querySelector('input[name*="[gpx_file]"]').value.trim();
+            const day = row.querySelector('select[name*="[day]"]')?.value;
+            const name = row.querySelector('input[name*="[name]"]')?.value.trim();
+            const startTime = parseInt(row.querySelector('input[name*="[start_time]"]')?.value.trim() || '0');
+            const duration = parseInt(row.querySelector('input[name*="[event_duration_minutes]"]')?.value.trim() || '0');
+            const runnersFile = row.querySelector('select[name*="[runners_file]"]')?.value.trim();
+            const gpxFile = row.querySelector('select[name*="[gpx_file]"]')?.value.trim();
 
             events.push({
                 name: name,
