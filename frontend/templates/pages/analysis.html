@@ -419,7 +419,7 @@
                     <label for="event-day-${eventRowCount}">Day <span style="color: #e74c3c;">*</span></label>
                     <select id="event-day-${eventRowCount}" name="events[${eventRowCount}][day]" required>
                         <option value="">Select day</option>
-                        ${DAYS.map(day => `<option value="${day}">${day.toUpperCase()}</option>`).join('')}
+                        ${DAYS.map(day => `<option value="${day}">${day}</option>`).join('')}
                     </select>
                     <div class="field-error" id="event-day-${eventRowCount}-error" style="display: none;"></div>
                 </div>
