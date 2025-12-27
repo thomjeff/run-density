@@ -11,9 +11,10 @@ Architecture: Option 3 - Hybrid Approach
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, Request, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Request, Form, HTTPException, Query
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from typing import Optional
 
 from app.common.config import load_reporting
 from app.utils.auth import (
@@ -392,7 +393,7 @@ async def check_session(request: Request):
 
 
 @router.get("/api/data/files")
-async def get_data_files(request: Request, extension: str = None):
+async def get_data_files(request: Request, extension: Optional[str] = Query(None)):
     """
     List files in the data directory, optionally filtered by extension.
     
@@ -405,11 +406,6 @@ async def get_data_files(request: Request, extension: str = None):
     Returns:
         JSON: List of file names matching the extension filter
     """
-    from fastapi.responses import JSONResponse
-    from fastapi import HTTPException, Query
-    from pathlib import Path
-    import os
-    
     require_auth(request)
     
     try:
