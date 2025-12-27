@@ -336,6 +336,26 @@ async def reports(request: Request):
     )
 
 
+@router.get("/analysis", response_class=HTMLResponse)
+async def analysis_page(request: Request):
+    """
+    Analysis request page for submitting new analysis requests.
+    
+    Issue #554: New page for submitting analysis requests via UI.
+    
+    Returns:
+        HTML: Analysis request form
+    """
+    auth_redirect = require_auth(request)
+    if auth_redirect:
+        return auth_redirect
+    meta = get_stub_meta()
+    return templates.TemplateResponse(
+        "pages/analysis.html",
+        {"request": request, "meta": meta}
+    )
+
+
 @router.get("/health-check", response_class=HTMLResponse)
 async def health_page(request: Request):
     """
@@ -369,4 +389,55 @@ async def check_session(request: Request):
     from fastapi.responses import JSONResponse
     is_valid = is_session_valid(request)
     return JSONResponse(content={"authenticated": is_valid})
+
+
+@router.get("/api/analysis/{run_id}/config")
+async def get_analysis_config(request: Request, run_id: str):
+    """
+    Fetch analysis.json for a given run_id.
+    
+    Issue #554: API endpoint to fetch analysis configuration for display in UI.
+    
+    Args:
+        run_id: Run identifier
+    
+    Returns:
+        JSON: analysis.json content
+    
+    Raises:
+        HTTPException: 404 if run_id or analysis.json not found
+    """
+    from fastapi.responses import JSONResponse
+    from fastapi import HTTPException
+    from pathlib import Path
+    
+    require_auth(request)
+    
+    try:
+        from app.utils.run_id import get_runflow_root
+        from app.core.v2.analysis_config import load_analysis_json
+        
+        runflow_root = get_runflow_root()
+        run_path = runflow_root / run_id
+        
+        if not run_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Run ID {run_id} not found"
+            )
+        
+        analysis_config = load_analysis_json(run_path)
+        return JSONResponse(content=analysis_config)
+        
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"analysis.json not found for run_id {run_id}"
+        )
+    except Exception as e:
+        logger.error(f"Error loading analysis.json for run_id {run_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to load analysis configuration: {str(e)}"
+        )
 
