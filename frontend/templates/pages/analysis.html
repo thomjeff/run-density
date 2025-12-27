@@ -122,7 +122,7 @@
 
         <!-- Events Inputs -->
         <div style="margin-bottom: 1.5rem;">
-            <h4 style="margin-bottom: 1rem; color: #2c3e50;">Events Inputs</h4>
+            <h3 style="margin-bottom: 1rem; color: #2c3e50;">Events Inputs</h3>
             <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
                 Add at least one event. Use the <strong>+</strong> button to add more events, or <strong>-</strong> to remove.
             </p>
@@ -155,7 +155,7 @@
 
 <!-- Response View (hidden initially) -->
 <div id="response-view" class="card" style="display: none; margin-top: 2rem;">
-    <h3 style="margin-bottom: 1rem;">Analysis Configuration</h3>
+    <h3 style="margin-bottom: 1rem;">Analysis Confirmation</h3>
     <div style="margin-bottom: 1rem;">
         <strong>Run ID:</strong> <span id="response-run-id" style="font-family: monospace; color: #3498db;"></span>
     </div>
@@ -421,8 +421,8 @@
                 </div>
                 <div class="event-field event-field-narrow">
                     <label for="event-start-time-${eventRowCount}">Start Time <span style="color: #e74c3c;">*</span></label>
-                    <input type="number" id="event-start-time-${eventRowCount}" name="events[${eventRowCount}][start_time]" required placeholder="480" min="300" max="1200">
-                    <small style="color: #7f8c8d; font-size: 0.75rem;">Minutes from midnight (300-1200)</small>
+                    <input type="time" id="event-start-time-${eventRowCount}" name="events[${eventRowCount}][start_time]" required>
+                    <small style="color: #7f8c8d; font-size: 0.75rem;">Time (05:00-20:00)</small>
                     <div class="field-error" id="event-start-time-${eventRowCount}-error" style="display: none;"></div>
                 </div>
                 <div class="event-field event-field-narrow">
@@ -477,6 +477,28 @@
         }
     }
 
+    // Convert hh:mm time string to minutes after midnight
+    function timeToMinutes(timeStr) {
+        if (!timeStr || !timeStr.includes(':')) {
+            return null;
+        }
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        if (isNaN(hours) || isNaN(minutes)) {
+            return null;
+        }
+        return hours * 60 + minutes;
+    }
+
+    // Convert minutes after midnight to hh:mm time string
+    function minutesToTime(minutes) {
+        if (isNaN(minutes)) {
+            return '';
+        }
+        const hours = Math.floor(minutes / 60);
+        const mins = minutes % 60;
+        return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+    }
+
     // Make functions global for onclick handlers
     window.addEventRow = addEventRow;
     window.removeEventRow = removeEventRow;
@@ -509,7 +531,7 @@
                 
                 const day = daySelect.value;
                 const name = nameInput.value.trim();
-                const startTime = startTimeInput.value.trim();
+                const startTime = startTimeInput.value.trim(); // Time input returns hh:mm format
                 const duration = durationInput.value.trim();
                 const runnersFile = runnersFileSelect.value.trim();
                 const gpxFile = gpxFileSelect.value.trim();
@@ -598,9 +620,12 @@
                 showFieldError(`event-start-time-${rowNum}`, 'Start time is required');
                 isValid = false;
             } else {
-                const startTimeNum = parseInt(startTime);
-                if (startTimeNum < 300 || startTimeNum > 1200) {
-                    showFieldError(`event-start-time-${rowNum}`, 'Start time must be between 300 and 1200');
+                const startTimeMinutes = timeToMinutes(startTime);
+                if (startTimeMinutes === null) {
+                    showFieldError(`event-start-time-${rowNum}`, 'Start time must be in HH:MM format');
+                    isValid = false;
+                } else if (startTimeMinutes < 300 || startTimeMinutes > 1200) {
+                    showFieldError(`event-start-time-${rowNum}`, 'Start time must be between 05:00 and 20:00');
                     isValid = false;
                 }
             }
@@ -639,7 +664,8 @@
         eventRows.forEach(row => {
             const day = row.querySelector('select[name*="[day]"]')?.value;
             const name = row.querySelector('input[name*="[name]"]')?.value.trim();
-            const startTime = parseInt(row.querySelector('input[name*="[start_time]"]')?.value.trim() || '0');
+            const startTimeStr = row.querySelector('input[name*="[start_time]"]')?.value.trim() || '';
+            const startTime = timeToMinutes(startTimeStr) || 0; // Convert hh:mm to minutes
             const duration = parseInt(row.querySelector('input[name*="[event_duration_minutes]"]')?.value.trim() || '0');
             const runnersFile = row.querySelector('select[name*="[runners_file]"]')?.value.trim();
             const gpxFile = row.querySelector('select[name*="[gpx_file]"]')?.value.trim();
