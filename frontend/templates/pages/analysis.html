@@ -228,8 +228,9 @@
 
     .event-fields {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        grid-template-columns: 120px 150px 120px 120px 1fr 1fr;
         gap: 1rem;
+        align-items: start;
     }
 
     .event-field {
@@ -240,7 +241,6 @@
     /* Narrow fields for Day, Start Time, and Duration */
     .event-field-narrow {
         max-width: 120px;
-        min-width: 100px;
     }
 
     .event-field label {
@@ -275,6 +275,15 @@
     }
 
     /* Responsive */
+    @media (max-width: 1200px) {
+        .event-fields {
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        }
+        .event-field-narrow {
+            max-width: none;
+        }
+    }
+    
     @media (max-width: 768px) {
         .event-fields {
             grid-template-columns: 1fr;
