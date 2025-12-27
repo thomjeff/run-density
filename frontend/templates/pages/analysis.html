@@ -760,8 +760,21 @@
         }
     });
 
-    // Form submit handler
-    document.getElementById('analysis-form').addEventListener('submit', submitForm);
+    // Form submit handler (for Enter key submissions)
+    document.getElementById('analysis-form').addEventListener('submit', function(event) {
+        event.preventDefault();
+        if (!document.getElementById('submit-btn').disabled) {
+            submitForm(event);
+        }
+    });
+
+    // Submit button click handler (manual submission since button type is now 'button')
+    document.getElementById('submit-btn').addEventListener('click', function(event) {
+        event.preventDefault();
+        if (!this.disabled) {
+            submitForm(event);
+        }
+    });
 
     // Initialize form on page load
     initForm();
