@@ -79,12 +79,12 @@ def run_analysis_background(
             "days": pipeline_result["days"],
             "output_paths": {
                 day: {
-                    "day": paths.day,
-                    "reports": paths.reports,
-                    "bins": paths.bins,
-                    "maps": paths.maps,
-                    "ui": paths.ui,
-                    "metadata": paths.metadata
+                    "day": paths["day"],
+                    "reports": paths["reports"],
+                    "bins": paths["bins"],
+                    "maps": paths["maps"],
+                    "ui": paths["ui"],
+                    "metadata": paths["metadata"]
                 }
                 for day, paths in pipeline_result["output_paths"].items()
             }
