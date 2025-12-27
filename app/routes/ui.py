@@ -11,9 +11,10 @@ Architecture: Option 3 - Hybrid Approach
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, Request, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Request, Form, HTTPException, Query
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from typing import Optional
 
 from app.common.config import load_reporting
 from app.utils.auth import (
@@ -336,6 +337,26 @@ async def reports(request: Request):
     )
 
 
+@router.get("/analysis", response_class=HTMLResponse)
+async def analysis_page(request: Request):
+    """
+    Analysis request page for submitting new analysis requests.
+    
+    Issue #554: New page for submitting analysis requests via UI.
+    
+    Returns:
+        HTML: Analysis request form
+    """
+    auth_redirect = require_auth(request)
+    if auth_redirect:
+        return auth_redirect
+    meta = get_stub_meta()
+    return templates.TemplateResponse(
+        "pages/analysis.html",
+        {"request": request, "meta": meta}
+    )
+
+
 @router.get("/health-check", response_class=HTMLResponse)
 async def health_page(request: Request):
     """
@@ -369,4 +390,114 @@ async def check_session(request: Request):
     from fastapi.responses import JSONResponse
     is_valid = is_session_valid(request)
     return JSONResponse(content={"authenticated": is_valid})
+
+
+@router.get("/api/data/files")
+async def get_data_files(request: Request, extension: Optional[str] = Query(None)):
+    """
+    List files in the data directory, optionally filtered by extension.
+    
+    Issue #554: API endpoint to populate file dropdowns in Analysis UI.
+    
+    Args:
+        extension: Optional file extension filter (e.g., "csv", "gpx")
+                  If not provided, returns all files
+    
+    Returns:
+        JSON: List of file names matching the extension filter
+    """
+    require_auth(request)
+    
+    try:
+        from app.core.v2.analysis_config import get_data_directory
+        
+        data_dir = get_data_directory()
+        data_path = Path(data_dir)
+        
+        if not data_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Data directory not found: {data_dir}"
+            )
+        
+        # List all files in data directory
+        files = []
+        for file_path in data_path.iterdir():
+            if file_path.is_file():
+                file_ext = file_path.suffix.lower()
+                file_name = file_path.name
+                
+                # Filter by extension if provided
+                if extension:
+                    # Remove leading dot if present
+                    ext_filter = extension.lower().lstrip('.')
+                    if file_ext == f'.{ext_filter}':
+                        files.append(file_name)
+                else:
+                    files.append(file_name)
+        
+        # Sort files alphabetically
+        files.sort()
+        
+        return JSONResponse(content={"files": files})
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing data files: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to list data files: {str(e)}"
+        )
+
+
+@router.get("/api/analysis/{run_id}/config")
+async def get_analysis_config(request: Request, run_id: str):
+    """
+    Fetch analysis.json for a given run_id.
+    
+    Issue #554: API endpoint to fetch analysis configuration for display in UI.
+    
+    Args:
+        run_id: Run identifier
+    
+    Returns:
+        JSON: analysis.json content
+    
+    Raises:
+        HTTPException: 404 if run_id or analysis.json not found
+    """
+    from fastapi.responses import JSONResponse
+    from fastapi import HTTPException
+    from pathlib import Path
+    
+    require_auth(request)
+    
+    try:
+        from app.utils.run_id import get_runflow_root
+        from app.core.v2.analysis_config import load_analysis_json
+        
+        runflow_root = get_runflow_root()
+        run_path = runflow_root / run_id
+        
+        if not run_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Run ID {run_id} not found"
+            )
+        
+        analysis_config = load_analysis_json(run_path)
+        return JSONResponse(content=analysis_config)
+        
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"analysis.json not found for run_id {run_id}"
+        )
+    except Exception as e:
+        logger.error(f"Error loading analysis.json for run_id {run_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to load analysis configuration: {str(e)}"
+        )
 

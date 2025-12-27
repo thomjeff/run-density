@@ -7,7 +7,7 @@ This enables early E2E testing of the API contract while core refactors proceed.
 Phase 2: API Route (Issue #496)
 """
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, BackgroundTasks
 from fastapi.responses import JSONResponse
 from typing import Dict, Any
 import logging
@@ -29,6 +29,92 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def run_analysis_background(
+    events,
+    segments_file: str,
+    locations_file: str,
+    flow_file: str,
+    data_dir: str,
+    run_id: str,
+    request_payload: Dict[str, Any]
+):
+    """
+    Background task to run the full analysis pipeline.
+    
+    Issue #554: Analysis runs asynchronously after API returns success response.
+    
+    Args:
+        events: List of Event objects
+        segments_file: Segments CSV file name
+        locations_file: Locations CSV file name
+        flow_file: Flow CSV file name
+        data_dir: Data directory path
+        run_id: Run identifier
+        request_payload: Original request payload for metadata
+    """
+    try:
+        logger.info(f"Starting background analysis for run_id: {run_id}")
+        pipeline_result = create_full_analysis_pipeline(
+            events=events,
+            segments_file=segments_file,
+            locations_file=locations_file,
+            flow_file=flow_file,
+            data_dir=data_dir,
+            run_id=run_id,
+            request_payload=request_payload
+        )
+        
+        # Update metadata.json files with response payload
+        from app.core.v2.analysis_config import load_analysis_json
+        from pathlib import Path
+        import json
+        
+        runflow_root = get_runflow_root()
+        run_path = runflow_root / run_id
+        
+        response_payload = {
+            "status": "success",
+            "code": 200,
+            "run_id": pipeline_result["run_id"],
+            "days": pipeline_result["days"],
+            "output_paths": {
+                day: {
+                    "day": paths["day"],
+                    "reports": paths["reports"],
+                    "bins": paths["bins"],
+                    "maps": paths["maps"],
+                    "ui": paths["ui"],
+                    "metadata": paths["metadata"]
+                }
+                for day, paths in pipeline_result["output_paths"].items()
+            }
+        }
+        
+        # Update run-level metadata.json
+        run_metadata_path = run_path / "metadata.json"
+        if run_metadata_path.exists():
+            with open(run_metadata_path, 'r', encoding='utf-8') as f:
+                run_metadata = json.load(f)
+            run_metadata["response"] = response_payload
+            with open(run_metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(run_metadata, f, indent=2, ensure_ascii=False)
+        
+        # Update day-level metadata.json files
+        for day_code in pipeline_result["days"]:
+            day_metadata_path = run_path / day_code / "metadata.json"
+            if day_metadata_path.exists():
+                with open(day_metadata_path, 'r', encoding='utf-8') as f:
+                    day_metadata = json.load(f)
+                day_metadata["response"] = response_payload
+                with open(day_metadata_path, 'w', encoding='utf-8') as f:
+                    json.dump(day_metadata, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"Background analysis completed for run_id: {run_id}")
+    except Exception as e:
+        logger.error(f"Error in background analysis for run_id {run_id}: {e}", exc_info=True)
+        # Note: Error is logged but not returned to client since request already returned
+
+
 @router.post(
     "/analyze",
     response_model=V2AnalyzeResponse,
@@ -36,7 +122,7 @@ logger = logging.getLogger(__name__)
     summary="Run v2 analysis",
     description="Analyze multiple events across multiple days with day-partitioned outputs"
 )
-async def analyze_v2(request: V2AnalyzeRequest) -> V2AnalyzeResponse:
+async def analyze_v2(request: V2AnalyzeRequest, background_tasks: BackgroundTasks) -> V2AnalyzeResponse:
     """
     Main v2 analysis endpoint.
     
@@ -108,74 +194,48 @@ async def analyze_v2(request: V2AnalyzeRequest) -> V2AnalyzeResponse:
         locations_file = analysis_config.get("locations_file")
         flow_file = analysis_config.get("flow_file")
         
-        # Run full analysis pipeline (Phase 4 + 5)
-        # This creates directory structure AND runs density + flow analysis
-        pipeline_result = create_full_analysis_pipeline(
+        # Issue #554: Extract days from events for immediate response
+        # We need to determine which days are in the request to return them in the response
+        event_days = list(set([event.get("day") for event in payload_dict.get("events", [])]))
+        
+        # Issue #554: Create stub output paths structure for immediate response
+        # The actual paths will be created during background analysis
+        from pathlib import Path
+        runflow_root = get_runflow_root()
+        run_path = runflow_root / run_id
+        
+        output_paths_dict = {}
+        for day_code in event_days:
+            # Create stub paths that will be populated during analysis
+            output_paths_dict[day_code] = V2OutputPaths(
+                day=day_code,
+                reports=f"runflow/{run_id}/{day_code}/reports",
+                bins=f"runflow/{run_id}/{day_code}/bins",
+                maps=f"runflow/{run_id}/{day_code}/maps",
+                ui=f"runflow/{run_id}/{day_code}/ui",
+                metadata=f"runflow/{run_id}/{day_code}/metadata.json"
+            )
+        
+        # Issue #554: Add background task to run analysis asynchronously
+        # This allows the API to return immediately with success response
+        background_tasks.add_task(
+            run_analysis_background,
             events=events,
             segments_file=segments_file,
             locations_file=locations_file,
             flow_file=flow_file,
             data_dir=data_dir,
-            run_id=run_id,  # Pass run_id to avoid regenerating
-            request_payload=payload_dict  # Issue #553: Pass request payload for metadata
+            run_id=run_id,
+            request_payload=payload_dict
         )
         
-        # Format output paths for response
-        output_paths_dict = {}
-        for day_code, paths in pipeline_result["output_paths"].items():
-            output_paths_dict[day_code] = V2OutputPaths(**paths)
+        logger.info(f"Analysis request accepted for run_id: {run_id}. Analysis running in background.")
         
-        # Create response payload (Issue #553: Include in metadata.json)
-        response_payload = {
-            "status": "success",
-            "code": 200,
-            "run_id": pipeline_result["run_id"],
-            "days": pipeline_result["days"],
-            "output_paths": {
-                day: {
-                    "day": paths.day,
-                    "reports": paths.reports,
-                    "bins": paths.bins,
-                    "maps": paths.maps,
-                    "ui": paths.ui,
-                    "metadata": paths.metadata
-                }
-                for day, paths in output_paths_dict.items()
-            }
-        }
-        
-        # Issue #553: Update metadata.json files with response payload
-        from app.core.v2.analysis_config import load_analysis_json
-        from pathlib import Path
-        import json
-        
-        runflow_root = get_runflow_root()
-        run_path = runflow_root / run_id
-        
-        # Update run-level metadata.json
-        run_metadata_path = run_path / "metadata.json"
-        if run_metadata_path.exists():
-            with open(run_metadata_path, 'r', encoding='utf-8') as f:
-                run_metadata = json.load(f)
-            run_metadata["response"] = response_payload
-            with open(run_metadata_path, 'w', encoding='utf-8') as f:
-                json.dump(run_metadata, f, indent=2, ensure_ascii=False)
-        
-        # Update day-level metadata.json files
-        for day_code in pipeline_result["days"]:
-            day_metadata_path = run_path / day_code / "metadata.json"
-            if day_metadata_path.exists():
-                with open(day_metadata_path, 'r', encoding='utf-8') as f:
-                    day_metadata = json.load(f)
-                day_metadata["response"] = response_payload
-                with open(day_metadata_path, 'w', encoding='utf-8') as f:
-                    json.dump(day_metadata, f, indent=2, ensure_ascii=False)
-        
-        # Return success response
+        # Return success response immediately (Issue #554)
         return V2AnalyzeResponse(
-            run_id=pipeline_result["run_id"],
+            run_id=run_id,
             status="success",
-            days=pipeline_result["days"],
+            days=event_days,
             output_paths=output_paths_dict
         )
         

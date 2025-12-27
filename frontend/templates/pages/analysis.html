@@ -1,0 +1,871 @@
+{% extends "base.html" %}
+
+{% block title %}Analysis{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Request Analysis</h2>
+</div>
+
+<!-- Instructions Section -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">How to Use</h3>
+    <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
+        Submit an analysis request to generate density, flow, and location reports for one or more events.
+        All required files must exist in the <code>/data</code> directory.
+    </p>
+    <details style="margin-top: 1rem;">
+        <summary style="cursor: pointer; color: #3498db; font-weight: 600;">View Example Request</summary>
+        <pre style="background: #f8f9fa; padding: 1rem; border-radius: 4px; margin-top: 0.5rem; overflow-x: auto;"><code>{
+  "description": "Saturday and Sunday race analysis",
+  "segments_file": "segments.csv",
+  "flow_file": "flow.csv",
+  "locations_file": "locations.csv",
+  "events": [
+    {
+      "name": "elite",
+      "day": "sat",
+      "start_time": 480,
+      "event_duration_minutes": 45,
+      "runners_file": "elite_runners.csv",
+      "gpx_file": "elite.gpx"
+    }
+  ]
+}</code></pre>
+    </details>
+</div>
+
+<!-- Error Banner -->
+<div id="error-banner" class="card" style="display: none; background: #fee; border-left: 4px solid #e74c3c; margin-bottom: 1.5rem;">
+    <h3 style="color: #e74c3c; margin-bottom: 0.5rem;">Error</h3>
+    <p id="error-message" style="color: #c0392b; margin: 0;"></p>
+</div>
+
+<!-- Success Banner -->
+<div id="success-banner" class="card" style="display: none; background: #efe; border-left: 4px solid #2ecc71; margin-bottom: 1.5rem;">
+    <h3 style="color: #2ecc71; margin-bottom: 0.5rem;">Analysis Submitted Successfully</h3>
+    <p id="success-message" style="color: #27ae60; margin: 0;"></p>
+</div>
+
+<!-- Analysis Form -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Analysis Inputs</h3>
+    
+    <form id="analysis-form">
+        <!-- Description -->
+        <div style="margin-bottom: 1.5rem;">
+            <label for="description" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
+                Description <span style="color: #95a5a6; font-weight: normal;">(optional)</span>
+            </label>
+            <input 
+                type="text" 
+                id="description" 
+                name="description" 
+                maxlength="254"
+                placeholder="Enter a short description for this analysis"
+                style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"
+            >
+            <small style="color: #7f8c8d; font-size: 0.875rem;">Maximum 254 characters</small>
+            <div class="field-error" id="description-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.25rem;"></div>
+        </div>
+
+        <!-- File Inputs (on same row) -->
+        <div class="file-inputs-row" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 1.5rem;">
+            <!-- Segments File -->
+            <div>
+                <label for="segments_file" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
+                    Segments File <span style="color: #e74c3c;">*</span>
+                </label>
+                <select 
+                    id="segments_file" 
+                    name="segments_file" 
+                    required
+                    style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"
+                >
+                    <option value="">Select segments file...</option>
+                </select>
+                <small style="color: #7f8c8d; font-size: 0.875rem;">Select the segments CSV file from the data folder.</small>
+                <div class="field-error" id="segments_file-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.25rem;"></div>
+            </div>
+
+            <!-- Flow File -->
+            <div>
+                <label for="flow_file" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
+                    Flow File <span style="color: #e74c3c;">*</span>
+                </label>
+                <select 
+                    id="flow_file" 
+                    name="flow_file" 
+                    required
+                    style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"
+                >
+                    <option value="">Select flow file...</option>
+                </select>
+                <small style="color: #7f8c8d; font-size: 0.875rem;">Select the flow CSV file from the data folder.</small>
+                <div class="field-error" id="flow_file-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.25rem;"></div>
+            </div>
+
+            <!-- Locations File -->
+            <div>
+                <label for="locations_file" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
+                    Locations File <span style="color: #e74c3c;">*</span>
+                </label>
+                <select 
+                    id="locations_file" 
+                    name="locations_file" 
+                    required
+                    style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"
+                >
+                    <option value="">Select locations file...</option>
+                </select>
+                <small style="color: #7f8c8d; font-size: 0.875rem;">Select the locations CSV file from the data folder.</small>
+                <div class="field-error" id="locations_file-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.25rem;"></div>
+            </div>
+        </div>
+
+        <!-- Events Inputs -->
+        <div style="margin-bottom: 1.5rem;">
+            <h3 style="margin-bottom: 1rem; color: #2c3e50;">Events Inputs</h3>
+            <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
+                Add at least one event. Use the <strong>+</strong> button to add more events, or <strong>-</strong> to remove.
+            </p>
+            <div id="events-container">
+                <!-- Events will be dynamically added here -->
+            </div>
+            <div class="field-error" id="events-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.5rem;"></div>
+        </div>
+
+        <!-- Buttons -->
+        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+            <button 
+                type="button" 
+                id="submit-btn"
+                style="padding: 0.75rem 2rem; background: #3498db; color: white; border: none; border-radius: 4px; font-size: 1rem; font-weight: 600; cursor: pointer;"
+                disabled
+            >
+                Submit
+            </button>
+            <button 
+                type="button" 
+                id="cancel-btn"
+                style="padding: 0.75rem 2rem; background: #95a5a6; color: white; border: none; border-radius: 4px; font-size: 1rem; font-weight: 600; cursor: pointer;"
+            >
+                Cancel
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Response View (hidden initially) -->
+<div id="response-view" class="card" style="display: none; margin-top: 2rem;">
+    <h3 style="margin-bottom: 1rem;">Analysis Confirmation</h3>
+    <div style="margin-bottom: 1rem;">
+        <strong>Run ID:</strong> <span id="response-run-id" style="font-family: monospace; color: #3498db;"></span>
+    </div>
+    <details open>
+        <summary style="cursor: pointer; color: #3498db; font-weight: 600; margin-bottom: 0.5rem;">View analysis.json</summary>
+        <pre id="analysis-json-display" style="background: #f8f9fa; padding: 1rem; border-radius: 4px; overflow-x: auto; max-height: 600px; overflow-y: auto; margin-top: 0.5rem;"><code></code></pre>
+    </details>
+</div>
+
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+    /* Event row styling */
+    .event-row {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 4px;
+        margin-bottom: 1rem;
+        border: 1px solid #e0e0e0;
+    }
+
+    .event-row-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .event-row-number {
+        font-weight: 600;
+        color: #2c3e50;
+    }
+
+    .event-row-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .btn-add-row, .btn-remove-row {
+        width: 32px;
+        height: 32px;
+        border: none;
+        border-radius: 4px;
+        font-size: 1.2rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .btn-add-row {
+        background: #2ecc71;
+        color: white;
+    }
+
+    .btn-add-row:hover {
+        background: #27ae60;
+    }
+
+    .btn-remove-row {
+        background: #e74c3c;
+        color: white;
+    }
+
+    .btn-remove-row:hover {
+        background: #c0392b;
+    }
+
+    .event-fields {
+        display: grid;
+        grid-template-columns: 120px 150px 120px 120px 1fr 1fr;
+        gap: 1rem;
+        align-items: start;
+    }
+
+    .event-field {
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Narrow fields for Day, Start Time, and Duration */
+    .event-field-narrow {
+        max-width: 120px;
+    }
+
+    .event-field label {
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+        color: #2c3e50;
+        font-size: 0.875rem;
+    }
+
+    .event-field input, .event-field select {
+        padding: 0.5rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 0.9rem;
+    }
+
+    .event-field .field-error {
+        color: #e74c3c;
+        font-size: 0.75rem;
+        margin-top: 0.25rem;
+    }
+
+    /* Loading state */
+    #submit-btn:disabled {
+        background: #95a5a6;
+        cursor: not-allowed;
+    }
+
+    .loading {
+        opacity: 0.6;
+        pointer-events: none;
+    }
+
+    /* Responsive */
+    @media (max-width: 1200px) {
+        .event-fields {
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        }
+        .event-field-narrow {
+            max-width: none;
+        }
+        .file-inputs-row {
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .event-fields {
+            grid-template-columns: 1fr;
+        }
+        .file-inputs-row {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function() {
+    let eventRowCount = 0;
+    const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+    // File lists cache
+    let csvFiles = [];
+    let gpxFiles = [];
+
+    // Load files from API
+    async function loadDataFiles() {
+        try {
+            // Load CSV files
+            const csvResponse = await fetch('/api/data/files?extension=csv');
+            if (csvResponse.ok) {
+                const csvData = await csvResponse.json();
+                csvFiles = csvData.files || [];
+                
+                // Populate segments, flow, locations dropdowns
+                populateDropdown('segments_file', csvFiles);
+                populateDropdown('flow_file', csvFiles);
+                populateDropdown('locations_file', csvFiles);
+            }
+            
+            // Load GPX files
+            const gpxResponse = await fetch('/api/data/files?extension=gpx');
+            if (gpxResponse.ok) {
+                const gpxData = await gpxResponse.json();
+                gpxFiles = gpxData.files || [];
+            }
+        } catch (error) {
+            console.error('Error loading data files:', error);
+        }
+    }
+
+    // Populate a dropdown with file options
+    function populateDropdown(selectId, files) {
+        const select = document.getElementById(selectId);
+        if (!select) return;
+        
+        // Clear existing options except the first (placeholder)
+        while (select.options.length > 1) {
+            select.remove(1);
+        }
+        
+        // Add file options
+        files.forEach(file => {
+            const option = document.createElement('option');
+            option.value = file;
+            option.textContent = file;
+            select.appendChild(option);
+        });
+    }
+
+    // Populate runners and GPX dropdowns for an event row
+    function populateEventFileDropdowns(rowId) {
+        const runnersSelect = document.getElementById(`event-runners-file-${rowId}`);
+        const gpxSelect = document.getElementById(`event-gpx-file-${rowId}`);
+        
+        if (runnersSelect) {
+            // Clear existing options except the first
+            while (runnersSelect.options.length > 1) {
+                runnersSelect.remove(1);
+            }
+            // Add CSV files
+            csvFiles.forEach(file => {
+                const option = document.createElement('option');
+                option.value = file;
+                option.textContent = file;
+                runnersSelect.appendChild(option);
+            });
+        }
+        
+        if (gpxSelect) {
+            // Clear existing options except the first
+            while (gpxSelect.options.length > 1) {
+                gpxSelect.remove(1);
+            }
+            // Add GPX files
+            gpxFiles.forEach(file => {
+                const option = document.createElement('option');
+                option.value = file;
+                option.textContent = file;
+                gpxSelect.appendChild(option);
+            });
+        }
+    }
+
+    // Initialize with one empty event row
+    async function initForm() {
+        // Load files first
+        await loadDataFiles();
+        addEventRow();
+        updateSubmitButton();
+    }
+
+    // Add event row
+    function addEventRow() {
+        eventRowCount++;
+        const container = document.getElementById('events-container');
+        const row = document.createElement('div');
+        row.className = 'event-row';
+        row.id = `event-row-${eventRowCount}`;
+        
+        row.innerHTML = `
+            <div class="event-row-header">
+                <span class="event-row-number">Event ${eventRowCount}</span>
+                <div class="event-row-actions">
+                    <button type="button" class="btn-add-row" onclick="addEventRow()" title="Add another event">+</button>
+                    <button type="button" class="btn-remove-row" onclick="removeEventRow(${eventRowCount})" title="Remove this event">-</button>
+                </div>
+            </div>
+            <div class="event-fields">
+                <div class="event-field event-field-narrow">
+                    <label for="event-day-${eventRowCount}">Day <span style="color: #e74c3c;">*</span></label>
+                    <select id="event-day-${eventRowCount}" name="events[${eventRowCount}][day]" required>
+                        <option value="">Select day</option>
+                        ${DAYS.map(day => `<option value="${day}">${day}</option>`).join('')}
+                    </select>
+                    <div class="field-error" id="event-day-${eventRowCount}-error" style="display: none;"></div>
+                </div>
+                <div class="event-field">
+                    <label for="event-name-${eventRowCount}">Event <span style="color: #e74c3c;">*</span></label>
+                    <input type="text" id="event-name-${eventRowCount}" name="events[${eventRowCount}][name]" required placeholder="elite" maxlength="8">
+                    <div class="field-error" id="event-name-${eventRowCount}-error" style="display: none;"></div>
+                </div>
+                <div class="event-field event-field-narrow">
+                    <label for="event-start-time-${eventRowCount}">Start Time <span style="color: #e74c3c;">*</span></label>
+                    <input type="text" id="event-start-time-${eventRowCount}" name="events[${eventRowCount}][start_time]" required pattern="^([0-1][0-9]|2[0-3]):[0-5][0-9]$" placeholder="08:00" maxlength="5">
+                    <small style="color: #7f8c8d; font-size: 0.75rem;">Time (05:00-20:00)</small>
+                    <div class="field-error" id="event-start-time-${eventRowCount}-error" style="display: none;"></div>
+                </div>
+                <div class="event-field event-field-narrow">
+                    <label for="event-duration-${eventRowCount}">Duration <span style="color: #e74c3c;">*</span></label>
+                    <input type="number" id="event-duration-${eventRowCount}" name="events[${eventRowCount}][event_duration_minutes]" required placeholder="45" min="1" max="500">
+                    <small style="color: #7f8c8d; font-size: 0.75rem;">Minutes (1-500)</small>
+                    <div class="field-error" id="event-duration-${eventRowCount}-error" style="display: none;"></div>
+                </div>
+                <div class="event-field">
+                    <label for="event-runners-file-${eventRowCount}">Runners File <span style="color: #e74c3c;">*</span></label>
+                    <select id="event-runners-file-${eventRowCount}" name="events[${eventRowCount}][runners_file]" required>
+                        <option value="">Select runners file...</option>
+                    </select>
+                    <div class="field-error" id="event-runners-file-${eventRowCount}-error" style="display: none;"></div>
+                </div>
+                <div class="event-field">
+                    <label for="event-gpx-file-${eventRowCount}">GPX File <span style="color: #e74c3c;">*</span></label>
+                    <select id="event-gpx-file-${eventRowCount}" name="events[${eventRowCount}][gpx_file]" required>
+                        <option value="">Select GPX file...</option>
+                    </select>
+                    <div class="field-error" id="event-gpx-file-${eventRowCount}-error" style="display: none;"></div>
+                </div>
+            </div>
+        `;
+        
+        container.appendChild(row);
+        
+        // Populate file dropdowns for this row
+        populateEventFileDropdowns(eventRowCount);
+        
+        // Add event listeners for validation
+        const inputs = row.querySelectorAll('input, select');
+        inputs.forEach(input => {
+            input.addEventListener('input', updateSubmitButton);
+            input.addEventListener('change', updateSubmitButton);
+        });
+        
+        // Add time formatting for start_time input
+        const startTimeInput = row.querySelector('input[name*="[start_time]"]');
+        if (startTimeInput) {
+            startTimeInput.addEventListener('input', function(e) {
+                formatTimeInput(e.target);
+            });
+            startTimeInput.addEventListener('keydown', function(e) {
+                // Allow backspace, delete, tab, escape, enter
+                if ([8, 9, 27, 13, 46].indexOf(e.keyCode) !== -1 ||
+                    // Allow Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+                    (e.keyCode === 65 && e.ctrlKey === true) ||
+                    (e.keyCode === 67 && e.ctrlKey === true) ||
+                    (e.keyCode === 86 && e.ctrlKey === true) ||
+                    (e.keyCode === 88 && e.ctrlKey === true) ||
+                    // Allow home, end, left, right
+                    (e.keyCode >= 35 && e.keyCode <= 39)) {
+                    return;
+                }
+                // Ensure that it is a number and stop the keypress
+                if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+                    e.preventDefault();
+                }
+            });
+        }
+        
+        updateSubmitButton();
+    }
+
+    // Remove event row
+    function removeEventRow(rowId) {
+        const row = document.getElementById(`event-row-${rowId}`);
+        if (row) {
+            const container = document.getElementById('events-container');
+            if (container.children.length > 1) {
+                row.remove();
+                updateSubmitButton();
+            } else {
+                alert('At least one event is required.');
+            }
+        }
+    }
+
+    // Convert hh:mm time string to minutes after midnight
+    function timeToMinutes(timeStr) {
+        if (!timeStr || !timeStr.includes(':')) {
+            return null;
+        }
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        if (isNaN(hours) || isNaN(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+            return null;
+        }
+        return hours * 60 + minutes;
+    }
+
+    // Convert minutes after midnight to hh:mm time string
+    function minutesToTime(minutes) {
+        if (isNaN(minutes)) {
+            return '';
+        }
+        const hours = Math.floor(minutes / 60);
+        const mins = minutes % 60;
+        return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+    }
+    
+    // Format time input as user types (add colon automatically)
+    function formatTimeInput(input) {
+        let value = input.value.replace(/[^\d]/g, ''); // Remove non-digits
+        if (value.length >= 2) {
+            value = value.substring(0, 2) + ':' + value.substring(2, 4);
+        }
+        if (value.length > 5) {
+            value = value.substring(0, 5);
+        }
+        input.value = value;
+    }
+
+    // Make functions global for onclick handlers
+    window.addEventRow = addEventRow;
+    window.removeEventRow = removeEventRow;
+
+    // Update submit button state
+    function updateSubmitButton() {
+        const form = document.getElementById('analysis-form');
+        const submitBtn = document.getElementById('submit-btn');
+        
+        // Check required fields
+        const segmentsFile = document.getElementById('segments_file').value.trim();
+        const flowFile = document.getElementById('flow_file').value.trim();
+        const locationsFile = document.getElementById('locations_file').value.trim();
+        
+        // Check at least one event row with all required fields
+        let hasValidEvent = false;
+        const eventRows = document.querySelectorAll('.event-row');
+        if (eventRows.length > 0) {
+            eventRows.forEach(row => {
+                const daySelect = row.querySelector('select[name*="[day]"]');
+                const nameInput = row.querySelector('input[name*="[name]"]');
+                const startTimeInput = row.querySelector('input[name*="[start_time]"]');
+                const durationInput = row.querySelector('input[name*="[event_duration_minutes]"]');
+                const runnersFileSelect = row.querySelector('select[name*="[runners_file]"]');
+                const gpxFileSelect = row.querySelector('select[name*="[gpx_file]"]');
+                
+                if (!daySelect || !nameInput || !startTimeInput || !durationInput || !runnersFileSelect || !gpxFileSelect) {
+                    return; // Skip if any required element is missing
+                }
+                
+                const day = daySelect.value;
+                const name = nameInput.value.trim();
+                const startTime = startTimeInput.value.trim(); // Time input returns hh:mm format
+                const duration = durationInput.value.trim();
+                const runnersFile = runnersFileSelect.value.trim();
+                const gpxFile = gpxFileSelect.value.trim();
+                
+                if (day && name && startTime && duration && runnersFile && gpxFile) {
+                    hasValidEvent = true;
+                }
+            });
+        }
+        
+        submitBtn.disabled = !(segmentsFile && flowFile && locationsFile && hasValidEvent);
+    }
+
+    // Clear all errors
+    function clearErrors() {
+        document.querySelectorAll('.field-error').forEach(el => {
+            el.style.display = 'none';
+            el.textContent = '';
+        });
+        document.getElementById('error-banner').style.display = 'none';
+    }
+
+    // Show field error
+    function showFieldError(fieldId, message) {
+        const errorEl = document.getElementById(`${fieldId}-error`);
+        if (errorEl) {
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+        }
+    }
+
+    // Validate form
+    function validateForm() {
+        clearErrors();
+        let isValid = true;
+
+        // Validate required analysis fields
+        const segmentsFile = document.getElementById('segments_file').value.trim();
+        const flowFile = document.getElementById('flow_file').value.trim();
+        const locationsFile = document.getElementById('locations_file').value.trim();
+
+        if (!segmentsFile) {
+            showFieldError('segments_file', 'Segments file is required');
+            isValid = false;
+        }
+
+        if (!flowFile) {
+            showFieldError('flow_file', 'Flow file is required');
+            isValid = false;
+        }
+
+        if (!locationsFile) {
+            showFieldError('locations_file', 'Locations file is required');
+            isValid = false;
+        }
+
+        // Validate events
+        const eventRows = document.querySelectorAll('.event-row');
+        if (eventRows.length === 0) {
+            document.getElementById('events-error').textContent = 'At least one event is required';
+            document.getElementById('events-error').style.display = 'block';
+            isValid = false;
+        }
+
+        eventRows.forEach((row) => {
+            const day = row.querySelector('select[name*="[day]"]')?.value;
+            const name = row.querySelector('input[name*="[name]"]')?.value.trim();
+            const startTime = row.querySelector('input[name*="[start_time]"]')?.value.trim();
+            const duration = row.querySelector('input[name*="[event_duration_minutes]"]')?.value.trim();
+            const runnersFile = row.querySelector('select[name*="[runners_file]"]')?.value.trim();
+            const gpxFile = row.querySelector('select[name*="[gpx_file]"]')?.value.trim();
+
+            // Extract row number from row ID (e.g., "event-row-1" -> 1)
+            const rowId = row.id;
+            const rowNum = rowId ? parseInt(rowId.replace('event-row-', '')) : 0;
+
+            if (!day) {
+                showFieldError(`event-day-${rowNum}`, 'Day is required');
+                isValid = false;
+            }
+            if (!name) {
+                showFieldError(`event-name-${rowNum}`, 'Event name is required');
+                isValid = false;
+            }
+            if (!startTime) {
+                showFieldError(`event-start-time-${rowNum}`, 'Start time is required');
+                isValid = false;
+            } else {
+                const startTimeMinutes = timeToMinutes(startTime);
+                if (startTimeMinutes === null) {
+                    showFieldError(`event-start-time-${rowNum}`, 'Start time must be in HH:MM format');
+                    isValid = false;
+                } else if (startTimeMinutes < 300 || startTimeMinutes > 1200) {
+                    showFieldError(`event-start-time-${rowNum}`, 'Start time must be between 05:00 and 20:00');
+                    isValid = false;
+                }
+            }
+            if (!duration) {
+                showFieldError(`event-duration-${rowNum}`, 'Duration is required');
+                isValid = false;
+            } else {
+                const durationNum = parseInt(duration);
+                if (durationNum < 1 || durationNum > 500) {
+                    showFieldError(`event-duration-${rowNum}`, 'Duration must be between 1 and 500 minutes');
+                    isValid = false;
+                }
+            }
+            if (!runnersFile) {
+                showFieldError(`event-runners-file-${rowNum}`, 'Runners file is required');
+                isValid = false;
+            }
+            if (!gpxFile) {
+                showFieldError(`event-gpx-file-${rowNum}`, 'GPX file is required');
+                isValid = false;
+            }
+        });
+
+        return isValid;
+    }
+
+    // Build request payload
+    function buildPayload() {
+        const description = document.getElementById('description').value.trim();
+        const segmentsFile = document.getElementById('segments_file').value.trim();
+        const flowFile = document.getElementById('flow_file').value.trim();
+        const locationsFile = document.getElementById('locations_file').value.trim();
+
+        const events = [];
+        const eventRows = document.querySelectorAll('.event-row');
+        eventRows.forEach(row => {
+            const day = row.querySelector('select[name*="[day]"]')?.value;
+            const name = row.querySelector('input[name*="[name]"]')?.value.trim();
+            const startTimeStr = row.querySelector('input[name*="[start_time]"]')?.value.trim() || '';
+            const startTime = timeToMinutes(startTimeStr) || 0; // Convert hh:mm to minutes
+            const duration = parseInt(row.querySelector('input[name*="[event_duration_minutes]"]')?.value.trim() || '0');
+            const runnersFile = row.querySelector('select[name*="[runners_file]"]')?.value.trim();
+            const gpxFile = row.querySelector('select[name*="[gpx_file]"]')?.value.trim();
+
+            events.push({
+                name: name,
+                day: day,
+                start_time: startTime,
+                event_duration_minutes: duration,
+                runners_file: runnersFile,
+                gpx_file: gpxFile
+            });
+        });
+
+        const payload = {
+            segments_file: segmentsFile,
+            flow_file: flowFile,
+            locations_file: locationsFile,
+            events: events
+        };
+
+        if (description) {
+            payload.description = description;
+        }
+
+        return payload;
+    }
+
+    // Submit form
+    async function submitForm(event) {
+        event.preventDefault();
+        
+        if (!validateForm()) {
+            return;
+        }
+
+        const submitBtn = document.getElementById('submit-btn');
+        const form = document.getElementById('analysis-form');
+        
+        // Disable form and show loading
+        submitBtn.disabled = true;
+        form.classList.add('loading');
+        submitBtn.textContent = 'Submitting...';
+        clearErrors();
+
+        const payload = buildPayload();
+
+        try {
+            const response = await fetch('/runflow/v2/analyze', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                // Handle error response
+                const errorBanner = document.getElementById('error-banner');
+                const errorMessage = document.getElementById('error-message');
+                errorMessage.textContent = data.error || `HTTP ${response.status}: ${response.statusText}`;
+                errorBanner.style.display = 'block';
+                errorBanner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } else {
+                // Success - show confirmation and fetch analysis.json
+                const successBanner = document.getElementById('success-banner');
+                const successMessage = document.getElementById('success-message');
+                successMessage.textContent = `Analysis submitted successfully. Run ID: ${data.run_id}. Estimated completion: 3-4 minutes.`;
+                successBanner.style.display = 'block';
+                successBanner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+                // Fetch and display analysis.json
+                await displayAnalysisJson(data.run_id);
+            }
+        } catch (error) {
+            const errorBanner = document.getElementById('error-banner');
+            const errorMessage = document.getElementById('error-message');
+            errorMessage.textContent = `Error submitting analysis: ${error.message}`;
+            errorBanner.style.display = 'block';
+            errorBanner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } finally {
+            // Re-enable form
+            submitBtn.disabled = false;
+            form.classList.remove('loading');
+            submitBtn.textContent = 'Submit';
+        }
+    }
+
+    // Fetch and display analysis.json
+    async function displayAnalysisJson(runId) {
+        try {
+            // Construct path to analysis.json
+            const response = await fetch(`/api/analysis/${runId}/config`);
+            
+            if (!response.ok) {
+                throw new Error(`Failed to fetch analysis.json: ${response.statusText}`);
+            }
+
+            const analysisJson = await response.json();
+            
+            // Display run_id
+            document.getElementById('response-run-id').textContent = runId;
+            
+            // Pretty-print JSON
+            const jsonDisplay = document.getElementById('analysis-json-display');
+            jsonDisplay.querySelector('code').textContent = JSON.stringify(analysisJson, null, 2);
+            
+            // Show response view
+            document.getElementById('response-view').style.display = 'block';
+            document.getElementById('response-view').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } catch (error) {
+            console.error('Error fetching analysis.json:', error);
+            // Still show success, but note that analysis.json couldn't be loaded
+            const errorBanner = document.getElementById('error-banner');
+            const errorMessage = document.getElementById('error-message');
+            errorMessage.textContent = `Analysis submitted successfully, but could not load analysis.json: ${error.message}`;
+            errorBanner.style.display = 'block';
+        }
+    }
+
+    // Cancel button
+    document.getElementById('cancel-btn').addEventListener('click', function() {
+        if (confirm('Clear all form data?')) {
+            document.getElementById('analysis-form').reset();
+            document.getElementById('events-container').innerHTML = '';
+            eventRowCount = 0;
+            initForm();
+            clearErrors();
+            document.getElementById('success-banner').style.display = 'none';
+            document.getElementById('response-view').style.display = 'none';
+        }
+    });
+
+    // Form submit handler (for Enter key submissions)
+    document.getElementById('analysis-form').addEventListener('submit', function(event) {
+        event.preventDefault();
+        if (!document.getElementById('submit-btn').disabled) {
+            submitForm(event);
+        }
+    });
+
+    // Submit button click handler (manual submission since button type is now 'button')
+    document.getElementById('submit-btn').addEventListener('click', function(event) {
+        event.preventDefault();
+        if (!this.disabled) {
+            submitForm(event);
+        }
+    });
+
+    // Initialize form on page load
+    initForm();
+})();
+</script>
+{% endblock %}
+
