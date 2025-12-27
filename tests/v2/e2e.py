@@ -38,7 +38,11 @@ class TestV2E2EScenarios:
     """E2E tests for v2 analysis scenarios."""
     
     def _make_analyze_request(self, base_url: str, payload: Dict[str, Any], timeout: int = None) -> Dict[str, Any]:
-        """Make POST request to /runflow/v2/analyze and return response."""
+        """Make POST request to /runflow/v2/analyze and return response.
+        
+        Issue #554: API now returns immediately and runs analysis in background.
+        This method only returns the immediate response with run_id.
+        """
         if timeout is None:
             timeout = TIMEOUT
         response = requests.post(
@@ -55,6 +59,55 @@ class TestV2E2EScenarios:
         assert data["status"] == "success", f"Analysis failed: {data}"
         
         return data
+    
+    def _wait_for_analysis_completion(self, run_id: str, days: List[str], max_wait_seconds: int = 900) -> None:
+        """Wait for background analysis to complete by polling for metadata.json files.
+        
+        Issue #554: After API returns immediately, we need to wait for background analysis.
+        
+        Args:
+            run_id: Run ID to wait for
+            days: List of day codes (e.g., ["sat", "sun"])
+            max_wait_seconds: Maximum time to wait (default 15 minutes)
+        """
+        run_dir = self._get_run_directory(run_id)
+        start_time = time.time()
+        poll_interval = 2  # Check every 2 seconds
+        last_log_time = start_time
+        
+        while time.time() - start_time < max_wait_seconds:
+            # Check if all day metadata.json files exist (indicates completion)
+            all_complete = True
+            for day in days:
+                metadata_path = run_dir / day / "metadata.json"
+                if not metadata_path.exists():
+                    all_complete = False
+                    break
+            
+            if all_complete:
+                elapsed = time.time() - start_time
+                print(f"✅ Analysis completed in {elapsed:.1f}s")
+                return
+            
+            # Log progress every 30 seconds
+            if time.time() - last_log_time >= 30:
+                elapsed = time.time() - start_time
+                print(f"⏳ Waiting for analysis to complete... ({elapsed:.0f}s elapsed)")
+                last_log_time = time.time()
+            
+            time.sleep(poll_interval)
+        
+        # Timeout - check what's missing
+        missing = []
+        for day in days:
+            metadata_path = run_dir / day / "metadata.json"
+            if not metadata_path.exists():
+                missing.append(f"{day}/metadata.json")
+        
+        raise TimeoutError(
+            f"Analysis did not complete within {max_wait_seconds}s. "
+            f"Missing metadata files: {missing}"
+        )
     
     def test_debug_ping(self, base_url, wait_for_server):
         """Debug test to verify coverage instrumentation is working.
@@ -294,9 +347,13 @@ class TestV2E2EScenarios:
             ]
         }
         
-        # Make API request
-        response_data = self._make_analyze_request(base_url, payload)
+        # Make API request (Issue #554: returns immediately, analysis runs in background)
+        response_data = self._make_analyze_request(base_url, payload, timeout=60)
         run_id = response_data["run_id"]
+        days = response_data.get("days", ["sat"])
+        
+        # Wait for background analysis to complete (Issue #554)
+        self._wait_for_analysis_completion(run_id, days, max_wait_seconds=600)
         
         # Verify outputs exist
         outputs = self._verify_outputs_exist(run_id, "sat", "saturday_only")
@@ -334,9 +391,13 @@ class TestV2E2EScenarios:
             ]
         }
         
-        # Make API request
-        response_data = self._make_analyze_request(base_url, payload)
+        # Make API request (Issue #554: returns immediately, analysis runs in background)
+        response_data = self._make_analyze_request(base_url, payload, timeout=60)
         run_id = response_data["run_id"]
+        days = response_data.get("days", ["sun"])
+        
+        # Wait for background analysis to complete (Issue #554)
+        self._wait_for_analysis_completion(run_id, days, max_wait_seconds=600)
         
         # Verify outputs exist
         outputs = self._verify_outputs_exist(run_id, "sun", "sunday_only")
@@ -375,9 +436,13 @@ class TestV2E2EScenarios:
             ]
         }
         
-        # Make API request (use longer timeout for multi-day scenario with 5 events)
-        response_data = self._make_analyze_request(base_url, payload, timeout=900)  # 15 minutes
+        # Make API request (Issue #554: returns immediately, analysis runs in background)
+        response_data = self._make_analyze_request(base_url, payload, timeout=60)  # Short timeout for API response
         run_id = response_data["run_id"]
+        days = response_data.get("days", ["sat", "sun"])
+        
+        # Wait for background analysis to complete (Issue #554)
+        self._wait_for_analysis_completion(run_id, days, max_wait_seconds=900)  # 15 minutes max wait
         
         # Verify outputs exist for both days
         sat_outputs = self._verify_outputs_exist(run_id, "sat", "sat_sun")
@@ -413,9 +478,13 @@ class TestV2E2EScenarios:
             ]
         }
         
-        # Make API request (use longer timeout for multi-day scenario with 5 events)
-        response_data = self._make_analyze_request(base_url, payload, timeout=900)  # 15 minutes
+        # Make API request (Issue #554: returns immediately, analysis runs in background)
+        response_data = self._make_analyze_request(base_url, payload, timeout=60)
         run_id = response_data["run_id"]
+        days = response_data.get("days", ["sat", "sun"])
+        
+        # Wait for background analysis to complete (Issue #554)
+        self._wait_for_analysis_completion(run_id, days, max_wait_seconds=900)
         
         # Verify outputs exist for both days
         sat_outputs = self._verify_outputs_exist(run_id, "sat", "mixed_day")
@@ -458,8 +527,14 @@ class TestV2E2EScenarios:
             ]
         }
         
-        response_data = self._make_analyze_request(base_url, payload)
+        # Make API request (Issue #554: returns immediately, analysis runs in background)
+        response_data = self._make_analyze_request(base_url, payload, timeout=60)
         run_id = response_data["run_id"]
+        days = response_data.get("days", ["sat", "sun"])
+        
+        # Wait for background analysis to complete (Issue #554)
+        self._wait_for_analysis_completion(run_id, days, max_wait_seconds=600)
+        
         run_dir = self._get_run_directory(run_id)
         
         # Check bins.parquet for cross-day contamination
@@ -521,8 +596,14 @@ class TestV2E2EScenarios:
             ]
         }
         
-        response_data = self._make_analyze_request(base_url, payload)
+        # Make API request (Issue #554: returns immediately, analysis runs in background)
+        response_data = self._make_analyze_request(base_url, payload, timeout=60)
         run_id = response_data["run_id"]
+        days = response_data.get("days", ["sun"])
+        
+        # Wait for background analysis to complete (Issue #554)
+        self._wait_for_analysis_completion(run_id, days, max_wait_seconds=600)
+        
         run_dir = self._get_run_directory(run_id)
         
         # Verify bins contain multiple events (same-day events share bins)
