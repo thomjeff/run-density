@@ -481,12 +481,23 @@
         const eventRows = document.querySelectorAll('.event-row');
         if (eventRows.length > 0) {
             eventRows.forEach(row => {
-                const day = row.querySelector('select[name*="[day]"]').value;
-                const name = row.querySelector('input[name*="[name]"]').value.trim();
-                const startTime = row.querySelector('input[name*="[start_time]"]').value.trim();
-                const duration = row.querySelector('input[name*="[event_duration_minutes]"]').value.trim();
-                const runnersFile = row.querySelector('input[name*="[runners_file]"]').value.trim();
-                const gpxFile = row.querySelector('input[name*="[gpx_file]"]').value.trim();
+                const daySelect = row.querySelector('select[name*="[day]"]');
+                const nameInput = row.querySelector('input[name*="[name]"]');
+                const startTimeInput = row.querySelector('input[name*="[start_time]"]');
+                const durationInput = row.querySelector('input[name*="[event_duration_minutes]"]');
+                const runnersFileSelect = row.querySelector('select[name*="[runners_file]"]');
+                const gpxFileSelect = row.querySelector('select[name*="[gpx_file]"]');
+                
+                if (!daySelect || !nameInput || !startTimeInput || !durationInput || !runnersFileSelect || !gpxFileSelect) {
+                    return; // Skip if any required element is missing
+                }
+                
+                const day = daySelect.value;
+                const name = nameInput.value.trim();
+                const startTime = startTimeInput.value.trim();
+                const duration = durationInput.value.trim();
+                const runnersFile = runnersFileSelect.value.trim();
+                const gpxFile = gpxFileSelect.value.trim();
                 
                 if (day && name && startTime && duration && runnersFile && gpxFile) {
                     hasValidEvent = true;
