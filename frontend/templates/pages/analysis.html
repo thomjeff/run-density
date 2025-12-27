@@ -237,6 +237,12 @@
         flex-direction: column;
     }
 
+    /* Narrow fields for Day, Start Time, and Duration */
+    .event-field-narrow {
+        max-width: 120px;
+        min-width: 100px;
+    }
+
     .event-field label {
         margin-bottom: 0.5rem;
         font-weight: 600;
@@ -391,7 +397,7 @@
                 </div>
             </div>
             <div class="event-fields">
-                <div class="event-field">
+                <div class="event-field event-field-narrow">
                     <label for="event-day-${eventRowCount}">Day <span style="color: #e74c3c;">*</span></label>
                     <select id="event-day-${eventRowCount}" name="events[${eventRowCount}][day]" required>
                         <option value="">Select day</option>
@@ -404,13 +410,13 @@
                     <input type="text" id="event-name-${eventRowCount}" name="events[${eventRowCount}][name]" required placeholder="elite" maxlength="8">
                     <div class="field-error" id="event-name-${eventRowCount}-error" style="display: none;"></div>
                 </div>
-                <div class="event-field">
+                <div class="event-field event-field-narrow">
                     <label for="event-start-time-${eventRowCount}">Start Time <span style="color: #e74c3c;">*</span></label>
                     <input type="number" id="event-start-time-${eventRowCount}" name="events[${eventRowCount}][start_time]" required placeholder="480" min="300" max="1200">
                     <small style="color: #7f8c8d; font-size: 0.75rem;">Minutes from midnight (300-1200)</small>
                     <div class="field-error" id="event-start-time-${eventRowCount}-error" style="display: none;"></div>
                 </div>
-                <div class="event-field">
+                <div class="event-field event-field-narrow">
                     <label for="event-duration-${eventRowCount}">Duration <span style="color: #e74c3c;">*</span></label>
                     <input type="number" id="event-duration-${eventRowCount}" name="events[${eventRowCount}][event_duration_minutes]" required placeholder="45" min="1" max="500">
                     <small style="color: #7f8c8d; font-size: 0.75rem;">Minutes (1-500)</small>
