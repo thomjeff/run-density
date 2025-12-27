@@ -391,6 +391,70 @@ async def check_session(request: Request):
     return JSONResponse(content={"authenticated": is_valid})
 
 
+@router.get("/api/data/files")
+async def get_data_files(request: Request, extension: str = None):
+    """
+    List files in the data directory, optionally filtered by extension.
+    
+    Issue #554: API endpoint to populate file dropdowns in Analysis UI.
+    
+    Args:
+        extension: Optional file extension filter (e.g., "csv", "gpx")
+                  If not provided, returns all files
+    
+    Returns:
+        JSON: List of file names matching the extension filter
+    """
+    from fastapi.responses import JSONResponse
+    from fastapi import HTTPException, Query
+    from pathlib import Path
+    import os
+    
+    require_auth(request)
+    
+    try:
+        from app.core.v2.analysis_config import get_data_directory
+        
+        data_dir = get_data_directory()
+        data_path = Path(data_dir)
+        
+        if not data_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Data directory not found: {data_dir}"
+            )
+        
+        # List all files in data directory
+        files = []
+        for file_path in data_path.iterdir():
+            if file_path.is_file():
+                file_ext = file_path.suffix.lower()
+                file_name = file_path.name
+                
+                # Filter by extension if provided
+                if extension:
+                    # Remove leading dot if present
+                    ext_filter = extension.lower().lstrip('.')
+                    if file_ext == f'.{ext_filter}':
+                        files.append(file_name)
+                else:
+                    files.append(file_name)
+        
+        # Sort files alphabetically
+        files.sort()
+        
+        return JSONResponse(content={"files": files})
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing data files: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to list data files: {str(e)}"
+        )
+
+
 @router.get("/api/analysis/{run_id}/config")
 async def get_analysis_config(request: Request, run_id: str):
     """
