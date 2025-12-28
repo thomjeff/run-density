@@ -380,6 +380,9 @@
                 a.setAttribute("href", newHref);
             });
         }
+        
+        // Make updateNavLinks globally accessible for dashboard.html
+        window.updateNavLinks = updateNavLinks;
 
         function storeSelection(day, runId) {
             if (day) localStorage.setItem("selected_day", day);
@@ -403,34 +406,28 @@
             let availableDays = [];
 
             try {
-                // Issue #538: Always fetch latest run_id without passing current run_id
-                // This ensures we get the actual latest run_id from the server
+                // Issue #565: If run_id is in URL, pass it to API to get correct available_days for that run
+                // Otherwise, get latest run_id from API
                 let url = "/api/dashboard/summary";
                 const qp = [];
-                // Only pass day if we have it, but never pass run_id to get latest
+                
+                if (hasUrlRun) {
+                    // URL has run_id - pass it to API to get available_days for that specific run
+                    qp.push(`run_id=${encodeURIComponent(urlRunRaw)}`);
+                    runId = urlRunRaw;
+                }
+                // Only pass day if we have it
                 if (selectedDay) qp.push(`day=${encodeURIComponent(selectedDay)}`);
                 if (qp.length) url += `?${qp.join("&")}`;
 
                 const resp = await fetch(url, { cache: "no-store" });
                 const data = await resp.json();
 
-                // Issue #538: Always use latest run_id from API, even if URL has old one
-                const latestRunId = data?.run_id;
-                if (latestRunId) {
-                    // If URL has a different (old) run_id, update it
-                    if (hasUrlRun && urlRunRaw !== latestRunId) {
-                        // Update URL to use latest run_id
-                        const newParams = new URLSearchParams(window.location.search);
-                        newParams.set("run_id", latestRunId);
-                        const newUrl = window.location.pathname + "?" + newParams.toString();
-                        window.history.replaceState({}, "", newUrl);
+                // If no run_id in URL, use latest from API
+                if (!hasUrlRun) {
+                    const latestRunId = data?.run_id;
+                    if (latestRunId) {
                         runId = latestRunId;
-                    } else if (!hasUrlRun) {
-                        // No run_id in URL, use latest from API
-                        runId = latestRunId;
-                    } else {
-                        // URL run_id matches latest, keep it
-                        runId = urlRunRaw;
                     }
                 }
 
@@ -446,11 +443,31 @@
 
             const DEFAULT_ORDER = ["fri","sat","sun","mon"];
 
-            // Ensure the selector never blanks: include selectedDay even if API returned none
+            // Issue #565: If run_id is set, only use available_days from API (don't add invalid days)
+            // If no run_id, fallback to defaults
             if (!availableDays.length) {
-                availableDays = selectedDay ? [selectedDay] : DEFAULT_ORDER;
+                if (runId) {
+                    // Run_id exists but no available_days - this shouldn't happen, but handle gracefully
+                    availableDays = selectedDay ? [selectedDay] : [];
+                } else {
+                    // No run_id - use defaults
+                    availableDays = selectedDay ? [selectedDay] : DEFAULT_ORDER;
+                }
             } else if (selectedDay && !availableDays.includes(selectedDay)) {
-                availableDays = [selectedDay, ...availableDays];
+                // URL has a day that's not available for this run_id - remove it and use first available
+                selectedDay = availableDays[0];
+                // Update URL to remove invalid day or set to first available
+                const params = new URLSearchParams(window.location.search);
+                if (selectedDay) {
+                    params.set("day", selectedDay);
+                } else {
+                    params.delete("day");
+                }
+                if (runId) params.set("run_id", runId);
+                const newUrl = window.location.pathname + (params.toString() ? "?" + params.toString() : "");
+                if (newUrl !== window.location.pathname + window.location.search) {
+                    window.history.replaceState({}, "", newUrl);
+                }
             }
 
             select.innerHTML = "";
@@ -461,8 +478,21 @@
                 select.appendChild(opt);
             });
 
-            if (selectedDay) {
+            // Issue #565: Only set selected day if it's in availableDays for this run_id
+            if (selectedDay && availableDays.includes(selectedDay)) {
                 select.value = selectedDay;
+            } else if (availableDays.length > 0) {
+                // If selectedDay is not available, use first available day
+                selectedDay = availableDays[0];
+                select.value = selectedDay;
+                // Update URL if day changed
+                const params = new URLSearchParams(window.location.search);
+                params.set("day", selectedDay);
+                if (runId) params.set("run_id", runId);
+                const newUrl = window.location.pathname + (params.toString() ? "?" + params.toString() : "");
+                if (newUrl !== window.location.pathname + window.location.search) {
+                    window.history.replaceState({}, "", newUrl);
+                }
             }
 
             // Persist canonical state and update nav links

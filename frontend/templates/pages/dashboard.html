@@ -73,71 +73,6 @@
 </div>
 
 
-<!-- Model Inputs Section -->
-<div class="card">
-    <h3 style="margin-bottom: 1.5rem; color: #2c3e50;">Model Inputs</h3>
-    <div id="events-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-        <!-- Dynamic event tiles injected via JS -->
-    </div>
-    <div style="margin-top: 1rem;">
-        <div id="metric-segments" class="kpi">
-            <div class="kpi-value">—</div>
-            <div class="kpi-label">Course Segments</div>
-        </div>
-    </div>
-</div>
-
-<!-- Model Outputs Section -->
-<div class="card">
-    <h3 style="margin-bottom: 1.5rem; color: #2c3e50;">Model Outputs</h3>
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem;">
-        
-        <div id="status-banner" class="kpi" style="display: none;">
-            <div id="status-icon" class="kpi-value" style="font-size: 1.5rem;">⚠️</div>
-            <div id="status-title" class="kpi-label">Action Required</div>
-            <div id="status-message" class="kpi-label">HIGH DENSITY OR FLAGGED SEGMENTS DETECTED</div>
-        </div>
-        
-        <div class="kpi">
-            <div id="metric-total-runners" class="kpi-value">—</div>
-            <div class="kpi-label">Total Participants</div>
-        </div>
-        
-        <div class="kpi">
-            <div id="kpi-peak-density" class="kpi-value">—</div>
-            <div class="kpi-label">Peak Density (p/m²)</div>
-            <div id="kpi-peak-density-los" style="margin-top: 0.25rem;">
-                <span class="badge-los badge-A">—</span>
-            </div>
-        </div>
-        
-        <div class="kpi">
-            <div id="kpi-peak-rate" class="kpi-value">—</div>
-            <div class="kpi-label">Peak Rate (p/s)</div>
-        </div>
-        
-        <div class="kpi">
-            <div id="kpi-flagged-segments" class="kpi-value">—</div>
-            <div class="kpi-label">Segments with Flags</div>
-        </div>
-        
-        <div class="kpi">
-            <div id="kpi-flagged-bins" class="kpi-value">—</div>
-            <div class="kpi-label">Flagged Bins</div>
-        </div>
-        
-        <div class="kpi">
-            <div id="kpi-overtaking" class="kpi-value">—</div>
-            <div class="kpi-label">Overtaking Segments</div>
-        </div>
-        
-        <div class="kpi">
-            <div id="kpi-copresence" class="kpi-value">—</div>
-            <div class="kpi-label">Co-presence Segments</div>
-        </div>
-        
-    </div>
-</div>
 
 <!-- Last Updated -->
 <div style="text-align: center; margin-top: 2rem; color: #7f8c8d; font-size: 0.875rem;">
@@ -190,9 +125,7 @@
     .badge-F { background-color: #34495e; }
     
     /* Issue #565: Run History Table Styles */
-    #run-history-table {
-        font-size: 0.875rem;
-    }
+    /* Font size matches other tables (default from base.html) */
     
     #run-history-table tbody tr:hover {
         background: #f8f9fa !important;
@@ -409,28 +342,63 @@
         selectedRunId = runId;
         localStorage.setItem('selected_run_id', runId);
         
-        // Update URL
-        const url = new URL(window.location);
-        url.searchParams.set('run_id', runId);
-        window.history.pushState({}, '', url);
+        // Load run detail first to get available days for this run
+        loadRunDetail(runId).then((data) => {
+            // After run detail loads, update URL with valid day
+            const currentDay = currentDaySelection();
+            const availableDays = data.days || [];
+            
+            // If current day is not available for this run, use first available day
+            let dayToUse = currentDay;
+            if (currentDay && !availableDays.includes(currentDay)) {
+                dayToUse = availableDays.length > 0 ? availableDays[0] : null;
+            } else if (!currentDay && availableDays.length > 0) {
+                dayToUse = availableDays[0];
+            }
+            
+            // Update URL
+            const url = new URL(window.location);
+            url.searchParams.set('run_id', runId);
+            if (dayToUse) {
+                url.searchParams.set('day', dayToUse);
+            } else {
+                url.searchParams.delete('day');
+            }
+            window.history.pushState({}, '', url);
+            
+            // Update base.html's global runflowDay object to sync navigation links
+            if (window.runflowDay) {
+                window.runflowDay.run_id = runId;
+                window.runflowDay.available = availableDays;
+                if (dayToUse) {
+                    window.runflowDay.selected = dayToUse;
+                }
+            } else {
+                window.runflowDay = { run_id: runId, selected: dayToUse, available: availableDays };
+            }
+            
+            // Update navigation links in base.html (globally accessible function)
+            if (window.updateNavLinks) {
+                window.updateNavLinks(dayToUse, runId);
+            }
+        });
         
         // Update table highlighting
         renderRunHistoryTable();
-        
-        // Load run detail
-        loadRunDetail(runId);
     }
     
     function loadRunDetail(runId) {
-        fetch(`/api/runs/${runId}/summary`)
+        return fetch(`/api/runs/${runId}/summary`)
             .then(response => response.json())
             .then(data => {
                 renderRunDetailView(data);
                 updateDaySelector(data.days);
+                return data; // Return data for chaining
             })
             .catch(error => {
                 console.error('Error loading run detail:', error);
                 document.getElementById('run-detail-section').style.display = 'none';
+                throw error;
             });
     }
     
@@ -466,7 +434,7 @@
             { key: 'participants', label: 'Total Participants' },
             { key: 'events', label: 'Events', format: (val) => Array.isArray(val) ? val.join(', ') : val },
             { key: 'segments_with_flags', label: 'Segments with Flags' },
-            { key: 'peak_density', label: 'Peak Density (P/m²)', format: (val, m) => `${val} (${m.peak_density_los || ''})` },
+            { key: 'peak_density', label: 'Peak Density (P/m²)' },
             { key: 'peak_rate', label: 'Peak Rate (P/s)' },
             { key: 'overtaking_segments', label: 'Overtaking Segments' },
             { key: 'co_presence_segments', label: 'Co-Presence Segments' },
@@ -476,7 +444,7 @@
         
         metricRows.forEach(row => {
             html += '<tr>';
-            html += `<td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6; font-weight: 600;">${row.label}</td>`;
+            html += `<td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6;">${row.label}</td>`;
             days.forEach(day => {
                 const dayMetrics = metrics[day] || {};
                 let value = dayMetrics[row.key];
@@ -485,7 +453,16 @@
                 } else if (typeof value === 'number') {
                     value = value.toLocaleString();
                 }
-                html += `<td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6; text-align: center;">${value || '—'}</td>`;
+                
+                // Special handling for Peak Density with LOS badge
+                if (row.key === 'peak_density' && dayMetrics.peak_density_los) {
+                    const los = dayMetrics.peak_density_los;
+                    html += `<td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6; text-align: center;">
+                        ${value || '—'} <span class="badge-los badge-${los}">${los}</span>
+                    </td>`;
+                } else {
+                    html += `<td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6; text-align: center;">${value || '—'}</td>`;
+                }
             });
             html += '</tr>';
         });
