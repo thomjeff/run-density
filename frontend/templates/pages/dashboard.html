@@ -9,6 +9,58 @@
     </div>
 </div>
 
+<!-- Run History Table Section (Issue #565) -->
+<div class="card" style="margin-bottom: 2rem;">
+    <h3 style="margin-bottom: 1rem; color: #2c3e50;">Run History</h3>
+    
+    <!-- Search/Filter -->
+    <div style="margin-bottom: 1rem;">
+        <input type="text" id="run-search" placeholder="Search by description, run ID, or date..." 
+               style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.875rem;">
+    </div>
+    
+    <!-- Table -->
+    <div style="overflow-x: auto;">
+        <table id="run-history-table" style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+                    <th style="padding: 0.75rem; text-align: left; cursor: pointer; user-select: none;">
+                        Run ID <span class="sort-indicator">↕</span>
+                    </th>
+                    <th style="padding: 0.75rem; text-align: left; cursor: pointer; user-select: none;">
+                        Description <span class="sort-indicator">↕</span>
+                    </th>
+                    <th style="padding: 0.75rem; text-align: left; cursor: pointer; user-select: none;">
+                        Date/Time <span class="sort-indicator">↕</span>
+                    </th>
+                    <th style="padding: 0.75rem; text-align: center; cursor: pointer; user-select: none;">
+                        Days <span class="sort-indicator">↕</span>
+                    </th>
+                    <th style="padding: 0.75rem; text-align: center; cursor: pointer; user-select: none;">
+                        Events <span class="sort-indicator">↕</span>
+                    </th>
+                    <th style="padding: 0.75rem; text-align: center; cursor: pointer; user-select: none;">
+                        RES <span class="sort-indicator">↕</span>
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="run-history-tbody">
+                <tr>
+                    <td colspan="6" style="padding: 2rem; text-align: center; color: #6c757d;">Loading runs...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Run Detail View Section (Issue #565) -->
+<div id="run-detail-section" class="card" style="display: none; margin-bottom: 2rem;">
+    <h3 style="margin-bottom: 1rem; color: #2c3e50;">Run Detail</h3>
+    <div id="run-detail-content">
+        <!-- Will be populated by JavaScript -->
+    </div>
+</div>
+
 <!-- Data Missing Banner -->
 <div id="data-missing-banner" class="card" style="display: none; margin-bottom: 1.5rem;">
     <div style="display: flex; align-items: center; gap: 0.75rem; padding: 1rem; border-radius: 4px; background: #fff3cd; border-left: 4px solid #ffc107;">
@@ -136,19 +188,359 @@
     .badge-D { background-color: #e74c3c; }
     .badge-E { background-color: #9b59b6; }
     .badge-F { background-color: #34495e; }
+    
+    /* Issue #565: Run History Table Styles */
+    #run-history-table {
+        font-size: 0.875rem;
+    }
+    
+    #run-history-table tbody tr:hover {
+        background: #f8f9fa !important;
+    }
+    
+    #run-history-table thead th {
+        position: relative;
+    }
+    
+    #run-history-table .sort-indicator {
+        margin-left: 0.5rem;
+        opacity: 0.5;
+        font-size: 0.75rem;
+    }
+    
+    #run-history-table thead th:hover {
+        background: #e9ecef;
+    }
+    
+    #run-search {
+        font-size: 0.875rem;
+    }
+    
+    #run-search:focus {
+        outline: none;
+        border-color: #3498db;
+        box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+    }
 </style>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
+    // Issue #565: Enhanced Dashboard
+    let runsList = [];
+    let selectedRunId = null;
+    let sortColumn = 'created_at';
+    let sortDirection = 'desc';
+    let filteredRuns = [];
+    
     // Dashboard data binding
     let dashboardData = null;
     
     // Initialize dashboard when page loads
     document.addEventListener('DOMContentLoaded', function() {
-        loadDashboardData();
+        // Issue #565: Load runs list first, then dashboard data
+        loadRunsList();
         
+        // Get run_id from URL params
+        const params = new URLSearchParams(window.location.search);
+        const urlRunId = params.get('run_id');
+        if (urlRunId) {
+            selectedRunId = urlRunId;
+            localStorage.setItem('selected_run_id', urlRunId);
+            loadRunDetail(urlRunId);
+        } else {
+            // Check localStorage
+            const storedRunId = localStorage.getItem('selected_run_id');
+            if (storedRunId) {
+                selectedRunId = storedRunId;
+                loadRunDetail(storedRunId);
+            } else {
+                // Auto-select most recent run after runs list loads
+                // (handled in loadRunsList callback)
+            }
+        }
+        
+        // Setup search
+        const searchInput = document.getElementById('run-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', handleSearch);
+        }
+        
+        // Setup table sorting
+        setupTableSorting();
     });
+    
+    // Issue #565: Run History Table functions
+    function loadRunsList() {
+        fetch('/api/runs/list')
+            .then(response => response.json())
+            .then(data => {
+                runsList = data.runs || [];
+                filteredRuns = [...runsList];
+                renderRunHistoryTable();
+                
+                // Auto-select most recent run if none selected
+                if (!selectedRunId && runsList.length > 0) {
+                    selectRun(runsList[0].run_id);
+                }
+            })
+            .catch(error => {
+                console.error('Error loading runs list:', error);
+                document.getElementById('run-history-tbody').innerHTML = 
+                    '<tr><td colspan="6" style="padding: 2rem; text-align: center; color: #e74c3c;">Error loading runs</td></tr>';
+            });
+    }
+    
+    function renderRunHistoryTable() {
+        const tbody = document.getElementById('run-history-tbody');
+        if (!tbody) return;
+        
+        if (filteredRuns.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="padding: 2rem; text-align: center; color: #6c757d;">No runs found</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = filteredRuns.map(run => {
+            const runIdShort = run.run_id.substring(0, 6) + '...';
+            const description = (run.description || '').substring(0, 25) + (run.description && run.description.length > 25 ? '...' : '');
+            const days = run.event_summary?.days || 0;
+            const events = run.event_summary?.events || 0;
+            const isSelected = run.run_id === selectedRunId;
+            const rowStyle = isSelected ? 'background: #e3f2fd; font-weight: 600;' : '';
+            
+            return `
+                <tr data-run-id="${run.run_id}" style="${rowStyle} cursor: pointer;" onclick="selectRun('${run.run_id}')">
+                    <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6;" title="${run.run_id}">${runIdShort}</td>
+                    <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6;" title="${run.description || ''}">${description}</td>
+                    <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6;">${run.formatted_date || run.created_at}</td>
+                    <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6; text-align: center;">${days}</td>
+                    <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6; text-align: center;">${events}</td>
+                    <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6; text-align: center;">—</td>
+                </tr>
+            `;
+        }).join('');
+    }
+    
+    function handleSearch(event) {
+        const query = event.target.value.toLowerCase();
+        if (!query) {
+            filteredRuns = [...runsList];
+        } else {
+            filteredRuns = runsList.filter(run => {
+                const desc = (run.description || '').toLowerCase();
+                const runId = run.run_id.toLowerCase();
+                const date = (run.formatted_date || run.created_at || '').toLowerCase();
+                return desc.includes(query) || runId.includes(query) || date.includes(query);
+            });
+        }
+        renderRunHistoryTable();
+    }
+    
+    function setupTableSorting() {
+        const headers = document.querySelectorAll('#run-history-table thead th');
+        headers.forEach((header, index) => {
+            header.addEventListener('click', () => {
+                const columns = ['run_id', 'description', 'created_at', 'days', 'events', 'res'];
+                if (index < columns.length) {
+                    if (sortColumn === columns[index]) {
+                        sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+                    } else {
+                        sortColumn = columns[index];
+                        sortDirection = 'desc';
+                    }
+                    sortRuns();
+                    updateSortIndicators();
+                    renderRunHistoryTable();
+                }
+            });
+        });
+    }
+    
+    function sortRuns() {
+        filteredRuns.sort((a, b) => {
+            let aVal, bVal;
+            switch (sortColumn) {
+                case 'run_id':
+                    aVal = a.run_id;
+                    bVal = b.run_id;
+                    break;
+                case 'description':
+                    aVal = (a.description || '').toLowerCase();
+                    bVal = (b.description || '').toLowerCase();
+                    break;
+                case 'created_at':
+                    aVal = new Date(a.created_at);
+                    bVal = new Date(b.created_at);
+                    break;
+                case 'days':
+                    aVal = a.event_summary?.days || 0;
+                    bVal = b.event_summary?.days || 0;
+                    break;
+                case 'events':
+                    aVal = a.event_summary?.events || 0;
+                    bVal = b.event_summary?.events || 0;
+                    break;
+                default:
+                    return 0;
+            }
+            
+            if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+            if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+            return 0;
+        });
+    }
+    
+    function updateSortIndicators() {
+        const headers = document.querySelectorAll('#run-history-table thead th');
+        const columns = ['run_id', 'description', 'created_at', 'days', 'events', 'res'];
+        headers.forEach((header, index) => {
+            const indicator = header.querySelector('.sort-indicator');
+            if (indicator) {
+                if (columns[index] === sortColumn) {
+                    indicator.textContent = sortDirection === 'asc' ? '↑' : '↓';
+                } else {
+                    indicator.textContent = '↕';
+                }
+            }
+        });
+    }
+    
+    function selectRun(runId) {
+        selectedRunId = runId;
+        localStorage.setItem('selected_run_id', runId);
+        
+        // Update URL
+        const url = new URL(window.location);
+        url.searchParams.set('run_id', runId);
+        window.history.pushState({}, '', url);
+        
+        // Update table highlighting
+        renderRunHistoryTable();
+        
+        // Load run detail
+        loadRunDetail(runId);
+    }
+    
+    function loadRunDetail(runId) {
+        fetch(`/api/runs/${runId}/summary`)
+            .then(response => response.json())
+            .then(data => {
+                renderRunDetailView(data);
+                updateDaySelector(data.days);
+            })
+            .catch(error => {
+                console.error('Error loading run detail:', error);
+                document.getElementById('run-detail-section').style.display = 'none';
+            });
+    }
+    
+    function renderRunDetailView(data) {
+        const section = document.getElementById('run-detail-section');
+        const content = document.getElementById('run-detail-content');
+        if (!section || !content) return;
+        
+        section.style.display = 'block';
+        
+        const days = data.days || [];
+        const metrics = data.metrics || {};
+        
+        // Build table HTML
+        let html = `
+            <div style="margin-bottom: 1rem;">
+                <strong>Run ID:</strong> ${data.run_id}<br>
+                <strong>Description:</strong> ${data.description || 'N/A'}
+            </div>
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+                            <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Metric</th>
+                            ${days.map(day => `<th style="padding: 0.75rem; text-align: center; border-bottom: 1px solid #dee2e6;">${day}</th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+        
+        // Metrics rows
+        const metricRows = [
+            { key: 'participants', label: 'Total Participants' },
+            { key: 'events', label: 'Events', format: (val) => Array.isArray(val) ? val.join(', ') : val },
+            { key: 'segments_with_flags', label: 'Segments with Flags' },
+            { key: 'peak_density', label: 'Peak Density (P/m²)', format: (val, m) => `${val} (${m.peak_density_los || ''})` },
+            { key: 'peak_rate', label: 'Peak Rate (P/s)' },
+            { key: 'overtaking_segments', label: 'Overtaking Segments' },
+            { key: 'co_presence_segments', label: 'Co-Presence Segments' },
+            { key: 'flagged_bins', label: 'Flagged Bins', format: (val) => val.toLocaleString() },
+            { key: 'operational_status', label: 'Operational Status' }
+        ];
+        
+        metricRows.forEach(row => {
+            html += '<tr>';
+            html += `<td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6; font-weight: 600;">${row.label}</td>`;
+            days.forEach(day => {
+                const dayMetrics = metrics[day] || {};
+                let value = dayMetrics[row.key];
+                if (row.format) {
+                    value = row.format(value, dayMetrics);
+                } else if (typeof value === 'number') {
+                    value = value.toLocaleString();
+                }
+                html += `<td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6; text-align: center;">${value || '—'}</td>`;
+            });
+            html += '</tr>';
+        });
+        
+        html += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+        
+        content.innerHTML = html;
+    }
+    
+    function updateDaySelector(availableDays) {
+        // Update day selector in navbar
+        const daySelector = document.getElementById('day-selector');
+        if (daySelector && availableDays && availableDays.length > 0) {
+            // Clear existing options
+            daySelector.innerHTML = '';
+            
+            // Add options for available days
+            const DAY_ORDER = ["fri", "sat", "sun", "mon"];
+            const orderedDays = availableDays.sort((a, b) => {
+                const aIdx = DAY_ORDER.indexOf(a);
+                const bIdx = DAY_ORDER.indexOf(b);
+                if (aIdx === -1 && bIdx === -1) return 0;
+                if (aIdx === -1) return 1;
+                if (bIdx === -1) return -1;
+                return aIdx - bIdx;
+            });
+            
+            orderedDays.forEach(day => {
+                const option = document.createElement('option');
+                option.value = day;
+                option.textContent = day.toUpperCase();
+                daySelector.appendChild(option);
+            });
+            
+            // Update window.runflowDay
+            if (window.runflowDay) {
+                window.runflowDay.available = availableDays;
+            } else {
+                window.runflowDay = { available: availableDays };
+            }
+            
+            // Select first day if none selected
+            const currentDay = currentDaySelection();
+            if (currentDay && availableDays.includes(currentDay)) {
+                daySelector.value = currentDay;
+            } else if (availableDays.length > 0) {
+                daySelector.value = availableDays[0];
+                localStorage.setItem('selected_day', availableDays[0]);
+            }
+        }
+    }
     
     function currentDaySelection() {
         if (window.runflowDay && window.runflowDay.selected) {

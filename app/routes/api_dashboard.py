@@ -19,6 +19,7 @@ from datetime import datetime
 from app.common.config import load_rulebook, load_reporting
 from app.utils.run_id import get_latest_run_id, resolve_selected_day
 from app.storage import create_runflow_storage
+from app.utils.metadata import get_run_index
 
 # Issue #283: Import SSOT for flagging logic parity
 from app import flagging as ssot_flagging
@@ -272,3 +273,212 @@ async def get_dashboard_summary(
             content=fallback_summary,
             headers={"Cache-Control": "public, max-age=60"}
         )
+
+
+@router.get("/api/runs/list")
+async def get_runs_list():
+    """
+    Get list of all runs from index.json with summary metrics.
+    
+    Issue #565: Returns all runs with event_summary data for Run History Table.
+    
+    Returns:
+        JSON with list of runs, each containing:
+        - run_id
+        - description (from analysis.json)
+        - created_at
+        - event_summary (days, events, events_by_day)
+        - status
+    """
+    try:
+        runs = get_run_index()
+        
+        # Load analysis.json for each run to get description
+        from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER
+        from pathlib import Path
+        
+        if Path(RUNFLOW_ROOT_CONTAINER).exists():
+            runflow_root = Path(RUNFLOW_ROOT_CONTAINER)
+        else:
+            runflow_root = Path(RUNFLOW_ROOT_LOCAL)
+        
+        runs_list = []
+        for run in runs:
+            run_id = run.get("run_id")
+            if not run_id:
+                continue
+            
+            # Load analysis.json for description
+            analysis_path = runflow_root / run_id / "analysis.json"
+            description = None
+            if analysis_path.exists():
+                try:
+                    with open(analysis_path, 'r', encoding='utf-8') as f:
+                        analysis_data = json.load(f)
+                        description = analysis_data.get("description")
+                except Exception as e:
+                    logger.warning(f"Could not load analysis.json for {run_id}: {e}")
+            
+            # Format created_at for display (MM-DD HH:MM)
+            created_at = run.get("created_at", "")
+            formatted_date = ""
+            if created_at:
+                try:
+                    from datetime import datetime
+                    dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                    formatted_date = dt.strftime("%m-%d %H:%M")
+                except Exception:
+                    formatted_date = created_at[:16] if len(created_at) > 16 else created_at
+            
+            run_entry = {
+                "run_id": run_id,
+                "description": description or f"Run {run_id[:8]}...",
+                "created_at": created_at,
+                "formatted_date": formatted_date,
+                "event_summary": run.get("event_summary", {}),
+                "status": run.get("status", "complete")
+            }
+            runs_list.append(run_entry)
+        
+        return JSONResponse(
+            content={"runs": runs_list},
+            headers={"Cache-Control": "public, max-age=60"}
+        )
+        
+    except Exception as e:
+        logger.error(f"Error getting runs list: {e}")
+        return JSONResponse(
+            content={"runs": []},
+            headers={"Cache-Control": "public, max-age=60"}
+        )
+
+
+@router.get("/api/runs/{run_id}/summary")
+async def get_run_summary(run_id: str):
+    """
+    Get detailed summary for specific run with metrics per day.
+    
+    Issue #565: Returns metrics for each day in column-per-day format for Run Detail View.
+    
+    Returns:
+        JSON with run_id, description, days, and metrics per day:
+        - participants
+        - events (list)
+        - segments_with_flags (X / Y format)
+        - peak_density (with LOS)
+        - peak_rate
+        - overtaking_segments
+        - co_presence_segments
+        - flagged_bins
+        - operational_status
+    """
+    try:
+        from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER
+        from pathlib import Path
+        
+        if Path(RUNFLOW_ROOT_CONTAINER).exists():
+            runflow_root = Path(RUNFLOW_ROOT_CONTAINER)
+        else:
+            runflow_root = Path(RUNFLOW_ROOT_LOCAL)
+        
+        # Load analysis.json for description and days
+        analysis_path = runflow_root / run_id / "analysis.json"
+        if not analysis_path.exists():
+            raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+        
+        with open(analysis_path, 'r', encoding='utf-8') as f:
+            analysis_data = json.load(f)
+        
+        description = analysis_data.get("description", f"Run {run_id[:8]}...")
+        event_summary = analysis_data.get("event_summary", {})
+        days = event_summary.get("days", [])
+        events_by_day = event_summary.get("events_by_day", {})
+        
+        # Get list of days from events_by_day keys
+        day_list = sorted(events_by_day.keys()) if events_by_day else []
+        
+        # Load metrics for each day
+        storage = create_runflow_storage(run_id)
+        metrics_by_day = {}
+        
+        for day in day_list:
+            try:
+                # Load day metadata
+                day_meta_path = storage._full_local(f"{day}/metadata.json")
+                if not day_meta_path.exists():
+                    continue
+                
+                day_meta = json.loads(day_meta_path.read_text())
+                
+                # Get events for this day
+                events_obj = day_meta.get("events", {}) if isinstance(day_meta.get("events"), dict) else {}
+                event_names = [ev_name for ev_name in events_obj.keys()]
+                total_participants = sum(int(ev_info.get("participants", 0)) for ev_info in events_obj.values() if isinstance(ev_info, dict))
+                
+                # Load segment metrics
+                segment_metrics = _load_ui_artifact_safe(storage, f"{day}/ui/segment_metrics.json", []) or {}
+                summary_fields = ['peak_density', 'peak_rate', 'segments_with_flags', 'flagged_bins', 
+                                 'overtaking_segments', 'co_presence_segments']
+                segments_overtaking = segment_metrics.get("overtaking_segments", 0)
+                segments_copresence = segment_metrics.get("co_presence_segments", 0)
+                
+                # Filter segment-level data
+                segment_level_data = {k: v for k, v in segment_metrics.items() if k not in summary_fields}
+                segments_total = len(segment_level_data)
+                
+                # Calculate peak density and rate
+                peak_density, peak_rate = _calculate_peak_metrics(segment_level_data)
+                peak_density_los = calculate_peak_density_los(peak_density)
+                
+                # Load flags
+                flags = _load_ui_artifact_safe(storage, f"{day}/ui/flags.json", [])
+                if flags is None:
+                    flags = []
+                segments_flagged, bins_flagged = _calculate_flags_metrics(flags)
+                
+                # Get operational_status from metadata (Issue #565)
+                operational_status = day_meta.get("operational_status", "Unknown")
+                
+                metrics_by_day[day] = {
+                    "participants": total_participants,
+                    "events": event_names,
+                    "segments_with_flags": f"{segments_flagged} / {segments_total}",
+                    "peak_density": round(peak_density, 3),
+                    "peak_density_los": peak_density_los,
+                    "peak_rate": round(peak_rate, 2),
+                    "overtaking_segments": segments_overtaking,
+                    "co_presence_segments": segments_copresence,
+                    "flagged_bins": bins_flagged,
+                    "operational_status": operational_status
+                }
+                
+            except Exception as e:
+                logger.warning(f"Error loading metrics for day {day}: {e}")
+                metrics_by_day[day] = {
+                    "participants": 0,
+                    "events": [],
+                    "segments_with_flags": "0 / 0",
+                    "peak_density": 0.0,
+                    "peak_density_los": "A",
+                    "peak_rate": 0.0,
+                    "overtaking_segments": 0,
+                    "co_presence_segments": 0,
+                    "flagged_bins": 0,
+                    "operational_status": "Unknown"
+                }
+        
+        return JSONResponse(
+            content={
+                "run_id": run_id,
+                "description": description,
+                "days": day_list,
+                "metrics": metrics_by_day
+            },
+            headers={"Cache-Control": "public, max-age=60"}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting run summary for {run_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error loading run summary: {str(e)}")
