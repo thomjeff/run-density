@@ -32,6 +32,81 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def compute_operational_status(los_letter: str, flow_utilization: Optional[float] = None) -> str:
+    """
+    Compute operational status based on LOS and flow utilization.
+    
+    Issue #569: Implements the same logic as density_report.py::_render_key_takeaways_v2
+    
+    Args:
+        los_letter: LOS grade (A-F)
+        flow_utilization: Optional flow utilization percentage (None if not available)
+        
+    Returns:
+        Operational status string: "Stable", "Moderate", "Critical", or "Overload"
+    """
+    # Determine status based on LOS and flow
+    if los_letter in ["A", "B"]:
+        if flow_utilization and flow_utilization > 200:
+            return "Overload"  # Flow utilization exceeds 200% - consider flow management
+        else:
+            return "Stable"  # Density and flow within acceptable ranges
+    elif los_letter in ["C", "D"]:
+        return "Moderate"  # Density approaching comfort limits - monitor closely
+    else:  # E, F
+        return "Critical"  # High density detected - immediate action required
+
+
+def calculate_peak_density_los(peak_density: float) -> str:
+    """
+    Calculate LOS for peak density using rulebook thresholds.
+    
+    Issue #569: Replicates logic from app/routes/api_dashboard.py
+    
+    Args:
+        peak_density: Peak density value (persons/m²)
+        
+    Returns:
+        LOS grade (A-F)
+    """
+    try:
+        from app.common.config import load_rulebook
+        rulebook = load_rulebook()
+        thresholds = rulebook.get("globals", {}).get("los_thresholds", {})
+        
+        # Get density thresholds (assuming they're in order A->F)
+        density_thresholds = thresholds.get("density", [])
+        
+        if not density_thresholds:
+            # Fallback to hardcoded thresholds if YAML missing
+            density_thresholds = [0.2, 0.4, 0.6, 0.8, 1.0]
+        
+        # Find appropriate LOS grade
+        los_grades = ["A", "B", "C", "D", "E", "F"]
+        
+        for i, threshold in enumerate(density_thresholds):
+            if peak_density < threshold:
+                return los_grades[i]
+        
+        # If above all thresholds, return F
+        return "F"
+    except Exception as e:
+        logger.warning(f"Error calculating LOS from rulebook: {e}, using fallback")
+        # Fallback logic
+        if peak_density < 0.36:
+            return "A"
+        elif peak_density < 0.54:
+            return "B"
+        elif peak_density < 0.72:
+            return "C"
+        elif peak_density < 1.08:
+            return "D"
+        elif peak_density < 1.63:
+            return "E"
+        else:
+            return "F"
+
+
 def create_stubbed_pipeline(
     events: List[Event],
     run_id: Optional[str] = None
@@ -766,6 +841,57 @@ def create_full_analysis_pipeline(
             )
             metadata["density"] = density_summary[day_code]
             metadata["flow"] = flow_summary_by_day[day_code]
+            
+            # Issue #569: Compute operational_status from peak density and flow utilization
+            try:
+                # Try to load segment_metrics.json to get peak_density
+                ui_path = day_path / "ui"
+                segment_metrics_path = ui_path / "segment_metrics.json"
+                
+                peak_density = 0.0
+                max_flow_utilization = None
+                
+                if segment_metrics_path.exists():
+                    segment_metrics_data = json.loads(segment_metrics_path.read_text())
+                    peak_density = segment_metrics_data.get("peak_density", 0.0)
+                    
+                    # Try to find max flow_utilization from segment-level data
+                    # flow_utilization is only available for merge segments in v2_context
+                    # Check if any segments have flow_utilization in their data
+                    for seg_id, seg_data in segment_metrics_data.items():
+                        if seg_id not in ["peak_density", "peak_rate", "segments_with_flags", 
+                                         "flagged_bins", "overtaking_segments", "co_presence_segments"]:
+                            # Check if this segment has flow_utilization
+                            if isinstance(seg_data, dict):
+                                flow_util = seg_data.get("flow_utilization")
+                                if flow_util is not None:
+                                    if max_flow_utilization is None or flow_util > max_flow_utilization:
+                                        max_flow_utilization = flow_util
+                
+                # If segment_metrics.json not available, try to compute from density results
+                if peak_density == 0.0 and day_density:
+                    # Try to extract peak density from density results
+                    segments = day_density.get("segments", {})
+                    if segments:
+                        peak_density = max(
+                            (seg.get("summary", {}).get("peak_areal_density", 0.0) 
+                             for seg in segments.values() if isinstance(seg, dict)),
+                            default=0.0
+                        )
+                
+                # Compute LOS from peak density
+                los_letter = calculate_peak_density_los(peak_density)
+                
+                # Compute operational status
+                operational_status = compute_operational_status(los_letter, max_flow_utilization)
+                metadata["operational_status"] = operational_status
+                
+                logger.info(f"Issue #569: Computed operational_status='{operational_status}' for {day_code} "
+                          f"(LOS={los_letter}, peak_density={peak_density:.3f}, flow_utilization={max_flow_utilization})")
+            except Exception as e:
+                logger.warning(f"Issue #569: Could not compute operational_status for {day_code}: {e}")
+                metadata["operational_status"] = "Unknown"
+            
             metadata_path = day_path / "metadata.json"
             with open(metadata_path, 'w', encoding='utf-8') as f:
                 json.dump(metadata, f, indent=2, ensure_ascii=False)
