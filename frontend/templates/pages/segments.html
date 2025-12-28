@@ -173,25 +173,25 @@
         return u.pathname + u.search;
     }
     
-    // Issue #538: Ensure run_id is present and up-to-date; always check latest from API
+    // Issue #565: Ensure run_id is present; respect URL run_id if explicitly set
     async function ensureRunAndDayInUrl() {
         const params = new URLSearchParams(window.location.search);
         let runId = params.get('run_id');
+        const hasUrlRunId = !!runId;
         let dayParam = params.get('day');
 
         try {
-            // Always fetch latest run_id without passing current run_id
+            // Fetch latest run_id for fallback only
             const resp = await fetch('/api/dashboard/summary', { cache: 'no-store' });
             const data = await resp.json();
             const latestRunId = data.run_id;
             
-            // Issue #538: Update URL if run_id is missing or outdated
-            if (latestRunId) {
-                if (!runId || runId !== latestRunId) {
-                    // Update to latest run_id
-                    runId = latestRunId;
-                }
+            // Issue #565: Only use latest run_id if no run_id in URL
+            // Respect URL run_id when explicitly set (don't override with latest)
+            if (!hasUrlRunId && latestRunId) {
+                runId = latestRunId;
             }
+            // If URL has run_id, keep it (don't override)
             
             const selectedDay = (dayParam || data.selected_day || '').toLowerCase();
             const p = new URLSearchParams(window.location.search);
