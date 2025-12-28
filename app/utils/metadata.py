@@ -355,19 +355,38 @@ def append_to_run_index(metadata: Dict[str, Any]) -> None:
     
     Deduplicates by run_id - if run already exists, skips append.
     
+    Issue #566: Loads event_summary from analysis.json and includes it in index entry.
+    
     Args:
         metadata: Metadata dictionary from create_run_metadata()
         
     Format:
         [
-          { "run_id": "...", "created_at": "...", "file_counts": {...}, ... },
-          { "run_id": "...", "created_at": "...", "file_counts": {...}, ... }
+          { "run_id": "...", "created_at": "...", "file_counts": {...}, "event_summary": {...}, ... },
+          { "run_id": "...", "created_at": "...", "file_counts": {...}, "event_summary": {...}, ... }
         ]
     """
     # Issue #466 Step 4 Cleanup: Local-only, dead GCS branch removed
     from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER
     
     run_id = metadata.get("run_id")
+    
+    # Issue #566: Load event_summary from analysis.json
+    event_summary = None
+    if Path(RUNFLOW_ROOT_CONTAINER).exists():
+        runflow_root = Path(RUNFLOW_ROOT_CONTAINER)
+    else:
+        runflow_root = Path(RUNFLOW_ROOT_LOCAL)
+    
+    analysis_json_path = runflow_root / run_id / "analysis.json"
+    if analysis_json_path.exists():
+        try:
+            with open(analysis_json_path, 'r', encoding='utf-8') as f:
+                analysis_data = json.load(f)
+                event_summary = analysis_data.get("event_summary")
+        except (json.JSONDecodeError, Exception) as e:
+            # If analysis.json doesn't exist or is invalid, continue without event_summary
+            pass
     
     # Extract summary for index (subset of full metadata)
     index_entry = {
@@ -381,11 +400,10 @@ def append_to_run_index(metadata: Dict[str, Any]) -> None:
         "status": metadata.get("status", "complete")
     }
     
-    # Use container root if in Docker, otherwise use local root
-    if Path(RUNFLOW_ROOT_CONTAINER).exists():
-        runflow_root = Path(RUNFLOW_ROOT_CONTAINER)
-    else:
-        runflow_root = Path(RUNFLOW_ROOT_LOCAL)
+    # Issue #566: Add event_summary to index entry if available
+    if event_summary is not None:
+        index_entry["event_summary"] = event_summary
+    
     runflow_root.mkdir(parents=True, exist_ok=True)
     index_path = runflow_root / "index.json"
     
