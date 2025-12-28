@@ -222,13 +222,25 @@ def prune_runs(keep_n: int, dry_run: bool = False, confirm: bool = False) -> boo
         # Identify runs to delete
         runs_to_delete, runs_to_keep = identify_runs_to_delete(keep_n)
         
-        logger.info(f"Will keep {len(runs_to_keep)} runs (last {keep_n})")
+        # CRITICAL: Always preserve latest.json run_id, even if not in index.json
+        if latest_run_id not in runs_to_keep:
+            if latest_run_id in runs_to_delete:
+                # Remove from delete list and add to keep list
+                runs_to_delete.remove(latest_run_id)
+                runs_to_keep.append(latest_run_id)
+                logger.info(f"Preserving latest.json run_id ({latest_run_id}) - not in index.json")
+            elif latest_run_id not in [e.get("run_id") for e in entries]:
+                # Latest run_id is not in index.json at all - add it to keep list
+                runs_to_keep.append(latest_run_id)
+                logger.warning(f"⚠️  latest.json run_id ({latest_run_id}) not found in index.json - will preserve it anyway")
+        
+        logger.info(f"Will keep {len(runs_to_keep)} runs (last {keep_n} from index + latest.json)")
         logger.info(f"Will delete {len(runs_to_delete)} runs")
         
-        # Validate latest.json is preserved
-        if not validate_latest_preserved(runs_to_delete, latest_run_id):
-            logger.error(f"ERROR: latest.json run_id ({latest_run_id}) would be deleted!")
-            logger.error("Aborting to preserve latest.json run_id.")
+        # Validate latest.json is preserved (double-check)
+        if latest_run_id in runs_to_delete:
+            logger.error(f"ERROR: latest.json run_id ({latest_run_id}) is still in deletion list!")
+            logger.error("This should not happen. Aborting.")
             return False
         
         # Show what will be deleted
