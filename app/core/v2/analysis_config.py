@@ -74,6 +74,7 @@ def generate_analysis_json(
     Generate analysis.json from validated request payload.
     
     Issue #553: Creates single source of truth for all analysis parameters.
+    Issue #566: Includes event_summary with days, events count, and events_by_day.
     
     Args:
         request_payload: Validated request payload dictionary
@@ -92,6 +93,16 @@ def generate_analysis_json(
             "flow_file": str,
             "locations_file": str,
             "runners": int,  # Total count across all events
+            "event_summary": {
+                "days": int,  # Count of unique days
+                "events": int,  # Total count of events
+                "events_by_day": {
+                    "day": {
+                        "count": int,
+                        "events": [str]  # List of event names for this day
+                    }
+                }
+            },
             "events": [
                 {
                     "name": str,
@@ -182,6 +193,23 @@ def generate_analysis_json(
         runners_files_dict[event_name] = f"{data_dir}/{runners_file}"
         gpx_files_dict[event_name] = f"{data_dir}/{gpx_file}"
     
+    # Issue #566: Compute event_summary
+    # Group events by day with count and event names
+    events_by_day = {}
+    for event in events_list:
+        day = event.get("day")
+        event_name = event.get("name")
+        if day not in events_by_day:
+            events_by_day[day] = {"count": 0, "events": []}
+        events_by_day[day]["count"] += 1
+        events_by_day[day]["events"].append(event_name)
+    
+    event_summary = {
+        "days": len(event_days_set),
+        "events": len(events_list),
+        "events_by_day": events_by_day
+    }
+    
     # Build analysis.json structure
     analysis_json = {
         "description": description,
@@ -190,6 +218,7 @@ def generate_analysis_json(
         "flow_file": flow_file,
         "locations_file": locations_file,
         "runners": total_runners,
+        "event_summary": event_summary,
         "events": events_list,
         "event_days": sorted(list(event_days_set)),
         "event_names": event_names_list,
