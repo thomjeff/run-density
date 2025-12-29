@@ -1,0 +1,12 @@
+# Postman local files (not version controlled)
+*.postman_environment.local.json
+*.postman_collection.local.json
+
+# Newman test results
+newman/
+*.xml
+*.html
+results/
+
+# Postman workspace files
+.postman/

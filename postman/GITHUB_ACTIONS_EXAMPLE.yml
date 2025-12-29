@@ -1,0 +1,86 @@
+# Example GitHub Actions workflow for running Postman tests
+# 
+# To use this workflow:
+# 1. Copy this file to .github/workflows/postman-tests.yml
+# 2. Adjust environment variables as needed
+# 3. Uncomment the steps you want to use
+
+name: Postman API Tests
+
+on:
+  push:
+    branches: [ main, dev ]
+    paths:
+      - 'postman/**'
+      - 'app/routes/v2/**'
+      - 'app/core/v2/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'postman/**'
+      - 'app/routes/v2/**'
+      - 'app/core/v2/**'
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  postman-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install Newman
+        run: npm install -g newman newman-reporter-html
+      
+      - name: Start Docker services
+        run: |
+          docker-compose up -d --build
+      
+      - name: Wait for server to be ready
+        run: |
+          echo "Waiting for server to start..."
+          for i in {1..30}; do
+            if curl -f http://localhost:8080/health >/dev/null 2>&1; then
+              echo "Server is ready!"
+              exit 0
+            fi
+            echo "Attempt $i/30: Server not ready yet..."
+            sleep 2
+          done
+          echo "Server failed to start"
+          exit 1
+      
+      - name: Run Postman tests
+        run: |
+          newman run postman/collections/Runflow-v2-API.postman_collection.json \
+            -e postman/environments/Docker.postman_environment.json \
+            --env-var "base_url=http://localhost:8080" \
+            --reporters cli,junit,html \
+            --reporter-junit-export postman-results.xml \
+            --reporter-html-export postman-report.html \
+            --timeout-request 60000 \
+            --timeout-script 60000
+        continue-on-error: false
+      
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: postman-results
+          path: |
+            postman-results.xml
+            postman-report.html
+          retention-days: 7
+      
+      - name: Stop Docker services
+        if: always()
+        run: |
+          docker-compose down
