@@ -600,8 +600,10 @@ def generate_locations_report_v2(
                 loc_seg_ids = row.get('seg_id')
                 if pd.isna(loc_seg_ids) or not loc_seg_ids:
                     return False
-                # Handle comma-separated seg_ids
-                loc_segs = [s.strip() for s in str(loc_seg_ids).split(',')]
+                # Handle comma-separated seg_ids and strip quotes from ALL segments
+                # Issue #571: Fix bug where 2-segment values like "D1,D2" were excluded
+                # because quotes weren't stripped, causing ['"D1', 'D2"'] instead of ['D1', 'D2']
+                loc_segs = [s.strip().strip('"').strip("'") for s in str(loc_seg_ids).split(',')]
                 return any(seg in day_segment_ids for seg in loc_segs)
             
             location_mask = locations_df.apply(location_matches_day, axis=1)
