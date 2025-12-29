@@ -26,7 +26,8 @@ postman/
 ├── README.md                    # This file
 ├── collections/
 │   ├── Runflow-v2-API.postman_collection.json    # Main collection (all test cases)
-│   └── Runflow-v2-Scenarios.postman_collection.json  # Scenario-based tests
+│   ├── Runflow-v2-Scenarios.postman_collection.json  # Scenario-based tests
+│   └── Runflow-v2-StartTime-Manipulation.postman_collection.json  # Start-time manipulation tests
 └── environments/
     ├── Local.postman_environment.json            # Local development (localhost:8080)
     ├── Docker.postman_environment.json          # Docker Compose (app:8080)
@@ -104,6 +105,29 @@ Focused scenario-based tests for specific use cases:
 - Scenario: Move 10k to Saturday
 - Scenario: Adjust start times
 - Error handling scenarios
+
+### Start Time Manipulation Collection: `Runflow-v2-StartTime-Manipulation.postman_collection.json`
+
+**Purpose:** Validate system behavior changes when start_time parameters are manipulated, with clear expectations for flow, density, and co-presence impacts.
+
+**Test Cases:**
+1. **WIDEN Start-Time Gaps (Reduce Overlap)**
+   - Full: 360 (6:00 AM), 10K: 420 (7:00 AM), Half: 540 (9:00 AM)
+   - Expected: Reduced co-presence, spread-out peak density timestamps
+   
+2. **COMPRESS Start-Time Gaps (Force Overlap)**
+   - Full: 420 (7:00 AM), 10K: 425 (7:05 AM), Half: 430 (7:10 AM)
+   - Expected: Increased co-presence, higher overtake counts, closer peak timestamps
+   
+3. **UNIFORM Start Times (Maximum Co-located Flow)**
+   - All events: 420 (7:00 AM)
+   - Expected: Superimposed density spikes, maximum concurrency in first 30-60 minutes
+
+**Validation:**
+Each test case includes console output with validation instructions. After analysis completes, check:
+- `runflow/{run_id}/sun/reports/Flow.csv` - Co-presence and overtake counts
+- `runflow/{run_id}/sun/reports/Density.md` - Peak density timestamps
+- Compare results across all three test cases to verify system responds differently to start time changes
 
 ---
 

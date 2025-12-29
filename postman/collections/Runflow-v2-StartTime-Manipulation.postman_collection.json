@@ -1,0 +1,314 @@
+{
+	"info": {
+		"_postman_id": "runflow-v2-starttime-manipulation",
+		"name": "Runflow v2 - Start Time Manipulation Tests",
+		"description": "Test collection focused on start-time manipulation patterns to validate system behavior changes.\n\n**Purpose:** Validate that the system behaves differently when start_time parameters change, with clear expectations for flow, density, and co-presence impacts.\n\n**Test Cases:**\n1. WIDEN - Increasing start-time gaps (reduce overlap)\n2. COMPRESS - Tightly packed start times (force overlap)\n3. UNIFORM - Identical start times (maximum co-located flow)\n\n**Version:** v2.0.2+\n**Last Updated:** 2025-01-26",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Test Case 1: WIDEN Start-Time Gaps (Reduce Overlap)",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"// Clear previous run_id",
+							"pm.environment.unset(\"run_id\");",
+							"pm.environment.unset(\"test_case\");",
+							"",
+							"// Store test case identifier",
+							"pm.environment.set(\"test_case\", \"WIDEN\");"
+						],
+						"type": "text/javascript"
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response has run_id\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property(\"run_id\");",
+							"    pm.environment.set(\"run_id\", jsonData.run_id);",
+							"    console.log(\"Run ID: \" + jsonData.run_id);",
+							"});",
+							"",
+							"pm.test(\"Response has status success\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.status).to.eql(\"success\");",
+							"});",
+							"",
+							"pm.test(\"Response contains sun day\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.days).to.include(\"sun\");",
+							"});",
+							"",
+							"// Store test metadata for validation",
+							"var jsonData = pm.response.json();",
+							"pm.environment.set(\"widen_run_id\", jsonData.run_id);",
+							"",
+							"console.log(\"\\n=== WIDEN Test Case - Validation Instructions ===\");",
+							"console.log(\"Run ID: \" + jsonData.run_id);",
+							"console.log(\"\\nExpected Behavior:\");",
+							"console.log(\"- Total segment co-presence count should DROP\");",
+							"console.log(\"- Segment peak density timestamps should be FURTHER APART\");",
+							"console.log(\"  * Full peak: ~06:40 (start 06:00)\");",
+							"console.log(\"  * 10K peak: ~07:30 (start 07:00)\");",
+							"console.log(\"  * Half peak: ~09:50 (start 09:00)\");",
+							"console.log(\"- No overtake events between events (if tracking enabled)\");",
+							"console.log(\"\\nTo Validate:\");",
+							"console.log(\"1. Check runflow/\" + jsonData.run_id + \"/sun/reports/Flow.csv\");",
+							"console.log(\"2. Check runflow/\" + jsonData.run_id + \"/sun/reports/Density.md\");",
+							"console.log(\"3. Compare co-presence counts with COMPRESS test case\");",
+							"console.log(\"4. Verify peak density timestamps are spread out\");"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"description\": \"Test Case 1: WIDEN Start-Time Gaps (Reduce Overlap)\",\n  \"segments_file\": \"segments.csv\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"events\": [\n    {\n      \"name\": \"full\",\n      \"day\": \"sun\",\n      \"start_time\": 360,\n      \"event_duration_minutes\": 390,\n      \"runners_file\": \"full_runners.csv\",\n      \"gpx_file\": \"full.gpx\"\n    },\n    {\n      \"name\": \"10k\",\n      \"day\": \"sun\",\n      \"start_time\": 420,\n      \"event_duration_minutes\": 120,\n      \"runners_file\": \"10k_runners.csv\",\n      \"gpx_file\": \"10k.gpx\"\n    },\n    {\n      \"name\": \"half\",\n      \"day\": \"sun\",\n      \"start_time\": 540,\n      \"event_duration_minutes\": 180,\n      \"runners_file\": \"half_runners.csv\",\n      \"gpx_file\": \"half.gpx\"\n    }\n  ]\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/runflow/v2/analyze",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"runflow",
+						"v2",
+						"analyze"
+					]
+				},
+				"description": "**Test Case 1: WIDEN Start-Time Gaps (Reduce Overlap)**\n\n**Purpose:** Confirm that increasing start-time separation reduces co-presence and lowers segment-level density.\n\n**Input:**\n- Full: 360 (6:00 AM) - 60 min gap\n- 10K: 420 (7:00 AM) - 120 min gap\n- Half: 540 (9:00 AM)\n\n**Expected Assertions:**\n- Total segment co-presence count should **DROP**\n- Segment peak density timestamps should be **FURTHER APART**\n  - Full peak on Bridge segment: ~06:40 (start 06:00)\n  - 10K peak on Bridge segment: ~07:30 (start 07:00)\n  - Half peak on Bridge segment: ~09:50 (start 09:00)\n- No overtake events should be recorded between events (if overtake tracking is part of your system)\n\n**Validation:**\nAfter analysis completes, check:\n- `runflow/{run_id}/sun/reports/Flow.csv` - Co-presence counts\n- `runflow/{run_id}/sun/reports/Density.md` - Peak density timestamps\n- Compare with COMPRESS test case results"
+			},
+			"response": []
+		},
+		{
+			"name": "Test Case 2: COMPRESS Start-Time Gaps (Force Overlap)",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"// Clear previous run_id",
+							"pm.environment.unset(\"run_id\");",
+							"pm.environment.unset(\"test_case\");",
+							"",
+							"// Store test case identifier",
+							"pm.environment.set(\"test_case\", \"COMPRESS\");"
+						],
+						"type": "text/javascript"
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response has run_id\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property(\"run_id\");",
+							"    pm.environment.set(\"run_id\", jsonData.run_id);",
+							"    console.log(\"Run ID: \" + jsonData.run_id);",
+							"});",
+							"",
+							"pm.test(\"Response has status success\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.status).to.eql(\"success\");",
+							"});",
+							"",
+							"pm.test(\"Response contains sun day\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.days).to.include(\"sun\");",
+							"});",
+							"",
+							"// Store test metadata for validation",
+							"var jsonData = pm.response.json();",
+							"pm.environment.set(\"compress_run_id\", jsonData.run_id);",
+							"",
+							"console.log(\"\\n=== COMPRESS Test Case - Validation Instructions ===\");",
+							"console.log(\"Run ID: \" + jsonData.run_id);",
+							"console.log(\"\\nExpected Behavior:\");",
+							"console.log(\"- Segment co-presence will INCREASE significantly\");",
+							"console.log(\"  * Queen Street shows runners from all three events at 07:15\");",
+							"console.log(\"- Overtake counts INCREASE\");",
+							"console.log(\"  * Especially in shared mid-course segments\");",
+							"console.log(\"  * Half overtake Full tail\");",
+							"console.log(\"- Peak density on shared segments should occur CLOSER TOGETHER\");",
+							"console.log(\"  * Potentially showing cumulative congestion\");",
+							"console.log(\"\\nTo Validate:\");",
+							"console.log(\"1. Check runflow/\" + jsonData.run_id + \"/sun/reports/Flow.csv\");",
+							"console.log(\"2. Check runflow/\" + jsonData.run_id + \"/sun/reports/Density.md\");",
+							"console.log(\"3. Compare co-presence counts with WIDEN test case\");",
+							"console.log(\"4. Verify overtake counts are higher\");",
+							"console.log(\"5. Verify peak density timestamps are closer together\");"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"description\": \"Test Case 2: COMPRESS Start-Time Gaps (Force Overlap)\",\n  \"segments_file\": \"segments.csv\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"events\": [\n    {\n      \"name\": \"full\",\n      \"day\": \"sun\",\n      \"start_time\": 420,\n      \"event_duration_minutes\": 390,\n      \"runners_file\": \"full_runners.csv\",\n      \"gpx_file\": \"full.gpx\"\n    },\n    {\n      \"name\": \"10k\",\n      \"day\": \"sun\",\n      \"start_time\": 425,\n      \"event_duration_minutes\": 120,\n      \"runners_file\": \"10k_runners.csv\",\n      \"gpx_file\": \"10k.gpx\"\n    },\n    {\n      \"name\": \"half\",\n      \"day\": \"sun\",\n      \"start_time\": 430,\n      \"event_duration_minutes\": 180,\n      \"runners_file\": \"half_runners.csv\",\n      \"gpx_file\": \"half.gpx\"\n    }\n  ]\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/runflow/v2/analyze",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"runflow",
+						"v2",
+						"analyze"
+					]
+				},
+				"description": "**Test Case 2: COMPRESS Start-Time Gaps (Force Overlap)**\n\n**Purpose:** Confirm that reducing start-time gaps creates higher co-presence, overlapping density, and increases overtaking.\n\n**Input:**\n- Full: 420 (7:00 AM) - 5 min gap\n- 10K: 425 (7:05 AM) - 5 min gap\n- Half: 430 (7:10 AM)\n\n**Expected Assertions:**\n- Segment co-presence will **INCREASE significantly**\n  - Queen Street shows runners from all three events at 07:15\n- Overtake counts **INCREASE**, especially in shared mid-course segments\n  - Half overtake Full tail\n- Peak density on shared segments should occur **CLOSER TOGETHER**\n  - Potentially showing cumulative congestion\n\n**Validation:**\nAfter analysis completes, check:\n- `runflow/{run_id}/sun/reports/Flow.csv` - Co-presence and overtake counts\n- `runflow/{run_id}/sun/reports/Density.md` - Peak density timestamps\n- Compare with WIDEN test case results"
+			},
+			"response": []
+		},
+		{
+			"name": "Test Case 3: UNIFORM Start Times (Maximum Co-located Flow)",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"// Clear previous run_id",
+							"pm.environment.unset(\"run_id\");",
+							"pm.environment.unset(\"test_case\");",
+							"",
+							"// Store test case identifier",
+							"pm.environment.set(\"test_case\", \"UNIFORM\");"
+						],
+						"type": "text/javascript"
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response has run_id\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property(\"run_id\");",
+							"    pm.environment.set(\"run_id\", jsonData.run_id);",
+							"    console.log(\"Run ID: \" + jsonData.run_id);",
+							"});",
+							"",
+							"pm.test(\"Response has status success\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.status).to.eql(\"success\");",
+							"});",
+							"",
+							"pm.test(\"Response contains sun day\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.days).to.include(\"sun\");",
+							"});",
+							"",
+							"// Store test metadata for validation",
+							"var jsonData = pm.response.json();",
+							"pm.environment.set(\"uniform_run_id\", jsonData.run_id);",
+							"",
+							"console.log(\"\\n=== UNIFORM Test Case - Validation Instructions ===\");",
+							"console.log(\"Run ID: \" + jsonData.run_id);",
+							"console.log(\"\\nExpected Behavior:\");",
+							"console.log(\"- Density charts for overlapping segments show SUPERIMPOSED SPIKES\");",
+							"console.log(\"- First 30-60 minutes of course show HIGHEST CONCURRENCY\");",
+							"console.log(\"- Aid station timelines and traffic control shift logic maximally synchronized\");",
+							"console.log(\"- All three events start simultaneously at 07:00 (420 minutes)\");",
+							"console.log(\"\\nTo Validate:\");",
+							"console.log(\"1. Check runflow/\" + jsonData.run_id + \"/sun/reports/Density.md\");",
+							"console.log(\"2. Verify density spikes are superimposed (all events at same time)\");",
+							"console.log(\"3. Check runflow/\" + jsonData.run_id + \"/sun/reports/Flow.csv\");",
+							"console.log(\"4. Verify maximum co-presence in first 30-60 minutes\");",
+							"console.log(\"5. Compare with WIDEN and COMPRESS test cases\");"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"description\": \"Test Case 3: UNIFORM Start Times (Maximum Co-located Flow)\",\n  \"segments_file\": \"segments.csv\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"events\": [\n    {\n      \"name\": \"full\",\n      \"day\": \"sun\",\n      \"start_time\": 420,\n      \"event_duration_minutes\": 390,\n      \"runners_file\": \"full_runners.csv\",\n      \"gpx_file\": \"full.gpx\"\n    },\n    {\n      \"name\": \"10k\",\n      \"day\": \"sun\",\n      \"start_time\": 420,\n      \"event_duration_minutes\": 120,\n      \"runners_file\": \"10k_runners.csv\",\n      \"gpx_file\": \"10k.gpx\"\n    },\n    {\n      \"name\": \"half\",\n      \"day\": \"sun\",\n      \"start_time\": 420,\n      \"event_duration_minutes\": 180,\n      \"runners_file\": \"half_runners.csv\",\n      \"gpx_file\": \"half.gpx\"\n    }\n  ]\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/runflow/v2/analyze",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"runflow",
+						"v2",
+						"analyze"
+					]
+				},
+				"description": "**Test Case 3: UNIFORM Start Times (Maximum Co-located Flow)**\n\n**Purpose:** Confirm system correctly handles identical start times for different events, resulting in total overlapping flow on shared segments.\n\n**Input:**\n- Full: 420 (7:00 AM)\n- 10K: 420 (7:00 AM)\n- Half: 420 (7:00 AM)\n\n**Expected Assertions:**\n- Density charts for overlapping segments should show **SUPERIMPOSED SPIKES**\n- First 30–60 minutes of the course show **HIGHEST CONCURRENCY**\n- Aid station timelines and traffic control shift logic (if modeled) should be **MAXIMALLY SYNCHRONIZED**\n\n**Validation:**\nAfter analysis completes, check:\n- `runflow/{run_id}/sun/reports/Density.md` - Superimposed density spikes\n- `runflow/{run_id}/sun/reports/Flow.csv` - Maximum co-presence in early segments\n- Compare with WIDEN and COMPRESS test cases"
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8080",
+			"type": "string"
+		}
+	]
+}
