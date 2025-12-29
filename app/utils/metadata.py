@@ -362,8 +362,8 @@ def append_to_run_index(metadata: Dict[str, Any]) -> None:
         
     Format:
         [
-          { "run_id": "...", "created_at": "...", "file_counts": {...}, "event_summary": {...}, ... },
-          { "run_id": "...", "created_at": "...", "file_counts": {...}, "event_summary": {...}, ... }
+          { "run_id": "...", "created_at": "...", "description": "...", "file_counts": {...}, "event_summary": {...}, ... },
+          { "run_id": "...", "created_at": "...", "description": "...", "file_counts": {...}, "event_summary": {...}, ... }
         ]
     """
     # Issue #466 Step 4 Cleanup: Local-only, dead GCS branch removed
@@ -388,10 +388,17 @@ def append_to_run_index(metadata: Dict[str, Any]) -> None:
             # If analysis.json doesn't exist or is invalid, continue without event_summary
             pass
     
+    # Extract description from request payload if available
+    description = None
+    request_payload = metadata.get("request")
+    if request_payload and isinstance(request_payload, dict):
+        description = request_payload.get("description")
+    
     # Extract summary for index (subset of full metadata)
     index_entry = {
         "run_id": run_id,
         "created_at": metadata.get("created_at"),
+        "description": description,  # Optional description from API request
         "runtime_env": metadata.get("runtime_env"),
         "storage_target": metadata.get("storage_target"),
         "app_version": metadata.get("app_version"),
