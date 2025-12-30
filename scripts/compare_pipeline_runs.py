@@ -319,8 +319,8 @@ def compare_heatmap_count(test_run: Path, day: str, expected: Dict[str, Any]) ->
     return ComparisonResult(f"Heatmap Count ({day})", match, details)
 
 
-def compare_file_structure(test_run: Path, day: str) -> ComparisonResult:
-    """Check if expected file structure exists."""
+def check_new_file_structure(test_run: Path, day: str) -> ComparisonResult:
+    """Check if new file structure exists in test run (Issue #574 structure)."""
     test_checks = check_file_structure(test_run, day)
     
     details = []
@@ -332,16 +332,16 @@ def compare_file_structure(test_run: Path, day: str) -> ComparisonResult:
         if not exists:
             all_pass = False
     
-    return ComparisonResult(f"File Structure ({day})", all_pass, details)
+    return ComparisonResult(f"New File Structure ({day})", all_pass, details)
 
 
-def compare_json_artifacts(test_run: Path, day: str) -> ComparisonResult:
-    """Validate JSON artifacts structure."""
+def check_new_json_artifacts(test_run: Path, day: str) -> ComparisonResult:
+    """Check if new JSON artifacts exist and are valid in test run (Issue #574 structure)."""
     is_valid, errors = validate_json_artifacts(test_run, day)
     
-    details = errors if errors else ["All JSON files valid and parseable"]
+    details = errors if errors else ["All JSON files exist and are parseable"]
     
-    return ComparisonResult(f"JSON Artifact Structure ({day})", is_valid, details)
+    return ComparisonResult(f"New JSON Artifacts ({day})", is_valid, details)
 
 
 def get_days_from_analysis_json(run_path: Path) -> List[str]:
@@ -407,11 +407,11 @@ def main():
         # Heatmap count
         results.append(compare_heatmap_count(test_run_path, day, expected))
         
-        # File structure (only check test run - reference doesn't have new structure)
-        results.append(compare_file_structure(test_run_path, day))
+        # New file structure (only check test run - reference doesn't have new structure)
+        results.append(check_new_file_structure(test_run_path, day))
         
-        # JSON artifacts (only validate test run)
-        results.append(compare_json_artifacts(test_run_path, day))
+        # New JSON artifacts (only check test run - reference doesn't have new structure)
+        results.append(check_new_json_artifacts(test_run_path, day))
     
     # Print results
     for result in results:
