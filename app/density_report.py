@@ -3421,12 +3421,17 @@ def generate_new_density_report_issue246(
     Returns:
         Dictionary with report content and metadata
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     from app.new_density_report import generate_new_density_report
     from pathlib import Path
     
     # Convert string paths to Path objects
     reports_path = Path(reports_dir)
     output_path_obj = Path(output_path) if output_path else None
+    
+    logger.info(f"generate_new_density_report_issue246: Calling generate_new_density_report with reports_dir={reports_path}, output_path={output_path_obj}")
     
     # Generate the new report
     results = generate_new_density_report(
@@ -3436,6 +3441,8 @@ def generate_new_density_report_issue246(
         events=events,
         event_groups_res=event_groups_res  # Issue #573: Pass RES data
     )
+    
+    logger.info(f"generate_new_density_report_issue246: generate_new_density_report returned, success={results.get('success', False)}")
     
     # Return in the format expected by the existing API
     return {

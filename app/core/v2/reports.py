@@ -380,6 +380,7 @@ def generate_density_report_v2(
             except Exception as e:
                 logger.debug(f"Could not load event_groups from metadata.json for day {day.value}: {e}")
             
+            logger.info(f"Calling generate_new_density_report_issue246 for day {day.value}...")
             results = generate_new_density_report_issue246(
                 reports_dir=str(reports_path),
                 output_path=str(reports_path / "Density.md"),
@@ -387,6 +388,7 @@ def generate_density_report_v2(
                 events=event_info,  # Pass event info for dynamic start times
                 event_groups_res=event_groups_res  # Issue #573: Pass RES data for Executive Summary
             )
+            logger.info(f"generate_new_density_report_issue246 returned for day {day.value}, success={results.get('success', False)}")
             
             if results.get('success'):
                 density_path = reports_path / "Density.md"
