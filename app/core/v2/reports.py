@@ -128,18 +128,22 @@ def generate_reports_per_day(
         
         # Generate Density.md
         if day in density_results:
-            density_path = generate_density_report_v2(
-                run_id=run_id,
-                day=day,
-                day_events=day_events,
-                density_results=density_results[day],
-                reports_path=reports_path,
-                segments_df=day_segments_df,
-                data_dir=data_dir,
-                segments_file_path=segments_file_path  # Issue #553 Phase 6.2
-            )
-            if density_path:
-                day_report_paths["density"] = str(density_path)
+            try:
+                density_path = generate_density_report_v2(
+                    run_id=run_id,
+                    day=day,
+                    day_events=day_events,
+                    density_results=density_results[day],
+                    reports_path=reports_path,
+                    segments_df=day_segments_df,
+                    data_dir=data_dir,
+                    segments_file_path=segments_file_path  # Issue #553 Phase 6.2
+                )
+                if density_path:
+                    day_report_paths["density"] = str(density_path)
+            except Exception as e:
+                logger.error(f"Failed to generate density report for day {day.value}: {e}", exc_info=True)
+                # Continue with other reports even if density fails
         
         # Generate Flow.md and Flow.csv
         if day in flow_results:

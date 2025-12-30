@@ -119,7 +119,10 @@ def count_locations(locations_csv_path: Path) -> int:
 
 
 def count_heatmaps(heatmaps_dir: Path) -> int:
-    """Count PNG heatmap files."""
+    """Count PNG heatmap files.
+    
+    Issue #574: Heatmaps are now in ui/visualizations/ subdirectory, not ui/heatmaps/
+    """
     if not heatmaps_dir.exists():
         return 0
     
@@ -307,8 +310,15 @@ def compare_locations_count(test_run: Path, day: str, expected: Dict[str, Any]) 
 
 
 def compare_heatmap_count(test_run: Path, day: str, expected: Dict[str, Any]) -> ComparisonResult:
-    """Compare heatmap count against expected value."""
-    test_heatmaps = test_run / day / "ui" / "heatmaps"
+    """Compare heatmap count against expected value.
+    
+    Issue #574: Heatmaps are now in ui/visualizations/ subdirectory, not ui/heatmaps/
+    """
+    # Check new location first (Issue #574)
+    test_heatmaps = test_run / day / "ui" / "visualizations"
+    if not test_heatmaps.exists():
+        # Fallback to old location for backward compatibility
+        test_heatmaps = test_run / day / "ui" / "heatmaps"
     
     test_count = count_heatmaps(test_heatmaps)
     expected_count = expected.get('heatmap_count', 0)

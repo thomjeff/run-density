@@ -1121,22 +1121,29 @@ def create_full_analysis_pipeline(
         # Issue #574: Reports now load from JSON artifacts where available, with fallback to in-memory
         # Note: Reports have access to RES data in metadata.json (calculated in Phase 4.2)
         # TODO: Full refactor to load from JSON only (remove in-memory fallback in future)
-        reports_by_day = generate_reports_per_day(
-            run_id=run_id,
-            events=events,
-            timelines=timelines,
-            density_results=density_results,  # Still using in-memory for now (JSON structure ready)
-            flow_results=flow_results,  # Still using in-memory for now (JSON structure ready)
-            segments_df=segments_df,
-            all_runners_df=all_runners_df,
-            locations_df=locations_df_from_json if locations_df_from_json is not None else locations_df,
-            data_dir=data_dir,
-            segments_file_path=segments_file_path,
-            flow_file_path=flow_file_path,
-            locations_file_path=locations_file_path
-        )
-        report_metrics.finish(memory_mb=get_memory_usage_mb())
-        logger.info("Phase 5: Report generation complete (all metrics available, no regeneration needed)")
+        try:
+            reports_by_day = generate_reports_per_day(
+                run_id=run_id,
+                events=events,
+                timelines=timelines,
+                density_results=density_results,  # Still using in-memory for now (JSON structure ready)
+                flow_results=flow_results,  # Still using in-memory for now (JSON structure ready)
+                segments_df=segments_df,
+                all_runners_df=all_runners_df,
+                locations_df=locations_df_from_json if locations_df_from_json is not None else locations_df,
+                data_dir=data_dir,
+                segments_file_path=segments_file_path,
+                flow_file_path=flow_file_path,
+                locations_file_path=locations_file_path
+            )
+            report_metrics.finish(memory_mb=get_memory_usage_mb())
+            logger.info("Phase 5: Report generation complete (all metrics available, no regeneration needed)")
+        except Exception as e:
+            logger.error(f"Phase 5: Report generation failed: {e}", exc_info=True)
+            report_metrics.finish(memory_mb=get_memory_usage_mb())
+            # Set empty reports dict to allow pipeline to continue
+            reports_by_day = {}
+            raise  # Re-raise to fail the pipeline
         
         # Create combined metadata (run-level)
         combined_metadata = create_combined_metadata(
