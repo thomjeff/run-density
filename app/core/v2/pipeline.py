@@ -892,6 +892,131 @@ def create_full_analysis_pipeline(
                 logger.warning(f"Issue #569: Could not compute operational_status for {day_code}: {e}")
                 metadata["operational_status"] = "Unknown"
             
+            # Issue #573: Calculate RES per event group for this day
+            # Use cached analysis_config and segments_df (already loaded earlier in pipeline)
+            try:
+                from app.core.v2.res import calculate_res_per_event_group
+                
+                # Use cached analysis_config (already loaded earlier in pipeline)
+                event_group_config = analysis_config.get("event_group") if analysis_config else None
+                
+                if event_group_config:
+                    # Load segment_metrics.json (this is generated during UI artifacts phase)
+                    segment_metrics_path = ui_path / "segment_metrics.json"
+                    if segment_metrics_path.exists():
+                        segment_metrics_data = json.loads(segment_metrics_path.read_text())
+                        
+                        # Filter out summary keys (keep only segment-level data)
+                        segment_metrics = {
+                            seg_id: seg_data
+                            for seg_id, seg_data in segment_metrics_data.items()
+                            if seg_id not in ["peak_density", "peak_rate", "segments_with_flags", 
+                                             "flagged_bins", "overtaking_segments", "co_presence_segments"]
+                            and isinstance(seg_data, dict)
+                        }
+                        
+                        # Use cached segments_df (already loaded earlier in pipeline at line 536)
+                        # No need to reload - segments_df is already in scope
+                        
+                        # Get event names for this day (lowercase)
+                        day_event_names = {e.name.lower() for e in day_events}
+                        
+                        # Calculate RES for each event group that applies to this day
+                        event_groups_res = {}
+                        for group_id, group_events_str in event_group_config.items():
+                            # Parse comma-separated event names
+                            group_event_names = [
+                                name.strip().lower() 
+                                for name in group_events_str.split(",") 
+                                if name.strip()
+                            ]
+                            
+                            # Filter to only groups that have events for this day
+                            day_group_events = [
+                                event_name for event_name in group_event_names
+                                if event_name in day_event_names
+                            ]
+                            
+                            if len(day_group_events) == 0:
+                                continue  # Skip groups that don't apply to this day
+                            
+                            # Calculate RES for this group (using only events for this day)
+                            try:
+                                res_score = calculate_res_per_event_group(
+                                    event_group_id=group_id,
+                                    event_names=day_group_events,
+                                    segment_metrics=segment_metrics,
+                                    segments_df=segments_df,  # Use cached segments_df from pipeline
+                                    analysis_config=analysis_config  # Use cached analysis_config
+                                )
+                                event_groups_res[group_id] = {
+                                    "events": day_group_events,
+                                    "res": round(res_score, 2)
+                                }
+                                logger.info(
+                                    f"Issue #573: Calculated RES for group '{group_id}' on {day_code}: "
+                                    f"{res_score:.2f} (events: {day_group_events})"
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    f"Issue #573: Failed to calculate RES for group '{group_id}' on {day_code}: {e}",
+                                    exc_info=True
+                                )
+                        
+                        if event_groups_res:
+                            metadata["event_groups"] = event_groups_res
+                            logger.info(
+                                f"Issue #573: Added {len(event_groups_res)} event group RES scores to metadata for {day_code}"
+                            )
+                            
+                            # Issue #573: Write metadata.json first so report generation can load RES data
+                            metadata_path_temp = day_path / "metadata.json"
+                            with open(metadata_path_temp, 'w', encoding='utf-8') as f:
+                                json.dump(metadata, f, indent=2, ensure_ascii=False)
+                            
+                            # Issue #573: Regenerate Density.md report with RES data
+                            # Reports were generated before RES calculation, so regenerate now that RES is available
+                            try:
+                                from app.core.v2.reports import generate_density_report_v2
+                                from app.core.v2.bins import filter_segments_by_events
+                                
+                                # Filter segments for this day
+                                day_segments_df = filter_segments_by_events(segments_df, day_events)
+                                
+                                # Get segments_file_path from analysis_config
+                                segments_file_path = None
+                                if analysis_config:
+                                    from app.core.v2.analysis_config import get_segments_file
+                                    segments_file_path = get_segments_file(analysis_config=analysis_config)
+                                
+                                # Regenerate Density.md with RES data (metadata.json now contains event_groups)
+                                density_path = generate_density_report_v2(
+                                    run_id=run_id,
+                                    day=day,
+                                    day_events=day_events,
+                                    density_results=density_results.get(day, {}),
+                                    reports_path=reports_dir,
+                                    segments_df=day_segments_df,
+                                    data_dir=data_dir,
+                                    segments_file_path=segments_file_path
+                                )
+                                if density_path:
+                                    logger.info(f"Issue #573: Regenerated Density.md with RES data for {day_code}: {density_path}")
+                            except Exception as e:
+                                logger.warning(
+                                    f"Issue #573: Failed to regenerate Density.md with RES data for {day_code}: {e}",
+                                    exc_info=True
+                                )
+                    else:
+                        logger.warning(
+                            f"Issue #573: segment_metrics.json not found at {segment_metrics_path}, "
+                            f"skipping RES calculation for {day_code}"
+                        )
+                else:
+                    logger.debug(f"Issue #573: No event_group configuration in analysis.json, skipping RES calculation for {day_code}")
+            except Exception as e:
+                logger.warning(f"Issue #573: Could not calculate RES for {day_code}: {e}", exc_info=True)
+            
             metadata_path = day_path / "metadata.json"
             with open(metadata_path, 'w', encoding='utf-8') as f:
                 json.dump(metadata, f, indent=2, ensure_ascii=False)

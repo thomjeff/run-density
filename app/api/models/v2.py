@@ -50,6 +50,7 @@ class V2AnalyzeRequest(BaseModel):
     Main request model for POST /runflow/v2/analyze.
     
     Issue #553: Extended to include description field and removed defaults (fail-fast).
+    Issue #573: Extended to include event_group field for Runner Experience Score (RES) calculation.
     
     Attributes:
         description: Optional description for the analysis (max 254 characters)
@@ -57,12 +58,16 @@ class V2AnalyzeRequest(BaseModel):
         locations_file: Name of locations CSV file (required, no default)
         flow_file: Name of flow CSV file (required, no default)
         events: List of event definitions
+        event_group: Optional event grouping configuration for RES calculation
+            Format: {"group_id": "event1, event2, ..."} where group_id is descriptive (e.g., "sat/elite")
+            and value is comma-separated list of event names (e.g., "elite" or "full, 10k, half")
     """
     description: Optional[str] = Field(None, max_length=254, description="Optional description for the analysis (max 254 characters)")
     segments_file: str = Field(..., description="Name of segments CSV file")
     locations_file: str = Field(..., description="Name of locations CSV file")
     flow_file: str = Field(..., description="Name of flow CSV file")
     events: List[V2EventRequest] = Field(..., min_length=1, description="List of events to analyze")
+    event_group: Optional[Dict[str, str]] = Field(None, description="Optional event grouping for RES calculation (format: {\"group_id\": \"event1, event2, ...\"})")
     
     model_config = {
         "json_schema_extra": {
@@ -88,7 +93,11 @@ class V2AnalyzeRequest(BaseModel):
                         "runners_file": "half_runners.csv",
                         "gpx_file": "half.gpx"
                     }
-                ]
+                ],
+                "event_group": {
+                    "sat/10k": "10k",
+                    "sun/half": "half"
+                }
             }
         }
     }

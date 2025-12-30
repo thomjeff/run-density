@@ -361,11 +361,27 @@ def generate_density_report_v2(
                     'runner_count': runner_count
                 }
             
+            # Issue #573: Load event_groups from metadata.json for RES display
+            event_groups_res = None
+            try:
+                from app.utils.run_id import get_runflow_root
+                runflow_root = get_runflow_root()
+                metadata_path = runflow_root / run_id / day.value / "metadata.json"
+                if metadata_path.exists():
+                    import json
+                    metadata = json.loads(metadata_path.read_text())
+                    event_groups_res = metadata.get("event_groups")
+                    if event_groups_res:
+                        logger.debug(f"Loaded event_groups RES data from metadata.json for day {day.value}")
+            except Exception as e:
+                logger.debug(f"Could not load event_groups from metadata.json for day {day.value}: {e}")
+            
             results = generate_new_density_report_issue246(
                 reports_dir=str(reports_path),
                 output_path=str(reports_path / "Density.md"),
                 app_version=app_version,
-                events=event_info  # Pass event info for dynamic start times
+                events=event_info,  # Pass event info for dynamic start times
+                event_groups_res=event_groups_res  # Issue #573: Pass RES data for Executive Summary
             )
             
             if results.get('success'):

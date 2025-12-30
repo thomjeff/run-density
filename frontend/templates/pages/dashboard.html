@@ -439,7 +439,20 @@
             { key: 'overtaking_segments', label: 'Overtaking Segments' },
             { key: 'co_presence_segments', label: 'Co-Presence Segments' },
             { key: 'flagged_bins', label: 'Flagged Bins', format: (val) => val.toLocaleString() },
-            { key: 'operational_status', label: 'Operational Status' }
+            { key: 'operational_status', label: 'Operational Status' },
+            { key: 'event_groups', label: 'Runner Experience Scores (RES)', format: (val, dayMetrics) => {
+                // Format event_groups RES data (Issue #573)
+                if (!val || typeof val !== 'object' || Object.keys(val).length === 0) {
+                    return '—';
+                }
+                const resEntries = Object.entries(val)
+                    .map(([group_id, group_data]) => {
+                        const res = group_data?.res || 0;
+                        return `${group_id}: ${res.toFixed(2)}`;
+                    })
+                    .join(', ');
+                return resEntries || '—';
+            }}
         ];
         
         metricRows.forEach(row => {

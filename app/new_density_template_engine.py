@@ -71,7 +71,9 @@ class NewDensityTemplateEngine:
         content.append("")
         
         # 2. Executive Summary
-        content.append(self._generate_executive_summary(stats, segment_summary_df))
+        # Pass context to _generate_executive_summary for RES data (Issue #573)
+        stats_with_context = {**stats, '_context': context}
+        content.append(self._generate_executive_summary(stats_with_context, segment_summary_df))
         content.append("")
         content.append("---")
         content.append("")
@@ -148,7 +150,7 @@ class NewDensityTemplateEngine:
         return "\n".join(lines)
     
     def _generate_executive_summary(self, stats: Dict[str, Any], segment_summary_df: pd.DataFrame) -> str:
-        """Generate executive summary with operational status."""
+        """Generate executive summary with operational status and RES scores (Issue #573)."""
         lines = [
             "## Executive Summary"
         ]
@@ -178,10 +180,27 @@ class NewDensityTemplateEngine:
             alert_reason = "No operational flags"
         
         lines.extend([
-            f"- **Operational Status:** {operational_status} ({alert_reason})",
-            "",
-            "> LOS (Level of Service) describes how comfortable runners are within a section — A means free-flowing, while E/F indicate crowding. Even when overall LOS is good, short-lived surges in runner flow can stress aid stations or intersections, requiring active flow management."
+            f"- **Operational Status:** {operational_status} ({alert_reason})"
         ])
+        
+        # Issue #573: Add Runner Experience Scores (RES) section if available
+        context = stats.get('_context', {})  # Get context from stats if passed
+        event_groups_res = context.get('event_groups_res') if isinstance(context, dict) else None
+        
+        if event_groups_res:
+            lines.append("")
+            lines.append("- **Runner Experience Scores (RES):**")
+            # Sort groups by name for consistent ordering
+            for group_id in sorted(event_groups_res.keys()):
+                group_data = event_groups_res[group_id]
+                res_score = group_data.get('res', 0.0)
+                lines.append(f"  - {group_id}: {res_score:.2f}")
+            lines.append("")
+            lines.append("> RES (Runner Experience Score) is a composite score (0.0-5.0) representing overall race experience, combining density and flow metrics. Higher scores indicate better runner experience.")
+        else:
+            lines.append("")
+        
+        lines.append("> LOS (Level of Service) describes how comfortable runners are within a section — A means free-flowing, while E/F indicate crowding. Even when overall LOS is good, short-lived surges in runner flow can stress aid stations or intersections, requiring active flow management.")
         
         return "\n".join(lines)
     

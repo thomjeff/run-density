@@ -113,6 +113,56 @@ def validate_event_names(events: List[Dict[str, Any]]) -> None:
         seen_names.add(name)
 
 
+def validate_event_group(
+    events: List[Dict[str, Any]],
+    event_group: Optional[Dict[str, str]]
+) -> None:
+    """
+    Validate event_group configuration (Issue #573).
+    
+    If event_group is provided, all events in the request must be covered by at least one group.
+    
+    Args:
+        events: List of event dictionaries from API payload
+        event_group: Optional event grouping dictionary (format: {"group_id": "event1, event2, ..."})
+        
+    Raises:
+        ValidationError (400): If event_group is provided but doesn't cover all events
+    """
+    if event_group is None:
+        return  # Optional field, skip validation if not provided
+    
+    if not isinstance(event_group, dict):
+        raise ValidationError(
+            "event_group must be a dictionary",
+            code=400
+        )
+    
+    # Collect all event names from the request (normalized to lowercase)
+    requested_event_names = {event.get("name", "").lower() for event in events}
+    
+    # Collect all event names from event_group values (parse comma-separated lists)
+    grouped_event_names = set()
+    for group_id, event_list_str in event_group.items():
+        if not isinstance(event_list_str, str):
+            raise ValidationError(
+                f"event_group value for '{group_id}' must be a string (comma-separated event names)",
+                code=400
+            )
+        
+        # Parse comma-separated event names (strip whitespace, normalize to lowercase)
+        event_names = [name.strip().lower() for name in event_list_str.split(",") if name.strip()]
+        grouped_event_names.update(event_names)
+    
+    # Check if all requested events are covered
+    missing_events = requested_event_names - grouped_event_names
+    if missing_events:
+        raise ValidationError(
+            f"event_group must cover all events in request. Missing events: {sorted(missing_events)}",
+            code=400
+        )
+
+
 def validate_file_existence(
     segments_file: str,
     locations_file: str,
@@ -490,6 +540,10 @@ def validate_api_payload(
     validate_start_times(events)
     validate_event_duration_range(events)
     validate_event_names(events)
+    
+    # Issue #573: Validate event_group if provided
+    event_group = payload.get("event_group")
+    validate_event_group(events, event_group)
     
     # File existence validation
     validate_file_existence(segments_file, locations_file, flow_file, events, data_dir)
