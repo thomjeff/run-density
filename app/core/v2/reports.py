@@ -164,17 +164,25 @@ def generate_reports_per_day(
         
         # Generate Locations.csv (if applicable)
         if locations_df is not None:
-            locations_path = generate_locations_report_v2(
-                run_id=run_id,
-                day=day,
-                day_events=day_events,
-                locations_df=locations_df,
-                all_runners_df=all_runners_df,
-                reports_path=reports_path,
-                segments_df=day_segments_df
-            )
-            if locations_path:
-                day_report_paths["locations"] = str(locations_path)
+            try:
+                logger.info(f"Generating locations report for day {day.value}...")
+                locations_path = generate_locations_report_v2(
+                    run_id=run_id,
+                    day=day,
+                    day_events=day_events,
+                    locations_df=locations_df,
+                    all_runners_df=all_runners_df,
+                    reports_path=reports_path,
+                    segments_df=day_segments_df
+                )
+                if locations_path:
+                    day_report_paths["locations"] = str(locations_path)
+                    logger.info(f"Successfully generated locations report for day {day.value}")
+                else:
+                    logger.warning(f"Locations report generation returned None for day {day.value}")
+            except Exception as e:
+                logger.error(f"Failed to generate locations report for day {day.value}: {e}", exc_info=True)
+                # Continue with other reports even if locations fails
         
         report_paths_by_day[day] = day_report_paths
         
