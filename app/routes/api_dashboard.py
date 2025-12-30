@@ -371,6 +371,13 @@ async def get_run_summary(run_id: str):
         - co_presence_segments
         - flagged_bins
         - operational_status
+        - event_groups (Issue #573): RES data per event group
+          Format: {
+            "group_id": {
+              "events": ["event1", "event2"],
+              "res": 4.2
+            }
+          }
     """
     try:
         from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER
@@ -439,6 +446,9 @@ async def get_run_summary(run_id: str):
                 # Get operational_status from metadata (Issue #565)
                 operational_status = day_meta.get("operational_status", "Unknown")
                 
+                # Issue #573: Get event_groups RES data from metadata
+                event_groups_res = day_meta.get("event_groups", {})
+                
                 metrics_by_day[day] = {
                     "participants": total_participants,
                     "events": event_names,
@@ -449,7 +459,8 @@ async def get_run_summary(run_id: str):
                     "overtaking_segments": segments_overtaking,
                     "co_presence_segments": segments_copresence,
                     "flagged_bins": bins_flagged,
-                    "operational_status": operational_status
+                    "operational_status": operational_status,
+                    "event_groups": event_groups_res  # Issue #573: RES data per event group
                 }
                 
             except Exception as e:
@@ -464,7 +475,8 @@ async def get_run_summary(run_id: str):
                     "overtaking_segments": 0,
                     "co_presence_segments": 0,
                     "flagged_bins": 0,
-                    "operational_status": "Unknown"
+                    "operational_status": "Unknown",
+                    "event_groups": {}  # Issue #573: Empty event_groups on error
                 }
         
         return JSONResponse(
