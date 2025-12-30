@@ -3402,7 +3402,8 @@ def generate_new_density_report_issue246(
     reports_dir: str,
     output_path: Optional[str] = None,
     app_version: str = "1.6.42",
-    events: Optional[Dict[str, Dict[str, Any]]] = None
+    events: Optional[Dict[str, Dict[str, Any]]] = None,
+    event_groups_res: Optional[Dict[str, Dict[str, Any]]] = None  # Issue #573: RES data for Executive Summary
 ) -> Dict[str, Any]:
     """
     Generate the new density report per Issue #246 specification.
@@ -3415,6 +3416,7 @@ def generate_new_density_report_issue246(
         output_path: Path to save the report (optional)
         app_version: Application version
         events: Optional dict of event info (name -> {start_time, start_time_formatted, runner_count})
+        event_groups_res: Optional event groups RES data (Issue #573)
         
     Returns:
         Dictionary with report content and metadata
@@ -3427,7 +3429,13 @@ def generate_new_density_report_issue246(
     output_path_obj = Path(output_path) if output_path else None
     
     # Generate the new report
-    results = generate_new_density_report(reports_path, output_path_obj, app_version, events=events)
+    results = generate_new_density_report(
+        reports_path, 
+        output_path_obj, 
+        app_version, 
+        events=events,
+        event_groups_res=event_groups_res  # Issue #573: Pass RES data
+    )
     
     # Return in the format expected by the existing API
     return {

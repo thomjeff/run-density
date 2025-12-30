@@ -153,7 +153,8 @@ def generate_new_density_report(
     reports_dir: Path,
     output_path: Optional[Path] = None,
     app_version: str = "1.0.0",
-    events: Optional[Dict[str, Dict[str, Any]]] = None
+    events: Optional[Dict[str, Dict[str, Any]]] = None,
+    event_groups_res: Optional[Dict[str, Dict[str, Any]]] = None  # Issue #573: RES data for Executive Summary
 ) -> Dict[str, Any]:
     """
     Generate the new density report per Issue #246 specification.
@@ -218,6 +219,7 @@ def generate_new_density_report(
         'rate_warn_threshold': flagging_config.rate_warn_threshold,
         'rate_critical_threshold': flagging_config.rate_critical_threshold,
         'events': events,  # Pass events for dynamic start times (v2)
+        'event_groups_res': event_groups_res,  # Issue #573: RES data for Executive Summary
         # Issue #512: Removed hardcoded runner counts - must be calculated from actual data
     }
     
