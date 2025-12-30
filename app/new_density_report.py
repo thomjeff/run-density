@@ -186,15 +186,22 @@ def generate_new_density_report(
     # Apply new flagging logic
     print("🔍 Applying new flagging logic...")
     bins_flagged = apply_new_flagging(bins_df, flagging_config, segments_df)
+    print(f"✅ Flagging complete: {len(bins_flagged)} bins processed")
     
     # Get flagged bins only
+    print("📊 Getting flagged bins...")
     flagged_bins = get_flagged_bins_new(bins_flagged)
+    print(f"✅ Found {len(flagged_bins)} flagged bins")
     
     # Issue #283: Use SSOT for flagging statistics to ensure report/artifact parity
+    print("📈 Computing flagging statistics...")
     stats_ssot = ssot_flagging.get_flagging_summary_for_report(bins_flagged, rulebook)
+    print(f"✅ Statistics computed: {stats_ssot.get('flagged_bins', 0)}/{stats_ssot.get('total_bins', 0)} flagged")
     
     # Generate summaries (keep segment_summary for template compatibility)
+    print("📋 Generating segment summary...")
     segment_summary = summarize_segment_flags_new(bins_flagged)
+    print(f"✅ Segment summary: {len(segment_summary)} segments")
     
     # Map SSOT stats to expected format for template engine
     stats = {
