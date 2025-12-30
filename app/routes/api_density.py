@@ -269,8 +269,8 @@ async def get_density_segments(
         selected_day, available_days = resolve_selected_day(run_id, day)
         storage = create_runflow_storage(run_id)
         
-        # Load segment metrics from day-scoped path
-        segment_metrics_raw = storage.read_json(f"{selected_day}/ui/segment_metrics.json")
+        # Load segment metrics from day-scoped path (Issue #580: Updated path to metrics/ subdirectory)
+        segment_metrics_raw = storage.read_json(f"{selected_day}/ui/metrics/segment_metrics.json")
         if not segment_metrics_raw:
             return JSONResponse(
                 content={"detail": "No segment metrics available"},
