@@ -695,9 +695,10 @@ def _aggregate_bins_from_all_days(run_id: str) -> Optional[pd.DataFrame]:
     all_bins = []
     
     # Collect bins from all day directories
+    # Issue #574: Bins are stored in {day}/bins/bins.parquet, not {day}/reports/bins.parquet
     for day_dir in run_path.iterdir():
         if day_dir.is_dir() and day_dir.name in ['fri', 'sat', 'sun', 'mon']:
-            bins_parquet = day_dir / "reports" / "bins.parquet"
+            bins_parquet = day_dir / "bins" / "bins.parquet"
             if bins_parquet.exists():
                 try:
                     day_bins = pd.read_parquet(bins_parquet)
