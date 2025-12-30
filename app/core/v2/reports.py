@@ -696,14 +696,20 @@ def generate_locations_report_v2(
             # NOTE: Do NOT pass run_id to generate_location_report when using v2 structure
             # because it will use get_runflow_category_path which creates runflow/{run_id}/reports
             # instead of runflow/{run_id}/{day}/reports. We pass output_dir directly instead.
-            result = generate_location_report(
-                locations_csv=tmp_locations_path,
-                runners_csv=tmp_runners_path,
-                segments_csv=tmp_segments_path,
-                start_times=start_times,
-                output_dir=str(reports_path),
-                run_id=None  # Don't pass run_id - use output_dir directly for v2 day-partitioned structure
-            )
+            logger.info(f"Calling generate_location_report for day {day.value} with {len(day_locations_df)} locations, {len(day_runners_df)} runners")
+            try:
+                result = generate_location_report(
+                    locations_csv=tmp_locations_path,
+                    runners_csv=tmp_runners_path,
+                    segments_csv=tmp_segments_path,
+                    start_times=start_times,
+                    output_dir=str(reports_path),
+                    run_id=None  # Don't pass run_id - use output_dir directly for v2 day-partitioned structure
+                )
+                logger.info(f"generate_location_report returned for day {day.value}: ok={result.get('ok', False)}")
+            except Exception as e:
+                logger.error(f"Exception in generate_location_report for day {day.value}: {e}", exc_info=True)
+                raise
             
             # location_report.py saves to output_dir/Locations.csv via get_report_paths
             locations_path = reports_path / "Locations.csv"
