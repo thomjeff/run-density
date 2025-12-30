@@ -61,81 +61,99 @@ class NewDensityTemplateEngine:
         stats: Dict[str, Any]
     ) -> str:
         """Generate the complete new density report."""
+        import logging
+        logger = logging.getLogger(__name__)
         
         content = []
         
-        # 1. Title & Metadata
-        content.append(self._generate_title_metadata(context))
-        content.append("")
-        content.append("---")
-        content.append("")
-        
-        # 2. Executive Summary
-        # Pass context to _generate_executive_summary for RES data (Issue #573)
-        stats_with_context = {**stats, '_context': context}
-        content.append(self._generate_executive_summary(stats_with_context, segment_summary_df))
-        content.append("")
-        content.append("---")
-        content.append("")
-        
-        # 3. Methodology & Inputs
-        content.append(self._generate_methodology_inputs(context))
-        content.append("")
-        content.append("---")
-        content.append("")
-        
-        # 4. Start Times & Cohorts
-        content.append(self._generate_start_times_cohorts(context))
-        content.append("")
-        content.append("---")
-        content.append("")
-        
-        # 5. Course Overview
-        content.append(self._generate_course_overview(segments_df, segment_windows_df, bins_df))
-        content.append("")
-        content.append("---")
-        content.append("")
-        
-        # 6. Flagged Segments
-        content.append(self._generate_flagged_segments_complete(segment_summary_df, segments_df))
-        content.append("")
-        content.append("---")
-        content.append("")
-        
-        # 7. Flagged Bins Summary (merged into Flagged Segments)
-        # content.append(self._generate_flagged_bins_summary(segment_summary_df))
-        # content.append("")
-        # content.append("---")
-        # content.append("")
-        
-        # 8. Operational Heatmap (placeholder)
-        content.append(self._generate_operational_heatmap_placeholder())
-        content.append("")
-        content.append("---")
-        content.append("")
-        
-        # 9. Bin-Level Detail
-        content.append(self._generate_bin_level_detail(flagged_bins_df))
-        content.append("")
-        content.append("---")
-        content.append("")
-        
-        # 10. Segment Details
-        content.append(self._generate_segment_details(segments_df, segment_windows_df, segment_summary_df))
-        content.append("")
-        content.append("---")
-        content.append("")
-        
-        # 10. Mitigations
-        content.append(self._generate_mitigations(segment_summary_df))
-        content.append("")
-        content.append("---")
-        content.append("")
-        
-        # 11. Appendix
-        content.append(self._generate_appendix())
-        
-        return "\n".join(content)
+        try:
+            # 1. Title & Metadata
+            logger.info("Template: Generating title & metadata...")
+            content.append(self._generate_title_metadata(context))
+            content.append("")
+            content.append("---")
+            content.append("")
+            
+            # 2. Executive Summary
+            logger.info("Template: Generating executive summary...")
+            # Pass context to _generate_executive_summary for RES data (Issue #573)
+            stats_with_context = {**stats, '_context': context}
+            content.append(self._generate_executive_summary(stats_with_context, segment_summary_df))
+            content.append("")
+            content.append("---")
+            content.append("")
+            
+            # 3. Methodology & Inputs
+            logger.info("Template: Generating methodology & inputs...")
+            content.append(self._generate_methodology_inputs(context))
+            content.append("")
+            content.append("---")
+            content.append("")
+            
+            # 4. Start Times & Cohorts
+            logger.info("Template: Generating start times & cohorts...")
+            content.append(self._generate_start_times_cohorts(context))
+            content.append("")
+            content.append("---")
+            content.append("")
+            
+            # 5. Course Overview
+            logger.info("Template: Generating course overview...")
+            content.append(self._generate_course_overview(segments_df, segment_windows_df, bins_df))
+            content.append("")
+            content.append("---")
+            content.append("")
+            
+            # 6. Flagged Segments
+            logger.info("Template: Generating flagged segments...")
+            content.append(self._generate_flagged_segments_complete(segment_summary_df, segments_df))
+            content.append("")
+            content.append("---")
+            content.append("")
+            
+            # 7. Flagged Bins Summary (merged into Flagged Segments)
+            # content.append(self._generate_flagged_bins_summary(segment_summary_df))
+            # content.append("")
+            # content.append("---")
+            # content.append("")
+            
+            # 8. Operational Heatmap (placeholder)
+            logger.info("Template: Generating operational heatmap placeholder...")
+            content.append(self._generate_operational_heatmap_placeholder())
+            content.append("")
+            content.append("---")
+            content.append("")
+            
+            # 9. Bin-Level Detail
+            logger.info("Template: Generating bin-level detail...")
+            content.append(self._generate_bin_level_detail(flagged_bins_df))
+            content.append("")
+            content.append("---")
+            content.append("")
+            
+            # 10. Segment Details
+            logger.info("Template: Generating segment details...")
+            content.append(self._generate_segment_details(segments_df, segment_windows_df, segment_summary_df))
+            content.append("")
+            content.append("---")
+            content.append("")
+            
+            # 10. Mitigations
+            logger.info("Template: Generating mitigations...")
+            content.append(self._generate_mitigations(segment_summary_df))
+            content.append("")
+            content.append("---")
+            content.append("")
+            
+            # 11. Appendix
+            logger.info("Template: Generating appendix...")
+            content.append(self._generate_appendix())
+            
+            logger.info("Template: Report generation complete, joining content...")
+            return "\n".join(content)
+        except Exception as e:
+            logger.error(f"Template: Error generating report: {e}", exc_info=True)
+            raise
     
     def _generate_title_metadata(self, context: Dict[str, Any]) -> str:
         """Generate title and metadata section."""
