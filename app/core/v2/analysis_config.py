@@ -123,7 +123,8 @@ def generate_analysis_json(
                 "locations": str,
                 "runners": {str: str},
                 "gpx": {str: str}
-            }
+            },
+            "event_group": {str: str}  # Optional (Issue #573): Event grouping for RES calculation
         }
     """
     # Get data directory (from constant/environment, not request)
@@ -136,6 +137,7 @@ def generate_analysis_json(
     flow_file = request_payload.get("flow_file")
     locations_file = request_payload.get("locations_file")
     events = request_payload.get("events", [])
+    event_group = request_payload.get("event_group")  # Issue #573: Optional event grouping for RES
     
     # Generate default description if not provided
     if not description:
@@ -231,6 +233,10 @@ def generate_analysis_json(
             "gpx": gpx_files_dict
         }
     }
+    
+    # Issue #573: Add event_group to analysis.json if provided
+    if event_group is not None:
+        analysis_json["event_group"] = event_group
     
     # Write to run directory
     analysis_json_path = run_path / "analysis.json"
