@@ -150,8 +150,8 @@ async def get_dashboard_summary(
         # Track missing files for warnings
         warnings = []
         
-        # Load meta data
-        meta = _load_ui_artifact_safe(storage, f"{selected_day}/ui/meta.json", warnings) or {}
+        # Load meta data (Issue #580: Updated path to metadata/ subdirectory)
+        meta = _load_ui_artifact_safe(storage, f"{selected_day}/ui/metadata/meta.json", warnings) or {}
         timestamp = meta.get("run_timestamp", datetime.now().isoformat() + "Z")
         environment = meta.get("environment", "local")
         
@@ -180,9 +180,9 @@ async def get_dashboard_summary(
         except Exception as e:
             logger.warning(f"Could not read day metadata for events: {e}")
         
-        # Load segment metrics
+        # Load segment metrics (Issue #580: Updated path to metrics/ subdirectory)
         # Issue #485: Extract summary fields BEFORE filtering segment-level data
-        raw_segment_metrics = _load_ui_artifact_safe(storage, f"{selected_day}/ui/segment_metrics.json", warnings) or {}
+        raw_segment_metrics = _load_ui_artifact_safe(storage, f"{selected_day}/ui/metrics/segment_metrics.json", warnings) or {}
         
         # Extract summary-level fields (these are top-level keys, not segment IDs)
         summary_fields = ['peak_density', 'peak_rate', 'segments_with_flags', 'flagged_bins', 
@@ -202,8 +202,8 @@ async def get_dashboard_summary(
         peak_density, peak_rate = _calculate_peak_metrics(segment_metrics)
         peak_density_los = calculate_peak_density_los(peak_density)
         
-        # Load flags data
-        flags = _load_ui_artifact_safe(storage, f"{selected_day}/ui/flags.json", warnings)
+        # Load flags data (Issue #580: Updated path to metrics/ subdirectory)
+        flags = _load_ui_artifact_safe(storage, f"{selected_day}/ui/metrics/flags.json", warnings)
         if flags is None:
             flags = []
         
@@ -423,7 +423,7 @@ async def get_run_summary(run_id: str):
                 total_participants = sum(int(ev_info.get("participants", 0)) for ev_info in events_obj.values() if isinstance(ev_info, dict))
                 
                 # Load segment metrics
-                segment_metrics = _load_ui_artifact_safe(storage, f"{day}/ui/segment_metrics.json", []) or {}
+                segment_metrics = _load_ui_artifact_safe(storage, f"{day}/ui/metrics/segment_metrics.json", []) or {}
                 summary_fields = ['peak_density', 'peak_rate', 'segments_with_flags', 'flagged_bins', 
                                  'overtaking_segments', 'co_presence_segments']
                 segments_overtaking = segment_metrics.get("overtaking_segments", 0)
@@ -438,7 +438,7 @@ async def get_run_summary(run_id: str):
                 peak_density_los = calculate_peak_density_los(peak_density)
                 
                 # Load flags
-                flags = _load_ui_artifact_safe(storage, f"{day}/ui/flags.json", [])
+                flags = _load_ui_artifact_safe(storage, f"{day}/ui/metrics/flags.json", [])
                 if flags is None:
                     flags = []
                 segments_flagged, bins_flagged = _calculate_flags_metrics(flags)

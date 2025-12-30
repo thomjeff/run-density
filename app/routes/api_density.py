@@ -281,16 +281,16 @@ async def get_density_segments(
         segment_metrics = {k: v for k, v in segment_metrics_raw.items() 
                           if isinstance(v, dict) and k not in ["peak_density", "peak_rate", "segments_with_flags", "flagged_bins"]}
         
-        # Load segments geojson for labels from day-scoped path
-        segments_geojson = storage.read_json(f"{selected_day}/ui/segments.geojson")
+        # Load segments geojson for labels from day-scoped path (Issue #580: Updated path to geospatial/ subdirectory)
+        segments_geojson = storage.read_json(f"{selected_day}/ui/geospatial/segments.geojson")
         if not segments_geojson:
             logger.warning(f"segments.geojson not found for day {selected_day}")
         
         # Build label lookup
         label_lookup = _build_label_lookup_from_geojson(segments_geojson or {})
         
-        # Load flags from day-scoped path
-        flags_data = storage.read_json(f"{selected_day}/ui/flags.json")
+        # Load flags from day-scoped path (Issue #580: Updated path to metrics/ subdirectory)
+        flags_data = storage.read_json(f"{selected_day}/ui/metrics/flags.json")
         flagged_seg_ids = set()
         if flags_data and isinstance(flags_data, list):
             flagged_seg_ids = {flag.get("segment_id") or flag.get("seg_id") for flag in flags_data}
@@ -472,8 +472,8 @@ async def get_density_segment_detail(
         selected_day, available_days = resolve_selected_day(run_id, day)
         storage = create_runflow_storage(run_id)
         
-        # Load segment metrics from day-scoped path
-        segment_metrics_raw = storage.read_json(f"{selected_day}/ui/segment_metrics.json")
+        # Load segment metrics from day-scoped path (Issue #580: Updated path to metrics/ subdirectory)
+        segment_metrics_raw = storage.read_json(f"{selected_day}/ui/metrics/segment_metrics.json")
         if not segment_metrics_raw:
             raise HTTPException(status_code=404, detail="Segment metrics not found")
         
@@ -487,7 +487,7 @@ async def get_density_segment_detail(
         metrics = segment_metrics[seg_id]
         
         # Load segment metadata from day-scoped geojson
-        segments_geojson = storage.read_json(f"{selected_day}/ui/segments.geojson")
+        segments_geojson = storage.read_json(f"{selected_day}/ui/geospatial/segments.geojson")
         metadata = {}
         if segments_geojson and "features" in segments_geojson:
             for feature in segments_geojson["features"]:
@@ -497,22 +497,22 @@ async def get_density_segment_detail(
                     break
         
         # Check if flagged from day-scoped path
-        flags_data = storage.read_json(f"{selected_day}/ui/flags.json")
+        flags_data = storage.read_json(f"{selected_day}/ui/metrics/flags.json")
         is_flagged = False
         if flags_data and isinstance(flags_data, list):
             is_flagged = any(f.get("segment_id") == seg_id or f.get("seg_id") == seg_id for f in flags_data)
         
-        # Load heatmap URL and caption from day-scoped captions.json
-        captions = storage.read_json(f"{selected_day}/ui/captions.json")
+        # Load heatmap URL and caption from day-scoped captions.json (Issue #580: Updated path to visualizations/ subdirectory)
+        captions = storage.read_json(f"{selected_day}/ui/visualizations/captions.json")
         heatmap_url = None
         caption = ""
         if captions and seg_id in captions:
             caption_data = captions[seg_id]
-            # Build heatmap URL for day-scoped runflow structure
-            # Files are at: runflow/<run_id>/<day>/ui/heatmaps/<seg_id>.png
+            # Build heatmap URL for day-scoped runflow structure (Issue #580: Updated path to visualizations/heatmaps/)
+            # Files are at: runflow/<run_id>/<day>/ui/visualizations/heatmaps/<seg_id>.png
             # Mounted as: /heatmaps -> /app/runflow
-            # URL path: /heatmaps/<run_id>/<day>/ui/heatmaps/<seg_id>.png
-            heatmap_url = f"/heatmaps/{run_id}/{selected_day}/ui/heatmaps/{seg_id}.png"
+            # URL path: /heatmaps/<run_id>/<day>/ui/visualizations/heatmaps/<seg_id>.png
+            heatmap_url = f"/heatmaps/{run_id}/{selected_day}/ui/visualizations/heatmaps/{seg_id}.png"
             caption = caption_data.get("summary", "")
         
         # Build detail response
