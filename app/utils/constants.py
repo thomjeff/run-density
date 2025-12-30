@@ -178,3 +178,9 @@ RUN_ID_MIN_LENGTH = 10
 # Location Report Configuration (Issue #277)
 LOCATION_SNAP_THRESHOLD_M = 50.0  # Maximum distance for snapping location to segment
 LOCATION_SETUP_BUFFER_MINUTES = 45  # Minutes before earliest runner start for loc_start
+
+# RES (Runner Experience Score) thresholds and weights (Issue #573)
+RES_HIGH_DENSITY_THRESHOLD = 0.72  # LOS D threshold (p/m²) - configurable
+RES_HIGH_FLOW_THRESHOLD = 90.0     # runners/min/m - configurable
+RES_FLOW_PENALTY_WEIGHT = 2.0      # Flow penalty weight
+RES_DENSITY_PENALTY_WEIGHT = 1.5   # Density penalty weight
