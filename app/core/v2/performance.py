@@ -70,14 +70,29 @@ class PerformanceMonitor:
         self.start_time = time.monotonic()
         self.total_memory_mb: Optional[float] = None
     
-    def start_phase(self, phase_name: str) -> PerformanceMetrics:
-        """Start timing a phase."""
+    def start_phase(self, phase_name: str, phase_number: Optional[str] = None, phase_description: Optional[str] = None) -> PerformanceMetrics:
+        """
+        Start timing a phase.
+        
+        Issue #581: Enhanced phase logging with Issue #574 phase numbers.
+        
+        Args:
+            phase_name: Internal phase identifier (e.g., "phase_1_pre_analysis")
+            phase_number: Optional phase number from Issue #574 (e.g., "Phase 1", "Phase 3.1")
+            phase_description: Optional human-readable description (e.g., "Pre-Analysis & Validation")
+        """
         metrics = PerformanceMetrics(
             phase_name=phase_name,
             start_time=time.monotonic()
         )
         self.metrics.append(metrics)
-        logger.info(f"⏱️  Starting phase: {phase_name}")
+        
+        # Issue #581: Enhanced phase logging with phase numbers
+        if phase_number and phase_description:
+            logger.info(f"[{phase_number}] ⏱️  Starting: {phase_description}")
+        else:
+            logger.info(f"⏱️  Starting phase: {phase_name}")
+        
         return metrics
     
     def get_total_elapsed(self) -> float:
@@ -90,6 +105,46 @@ class PerformanceMonitor:
             if m.phase_name == phase_name:
                 return m
         return None
+    
+    def complete_phase(self, metrics: PerformanceMetrics, phase_number: Optional[str] = None, 
+                      phase_description: Optional[str] = None, summary_stats: Optional[Dict[str, Any]] = None):
+        """
+        Complete a phase and log completion message with summary statistics.
+        
+        Issue #581: Enhanced phase completion logging with Issue #574 phase numbers.
+        
+        Args:
+            metrics: PerformanceMetrics object for the phase
+            phase_number: Optional phase number from Issue #574 (e.g., "Phase 1", "Phase 3.1")
+            phase_description: Optional human-readable description (e.g., "Pre-Analysis & Validation")
+            summary_stats: Optional dict with summary statistics to include in log message
+        """
+        metrics.finish()
+        
+        # Issue #581: Enhanced phase completion logging
+        elapsed_str = f"({metrics.elapsed_seconds:.3f}s)" if metrics.elapsed_seconds else ""
+        
+        if phase_number and phase_description:
+            # Build summary string from statistics
+            summary_parts = []
+            if summary_stats:
+                for key, value in summary_stats.items():
+                    if isinstance(value, (int, float)):
+                        if isinstance(value, float):
+                            summary_parts.append(f"{key}={value:.2f}" if value < 100 else f"{key}={int(value)}")
+                        else:
+                            summary_parts.append(f"{key}={value}")
+                    elif isinstance(value, (list, tuple)):
+                        summary_parts.append(f"{key}={len(value)}")
+                    else:
+                        summary_parts.append(f"{key}={value}")
+            
+            summary_str = f" ({', '.join(summary_parts)})" if summary_parts else ""
+            logger.info(f"[{phase_number}] ✅ Complete: {phase_description}{summary_str} {elapsed_str}")
+            # Add visual separator after phase completion
+            logger.info("═" * 65)
+        else:
+            logger.info(f"✅ Phase complete: {metrics.phase_name} {elapsed_str}")
     
     def check_guardrails(self, metrics: PerformanceMetrics) -> Dict[str, Any]:
         """
@@ -199,26 +254,45 @@ class PerformanceMonitor:
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
     
-    def log_summary(self):
-        """Log performance summary to logger."""
+    def log_summary(self, phase_mapping: Optional[Dict[str, Dict[str, str]]] = None):
+        """
+        Log performance summary to logger.
+        
+        Issue #581: Enhanced phase breakdown with Issue #574 phase numbers.
+        
+        Args:
+            phase_mapping: Optional dict mapping phase_name to {phase_number, phase_description}
+                          Example: {"phase_1_pre_analysis": {"number": "Phase 1", "description": "Pre-Analysis & Validation"}}
+        """
         summary = self.get_summary()
-        logger.info("=" * 80)
+        logger.info("═" * 65)
         logger.info("📊 Performance Summary")
-        logger.info("=" * 80)
+        logger.info("═" * 65)
         logger.info(f"Total runtime: {summary['total_elapsed_minutes']:.2f} minutes ({summary['total_elapsed_seconds']:.2f}s)")
         
         if summary['phases']:
             logger.info("\nPhase Breakdown:")
+            logger.info("═" * 65)
             for phase in summary['phases']:
+                phase_name = phase['phase']
+                
+                # Issue #581: Map phase names to Issue #574 phase numbers if mapping provided
+                if phase_mapping and phase_name in phase_mapping:
+                    phase_info = phase_mapping[phase_name]
+                    phase_label = f"[{phase_info['number']}] {phase_info['description']}"
+                else:
+                    phase_label = phase_name
+                
                 logger.info(
-                    f"  {phase['phase']:20s}: {phase['elapsed_seconds']:6.3f}s "
+                    f"  {phase_label:40s}: {phase['elapsed_seconds']:6.3f}s "
                     f"({phase['percentage']:5.1f}%)"
                 )
+            logger.info("═" * 65)
         
         if summary['total_memory_mb']:
             logger.info(f"\nPeak memory usage: {summary['total_memory_mb']:.2f} MB")
         
-        logger.info("=" * 80)
+        logger.info("═" * 65)
 
 
 def monitor_performance(phase_name: Optional[str] = None):
