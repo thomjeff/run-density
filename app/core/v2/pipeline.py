@@ -555,18 +555,16 @@ def create_full_analysis_pipeline(
             1 if analysis_config.get("flow_file") else 0,
             1 if analysis_config.get("locations_file") else 0,
         ])
+        # Timeline Generation (part of Phase 1)
+        timelines = generate_day_timelines(events)
+        logger.info(f"[Phase 1] Generated {len(timelines)} day timelines")
+        
         perf_monitor.complete_phase(
             phase_1_metrics,
             phase_number="Phase 1",
             phase_description="Pre-Analysis & Validation",
-            summary_stats={"events": event_count, "days": days_count, "data_files": data_files_count}
+            summary_stats={"events": event_count, "days": days_count, "data_files": data_files_count, "timelines": len(timelines)}
         )
-        
-        # Phase: Timeline Generation (part of Phase 1)
-        timeline_metrics = perf_monitor.start_phase("timeline_generation")
-        timelines = generate_day_timelines(events)
-        timeline_metrics.finish(event_count=len(events))
-        logger.info(f"Generated {len(timelines)} day timelines")
         
         # Phase 2: Data Loading (Issue #581: Enhanced logging)
         data_loading_metrics = perf_monitor.start_phase(
@@ -719,9 +717,10 @@ def create_full_analysis_pipeline(
             summary_stats={"json_files": len(persisted_files)}
         )
         
-        # Phase: Bin Generation (per day)
+        # Bin Generation (per day) - part of Phase 3.1, no separate phase tracking
         bins_by_day = {}
         for day, day_events in events_by_day.items():
+            logger.info(f"[Phase 3.1] Processing bin generation for day: {day.value}")
             bin_metrics = perf_monitor.start_phase(f"bin_generation_{day.value}")
             
             # Get density results for this day
