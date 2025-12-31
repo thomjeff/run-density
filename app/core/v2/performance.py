@@ -90,8 +90,6 @@ class PerformanceMonitor:
         # Issue #581: Enhanced phase logging with phase numbers
         if phase_number and phase_description:
             logger.info(f"[{phase_number}] ⏱️  Starting: {phase_description}")
-            # Add visual separator for phase transitions
-            logger.info("═" * 65)
         else:
             logger.info(f"⏱️  Starting phase: {phase_name}")
         
@@ -143,6 +141,8 @@ class PerformanceMonitor:
             
             summary_str = f" ({', '.join(summary_parts)})" if summary_parts else ""
             logger.info(f"[{phase_number}] ✅ Complete: {phase_description}{summary_str} {elapsed_str}")
+            # Add visual separator after phase completion
+            logger.info("═" * 65)
         else:
             logger.info(f"✅ Phase complete: {metrics.phase_name} {elapsed_str}")
     
