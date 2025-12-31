@@ -277,7 +277,19 @@ def _export_ui_artifacts_v2(
     ui_path = get_ui_artifacts_path(run_id, day)
     ui_path.mkdir(parents=True, exist_ok=True)
     
+    # Issue #574: Create subdirectories for organized artifact structure
+    metadata_dir = ui_path / "metadata"
+    metrics_dir = ui_path / "metrics"
+    geospatial_dir = ui_path / "geospatial"
+    visualizations_dir = ui_path / "visualizations"
+    
+    metadata_dir.mkdir(exist_ok=True)
+    metrics_dir.mkdir(exist_ok=True)
+    geospatial_dir.mkdir(exist_ok=True)
+    visualizations_dir.mkdir(exist_ok=True)
+    
     logger.info(f"Generating UI artifacts in {ui_path} (day-scoped to {len(day_segment_ids)} segments)")
+    logger.info(f"Issue #574: Using organized structure: metadata/, metrics/, geospatial/, visualizations/")
     
     # Aggregate bins.parquet from all days, then filter by day segments
     aggregated_bins = None
@@ -348,13 +360,13 @@ def _export_ui_artifacts_v2(
         logger.warning(f"   ⚠️  Could not aggregate/filter bins: {e}")
     
     try:
-        # 1. Generate meta.json
+        # 1. Generate meta.json (Issue #574: in metadata/ subdirectory)
         logger.info("1️⃣  Generating meta.json...")
         meta = generate_meta_json(run_id, environment)
         # Add day information for v2
         meta["day"] = day.value
-        (ui_path / "meta.json").write_text(json.dumps(meta, indent=2))
-        logger.info(f"   ✅ meta.json: run_id={meta['run_id']}, day={day.value}")
+        (metadata_dir / "meta.json").write_text(json.dumps(meta, indent=2))
+        logger.info(f"   ✅ meta.json: run_id={meta['run_id']}, day={day.value} (in metadata/)")
         
         # 2. Generate segment_metrics.json (day-scoped)
         logger.info("2️⃣  Generating segment_metrics.json...")
@@ -443,11 +455,12 @@ def _export_ui_artifacts_v2(
             **segment_metrics
         }
         
-        (ui_path / "segment_metrics.json").write_text(json.dumps(segment_metrics_with_summary, indent=2))
-        logger.info(f"   ✅ segment_metrics.json: {len(segment_metrics)} segments + summary")
+        # Issue #574: Write to metrics/ subdirectory
+        (metrics_dir / "segment_metrics.json").write_text(json.dumps(segment_metrics_with_summary, indent=2))
+        logger.info(f"   ✅ segment_metrics.json: {len(segment_metrics)} segments + summary (in metrics/)")
         
-        (ui_path / "flags.json").write_text(json.dumps(flags, indent=2))
-        logger.info(f"   ✅ flags.json: {len(flags)} flagged segments")
+        (metrics_dir / "flags.json").write_text(json.dumps(flags, indent=2))
+        logger.info(f"   ✅ flags.json: {len(flags)} flagged segments (in metrics/)")
         
         # 4. Generate flow.json
         logger.info("4️⃣  Generating flow.json...")
@@ -470,8 +483,9 @@ def _export_ui_artifacts_v2(
                 "summaries": []
             }
         
-        (ui_path / "flow.json").write_text(json.dumps(flow, indent=2))
-        logger.info(f"   ✅ flow.json: {len(flow.get('summaries', []))} segments, {len(flow.get('rows', []))} rows")
+        # Issue #574: Write to geospatial/ subdirectory
+        (geospatial_dir / "flow.json").write_text(json.dumps(flow, indent=2))
+        logger.info(f"   ✅ flow.json: {len(flow.get('summaries', []))} segments, {len(flow.get('rows', []))} rows (in geospatial/)")
         
         # 5. Generate segments.geojson (day-scoped)
         logger.info("5️⃣  Generating segments.geojson...")
@@ -534,20 +548,22 @@ def _export_ui_artifacts_v2(
             logger.warning(f"   ⚠️  Could not generate segments.geojson: {e}")
             segments_geojson = {"type": "FeatureCollection", "features": []}
         
-        (ui_path / "segments.geojson").write_text(json.dumps(segments_geojson, indent=2))
-        logger.info(f"   ✅ segments.geojson: {len(segments_geojson.get('features', []))} features")
+        # Issue #574: Write to geospatial/ subdirectory
+        (geospatial_dir / "segments.geojson").write_text(json.dumps(segments_geojson, indent=2))
+        logger.info(f"   ✅ segments.geojson: {len(segments_geojson.get('features', []))} features (in geospatial/)")
         
-        # 6. Generate schema_density.json
+        # 6. Generate schema_density.json (Issue #574: in metadata/ subdirectory)
         logger.info("6️⃣  Generating schema_density.json...")
         schema_density = generate_density_schema_json(meta.get('dataset_version', 'unknown'))
-        (ui_path / "schema_density.json").write_text(json.dumps(schema_density, indent=2))
-        logger.info(f"   ✅ schema_density.json: schema_version={schema_density.get('schema_version')}")
+        (metadata_dir / "schema_density.json").write_text(json.dumps(schema_density, indent=2))
+        logger.info(f"   ✅ schema_density.json: schema_version={schema_density.get('schema_version')} (in metadata/)")
         
-        # 7. Generate health.json
+        # 7. Generate health.json (Issue #574: in metadata/ subdirectory)
         logger.info("7️⃣  Generating health.json...")
+        # Note: generate_health_json expects ui_path, but we'll pass it and then move the file
         health = generate_health_json(ui_path, run_id, environment)
-        (ui_path / "health.json").write_text(json.dumps(health, indent=2))
-        logger.info(f"   ✅ health.json generated")
+        (metadata_dir / "health.json").write_text(json.dumps(health, indent=2))
+        logger.info(f"   ✅ health.json generated (in metadata/)")
         
         # 8. Generate heatmaps and captions
         logger.info("8️⃣  Generating heatmaps and captions...")
@@ -586,9 +602,9 @@ def _export_ui_artifacts_v2(
                         captions_source = possible_path
                         break
                 
-                # Move heatmaps and filter by day segments
+                # Issue #574: Move heatmaps to visualizations/ subdirectory
                 if heatmaps_source and heatmaps_source.exists():
-                    heatmaps_dest = ui_path / "heatmaps"
+                    heatmaps_dest = visualizations_dir  # visualizations/ subdirectory
                     heatmaps_dest.mkdir(parents=True, exist_ok=True)
 
                     heatmaps_moved = 0
@@ -609,18 +625,18 @@ def _export_ui_artifacts_v2(
 
                     logger.info(
                         f"   ✅ Heatmaps filtered and moved: {heatmaps_moved} PNGs "
-                        f"for day {day.value} ({len(day_segment_ids)} segments)"
+                        f"for day {day.value} ({len(day_segment_ids)} segments) (in visualizations/)"
                     )
                 else:
                     logger.warning(f"   ⚠️  Heatmaps not found at expected locations")
                 
-                # Move captions.json
+                # Issue #574: Move captions.json to visualizations/ subdirectory
                 if captions_source and captions_source.exists():
-                    captions_dest = ui_path / "captions.json"
+                    captions_dest = visualizations_dir / "captions.json"
                     if captions_dest.exists():
                         captions_dest.unlink()
                     shutil.move(str(captions_source), str(captions_dest))
-                    logger.info(f"   ✅ Captions moved to {captions_dest}")
+                    logger.info(f"   ✅ Captions moved to {captions_dest} (in visualizations/)")
                 else:
                     logger.warning(f"   ⚠️  Captions not found at expected locations")
                 
@@ -679,9 +695,10 @@ def _aggregate_bins_from_all_days(run_id: str) -> Optional[pd.DataFrame]:
     all_bins = []
     
     # Collect bins from all day directories
+    # Issue #574: Bins are stored in {day}/bins/bins.parquet, not {day}/reports/bins.parquet
     for day_dir in run_path.iterdir():
         if day_dir.is_dir() and day_dir.name in ['fri', 'sat', 'sun', 'mon']:
-            bins_parquet = day_dir / "reports" / "bins.parquet"
+            bins_parquet = day_dir / "bins" / "bins.parquet"
             if bins_parquet.exists():
                 try:
                     day_bins = pd.read_parquet(bins_parquet)

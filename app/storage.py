@@ -134,7 +134,8 @@ class Storage:
             logging.warning("No run_id available - cannot generate heatmap URL. Artifacts missing for current run.")
             return None
         # Issue #470: Heatmaps stored in runflow structure
-        return f"/runflow/{run_id}/ui/heatmaps/{segment_id}.png"
+        # Issue #580: Updated path to visualizations/ subdirectory (heatmaps are directly in visualizations/, not in a heatmaps/ subdirectory)
+        return f"/runflow/{run_id}/ui/visualizations/{segment_id}.png"
     
     # ===== Write Methods (Issue #455 - Phase 3) =====
     

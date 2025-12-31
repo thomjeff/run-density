@@ -167,9 +167,12 @@ def generate_new_density_report(
     Returns:
         Dictionary with report content and metadata
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     start_time = time.time()
     
-    print("🚀 Generating new density report (Issue #246)...")
+    logger.info("🚀 Generating new density report (Issue #246)...")
     
     # Load all data sources
     sources = load_parquet_sources(reports_dir)
@@ -184,17 +187,24 @@ def generate_new_density_report(
     flagging_config = create_flagging_config(rulebook, bins_df)
     
     # Apply new flagging logic
-    print("🔍 Applying new flagging logic...")
+    logger.info("🔍 Applying new flagging logic...")
     bins_flagged = apply_new_flagging(bins_df, flagging_config, segments_df)
+    logger.info(f"✅ Flagging complete: {len(bins_flagged)} bins processed")
     
     # Get flagged bins only
+    logger.info("📊 Getting flagged bins...")
     flagged_bins = get_flagged_bins_new(bins_flagged)
+    logger.info(f"✅ Found {len(flagged_bins)} flagged bins")
     
     # Issue #283: Use SSOT for flagging statistics to ensure report/artifact parity
+    logger.info("📈 Computing flagging statistics...")
     stats_ssot = ssot_flagging.get_flagging_summary_for_report(bins_flagged, rulebook)
+    logger.info(f"✅ Statistics computed: {stats_ssot.get('flagged_bins', 0)}/{stats_ssot.get('total_bins', 0)} flagged")
     
     # Generate summaries (keep segment_summary for template compatibility)
+    logger.info("📋 Generating segment summary...")
     segment_summary = summarize_segment_flags_new(bins_flagged)
+    logger.info(f"✅ Segment summary: {len(segment_summary)} segments")
     
     # Map SSOT stats to expected format for template engine
     stats = {
@@ -224,7 +234,7 @@ def generate_new_density_report(
     }
     
     # Generate report using new template engine
-    print("📝 Generating report content...")
+    logger.info("📝 Generating report content...")
     template_engine = NewDensityTemplateEngine()
     report_content = template_engine.generate_report(
         context=context,
@@ -241,7 +251,7 @@ def generate_new_density_report(
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, 'w') as f:
             f.write(report_content)
-        print(f"✅ Report saved to: {output_path}")
+        logger.info(f"✅ Report saved to: {output_path}")
     
     # Prepare results
     results = {

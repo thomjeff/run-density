@@ -128,18 +128,22 @@ def generate_reports_per_day(
         
         # Generate Density.md
         if day in density_results:
-            density_path = generate_density_report_v2(
-                run_id=run_id,
-                day=day,
-                day_events=day_events,
-                density_results=density_results[day],
-                reports_path=reports_path,
-                segments_df=day_segments_df,
-                data_dir=data_dir,
-                segments_file_path=segments_file_path  # Issue #553 Phase 6.2
-            )
-            if density_path:
-                day_report_paths["density"] = str(density_path)
+            try:
+                density_path = generate_density_report_v2(
+                    run_id=run_id,
+                    day=day,
+                    day_events=day_events,
+                    density_results=density_results[day],
+                    reports_path=reports_path,
+                    segments_df=day_segments_df,
+                    data_dir=data_dir,
+                    segments_file_path=segments_file_path  # Issue #553 Phase 6.2
+                )
+                if density_path:
+                    day_report_paths["density"] = str(density_path)
+            except Exception as e:
+                logger.error(f"Failed to generate density report for day {day.value}: {e}", exc_info=True)
+                # Continue with other reports even if density fails
         
         # Generate Flow.md and Flow.csv
         if day in flow_results:
@@ -160,17 +164,25 @@ def generate_reports_per_day(
         
         # Generate Locations.csv (if applicable)
         if locations_df is not None:
-            locations_path = generate_locations_report_v2(
-                run_id=run_id,
-                day=day,
-                day_events=day_events,
-                locations_df=locations_df,
-                all_runners_df=all_runners_df,
-                reports_path=reports_path,
-                segments_df=day_segments_df
-            )
-            if locations_path:
-                day_report_paths["locations"] = str(locations_path)
+            try:
+                logger.info(f"Generating locations report for day {day.value}...")
+                locations_path = generate_locations_report_v2(
+                    run_id=run_id,
+                    day=day,
+                    day_events=day_events,
+                    locations_df=locations_df,
+                    all_runners_df=all_runners_df,
+                    reports_path=reports_path,
+                    segments_df=day_segments_df
+                )
+                if locations_path:
+                    day_report_paths["locations"] = str(locations_path)
+                    logger.info(f"Successfully generated locations report for day {day.value}")
+                else:
+                    logger.warning(f"Locations report generation returned None for day {day.value}")
+            except Exception as e:
+                logger.error(f"Failed to generate locations report for day {day.value}: {e}", exc_info=True)
+                # Continue with other reports even if locations fails
         
         report_paths_by_day[day] = day_report_paths
         
@@ -376,6 +388,7 @@ def generate_density_report_v2(
             except Exception as e:
                 logger.debug(f"Could not load event_groups from metadata.json for day {day.value}: {e}")
             
+            logger.info(f"Calling generate_new_density_report_issue246 for day {day.value}...")
             results = generate_new_density_report_issue246(
                 reports_dir=str(reports_path),
                 output_path=str(reports_path / "Density.md"),
@@ -383,6 +396,7 @@ def generate_density_report_v2(
                 events=event_info,  # Pass event info for dynamic start times
                 event_groups_res=event_groups_res  # Issue #573: Pass RES data for Executive Summary
             )
+            logger.info(f"generate_new_density_report_issue246 returned for day {day.value}, success={results.get('success', False)}")
             
             if results.get('success'):
                 density_path = reports_path / "Density.md"
@@ -682,14 +696,20 @@ def generate_locations_report_v2(
             # NOTE: Do NOT pass run_id to generate_location_report when using v2 structure
             # because it will use get_runflow_category_path which creates runflow/{run_id}/reports
             # instead of runflow/{run_id}/{day}/reports. We pass output_dir directly instead.
-            result = generate_location_report(
-                locations_csv=tmp_locations_path,
-                runners_csv=tmp_runners_path,
-                segments_csv=tmp_segments_path,
-                start_times=start_times,
-                output_dir=str(reports_path),
-                run_id=None  # Don't pass run_id - use output_dir directly for v2 day-partitioned structure
-            )
+            logger.info(f"Calling generate_location_report for day {day.value} with {len(day_locations_df)} locations, {len(day_runners_df)} runners")
+            try:
+                result = generate_location_report(
+                    locations_csv=tmp_locations_path,
+                    runners_csv=tmp_runners_path,
+                    segments_csv=tmp_segments_path,
+                    start_times=start_times,
+                    output_dir=str(reports_path),
+                    run_id=None  # Don't pass run_id - use output_dir directly for v2 day-partitioned structure
+                )
+                logger.info(f"generate_location_report returned for day {day.value}: ok={result.get('ok', False)}")
+            except Exception as e:
+                logger.error(f"Exception in generate_location_report for day {day.value}: {e}", exc_info=True)
+                raise
             
             # location_report.py saves to output_dir/Locations.csv via get_report_paths
             locations_path = reports_path / "Locations.csv"

@@ -159,10 +159,10 @@ async def get_segments_geojson(
         selected_day, available_days = resolve_selected_day(run_id, day)
         storage = create_runflow_storage(run_id)
         
-        # Read segments.geojson from runflow UI artifacts (GeoJSON is JSON)
-        segments_geojson = storage.read_json(f"{selected_day}/ui/segments.geojson")
+        # Read segments.geojson from runflow UI artifacts (Issue #580: Updated path to geospatial/ subdirectory)
+        segments_geojson = storage.read_json(f"{selected_day}/ui/geospatial/segments.geojson")
         if segments_geojson is None:
-            logger.warning(f"segments.geojson not found in runflow/{run_id}/{selected_day}/ui/")
+            logger.warning(f"segments.geojson not found in runflow/{run_id}/{selected_day}/ui/geospatial/")
             return JSONResponse(
                 content={
                     "selected_day": selected_day,
@@ -179,15 +179,15 @@ async def get_segments_geojson(
             if "geometry" in feature:
                 feature["geometry"] = convert_geometry_to_wgs84(feature["geometry"])
         
-        # Read segment_metrics.json from runflow UI artifacts
-        segment_metrics = storage.read_json(f"{selected_day}/ui/segment_metrics.json")
+        # Read segment_metrics.json from runflow UI artifacts (Issue #580: Updated path to metrics/ subdirectory)
+        segment_metrics = storage.read_json(f"{selected_day}/ui/metrics/segment_metrics.json")
         if segment_metrics is None:
             logger.warning(f"segment_metrics.json not found in runflow/{run_id}/{selected_day}/ui/")
             segment_metrics = {}
         
-        # Load flags to mark flagged segments
+        # Load flags to mark flagged segments (Issue #580: Updated path to metrics/ subdirectory)
         flagged_seg_ids = set()
-        flags = storage.read_json(f"{selected_day}/ui/flags.json")
+        flags = storage.read_json(f"{selected_day}/ui/metrics/flags.json")
         if flags:
             try:
                 # Handle both dict and array formats
@@ -242,8 +242,8 @@ async def get_segments_summary(
         selected_day, available_days = resolve_selected_day(run_id, day)
         storage = create_runflow_storage(run_id)
         
-        # Read segments.geojson from runflow UI artifacts (GeoJSON is JSON)
-        segments_geojson = storage.read_json(f"{selected_day}/ui/segments.geojson")
+        # Read segments.geojson from runflow UI artifacts (Issue #580: Updated path to geospatial/ subdirectory)
+        segments_geojson = storage.read_json(f"{selected_day}/ui/geospatial/segments.geojson")
         if segments_geojson is None:
             return JSONResponse(content={
                 "error": "segments.geojson not found",
@@ -253,8 +253,8 @@ async def get_segments_summary(
         
         features = segments_geojson.get("features", [])
         
-        # Read segment_metrics.json from UI artifacts
-        segment_metrics = storage.read_json(f"{selected_day}/ui/segment_metrics.json")
+        # Read segment_metrics.json from UI artifacts (Issue #580: Updated path to metrics/ subdirectory)
+        segment_metrics = storage.read_json(f"{selected_day}/ui/metrics/segment_metrics.json")
         if segment_metrics is None:
             segment_metrics = {}
         
@@ -270,9 +270,9 @@ async def get_segments_summary(
             worst_los = metrics.get("worst_los", "Unknown")
             los_counts[worst_los] = los_counts.get(worst_los, 0) + 1
         
-        # Count flagged segments (if flags exist)
+        # Count flagged segments (if flags exist) (Issue #580: Updated path to metrics/ subdirectory)
         flagged_count = 0
-        flags = storage.read_json(f"{selected_day}/ui/flags.json")
+        flags = storage.read_json(f"{selected_day}/ui/metrics/flags.json")
         if flags:
             # Handle both dict and array formats
             if isinstance(flags, dict):

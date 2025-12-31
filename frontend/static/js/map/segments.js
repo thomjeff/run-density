@@ -472,10 +472,13 @@ async function showHeatmapPreview(segmentId) {
     let foundUrl = null;
     const bases = [
         // Preferred mount: FastAPI mounts RUNFLOW_ROOT at /heatmaps
+        // Issue #580: Updated path to visualizations/ subdirectory
+        `/heatmaps/${runId}/${day}/ui/visualizations/`,
         `/heatmaps/${runId}/${day}/ui/heatmaps/`,
         `/heatmaps/${runId}/heatmaps/`,
         `/heatmaps/${runId}/ui/heatmaps/`,
         // Legacy direct paths
+        `/runflow/${runId}/${day}/ui/visualizations/`,
         `/runflow/${runId}/${day}/ui/heatmaps/`,
         `/runflow/${runId}/heatmaps/`,
         `/runflow/${runId}/ui/heatmaps/`

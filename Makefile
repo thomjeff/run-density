@@ -71,7 +71,7 @@ e2e: ## Run sat+sun E2E test (single run_id with both days)
 	@echo "⏳ Waiting for server to be ready (10s)..."
 	@sleep 10
 	@echo "▶️  Running pytest test_sat_sun_scenario..."
-	@docker exec run-density-dev python -m pytest tests/v2/e2e.py::TestV2E2EScenarios::test_sat_sun_scenario -v --base-url http://localhost:8080 || (echo "❌ E2E test failed" && docker-compose down && exit 1)
+	@docker exec run-density-dev python -m pytest tests/v2/e2e.py::TestV2E2EScenarios::test_sat_sun_scenario -v --base-url http://localhost:8080 || (echo "❌ E2E test failed" && echo "💡 Container still running for debugging. Use 'make stop' to stop it." && exit 1)
 	@echo "✅ E2E test completed"
 	@echo "💡 Container still running. Use 'make stop' to stop it."
 
@@ -91,7 +91,7 @@ e2e-full: ## Run full E2E test suite (all scenarios)
 	@echo "⏳ Waiting for server to be ready (10s)..."
 	@sleep 10
 	@echo "▶️  Running pytest tests/v2/e2e.py..."
-	@docker exec run-density-dev python -m pytest tests/v2/e2e.py -v --base-url http://localhost:8080 || (echo "❌ E2E tests failed" && docker-compose down && exit 1)
+	@docker exec run-density-dev python -m pytest tests/v2/e2e.py -v --base-url http://localhost:8080 || (echo "❌ E2E tests failed" && echo "💡 Container still running for debugging. Use 'make stop' to stop it." && exit 1)
 	@echo "✅ E2E tests completed"
 	@echo "💡 Container still running. Use 'make stop' to stop it."
 
@@ -111,7 +111,7 @@ e2e-sat: ## Run Saturday-only E2E test
 	@echo "⏳ Waiting for server to be ready (10s)..."
 	@sleep 10
 	@echo "▶️  Running pytest test_saturday_only_scenario..."
-	@docker exec run-density-dev python -m pytest tests/v2/e2e.py::TestV2E2EScenarios::test_saturday_only_scenario -v --base-url http://localhost:8080 || (echo "❌ E2E test failed" && docker-compose down && exit 1)
+	@docker exec run-density-dev python -m pytest tests/v2/e2e.py::TestV2E2EScenarios::test_saturday_only_scenario -v --base-url http://localhost:8080 || (echo "❌ E2E test failed" && echo "💡 Container still running for debugging. Use 'make stop' to stop it." && exit 1)
 	@echo "✅ E2E test completed"
 	@echo "💡 Container still running. Use 'make stop' to stop it."
 
@@ -131,7 +131,7 @@ e2e-sun: ## Run Sunday-only E2E test
 	@echo "⏳ Waiting for server to be ready (10s)..."
 	@sleep 10
 	@echo "▶️  Running pytest test_sunday_only_scenario..."
-	@docker exec run-density-dev python -m pytest tests/v2/e2e.py::TestV2E2EScenarios::test_sunday_only_scenario -v --base-url http://localhost:8080 || (echo "❌ E2E test failed" && docker-compose down && exit 1)
+	@docker exec run-density-dev python -m pytest tests/v2/e2e.py::TestV2E2EScenarios::test_sunday_only_scenario -v --base-url http://localhost:8080 || (echo "❌ E2E test failed" && echo "💡 Container still running for debugging. Use 'make stop' to stop it." && exit 1)
 	@echo "✅ E2E test completed"
 	@echo "💡 Container still running. Use 'make stop' to stop it."
 
@@ -183,7 +183,7 @@ e2e-coverage-lite: ## Run E2E with coverage (DAY=sat|sun|both) and save reports 
 		fi \
 	); \
 	echo "▶️  Running pytest $$scenario under coverage..."; \
-	docker exec run-density-dev env COVERAGE_RCFILE=/app/coverage.rc COVERAGE_PROCESS_START=/app/coverage.rc COVERAGE_FILE=/app/runflow/.coverage python -m coverage run -m pytest $$scenario -v --base-url http://localhost:8080 || (echo "❌ Coverage run failed" && docker-compose down && exit 1)
+	docker exec run-density-dev env COVERAGE_RCFILE=/app/coverage.rc COVERAGE_PROCESS_START=/app/coverage.rc COVERAGE_FILE=/app/runflow/.coverage python -m coverage run -m pytest $$scenario -v --base-url http://localhost:8080 || (echo "❌ Coverage run failed" && echo "💡 Container still running for debugging. Use 'make stop' to stop it." && exit 1)
 	@echo "🧮 Combining coverage data..."
 	@docker exec run-density-dev env COVERAGE_RCFILE=/app/coverage.rc COVERAGE_PROCESS_START=/app/coverage.rc COVERAGE_FILE=/app/runflow/.coverage python -m coverage combine || echo "⚠️  No parallel coverage files to combine (using existing .coverage)"
 	@run_id=$$(docker exec run-density-dev python -c "import json, pathlib; latest=pathlib.Path('/app/runflow/latest.json'); data=json.loads(latest.read_text()) if latest.exists() else {}; print(data.get('run_id','latest'))"); \
