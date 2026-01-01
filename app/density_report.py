@@ -3403,7 +3403,8 @@ def generate_new_density_report_issue246(
     output_path: Optional[str] = None,
     app_version: str = "1.6.42",
     events: Optional[Dict[str, Dict[str, Any]]] = None,
-    event_groups_res: Optional[Dict[str, Dict[str, Any]]] = None  # Issue #573: RES data for Executive Summary
+    event_groups_res: Optional[Dict[str, Dict[str, Any]]] = None,  # Issue #573: RES data for Executive Summary
+    bins_dir: Optional[str] = None  # Issue #519/542: Optional bins directory to avoid duplicate files
 ) -> Dict[str, Any]:
     """
     Generate the new density report per Issue #246 specification.
@@ -3412,11 +3413,14 @@ def generate_new_density_report_issue246(
     to replace the legacy report structure.
     
     Args:
-        reports_dir: Directory containing Parquet files
+        reports_dir: Directory containing segments.parquet
         output_path: Path to save the report (optional)
         app_version: Application version
         events: Optional dict of event info (name -> {start_time, start_time_formatted, runner_count})
         event_groups_res: Optional event groups RES data (Issue #573)
+        bins_dir: Optional directory containing bins.parquet and segment_windows_from_bins.parquet.
+                  If None, reads from reports_dir (for backward compatibility).
+                  Issue #519/542: Prefer reading from bins_dir to avoid duplicate files.
         
     Returns:
         Dictionary with report content and metadata
@@ -3430,8 +3434,9 @@ def generate_new_density_report_issue246(
     # Convert string paths to Path objects
     reports_path = Path(reports_dir)
     output_path_obj = Path(output_path) if output_path else None
+    bins_path = Path(bins_dir) if bins_dir else None
     
-    logger.info(f"generate_new_density_report_issue246: Calling generate_new_density_report with reports_dir={reports_path}, output_path={output_path_obj}")
+    logger.info(f"generate_new_density_report_issue246: Calling generate_new_density_report with reports_dir={reports_path}, bins_dir={bins_path}, output_path={output_path_obj}")
     
     # Generate the new report
     results = generate_new_density_report(
@@ -3439,7 +3444,8 @@ def generate_new_density_report_issue246(
         output_path_obj, 
         app_version, 
         events=events,
-        event_groups_res=event_groups_res  # Issue #573: Pass RES data
+        event_groups_res=event_groups_res,  # Issue #573: Pass RES data
+        bins_dir=bins_path  # Issue #519/542: Pass bins_dir to avoid duplicate files
     )
     
     logger.info(f"generate_new_density_report_issue246: generate_new_density_report returned, success={results.get('success', False)}")
