@@ -45,12 +45,27 @@ from .new_density_template_engine import NewDensityTemplateEngine
 from . import flagging as ssot_flagging
 
 
-def load_parquet_sources(reports_dir: Path) -> Dict[str, pd.DataFrame]:
-    """Load all required Parquet sources for the new report."""
+def load_parquet_sources(reports_dir: Path, bins_dir: Optional[Path] = None) -> Dict[str, pd.DataFrame]:
+    """
+    Load all required Parquet sources for the new report.
+    
+    Args:
+        reports_dir: Directory containing segments.parquet
+        bins_dir: Optional directory containing bins.parquet and segment_windows_from_bins.parquet.
+                  If None, reads from reports_dir (for backward compatibility).
+                  Issue #519/542: Prefer reading from bins_dir to avoid duplicate files.
+    """
     sources = {}
     
+    # Issue #519/542: Read bins.parquet from bins_dir if provided, otherwise from reports_dir (backward compat)
+    if bins_dir is not None:
+        bins_path = bins_dir / "bins.parquet"
+        segment_windows_path = bins_dir / "segment_windows_from_bins.parquet"
+    else:
+        bins_path = reports_dir / "bins.parquet"
+        segment_windows_path = reports_dir / "segment_windows_from_bins.parquet"
+    
     # Load bins.parquet
-    bins_path = reports_dir / "bins.parquet"
     if bins_path.exists():
         sources['bins'] = pd.read_parquet(bins_path)
         print(f"📊 Loaded {len(sources['bins'])} bins from {bins_path}")
@@ -58,7 +73,6 @@ def load_parquet_sources(reports_dir: Path) -> Dict[str, pd.DataFrame]:
         raise FileNotFoundError(f"bins.parquet not found at {bins_path}")
     
     # Load segment_windows_from_bins.parquet
-    segment_windows_path = reports_dir / "segment_windows_from_bins.parquet"
     if segment_windows_path.exists():
         sources['segment_windows'] = pd.read_parquet(segment_windows_path)
         print(f"📊 Loaded {len(sources['segment_windows'])} segment windows from {segment_windows_path}")
@@ -154,15 +168,21 @@ def generate_new_density_report(
     output_path: Optional[Path] = None,
     app_version: str = "1.0.0",
     events: Optional[Dict[str, Dict[str, Any]]] = None,
-    event_groups_res: Optional[Dict[str, Dict[str, Any]]] = None  # Issue #573: RES data for Executive Summary
+    event_groups_res: Optional[Dict[str, Dict[str, Any]]] = None,  # Issue #573: RES data for Executive Summary
+    bins_dir: Optional[Path] = None  # Issue #519/542: Optional bins directory to avoid duplicate files
 ) -> Dict[str, Any]:
     """
     Generate the new density report per Issue #246 specification.
     
     Args:
-        reports_dir: Directory containing Parquet files
+        reports_dir: Directory containing segments.parquet
         output_path: Path to save the report (optional)
         app_version: Application version
+        events: Optional dict of event info
+        event_groups_res: Optional event groups RES data (Issue #573)
+        bins_dir: Optional directory containing bins.parquet and segment_windows_from_bins.parquet.
+                  If None, reads from reports_dir (for backward compatibility).
+                  Issue #519/542: Prefer reading from bins_dir to avoid duplicate files.
         
     Returns:
         Dictionary with report content and metadata
@@ -175,7 +195,7 @@ def generate_new_density_report(
     logger.info("🚀 Generating new density report (Issue #246)...")
     
     # Load all data sources
-    sources = load_parquet_sources(reports_dir)
+    sources = load_parquet_sources(reports_dir, bins_dir=bins_dir)
     bins_df = sources['bins']
     segments_df = sources['segments']
     segment_windows_df = sources['segment_windows']
