@@ -1332,6 +1332,9 @@ def create_full_analysis_pipeline(
                 # Re-write metadata.json with logs reference
                 with open(run_metadata_path, 'w', encoding='utf-8') as f:
                     json.dump(combined_metadata, f, indent=2, ensure_ascii=False)
+        
+        # Update pointer files (latest.json, index.json)
+        update_pointer_files(run_id, combined_metadata)
         logger.info(f"[Phase 6] Updated pointer files (latest.json, index.json)")
         
         metadata_metrics.finish(memory_mb=get_memory_usage_mb())
