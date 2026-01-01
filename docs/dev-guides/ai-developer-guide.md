@@ -32,6 +32,7 @@ Begin familiarizing yourself with repo structure, especially:
 - `app/core/v2/analysis_config.py`: `analysis.json` generation (single source of truth)
 - `app/core/v2/validation.py`: Comprehensive validation layer
 - `tests/v2/e2e.py`: v2 E2E test suite
+- `postman/`: collections and environment variables for using the main v2 API endpoint
 - `app/utils/constants.py`: Application constants (deprecated constants removed in Issue #553)
 - `docs/user-guide/api-user-guide.md`: API user guide (v2.0.2+)
 - `docs/dev-guides/developer-guide-v2.md`: Developer guide (v2.0.2+)
@@ -62,7 +63,7 @@ Before any code or tests are written, confirm the following:
 1. NO HARDCODED VALUES – Use app/core/v2/analysis_config.py helpers (Issue #553)
 2. PERMANENT CODE ONLY – No temp scripts or isolated experiments
 3. START TIME CONSTANTS – Use get_start_time() from analysis.json (Issue #553)
-4. API TESTING ONLY – Always test via POST /runflow/v2/analyze endpoint
+4. API TESTING ONLY – Always test using e2e.py defined tests; if not an option via POST /runflow/v2/analyze endpoint
 5. MINIMAL CHANGES – Make small, testable commits
 6. NO ENDLESS LOOPS – Stop after 3 failed analysis attempts and ask
 7. STRICT TYPOS – Match variable names exactly to references
