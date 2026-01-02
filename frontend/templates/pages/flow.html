@@ -21,11 +21,11 @@
                 <tr>
                     <th>ID</th>
                     <th>NAME</th>
-                    <th>EVENT A / B</th>
+                    <th>EVENT</th>
                     <th>FLOW TYPE</th>
-                    <th>OVERTAKING A / B</th>
-                    <th>PCT A / B</th>
-                    <th>CO-PRESENCE A / B</th>
+                    <th class="sortable" data-sort="overtaking">OVERTAKING <span class="sort-indicator"></span></th>
+                    <th>PCT</th>
+                    <th class="sortable" data-sort="copresence">CO-PRESENCE <span class="sort-indicator"></span></th>
                 </tr>
             </thead>
             <tbody id="flow-tbody">
@@ -86,6 +86,7 @@
     
     // Load flow data on page load
     document.addEventListener('DOMContentLoaded', function() {
+        initializeSorting();
         loadFlowData();
     });
     
@@ -141,10 +142,16 @@
             return;
         }
         
-        // Sort by id
-        segments.sort((a, b) => a.id.localeCompare(b.id));
+        // Apply sorting if column is selected
+        let sortedSegments = segments;
+        if (currentSort.column) {
+            sortedSegments = sortSegments(segments, currentSort.column, currentSort.direction);
+        } else {
+            // Default sort by id
+            sortedSegments = [...segments].sort((a, b) => a.id.localeCompare(b.id));
+        }
         
-        segments.forEach(segment => {
+        sortedSegments.forEach(segment => {
             const row = document.createElement('tr');
             
             // Handle null/missing values with fallback to "—"
@@ -182,16 +189,16 @@
             copresence_b: 0
         };
         
-        segments.forEach(seg => {
-            totals.overtaking_a += seg.overtaking_a;
-            totals.overtaking_b += seg.overtaking_b;
-            totals.copresence_a += seg.copresence_a;
-            totals.copresence_b += seg.copresence_b;
+        sortedSegments.forEach(seg => {
+            totals.overtaking_a += (seg.overtaking_a || 0);
+            totals.overtaking_b += (seg.overtaking_b || 0);
+            totals.copresence_a += (seg.copresence_a || 0);
+            totals.copresence_b += (seg.copresence_b || 0);
         });
         
         totalRow.innerHTML = `
             <td>TOTAL</td>
-            <td>${segments.length} segments</td>
+            <td>${sortedSegments.length} segments</td>
             <td class="event-pair">— / —</td>
             <td>—</td>
             <td class="numeric-pair">${totals.overtaking_a.toFixed(0)} / ${totals.overtaking_b.toFixed(0)}</td>
@@ -200,6 +207,83 @@
         `;
         
         tbody.appendChild(totalRow);
+        
+        // Update sort indicators
+        updateSortIndicators();
+    }
+    
+    function sortSegments(segments, column, direction) {
+        const sorted = [...segments];
+        
+        sorted.sort((a, b) => {
+            let aVal, bVal;
+            
+            switch (column) {
+                case 'overtaking':
+                    // Sort by sum of A + B (Issue #596)
+                    const aOvertaking = (a.overtaking_a || 0) + (a.overtaking_b || 0);
+                    const bOvertaking = (b.overtaking_a || 0) + (b.overtaking_b || 0);
+                    aVal = aOvertaking;
+                    bVal = bOvertaking;
+                    break;
+                case 'copresence':
+                    // Sort by sum of A + B (Issue #596)
+                    const aCopresence = (a.copresence_a || 0) + (a.copresence_b || 0);
+                    const bCopresence = (b.copresence_a || 0) + (b.copresence_b || 0);
+                    aVal = aCopresence;
+                    bVal = bCopresence;
+                    break;
+                default:
+                    return 0;
+            }
+            
+            if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+            if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+        
+        return sorted;
+    }
+    
+    function initializeSorting() {
+        const sortableHeaders = document.querySelectorAll('#flow-table th.sortable');
+        sortableHeaders.forEach(header => {
+            header.style.cursor = 'pointer';
+            header.addEventListener('click', function() {
+                const column = this.getAttribute('data-sort');
+                if (!column) return;
+                
+                // Toggle sort direction if same column
+                if (currentSort.column === column) {
+                    currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+                } else {
+                    currentSort.column = column;
+                    currentSort.direction = 'asc';
+                }
+                
+                // Re-render table with new sort
+                if (flowData && Object.keys(flowData).length > 0) {
+                    renderFlowTable(flowData);
+                }
+            });
+        });
+    }
+    
+    function updateSortIndicators() {
+        const sortableHeaders = document.querySelectorAll('#flow-table th.sortable');
+        sortableHeaders.forEach(header => {
+            const indicator = header.querySelector('.sort-indicator');
+            const column = header.getAttribute('data-sort');
+            
+            if (indicator) {
+                if (currentSort.column === column) {
+                    indicator.textContent = currentSort.direction === 'asc' ? ' ▲' : ' ▼';
+                    indicator.style.color = '#007bff';
+                } else {
+                    indicator.textContent = '';
+                }
+            }
+        });
     }
     
     function showFlowError() {
@@ -211,6 +295,22 @@
 
 {% block extra_styles %}
 <style>
+    #flow-table th.sortable {
+        cursor: pointer;
+        user-select: none;
+        position: relative;
+    }
+    
+    #flow-table th.sortable:hover {
+        background: #e9ecef;
+    }
+    
+    #flow-table th.sortable .sort-indicator {
+        color: #007bff;
+        font-size: 0.75rem;
+        margin-left: 0.25rem;
+    }
+    
     #flow-table {
         width: 100%;
         border-collapse: collapse;
