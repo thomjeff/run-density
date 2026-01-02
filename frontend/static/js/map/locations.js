@@ -125,6 +125,21 @@ function createLocationTooltip(properties) {
         tooltip += `<br>Duration: ${duration} min`;
     }
     
+    // Issue #592: Add resource counts to tooltip
+    const resourceCounts = [];
+    Object.keys(props).forEach(key => {
+        if (key.endsWith('_count')) {
+            const count = props[key];
+            if (count && count > 0) {
+                const resource = key.replace('_count', '').toUpperCase();
+                resourceCounts.push(`${resource}: ${count}`);
+            }
+        }
+    });
+    if (resourceCounts.length > 0) {
+        tooltip += `<br>Resources: ${resourceCounts.join(', ')}`;
+    }
+    
     if (timingSourceTooltip) {
         tooltip += timingSourceTooltip;
     }
@@ -193,6 +208,21 @@ function createLocationPopup(properties) {
     
     if (props.zone) {
         popup += `<div style="margin-bottom: 0.5rem;"><strong>Zone:</strong> ${props.zone}</div>`;
+    }
+    
+    // Issue #592: Add resource counts to popup (after Zone, before Source)
+    const resourceCounts = [];
+    Object.keys(props).forEach(key => {
+        if (key.endsWith('_count')) {
+            const count = props[key];
+            if (count && count > 0) {
+                const resource = key.replace('_count', '').toUpperCase();
+                resourceCounts.push(`${resource}: ${count}`);
+            }
+        }
+    });
+    if (resourceCounts.length > 0) {
+        popup += `<div style="margin-bottom: 0.5rem;"><strong>Resources:</strong> ${resourceCounts.join(', ')}</div>`;
     }
     
     // Add timing source (Issue #479)
