@@ -100,17 +100,17 @@
 99,Bridge at Mill St,aid,Both directions,45.979519,-66.59192,,"""I1,J1,J4,J5""",sun,4,y,y,n,n,n,10,5,0,0,0,0,0,3,0,0,SJA First Aid (Full/Half)
 100,Regent / Queen,course,Uni Direction from PSAB heading west on Queen,45.961152,-66.638708,,"""N1,N2,O1,O2""",sat,8,n,n,n,y,y,10,5,1,0,4,0,0,0,0,0,Westbound on Queen
 101,Carleton at Queen,course,Uni - west on Queen,45.96209,-66.640924,,"""N1,N2,O1,O2""",sat,8,n,n,n,y,y,10,5,0,0,0,2,0,0,0,0,Southbound from Library / Garrison
-102,Carleton at King,traffic,N/A - Traffic Countrol,45.96119,-66.64169,98,,sat,8,n,n,n,y,y,10,5,1,0,1,0,0,0,0,0,Northbound to Queen
+102,Carleton at King,traffic,N/A - Traffic Countrol,45.96119,-66.64169,101,,sat,8,n,n,n,y,y,10,5,1,0,1,0,0,0,0,0,Northbound to Queen
 103,Wilmot Alley at King,course,Uni - west on Queen,45.961597,-66.642755,,"""N1,N2,O1,O2""",sat,8,n,n,n,y,y,10,5,0,0,0,1,0,0,0,0,Northbound to Queen
 104,York at Queen,course,Uni - west on Queen,45.963062,-66.643097,,"""N1,N2,N3,O1,O2,O3""",sat,8,n,n,n,y,y,10,5,0,0,0,2,0,0,0,0,Southbound to King
-105,York at King,traffic,N/A - Traffic Countrol,45.962135,-66.643915,101,,sat,8,n,n,n,y,y,10,5,1,0,1,0,0,0,0,0,Northbound to Queen
+105,York at King,traffic,N/A - Traffic Countrol,45.962135,-66.643915,104,,sat,8,n,n,n,y,y,10,5,1,0,1,0,0,0,0,0,Northbound to Queen
 106,Campbell at York,course,Runners heading north on York to finish,45.963779,-66.64262,,"""N3,O3""",sat,8,n,n,n,y,y,10,5,0,0,2,0,0,0,0,0,Eastbound to York
 107,Queen at Canabis NB,course,Uni - west on Queen,45.963254,-66.643762,,"""N1,N2,O1,O2""",sat,8,n,n,n,y,y,10,5,0,0,0,1,0,0,0,0,Traffic exiting  alleys
-108,Westmorland at King,traffic,N/A - Traffic Countrol,45.963083,-66.646123,106,,sat,8,n,n,n,y,y,10,5,1,0,1,0,0,0,0,0,Northbound to Queen
+108,Westmorland at King,traffic,N/A - Traffic Countrol,45.963083,-66.646123,109,,sat,8,n,n,n,y,y,10,5,1,0,1,0,0,0,0,0,Northbound to Queen
 109,Westmorland at Queen,course,Uni - west on Queen,45.963989,-66.645371,,"""N1,N2,O1,O2""",sat,8,n,n,n,y,y,10,5,0,0,2,0,0,0,0,0,Southbound from WSB
 110,Queen at Frederik Sq Garage,course,Uni - west on Queen,45.964322,-66.646313,,"""N1,N2,O1,O2""",sat,8,n,n,n,y,y,10,5,0,0,0,1,0,0,0,0,Westbound on Queen
 111,Queen at Westpointe,course,Uni - west on Queen,45.964628,-66.646724,,"""N1,N2,O1,O2""",sat,8,n,n,n,y,y,10,5,0,0,0,1,0,0,0,0,Westbound on Queen
 112,Northumberland at Queen,course,Uni - west on Queen,45.96478,-66.647751,,"""N1,N2,O1,O2""",sat,8,n,n,n,y,y,10,5,0,0,2,1,0,0,0,0,Traffic apts/senior home lots
 113,Queen at Smythe,course,Uni - west on Queen,45.965119,-66.649656,,"""N1,N2,O1,O2""",sat,8,n,n,n,y,y,10,5,0,0,0,2,0,0,0,0,Turn onto Sainte Anne Pointe Drive
-114,Victoria Traffic Circle,traffic,N/A - Traffic Countrol,45.964298,-66.651403,97,,sat,8,n,n,n,y,y,10,5,1,0,1,0,0,0,0,0,Northside Access
-115,WSB Smythe St Exit/Ramp,traffic,N/A - Traffic Countrol,45.96684,-66.643575,97,,sat,8,n,n,n,y,y,10,5,1,0,0,0,0,0,0,0,Southbound from WSB
+114,Victoria Traffic Circle,traffic,N/A - Traffic Countrol,45.964298,-66.651403,100,,sat,8,n,n,n,y,y,10,5,1,0,1,0,0,0,0,0,Northside Access
+115,WSB Smythe St Exit/Ramp,traffic,N/A - Traffic Countrol,45.96684,-66.643575,100,,sat,8,n,n,n,y,y,10,5,1,0,0,0,0,0,0,0,Southbound from WSB

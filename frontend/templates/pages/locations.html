@@ -102,6 +102,17 @@
             <!-- Visual Separator -->
             <div style="width: 1px; background-color: #ddd; align-self: stretch; margin: 0 0.5rem;"></div>
             
+            <!-- Resource Filter (Issue #591) -->
+            <div style="position: relative; z-index: 101;">
+                <label for="filter-resource" style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.9rem; color: #2c3e50;">Resource</label>
+                <select id="filter-resource" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem; position: relative; z-index: 102; background: white;">
+                    <option value="">All Resources</option>
+                </select>
+            </div>
+            
+            <!-- Visual Separator -->
+            <div style="width: 1px; background-color: #ddd; align-self: stretch; margin: 0 0.5rem;"></div>
+            
             <!-- First Runner Filter -->
             <div>
                 <label style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.9rem; color: #2c3e50;">First Runner</label>
@@ -282,6 +293,10 @@
                     // Populate filter dropdowns
                     populateTypeFilter(data.locations);
                     populateZoneFilter(data.locations);
+                    // Issue #591: Populate resource filter from API response
+                    if (data.resources_available) {
+                        populateResourceFilter(data.resources_available);
+                    }
                     
                     // Apply filters and render
                     applyFiltersAndRender();
@@ -312,20 +327,30 @@
         
         // Convert features back to locations format for table rendering
         // Issue #483: Include first_runner and last_runner
-        const locations = features.map(feature => ({
-            loc_id: feature.properties.loc_id,
-            loc_label: feature.properties.loc_label,
-            loc_type: feature.properties.loc_type,
-            zone: feature.properties.zone,
-            loc_start: feature.properties.loc_start,
-            loc_end: feature.properties.loc_end,
-            duration: feature.properties.duration,
-            peak_start: feature.properties.peak_start,
-            peak_end: feature.properties.peak_end,
-            timing_source: feature.properties.timing_source,
-            first_runner: feature.properties.first_runner,
-            last_runner: feature.properties.last_runner
-        }));
+        // Issue #591: Include resource count and mins fields dynamically
+        const locations = features.map(feature => {
+            const location = {
+                loc_id: feature.properties.loc_id,
+                loc_label: feature.properties.loc_label,
+                loc_type: feature.properties.loc_type,
+                zone: feature.properties.zone,
+                loc_start: feature.properties.loc_start,
+                loc_end: feature.properties.loc_end,
+                duration: feature.properties.duration,
+                peak_start: feature.properties.peak_start,
+                peak_end: feature.properties.peak_end,
+                timing_source: feature.properties.timing_source,
+                first_runner: feature.properties.first_runner,
+                last_runner: feature.properties.last_runner
+            };
+            // Issue #591: Dynamically add all resource count and mins fields
+            Object.keys(feature.properties).forEach(key => {
+                if (key.endsWith('_count') || key.endsWith('_mins')) {
+                    location[key] = feature.properties[key];
+                }
+            });
+            return location;
+        });
         
         // Store for later use (only update if this is new data, not filtered subset)
         const isNewData = !locationsData || locations.length >= locationsData.length;
@@ -356,24 +381,35 @@
         }
         
         // Convert features to locations format
-        const locations = features.map(feature => ({
-            loc_id: feature.properties.loc_id,
-            loc_label: feature.properties.loc_label,
-            loc_type: feature.properties.loc_type,
-            zone: feature.properties.zone,
-            loc_start: feature.properties.loc_start,
-            loc_end: feature.properties.loc_end,
-            duration: feature.properties.duration,
-            peak_start: feature.properties.peak_start,
-            peak_end: feature.properties.peak_end,
-            timing_source: feature.properties.timing_source,
-            first_runner: feature.properties.first_runner,
-            last_runner: feature.properties.last_runner
-        }));
+        // Issue #591: Include resource count and mins fields dynamically
+        const locations = features.map(feature => {
+            const location = {
+                loc_id: feature.properties.loc_id,
+                loc_label: feature.properties.loc_label,
+                loc_type: feature.properties.loc_type,
+                zone: feature.properties.zone,
+                loc_start: feature.properties.loc_start,
+                loc_end: feature.properties.loc_end,
+                duration: feature.properties.duration,
+                peak_start: feature.properties.peak_start,
+                peak_end: feature.properties.peak_end,
+                timing_source: feature.properties.timing_source,
+                first_runner: feature.properties.first_runner,
+                last_runner: feature.properties.last_runner
+            };
+            // Issue #591: Dynamically add all resource count and mins fields
+            Object.keys(feature.properties).forEach(key => {
+                if (key.endsWith('_count') || key.endsWith('_mins')) {
+                    location[key] = feature.properties[key];
+                }
+            });
+            return location;
+        });
         
-        // Apply UI filters (Type, Zone, First Runner, Last Runner) to the map-bounds-filtered locations
+        // Apply UI filters (Type, Zone, Resource, First Runner, Last Runner) to the map-bounds-filtered locations
         const typeFilter = document.getElementById('filter-type')?.value || '';
         const zoneFilter = document.getElementById('filter-zone')?.value || '';
+        const resourceFilter = document.getElementById('filter-resource')?.value || '';  // Issue #591
         const firstRunnerMin = document.getElementById('filter-first-runner-min')?.value || '';
         const firstRunnerMax = document.getElementById('filter-first-runner-max')?.value || '';
         const lastRunnerMin = document.getElementById('filter-last-runner-min')?.value || '';
@@ -390,6 +426,16 @@
                 const locationZone = location.zone != null ? Number(location.zone) : null;
                 const filterZone = Number(zoneFilter);
                 if (locationZone !== filterZone) {
+                    return false;
+                }
+            }
+            
+            // Issue #591: Resource filter - check if location has count > 0 for selected resource
+            if (resourceFilter) {
+                const countField = `${resourceFilter}_count`;
+                const locationCount = location[countField];
+                // Check if count exists and is greater than 0
+                if (!locationCount || locationCount === 0 || locationCount === "0" || locationCount === null || locationCount === undefined) {
                     return false;
                 }
             }
@@ -473,6 +519,7 @@
     
     let zoneFilterPopulated = false;
     let typeFilterPopulated = false;
+    let resourceFilterPopulated = false;  // Issue #591
     
     /**
      * Populate type filter dropdown with unique types
@@ -524,6 +571,76 @@
         }
         
         typeFilterPopulated = true;
+    }
+    
+    /**
+     * Populate resource filter dropdown with available resources (Issue #591)
+     * @param {Array} resources - Array of resource prefixes (e.g., ["fpf", "awp", "yssr"])
+     */
+    function populateResourceFilter(resources) {
+        const resourceSelect = document.getElementById('filter-resource');
+        if (!resourceSelect) {
+            // Function called before DOM is ready, skip
+            return;
+        }
+        
+        // Don't repopulate if dropdown is currently open (has focus)
+        if (document.activeElement === resourceSelect) {
+            return;
+        }
+        
+        // Only populate if dropdown hasn't been populated yet, or if resources have changed
+        const existingResources = Array.from(resourceSelect.options)
+            .slice(1) // Skip "All Resources" option
+            .map(opt => opt.value)
+            .sort();
+        
+        const resourcesMatch = existingResources.length === resources.length && 
+            existingResources.every((r, i) => r === resources[i]);
+        
+        if (resourceFilterPopulated && resourcesMatch) {
+            // Already populated with same resources, don't reset
+            return;
+        }
+        
+        // Preserve currently selected value
+        const currentValue = resourceSelect.value;
+        
+        // Clear existing options except "All Resources"
+        resourceSelect.innerHTML = '<option value="">All Resources</option>';
+        
+        // Add resource options
+        resources.forEach(resource => {
+            const option = document.createElement('option');
+            option.value = resource;
+            option.textContent = resource.toUpperCase(); // Display in uppercase for readability
+            resourceSelect.appendChild(option);
+        });
+        
+        // Restore previously selected value if it still exists
+        if (currentValue && resources.includes(currentValue)) {
+            resourceSelect.value = currentValue;
+        }
+        
+        resourceFilterPopulated = true;
+    }
+    
+    // Issue #591: Make populateResourceFilter globally available for locations.js
+    window.populateResourceFilter = populateResourceFilter;
+    
+    // Issue #591: Populate resource filter if pending data exists (from map script loading first)
+    // Check immediately, and also check after a delay in case map script loads after page load
+    if (window.pendingResourcesAvailable) {
+        populateResourceFilter(window.pendingResourcesAvailable);
+        delete window.pendingResourcesAvailable;
+    } else {
+        // Also check after a delay in case locations.js loads data after this script runs
+        setTimeout(() => {
+            if (window.pendingResourcesAvailable && typeof populateResourceFilter === 'function') {
+                populateResourceFilter(window.pendingResourcesAvailable);
+                delete window.pendingResourcesAvailable;
+            }
+        }, 1000);
     }
     
     /**
@@ -592,6 +709,7 @@
         // Get filter values
         const typeFilter = document.getElementById('filter-type')?.value || '';
         const zoneFilter = document.getElementById('filter-zone')?.value || '';
+        const resourceFilter = document.getElementById('filter-resource')?.value || '';  // Issue #591
         const firstRunnerMin = document.getElementById('filter-first-runner-min')?.value || '';
         const firstRunnerMax = document.getElementById('filter-first-runner-max')?.value || '';
         const lastRunnerMin = document.getElementById('filter-last-runner-min')?.value || '';
@@ -609,6 +727,16 @@
                 const locationZone = location.zone != null ? Number(location.zone) : null;
                 const filterZone = Number(zoneFilter);
                 if (locationZone !== filterZone) {
+                    return false;
+                }
+            }
+            
+            // Issue #591: Resource filter - check if location has count > 0 for selected resource
+            if (resourceFilter) {
+                const countField = `${resourceFilter}_count`;
+                const locationCount = location[countField];
+                // Check if count exists and is greater than 0
+                if (!locationCount || locationCount === 0 || locationCount === "0" || locationCount === null || locationCount === undefined) {
                     return false;
                 }
             }
@@ -810,6 +938,16 @@
             });
         }
         
+        // Issue #591: Resource filter
+        const resourceFilter = document.getElementById('filter-resource');
+        if (resourceFilter) {
+            resourceFilter.addEventListener('change', function(e) {
+                setTimeout(() => {
+                    applyFiltersAndRender();
+                }, 10);
+            });
+        }
+        
         // First Runner filters
         const firstRunnerMin = document.getElementById('filter-first-runner-min');
         const firstRunnerMax = document.getElementById('filter-first-runner-max');
@@ -853,6 +991,8 @@
             clearFiltersBtn.addEventListener('click', function() {
                 if (typeFilter) typeFilter.value = '';
                 if (zoneFilter) zoneFilter.value = '';
+                const resourceFilter = document.getElementById('filter-resource');  // Issue #591
+                if (resourceFilter) resourceFilter.value = '';
                 if (firstRunnerMin) firstRunnerMin.value = '';
                 if (firstRunnerMax) firstRunnerMax.value = '';
                 if (lastRunnerMin) lastRunnerMin.value = '';

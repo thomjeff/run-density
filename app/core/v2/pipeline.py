@@ -816,7 +816,11 @@ def create_full_analysis_pipeline(
                 logger.warning(f"Locations file not found at {locations_path_str}, skipping locations report")
         
         # Persist locations_results.json if locations_df exists (Issue #574, #581: Enhanced logging)
+        # Issue #591: Compute resources_available per day
         if locations_df is not None:
+            import pandas as pd
+            from app.core.v2.bins import filter_segments_by_events
+            
             locations_count = len(locations_df)
             logger.info(f"[Phase 3.2] Processing locations persistence...")
             for day, day_events in events_by_day.items():
@@ -826,11 +830,74 @@ def create_full_analysis_pipeline(
                 computation_dir = day_path / "computation"
                 computation_dir.mkdir(parents=True, exist_ok=True)
                 
+                # Issue #591: Filter locations by day to compute day-specific resources_available
+                # Filter segments for this day
+                day_segments_df = filter_segments_by_events(segments_df, day_events)
+                day_segment_ids = set(day_segments_df['seg_id'].astype(str).unique())
+                
+                # Filter locations to those associated with day segments (similar to generate_locations_report_v2)
+                if 'seg_id' in locations_df.columns:
+                    def location_matches_day(row) -> bool:
+                        """Check if location's seg_ids overlap with day segments, or if it's a proxy location for this day."""
+                        # Check 'day' column first (if present) for all locations
+                        if 'day' in row and pd.notna(row.get('day')):
+                            loc_day = str(row.get('day')).lower()
+                            if loc_day != day_code.lower():
+                                return False
+                        
+                        # Include proxy locations ONLY if they match the requested day
+                        if 'proxy_loc_id' in row and pd.notna(row.get('proxy_loc_id')):
+                            return True
+                        
+                        # Check seg_id match for regular locations
+                        loc_seg_ids = row.get('seg_id')
+                        if pd.isna(loc_seg_ids) or not loc_seg_ids:
+                            return False
+                        loc_segs = [s.strip().strip('"').strip("'") for s in str(loc_seg_ids).split(',')]
+                        return any(seg in day_segment_ids for seg in loc_segs)
+                    
+                    location_mask = locations_df.apply(location_matches_day, axis=1)
+                    day_locations_df = locations_df[location_mask].copy()
+                    
+                    # Also include proxy source locations (locations that are referenced by proxy_loc_id)
+                    if 'proxy_loc_id' in day_locations_df.columns:
+                        proxy_source_ids = set(day_locations_df['proxy_loc_id'].dropna().astype(int).tolist())
+                        if proxy_source_ids:
+                            source_locations = locations_df[locations_df['loc_id'].isin(proxy_source_ids)]
+                            missing_sources = source_locations[~source_locations['loc_id'].isin(day_locations_df['loc_id'])]
+                            if not missing_sources.empty:
+                                day_locations_df = pd.concat([day_locations_df, missing_sources], ignore_index=True)
+                else:
+                    day_locations_df = locations_df.copy()
+                
+                # Issue #591: Compute resources_available for this day
+                # Detect all columns ending with "_count"
+                count_columns = [col for col in day_locations_df.columns if col.endswith("_count")]
+                
+                # Find resources where at least one location has count > 0
+                resources_available = []
+                for count_col in count_columns:
+                    # Check if any location has count > 0 for this resource
+                    if not day_locations_df.empty:
+                        # Convert to numeric, filling NaN with 0
+                        numeric_counts = pd.to_numeric(day_locations_df[count_col], errors='coerce').fillna(0)
+                        if (numeric_counts > 0).any():
+                            # Extract prefix (e.g., "fpf" from "fpf_count")
+                            resource_prefix = count_col.replace("_count", "")
+                            resources_available.append(resource_prefix)
+                
+                # Sort for consistent output
+                resources_available = sorted(resources_available)
+                
+                logger.info(f"  → Day {day_code}: Found {len(resources_available)} resources with count > 0: {resources_available}")
+                
                 # Persist all locations (locations are not day-partitioned in the data)
+                # But resources_available IS day-specific
                 locations_json_path = computation_dir / "locations_results.json"
                 locations_for_json = {
                     "day": day_code,
                     "locations_count": locations_count,
+                    "resources_available": resources_available,  # Issue #591: Day-specific resource list
                     "locations": locations_df.to_dict('records') if not locations_df.empty else []
                 }
                 with open(locations_json_path, 'w', encoding='utf-8') as f:

@@ -23,13 +23,9 @@ const locationTypeColors = {
 function convertToGeoJSON(locations) {
     const features = locations
         .filter(loc => loc.lat != null && loc.lon != null && !isNaN(loc.lat) && !isNaN(loc.lon))
-        .map(loc => ({
-            type: 'Feature',
-            geometry: {
-                type: 'Point',
-                coordinates: [parseFloat(loc.lon), parseFloat(loc.lat)]
-            },
-            properties: {
+        .map(loc => {
+            // Issue #591: Include all resource count and mins fields dynamically
+            const properties = {
                 loc_id: loc.loc_id,
                 loc_label: loc.loc_label || 'Unknown',
                 loc_type: loc.loc_type || 'unknown',
@@ -43,8 +39,24 @@ function convertToGeoJSON(locations) {
                 notes: loc.notes,
                 first_runner: loc.first_runner,  // Issue #483: Include first_runner
                 last_runner: loc.last_runner     // Issue #483: Include last_runner
-            }
-        }));
+            };
+            
+            // Issue #591: Dynamically add all resource count and mins fields
+            Object.keys(loc).forEach(key => {
+                if (key.endsWith('_count') || key.endsWith('_mins')) {
+                    properties[key] = loc[key];
+                }
+            });
+            
+            return {
+                type: 'Feature',
+                geometry: {
+                    type: 'Point',
+                    coordinates: [parseFloat(loc.lon), parseFloat(loc.lat)]
+                },
+                properties: properties
+            };
+        });
     
     return {
         type: 'FeatureCollection',
@@ -226,6 +238,14 @@ async function loadLocations() {
         
         if (!data.ok || !data.locations) {
             throw new Error('Invalid response format');
+        }
+        
+        // Issue #591: Store resources_available globally for table script to use
+        if (data.resources_available && window.populateResourceFilter) {
+            window.populateResourceFilter(data.resources_available);
+        } else if (data.resources_available) {
+            // Store for later if populateResourceFilter not yet defined
+            window.pendingResourcesAvailable = data.resources_available;
         }
         
         // Convert to GeoJSON

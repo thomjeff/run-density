@@ -61,6 +61,16 @@ async def get_locations_report(
         selected_day, available_days = resolve_selected_day(run_id, day)
         storage = create_runflow_storage(run_id)
         
+        # Issue #591: Load resources_available from locations_results.json
+        resources_available = []
+        locations_results_path = f"{selected_day}/computation/locations_results.json"
+        if storage.exists(locations_results_path):
+            try:
+                locations_results = storage.read_json(locations_results_path)
+                resources_available = locations_results.get("resources_available", [])
+            except Exception as e:
+                logger.warning(f"Could not load resources_available from {locations_results_path}: {e}")
+        
         # Try to load existing report from day-scoped path
         report_path = f"{selected_day}/reports/Locations.csv"
         
@@ -97,7 +107,8 @@ async def get_locations_report(
             "selected_day": selected_day,
             "available_days": available_days,
             "locations": report_data,
-            "count": len(report_data) if report_data else 0
+            "count": len(report_data) if report_data else 0,
+            "resources_available": resources_available  # Issue #591: Day-specific resource list
         })
         
     except ValueError as e:
