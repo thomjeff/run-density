@@ -771,12 +771,24 @@
                     opacity: 1,
                     fillOpacity: 0.8
                 });
+                
+                // Re-enable pointer events so tooltips/popups work
+                if (marker.options) {
+                    marker.options.interactive = true;
+                }
+                marker._path && (marker._path.style.pointerEvents = 'auto');
             } else {
-                // Hide marker by making it transparent
+                // Hide marker by making it transparent and disabling pointer events
                 marker.setStyle({
                     opacity: 0,
                     fillOpacity: 0
                 });
+                
+                // Disable pointer events to prevent tooltip/popup on hidden markers
+                if (marker.options) {
+                    marker.options.interactive = false;
+                }
+                marker._path && (marker._path.style.pointerEvents = 'none');
             }
         });
         
