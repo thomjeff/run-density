@@ -172,6 +172,9 @@ GCS_BUCKET_RUNFLOW = "runflow"  # New UUID-based structure
 RUNFLOW_ROOT_LOCAL = "/Users/jthompson/Documents/runflow"  # Must match docker-compose.yml volume mount
 RUNFLOW_ROOT_CONTAINER = "/app/runflow"
 
+# Data directory path (Issue #596)
+DATA_DIR = "data"
+
 # Run metadata
 RUN_ID_MIN_LENGTH = 10
 

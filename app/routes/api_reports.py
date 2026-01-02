@@ -68,25 +68,44 @@ def _get_file_metadata(storage, file_path: str) -> tuple[Optional[float], Option
 
 
 def _add_core_data_files(reports: list) -> None:
-    """Add core data files from local data/ directory to reports list."""
+    """Add all .csv and .gpx files from local data/ directory to reports list (Issue #596)."""
     from pathlib import Path
+    from app.utils.constants import DATA_DIR
     
-    core_data_files = [
-        {"name": "runners.csv", "path": "data/runners.csv", "description": "Runner data with start times and event assignments"},
-        {"name": "segments.csv", "path": "data/segments.csv", "description": "Course segment definitions and characteristics"},
-        {"name": "flow_expected_results.csv", "path": "data/flow_expected_results.csv", "description": "Expected results for validation"}
-    ]
+    data_dir = Path(DATA_DIR)
+    if not data_dir.exists():
+        return
     
-    for data_file in core_data_files:
-        file_path = Path(data_file["path"])
-        if file_path.exists():
+    # Find all .csv and .gpx files in the data directory
+    csv_files = list(data_dir.glob("*.csv"))
+    gpx_files = list(data_dir.glob("*.gpx"))
+    all_data_files = csv_files + gpx_files
+    
+    # File descriptions mapping (optional, for known files)
+    file_descriptions = {
+        "runners.csv": "Runner data with start times and event assignments",
+        "segments.csv": "Course segment definitions and characteristics",
+        "flow_expected_results.csv": "Expected results for validation",
+        "locations.csv": "Location definitions and resource counts",
+        "flow.csv": "Flow analysis input data"
+    }
+    
+    for file_path in all_data_files:
+        if file_path.is_file():
             stat = file_path.stat()
+            file_name = file_path.name
+            description = file_descriptions.get(file_name, f"{file_path.suffix.upper().replace('.', '')} data file")
+            
+            # Issue #596: Use relative path for data files (data/filename.csv)
+            # This matches the download endpoint expectation
+            relative_path = f"{DATA_DIR}/{file_name}"
+            
             reports.append({
-                "name": data_file["name"],
-                "path": data_file["path"],
+                "name": file_name,
+                "path": relative_path,
                 "mtime": stat.st_mtime,
                 "size": stat.st_size,
-                "description": data_file["description"],
+                "description": description,
                 "type": "data_file"
             })
 

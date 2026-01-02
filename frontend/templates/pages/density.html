@@ -23,16 +23,14 @@
                 <th>Peak Density</th>
                 <th>LOS</th>
                 <th>Peak Rate</th>
-                <th>Utilization</th>
                 <th>Flag</th>
-                <th>Worst Bin</th>
             </tr>
         </thead>
-        <tbody>
-            <tr>
-                <td colspan="10" class="placeholder">Loading density data...</td>
-            </tr>
-        </tbody>
+            <tbody>
+                <tr>
+                    <td colspan="8" class="placeholder">Loading density data...</td>
+                </tr>
+            </tbody>
     </table>
 </div>
 
@@ -56,6 +54,12 @@
                 </div>
                 <div>
                     <strong>Active Window:</strong> <span id="detail-active">—</span>
+                </div>
+                <div>
+                    <strong>Utilization:</strong> <span id="detail-utilization">—</span>
+                </div>
+                <div>
+                    <strong>Worst Bin:</strong> <span id="detail-worst-bin">—</span>
                 </div>
             </div>
         </div>
@@ -387,7 +391,7 @@
         if (!segments || segments.length === 0) {
             // Issue #361: Show informative message with run_id when artifacts are missing
             const runId = '{{ run_id if run_id else "latest run" }}';
-            tbody.innerHTML = `<tr><td colspan="10" class="placeholder">⚠️ No density data available for latest run ID: ${runId}. Check logs.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="8" class="placeholder">⚠️ No density data available for latest run ID: ${runId}. Check logs.</td></tr>`;
             return;
         }
         
@@ -418,9 +422,7 @@
                 <td>${segment.peak_density.toFixed(3)}</td>
                 <td>${losBadge}</td>
                 <td>${segment.peak_rate.toFixed(2)}</td>
-                <td>${segment.utilization ? segment.utilization.toFixed(3) : '—'}</td>
                 <td>${flaggedIcon}</td>
-                <td>${worstBinLabel}</td>
             `;
             
             tbody.appendChild(row);
@@ -498,7 +500,7 @@
         // Issue #361: Show informative message with run_id when artifacts are missing
         const tbody = document.querySelector('#density-table tbody');
         const runId = '{{ run_id if run_id else "latest run" }}';
-        tbody.innerHTML = `<tr><td colspan="10" class="placeholder">⚠️ Error loading density data for run ID: ${runId}. Check logs.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="placeholder">⚠️ Error loading density data for run ID: ${runId}. Check logs.</td></tr>`;
     }
     
     function showSegmentDetail(seg_id) {
@@ -547,6 +549,15 @@
         const peakRate = detail.peak_rate || 0;
         document.getElementById('detail-peak-rate').textContent = peakRate.toFixed(2) + ' p/s';
         document.getElementById('detail-active').textContent = detail.active || 'N/A';
+        
+        // Issue #596: Add Utilization and Worst Bin to Key Metrics
+        const utilization = detail.utilization !== null && detail.utilization !== undefined ? detail.utilization.toFixed(3) : '—';
+        document.getElementById('detail-utilization').textContent = utilization;
+        
+        // Format worst bin using the same formatter as table
+        const worstBin = detail.worst_bin ? {...detail.worst_bin, segment_id: detail.seg_id} : null;
+        const worstBinLabel = formatWorstBinLabel(worstBin);
+        document.getElementById('detail-worst-bin').textContent = worstBinLabel;
         
         // Show heatmap or empty state
         const heatmapImg = document.getElementById('heatmap-image');

@@ -131,10 +131,25 @@
         };
         
         relevantReports.sort(sortByDayAndTime);
+        
+        // Issue #596: Group data files by extension (CSV first, then GPX), then sort by filename
         dataFiles.sort((a, b) => {
-            const timeA = a.mtime || 0;
-            const timeB = b.mtime || 0;
-            return timeB - timeA;
+            // Get file extensions (lowercase for comparison)
+            const extA = (a.name.split('.').pop() || '').toLowerCase();
+            const extB = (b.name.split('.').pop() || '').toLowerCase();
+            
+            // Define extension order: CSV first, then GPX, then others
+            const extOrder = { 'csv': 0, 'gpx': 1 };
+            const orderA = extOrder[extA] !== undefined ? extOrder[extA] : 2;
+            const orderB = extOrder[extB] !== undefined ? extOrder[extB] : 2;
+            
+            // First, sort by extension order
+            if (orderA !== orderB) {
+                return orderA - orderB;
+            }
+            
+            // Same extension - sort by filename (case-insensitive)
+            return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
         });
         
         // Group reports by day
