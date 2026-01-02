@@ -96,9 +96,13 @@ def _add_core_data_files(reports: list) -> None:
             file_name = file_path.name
             description = file_descriptions.get(file_name, f"{file_path.suffix.upper().replace('.', '')} data file")
             
+            # Issue #596: Use relative path for data files (data/filename.csv)
+            # This matches the download endpoint expectation
+            relative_path = f"{DATA_DIR}/{file_name}"
+            
             reports.append({
                 "name": file_name,
-                "path": str(file_path),
+                "path": relative_path,
                 "mtime": stat.st_mtime,
                 "size": stat.st_size,
                 "description": description,
