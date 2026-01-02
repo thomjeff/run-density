@@ -62,7 +62,7 @@
         </div>
         
         <!-- Reset View Button -->
-        <div style="position: absolute; top: 10px; left: 10px; z-index: 1000;">
+        <div style="position: absolute; bottom: 10px; right: 10px; z-index: 1000;">
             <button id="reset-view-btn" onclick="resetMapView()" style="padding: 0.4rem 0.8rem; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
                 Reset View
             </button>
@@ -113,26 +113,13 @@
             <!-- Visual Separator -->
             <div style="width: 1px; background-color: #ddd; align-self: stretch; margin: 0 0.5rem;"></div>
             
-            <!-- First Runner Filter -->
-            <div>
-                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.9rem; color: #2c3e50;">First Runner</label>
-                <div style="display: flex; gap: 0.5rem; align-items: center;">
-                    <input type="text" id="filter-first-runner-min" placeholder="Min (HHMM)" maxlength="4" pattern="[0-9]{4}" style="flex: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem;">
-                    <span style="color: #666;">to</span>
-                    <input type="text" id="filter-first-runner-max" placeholder="Max (HHMM)" maxlength="4" pattern="[0-9]{4}" style="flex: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem;">
-                </div>
-            </div>
-            
-            <!-- Visual Separator -->
-            <div style="width: 1px; background-color: #ddd; align-self: stretch; margin: 0 0.5rem;"></div>
-            
             <!-- Last Runner Filter -->
             <div>
                 <label style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.9rem; color: #2c3e50;">Last Runner</label>
                 <div style="display: flex; gap: 0.5rem; align-items: center;">
                     <input type="text" id="filter-last-runner-min" placeholder="Min (HHMM)" maxlength="4" pattern="[0-9]{4}" style="flex: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem;">
                     <span style="color: #666;">to</span>
-                    <input type="text" id="filter-last-runner-max" placeholder="Max (HHMM)" maxlength="4" pattern="[0-9]{4}" style="flex: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem;">
+                    <input type="text" id="filter-last-runner-max" placeholder="Max (HHMM)" maxlength="4" pattern="[0-9]{4}" style="flex: 0.5; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem;">
                 </div>
             </div>
             
@@ -157,15 +144,14 @@
                     <th>Location</th>
                     <th class="sortable" data-sort="loc_type">Type <span class="sort-indicator"></span></th>
                     <th class="sortable" data-sort="zone">Zone <span class="sort-indicator"></span></th>
-                    <th class="sortable" data-sort="first_runner">First Runner <span class="sort-indicator"></span></th>
-                    <th class="sortable" data-sort="last_runner">Last Runner <span class="sort-indicator"></span></th>
+                    <th class="sortable" data-sort="first_runner">First/Last Runner <span class="sort-indicator"></span></th>
                     <th>Operational Window</th>
                     <th>Peak Window</th>
                 </tr>
             </thead>
             <tbody id="locations-tbody">
                 <tr>
-                    <td colspan="8" class="placeholder">Loading locations data...</td>
+                    <td colspan="7" class="placeholder">Loading locations data...</td>
                 </tr>
             </tbody>
         </table>
@@ -410,8 +396,6 @@
         const typeFilter = document.getElementById('filter-type')?.value || '';
         const zoneFilter = document.getElementById('filter-zone')?.value || '';
         const resourceFilter = document.getElementById('filter-resource')?.value || '';  // Issue #591
-        const firstRunnerMin = document.getElementById('filter-first-runner-min')?.value || '';
-        const firstRunnerMax = document.getElementById('filter-first-runner-max')?.value || '';
         const lastRunnerMin = document.getElementById('filter-last-runner-min')?.value || '';
         const lastRunnerMax = document.getElementById('filter-last-runner-max')?.value || '';
         
@@ -438,15 +422,6 @@
                 if (!locationCount || locationCount === 0 || locationCount === "0" || locationCount === null || locationCount === undefined) {
                     return false;
                 }
-            }
-            
-            // First Runner filter
-            const firstRunnerHHMM = timeToHHMM(location.first_runner);
-            if (firstRunnerMin && (!firstRunnerHHMM || firstRunnerHHMM < firstRunnerMin)) {
-                return false;
-            }
-            if (firstRunnerMax && (!firstRunnerHHMM || firstRunnerHHMM > firstRunnerMax)) {
-                return false;
             }
             
             // Last Runner filter
@@ -710,8 +685,6 @@
         const typeFilter = document.getElementById('filter-type')?.value || '';
         const zoneFilter = document.getElementById('filter-zone')?.value || '';
         const resourceFilter = document.getElementById('filter-resource')?.value || '';  // Issue #591
-        const firstRunnerMin = document.getElementById('filter-first-runner-min')?.value || '';
-        const firstRunnerMax = document.getElementById('filter-first-runner-max')?.value || '';
         const lastRunnerMin = document.getElementById('filter-last-runner-min')?.value || '';
         const lastRunnerMax = document.getElementById('filter-last-runner-max')?.value || '';
         
@@ -739,15 +712,6 @@
                 if (!locationCount || locationCount === 0 || locationCount === "0" || locationCount === null || locationCount === undefined) {
                     return false;
                 }
-            }
-            
-            // First Runner filter
-            const firstRunnerHHMM = timeToHHMM(location.first_runner);
-            if (firstRunnerMin && (!firstRunnerHHMM || firstRunnerHHMM < firstRunnerMin)) {
-                return false;
-            }
-            if (firstRunnerMax && (!firstRunnerHHMM || firstRunnerHHMM > firstRunnerMax)) {
-                return false;
             }
             
             // Last Runner filter
@@ -948,25 +912,6 @@
             });
         }
         
-        // First Runner filters
-        const firstRunnerMin = document.getElementById('filter-first-runner-min');
-        const firstRunnerMax = document.getElementById('filter-first-runner-max');
-        if (firstRunnerMin) {
-            firstRunnerMin.addEventListener('input', function(e) {
-                // Validate HHMM format
-                const value = e.target.value.replace(/\D/g, '');
-                e.target.value = value;
-                applyFiltersAndRender();
-            });
-        }
-        if (firstRunnerMax) {
-            firstRunnerMax.addEventListener('input', function(e) {
-                const value = e.target.value.replace(/\D/g, '');
-                e.target.value = value;
-                applyFiltersAndRender();
-            });
-        }
-        
         // Last Runner filters
         const lastRunnerMin = document.getElementById('filter-last-runner-min');
         const lastRunnerMax = document.getElementById('filter-last-runner-max');
@@ -993,8 +938,6 @@
                 if (zoneFilter) zoneFilter.value = '';
                 const resourceFilter = document.getElementById('filter-resource');  // Issue #591
                 if (resourceFilter) resourceFilter.value = '';
-                if (firstRunnerMin) firstRunnerMin.value = '';
-                if (firstRunnerMax) firstRunnerMax.value = '';
                 if (lastRunnerMin) lastRunnerMin.value = '';
                 if (lastRunnerMax) lastRunnerMax.value = '';
                 
@@ -1062,7 +1005,7 @@
         tbody.innerHTML = '';
         
         if (!locations || locations.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="placeholder">No locations data available</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="placeholder">No locations data available</td></tr>';
             return;
         }
         
@@ -1095,28 +1038,30 @@
             // Format zone
             const zone = location.zone && location.zone !== "NA" && location.zone !== "" ? location.zone : "—";
             
-            // Format First Runner (Issue #483)
+            // Format First/Last Runner (Issue #592: Combined column)
             // Handle null, undefined, "NA", or empty string
             const firstRunnerRaw = location.first_runner;
             const firstRunnerFormatted = (firstRunnerRaw && firstRunnerRaw !== "NA" && firstRunnerRaw !== "null") 
                 ? formatTimeToHHMM(firstRunnerRaw) || "—"
                 : "—";
             
-            // Format Last Runner (Issue #483)
-            // Handle null, undefined, "NA", or empty string
             const lastRunnerRaw = location.last_runner;
             const lastRunnerFormatted = (lastRunnerRaw && lastRunnerRaw !== "NA" && lastRunnerRaw !== "null")
                 ? formatTimeToHHMM(lastRunnerRaw) || "—"
                 : "—";
             
-            // Updated table structure - includes Type column
+            // Combine First/Last Runner into single column (Issue #592)
+            const firstLastRunner = (firstRunnerFormatted !== "—" && lastRunnerFormatted !== "—")
+                ? `${firstRunnerFormatted} → ${lastRunnerFormatted}`
+                : "—";
+            
+            // Updated table structure - includes Type column, combined First/Last Runner
             row.innerHTML = `
                 <td>${locId}</td>
                 <td>${locLabel}</td>
                 <td>${locType}</td>
                 <td>${zone}</td>
-                <td>${firstRunnerFormatted}</td>
-                <td>${lastRunnerFormatted}</td>
+                <td>${firstLastRunner}</td>
                 <td>${operationalWindow}</td>
                 <td>${peakWindow}</td>
             `;
@@ -1158,7 +1103,7 @@
     
     function showLocationsError(message) {
         const tbody = document.getElementById('locations-tbody');
-        tbody.innerHTML = `<tr><td colspan="8" class="placeholder">${message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="placeholder">${message}</td></tr>`;
     }
     
     // Make updateLocationsTable globally available for locations.js
