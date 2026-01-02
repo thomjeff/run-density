@@ -83,6 +83,7 @@
 {% block extra_scripts %}
 <script>
     let flowData = {};
+    let currentSort = { column: null, direction: 'asc' }; // 'asc' or 'desc' (Issue #596: Fix - moved outside DOMContentLoaded)
     
     // Load flow data on page load
     document.addEventListener('DOMContentLoaded', function() {

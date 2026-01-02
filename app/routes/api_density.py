@@ -515,11 +515,21 @@ async def get_density_segment_detail(
             heatmap_url = f"/heatmaps/{run_id}/{selected_day}/ui/visualizations/{seg_id}.png"
             caption = caption_data.get("summary", "")
         
+        # Issue #596: Load density metrics (utilization, worst_bin) from bins.parquet
+        density_metrics = load_density_metrics_from_bins(run_id, selected_day)
+        bin_metrics = density_metrics.get(seg_id, {})
+        utilization = bin_metrics.get("utilization", 0.0)
+        worst_bin = bin_metrics.get("worst_bin")
+        
         # Build detail response
         detail = _build_segment_detail_response(
             seg_id, metrics, metadata, is_flagged, heatmap_url,
             caption, segment_metrics
         )
+        
+        # Issue #596: Add utilization and worst_bin to detail response
+        detail["utilization"] = utilization
+        detail["worst_bin"] = worst_bin
         
         return JSONResponse(content=detail)
         
