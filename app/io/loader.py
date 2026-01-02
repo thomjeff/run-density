@@ -110,6 +110,20 @@ def load_locations(path="data/locations.csv"):
     if "interval" in df.columns:
         df["interval"] = pd.to_numeric(df["interval"], errors="coerce")
     
+    # Issue #589: Normalize all *_count fields to numeric
+    # Dynamically detect all columns ending with "_count"
+    count_columns = [col for col in df.columns if col.endswith("_count")]
+    for col in count_columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+        # Fill NaN with 0 (validation will catch invalid values, but this prevents errors during processing)
+        df[col] = df[col].fillna(0)
+    
+    # Issue #589: Normalize loc_direction (optional field, empty string if missing)
+    if "loc_direction" in df.columns:
+        df["loc_direction"] = df["loc_direction"].fillna("").astype(str)
+    else:
+        df["loc_direction"] = ""  # Add column with empty strings if missing
+    
     # Parse seg_id field (comma-separated) - Issue #277: CSV uses "seg_id" column
     if "seg_id" in df.columns:
         df["seg_id"] = df["seg_id"].fillna("").astype(str)

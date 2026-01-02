@@ -595,13 +595,17 @@ def generate_location_report(
         logger.info(f"Processing location {loc_id}: {loc_label}")
         
         # Initialize report row
+        # Issue #589: Field order matches loc_expected.csv specification
         report_row = {
             "loc_id": loc_id,
             "loc_label": loc_label,
             "loc_type": loc_type,
-            "zone": location.get("zone", ""),
+            "loc_direction": location.get("loc_direction", ""),  # Issue #589: Add this
             "lat": location.get("lat"),
             "lon": location.get("lon"),
+            "zone": location.get("zone", ""),
+            "buffer": location.get("buffer", 0),  # Issue #589: Add to output (already used in calculation)
+            "interval": location.get("interval", 5),  # Issue #589: Add to output (already used in calculation)
             "first_runner": None,
             "peak_start": None,
             "peak_end": None,
@@ -610,6 +614,7 @@ def generate_location_report(
             "loc_end": None,
             "duration": None,
             "timing_source": "modeled",  # Default to modeled, will be updated for proxy-based traffic locations
+            # Issue #589: Resource counts and minutes will be added dynamically below
             "notes": location.get("notes", "")
         }
         
@@ -885,8 +890,71 @@ def generate_location_report(
             report_row["loc_end"] = None
             report_row["duration"] = None
     
+    # Issue #589: Dynamically detect and add resource count and minutes fields
+    # This must be done after all report_rows are created and duration is calculated
+    
+    # Detect all *_count columns from the first location (all locations should have same columns)
+    if report_rows and len(locations_df) > 0:
+        count_columns = [col for col in locations_df.columns if col.endswith("_count")]
+        
+        # Add *_count and *_mins fields to each report_row
+        for report_row in report_rows:
+            duration_minutes = report_row.get("duration", 0)
+            if duration_minutes is None:
+                duration_minutes = 0
+            
+            # Add each resource count field
+            for count_col in count_columns:
+                # Get count value from original location data
+                loc_id = report_row["loc_id"]
+                location_row = locations_df[locations_df['loc_id'] == loc_id]
+                
+                if not location_row.empty:
+                    location = location_row.iloc[0]
+                    count_value = location.get(count_col, 0)
+                    if pd.isna(count_value):
+                        count_value = 0
+                    else:
+                        count_value = int(count_value)  # Ensure integer
+                else:
+                    count_value = 0
+                
+                # Add count field to report_row
+                report_row[count_col] = count_value
+                
+                # Calculate and add corresponding _mins field
+                mins_col = count_col.replace("_count", "_mins")
+                mins_value = count_value * duration_minutes
+                report_row[mins_col] = int(mins_value) if mins_value >= 0 else 0
+    
     # Create DataFrame and save
     report_df = pd.DataFrame(report_rows)
+    
+    # Issue #589: Reorder columns to match expected order
+    # Base fields (in order from loc_expected.csv)
+    base_fields = [
+        "loc_id", "loc_label", "loc_type", "loc_direction",
+        "lat", "lon", "zone",
+        "buffer", "interval",
+        "first_runner", "peak_start", "peak_end", "last_runner",
+        "loc_start", "loc_end", "duration",
+        "timing_source"
+    ]
+    
+    # Dynamically detect all *_count and *_mins fields (in alphabetical order for consistency)
+    count_fields = sorted([col for col in report_df.columns if col.endswith("_count")])
+    mins_fields = sorted([col for col in report_df.columns if col.endswith("_mins")])
+    
+    # Build final column order: base fields, then all *_count, then all *_mins, then notes
+    expected_columns = base_fields + count_fields + mins_fields + ["notes"]
+    
+    # Reorder DataFrame (only include columns that exist)
+    final_columns = [col for col in expected_columns if col in report_df.columns]
+    # Add any remaining columns that weren't in expected list (for backward compatibility)
+    remaining_cols = [col for col in report_df.columns if col not in final_columns]
+    final_columns = final_columns + remaining_cols
+    
+    report_df = report_df[final_columns]
     
     # Get output path
     full_path, relative_path = get_report_paths("Locations", "csv", output_dir)
