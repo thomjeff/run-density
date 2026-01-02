@@ -469,6 +469,69 @@ def validate_gpx_files(
             )
 
 
+def validate_locations_resource_counts(
+    locations_file: str,
+    data_dir: str = "data"
+) -> None:
+    """
+    Validate locations.csv resource count fields (all *_count columns).
+    
+    Issue #589: Validates that all *_count fields have valid values (not NaN, not < 0).
+    Fails fast at API layer with ValidationError(422) if validation fails.
+    
+    Args:
+        locations_file: Path to locations.csv file
+        data_dir: Base directory for data files (default: "data")
+        
+    Raises:
+        ValidationError (422): If any *_count field has NaN or < 0 values
+    """
+    locations_path = Path(data_dir) / locations_file
+    
+    try:
+        locations_df = pd.read_csv(locations_path)
+    except Exception as e:
+        raise ValidationError(
+            f"Failed to read locations.csv: {str(e)}",
+            code=422
+        )
+    
+    # Dynamically detect all *_count columns
+    count_columns = [col for col in locations_df.columns if col.endswith("_count")]
+    
+    if not count_columns:
+        # No resource count fields found - this is acceptable (backward compatible)
+        return
+    
+    # Validate each *_count field
+    errors = []
+    for col in count_columns:
+        # Check for NaN values
+        nan_rows = locations_df[locations_df[col].isna()]
+        if not nan_rows.empty:
+            loc_ids = nan_rows["loc_id"].tolist()
+            errors.append(
+                f"locations.csv: {col} has NaN values for loc_ids: {loc_ids}"
+            )
+        
+        # Check for negative values
+        # Convert to numeric first (handle string values)
+        numeric_col = pd.to_numeric(locations_df[col], errors="coerce")
+        negative_rows = locations_df[numeric_col < 0]
+        if not negative_rows.empty:
+            loc_ids = negative_rows["loc_id"].tolist()
+            errors.append(
+                f"locations.csv: {col} has negative values for loc_ids: {loc_ids}"
+            )
+    
+    if errors:
+        error_msg = "\n".join(errors)
+        raise ValidationError(
+            f"locations.csv resource count validation failed:\n{error_msg}",
+            code=422
+        )
+
+
 def validate_api_payload(
     payload: Dict[str, Any],
     data_dir: str = "data"
@@ -552,6 +615,7 @@ def validate_api_payload(
     validate_segment_spans(segments_file, events, data_dir)
     validate_runner_uniqueness(events, data_dir)
     validate_gpx_files(events, data_dir)
+    validate_locations_resource_counts(locations_file, data_dir)  # Issue #589
     
     return events, segments_file, locations_file, flow_file
 

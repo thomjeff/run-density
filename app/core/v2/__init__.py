@@ -18,6 +18,7 @@ from app.core.v2.validation import (
     validate_segment_spans,
     validate_runner_uniqueness,
     validate_gpx_files,
+    validate_locations_resource_counts,
 )
 from app.core.v2.loader import (
     load_events_from_payload,
@@ -73,6 +74,7 @@ __all__ = [
     "validate_segment_spans",
     "validate_runner_uniqueness",
     "validate_gpx_files",
+    "validate_locations_resource_counts",
     # Loaders
     "load_events_from_payload",
     "load_runners_for_event",
