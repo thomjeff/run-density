@@ -13,7 +13,7 @@ Core Principles:
   * Which event pairs to analyze (including same-event pairs like elite-elite, open-open)
   * Event ordering (event_a vs event_b)
   * Distance ranges (from_km_a, to_km_a, from_km_b, to_km_b)
-  * Flow metadata (flow_type, notes, overtake_flag)
+  * Flow metadata (flow_type, notes)
 - Handle sub-segment pattern (e.g., A1 → A1a, A1b, A1c)
 - Issue #553: NO fallbacks - if flow.csv is missing, unreadable, or missing required pairs, the request fails
 - Do not alter core flow logic (overtake detection, co-presence, convergence)
@@ -281,6 +281,41 @@ def find_flow_csv_segments_for_pair(
     return pd.DataFrame()
 
 
+def _get_required_flow_type(flow_row: pd.Series, seg_id: str, event_a: Event, event_b: Event) -> str:
+    """
+    Get flow_type from flow.csv, failing if missing or empty.
+    
+    Issue #549: flow_type is required in flow.csv for all segment-pairs.
+    No fallback - flow.csv must be complete.
+    
+    Args:
+        flow_row: Row from flow.csv DataFrame
+        seg_id: Segment ID for error message
+        event_a: Event A for error message
+        event_b: Event B for error message
+        
+    Returns:
+        flow_type string (never empty or None)
+        
+    Raises:
+        ValueError: If flow_type is missing, empty, or NaN
+    """
+    flow_type = flow_row.get("flow_type", "")
+    
+    # Check if missing or empty
+    if pd.isna(flow_type) or not str(flow_type).strip():
+        error_msg = (
+            f"flow_type is required in flow.csv for segment '{seg_id}' "
+            f"(event pair: {event_a.name}/{event_b.name}), but it is missing or empty. "
+            f"flow.csv must contain flow_type for all segment-pairs. "
+            f"Valid values: 'overtake', 'merge', 'counterflow', 'parallel', 'none'"
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+    
+    return str(flow_type).strip()
+
+
 def create_flow_segments_from_flow_csv(
     flow_rows: pd.DataFrame,
     event_a: Event,
@@ -293,7 +328,7 @@ def create_flow_segments_from_flow_csv(
     Uses flow.csv as authoritative source for:
     - Event ordering (event_a, event_b)
     - Distance ranges (from_km_a, to_km_a, from_km_b, to_km_b)
-    - Flow metadata (flow_type, notes, overtake_flag, prior_seg_id)
+    - Flow metadata (flow_type, notes, prior_seg_id)
     
     Args:
         flow_rows: DataFrame with matching rows from flow.csv
@@ -325,7 +360,8 @@ def create_flow_segments_from_flow_csv(
         from_km_b = float(flow_row.get("from_km_b", 0))
         to_km_b = float(flow_row.get("to_km_b", 0))
         
-        # Get additional metadata from segments_df if available
+        # Get additional metadata from segments_df (physical properties)
+        # Issue #549: direction and width_m are physical properties, only in segments.csv
         width_m = 0
         direction = ""
         if not seg_metadata.empty:
@@ -342,10 +378,9 @@ def create_flow_segments_from_flow_csv(
             "to_km_a": to_km_a,  # From flow.csv
             "from_km_b": from_km_b,  # From flow.csv
             "to_km_b": to_km_b,  # From flow.csv
-            "direction": direction or flow_row.get("direction", ""),
-            "width_m": width_m or flow_row.get("width_m", 0),
-            "flow_type": flow_row.get("flow_type", "none"),
-            "overtake_flag": flow_row.get("overtake_flag", ""),
+            "direction": direction,  # Issue #549: Always from segments.csv (physical property)
+            "width_m": width_m,  # Issue #549: Always from segments.csv (physical property)
+            "flow_type": flow_row.get("flow_type", "none"),  # Issue #549: Flow-specific, from flow.csv
             "prior_segment_id": flow_row.get("prior_seg_id", "") if pd.notna(flow_row.get("prior_seg_id", "")) else "",
             "notes": flow_row.get("notes", ""),
             "length_km": to_km_a - from_km_a if to_km_a > from_km_a else 0
@@ -403,10 +438,9 @@ def create_flow_segments_fallback(
             "to_km_a": to_km_a,
             "from_km_b": from_km_b,
             "to_km_b": to_km_b,
-            "direction": segment_row.get("direction", ""),
-            "width_m": segment_row.get("width_m", 0),
-            "flow_type": segment_row.get("flow_type", "none"),
-            "overtake_flag": "",
+            "direction": segment_row.get("direction", ""),  # Issue #549: Physical property from segments.csv
+            "width_m": segment_row.get("width_m", 0),  # Issue #549: Physical property from segments.csv
+            "flow_type": "none",  # Issue #549: Fallback default (flow.csv should have all segment-pairs, this is rare fallback only)
             "prior_segment_id": "",
             "notes": "",
             "length_km": segment_row.get("length_km", 0)

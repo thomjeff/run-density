@@ -26,8 +26,8 @@ def _check_required_columns(df: pd.DataFrame, validation_results: Dict[str, Any]
         "full", "half", "10K",
         "full_from_km", "full_to_km",
         "half_from_km", "half_to_km",
-        "10K_from_km", "10K_to_km",
-        "flow_type"
+        "10K_from_km", "10K_to_km"
+        # Issue #549: flow_type removed from segments.csv (flow-specific, only in flow.csv)
     ]
 
     missing_columns = [col for col in required_columns if col not in df.columns]
@@ -195,7 +195,8 @@ def validate_segments_csv(file_path: str = "data/segments.csv") -> Dict[str, Any
         _check_event_flag_values(df, event, validation_results)
         _check_event_window_values(df, event, validation_results)
 
-    _check_flow_type_values(df, validation_results)
+    # Issue #549: flow_type validation removed (flow_type no longer in segments.csv)
+    # Flow_type is validated in flow.csv processing (see app/core/v2/flow.py::_get_required_flow_type)
 
     # Raise error if validation failed
     _raise_if_validation_failed(validation_results)
