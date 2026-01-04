@@ -207,7 +207,7 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
     df = pd.read_parquet(parquet_path)
     
     # Load segment_windows for active_window calculation (bug fix: use actual windows, not all bins)
-    segment_windows_path = reports_dir / "bins" / "segment_windows_from_bins.parquet"
+    segment_windows_path = reports_dir.parent / "bins" / "segment_windows_from_bins.parquet"
     segment_windows_df = pd.DataFrame()
     if segment_windows_path.exists():
         try:
