@@ -377,9 +377,6 @@ class NewDensityTemplateEngine:
                 else:
                     worst_time = "N/A"
                 
-                # Format worst bin rate
-                worst_rate = f"{row['worst_bin_rate']:.3f}" if row['worst_bin_rate'] > 0 else "N/A"
-                
                 # Calculate Util% based on segment schema
                 # Issue #548 Bug 4: Load flow_ref.critical from rulebook dynamically
                 from app.rulebook import get_thresholds, classify_los
@@ -390,6 +387,11 @@ class NewDensityTemplateEngine:
                 util_display = "N/A"
                 if flow_ref_critical and row['peak_rate_per_m_per_min'] > 0:
                     util_display = f"{(row['peak_rate_per_m_per_min'] / flow_ref_critical * 100):.0f}%"
+                
+                # Bug fix: Use peak_rate (converted from peak_rate_per_m_per_min) instead of worst_bin_rate
+                # to match the UI's peak_rate display. The UI shows peak_rate for the segment, not the worst bin rate.
+                peak_rate_ps = row['peak_rate_per_m_per_min'] / 60.0 if row['peak_rate_per_m_per_min'] > 0 else 0
+                peak_rate_display = f"{peak_rate_ps:.3f}" if peak_rate_ps > 0 else "N/A"
                 
                 # Bug fix: Recalculate LOS from worst_bin_density to ensure it matches the density shown
                 # The worst_bin_los field is the LOS of the worst bin (by severity), which may not match
@@ -402,7 +404,7 @@ class NewDensityTemplateEngine:
                 
                 lines.append(
                     f"| {row['segment_id']} | {row['seg_label']} | {row['flagged_bins']} | {row['total_bins']} | "
-                    f"{flagged_pct:.1f}% | {worst_km} | {worst_time} | {worst_bin_density:.4f} | {worst_rate} | {util_display} | "
+                    f"{flagged_pct:.1f}% | {worst_km} | {worst_time} | {worst_bin_density:.4f} | {peak_rate_display} | {util_display} | "
                     f"{los_from_density} | {row['worst_severity']} | {row['worst_reason']} |"
                 )
         
