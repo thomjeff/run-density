@@ -1340,11 +1340,10 @@ def create_full_analysis_pipeline(
                 run_id=run_id,
                 events=events,
                 timelines=timelines,
-                density_results=density_results,  # Still using in-memory for now (JSON structure ready)
-                flow_results=flow_results,  # Still using in-memory for now (JSON structure ready)
+                density_results=density_results,  # Issue #600: Still using in-memory for now (will be removed when Density refactored)
                 segments_df=segments_df,
                 all_runners_df=all_runners_df,
-                locations_df=locations_df_from_json if locations_df_from_json is not None else locations_df,
+                locations_df=locations_df_from_json if locations_df_from_json is not None else locations_df,  # Issue #600: Still using JSON fallback (will be required in future)
                 data_dir=data_dir,
                 segments_file_path=segments_file_path,
                 flow_file_path=flow_file_path,

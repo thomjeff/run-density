@@ -3400,6 +3400,7 @@ def save_bin_dataset(bin_data: Dict[str, Any], output_dir: str) -> str:
 
 def generate_new_density_report_issue246(
     reports_dir: str,
+    segment_metrics_path: str,  # Issue #600: Path to segment_metrics.json (SSOT - required)
     output_path: Optional[str] = None,
     app_version: str = "1.6.42",
     events: Optional[Dict[str, Dict[str, Any]]] = None,
@@ -3438,9 +3439,18 @@ def generate_new_density_report_issue246(
     
     logger.info(f"generate_new_density_report_issue246: Calling generate_new_density_report with reports_dir={reports_path}, bins_dir={bins_path}, output_path={output_path_obj}")
     
+    # Issue #600: Convert segment_metrics_path string to Path if provided
+    segment_metrics_path_obj = None
+    if segment_metrics_path:
+        segment_metrics_path_obj = Path(segment_metrics_path)
+    
+    # Issue #600: Convert segment_metrics_path string to Path (required)
+    segment_metrics_path_obj = Path(segment_metrics_path)
+    
     # Generate the new report
     results = generate_new_density_report(
-        reports_path, 
+        reports_path,
+        segment_metrics_path_obj,  # Issue #600: Pass segment_metrics.json path (required)
         output_path_obj, 
         app_version, 
         events=events,
