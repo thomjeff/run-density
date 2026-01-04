@@ -332,11 +332,13 @@ class NewDensityTemplateEngine:
             "|----------|--------|--------------|------------|---|----------------|-------|----------------|-------------|-------|-----|-----------|---------|"
         ]
         
-        # Merge with segments to get segment_type for Util% calculation
+        # Merge with segments to get segment_type and width_m for Util% calculation and peak_rate conversion
         # segment_type is optional - use schema_key from bins if available
         segment_cols = ['segment_id']
         if 'segment_type' in segments_df.columns:
             segment_cols.append('segment_type')
+        if 'width_m' in segments_df.columns:
+            segment_cols.append('width_m')
         flagged_with_schema = segment_summary_df[segment_summary_df['flagged_bins'] > 0].merge(
             segments_df[segment_cols], on='segment_id', how='left'
         ).sort_values('segment_id')
@@ -390,8 +392,13 @@ class NewDensityTemplateEngine:
                 
                 # Bug fix: Use peak_rate (converted from peak_rate_per_m_per_min) instead of worst_bin_rate
                 # to match the UI's peak_rate display. The UI shows peak_rate for the segment, not the worst bin rate.
-                peak_rate_ps = row['peak_rate_per_m_per_min'] / 60.0 if row['peak_rate_per_m_per_min'] > 0 else 0
-                peak_rate_display = f"{peak_rate_ps:.3f}" if peak_rate_ps > 0 else "N/A"
+                # Conversion: peak_rate (p/s) = peak_rate_per_m_per_min (p/m/min) * width_m (m) / 60
+                width_m = row.get('width_m', 0.0)
+                if width_m and width_m > 0 and row['peak_rate_per_m_per_min'] > 0:
+                    peak_rate_ps = row['peak_rate_per_m_per_min'] * width_m / 60.0
+                    peak_rate_display = f"{peak_rate_ps:.3f}"
+                else:
+                    peak_rate_display = "N/A"
                 
                 # Bug fix: Recalculate LOS from worst_bin_density to ensure it matches the density shown
                 # The worst_bin_los field is the LOS of the worst bin (by severity), which may not match
