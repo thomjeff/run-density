@@ -485,6 +485,37 @@ class NewDensityTemplateEngine:
             "## Segment Details"
         ]
         
+        # Calculate active windows for each segment from segment_windows_df
+        # Bug fix: Calculate actual active windows instead of hardcoded values
+        active_windows = {}
+        if len(segment_windows_df) > 0 and 'segment_id' in segment_windows_df.columns:
+            if 't_start' in segment_windows_df.columns and 't_end' in segment_windows_df.columns:
+                try:
+                    # Work with a copy to avoid modifying the original
+                    windows_copy = segment_windows_df.copy()
+                    
+                    # Convert to datetime if not already datetime type
+                    if not pd.api.types.is_datetime64_any_dtype(windows_copy['t_start']):
+                        windows_copy['t_start'] = pd.to_datetime(windows_copy['t_start'], utc=True, errors='coerce')
+                    if not pd.api.types.is_datetime64_any_dtype(windows_copy['t_end']):
+                        windows_copy['t_end'] = pd.to_datetime(windows_copy['t_end'], utc=True, errors='coerce')
+                    
+                    # Group by segment_id and find min t_start and max t_end
+                    segment_groups = windows_copy.groupby('segment_id')
+                    for seg_id, group in segment_groups:
+                        min_start = group['t_start'].min()
+                        max_end = group['t_end'].max()
+                        if pd.notna(min_start) and pd.notna(max_end):
+                            # Format as HH:MM → HH:MM
+                            start_str = min_start.strftime('%H:%M') if hasattr(min_start, 'strftime') else str(min_start)[:5]
+                            end_str = max_end.strftime('%H:%M') if hasattr(max_end, 'strftime') else str(max_end)[:5]
+                            active_windows[seg_id] = f"{start_str} → {end_str}"
+                except Exception as e:
+                    # If calculation fails, active_windows will remain empty and fallback to "N/A"
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Could not calculate active windows from segment_windows_df: {e}")
+        
         for _, seg_row in segments_df.iterrows():
             seg_id = seg_row['segment_id']
             seg_label = seg_row['seg_label']
@@ -519,11 +550,13 @@ class NewDensityTemplateEngine:
                     peaks_line += f", Util {util_pct}"
                 
                 segment_type = seg_row.get('segment_type', 'on_course_open')
+                # Get active window for this segment, or use fallback
+                active_window = active_windows.get(seg_id, "N/A")
                 lines.extend([
                     "",
                     f"### {seg_label} ({seg_id})",
                     f"- **Schema:** {segment_type} · **Width:** {seg_row['width_m']} m · **Bins:** {summary['total_bins']}",
-                    f"- **Active:** 07:00 → 10:00",  # TODO: Calculate actual active times
+                    f"- **Active:** {active_window}",
                     peaks_line,
                     f"- **Worst Bin:** {worst_km} km at {worst_time} — {summary['worst_severity']} ({summary['worst_reason']})",
                     f"- **Mitigations:** {self._get_mitigations_for_segment(seg_id, summary['worst_reason'], segment_type)}"
