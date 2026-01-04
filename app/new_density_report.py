@@ -535,7 +535,7 @@ def generate_new_density_report(
             lambda x: {'none': 0, 'watch': 1, 'caution': 1, 'alert': 2, 'critical': 3}.get(x.lower(), 0)
         ).idxmax(), 'worst_severity'
     ] if len(segment_summary) > 0 else 'none'
-    worst_los = segment_summary['worst_los'].max() if len(segment_summary) > 0 else 'A'
+    worst_los = segment_summary['peak_los'].max() if len(segment_summary) > 0 else 'A'
     peak_density = segment_summary['peak_density'].max() if len(segment_summary) > 0 else 0.0
     peak_rate = segment_summary['peak_rate_per_m_per_min'].max() if len(segment_summary) > 0 else 0.0
     # Convert peak_rate_per_m_per_min to p/s (need width_m - use average or max)
