@@ -27,6 +27,7 @@ warnings.warn(
     DeprecationWarning
 )
 import os
+import math
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 import pandas as pd
@@ -49,6 +50,23 @@ class NewDensityTemplateEngine:
             'mitigations',
             'appendix'
         ]
+    
+    @staticmethod
+    def _round_half_up(n: float, decimals: int = 1) -> float:
+        """Round half up (away from zero) for consistent percentage formatting.
+        
+        Python's default round() uses round-half-to-even which causes inconsistency.
+        This method ensures consistent rounding for percentage display.
+        
+        Args:
+            n: Number to round
+            decimals: Number of decimal places (default 1)
+            
+        Returns:
+            Rounded number using round-half-up behavior
+        """
+        multiplier = 10 ** decimals
+        return math.floor(n * multiplier + 0.5) / multiplier
     
     def generate_report(
         self,
@@ -379,9 +397,12 @@ class NewDensityTemplateEngine:
                 worst_bin_density = row['worst_bin_density']
                 los_from_density = classify_los(worst_bin_density, thresholds.los)
                 
+                # Bug fix: Use consistent round-half-up for percentage formatting
+                flagged_pct = self._round_half_up(row['flagged_percentage'], 1)
+                
                 lines.append(
                     f"| {row['segment_id']} | {row['seg_label']} | {row['flagged_bins']} | {row['total_bins']} | "
-                    f"{row['flagged_percentage']:.1f}% | {worst_km} | {worst_time} | {worst_bin_density:.4f} | {worst_rate} | {util_display} | "
+                    f"{flagged_pct:.1f}% | {worst_km} | {worst_time} | {worst_bin_density:.4f} | {worst_rate} | {util_display} | "
                     f"{los_from_density} | {row['worst_severity']} | {row['worst_reason']} |"
                 )
         
@@ -396,11 +417,13 @@ class NewDensityTemplateEngine:
             "|----------|--------|----------|--------|----|--------------|"
         ]
         
+        # Bug fix: Use consistent round-half-up for percentage formatting (same as flagged segments table)
         for _, row in segment_summary_df.iterrows():
             if row['flagged_bins'] > 0:
+                flagged_pct = self._round_half_up(row['flagged_percentage'], 1)
                 lines.append(
                     f"| {row['segment_id']} | {row['seg_label']} | {row['flagged_bins']} | "
-                    f"{row['total_bins']} | {row['flagged_percentage']:.1f}% | {row['worst_reason']} |"
+                    f"{row['total_bins']} | {flagged_pct:.1f}% | {row['worst_reason']} |"
                 )
         
         if len(segment_summary_df[segment_summary_df['flagged_bins'] > 0]) == 0:
