@@ -206,6 +206,15 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
     # Read parquet
     df = pd.read_parquet(parquet_path)
     
+    # Load segment_windows for active_window calculation (bug fix: use actual windows, not all bins)
+    segment_windows_path = reports_dir / "bins" / "segment_windows_from_bins.parquet"
+    segment_windows_df = pd.DataFrame()
+    if segment_windows_path.exists():
+        try:
+            segment_windows_df = pd.read_parquet(segment_windows_path)
+        except Exception as e:
+            print(f"Warning: Could not load segment_windows_from_bins.parquet: {e}")
+
     # Group by segment_id and aggregate metrics
     metrics = {}
     
@@ -227,18 +236,27 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
         # Set to 0.0 for now, will be updated later
         peak_rate = 0.0
         
-        # Active window: min start time to max end time
-        # Use t_start/t_end or start_time/end_time
-        if 't_start' in group.columns and 't_end' in group.columns:
-            start_dt = pd.to_datetime(group['t_start']).min()
-            end_dt = pd.to_datetime(group['t_end']).max()
-            active_window = f"{start_dt.strftime('%H:%M')}–{end_dt.strftime('%H:%M')}"
-        elif 'start_time' in group.columns and 'end_time' in group.columns:
-            start_dt = pd.to_datetime(group['start_time']).min()
-            end_dt = pd.to_datetime(group['end_time']).max()
-            active_window = f"{start_dt.strftime('%H:%M')}–{end_dt.strftime('%H:%M')}"
-        else:
-            active_window = "N/A"
+        # Active window: calculate from segment_windows_df (actual active windows)
+        # Bug fix: Use segment_windows_from_bins.parquet instead of bins.parquet
+        # to get actual active windows per segment, not day-level windows
+        active_window = "N/A"
+        if len(segment_windows_df) > 0 and "segment_id" in segment_windows_df.columns:
+            seg_windows = segment_windows_df[segment_windows_df["segment_id"] == seg_id]
+            if len(seg_windows) > 0 and "t_start" in seg_windows.columns and "t_end" in seg_windows.columns:
+                try:
+                    windows_copy = seg_windows.copy()
+                    if not pd.api.types.is_datetime64_any_dtype(windows_copy["t_start"]):
+                        windows_copy["t_start"] = pd.to_datetime(windows_copy["t_start"], utc=True, errors="coerce")
+                    if not pd.api.types.is_datetime64_any_dtype(windows_copy["t_end"]):
+                        windows_copy["t_end"] = pd.to_datetime(windows_copy["t_end"], utc=True, errors="coerce")
+                    min_start = windows_copy["t_start"].min()
+                    max_end = windows_copy["t_end"].max()
+                    if pd.notna(min_start) and pd.notna(max_end):
+                        start_str = min_start.strftime("%H:%M") if hasattr(min_start, "strftime") else str(min_start)[:5]
+                        end_str = max_end.strftime("%H:%M") if hasattr(max_end, "strftime") else str(max_end)[:5]
+                        active_window = f"{start_str}–{end_str}"
+                except Exception as e:
+                    pass  # Fallback to "N/A" if calculation fails
         
         # Classify LOS
         worst_los = classify_los(peak_density, los_thresholds)
