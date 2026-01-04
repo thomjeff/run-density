@@ -2718,8 +2718,8 @@ def analyze_temporal_flow_segments(
             "first_entry_b": first_entry_b,
             "last_exit_b": last_exit_b,
             "overlap_window_duration": overlap_window_duration,
-            "prior_segment_id": segment.get("prior_segment_id", "") if pd.notna(segment.get("prior_segment_id", "")) else "",
-            "overtake_flag": segment.get("overtake_flag", "")
+            "prior_segment_id": segment.get("prior_segment_id", "") if pd.notna(segment.get("prior_segment_id", "")) else ""
+            # Issue #549: overtake_flag removed - not used in any logic or calculations
         }
         
         if cp_km is not None:
