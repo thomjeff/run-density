@@ -281,6 +281,41 @@ def find_flow_csv_segments_for_pair(
     return pd.DataFrame()
 
 
+def _get_required_flow_type(flow_row: pd.Series, seg_id: str, event_a: Event, event_b: Event) -> str:
+    """
+    Get flow_type from flow.csv, failing if missing or empty.
+    
+    Issue #549: flow_type is required in flow.csv for all segment-pairs.
+    No fallback - flow.csv must be complete.
+    
+    Args:
+        flow_row: Row from flow.csv DataFrame
+        seg_id: Segment ID for error message
+        event_a: Event A for error message
+        event_b: Event B for error message
+        
+    Returns:
+        flow_type string (never empty or None)
+        
+    Raises:
+        ValueError: If flow_type is missing, empty, or NaN
+    """
+    flow_type = flow_row.get("flow_type", "")
+    
+    # Check if missing or empty
+    if pd.isna(flow_type) or not str(flow_type).strip():
+        error_msg = (
+            f"flow_type is required in flow.csv for segment '{seg_id}' "
+            f"(event pair: {event_a.name}/{event_b.name}), but it is missing or empty. "
+            f"flow.csv must contain flow_type for all segment-pairs. "
+            f"Valid values: 'overtake', 'merge', 'counterflow', 'parallel', 'none'"
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+    
+    return str(flow_type).strip()
+
+
 def create_flow_segments_from_flow_csv(
     flow_rows: pd.DataFrame,
     event_a: Event,
@@ -405,7 +440,7 @@ def create_flow_segments_fallback(
             "to_km_b": to_km_b,
             "direction": segment_row.get("direction", ""),  # Issue #549: Physical property from segments.csv
             "width_m": segment_row.get("width_m", 0),  # Issue #549: Physical property from segments.csv
-            "flow_type": segment_row.get("flow_type", "none"),  # Issue #549: Fallback from segments.csv when flow.csv missing
+            "flow_type": "none",  # Issue #549: Fallback default (flow.csv should have all segment-pairs, this is rare fallback only)
             "prior_segment_id": "",
             "notes": "",
             "length_km": segment_row.get("length_km", 0)

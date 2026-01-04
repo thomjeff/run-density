@@ -26,8 +26,8 @@ def _check_required_columns(df: pd.DataFrame, validation_results: Dict[str, Any]
         "full", "half", "10K",
         "full_from_km", "full_to_km",
         "half_from_km", "half_to_km",
-        "10K_from_km", "10K_to_km",
-        "flow_type"
+        "10K_from_km", "10K_to_km"
+        # Issue #549: flow_type removed from segments.csv (flow-specific, only in flow.csv)
     ]
 
     missing_columns = [col for col in required_columns if col not in df.columns]
