@@ -136,10 +136,9 @@ def _create_converted_segment(segment: pd.Series, event_a: str, event_b: str) ->
         "to_km_a": to_km_a,
         "from_km_b": from_km_b,
         "to_km_b": to_km_b,
-        "direction": segment.get("direction", ""),
-        "width_m": segment.get("width_m", 0),
-        "overtake_flag": segment.get("overtake_flag", ""),
-        "flow_type": segment.get("flow_type", ""),
+        "direction": segment.get("direction", ""),  # Issue #549: Physical property from segments.csv
+        "width_m": segment.get("width_m", 0),  # Issue #549: Physical property from segments.csv
+        "flow_type": segment.get("flow_type", ""),  # Issue #549: Flow-specific metadata
         "length_km": segment.get("length_km", 0)
     }
     """
