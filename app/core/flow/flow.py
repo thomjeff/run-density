@@ -1256,9 +1256,11 @@ def validate_per_runner_entry_exit_f1(
         a_copresence.add(a_id)
         b_copresence.add(b_id)
         
-        if has_overtake[i, j]:
-            a_overtakes.add(a_id)
-            b_overtakes.add(b_id)
+        # Issue #552: Fix overtaking count logic - only count the runner who is actually overtaking
+        if a_passes_b[i, j]:  # Runner A overtakes runner B
+            a_overtakes.add(a_id)  # Only count A as overtaking
+        if b_passes_a[i, j]:  # Runner B overtakes runner A
+            b_overtakes.add(b_id)  # Only count B as overtaking
         
         overlap_pairs.append({
             "a_id": a_id,
@@ -1859,10 +1861,11 @@ def calculate_convergence_zone_overlaps_original(
                     a_bibs_copresence.add(a_bib)
                     b_bibs_copresence.add(b_bib)
                     
-                    # Count as true pass only if directional change occurs
-                    if a_passes_b or b_passes_a:
-                        a_bibs_overtakes.add(a_bib)
-                        b_bibs_overtakes.add(b_bib)
+                    # Issue #552: Fix overtaking count logic - only count the runner who is actually overtaking
+                    if a_passes_b:  # Runner A overtakes runner B
+                        a_bibs_overtakes.add(a_bib)  # Only count A as overtaking
+                    if b_passes_a:  # Runner B overtakes runner A
+                        b_bibs_overtakes.add(b_bib)  # Only count B as overtaking
                     
                 # Track unique pairs (ordered to avoid duplicates)
                 unique_pairs.add((a_bib, b_bib))
