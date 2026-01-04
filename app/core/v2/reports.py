@@ -1,10 +1,12 @@
 """
 Runflow v2 Reports Module
 
-Generates day-partitioned reports (Density.md, Flow.md, Flow.csv, Locations.csv)
+Generates day-partitioned reports (Density.md, Flow.csv, Locations.csv)
 organized in runflow/{run_id}/{day}/reports/ structure.
 
 Phase 6: Reports & Artifacts (Issue #500)
+
+Issue #600: Flow.md generation deprecated (only Flow.csv is used)
 """
 
 from typing import Dict, List, Any, Optional
@@ -63,8 +65,7 @@ def generate_reports_per_day(
     
     Main entry point for v2 report generation. Iterates over days and generates:
     - Density.md
-    - Flow.md
-    - Flow.csv
+    - Flow.csv (Issue #600: Flow.md deprecated, only CSV used)
     - Locations.csv (if applicable)
     
     Args:
@@ -82,12 +83,12 @@ def generate_reports_per_day(
         {
             Day.SUN: {
                 "density": "runflow/{run_id}/sun/reports/Density.md",
-                "flow_md": "runflow/{run_id}/sun/reports/Flow.md",
                 "flow_csv": "runflow/{run_id}/sun/reports/Flow.csv",
                 "locations": "runflow/{run_id}/sun/reports/Locations.csv",
             },
             ...
         }
+        Note: Issue #600 - Flow.md generation deprecated (only Flow.csv used)
     """
     # Issue #553 Phase 6.2: Default file paths if not provided
     if segments_file_path is None:
@@ -145,7 +146,7 @@ def generate_reports_per_day(
                 logger.error(f"Failed to generate density report for day {day.value}: {e}", exc_info=True)
                 # Continue with other reports even if density fails
         
-        # Generate Flow.md and Flow.csv
+        # Generate Flow.csv (Issue #600: Flow.md deprecated, only CSV used)
         if day in flow_results:
             try:
                 flow_paths = generate_flow_report_v2(
@@ -382,7 +383,9 @@ def generate_flow_report_v2(
     reports_path: Path
 ) -> Dict[str, str]:
     """
-    Generate day-scoped flow reports (Flow.md and Flow.csv).
+    Generate day-scoped flow report (Flow.csv only).
+    
+    Issue #600: Flow.md generation deprecated - only Flow.csv is used.
     
     Args:
         run_id: Unique run identifier
@@ -392,7 +395,7 @@ def generate_flow_report_v2(
         reports_path: Path to reports directory for this day
         
     Returns:
-        Dictionary with flow_md and flow_csv paths
+        Dictionary with flow_csv path (flow_md key removed per Issue #600)
     """
     flow_paths: Dict[str, str] = {}
     
@@ -439,28 +442,7 @@ def generate_flow_report_v2(
                 elif isinstance(pair_segments, dict):
                     v1_flow_results["segments"].append(pair_segments)
         
-        from app.flow_report import generate_markdown_report as generate_flow_markdown
-        
-        # Generate flow markdown content
-        flow_md_content = generate_flow_markdown(
-            results=v1_flow_results,
-            start_times=start_times
-        )
-        
-        # Add day identifier to flow report header
-        day_header = f"# Flow Analysis - {day.value.upper()}\n\n"
-        day_header += f"**Run ID:** {run_id}\n"
-        day_header += f"**Day:** {day.value}\n"
-        day_header += f"**Events:** {', '.join([e.name for e in day_events])}\n\n"
-        day_header += "---\n\n"
-        
-        flow_md_content = day_header + flow_md_content
-        
-        # Save Flow.md
-        flow_md_path = reports_path / "Flow.md"
-        flow_md_path.write_text(flow_md_content, encoding='utf-8')
-        flow_paths["flow_md"] = str(flow_md_path)
-        
+        # Issue #600: Flow.md generation deprecated - only Flow.csv is used
         # Generate Flow.csv using v1 export function for consistency
         from app.flow_report import export_temporal_flow_csv
         flow_csv_path = reports_path / "Flow.csv"

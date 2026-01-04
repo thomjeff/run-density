@@ -292,7 +292,7 @@ def _verify_outputs(files_created: Dict[str, List[str]]) -> Dict[str, Any]:
     critical = [
         ("reports", "Density.md"),
         ("reports", "Flow.csv"),
-        ("reports", "Flow.md"),
+        # Issue #600: Flow.md removed from critical files (deprecated, only Flow.csv used)
         ("reports", "Locations.csv"),
         ("bins", "bins.parquet"),
         ("ui", "metrics/segment_metrics.json"),  # Issue #574: Now in metrics/ subdirectory
