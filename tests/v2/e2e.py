@@ -138,19 +138,20 @@ class TestV2E2EScenarios:
             # Report files
             "density_md": day_dir / "reports" / "Density.md",
             "flow_csv": day_dir / "reports" / "Flow.csv",
-            "flow_md": day_dir / "reports" / "Flow.md",
+            # Issue #600: Flow.md deprecated (only Flow.csv used)
             "bins_parquet": day_dir / "bins" / "bins.parquet",
             "metadata_json": day_dir / "metadata.json",
             
             # UI artifacts (v2 minimum contract)
-            "meta_json": day_dir / "ui" / "meta.json",
-            "segment_metrics_json": day_dir / "ui" / "segment_metrics.json",
-            "flags_json": day_dir / "ui" / "flags.json",
-            "flow_json": day_dir / "ui" / "flow.json",
-            "schema_density_json": day_dir / "ui" / "schema_density.json",
-            "health_json": day_dir / "ui" / "health.json",
-            "segments_geojson": day_dir / "ui" / "segments.geojson",
-            "captions_json": day_dir / "ui" / "captions.json",
+            # Issue #574: UI artifacts organized in subdirectories
+            "meta_json": day_dir / "ui" / "metadata" / "meta.json",
+            "segment_metrics_json": day_dir / "ui" / "metrics" / "segment_metrics.json",
+            "flags_json": day_dir / "ui" / "metrics" / "flags.json",
+            "flow_json": day_dir / "ui" / "geospatial" / "flow.json",
+            "schema_density_json": day_dir / "ui" / "metadata" / "schema_density.json",
+            "health_json": day_dir / "ui" / "metadata" / "health.json",
+            "segments_geojson": day_dir / "ui" / "geospatial" / "segments.geojson",
+            "captions_json": day_dir / "ui" / "visualizations" / "captions.json",
         }
         
         # Locations.csv may not exist for all days (e.g., SAT)
