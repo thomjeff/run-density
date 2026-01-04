@@ -50,10 +50,9 @@ def generate_reports_per_day(
     run_id: str,
     events: List[Event],
     timelines: List[DayTimeline],
-    density_results: Dict[Day, Dict[str, Any]],  # Issue #600: Still used for now (will be removed in future)
+    density_results: Dict[Day, Dict[str, Any]],  # Issue #600: Still used for now (will be removed when Density fully refactored)
     segments_df: Any,  # pd.DataFrame
     all_runners_df: Any,  # pd.DataFrame
-    locations_df: Optional[Any] = None,  # pd.DataFrame
     data_dir: str = "data",  # Data directory for loading runner files
     segments_file_path: Optional[str] = None,  # Issue #553 Phase 6.2: Path to segments file
     flow_file_path: Optional[str] = None,  # Issue #553 Phase 6.2: Path to flow file
@@ -175,15 +174,24 @@ def generate_reports_per_day(
             logger.error(f"Failed to generate flow report for day {day.value}: {e}", exc_info=True)
             # Continue with other reports even if flow fails
         
-        # Generate Locations.csv (if applicable)
-        if locations_df is not None:
-            try:
-                logger.info(f"Generating locations report for day {day.value}...")
+        # Generate Locations.csv (Issue #600: Load from locations_results.json - SSOT mandatory if file exists)
+        try:
+            from app.utils.run_id import get_runflow_root
+            runflow_root = get_runflow_root()
+            computation_dir = runflow_root / run_id / day.value / "computation"
+            locations_results_json_path = computation_dir / "locations_results.json"
+            
+            if not locations_results_json_path.exists():
+                # Locations report is optional (only generated if locations file provided)
+                logger.debug(f"Issue #600: locations_results.json not found at {locations_results_json_path}, skipping locations report")
+            else:
+                logger.info(f"Issue #600: Using locations_results.json as SSOT: {locations_results_json_path}")
+                
                 locations_path = generate_locations_report_v2(
                     run_id=run_id,
                     day=day,
                     day_events=day_events,
-                    locations_df=locations_df,
+                    locations_results_json_path=locations_results_json_path,  # Issue #600: Pass JSON path (required)
                     all_runners_df=all_runners_df,
                     reports_path=reports_path,
                     segments_df=day_segments_df
@@ -193,9 +201,12 @@ def generate_reports_per_day(
                     logger.info(f"Successfully generated locations report for day {day.value}")
                 else:
                     logger.warning(f"Locations report generation returned None for day {day.value}")
-            except Exception as e:
-                logger.error(f"Failed to generate locations report for day {day.value}: {e}", exc_info=True)
-                # Continue with other reports even if locations fails
+        except FileNotFoundError:
+            # Locations report is optional - skip if file not found
+            logger.debug(f"Locations report skipped for day {day.value} (locations_results.json not found)")
+        except Exception as e:
+            logger.error(f"Failed to generate locations report for day {day.value}: {e}", exc_info=True)
+            # Continue with other reports even if locations fails
         
         report_paths_by_day[day] = day_report_paths
         
@@ -538,7 +549,7 @@ def generate_locations_report_v2(
     run_id: str,
     day: Day,
     day_events: List[Event],
-    locations_df: Any,  # pd.DataFrame
+    locations_results_json_path: Path,
     all_runners_df: Any,  # pd.DataFrame
     reports_path: Path,
     segments_df: Optional[Any] = None  # pd.DataFrame - day-filtered segments
@@ -546,20 +557,43 @@ def generate_locations_report_v2(
     """
     Generate day-scoped locations report (Locations.csv).
     
+    Issue #600: Loads locations_results.json as SSOT (mandatory).
     Filters locations by day/events and uses location_report.py for proper generation.
     
     Args:
         run_id: Unique run identifier
         day: Day enum
         day_events: List of events for this day
-        locations_df: Full locations DataFrame
+        locations_results_json_path: Path to locations_results.json file (Issue #600 - required)
         all_runners_df: Full runners DataFrame
         reports_path: Path to reports directory for this day
         segments_df: Optional day-filtered segments DataFrame
         
     Returns:
         Path to generated Locations.csv file, or None if generation failed
+        
+    Raises:
+        FileNotFoundError: If locations_results.json file does not exist
+        RuntimeError: If locations_results.json cannot be loaded or is invalid
     """
+    import json
+    import pandas as pd
+    
+    # Issue #600: Load locations_results.json as SSOT (mandatory)
+    if not locations_results_json_path.exists():
+        raise FileNotFoundError(
+            f"Issue #600: locations_results.json is required (SSOT) but not found at {locations_results_json_path}"
+        )
+    
+    try:
+        locations_data = json.loads(locations_results_json_path.read_text(encoding='utf-8'))
+        # Convert JSON to DataFrame: locations_results.json has structure {"locations": [...]}
+        locations_df = pd.DataFrame(locations_data.get("locations", []))
+        logger.info(f"Issue #600: Loaded locations_results.json from {locations_results_json_path}: {len(locations_df)} locations")
+    except Exception as e:
+        logger.error(f"Failed to load locations_results.json from {locations_results_json_path}: {e}", exc_info=True)
+        raise RuntimeError(f"Issue #600: Failed to load locations_results.json from {locations_results_json_path}: {e}") from e
+    
     try:
         import pandas as pd
         from app.location_report import generate_location_report
