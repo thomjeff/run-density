@@ -195,7 +195,8 @@ def validate_segments_csv(file_path: str = "data/segments.csv") -> Dict[str, Any
         _check_event_flag_values(df, event, validation_results)
         _check_event_window_values(df, event, validation_results)
 
-    _check_flow_type_values(df, validation_results)
+    # Issue #549: flow_type validation removed (flow_type no longer in segments.csv)
+    # Flow_type is validated in flow.csv processing (see app/core/v2/flow.py::_get_required_flow_type)
 
     # Raise error if validation failed
     _raise_if_validation_failed(validation_results)
