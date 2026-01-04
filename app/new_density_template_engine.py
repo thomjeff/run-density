@@ -27,6 +27,7 @@ warnings.warn(
     DeprecationWarning
 )
 import os
+import math
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 import pandas as pd
@@ -49,6 +50,23 @@ class NewDensityTemplateEngine:
             'mitigations',
             'appendix'
         ]
+    
+    @staticmethod
+    def _round_half_up(n: float, decimals: int = 1) -> float:
+        """Round half up (away from zero) for consistent percentage formatting.
+        
+        Python's default round() uses round-half-to-even which causes inconsistency.
+        This method ensures consistent rounding for percentage display.
+        
+        Args:
+            n: Number to round
+            decimals: Number of decimal places (default 1)
+            
+        Returns:
+            Rounded number using round-half-up behavior
+        """
+        multiplier = 10 ** decimals
+        return math.floor(n * multiplier + 0.5) / multiplier
     
     def generate_report(
         self,
@@ -314,11 +332,13 @@ class NewDensityTemplateEngine:
             "|----------|--------|--------------|------------|---|----------------|-------|----------------|-------------|-------|-----|-----------|---------|"
         ]
         
-        # Merge with segments to get segment_type for Util% calculation
+        # Merge with segments to get segment_type and width_m for Util% calculation and peak_rate conversion
         # segment_type is optional - use schema_key from bins if available
         segment_cols = ['segment_id']
         if 'segment_type' in segments_df.columns:
             segment_cols.append('segment_type')
+        if 'width_m' in segments_df.columns:
+            segment_cols.append('width_m')
         flagged_with_schema = segment_summary_df[segment_summary_df['flagged_bins'] > 0].merge(
             segments_df[segment_cols], on='segment_id', how='left'
         ).sort_values('segment_id')
@@ -359,12 +379,9 @@ class NewDensityTemplateEngine:
                 else:
                     worst_time = "N/A"
                 
-                # Format worst bin rate
-                worst_rate = f"{row['worst_bin_rate']:.3f}" if row['worst_bin_rate'] > 0 else "N/A"
-                
                 # Calculate Util% based on segment schema
                 # Issue #548 Bug 4: Load flow_ref.critical from rulebook dynamically
-                from app.rulebook import get_thresholds
+                from app.rulebook import get_thresholds, classify_los
                 segment_type = row.get('segment_type', 'on_course_open')
                 thresholds = get_thresholds(segment_type)
                 flow_ref_critical = thresholds.flow_ref.critical if thresholds.flow_ref else None
@@ -373,10 +390,29 @@ class NewDensityTemplateEngine:
                 if flow_ref_critical and row['peak_rate_per_m_per_min'] > 0:
                     util_display = f"{(row['peak_rate_per_m_per_min'] / flow_ref_critical * 100):.0f}%"
                 
+                # Bug fix: Use peak_rate (converted from peak_rate_per_m_per_min) instead of worst_bin_rate
+                # to match the UI's peak_rate display. The UI shows peak_rate for the segment, not the worst bin rate.
+                # Conversion: peak_rate (p/s) = peak_rate_per_m_per_min (p/m/min) * width_m (m) / 60
+                width_m = row.get('width_m', 0.0)
+                if width_m and width_m > 0 and row['peak_rate_per_m_per_min'] > 0:
+                    peak_rate_ps = row['peak_rate_per_m_per_min'] * width_m / 60.0
+                    peak_rate_display = f"{peak_rate_ps:.3f}"
+                else:
+                    peak_rate_display = "N/A"
+                
+                # Bug fix: Recalculate LOS from worst_bin_density to ensure it matches the density shown
+                # The worst_bin_los field is the LOS of the worst bin (by severity), which may not match
+                # the density value shown. Recalculate LOS from the density to ensure consistency.
+                worst_bin_density = row['worst_bin_density']
+                los_from_density = classify_los(worst_bin_density, thresholds.los)
+                
+                # Bug fix: Use consistent round-half-up for percentage formatting
+                flagged_pct = self._round_half_up(row['flagged_percentage'], 1)
+                
                 lines.append(
                     f"| {row['segment_id']} | {row['seg_label']} | {row['flagged_bins']} | {row['total_bins']} | "
-                    f"{row['flagged_percentage']:.1f}% | {worst_km} | {worst_time} | {row['worst_bin_density']:.4f} | {worst_rate} | {util_display} | "
-                    f"{row['worst_bin_los']} | {row['worst_severity']} | {row['worst_reason']} |"
+                    f"{flagged_pct:.1f}% | {worst_km} | {worst_time} | {worst_bin_density:.4f} | {peak_rate_display} | {util_display} | "
+                    f"{los_from_density} | {row['worst_severity']} | {row['worst_reason']} |"
                 )
         
         return "\n".join(lines)
@@ -390,11 +426,13 @@ class NewDensityTemplateEngine:
             "|----------|--------|----------|--------|----|--------------|"
         ]
         
+        # Bug fix: Use consistent round-half-up for percentage formatting (same as flagged segments table)
         for _, row in segment_summary_df.iterrows():
             if row['flagged_bins'] > 0:
+                flagged_pct = self._round_half_up(row['flagged_percentage'], 1)
                 lines.append(
                     f"| {row['segment_id']} | {row['seg_label']} | {row['flagged_bins']} | "
-                    f"{row['total_bins']} | {row['flagged_percentage']:.1f}% | {row['worst_reason']} |"
+                    f"{row['total_bins']} | {flagged_pct:.1f}% | {row['worst_reason']} |"
                 )
         
         if len(segment_summary_df[segment_summary_df['flagged_bins'] > 0]) == 0:
@@ -479,6 +517,37 @@ class NewDensityTemplateEngine:
             "## Segment Details"
         ]
         
+        # Calculate active windows for each segment from segment_windows_df
+        # Bug fix: Calculate actual active windows instead of hardcoded values
+        active_windows = {}
+        if len(segment_windows_df) > 0 and 'segment_id' in segment_windows_df.columns:
+            if 't_start' in segment_windows_df.columns and 't_end' in segment_windows_df.columns:
+                try:
+                    # Work with a copy to avoid modifying the original
+                    windows_copy = segment_windows_df.copy()
+                    
+                    # Convert to datetime if not already datetime type
+                    if not pd.api.types.is_datetime64_any_dtype(windows_copy['t_start']):
+                        windows_copy['t_start'] = pd.to_datetime(windows_copy['t_start'], utc=True, errors='coerce')
+                    if not pd.api.types.is_datetime64_any_dtype(windows_copy['t_end']):
+                        windows_copy['t_end'] = pd.to_datetime(windows_copy['t_end'], utc=True, errors='coerce')
+                    
+                    # Group by segment_id and find min t_start and max t_end
+                    segment_groups = windows_copy.groupby('segment_id')
+                    for seg_id, group in segment_groups:
+                        min_start = group['t_start'].min()
+                        max_end = group['t_end'].max()
+                        if pd.notna(min_start) and pd.notna(max_end):
+                            # Format as HH:MM → HH:MM
+                            start_str = min_start.strftime('%H:%M') if hasattr(min_start, 'strftime') else str(min_start)[:5]
+                            end_str = max_end.strftime('%H:%M') if hasattr(max_end, 'strftime') else str(max_end)[:5]
+                            active_windows[seg_id] = f"{start_str} → {end_str}"
+                except Exception as e:
+                    # If calculation fails, active_windows will remain empty and fallback to "N/A"
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Could not calculate active windows from segment_windows_df: {e}")
+        
         for _, seg_row in segments_df.iterrows():
             seg_id = seg_row['segment_id']
             seg_label = seg_row['seg_label']
@@ -513,11 +582,13 @@ class NewDensityTemplateEngine:
                     peaks_line += f", Util {util_pct}"
                 
                 segment_type = seg_row.get('segment_type', 'on_course_open')
+                # Get active window for this segment, or use fallback
+                active_window = active_windows.get(seg_id, "N/A")
                 lines.extend([
                     "",
                     f"### {seg_label} ({seg_id})",
                     f"- **Schema:** {segment_type} · **Width:** {seg_row['width_m']} m · **Bins:** {summary['total_bins']}",
-                    f"- **Active:** 07:00 → 10:00",  # TODO: Calculate actual active times
+                    f"- **Active:** {active_window}",
                     peaks_line,
                     f"- **Worst Bin:** {worst_km} km at {worst_time} — {summary['worst_severity']} ({summary['worst_reason']})",
                     f"- **Mitigations:** {self._get_mitigations_for_segment(seg_id, summary['worst_reason'], segment_type)}"

@@ -261,6 +261,32 @@ def _file_counts(files_created: Dict[str, List[str]]) -> Dict[str, int]:
     return {k: len(v) for k, v in files_created.items()}
 
 
+def _update_metadata_verification(day_path: Path, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Update metadata verification by re-checking files on disk.
+    
+    This should be called after reports are generated to ensure verification
+    reflects the actual files that exist.
+    
+    Args:
+        day_path: Path to day directory
+        metadata: Existing metadata dictionary to update
+        
+    Returns:
+        Updated metadata dictionary with corrected verification
+    """
+    files_created = _list_files_by_category(day_path)
+    verification = _verify_outputs(files_created)
+    
+    # Update metadata with new file lists and verification
+    metadata["files_created"] = files_created
+    metadata["file_counts"] = _file_counts(files_created)
+    metadata["output_verification"] = verification
+    metadata["status"] = verification["status"]
+    
+    return metadata
+
+
 def _verify_outputs(files_created: Dict[str, List[str]]) -> Dict[str, Any]:
     """Simple verification similar to v1 semantics."""
     critical = [
@@ -1344,6 +1370,20 @@ def create_full_analysis_pipeline(
                 summary_stats={"reports": total_reports, "Density.md": report_counts["Density.md"], 
                               "Flow.csv": report_counts["Flow.csv"], "Locations.csv": report_counts["Locations.csv"]}
             )
+            
+            # Update metadata verification after reports are generated
+            # Bug fix: Metadata was created before reports, causing false FAIL status
+            logger.info("[Phase 5] Updating metadata verification after report generation")
+            for day_code, day_metadata in day_metadata_map.items():
+                day_path = run_path / day_code
+                updated_metadata = _update_metadata_verification(day_path, day_metadata)
+                day_metadata_map[day_code] = updated_metadata
+                
+                # Write updated metadata.json to disk
+                metadata_path = day_path / "metadata.json"
+                with open(metadata_path, 'w', encoding='utf-8') as f:
+                    json.dump(updated_metadata, f, indent=2, ensure_ascii=False)
+                logger.info(f"[Phase 5] Updated metadata.json for {day_code}: status={updated_metadata['status']}")
         except Exception as e:
             logger.error(f"[Phase 5] ❌ ERROR: Report generation failed: {e}", exc_info=True)
             logger.error(f"  → Phase: Report Generation")
