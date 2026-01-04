@@ -292,7 +292,7 @@ def _verify_outputs(files_created: Dict[str, List[str]]) -> Dict[str, Any]:
     critical = [
         ("reports", "Density.md"),
         ("reports", "Flow.csv"),
-        ("reports", "Flow.md"),
+        # Issue #600: Flow.md removed from critical files (deprecated, only Flow.csv used)
         ("reports", "Locations.csv"),
         ("bins", "bins.parquet"),
         ("ui", "metrics/segment_metrics.json"),  # Issue #574: Now in metrics/ subdirectory
@@ -1340,11 +1340,9 @@ def create_full_analysis_pipeline(
                 run_id=run_id,
                 events=events,
                 timelines=timelines,
-                density_results=density_results,  # Still using in-memory for now (JSON structure ready)
-                flow_results=flow_results,  # Still using in-memory for now (JSON structure ready)
+                density_results=density_results,  # Issue #600: Still using in-memory for now (will be removed when Density fully refactored)
                 segments_df=segments_df,
                 all_runners_df=all_runners_df,
-                locations_df=locations_df_from_json if locations_df_from_json is not None else locations_df,
                 data_dir=data_dir,
                 segments_file_path=segments_file_path,
                 flow_file_path=flow_file_path,
