@@ -658,14 +658,25 @@ def _format_convergence_points_json(convergence_points: Optional[List[Any]]) -> 
         return ""
     
     # Convert ConvergencePoint dataclasses to dicts
+    # Handle both dataclass objects (from direct analysis) and dicts (from JSON deserialization)
     cp_dicts = []
     for cp in convergence_points:
-        cp_dict = {
-            "km": round(cp.km, 2),
-            "type": cp.type
-        }
-        if cp.overlap_count is not None:
-            cp_dict["overlap_count"] = cp.overlap_count
+        # Handle dict (from JSON deserialization in v2 pipeline)
+        if isinstance(cp, dict):
+            cp_dict = {
+                "km": round(float(cp.get("km", 0)), 2),
+                "type": str(cp.get("type", "unknown"))
+            }
+            if "overlap_count" in cp and cp["overlap_count"] is not None:
+                cp_dict["overlap_count"] = cp["overlap_count"]
+        # Handle ConvergencePoint dataclass object (direct from analysis)
+        else:
+            cp_dict = {
+                "km": round(cp.km, 2),
+                "type": cp.type
+            }
+            if cp.overlap_count is not None:
+                cp_dict["overlap_count"] = cp.overlap_count
         cp_dicts.append(cp_dict)
     
     return json.dumps(cp_dicts)
