@@ -3245,10 +3245,10 @@ def analyze_temporal_flow_segments(
         df_a = pace_df[pace_df["event"] == event_a].copy()
         df_b = pace_df[pace_df["event"] == event_b].copy()
         
-        # Calculate convergence point (in event A km ruler) - for all segments
+        # Issue #612: Calculate convergence points (multi-CP) - for all segments
         # NOTE: Segments may not show convergence if there are no temporal overlaps 
         # due to timing differences (e.g., A1, B1)
-        cp_km = calculate_convergence_point(
+        convergence_points = calculate_convergence_points(
             df_a, df_b, event_a, event_b, start_times,
             from_km_a, to_km_a, from_km_b, to_km_b
         )
@@ -3262,6 +3262,10 @@ def analyze_temporal_flow_segments(
         # Get appropriate terminology for this flow type
         flow_type = segment.get("flow_type", "")
         terminology = get_flow_terminology(flow_type)
+        
+        # Issue #612: For backward compatibility, use first CP (or None if no CPs)
+        # TODO: Full multi-zone processing will replace this
+        cp_km = convergence_points[0].km if convergence_points else None
         
         segment_result = {
             "seg_id": seg_id,
@@ -4059,11 +4063,14 @@ def generate_flow_audit_for_segment(
     
     print(f"  📊 Data loaded: {len(df_a)} {event_a} runners, {len(df_b)} {event_b} runners")
     
-    # Calculate convergence point
-    cp_km = calculate_convergence_point(
+    # Issue #612: Calculate convergence points (multi-CP)
+    convergence_points = calculate_convergence_points(
         df_a, df_b, event_a, event_b, start_times,
         from_km_a, to_km_a, from_km_b, to_km_b
     )
+    
+    # For backward compatibility, use first CP (or None if no CPs)
+    cp_km = convergence_points[0].km if convergence_points else None
     
     if cp_km is None:
         return {
