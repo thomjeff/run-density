@@ -641,6 +641,36 @@ def generate_deep_dive_analysis(segment: Dict[str, Any]) -> List[str]:
     return content
 
 
+def _format_convergence_points_json(convergence_points: Optional[List[Any]]) -> str:
+    """
+    Format convergence points list as JSON string for CSV export.
+    
+    Issue #612: Converts list of ConvergencePoint objects to JSON array.
+    
+    Args:
+        convergence_points: List of ConvergencePoint objects (or None)
+        
+    Returns:
+        JSON string representation of convergence points, or empty string if None/empty
+    """
+    import json
+    if not convergence_points:
+        return ""
+    
+    # Convert ConvergencePoint dataclasses to dicts
+    cp_dicts = []
+    for cp in convergence_points:
+        cp_dict = {
+            "km": round(cp.km, 2),
+            "type": cp.type
+        }
+        if cp.overlap_count is not None:
+            cp_dict["overlap_count"] = cp.overlap_count
+        cp_dicts.append(cp_dict)
+    
+    return json.dumps(cp_dicts)
+
+
 def _format_start_times_for_csv(start_times: Dict[str, float]) -> str:
     """
     Format start times for CSV metadata display.
@@ -738,6 +768,8 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
             "spatial_zone_exists", "temporal_overlap_exists", "true_pass_exists",
             "has_convergence_policy", "has_convergence", "convergence_zone_start",
             "convergence_zone_end", "no_pass_reason_code", "conflict_length_m",
+            # Issue #612: Multi-zone fields
+            "worst_zone_index", "convergence_points_json",
             
             # Group 5: Metadata (moved to end as requested)
             "analysis_timestamp", "app_version", "environment", "data_source",
@@ -849,6 +881,9 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
                 conv_end,
                 segment.get("no_pass_reason_code", ""),
                 segment.get('conflict_length_m', 100.0),  # conflict_length_m from analysis
+                # Issue #612: Multi-zone fields
+                segment.get("worst_zone_index"),
+                _format_convergence_points_json(segment.get("convergence_points")),
                 
                 # Group 5: Metadata (moved to end as requested)
                 datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
