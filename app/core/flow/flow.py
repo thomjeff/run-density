@@ -20,10 +20,14 @@ from __future__ import annotations
 import time
 import logging
 import json
-from typing import Dict, Optional, Any, List, Tuple
+from typing import Dict, Optional, Any, List, Tuple, TYPE_CHECKING
 from dataclasses import dataclass
 import pandas as pd
 import numpy as np
+
+if TYPE_CHECKING:
+    # Avoid circular import - bin_analysis imports flow, so we only import types for type hints
+    from app.bin_analysis import SegmentBinData
 from app.utils.constants import (
     SECONDS_PER_MINUTE, SECONDS_PER_HOUR,
     DEFAULT_CONVERGENCE_STEP_KM, DEFAULT_MIN_OVERLAP_DURATION, 
@@ -396,6 +400,53 @@ def _collect_all_true_pass_points(
     return true_pass_points
 
 
+def _extract_bin_peak_convergence_points(
+    bin_data: "SegmentBinData",
+    from_km_a: float,
+    to_km_a: float,
+) -> List[ConvergencePoint]:
+    """
+    Extract convergence points from bin data based on RSI peaks.
+    
+    Issue #612 Task 2: Uses bins where convergence_point == True (RSI > 0.1 threshold)
+    to identify potential convergence points.
+    
+    Args:
+        bin_data: SegmentBinData with bin-level analysis results
+        from_km_a: Start of segment for event A (for filtering bins within segment)
+        to_km_a: End of segment for event A (for filtering bins within segment)
+        
+    Returns:
+        List of ConvergencePoint objects with type="bin_peak"
+    """
+    bin_peak_cps = []
+    
+    if not bin_data or not bin_data.bins:
+        return bin_peak_cps
+    
+    for bin_obj in bin_data.bins:
+        # Only consider bins marked as convergence points (RSI > 0.1)
+        if not bin_obj.convergence_point:
+            continue
+        
+        # Use bin center as the convergence point location
+        bin_center_km = (bin_obj.start_km + bin_obj.end_km) / 2.0
+        
+        # Filter to bins within the segment range (event A coordinates)
+        if from_km_a <= bin_center_km <= to_km_a:
+            # Use overlap_count (total overtakes + co-presence) if available
+            total_overlaps = sum(bin_obj.overtakes.values()) + sum(bin_obj.co_presence.values())
+            bin_peak_cps.append(
+                ConvergencePoint(
+                    km=bin_center_km,
+                    type="bin_peak",
+                    overlap_count=total_overlaps if total_overlaps > 0 else None
+                )
+            )
+    
+    return bin_peak_cps
+
+
 def calculate_convergence_points(
     dfA: pd.DataFrame,
     dfB: pd.DataFrame,
@@ -407,12 +458,14 @@ def calculate_convergence_points(
     from_km_b: float,
     to_km_b: float,
     step_km: float = DEFAULT_CONVERGENCE_STEP_KM,
+    bin_data: Optional["SegmentBinData"] = None,
 ) -> List[ConvergencePoint]:
     """
-    Calculate convergence points using TRUE PASS DETECTION.
+    Calculate convergence points using TRUE PASS DETECTION and BIN PEAKS.
     
     Issue #612: Replaces single CP detection with multi-CP detection.
     Scans the entire segment to collect ALL true-pass locations.
+    Optionally merges with bin-peak CPs from bin analysis.
     
     This function detects when runners from one event actually pass runners
     from another event (directional overtaking), not just co-presence.
@@ -423,15 +476,25 @@ def calculate_convergence_points(
     3. |T_A - T_B| <= tolerance
     4. AND one runner was behind the other at from_km but ahead at to_km
     
+    Bin-peak CPs are extracted from bin analysis results (bins with RSI > 0.1).
+    
     ALGORITHM APPROACH:
     - If events have absolute intersection (like L1): Use intersection-based approach
     - If events have no intersection (like F1): Use normalized approach with fine grid
     - Normalized approach maps relative positions (0.0-1.0) to absolute coordinates
       for pace calculations, then checks for temporal overlap
+    - Merge true-pass CPs with bin-peak CPs (if bin_data provided)
+    
+    Args:
+        bin_data: Optional SegmentBinData from bin analysis. If provided, extracts
+                  bin-peak CPs (bins with convergence_point == True) and merges with true-pass CPs.
     
     Returns:
-        List of ConvergencePoint objects (may be empty)
+        List of ConvergencePoint objects (may be empty), merged from true-pass and bin-peak sources
     """
+    # Step 1: Collect true-pass convergence points
+    true_pass_cps = []
+    
     # Check if there's an intersection in absolute space first
     intersection_start = max(from_km_a, from_km_b)
     intersection_end = min(to_km_a, to_km_b)
@@ -444,56 +507,59 @@ def calculate_convergence_points(
         )
         
         # Convert to ConvergencePoint objects
-        convergence_points = [
+        true_pass_cps = [
             ConvergencePoint(km=km_point, type="true_pass")
             for km_point in true_pass_points
         ]
+    else:
+        # No intersection in absolute space - need normalized approach for segments like F1
+        # NORMALIZED DISTANCE APPROACH: For segments with different absolute ranges but same
+        # relative positions (e.g., F1: Full 16.35-18.65km, Half 2.7-5.0km, 10K 5.8-8.1km),
+        # we work in normalized space (0.0-1.0) to compare relative positions within each segment.
+        # Calculate segment lengths
+        len_a = to_km_a - from_km_a
+        len_b = to_km_b - from_km_b
         
-        return convergence_points
+        if len_a > 0 and len_b > 0:
+            # Use a finer grid of normalized positions
+            normalized_points = np.linspace(0.0, 1.0, 21)  # 0.0, 0.05, 0.1, ..., 1.0
+            
+            for norm_point in normalized_points:
+                # Map normalized point to absolute coordinates for each event
+                abs_km_a = from_km_a + (norm_point * len_a)
+                abs_km_b = from_km_b + (norm_point * len_b)
+                
+                # Use a temporary "intersection" range around this point
+                tolerance_km = CONVERGENCE_POINT_TOLERANCE_KM  # 100m tolerance around the point
+                range_start = max(from_km_a, abs_km_a - tolerance_km)  # Ensure within segment bounds
+                range_end = min(to_km_a, abs_km_a + tolerance_km)      # Ensure within segment bounds
+                
+                # Collect true pass points in this range
+                true_pass_points = _collect_all_true_pass_points(
+                    dfA, dfB, eventA, eventB, start_times,
+                    range_start, range_end, step_km
+                )
+                
+                # Add to convergence points list (using event A coordinate)
+                for km_point in true_pass_points:
+                    true_pass_cps.append(ConvergencePoint(km=km_point, type="true_pass"))
     
-    # No intersection in absolute space - need normalized approach for segments like F1
-    # NORMALIZED DISTANCE APPROACH: For segments with different absolute ranges but same
-    # relative positions (e.g., F1: Full 16.35-18.65km, Half 2.7-5.0km, 10K 5.8-8.1km),
-    # we work in normalized space (0.0-1.0) to compare relative positions within each segment.
-    # Calculate segment lengths
-    len_a = to_km_a - from_km_a
-    len_b = to_km_b - from_km_b
+    # Step 2: Extract bin-peak convergence points (if bin_data provided)
+    bin_peak_cps = []
+    if bin_data is not None:
+        bin_peak_cps = _extract_bin_peak_convergence_points(bin_data, from_km_a, to_km_a)
     
-    if len_a <= 0 or len_b <= 0:
-        return []
+    # Step 3: Merge true-pass and bin-peak CPs
+    all_cps = true_pass_cps + bin_peak_cps
     
-    # Use a finer grid of normalized positions
-    normalized_points = np.linspace(0.0, 1.0, 21)  # 0.0, 0.05, 0.1, ..., 1.0
-    
+    # Step 4: Remove duplicates and sort by km (deduplicate within tolerance)
     convergence_points = []
-    for norm_point in normalized_points:
-        # Map normalized point to absolute coordinates for each event
-        abs_km_a = from_km_a + (norm_point * len_a)
-        abs_km_b = from_km_b + (norm_point * len_b)
-        
-        # Use a temporary "intersection" range around this point
-        tolerance_km = CONVERGENCE_POINT_TOLERANCE_KM  # 100m tolerance around the point
-        range_start = max(from_km_a, abs_km_a - tolerance_km)  # Ensure within segment bounds
-        range_end = min(to_km_a, abs_km_a + tolerance_km)      # Ensure within segment bounds
-        
-        # Collect true pass points in this range
-        true_pass_points = _collect_all_true_pass_points(
-            dfA, dfB, eventA, eventB, start_times,
-            range_start, range_end, step_km
-        )
-        
-        # Add to convergence points list (using event A coordinate)
-        for km_point in true_pass_points:
-            convergence_points.append(ConvergencePoint(km=km_point, type="true_pass"))
-    
-    # Remove duplicates and sort by km (in case normalized approach found overlapping points)
-    if convergence_points:
-        # Deduplicate by km (within tolerance)
+    if all_cps:
         unique_points = []
         seen_km = set()
         tolerance_km = CONVERGENCE_POINT_TOLERANCE_KM
         
-        for cp in sorted(convergence_points, key=lambda x: x.km):
+        for cp in sorted(all_cps, key=lambda x: x.km):
             # Check if this km is close to any we've already seen
             is_duplicate = False
             for seen in seen_km:
