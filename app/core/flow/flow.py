@@ -1943,8 +1943,13 @@ def calculate_convergence_zone_overlaps_with_binning(
     overlap_duration_minutes: float = 0.0,
 ) -> Tuple[int, int, int, int, List[str], List[str], int, int]:
     """
-    Calculate overtaking with binning for long segments.
-    Uses unified selector for consistent path selection across Main Analysis and Flow Runner.
+    Calculate overtaking with binning for all segments.
+    
+    Issue #612 Task 2: Binning is now always-on for all segments (short and long).
+    Binning must never gate analysis - it's always used as the calculation method.
+    
+    The function still decides between time bins and distance bins based on segment
+    characteristics, but the binned calculation path is always used.
     """
     
     # Import unified selector modules
@@ -1968,49 +1973,24 @@ def calculate_convergence_zone_overlaps_with_binning(
         use_time_bins = overlap_duration_minutes > TEMPORAL_BINNING_THRESHOLD_MINUTES
         use_distance_bins = chosen_path == "BINNED"
     else:
-        # Use legacy binning logic
+        # Use legacy binning logic (always use binning - decide between time/distance bins)
         use_time_bins = overlap_duration_minutes > TEMPORAL_BINNING_THRESHOLD_MINUTES
         use_distance_bins = conflict_length_m > SPATIAL_BINNING_THRESHOLD_METERS
-        chosen_path = "BINNED" if (use_time_bins or use_distance_bins) else "ORIGINAL"
+        chosen_path = "BINNED"  # Always use binned path (Issue #612 Task 2)
         norm_inputs = None
     
-    # Debug logging for M1 (sampled to avoid hot-loop overhead)
-    if event_a == "Half" and event_b == "10K" and hash(segment_key) % 100 == 0:  # 1% sampling
-        print(f"🔍 BINNING DECISION DEBUG:")
-        print(f"  Segment key: {segment_key}")
-        if norm_inputs is not None:
-            print(f"  Normalized conflict length: {norm_inputs.conflict_len_m:.3f} m")
-            print(f"  Normalized overlap duration: {norm_inputs.overlap_dur_s:.3f} s")
-        else:
-            print(f"  Raw conflict length: {conflict_length_m:.3f} m")
-            print(f"  Raw overlap duration: {overlap_duration_minutes:.3f} min")
-        print(f"  Chosen path: {chosen_path}")
-        print(f"  Legacy time bins: {use_time_bins}")
-        print(f"  Legacy distance bins: {use_distance_bins}")
-        print(f"  Will use: {chosen_path} calculation")
+    # Issue #612 Task 2: Always use binned calculation (binning is always-on)
+    # The function still decides between time bins and distance bins, but always uses binning
+    # Log binning decision for transparency
+    logging.info(f"BINNING APPLIED (always-on): time_bins={use_time_bins}, distance_bins={use_distance_bins} "
+                f"(window={overlap_duration_minutes:.1f}min, zone={conflict_length_m:.0f}m)")
     
-    # Calculate results using chosen path
-    if use_time_bins or use_distance_bins:
-        # Log binning decision for transparency
-        logging.info(f"BINNING APPLIED: time_bins={use_time_bins}, distance_bins={use_distance_bins} "
-                    f"(window={overlap_duration_minutes:.1f}min, zone={conflict_length_m:.0f}m)")
-        
-        results = calculate_convergence_zone_overlaps_binned(
-            df_a, df_b, event_a, event_b, start_times,
-            cp_km, from_km_a, to_km_a, from_km_b, to_km_b,
-            min_overlap_duration, conflict_length_m,
-            use_time_bins, use_distance_bins, overlap_duration_minutes
-        )
-    else:
-        # Use original method for short segments
-        logging.debug(f"BINNING NOT APPLIED: time_bins={use_time_bins}, distance_bins={use_distance_bins} "
-                     f"(window={overlap_duration_minutes:.1f}min, zone={conflict_length_m:.0f}m)")
-        
-        results = calculate_convergence_zone_overlaps_original(
-            df_a, df_b, event_a, event_b, start_times,
-            cp_km, from_km_a, to_km_a, from_km_b, to_km_b,
-            min_overlap_duration, conflict_length_m
-        )
+    results = calculate_convergence_zone_overlaps_binned(
+        df_a, df_b, event_a, event_b, start_times,
+        cp_km, from_km_a, to_km_a, from_km_b, to_km_b,
+        min_overlap_duration, conflict_length_m,
+        use_time_bins, use_distance_bins, overlap_duration_minutes
+    )
     
     # Extract results for telemetry
     overtakes_a, overtakes_b, copresence_a, copresence_b, bibs_a, bibs_b, unique_encounters, participants_involved = results
