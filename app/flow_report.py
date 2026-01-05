@@ -1075,7 +1075,9 @@ def generate_flow_audit_csv(
         "pct_overtake_raw_a", "pct_overtake_raw_b", 
         "pct_overtake_strict_a", "pct_overtake_strict_b",
         "time_bins_used", "distance_bins_used", "dedup_passes_applied",
-        "reason_codes", "audit_trigger"
+        "reason_codes", "audit_trigger",
+        # Issue #612: Multi-zone fields
+        "zone_index", "cp_km", "zone_source"
     ]
     
     import csv
@@ -1124,7 +1126,11 @@ def generate_flow_audit_csv(
                     audit_data.get("distance_bins_used", False),
                     audit_data.get("dedup_passes_applied", False),
                     audit_data.get("reason_codes", ""),
-                    audit_data.get("audit_trigger", "")
+                    audit_data.get("audit_trigger", ""),
+                    # Issue #612: Multi-zone fields
+                    audit_data.get("zone_index"),
+                    audit_data.get("cp_km"),
+                    audit_data.get("zone_source", "")
                 ])
     
     return full_path
