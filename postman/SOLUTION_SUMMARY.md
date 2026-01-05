@@ -43,6 +43,7 @@ postman/
 - ✅ Pre-request scripts (variable setup)
 - ✅ Test scripts (assertions and validations)
 - ✅ Auto-extraction of `run_id` for follow-up requests
+- ✅ `enableAudit: "y"` - All analyze requests enable audit generation (Issue #607)
 
 **Test Coverage:**
 - Matches all scenarios from `tests/v2/e2e.py`
@@ -167,6 +168,7 @@ POST /runflow/v2/analyze
   "segments_file": "segments.csv",
   "flow_file": "flow.csv",
   "locations_file": "locations.csv",
+  "enableAudit": "y",
   "events": [
     {
       "name": "event_name",
@@ -179,6 +181,8 @@ POST /runflow/v2/analyze
   ]
 }
 ```
+
+**Note:** All analyze requests include `enableAudit: "y"` to generate audit Parquet files (`audit_sat.parquet`, `audit_sun.parquet`) for detailed flow analysis (Issue #607).
 
 **Matches:**
 - `tests/v2/e2e.py` test payloads

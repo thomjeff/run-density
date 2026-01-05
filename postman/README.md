@@ -97,6 +97,7 @@ Contains all test cases organized by category:
 - Test scripts (assertions)
 - Response validation
 - Run ID extraction for follow-up requests
+- `enableAudit: "y"` - All analyze requests enable audit generation (Issue #607)
 
 ### Scenario Collection: `Runflow-v2-Scenarios.postman_collection.json`
 
@@ -123,10 +124,13 @@ Focused scenario-based tests for specific use cases:
    - All events: 420 (7:00 AM)
    - Expected: Superimposed density spikes, maximum concurrency in first 30-60 minutes
 
+**Note:** All test cases include `enableAudit: "y"` to generate audit Parquet files for detailed flow analysis (Issue #607).
+
 **Validation:**
 Each test case includes console output with validation instructions. After analysis completes, check:
 - `runflow/{run_id}/sun/reports/Flow.csv` - Co-presence and overtake counts
 - `runflow/{run_id}/sun/reports/Density.md` - Peak density timestamps
+- `runflow/{run_id}/sun/audit/audit_sun.parquet` - Detailed audit data (Issue #607)
 - Compare results across all three test cases to verify system responds differently to start time changes
 
 ---
@@ -179,10 +183,11 @@ For production/Cloud Run:
 ```json
 POST {{base_url}}/runflow/v2/analyze
 {
-  "description": "Saturday only scenario test",
+  "description": "Saturday only scenario test with audit",
   "segments_file": "segments.csv",
   "flow_file": "flow.csv",
   "locations_file": "locations.csv",
+  "enableAudit": "y",
   "events": [
     {
       "name": "elite",
@@ -203,6 +208,8 @@ POST {{base_url}}/runflow/v2/analyze
   ]
 }
 ```
+
+**Note:** All analyze requests include `enableAudit: "y"` to generate audit Parquet files for detailed flow analysis (Issue #607).
 
 **Validations:**
 - Status code: 200

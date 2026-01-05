@@ -176,6 +176,51 @@ class TestV2E2EScenarios:
         
         return expected_files
     
+    def _verify_audit_files(self, run_id: str, day: str) -> Path:
+        """Verify that audit Parquet file exists and is valid.
+        
+        Issue #607: Audit files are now stored as single Parquet file per day.
+        
+        Args:
+            run_id: Run ID to check
+            day: Day code (e.g., "sat", "sun")
+            
+        Returns:
+            Path to the audit Parquet file
+            
+        Raises:
+            AssertionError if audit file is missing or invalid
+        """
+        run_dir = self._get_run_directory(run_id)
+        day_dir = run_dir / day
+        audit_dir = day_dir / "audit"
+        
+        # Determine day name for filename (sat or sun)
+        day_name = day.lower()[:3]  # "saturday" -> "sat", "sunday" -> "sun"
+        audit_parquet = audit_dir / f"audit_{day_name}.parquet"
+        
+        assert audit_parquet.exists(), f"Audit Parquet file missing for {day}: {audit_parquet}"
+        
+        # Verify Parquet file is readable and has expected columns
+        try:
+            audit_df = pd.read_parquet(audit_parquet)
+            assert len(audit_df) > 0, f"Audit Parquet file is empty for {day}"
+            
+            # Verify expected columns exist
+            expected_cols = [
+                "seg_id", "event_a", "event_b", "runner_id_a", "runner_id_b",
+                "pass_flag_raw", "pass_flag_strict", "overlap_dwell_sec"
+            ]
+            missing_cols = [col for col in expected_cols if col not in audit_df.columns]
+            assert not missing_cols, f"Audit Parquet missing columns for {day}: {missing_cols}"
+            
+            print(f"✅ Audit Parquet file verified for {day}: {len(audit_df)} rows, {audit_parquet.stat().st_size / 1024 / 1024:.1f} MB")
+            
+        except Exception as e:
+            raise AssertionError(f"Failed to read/validate audit Parquet for {day}: {e}")
+        
+        return audit_parquet
+    
     def _verify_day_isolation(self, run_id: str, day: str, expected_events: List[str]):
         """Verify that outputs for a day only contain expected events.
         
@@ -336,12 +381,13 @@ class TestV2E2EScenarios:
                         f"Unexpected seg_ids in {day} {filename}: {unexpected_seg_ids}"
     
     def test_saturday_only_scenario(self, base_url, wait_for_server):
-        """Test complete Saturday-only workflow (elite, open events)."""
+        """Test complete Saturday-only workflow (elite, open events) with audit enabled."""
         payload = {
-            "description": "Saturday only scenario test",
+            "description": "Saturday only scenario test with audit",
             "segments_file": "segments.csv",
             "flow_file": "flow.csv",
             "locations_file": "locations.csv",
+            "enableAudit": "y",
             "event_group": {
                 "sat-elite": "elite",
                 "sat-open": "open"
@@ -363,6 +409,9 @@ class TestV2E2EScenarios:
         # Verify outputs exist
         outputs = self._verify_outputs_exist(run_id, "sat", "saturday_only")
         
+        # Issue #607: Verify audit Parquet file exists (audit enabled)
+        audit_path = self._verify_audit_files(run_id, "sat")
+        
         # Verify day isolation (only elite and open events)
         self._verify_day_isolation(run_id, "sat", ["elite", "open"])
         
@@ -383,12 +432,13 @@ class TestV2E2EScenarios:
         assert len(open_pairs) > 0, "No flow pairs found for open event"
     
     def test_sunday_only_scenario(self, base_url, wait_for_server):
-        """Test complete Sunday-only workflow (full, half, 10k events)."""
+        """Test complete Sunday-only workflow (full, half, 10k events) with audit enabled."""
         payload = {
-            "description": "Sunday only scenario test",
+            "description": "Sunday only scenario test with audit",
             "segments_file": "segments.csv",
             "flow_file": "flow.csv",
             "locations_file": "locations.csv",
+            "enableAudit": "y",
             "event_group": {
                 "sun-all": "full, 10k, half"
             },
@@ -429,12 +479,13 @@ class TestV2E2EScenarios:
             assert len(pairs) > 0, f"No flow pairs found between {event_a} and {event_b}"
     
     def test_sat_sun_scenario(self, base_url, wait_for_server):
-        """Test sat+sun analysis in single run_id (simpler than mixed_day, focused on Issue #528)."""
+        """Test sat+sun analysis in single run_id with audit enabled (simpler than mixed_day, focused on Issue #528)."""
         payload = {
-            "description": "Sat+Sun analysis test",
+            "description": "Sat+Sun analysis test with audit",
             "segments_file": "segments.csv",
             "flow_file": "flow.csv",
             "locations_file": "locations.csv",
+            "enableAudit": "y",
             "event_group": {
                 "sat-elite": "elite",
                 "sat-open": "open",
@@ -461,6 +512,10 @@ class TestV2E2EScenarios:
         sat_outputs = self._verify_outputs_exist(run_id, "sat", "sat_sun")
         sun_outputs = self._verify_outputs_exist(run_id, "sun", "sat_sun")
         
+        # Issue #607: Verify audit Parquet files exist (audit enabled)
+        sat_audit_path = self._verify_audit_files(run_id, "sat")
+        sun_audit_path = self._verify_audit_files(run_id, "sun")
+        
         # Verify flags.json exists and is not empty (Issue #528)
         assert "flags_json" in sat_outputs, "SAT flags.json missing"
         assert "flags_json" in sun_outputs, "SUN flags.json missing"
@@ -476,12 +531,13 @@ class TestV2E2EScenarios:
         print(f"✅ SUN flags.json: {len(sun_flags)} flagged segments")
     
     def test_mixed_day_scenario(self, base_url, wait_for_server):
-        """Test mixed-day scenario (Saturday + Sunday) with isolation validation."""
+        """Test mixed-day scenario (Saturday + Sunday) with isolation validation and audit enabled."""
         payload = {
-            "description": "Mixed day scenario test",
+            "description": "Mixed day scenario test with audit",
             "segments_file": "segments.csv",
             "flow_file": "flow.csv",
             "locations_file": "locations.csv",
+            "enableAudit": "y",
             "event_group": {
                 "sat-elite": "elite",
                 "sat-open": "open",
@@ -532,13 +588,14 @@ class TestV2E2EScenarios:
         assert len(sun_events_in_sat) == 0, f"Found SUN events in SAT Flow.csv: {sun_events_in_sat}"
     
     def test_cross_day_isolation(self, base_url, wait_for_server):
-        """Verify no cross-day contamination in bins, flow, density, locations."""
+        """Verify no cross-day contamination in bins, flow, density, locations with audit enabled."""
         # Use mixed-day scenario
         payload = {
-            "description": "Cross-day isolation test",
+            "description": "Cross-day isolation test with audit",
             "segments_file": "segments.csv",
             "flow_file": "flow.csv",
             "locations_file": "locations.csv",
+            "enableAudit": "y",
             "events": [
                 {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
                 {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"}
@@ -600,13 +657,14 @@ class TestV2E2EScenarios:
         assert not has_elite.any(), "Found 'elite' event in SUN Flow.csv"
     
     def test_same_day_interactions(self, base_url, wait_for_server):
-        """Verify same-day events can share bins and generate flow."""
+        """Verify same-day events can share bins and generate flow with audit enabled."""
         # Test with Sunday events (full, 10k, half)
         payload = {
-            "description": "Sunday only scenario test",
+            "description": "Sunday only scenario test with audit",
             "segments_file": "segments.csv",
             "flow_file": "flow.csv",
             "locations_file": "locations.csv",
+            "enableAudit": "y",
             "events": [
                 {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"},
                 {"name": "10k", "day": "sun", "start_time": 440, "event_duration_minutes": 120, "runners_file": "10k_runners.csv", "gpx_file": "10k.gpx"},
