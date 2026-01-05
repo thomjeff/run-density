@@ -61,6 +61,8 @@ class V2AnalyzeRequest(BaseModel):
         event_group: Optional event grouping configuration for RES calculation
             Format: {"group_id": "event1, event2, ..."} where group_id is descriptive (e.g., "sat/elite")
             and value is comma-separated list of event names (e.g., "elite" or "full, 10k, half")
+        enableAudit: Enable detailed flow audit generation ('y' or 'n', default 'n')
+            When 'y', generates detailed CSV shard files with runner pair overtake information
     """
     description: Optional[str] = Field(None, max_length=254, description="Optional description for the analysis (max 254 characters)")
     segments_file: str = Field(..., description="Name of segments CSV file")
@@ -68,6 +70,7 @@ class V2AnalyzeRequest(BaseModel):
     flow_file: str = Field(..., description="Name of flow CSV file")
     events: List[V2EventRequest] = Field(..., min_length=1, description="List of events to analyze")
     event_group: Optional[Dict[str, str]] = Field(None, description="Optional event grouping for RES calculation (format: {\"group_id\": \"event1, event2, ...\"})")
+    enableAudit: str = Field(default='n', pattern='^[yn]$', description="Enable detailed flow audit generation ('y' or 'n')")
     
     model_config = {
         "json_schema_extra": {
@@ -97,7 +100,8 @@ class V2AnalyzeRequest(BaseModel):
                 "event_group": {
                     "sat/10k": "10k",
                     "sun/half": "half"
-                }
+                },
+                "enableAudit": "n"
             }
         }
     }
