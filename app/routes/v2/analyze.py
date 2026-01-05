@@ -54,6 +54,8 @@ def run_analysis_background(
     """
     try:
         logger.info(f"Starting background analysis for run_id: {run_id}")
+        # Extract enableAudit flag from request payload (default 'n')
+        enable_audit = request_payload.get('enableAudit', 'n').lower()
         pipeline_result = create_full_analysis_pipeline(
             events=events,
             segments_file=segments_file,
@@ -61,7 +63,8 @@ def run_analysis_background(
             flow_file=flow_file,
             data_dir=data_dir,
             run_id=run_id,
-            request_payload=request_payload
+            request_payload=request_payload,
+            enable_audit=enable_audit
         )
         
         # Update metadata.json files with response payload

@@ -490,7 +490,8 @@ def create_full_analysis_pipeline(
     data_dir: str = "data",
     run_id: Optional[str] = None,
     request_payload: Optional[Dict[str, Any]] = None,
-    response_payload: Optional[Dict[str, Any]] = None
+    response_payload: Optional[Dict[str, Any]] = None,
+    enable_audit: str = 'n'
 ) -> Dict[str, Any]:
     """
     Create day-partitioned directory structure and run full analysis (Phase 4 + 5).
@@ -668,7 +669,10 @@ def create_full_analysis_pipeline(
             segments_df=segments_df,
             all_runners_df=all_runners_df,
             flow_file=flow_file_path,
-            data_dir=data_dir
+            data_dir=data_dir,
+            enable_audit=enable_audit,
+            run_id=run_id,
+            run_path=run_path
         )
         flow_days = len(flow_results)
         logger.info(f"[Phase 3.1] Flow analysis complete: {flow_days} days")

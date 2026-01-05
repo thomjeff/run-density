@@ -719,10 +719,20 @@ def _build_overlap_row(
     directional_gain: float,
     pass_raw: bool,
     pass_strict: bool,
-    reason: str
+    reason: str,
+    conflict_zone_a_start: Optional[float] = None,
+    conflict_zone_a_end: Optional[float] = None,
+    conflict_zone_b_start: Optional[float] = None,
+    conflict_zone_b_end: Optional[float] = None,
+    in_conflict_zone: Optional[bool] = None
 ) -> Dict[str, Any]:
-    """Build overlap row dictionary for CSV output."""
-    return {
+    """
+    Build overlap row dictionary for audit output.
+    
+    Issue #607 Enhancement: Added conflict zone boundaries and in_conflict_zone flag
+    to support querying audit data to match Flow.csv results.
+    """
+    row = {
         "run_id": run_id,
         "executed_at_utc": executed_at_utc,
         "seg_id": seg_id,
@@ -759,10 +769,25 @@ def _build_overlap_row(
         "pass_flag_strict": pass_strict,
         "reason_code": reason
     }
+    
+    # Issue #607: Add conflict zone boundaries and flag
+    if conflict_zone_a_start is not None:
+        row["conflict_zone_a_start_km"] = conflict_zone_a_start
+        row["conflict_zone_a_end_km"] = conflict_zone_a_end
+        row["conflict_zone_b_start_km"] = conflict_zone_b_start
+        row["conflict_zone_b_end_km"] = conflict_zone_b_end
+        row["in_conflict_zone"] = in_conflict_zone
+    
+    return row
 
 
 class _ShardWriter:
-    """Helper class to manage shard file writing with row capping."""
+    """
+    Helper class to manage shard file writing with row capping.
+    
+    DEPRECATED (Issue #607): This class is no longer used after refactoring audit
+    output to Parquet format. Kept for reference but should not be used in new code.
+    """
     def __init__(self, audit_dir: str, seg_id: str, event_a_name: str, event_b_name: str, 
                  pair_base_cols: List[str], row_cap_per_shard: int):
         self.audit_dir = audit_dir
@@ -818,7 +843,7 @@ class _ShardWriter:
 def _process_two_pointer_sweep(
     A: List[Dict[str, Any]],
     B: List[Dict[str, Any]],
-    shard_writer: _ShardWriter,
+    rows_collector: List[Dict[str, Any]],
     run_id: str,
     executed_at_utc: str,
     seg_id: str,
@@ -834,10 +859,19 @@ def _process_two_pointer_sweep(
     strict_min_dwell: int,
     strict_margin: int,
     topk: List[Tuple[float, Dict[str, Any]]],
-    topk_size: int = 2000
+    topk_size: int = 2000,
+    conflict_zone_a_start: Optional[float] = None,
+    conflict_zone_a_end: Optional[float] = None,
+    conflict_zone_b_start: Optional[float] = None,
+    conflict_zone_b_end: Optional[float] = None,
+    min_overlap_duration: float = 0.0
 ) -> Tuple[int, int, int, int]:
-    """Process two-pointer sweep algorithm for temporal interval join."""
-    WINDOW_GRANULARITY_SEC = 60
+    """
+    Process two-pointer sweep algorithm for temporal interval join.
+    
+    Issue #607: Refactored to collect rows in a list instead of writing via _ShardWriter.
+    Issue #607 Enhancement: Added conflict zone boundaries and in_conflict_zone flag calculation.
+    """
     j = 0
     total_pairs = 0
     overlapped_pairs = 0
@@ -869,15 +903,61 @@ def _process_two_pointer_sweep(
                 if pass_raw: raw_pass += 1
                 if pass_strict: strict_pass += 1
                 
-                shard_key = _shard_key_from_overlap_start(os_, WINDOW_GRANULARITY_SEC)
+                # Issue #607: Calculate if overlap is within conflict zone
+                # The main analysis calculates entry/exit times based on conflict zone boundaries.
+                # To match Flow.csv, we need to recalculate entry/exit times for conflict zone
+                # and check if the temporal overlap would still occur.
+                in_conflict_zone = None
+                if (conflict_zone_a_start is not None and conflict_zone_a_end is not None and
+                    conflict_zone_b_start is not None and conflict_zone_b_end is not None):
+                    # Calculate pace from full segment entry/exit times and distances
+                    # pace = (exit_time - entry_time) / (exit_km - entry_km) in sec/km
+                    segment_length_a = a["exit_km"] - a["entry_km"]
+                    segment_length_b = b["exit_km"] - b["entry_km"]
+                    
+                    if segment_length_a > 0 and segment_length_b > 0:
+                        pace_a_sec_per_km = (a["exit_time"] - a["entry_time"]) / segment_length_a
+                        pace_b_sec_per_km = (b["exit_time"] - b["entry_time"]) / segment_length_b
+                        
+                        # Calculate entry time at conflict zone start (relative to segment entry)
+                        # entry_time_at_conflict_start = entry_time + pace * (conflict_start - entry_km)
+                        conflict_zone_entry_time_a = a["entry_time"] + pace_a_sec_per_km * (conflict_zone_a_start - a["entry_km"])
+                        conflict_zone_exit_time_a = a["entry_time"] + pace_a_sec_per_km * (conflict_zone_a_end - a["entry_km"])
+                        conflict_zone_entry_time_b = b["entry_time"] + pace_b_sec_per_km * (conflict_zone_b_start - b["entry_km"])
+                        conflict_zone_exit_time_b = b["entry_time"] + pace_b_sec_per_km * (conflict_zone_b_end - b["entry_km"])
+                        
+                        # Check if temporal overlap occurs within conflict zone boundaries
+                        # Overlap occurs if: max(entry_a, entry_b) < min(exit_a, exit_b)
+                        overlap_start = max(conflict_zone_entry_time_a, conflict_zone_entry_time_b)
+                        overlap_end = min(conflict_zone_exit_time_a, conflict_zone_exit_time_b)
+                        conflict_zone_overlap_duration = overlap_end - overlap_start
+                        
+                        # Also check if both runners actually pass through their conflict zones
+                        # (entry_km <= conflict_end AND exit_km >= conflict_start)
+                        a_passes_through_zone = (a["entry_km"] <= conflict_zone_a_end and a["exit_km"] >= conflict_zone_a_start)
+                        b_passes_through_zone = (b["entry_km"] <= conflict_zone_b_end and b["exit_km"] >= conflict_zone_b_start)
+                        
+                        # Overlap is in conflict zone if:
+                        # 1. Both runners pass through their conflict zones
+                        # 2. There is a temporal overlap when using conflict zone entry/exit times
+                        # 3. Overlap duration meets minimum threshold (binned method uses >= min_overlap_duration)
+                        in_conflict_zone = (a_passes_through_zone and b_passes_through_zone and 
+                                          conflict_zone_overlap_duration >= min_overlap_duration)
+                    else:
+                        # Invalid segment lengths, default to False
+                        in_conflict_zone = False
+                
                 row = _build_overlap_row(
                     run_id, executed_at_utc, seg_id, segment_label, flow_type,
                     event_a_name, event_b_name, convergence_zone_start, convergence_zone_end,
                     zone_width_m, binning_applied, binning_mode, a, b,
                     os_, oe_, dwell, entry_delta, exit_delta, rel_entry, rel_exit,
-                    order_flip, directional_gain, pass_raw, pass_strict, reason
+                    order_flip, directional_gain, pass_raw, pass_strict, reason,
+                    conflict_zone_a_start, conflict_zone_a_end,
+                    conflict_zone_b_start, conflict_zone_b_end,
+                    in_conflict_zone
                 )
-                shard_writer.write_pair(shard_key, row)
+                rows_collector.append(row)
                 
                 topk.append((dwell, row))
                 if len(topk) > topk_size:
@@ -900,7 +980,13 @@ def _write_index_csv(
     strict_pass: int,
     shard_paths: List[str]
 ) -> str:
-    """Write index CSV with audit summary statistics."""
+    """
+    Write index CSV with audit summary statistics.
+    
+    DEPRECATED (Issue #607): This function is no longer used after refactoring audit
+    output to Parquet format. Index/TopK summaries can be generated on-demand from
+    Parquet files using DuckDB or Pandas. Kept for reference but should not be used.
+    """
     import csv, os
     
     index_path = os.path.join(audit_dir, f"{seg_id}_{event_a_name}-{event_b_name}_index.csv")
@@ -931,7 +1017,13 @@ def _write_topk_csv(
     topk: List[Tuple[float, Dict[str, Any]]],
     pair_base_cols: List[str]
 ) -> str:
-    """Write TopK CSV with highest dwell time overlaps."""
+    """
+    Write TopK CSV with highest dwell time overlaps.
+    
+    DEPRECATED (Issue #607): This function is no longer used after refactoring audit
+    output to Parquet format. TopK summaries can be generated on-demand from Parquet
+    files using DuckDB or Pandas. Kept for reference but should not be used.
+    """
     import csv, os
     
     topk_path = os.path.join(audit_dir, f"{seg_id}_{event_a_name}-{event_b_name}_TopK.csv")
@@ -946,9 +1038,8 @@ def _write_topk_csv(
 
 
 def emit_runner_audit(
-    event_a_csv: str,
-    event_b_csv: str,
-    out_dir: str,
+    event_a_data: pd.DataFrame,
+    event_b_data: pd.DataFrame,
     run_id: str,
     seg_id: str,
     segment_label: str,
@@ -960,75 +1051,109 @@ def emit_runner_audit(
     zone_width_m: float,
     binning_applied: bool = False,
     binning_mode: str = "none",
-    row_cap_per_shard: int = 50000,
     strict_min_dwell: int = 5,
-    strict_margin: int = 2
-) -> Dict[str, Any]:
+    strict_margin: int = 2,
+    from_km_a: Optional[float] = None,
+    to_km_a: Optional[float] = None,
+    from_km_b: Optional[float] = None,
+    to_km_b: Optional[float] = None
+) -> Tuple[pd.DataFrame, Dict[str, int]]:
     """
-    Pure-CSV runner-level audit emitter (no third-party deps).
+    Generate runner-level audit data and return as DataFrame.
     
-    Inputs: two CSVs with runner timing windows in a segment (Event A and Event B)
-    Outputs: small index CSV + one or more shard CSVs with pairwise overlaps
-    Strategy: interval join using two-pointer sweep; shard by minute window and row cap
+    Issue #607: Refactored to return DataFrame instead of writing CSV files.
+    Issue #607 Enhancement: Added conflict zone boundaries and in_conflict_zone flag.
+    
+    Inputs: 
+        - event_a_data: DataFrame with columns: runner_id, entry_time, exit_time, entry_km, exit_km
+        - event_b_data: DataFrame with columns: runner_id, entry_time, exit_time, entry_km, exit_km
+        - from_km_a, to_km_a, from_km_b, to_km_b: Full segment ranges (for conflict zone calculation)
+    
+    Outputs:
+        - DataFrame with all audit rows (including conflict zone columns)
+        - Dictionary with summary statistics
+    
+    Strategy: interval join using two-pointer sweep algorithm.
     """
-    import os, pathlib, datetime
-    
-    TOPK_CSV_ROWS = 2000
-    
-    # Create audit subdirectory
-    audit_dir = os.path.join(out_dir, "audit")
-    pathlib.Path(audit_dir).mkdir(parents=True, exist_ok=True)
-    pathlib.Path(out_dir).mkdir(parents=True, exist_ok=True)
-    
-    # Read runner CSVs
-    A = _read_runners_csv(event_a_csv)
-    B = _read_runners_csv(event_b_csv)
+    import datetime
     
     executed_at_utc = datetime.datetime.utcnow().isoformat()+"Z"
-    pair_base_cols = [
-        "run_id","executed_at_utc","seg_id","segment_label","flow_type",
-        "event_a","event_b","pair_key",
-        "convergence_zone_start","convergence_zone_end","zone_width_m",
-        "binning_applied","binning_mode",
-        "runner_id_a","entry_km_a","exit_km_a","entry_time_sec_a","exit_time_sec_a",
-        "runner_id_b","entry_km_b","exit_km_b","entry_time_sec_b","exit_time_sec_b",
-        "overlap_start_time_sec","overlap_end_time_sec","overlap_dwell_sec",
-        "entry_delta_sec","exit_delta_sec","rel_order_entry","rel_order_exit",
-        "order_flip_bool","directional_gain_sec",
-        "pass_flag_raw","pass_flag_strict","reason_code"
-    ]
     
-    # Initialize shard writer
-    shard_writer = _ShardWriter(audit_dir, seg_id, event_a_name, event_b_name, pair_base_cols, row_cap_per_shard)
+    # Convert DataFrames to list of dicts (matching _read_runners_csv format)
+    A = event_a_data.to_dict('records') if not event_a_data.empty else []
+    B = event_b_data.to_dict('records') if not event_b_data.empty else []
+    
+    # Sort by entry_time (should already be sorted, but ensure it)
+    A.sort(key=lambda x: x["entry_time"])
+    B.sort(key=lambda x: x["entry_time"])
+    
+    # Issue #607: Calculate conflict zone boundaries if segment ranges are provided
+    conflict_zone_a_start = None
+    conflict_zone_a_end = None
+    conflict_zone_b_start = None
+    conflict_zone_b_end = None
+    
+    if from_km_a is not None and to_km_a is not None and from_km_b is not None and to_km_b is not None:
+        # Calculate conflict zone boundaries (same logic as main analysis)
+        center_a = (from_km_a + to_km_a) / 2.0
+        center_b = (from_km_b + to_km_b) / 2.0
+        conflict_half_km = (zone_width_m / 1000.0) / 2.0
+        
+        conflict_zone_a_start = max(from_km_a, center_a - conflict_half_km)
+        conflict_zone_a_end = min(to_km_a, center_a + conflict_half_km)
+        conflict_zone_b_start = max(from_km_b, center_b - conflict_half_km)
+        conflict_zone_b_end = min(to_km_b, center_b + conflict_half_km)
+    
+    # Collect rows instead of writing to files
+    rows_collector = []
+    topk = []  # Keep topk for potential future use, but don't write CSV
     
     # Process two-pointer sweep algorithm
-    topk = []
+    # Issue #607: Pass min_overlap_duration to match main analysis logic
+    from app.utils.constants import DEFAULT_MIN_OVERLAP_DURATION
     total_pairs, overlapped_pairs, raw_pass, strict_pass = _process_two_pointer_sweep(
-        A, B, shard_writer, run_id, executed_at_utc, seg_id, segment_label, flow_type,
+        A, B, rows_collector, run_id, executed_at_utc, seg_id, segment_label, flow_type,
         event_a_name, event_b_name, convergence_zone_start, convergence_zone_end,
         zone_width_m, binning_applied, binning_mode, strict_min_dwell, strict_margin,
-        topk, TOPK_CSV_ROWS
+        topk, 2000,  # topk_size, not used for CSV anymore
+        conflict_zone_a_start, conflict_zone_a_end, conflict_zone_b_start, conflict_zone_b_end,
+        DEFAULT_MIN_OVERLAP_DURATION  # Issue #607: Use same min_overlap_duration as main analysis
     )
     
-    # Close all shard files
-    shard_paths = shard_writer.close_all()
+    # Convert collected rows to DataFrame
+    if rows_collector:
+        audit_df = pd.DataFrame(rows_collector)
+    else:
+        # Create empty DataFrame with correct schema (including conflict zone columns)
+        base_columns = [
+            "run_id","executed_at_utc","seg_id","segment_label","flow_type",
+            "event_a","event_b","pair_key",
+            "convergence_zone_start","convergence_zone_end","zone_width_m",
+            "binning_applied","binning_mode",
+            "runner_id_a","entry_km_a","exit_km_a","entry_time_sec_a","exit_time_sec_a",
+            "runner_id_b","entry_km_b","exit_km_b","entry_time_sec_b","exit_time_sec_b",
+            "overlap_start_time_sec","overlap_end_time_sec","overlap_dwell_sec",
+            "entry_delta_sec","exit_delta_sec","rel_order_entry","rel_order_exit",
+            "order_flip_bool","directional_gain_sec",
+            "pass_flag_raw","pass_flag_strict","reason_code"
+        ]
+        # Issue #607: Add conflict zone columns if calculated
+        if conflict_zone_a_start is not None:
+            base_columns.extend([
+                "conflict_zone_a_start_km", "conflict_zone_a_end_km",
+                "conflict_zone_b_start_km", "conflict_zone_b_end_km",
+                "in_conflict_zone"
+            ])
+        audit_df = pd.DataFrame(columns=base_columns)
     
-    # Write index and TopK CSVs
-    index_path = _write_index_csv(audit_dir, seg_id, event_a_name, event_b_name, run_id,
-                                 total_pairs, overlapped_pairs, raw_pass, strict_pass, shard_paths)
-    topk_path = _write_topk_csv(audit_dir, seg_id, event_a_name, event_b_name, topk, pair_base_cols)
-    
-    return {
-        "index_csv": index_path,
-        "shard_csvs": shard_paths,
-        "topk_csv": topk_path,
-        "stats": {
-            "total_pairs": total_pairs,
-            "overlapped_pairs": overlapped_pairs,
-            "raw_pass": raw_pass,
-            "strict_pass": strict_pass
-        }
+    stats = {
+        "total_pairs": total_pairs,
+        "overlapped_pairs": overlapped_pairs,
+        "raw_pass": raw_pass,
+        "strict_pass": strict_pass
     }
+    
+    return audit_df, stats
 
 
 def extract_runner_timing_data_for_audit(
@@ -1042,94 +1167,107 @@ def extract_runner_timing_data_for_audit(
     from_km_b: float,
     to_km_b: float,
     output_dir: str = "reports"
-) -> Dict[str, str]:
+) -> Dict[str, Any]:
     """
-    Extract runner timing data from F1 analysis for runner audit emitter.
+    Extract runner timing data from flow analysis for runner audit emitter.
     
-    Creates CSV files with runner entry/exit timing data that can be consumed
+    Returns DataFrames with runner entry/exit timing data that can be consumed
     by the emit_runner_audit function.
+    
+    Updated to work with v2 pipeline DataFrames that have:
+    - 'pace' (min per km)
+    - 'start_offset' (seconds)
+    - 'runner_id'
+    
+    Entry/exit times are calculated from pace, start_offset, and distance ranges.
+    
+    Issue #607: Refactored to return DataFrames instead of CSV file paths.
     """
     import os
-    import csv
-    from datetime import datetime
     
     # Create audit subdirectory within the output directory
+    # For v2 pipeline, output_dir is already {run_id}/{day}, so this creates {run_id}/{day}/audit
     audit_dir = os.path.join(output_dir, "audit")
     os.makedirs(audit_dir, exist_ok=True)
     
-    # Generate filenames
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-    csv_a_path = os.path.join(audit_dir, f"F1_{event_a}_runners_{timestamp}.csv")
-    csv_b_path = os.path.join(audit_dir, f"F1_{event_b}_runners_{timestamp}.csv")
+    # Get start times in seconds (start_times dict is in minutes)
+    start_a_sec = start_times.get(event_a, 0.0) * 60.0
+    start_b_sec = start_times.get(event_b, 0.0) * 60.0
     
     # Extract runner data for event A
     runners_a = []
     for _, runner in df_a.iterrows():
+        # Get pace in min/km, convert to sec/km
+        pace_min_per_km = runner.get('pace', 0.0)
+        pace_sec_per_km = pace_min_per_km * 60.0
+        
+        # Get start_offset in seconds
+        start_offset_sec = runner.get('start_offset', 0.0)
+        if pd.isna(start_offset_sec):
+            start_offset_sec = 0.0
+        
         # Calculate entry/exit times in seconds from start
-        # The DataFrame has 'entry_time' and 'exit_time' columns as numeric values (minutes)
-        entry_time_min = runner.get('entry_time', 0.0)
-        exit_time_min = runner.get('exit_time', 0.0)
+        # Formula: start_time_sec + start_offset + pace_sec_per_km * distance_km
+        entry_time_sec = start_a_sec + start_offset_sec + pace_sec_per_km * from_km_a
+        exit_time_sec = start_a_sec + start_offset_sec + pace_sec_per_km * to_km_a
         
-        # Convert minutes to seconds
-        entry_time_sec = entry_time_min * 60.0
-        exit_time_sec = exit_time_min * 60.0
-        
-        # Calculate entry/exit distances
+        # Entry/exit distances
         entry_km = from_km_a
         exit_km = to_km_a
         
         runners_a.append({
             'runner_id': runner['runner_id'],
-            'entry_time_sec': entry_time_sec,
-            'exit_time_sec': exit_time_sec,
+            'entry_time': entry_time_sec,  # Note: using 'entry_time' to match _read_runners_csv format
+            'exit_time': exit_time_sec,    # Note: using 'exit_time' to match _read_runners_csv format
             'entry_km': entry_km,
             'exit_km': exit_km,
-            'pace_min_per_km': runner.get('pace_min_per_km', 0.0),
-            'start_offset_sec': runner.get('start_offset_sec', 0.0)
+            'pace_min_per_km': pace_min_per_km,
+            'start_offset_sec': float(start_offset_sec)
         })
     
     # Extract runner data for event B
     runners_b = []
     for _, runner in df_b.iterrows():
+        # Get pace in min/km, convert to sec/km
+        pace_min_per_km = runner.get('pace', 0.0)
+        pace_sec_per_km = pace_min_per_km * 60.0
+        
+        # Get start_offset in seconds
+        start_offset_sec = runner.get('start_offset', 0.0)
+        if pd.isna(start_offset_sec):
+            start_offset_sec = 0.0
+        
         # Calculate entry/exit times in seconds from start
-        # The DataFrame has 'entry_time' and 'exit_time' columns as numeric values (minutes)
-        entry_time_min = runner.get('entry_time', 0.0)
-        exit_time_min = runner.get('exit_time', 0.0)
+        # Formula: start_time_sec + start_offset + pace_sec_per_km * distance_km
+        entry_time_sec = start_b_sec + start_offset_sec + pace_sec_per_km * from_km_b
+        exit_time_sec = start_b_sec + start_offset_sec + pace_sec_per_km * to_km_b
         
-        # Convert minutes to seconds
-        entry_time_sec = entry_time_min * 60.0
-        exit_time_sec = exit_time_min * 60.0
-        
-        # Calculate entry/exit distances
+        # Entry/exit distances
         entry_km = from_km_b
         exit_km = to_km_b
         
         runners_b.append({
             'runner_id': runner['runner_id'],
-            'entry_time_sec': entry_time_sec,
-            'exit_time_sec': exit_time_sec,
+            'entry_time': entry_time_sec,  # Note: using 'entry_time' to match _read_runners_csv format
+            'exit_time': exit_time_sec,    # Note: using 'exit_time' to match _read_runners_csv format
             'entry_km': entry_km,
             'exit_km': exit_km,
-            'pace_min_per_km': runner.get('pace_min_per_km', 0.0),
-            'start_offset_sec': runner.get('start_offset_sec', 0.0)
+            'pace_min_per_km': pace_min_per_km,
+            'start_offset_sec': float(start_offset_sec)
         })
     
-    # Write CSV files
-    csv_headers = ['runner_id', 'entry_time_sec', 'exit_time_sec', 'entry_km', 'exit_km', 'pace_min_per_km', 'start_offset_sec']
+    # Convert to DataFrames and sort by entry_time (matching _read_runners_csv behavior)
+    df_a_audit = pd.DataFrame(runners_a)
+    df_b_audit = pd.DataFrame(runners_b)
     
-    with open(csv_a_path, 'w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=csv_headers)
-        writer.writeheader()
-        writer.writerows(runners_a)
-    
-    with open(csv_b_path, 'w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=csv_headers)
-        writer.writeheader()
-        writer.writerows(runners_b)
+    if not df_a_audit.empty:
+        df_a_audit = df_a_audit.sort_values('entry_time').reset_index(drop=True)
+    if not df_b_audit.empty:
+        df_b_audit = df_b_audit.sort_values('entry_time').reset_index(drop=True)
     
     return {
-        'event_a_csv': csv_a_path,
-        'event_b_csv': csv_b_path,
+        'event_a_data': df_a_audit,
+        'event_b_data': df_b_audit,
         'runners_a_count': len(runners_a),
         'runners_b_count': len(runners_b)
     }
@@ -3386,32 +3524,28 @@ def _generate_runner_audit_for_segment(
     conflict_end: Optional[float],
     conflict_length_m: float,
     output_dir: str
-) -> Optional[Dict[str, Any]]:
-    """Generate runner-level audit for a segment, returning audit results or None on failure."""
+) -> Optional[Tuple[pd.DataFrame, Dict[str, int]]]:
+    """
+    Generate runner-level audit for a segment, returning DataFrame and stats or None on failure.
+    
+    Issue #607: Refactored to return DataFrame instead of file paths.
+    """
     from datetime import datetime
     
     try:
-        # Get date-based output directory
-        try:
-            from app.report_utils import get_date_folder_path
-        except ImportError:
-            from report_utils import get_date_folder_path
-        
-        date_folder_path, _ = get_date_folder_path(output_dir)
-        
-        # Extract runner timing data
+        # Extract runner timing data (returns DataFrames)
         runner_data = extract_runner_timing_data_for_audit(
             df_a, df_b, event_a, event_b, start_times,
-            from_km_a, to_km_a, from_km_b, to_km_b, date_folder_path
+            from_km_a, to_km_a, from_km_b, to_km_b, output_dir
         )
         print(f"  📊 Runner timing data extracted: {runner_data['runners_a_count']} {event_a}, {runner_data['runners_b_count']} {event_b}")
         
-        # Generate runner audit
-        audit_results = emit_runner_audit(
-            event_a_csv=runner_data['event_a_csv'],
-            event_b_csv=runner_data['event_b_csv'],
-            out_dir=date_folder_path,
-            run_id=f"{datetime.now().strftime('%Y-%m-%dT%H:%M')}Z",
+        # Generate runner audit (returns DataFrame and stats)
+        run_id = f"{datetime.now().strftime('%Y-%m-%dT%H:%M')}Z"
+        audit_df, stats = emit_runner_audit(
+            event_a_data=runner_data['event_a_data'],
+            event_b_data=runner_data['event_b_data'],
+            run_id=run_id,
             seg_id=seg_id,
             segment_label=segment.get('segment_label', ''),
             flow_type=segment.get('flow_type', 'overtake'),
@@ -3422,31 +3556,32 @@ def _generate_runner_audit_for_segment(
             zone_width_m=conflict_length_m,
             binning_applied=True,
             binning_mode="time",
-            row_cap_per_shard=50000,
             strict_min_dwell=5,
-            strict_margin=2
+            strict_margin=2,
+            from_km_a=from_km_a,  # Issue #607: Pass segment ranges for conflict zone calculation
+            to_km_a=to_km_a,
+            from_km_b=from_km_b,
+            to_km_b=to_km_b
         )
         
         print(f"  📊 Runner audit generated:")
-        print(f"    - Index: {audit_results['index_csv']}")
-        print(f"    - Shards: {len(audit_results['shard_csvs'])} files")
-        print(f"    - TopK: {audit_results['topk_csv']}")
-        print(f"    - Stats: {audit_results['stats']['overlapped_pairs']} overlaps, {audit_results['stats']['raw_pass']} raw passes, {audit_results['stats']['strict_pass']} strict passes")
+        print(f"    - Rows: {len(audit_df)}")
+        print(f"    - Stats: {stats['overlapped_pairs']} overlaps, {stats['raw_pass']} raw passes, {stats['strict_pass']} strict passes")
         
         # STRICT-FIRST PUBLICATION RULE (Phase 2 Fix)
-        if audit_results and 'stats' in audit_results:
-            stats = audit_results['stats']
-            audit_strict_passes = stats.get('strict_pass', 0)
-            audit_raw_passes = stats.get('raw_pass', 0)
-            
-            print(f"🔍 STRICT-FIRST RULE APPLIED for {seg_id} {event_a} vs {event_b}:")
-            print(f"  Audit generation: {audit_strict_passes} strict, {audit_raw_passes} raw")
-            print(f"  Using main calculation results (authoritative)")
+        audit_strict_passes = stats.get('strict_pass', 0)
+        audit_raw_passes = stats.get('raw_pass', 0)
         
-        return audit_results
+        print(f"🔍 STRICT-FIRST RULE APPLIED for {seg_id} {event_a} vs {event_b}:")
+        print(f"  Audit generation: {audit_strict_passes} strict, {audit_raw_passes} raw")
+        print(f"  Using main calculation results (authoritative)")
+        
+        return audit_df, stats
         
     except Exception as e:
         print(f"  ⚠️ Runner audit generation failed: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 

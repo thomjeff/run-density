@@ -465,6 +465,9 @@ def analyze_temporal_flow_segments_v2(
     data_dir: str = "data",
     min_overlap_duration: float = DEFAULT_MIN_OVERLAP_DURATION,
     conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
+    enable_audit: str = 'n',
+    run_id: Optional[str] = None,
+    run_path: Optional[Path] = None
 ) -> Dict[Day, Dict[str, Any]]:
     """
     Analyze temporal flow for all segments using v2 Event objects and day-scoped data.
@@ -705,6 +708,92 @@ def analyze_temporal_flow_segments_v2(
             # Add day and events metadata to results
             flow_results["day"] = day.value
             flow_results["events"] = [e.name for e in day_events_unique]
+            
+            # Generate audit files if enabled
+            logger.info(f"Day {day.value}: Checking audit generation - enable_audit={enable_audit}, run_path={run_path}")
+            if enable_audit.lower() == 'y' and run_path is not None:
+                segments_list = flow_results.get('segments', [])
+                logger.info(f"Day {day.value}: Generating flow audit files for {len(segments_list)} segments")
+                day_path = run_path / day.value
+                # Audit files go directly under {day}/audit/
+                output_dir = str(day_path)
+                logger.info(f"Day {day.value}: Output directory for audit: {output_dir}")
+                
+                # Issue #607: Accumulate audit DataFrames from all segments
+                audit_dataframes = []
+                segment_count = 0
+                
+                for segment in segments_list:
+                    segment_count += 1
+                    try:
+                        seg_id = segment.get('seg_id')
+                        event_a_name = segment.get('event_a')
+                        event_b_name = segment.get('event_b')
+                        from_km_a = segment.get('from_km_a', 0.0)
+                        to_km_a = segment.get('to_km_a', 0.0)
+                        from_km_b = segment.get('from_km_b', 0.0)
+                        to_km_b = segment.get('to_km_b', 0.0)
+                        conflict_start = segment.get('convergence_zone_start')
+                        conflict_end = segment.get('convergence_zone_end')
+                        conflict_length_m = segment.get('conflict_length_m', conflict_length_m)
+                        
+                        # Filter runners for event_a and event_b
+                        df_a = day_runners_df[day_runners_df['event'].str.lower() == event_a_name.lower()].copy()
+                        df_b = day_runners_df[day_runners_df['event'].str.lower() == event_b_name.lower()].copy()
+                        
+                        if not df_a.empty and not df_b.empty:
+                            from app.core.flow.flow import _generate_runner_audit_for_segment
+                            audit_result = _generate_runner_audit_for_segment(
+                                seg_id=seg_id,
+                                segment=segment,
+                                event_a=event_a_name,
+                                event_b=event_b_name,
+                                df_a=df_a,
+                                df_b=df_b,
+                                start_times=start_times,
+                                from_km_a=from_km_a,
+                                to_km_a=to_km_a,
+                                from_km_b=from_km_b,
+                                to_km_b=to_km_b,
+                                conflict_start=conflict_start,
+                                conflict_end=conflict_end,
+                                conflict_length_m=conflict_length_m,
+                                output_dir=output_dir
+                            )
+                            if audit_result is not None:
+                                audit_df, stats = audit_result
+                                if not audit_df.empty:
+                                    audit_dataframes.append(audit_df)
+                                logger.info(f"  ✓ Generated audit for {seg_id} ({event_a_name} vs {event_b_name}): {len(audit_df)} rows")
+                            else:
+                                logger.warning(f"  ⚠ Audit generation returned None for {seg_id} ({event_a_name} vs {event_b_name})")
+                        else:
+                            logger.warning(f"  ⚠ Skipping audit for {seg_id}: empty dataframes (A: {len(df_a)}, B: {len(df_b)})")
+                    except Exception as e:
+                        logger.error(f"  ❌ Failed to generate audit for segment {segment.get('seg_id', 'unknown')}: {e}", exc_info=True)
+                
+                # Issue #607: Write single Parquet file per day
+                if audit_dataframes:
+                    audit_dir = day_path / "audit"
+                    audit_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    # Combine all segment DataFrames
+                    combined_audit_df = pd.concat(audit_dataframes, ignore_index=True)
+                    
+                    # Determine day name for filename (sat or sun)
+                    day_name = day.value.lower()[:3]  # "saturday" -> "sat", "sunday" -> "sun"
+                    parquet_path = audit_dir / f"audit_{day_name}.parquet"
+                    
+                    # Write Parquet file
+                    combined_audit_df.to_parquet(parquet_path, index=False, engine='pyarrow')
+                    
+                    logger.info(f"Day {day.value}: Wrote audit Parquet file: {parquet_path} ({len(combined_audit_df)} rows, {parquet_path.stat().st_size / 1024 / 1024:.1f} MB)")
+                else:
+                    logger.warning(f"Day {day.value}: No audit data to write (all segments returned empty DataFrames)")
+            
+                logger.info(f"Day {day.value}: Completed audit generation loop for {segment_count} segments")
+            else:
+                logger.info(f"Day {day.value}: Audit generation skipped - enable_audit={enable_audit}, run_path={run_path}")
             
             results_by_day[day] = flow_results
             
