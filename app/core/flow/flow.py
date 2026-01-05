@@ -3263,9 +3263,36 @@ def analyze_temporal_flow_segments(
         flow_type = segment.get("flow_type", "")
         terminology = get_flow_terminology(flow_type)
         
-        # Issue #612: For backward compatibility, use first CP (or None if no CPs)
-        # TODO: Full multi-zone processing will replace this
-        cp_km = convergence_points[0].km if convergence_points else None
+        # Issue #612: Multi-zone processing
+        # Calculate dynamic conflict length
+        segment_length_km = to_km_a - from_km_a
+        dynamic_conflict_length_m = _calculate_dynamic_conflict_length(
+            segment_length_km, from_km_a, to_km_a
+        )
+        
+        # Parse overlap duration
+        overlap_duration_minutes = _parse_overlap_duration_minutes(overlap_window_duration)
+        
+        # Build zones from convergence points
+        zones = build_conflict_zones(
+            convergence_points, from_km_a, to_km_a, from_km_b, to_km_b,
+            dynamic_conflict_length_m
+        )
+        
+        # Calculate metrics for all zones
+        for zone in zones:
+            zone_metrics = calculate_zone_metrics(
+                zone, df_a, df_b, event_a, event_b, start_times,
+                from_km_a, to_km_a, from_km_b, to_km_b,
+                min_overlap_duration, dynamic_conflict_length_m, overlap_duration_minutes
+            )
+            zone.metrics = zone_metrics
+        
+        # Select worst zone
+        worst_zone = select_worst_zone(zones) if zones else None
+        
+        # For backward compatibility, use worst zone's CP (or first CP, or None)
+        cp_km = worst_zone.cp.km if worst_zone else (convergence_points[0].km if convergence_points else None)
         
         segment_result = {
             "seg_id": seg_id,
@@ -3278,7 +3305,7 @@ def analyze_temporal_flow_segments(
             "to_km_a": to_km_a,
             "from_km_b": from_km_b,
             "to_km_b": to_km_b,
-            "convergence_point": cp_km,
+            "convergence_point": cp_km,  # Worst zone CP for backward compatibility
             "has_convergence": cp_km is not None,
             "total_a": len(df_a),
             "total_b": len(df_b),
@@ -3291,18 +3318,37 @@ def analyze_temporal_flow_segments(
             "first_entry_b": first_entry_b,
             "last_exit_b": last_exit_b,
             "overlap_window_duration": overlap_window_duration,
-            "prior_segment_id": segment.get("prior_segment_id", "") if pd.notna(segment.get("prior_segment_id", "")) else ""
+            "prior_segment_id": segment.get("prior_segment_id", "") if pd.notna(segment.get("prior_segment_id", "")) else "",
+            # Issue #612: Multi-zone fields
+            "convergence_points": convergence_points,  # List of ConvergencePoint objects
+            "zones": zones,  # List of ConflictZone objects
+            "worst_zone_index": worst_zone.zone_index if worst_zone else None,
+            "worst_zone": worst_zone,  # Worst ConflictZone object
             # Issue #549: overtake_flag removed - not used in any logic or calculations
         }
         
-        if cp_km is not None:
-            # Process segment with convergence - extracted to helper function to reduce complexity
+        if cp_km is not None and worst_zone is not None:
+            # Process segment with worst zone CP - handles policy, validation, loads
             segment_result = _process_segment_with_convergence(
                 seg_id, df_a, df_b, event_a, event_b, start_times,
                 cp_km, from_km_a, to_km_a, from_km_b, to_km_b,
                 min_overlap_duration, overlap_window_duration,
                 segment_start_time, segment_result
             )
+            # Override metrics with worst zone metrics (preserve policy, validation, loads from above)
+            worst_metrics = worst_zone.metrics
+            segment_result.update({
+                "overtaking_a": worst_metrics.get("overtaking_a", 0),
+                "overtaking_b": worst_metrics.get("overtaking_b", 0),
+                "copresence_a": worst_metrics.get("copresence_a", 0),
+                "copresence_b": worst_metrics.get("copresence_b", 0),
+                "sample_a": worst_metrics.get("sample_a", [])[:10],
+                "sample_b": worst_metrics.get("sample_b", [])[:10],
+                "unique_encounters": worst_metrics.get("unique_encounters", 0),
+                "participants_involved": worst_metrics.get("participants_involved", 0),
+                "convergence_zone_start": worst_zone.zone_start_km_a,
+                "convergence_zone_end": worst_zone.zone_end_km_a,
+            })
             results["segments_with_convergence"] += 1
         
         results["segments"].append(segment_result)
