@@ -999,6 +999,9 @@ def generate_flow_audit_data(
     overtakes_b: int = 0,
     total_a: int = 0,
     total_b: int = 0,
+    zone_index: Optional[int] = None,
+    cp_km: Optional[float] = None,
+    zone_source: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Generate comprehensive Flow Audit data for diagnostic analysis.
@@ -1045,7 +1048,11 @@ def generate_flow_audit_data(
         "distance_bins_used": False,
         "dedup_passes_applied": False,
         "reason_codes": "",
-        "audit_trigger": ""
+        "audit_trigger": "",
+        # Issue #612: Multi-zone fields
+        "zone_index": zone_index,
+        "cp_km": cp_km,
+        "zone_source": zone_source or ""
     }
     
     # Calculate density ratio
@@ -4205,7 +4212,10 @@ def generate_flow_audit_for_segment(
         overtakes_a=overtakes_a,
         overtakes_b=overtakes_b,
         total_a=len(df_a),
-        total_b=len(df_b)
+        total_b=len(df_b),
+        zone_index=None,  # TODO: Issue #612 - Add multi-zone support to generate_flow_audit_for_segment
+        cp_km=cp_km,
+        zone_source=None  # TODO: Issue #612 - Add multi-zone support to generate_flow_audit_for_segment
     )
     
     print(f"  📊 Flow Audit data generated with {len(flow_audit_data)} fields")
