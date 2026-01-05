@@ -707,6 +707,102 @@ def build_conflict_zones(
     return zones
 
 
+def calculate_zone_metrics(
+    zone: ConflictZone,
+    df_a: pd.DataFrame,
+    df_b: pd.DataFrame,
+    event_a: str,
+    event_b: str,
+    start_times: Dict[str, float],
+    from_km_a: float,
+    to_km_a: float,
+    from_km_b: float,
+    to_km_b: float,
+    min_overlap_duration: float,
+    conflict_length_m: float,
+    overlap_duration_minutes: float,
+) -> Dict[str, Any]:
+    """
+    Calculate metrics for a single conflict zone.
+    
+    Issue #612: Uses calculate_convergence_zone_overlaps_with_binning to compute
+    zone-level metrics (overtakes, copresence, etc.).
+    
+    Note: The function recalculates zone boundaries from cp_km internally,
+    which should match the zone boundaries computed by build_conflict_zones.
+    
+    Args:
+        zone: ConflictZone object with zone boundaries
+        df_a: DataFrame of runners for event A
+        df_b: DataFrame of runners for event B
+        event_a: Event A name
+        event_b: Event B name
+        start_times: Event start times dictionary
+        from_km_a: Start of segment for event A
+        to_km_a: End of segment for event A
+        from_km_b: Start of segment for event B
+        to_km_b: End of segment for event B
+        min_overlap_duration: Minimum overlap duration threshold
+        conflict_length_m: Conflict length in meters
+        overlap_duration_minutes: Overlap duration in minutes
+        
+    Returns:
+        Dictionary with zone metrics (overtaking_a, overtaking_b, copresence_a, etc.)
+    """
+    # Use the zone's CP km location
+    cp_km = zone.cp.km
+    
+    # Calculate metrics for this zone
+    # Function recalculates zone boundaries from cp_km internally
+    overtakes_a, overtakes_b, copresence_a, copresence_b, bibs_a, bibs_b, unique_encounters, participants_involved = calculate_convergence_zone_overlaps_with_binning(
+        df_a, df_b, event_a, event_b, start_times,
+        cp_km, from_km_a, to_km_a, from_km_b, to_km_b,
+        min_overlap_duration, conflict_length_m, overlap_duration_minutes
+    )
+    
+    return {
+        "overtaking_a": overtakes_a,
+        "overtaking_b": overtakes_b,
+        "copresence_a": copresence_a,
+        "copresence_b": copresence_b,
+        "sample_a": bibs_a[:10],
+        "sample_b": bibs_b[:10],
+        "unique_encounters": unique_encounters,
+        "participants_involved": participants_involved,
+    }
+
+
+def select_worst_zone(zones: List[ConflictZone]) -> Optional[ConflictZone]:
+    """
+    Select the "worst" zone based on metrics.
+    
+    Issue #612: Worst zone selection criteria (in order):
+    1. Maximum total overtakes (overtaking_a + overtaking_b)
+    2. Tie-breaker: Maximum total copresence (copresence_a + copresence_b)
+    3. Tie-breaker: Earliest by distance (zone.cp.km)
+    
+    Args:
+        zones: List of ConflictZone objects with populated metrics
+        
+    Returns:
+        The worst ConflictZone, or None if zones list is empty
+    """
+    if not zones:
+        return None
+    
+    def worst_zone_key(zone: ConflictZone) -> Tuple[int, int, float]:
+        """Key function for sorting: (negative overtakes, negative copresence, km)"""
+        metrics = zone.metrics
+        total_overtakes = metrics.get("overtaking_a", 0) + metrics.get("overtaking_b", 0)
+        total_copresence = metrics.get("copresence_a", 0) + metrics.get("copresence_b", 0)
+        # Use negative values for descending sort (worst first)
+        return (-total_overtakes, -total_copresence, zone.cp.km)
+    
+    # Sort by worst key and return first (worst) zone
+    worst_zone = min(zones, key=worst_zone_key)
+    return worst_zone
+
+
 def calculate_entry_exit_times(
     df_a: pd.DataFrame,
     df_b: pd.DataFrame,
