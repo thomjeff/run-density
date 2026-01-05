@@ -21,6 +21,7 @@ import time
 import logging
 import json
 from typing import Dict, Optional, Any, List, Tuple
+from dataclasses import dataclass
 import pandas as pd
 import numpy as np
 from app.utils.constants import (
@@ -37,6 +38,48 @@ from app.utils.constants import (
     DEFAULT_TIME_BIN_SECONDS, CONFLICT_LENGTH_LONG_SEGMENT_M
 )
 from app.utils.shared import load_pace_csv, arrival_time_sec, load_segments_csv
+
+
+# Issue #612: Multi-CP data structures
+@dataclass
+class ConvergencePoint:
+    """
+    Represents a convergence point detected in a segment.
+    
+    Attributes:
+        km: Kilometer mark of the convergence point (in event A coordinate system)
+        type: Type of detection - "true_pass" or "bin_peak"
+        overlap_count: Optional count of overlaps at this point (for bin_peak type)
+    """
+    km: float
+    type: str  # "true_pass" or "bin_peak"
+    overlap_count: Optional[int] = None
+
+
+@dataclass
+class ConflictZone:
+    """
+    Represents a conflict zone built from a convergence point.
+    
+    Attributes:
+        cp: The convergence point that defines this zone
+        zone_start_km_a: Start of zone in event A coordinates
+        zone_end_km_a: End of zone in event A coordinates
+        zone_start_km_b: Start of zone in event B coordinates
+        zone_end_km_b: End of zone in event B coordinates
+        zone_index: Index of this zone within the segment (0-based)
+        source: Source identifier (e.g., "true_pass" or "bin_peak")
+        metrics: Dictionary with zone-level metrics (overtakes_a, overtakes_b, etc.)
+                 Initially empty, populated after zone analysis
+    """
+    cp: ConvergencePoint
+    zone_start_km_a: float
+    zone_end_km_a: float
+    zone_start_km_b: float
+    zone_end_km_b: float
+    zone_index: int
+    source: str
+    metrics: Dict[str, Any]
 
 
 def _get_event_distance_range(segment: pd.Series, event: str) -> Tuple[float, float]:
@@ -247,7 +290,113 @@ def clamp_normalized_fraction(fraction: float, reason_prefix: str = "") -> Tuple
 # Use shared utility function from utils module
 
 
-def calculate_convergence_point(
+def _collect_all_true_pass_points(
+    dfA: pd.DataFrame,
+    dfB: pd.DataFrame,
+    eventA: str,
+    eventB: str,
+    start_times: Dict[str, float],
+    from_km: float,
+    to_km: float,
+    step_km: float,
+) -> List[float]:
+    """
+    Collect all true-pass convergence points in a segment range.
+    
+    Issue #612: Scans the entire segment to collect ALL true-pass locations,
+    not just the first one. This enables multi-CP detection.
+    
+    Args:
+        dfA: DataFrame with runners from event A
+        dfB: DataFrame with runners from event B
+        eventA: Event A name
+        eventB: Event B name
+        start_times: Dictionary mapping event names to start times (minutes from midnight)
+        from_km: Start of segment range to scan
+        to_km: End of segment range to scan
+        step_km: Step size for scanning (km)
+        
+    Returns:
+        List of km points where true passes occur (may be empty)
+    """
+    if dfA.empty or dfB.empty:
+        return []
+    
+    from app.utils.constants import TRUE_PASS_DETECTION_TOLERANCE_SECONDS
+    
+    # Get absolute start times in seconds
+    start_a = start_times.get(eventA, 0) * 60.0
+    start_b = start_times.get(eventB, 0) * 60.0
+    
+    # Create distance check points along the segment
+    check_points = []
+    current_km = from_km
+    while current_km <= to_km:
+        check_points.append(current_km)
+        current_km += step_km
+    
+    true_pass_points = []
+    tolerance_seconds = TRUE_PASS_DETECTION_TOLERANCE_SECONDS
+    
+    # For each check point, detect true passes
+    for km_point in check_points:
+        # Calculate arrival times for all runners at this point
+        pace_a = dfA["pace"].values * 60.0  # sec per km
+        offset_a = dfA.get("start_offset", pd.Series([0]*len(dfA))).fillna(0).values.astype(float)
+        arrival_times_a = start_a + offset_a + pace_a * km_point
+        
+        pace_b = dfB["pace"].values * 60.0  # sec per km
+        offset_b = dfB.get("start_offset", pd.Series([0]*len(dfB))).fillna(0).values.astype(float)
+        arrival_times_b = start_b + offset_b + pace_b * km_point
+        
+        # Calculate arrival times at segment start (from_km)
+        arrival_start_a = start_a + offset_a + pace_a * from_km
+        arrival_start_b = start_b + offset_b + pace_b * from_km
+        
+        # Calculate arrival times at segment end (to_km)
+        arrival_end_a = start_a + offset_a + pace_a * to_km
+        arrival_end_b = start_b + offset_b + pace_b * to_km
+        
+        # Vectorized true pass detection using NumPy broadcasting
+        # Check for temporal overlap
+        time_diff = np.abs(arrival_times_a[:, np.newaxis] - arrival_times_b[np.newaxis, :])
+        temporal_overlaps = time_diff <= tolerance_seconds
+        
+        if not np.any(temporal_overlaps):
+            continue  # No temporal overlap at this km_point, skip to next
+        
+        # For pairs with temporal overlap, check directional passes
+        start_a_2d = arrival_start_a[:, np.newaxis]  # (n, 1)
+        start_b_2d = arrival_start_b[np.newaxis, :]  # (1, m)
+        end_a_2d = arrival_end_a[:, np.newaxis]      # (n, 1)
+        end_b_2d = arrival_end_b[np.newaxis, :]      # (1, m)
+        
+        # Check for pass A -> B (A overtakes B): A starts behind B but finishes ahead of B
+        pass_a_b = (start_a_2d > start_b_2d) & (end_a_2d < end_b_2d)
+        
+        # Check for pass B -> A (B overtakes A): B starts behind A but finishes ahead of A
+        pass_b_a = (start_b_2d > start_a_2d) & (end_b_2d < end_a_2d)
+        
+        # Check for convergence: runners meet at same time at both boundaries
+        start_convergence = np.abs(start_a_2d - start_b_2d) <= tolerance_seconds
+        end_convergence = np.abs(end_a_2d - end_b_2d) <= tolerance_seconds
+        convergence = start_convergence & end_convergence
+        
+        # Check for runners running together (close in time and space)
+        start_close = np.abs(start_a_2d - start_b_2d) <= tolerance_seconds * 2
+        end_close = np.abs(end_a_2d - end_b_2d) <= tolerance_seconds * 2
+        running_together = start_close & end_close
+        
+        # Combine all conditions: temporal overlap AND (pass OR convergence OR running together)
+        true_pass_mask = temporal_overlaps & (pass_a_b | pass_b_a | convergence | running_together)
+        
+        if np.any(true_pass_mask):
+            true_pass_points.append(float(km_point))
+    
+    return true_pass_points
+
+
+def calculate_convergence_points(
     dfA: pd.DataFrame,
     dfB: pd.DataFrame,
     eventA: str,
@@ -258,9 +407,12 @@ def calculate_convergence_point(
     from_km_b: float,
     to_km_b: float,
     step_km: float = DEFAULT_CONVERGENCE_STEP_KM,
-) -> Optional[float]:
+) -> List[ConvergencePoint]:
     """
-    Calculate convergence point using TRUE PASS DETECTION.
+    Calculate convergence points using TRUE PASS DETECTION.
+    
+    Issue #612: Replaces single CP detection with multi-CP detection.
+    Scans the entire segment to collect ALL true-pass locations.
     
     This function detects when runners from one event actually pass runners
     from another event (directional overtaking), not just co-presence.
@@ -277,31 +429,27 @@ def calculate_convergence_point(
     - Normalized approach maps relative positions (0.0-1.0) to absolute coordinates
       for pace calculations, then checks for temporal overlap
     
-    Returns the kilometer mark where the first true pass occurs, or None.
+    Returns:
+        List of ConvergencePoint objects (may be empty)
     """
-    # Import the true pass detection function from overlap module
-    from app.overlap import calculate_true_pass_detection, calculate_convergence_point as calculate_co_presence
-    
     # Check if there's an intersection in absolute space first
     intersection_start = max(from_km_a, from_km_b)
     intersection_end = min(to_km_a, to_km_b)
     
     if intersection_start < intersection_end:
         # There is an intersection - use normal approach with true pass detection
-        true_pass_result = calculate_true_pass_detection(
+        true_pass_points = _collect_all_true_pass_points(
             dfA, dfB, eventA, eventB, start_times,
             intersection_start, intersection_end, step_km
         )
         
-        # Also check for co-presence (temporal overlap without directional change)
-        # This handles cases where events overlap in time but don't have directional overtaking
-        co_presence_result = calculate_co_presence(
-            dfA, dfB, eventA, eventB, start_times,
-            intersection_start, intersection_end, step_km
-        )
+        # Convert to ConvergencePoint objects
+        convergence_points = [
+            ConvergencePoint(km=km_point, type="true_pass")
+            for km_point in true_pass_points
+        ]
         
-        # Return true pass result if available, otherwise co-presence result
-        return true_pass_result if true_pass_result is not None else co_presence_result
+        return convergence_points
     
     # No intersection in absolute space - need normalized approach for segments like F1
     # NORMALIZED DISTANCE APPROACH: For segments with different absolute ranges but same
@@ -312,47 +460,185 @@ def calculate_convergence_point(
     len_b = to_km_b - from_km_b
     
     if len_a <= 0 or len_b <= 0:
-        return None
-
-    # For segments with different ranges, we need to find where runners from different events
-    # are at the same relative position within their respective segments.
-    # We'll check multiple normalized positions and find where temporal overlap occurs.
+        return []
     
     # Use a finer grid of normalized positions
-    import numpy as np
     normalized_points = np.linspace(0.0, 1.0, 21)  # 0.0, 0.05, 0.1, ..., 1.0
     
+    convergence_points = []
     for norm_point in normalized_points:
         # Map normalized point to absolute coordinates for each event
         abs_km_a = from_km_a + (norm_point * len_a)
         abs_km_b = from_km_b + (norm_point * len_b)
         
-        # Use the existing overlap detection functions with the mapped coordinates
-        # We'll create a temporary "intersection" range around this point
+        # Use a temporary "intersection" range around this point
         tolerance_km = CONVERGENCE_POINT_TOLERANCE_KM  # 100m tolerance around the point
         range_start = max(from_km_a, abs_km_a - tolerance_km)  # Ensure within segment bounds
         range_end = min(to_km_a, abs_km_a + tolerance_km)      # Ensure within segment bounds
         
-        # Try true pass detection at this normalized position
-        true_pass_result = calculate_true_pass_detection(
+        # Collect true pass points in this range
+        true_pass_points = _collect_all_true_pass_points(
             dfA, dfB, eventA, eventB, start_times,
             range_start, range_end, step_km
         )
         
-        # Try co-presence detection at this normalized position
-        co_presence_result = calculate_co_presence(
-            dfA, dfB, eventA, eventB, start_times,
-            range_start, range_end, step_km
-        )
-        
-        # Return true pass result if available, otherwise co-presence result
-        if true_pass_result is not None:
-            return true_pass_result
-        elif co_presence_result is not None:
-            return co_presence_result
+        # Add to convergence points list (using event A coordinate)
+        for km_point in true_pass_points:
+            convergence_points.append(ConvergencePoint(km=km_point, type="true_pass"))
     
-    # No convergence found in normalized space
-    return None
+    # Remove duplicates and sort by km (in case normalized approach found overlapping points)
+    if convergence_points:
+        # Deduplicate by km (within tolerance)
+        unique_points = []
+        seen_km = set()
+        tolerance_km = CONVERGENCE_POINT_TOLERANCE_KM
+        
+        for cp in sorted(convergence_points, key=lambda x: x.km):
+            # Check if this km is close to any we've already seen
+            is_duplicate = False
+            for seen in seen_km:
+                if abs(cp.km - seen) < tolerance_km:
+                    is_duplicate = True
+                    break
+            
+            if not is_duplicate:
+                unique_points.append(cp)
+                seen_km.add(cp.km)
+        
+        convergence_points = unique_points
+    
+    return convergence_points
+
+
+def build_conflict_zones(
+    convergence_points: List[ConvergencePoint],
+    from_km_a: float,
+    to_km_a: float,
+    from_km_b: float,
+    to_km_b: float,
+    conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
+) -> List[ConflictZone]:
+    """
+    Build non-overlapping conflict zones from convergence points.
+    
+    Issue #612: Creates zones from CPs with non-overlapping enforcement.
+    Zones are built in order from start to end of segment, and scanning
+    resumes after each zone's end boundary.
+    
+    Args:
+        convergence_points: List of ConvergencePoint objects (should be sorted by km)
+        from_km_a: Start of segment for event A (km)
+        to_km_a: End of segment for event A (km)
+        from_km_b: Start of segment for event B (km)
+        to_km_b: End of segment for event B (km)
+        conflict_length_m: Conflict zone length in meters
+        
+    Returns:
+        List of ConflictZone objects (non-overlapping, ordered by zone_start_km_a)
+    """
+    if not convergence_points:
+        return []
+    
+    # Sort CPs by km to process from start to end
+    sorted_cps = sorted(convergence_points, key=lambda cp: cp.km)
+    
+    zones = []
+    cursor_km = from_km_a  # Track position in segment, resume scanning after zone ends
+    
+    len_a = to_km_a - from_km_a
+    len_b = to_km_b - from_km_b
+    
+    if len_a <= 0 or len_b <= 0:
+        return []
+    
+    for cp in sorted_cps:
+        cp_km = cp.km
+        
+        # Skip CPs before cursor (already processed or covered)
+        if cp_km < cursor_km:
+            continue
+        
+        # Check if CP falls within an existing zone (if so, ignore it - already covered)
+        cp_in_existing_zone = False
+        for existing_zone in zones:
+            if (existing_zone.zone_start_km_a <= cp_km <= existing_zone.zone_end_km_a):
+                cp_in_existing_zone = True
+                break
+        
+        if cp_in_existing_zone:
+            continue  # Skip this CP - it's already covered by an existing zone
+        
+        # Build zone from this CP
+        # Use the same logic as _calculate_conflict_zone_boundaries but convert to absolute coordinates
+        if from_km_a <= cp_km <= to_km_a:
+            # Convergence point within Event A's range - use absolute approach
+            s_cp = (cp_km - from_km_a) / max(len_a, 1e-9)
+            s_cp, _ = clamp_normalized_fraction(s_cp, "convergence_point_")
+            
+            # Proportional tolerance: 5% of shorter segment, minimum 50m
+            min_segment_len = min(len_a, len_b)
+            proportional_tolerance_km = max(0.05, 0.05 * min_segment_len)
+            s_conflict_half = proportional_tolerance_km / max(min_segment_len, 1e-9)
+            
+            # Define normalized conflict zone boundaries
+            s_start = max(0.0, s_cp - s_conflict_half)
+            s_end = min(1.0, s_cp + s_conflict_half)
+            
+            # Ensure conflict zone has some width
+            if s_end <= s_start:
+                s_start = max(0.0, s_cp - 0.05)
+                s_end = min(1.0, s_cp + 0.05)
+        else:
+            # Convergence point outside Event A's range - use normalized approach
+            intersection_start = max(from_km_a, from_km_b)
+            intersection_end = min(to_km_a, to_km_b)
+            
+            if intersection_start < intersection_end:
+                # Use intersection boundaries
+                intersection_start_norm = (intersection_start - from_km_a) / len_a
+                intersection_end_norm = (intersection_end - from_km_a) / len_a
+                conflict_length_km = conflict_length_m / 1000.0
+                conflict_half_km = conflict_length_km / 2.0 / len_a
+                s_start = max(0.0, intersection_start_norm - conflict_half_km)
+                s_end = min(1.0, intersection_end_norm + conflict_half_km)
+            else:
+                # Use segment center
+                center_a_norm = 0.5
+                conflict_length_km = conflict_length_m / 1000.0
+                conflict_half_km = conflict_length_km / 2.0 / len_a
+                s_start = max(0.0, center_a_norm - conflict_half_km)
+                s_end = min(1.0, center_a_norm + conflict_half_km)
+        
+        # Convert normalized boundaries to absolute coordinates
+        zone_start_km_a = from_km_a + s_start * len_a
+        zone_end_km_a = from_km_a + s_end * len_a
+        zone_start_km_b = from_km_b + s_start * len_b
+        zone_end_km_b = from_km_b + s_end * len_b
+        
+        # Clamp to segment boundaries
+        zone_start_km_a = max(from_km_a, zone_start_km_a)
+        zone_end_km_a = min(to_km_a, zone_end_km_a)
+        zone_start_km_b = max(from_km_b, zone_start_km_b)
+        zone_end_km_b = min(to_km_b, zone_end_km_b)
+        
+        # Create ConflictZone object
+        zone = ConflictZone(
+            cp=cp,
+            zone_start_km_a=zone_start_km_a,
+            zone_end_km_a=zone_end_km_a,
+            zone_start_km_b=zone_start_km_b,
+            zone_end_km_b=zone_end_km_b,
+            zone_index=len(zones),  # 0-based index
+            source=cp.type,  # "true_pass" or "bin_peak"
+            metrics={}  # Will be populated later when zone metrics are calculated
+        )
+        
+        zones.append(zone)
+        
+        # Resume scanning after this zone's end (enforce non-overlapping)
+        cursor_km = zone_end_km_a
+    
+    return zones
 
 
 def calculate_entry_exit_times(
