@@ -658,10 +658,11 @@ def _format_convergence_points_json(convergence_points: Optional[List[Any]]) -> 
         return ""
     
     # Convert ConvergencePoint dataclasses to dicts
-    # Handle both dataclass objects (from direct analysis) and dicts (from JSON deserialization)
+    # Handle dataclass objects (from direct analysis), dicts (from proper JSON serialization),
+    # and strings (from default=str JSON serialization - should be fixed in pipeline)
     cp_dicts = []
     for cp in convergence_points:
-        # Handle dict (from JSON deserialization in v2 pipeline)
+        # Handle dict (from proper JSON deserialization in v2 pipeline)
         if isinstance(cp, dict):
             cp_dict = {
                 "km": round(float(cp.get("km", 0)), 2),
@@ -669,15 +670,29 @@ def _format_convergence_points_json(convergence_points: Optional[List[Any]]) -> 
             }
             if "overlap_count" in cp and cp["overlap_count"] is not None:
                 cp_dict["overlap_count"] = cp["overlap_count"]
+            cp_dicts.append(cp_dict)
+        # Handle string (from default=str JSON serialization - temporary workaround)
+        elif isinstance(cp, str):
+            # Skip strings - they can't be parsed reliably
+            # TODO: Fix pipeline to use asdict() for dataclass serialization
+            import logging
+            logging.warning(f"Skipping string-serialized ConvergencePoint: {cp}")
+            continue
         # Handle ConvergencePoint dataclass object (direct from analysis)
         else:
-            cp_dict = {
-                "km": round(cp.km, 2),
-                "type": cp.type
-            }
-            if cp.overlap_count is not None:
-                cp_dict["overlap_count"] = cp.overlap_count
-        cp_dicts.append(cp_dict)
+            try:
+                cp_dict = {
+                    "km": round(cp.km, 2),
+                    "type": cp.type
+                }
+                if cp.overlap_count is not None:
+                    cp_dict["overlap_count"] = cp.overlap_count
+                cp_dicts.append(cp_dict)
+            except AttributeError:
+                # Skip invalid objects
+                import logging
+                logging.warning(f"Skipping invalid ConvergencePoint object: {type(cp)}")
+                continue
     
     return json.dumps(cp_dicts)
 
