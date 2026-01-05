@@ -916,6 +916,15 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
         except Exception as e:
             print(f"⚠️ Failed to save flow CSV to storage: {e}")
     
+    # Issue #612: Generate flow_zones.parquet if any segments have zone data
+    zones_segments = [seg for seg in segments if "zones" in seg and seg.get("zones")]
+    if zones_segments:
+        output_dir = os.path.dirname(full_path)
+        zones_path = export_flow_zones_parquet(segments, output_dir, run_id)
+        print(f"📊 Flow zones Parquet exported to: {zones_path}")
+    else:
+        print("ℹ️  No zone data to export to flow_zones.parquet")
+    
     # Generate Flow Audit CSV if any segments have audit data
     audit_segments = [seg for seg in segments if "flow_audit_data" in seg]
     if audit_segments:
@@ -925,7 +934,7 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
         print(f"🔍 Flow Audit data exported to: {audit_path}")
     else:
         print("ℹ️  No Flow Audit data to export")
-
+    
     return full_path
 
 
@@ -957,6 +966,77 @@ def format_bib_range(bib_list: List[str], max_individual: int = 3) -> str:
     sorted_bibs = sorted(bib_list, key=lambda x: int(x) if str(x).isdigit() else x)
     first_few = sorted_bibs[:max_individual]
     return f"{', '.join(map(str, first_few))}, ... ({len(bib_list)} total)"
+
+
+def export_flow_zones_parquet(segments: List[Dict[str, Any]], output_dir: str, run_id: str = None) -> str:
+    """
+    Export flow zones data to Parquet format.
+    
+    Issue #612: Creates flow_zones.parquet with one row per zone, containing:
+    - seg_id, event_a, event_b, zone_index, cp_km, zone boundaries, metrics
+    
+    Args:
+        segments: List of segment result dictionaries with zone data
+        output_dir: Directory to save the Parquet file
+        run_id: Optional run ID for path organization
+        
+    Returns:
+        Path to the created Parquet file
+    """
+    from dataclasses import asdict
+    from pathlib import Path
+    
+    # Collect all zones from all segments
+    zones_rows = []
+    
+    for segment in segments:
+        seg_id = segment.get("seg_id", "")
+        event_a = segment.get("event_a", "")
+        event_b = segment.get("event_b", "")
+        zones = segment.get("zones", [])
+        
+        if not zones:
+            continue
+        
+        # Convert each zone to a row
+        for zone in zones:
+            metrics = zone.metrics
+            zone_row = {
+                "seg_id": seg_id,
+                "event_a": event_a,
+                "event_b": event_b,
+                "zone_index": zone.zone_index,
+                "cp_km": round(zone.cp.km, 2),
+                "cp_type": zone.cp.type,
+                "zone_source": zone.source,
+                "zone_start_km_a": round(zone.zone_start_km_a, 2),
+                "zone_end_km_a": round(zone.zone_end_km_a, 2),
+                "zone_start_km_b": round(zone.zone_start_km_b, 2),
+                "zone_end_km_b": round(zone.zone_end_km_b, 2),
+                "overtaking_a": metrics.get("overtaking_a", 0),
+                "overtaking_b": metrics.get("overtaking_b", 0),
+                "copresence_a": metrics.get("copresence_a", 0),
+                "copresence_b": metrics.get("copresence_b", 0),
+                "unique_encounters": metrics.get("unique_encounters", 0),
+                "participants_involved": metrics.get("participants_involved", 0),
+            }
+            zones_rows.append(zone_row)
+    
+    if not zones_rows:
+        # No zones to export
+        return ""
+    
+    # Create DataFrame and write to Parquet
+    zones_df = pd.DataFrame(zones_rows)
+    
+    # Determine output path
+    output_path = Path(output_dir)
+    zones_path = output_path / "flow_zones.parquet"
+    
+    # Write Parquet file
+    zones_df.to_parquet(zones_path, index=False, engine='pyarrow')
+    
+    return str(zones_path)
 
 
 def generate_flow_audit_csv(
