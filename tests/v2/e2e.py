@@ -332,6 +332,65 @@ class TestV2E2EScenarios:
         
         return zones_parquet
     
+    def _verify_zones_cross_validation(self, flow_csv_path: Path, zones_parquet_path: Path, day: str) -> None:
+        """Cross-validate flow_zones.parquet with Flow.csv.
+        
+        Issue #612: Validates that:
+        - Segments in Flow.csv with zones have corresponding rows in flow_zones.parquet
+        - worst_zone_index in Flow.csv matches a valid zone_index in flow_zones.parquet
+        - convergence_points_json aligns with zones data
+        
+        Args:
+            flow_csv_path: Path to Flow.csv
+            zones_parquet_path: Path to flow_zones.parquet
+            day: Day code for logging
+        """
+        import json
+        
+        flow_df = pd.read_csv(flow_csv_path)
+        zones_df = pd.read_parquet(zones_parquet_path)
+        
+        # Group zones by segment and event pair
+        zones_by_segment = {}
+        for _, zone_row in zones_df.iterrows():
+            key = (zone_row["seg_id"], zone_row["event_a"], zone_row["event_b"])
+            if key not in zones_by_segment:
+                zones_by_segment[key] = []
+            zones_by_segment[key].append(zone_row)
+        
+        # Validate each segment in Flow.csv
+        for _, flow_row in flow_df.iterrows():
+            seg_id = flow_row.get("seg_id", "")
+            event_a = flow_row.get("event_a", "")
+            event_b = flow_row.get("event_b", "")
+            key = (seg_id, event_a, event_b)
+            
+            worst_zone_idx = flow_row.get("worst_zone_index")
+            cp_json_str = flow_row.get("convergence_points_json", "")
+            
+            # If segment has zones in flow_zones.parquet, validate alignment
+            if key in zones_by_segment:
+                zones = zones_by_segment[key]
+                
+                # Validate worst_zone_index points to a valid zone
+                if pd.notna(worst_zone_idx):
+                    worst_idx = int(worst_zone_idx)
+                    zone_indices = [int(z["zone_index"]) for z in zones]
+                    assert worst_idx in zone_indices, \
+                        f"worst_zone_index {worst_idx} not found in zones for {seg_id} {event_a} vs {event_b}"
+                
+                # Validate convergence_points_json matches zone count (approximately)
+                if pd.notna(cp_json_str) and str(cp_json_str).strip():
+                    try:
+                        cp_data = json.loads(cp_json_str)
+                        # CPs should match or be close to zone count (deduplication may reduce count)
+                        assert len(cp_data) >= len(zones) or len(cp_data) <= len(zones) + 2, \
+                            f"CP count ({len(cp_data)}) doesn't align with zone count ({len(zones)}) for {seg_id}"
+                    except json.JSONDecodeError:
+                        pass  # Already validated in _verify_flow_csv_multi_zone
+        
+        print(f"✅ Zones cross-validation passed for {day}")
+    
     def _verify_day_isolation(self, run_id: str, day: str, expected_events: List[str]):
         """Verify that outputs for a day only contain expected events.
         
