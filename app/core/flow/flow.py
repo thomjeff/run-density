@@ -86,6 +86,121 @@ class ConflictZone:
     metrics: Dict[str, Any]
 
 
+# Issue #613: SegmentFlowCache for vectorization optimization
+@dataclass
+class SegmentFlowCache:
+    """
+    Per-segment cache of event-level arrays to avoid repeated DataFrame operations.
+    
+    Shared across all zones within a segment to eliminate redundant:
+    - DataFrame filtering
+    - Array conversion (pace, start_offset, runner_id)
+    - Start time calculations
+    
+    Attributes:
+        event_a: Event A name
+        event_b: Event B name
+        start_time_a: Start time for event A in seconds (from midnight)
+        start_time_b: Start time for event B in seconds (from midnight)
+        pace_a: NumPy array of paces for event A runners (sec/km)
+        pace_b: NumPy array of paces for event B runners (sec/km)
+        offset_a: NumPy array of start offsets for event A runners (seconds)
+        offset_b: NumPy array of start offsets for event B runners (seconds)
+        runner_id_a: NumPy array of runner IDs for event A
+        runner_id_b: NumPy array of runner IDs for event B
+        from_km_a: Start of segment for event A
+        to_km_a: End of segment for event A
+        from_km_b: Start of segment for event B
+        to_km_b: End of segment for event B
+    """
+    event_a: str
+    event_b: str
+    start_time_a: float
+    start_time_b: float
+    pace_a: np.ndarray
+    pace_b: np.ndarray
+    offset_a: np.ndarray
+    offset_b: np.ndarray
+    runner_id_a: np.ndarray
+    runner_id_b: np.ndarray
+    from_km_a: float
+    to_km_a: float
+    from_km_b: float
+    to_km_b: float
+
+
+def build_segment_flow_cache(
+    df_a: pd.DataFrame,
+    df_b: pd.DataFrame,
+    event_a: str,
+    event_b: str,
+    start_times: Dict[str, float],
+    from_km_a: float,
+    to_km_a: float,
+    from_km_b: float,
+    to_km_b: float,
+) -> Optional[SegmentFlowCache]:
+    """
+    Build a SegmentFlowCache from filtered DataFrames.
+    
+    Issue #613: Precomputes event-level arrays once per segment to avoid repeated
+    DataFrame filtering and array conversion in zone metric calculations.
+    
+    Args:
+        df_a: DataFrame of runners for event A (already filtered for segment)
+        df_b: DataFrame of runners for event B (already filtered for segment)
+        event_a: Event A name
+        event_b: Event B name
+        start_times: Event start times dictionary (offsets from midnight in minutes)
+        from_km_a: Start of segment for event A
+        to_km_a: End of segment for event A
+        from_km_b: Start of segment for event B
+        to_km_b: End of segment for event B
+        
+    Returns:
+        SegmentFlowCache object, or None if either DataFrame is empty
+    """
+    if df_a.empty or df_b.empty:
+        return None
+    
+    # Get start times in seconds (convert from minutes)
+    start_time_a = start_times.get(event_a, 0) * 60.0
+    start_time_b = start_times.get(event_b, 0) * 60.0
+    
+    # Reset index to ensure iloc access is safe
+    df_a = df_a.reset_index(drop=True)
+    df_b = df_b.reset_index(drop=True)
+    
+    # Extract arrays once - these are reused across all zones
+    pace_a = df_a["pace"].values * 60.0  # Convert min/km to sec/km
+    pace_b = df_b["pace"].values * 60.0
+    
+    # Handle start_offset with default 0
+    offset_a = df_a.get("start_offset", pd.Series([0] * len(df_a))).fillna(0).values.astype(float)
+    offset_b = df_b.get("start_offset", pd.Series([0] * len(df_b))).fillna(0).values.astype(float)
+    
+    # Extract runner IDs
+    runner_id_a = df_a["runner_id"].values
+    runner_id_b = df_b["runner_id"].values
+    
+    return SegmentFlowCache(
+        event_a=event_a,
+        event_b=event_b,
+        start_time_a=start_time_a,
+        start_time_b=start_time_b,
+        pace_a=pace_a,
+        pace_b=pace_b,
+        offset_a=offset_a,
+        offset_b=offset_b,
+        runner_id_a=runner_id_a,
+        runner_id_b=runner_id_b,
+        from_km_a=from_km_a,
+        to_km_a=to_km_a,
+        from_km_b=from_km_b,
+        to_km_b=to_km_b,
+    )
+
+
 def _get_event_distance_range(segment: pd.Series, event: str) -> Tuple[float, float]:
     """
     Extract distance range for a specific event from segment data.
@@ -707,6 +822,344 @@ def build_conflict_zones(
     return zones
 
 
+def calculate_zone_metrics_vectorized_binned(
+    zone: ConflictZone,
+    cache: SegmentFlowCache,
+    min_overlap_duration: float,
+    conflict_length_m: float,
+    overlap_duration_minutes: float,
+    use_time_bins: bool,
+    use_distance_bins: bool,
+) -> Dict[str, Any]:
+    """
+    Calculate zone metrics using vectorized binning (time or distance bins).
+    
+    Issue #613: Optimized binning that uses cached arrays and vectorized operations
+    instead of repeated DataFrame filtering and per-bin calls to original method.
+    
+    Args:
+        zone: ConflictZone with pre-computed boundaries
+        cache: SegmentFlowCache with pre-computed event arrays
+        min_overlap_duration: Minimum overlap duration (seconds)
+        conflict_length_m: Conflict length in meters
+        overlap_duration_minutes: Overlap duration in minutes
+        use_time_bins: Whether to use time-based binning
+        use_distance_bins: Whether to use distance-based binning
+        
+    Returns:
+        Dictionary with zone metrics aggregated across all bins
+    """
+    # Track results across all bins
+    all_a_bibs_overtakes = set()
+    all_b_bibs_overtakes = set()
+    all_a_bibs_copresence = set()
+    all_b_bibs_copresence = set()
+    total_unique_encounters = 0
+    
+    if use_time_bins:
+        # Get zone boundaries
+        zone_start_km_a = zone.zone_start_km_a
+        zone_end_km_a = zone.zone_end_km_a
+        zone_start_km_b = zone.zone_start_km_b
+        zone_end_km_b = zone.zone_end_km_b
+        # Time binning: use vectorized membership masks
+        bin_duration_minutes = TEMPORAL_BINNING_THRESHOLD_MINUTES
+        bin_duration_seconds = bin_duration_minutes * 60.0
+        
+        # Compute entry/exit times for full segment using cached arrays (vectorized)
+        entry_time_a = cache.start_time_a + cache.offset_a + cache.pace_a * cache.from_km_a  # (n,)
+        exit_time_a = cache.start_time_a + cache.offset_a + cache.pace_a * cache.to_km_a     # (n,)
+        entry_time_b = cache.start_time_b + cache.offset_b + cache.pace_b * cache.from_km_b  # (m,)
+        exit_time_b = cache.start_time_b + cache.offset_b + cache.pace_b * cache.to_km_b     # (m,)
+        
+        # Calculate overlap window
+        overlap_start = max(np.min(entry_time_a), np.min(entry_time_b))
+        overlap_end = min(np.max(exit_time_a), np.max(exit_time_b))
+        overlap_duration_seconds = overlap_end - overlap_start
+        num_bins = max(1, int(overlap_duration_seconds / bin_duration_seconds))
+        
+        # Process each time bin using vectorized masks
+        for bin_idx in range(num_bins):
+            bin_start = overlap_start + (bin_idx * bin_duration_seconds)
+            bin_end = min(overlap_start + ((bin_idx + 1) * bin_duration_seconds), overlap_end)
+            
+            # Vectorized membership masks: runners active in this time bin
+            a_in_bin = (entry_time_a <= bin_end) & (exit_time_a >= bin_start)  # (n,) boolean
+            b_in_bin = (entry_time_b <= bin_end) & (exit_time_b >= bin_start)  # (m,) boolean
+            
+            if not (np.any(a_in_bin) and np.any(b_in_bin)):
+                continue  # Skip empty bins
+            
+            # Get sub-arrays for runners in this bin
+            a_indices = np.where(a_in_bin)[0]
+            b_indices = np.where(b_in_bin)[0]
+            
+            # Create temporary zone with same boundaries for this bin
+            bin_zone = ConflictZone(
+                cp=zone.cp,
+                zone_start_km_a=zone_start_km_a,
+                zone_end_km_a=zone_end_km_a,
+                zone_start_km_b=zone_start_km_b,
+                zone_end_km_b=zone_end_km_b,
+                zone_index=zone.zone_index,
+                source=zone.source,
+                metrics={}
+            )
+            
+            # Create sub-cache with filtered arrays
+            bin_cache = SegmentFlowCache(
+                event_a=cache.event_a,
+                event_b=cache.event_b,
+                start_time_a=cache.start_time_a,
+                start_time_b=cache.start_time_b,
+                pace_a=cache.pace_a[a_indices],
+                pace_b=cache.pace_b[b_indices],
+                offset_a=cache.offset_a[a_indices],
+                offset_b=cache.offset_b[b_indices],
+                runner_id_a=cache.runner_id_a[a_indices],
+                runner_id_b=cache.runner_id_b[b_indices],
+                from_km_a=cache.from_km_a,
+                to_km_a=cache.to_km_a,
+                from_km_b=cache.from_km_b,
+                to_km_b=cache.to_km_b,
+            )
+            
+            # Calculate metrics for this bin using direct vectorized path (no further binning)
+            bin_metrics = calculate_zone_metrics_vectorized_direct(
+                bin_zone, bin_cache, min_overlap_duration
+            )
+            
+            # Accumulate results
+            all_a_bibs_overtakes.update(bin_metrics.get("sample_a", []))
+            all_b_bibs_overtakes.update(bin_metrics.get("sample_b", []))
+            # Note: co-presence includes all overlaps, so accumulate all
+            all_a_bibs_copresence.update(bin_metrics.get("sample_a", []))
+            all_b_bibs_copresence.update(bin_metrics.get("sample_b", []))
+            total_unique_encounters += bin_metrics.get("unique_encounters", 0)
+    
+    elif use_distance_bins:
+        # Distance binning: compute per-bin boundaries and use vectorized core
+        bin_size_km = DISTANCE_BIN_SIZE_KM  # 100m
+        len_a = cache.to_km_a - cache.from_km_a
+        len_b = cache.to_km_b - cache.from_km_b
+        num_bins = max(1, int(min(len_a, len_b) / bin_size_km))
+        
+        for bin_idx in range(num_bins):
+            bin_start_a = cache.from_km_a + (bin_idx * bin_size_km)
+            bin_end_a = min(cache.from_km_a + ((bin_idx + 1) * bin_size_km), cache.to_km_a)
+            bin_start_b = cache.from_km_b + (bin_idx * bin_size_km)
+            bin_end_b = min(cache.from_km_b + ((bin_idx + 1) * bin_size_km), cache.to_km_b)
+            
+            # Create temporary zone with bin-specific boundaries
+            bin_zone = ConflictZone(
+                cp=zone.cp,
+                zone_start_km_a=bin_start_a,
+                zone_end_km_a=bin_end_a,
+                zone_start_km_b=bin_start_b,
+                zone_end_km_b=bin_end_b,
+                zone_index=zone.zone_index,
+                source=zone.source,
+                metrics={}
+            )
+            
+            # Calculate metrics for this bin using direct vectorized path
+            bin_metrics = calculate_zone_metrics_vectorized_direct(
+                bin_zone, cache, min_overlap_duration
+            )
+            
+            # Accumulate results
+            all_a_bibs_overtakes.update(bin_metrics.get("sample_a", []))
+            all_b_bibs_overtakes.update(bin_metrics.get("sample_b", []))
+            all_a_bibs_copresence.update(bin_metrics.get("sample_a", []))
+            all_b_bibs_copresence.update(bin_metrics.get("sample_b", []))
+            total_unique_encounters += bin_metrics.get("unique_encounters", 0)
+    
+    # Calculate final participants involved
+    all_a_bibs = all_a_bibs_overtakes.union(all_a_bibs_copresence)
+    all_b_bibs = all_b_bibs_overtakes.union(all_b_bibs_copresence)
+    participants_involved = len(all_a_bibs.union(all_b_bibs))
+    
+    return {
+        "overtaking_a": len(all_a_bibs_overtakes),
+        "overtaking_b": len(all_b_bibs_overtakes),
+        "copresence_a": len(all_a_bibs_copresence),
+        "copresence_b": len(all_b_bibs_copresence),
+        "sample_a": list(all_a_bibs_overtakes)[:10],
+        "sample_b": list(all_b_bibs_overtakes)[:10],
+        "unique_encounters": total_unique_encounters,
+        "participants_involved": participants_involved,
+    }
+
+
+def calculate_zone_metrics_vectorized_direct(
+    zone: ConflictZone,
+    cache: SegmentFlowCache,
+    min_overlap_duration: float,
+) -> Dict[str, Any]:
+    """
+    Direct vectorized calculation for a zone (no binning).
+    Extracted from calculate_zone_metrics_vectorized for reuse in binning paths.
+    
+    Args:
+        zone: ConflictZone with boundaries
+        cache: SegmentFlowCache with arrays
+        min_overlap_duration: Minimum overlap duration (seconds)
+        
+    Returns:
+        Dictionary with zone metrics
+    """
+    zone_start_km_a = zone.zone_start_km_a
+    zone_end_km_a = zone.zone_end_km_a
+    zone_start_km_b = zone.zone_start_km_b
+    zone_end_km_b = zone.zone_end_km_b
+    
+    # Compute entry/exit times using cached arrays (vectorized)
+    time_enter_a = cache.start_time_a + cache.offset_a + cache.pace_a * zone_start_km_a
+    time_exit_a = cache.start_time_a + cache.offset_a + cache.pace_a * zone_end_km_a
+    time_enter_b = cache.start_time_b + cache.offset_b + cache.pace_b * zone_start_km_b
+    time_exit_b = cache.start_time_b + cache.offset_b + cache.pace_b * zone_end_km_b
+    
+    # Convert to NumPy arrays
+    time_enter_a_arr = np.array(time_enter_a)  # (n,)
+    time_exit_a_arr = np.array(time_exit_a)     # (n,)
+    time_enter_b_arr = np.array(time_enter_b)  # (m,)
+    time_exit_b_arr = np.array(time_exit_b)    # (m,)
+    
+    # Broadcast to compute all pairwise overlaps: (n, 1) vs (1, m) = (n, m)
+    enter_a_2d = time_enter_a_arr[:, np.newaxis]  # (n, 1)
+    exit_a_2d = time_exit_a_arr[:, np.newaxis]    # (n, 1)
+    enter_b_2d = time_enter_b_arr[np.newaxis, :]  # (1, m)
+    exit_b_2d = time_exit_b_arr[np.newaxis, :]    # (1, m)
+    
+    # Compute overlap start/end/duration for all pairs (vectorized)
+    overlap_start = np.maximum(enter_a_2d, enter_b_2d)  # (n, m)
+    overlap_end = np.minimum(exit_a_2d, exit_b_2d)      # (n, m)
+    overlap_duration = overlap_end - overlap_start       # (n, m)
+    
+    # Find pairs with sufficient temporal overlap
+    has_sufficient_overlap = overlap_duration >= min_overlap_duration  # (n, m) boolean
+    
+    # For true pass detection, compute boundary times once per zone (not per pair)
+    intersection_start = max(cache.from_km_a, cache.from_km_b)
+    intersection_end = min(cache.to_km_a, cache.to_km_b)
+    
+    # Compute boundary arrival times for all runners (vectorized)
+    if intersection_start < intersection_end:
+        # Use intersection boundaries
+        boundary_start = intersection_start
+        boundary_end = intersection_end
+        start_time_a_all = cache.start_time_a + cache.offset_a + cache.pace_a * boundary_start  # (n,)
+        end_time_a_all = cache.start_time_a + cache.offset_a + cache.pace_a * boundary_end      # (n,)
+        start_time_b_all = cache.start_time_b + cache.offset_b + cache.pace_b * boundary_start  # (m,)
+        end_time_b_all = cache.start_time_b + cache.offset_b + cache.pace_b * boundary_end      # (m,)
+    else:
+        # Use normalized conflict zone (for finish line convergence like M1)
+        segment_length_a = cache.to_km_a - cache.from_km_a
+        segment_length_b = cache.to_km_b - cache.from_km_b
+        conflict_zone_length = min(segment_length_a, segment_length_b) * 0.2
+        boundary_start_norm = 0.0
+        boundary_end_norm = conflict_zone_length
+        
+        abs_start_a = cache.from_km_a + boundary_start_norm
+        abs_end_a = cache.from_km_a + boundary_end_norm
+        abs_start_b = cache.from_km_b + boundary_start_norm
+        abs_end_b = cache.from_km_b + boundary_end_norm
+        
+        start_time_a_all = cache.start_time_a + cache.offset_a + cache.pace_a * abs_start_a  # (n,)
+        end_time_a_all = cache.start_time_a + cache.offset_a + cache.pace_a * abs_end_a      # (n,)
+        start_time_b_all = cache.start_time_b + cache.offset_b + cache.pace_b * abs_start_b  # (m,)
+        end_time_b_all = cache.start_time_b + cache.offset_b + cache.pace_b * abs_end_b      # (m,)
+    
+    # Vectorized pass detection: broadcast boundary times to (n, m) matrix
+    start_time_a_2d = start_time_a_all[:, np.newaxis]  # (n, 1)
+    end_time_a_2d = end_time_a_all[:, np.newaxis]      # (n, 1)
+    start_time_b_2d = start_time_b_all[np.newaxis, :]  # (1, m)
+    end_time_b_2d = end_time_b_all[np.newaxis, :]      # (1, m)
+    
+    # Vectorized pass detection: A passes B if A starts behind B but finishes ahead
+    a_passes_b = (start_time_a_2d > start_time_b_2d) & (end_time_a_2d < end_time_b_2d)  # (n, m)
+    b_passes_a = (start_time_b_2d > start_time_a_2d) & (end_time_b_2d < end_time_a_2d)  # (n, m)
+    
+    # Combine temporal overlap and pass detection
+    a_passes_b_with_overlap = a_passes_b & has_sufficient_overlap  # (n, m)
+    b_passes_a_with_overlap = b_passes_a & has_sufficient_overlap  # (n, m)
+    
+    # Co-presence: temporal overlap without directional change
+    temporal_overlap_matrix = (start_time_a_2d < end_time_b_2d) & (start_time_b_2d < end_time_a_2d)  # (n, m)
+    copresence = temporal_overlap_matrix & has_sufficient_overlap & ~a_passes_b_with_overlap & ~b_passes_a_with_overlap  # (n, m)
+    
+    # Reduce to per-runner counts (vectorized)
+    a_has_pass = np.any(a_passes_b_with_overlap, axis=1)  # (n,)
+    b_has_pass = np.any(b_passes_a_with_overlap, axis=0)  # (m,)
+    a_has_copresence = np.any(copresence, axis=1)  # (n,)
+    b_has_copresence = np.any(copresence, axis=0)  # (m,)
+    
+    # Extract runner IDs
+    a_bibs_overtakes = cache.runner_id_a[a_has_pass].tolist()
+    b_bibs_overtakes = cache.runner_id_b[b_has_pass].tolist()
+    a_bibs_copresence = cache.runner_id_a[a_has_copresence].tolist()
+    b_bibs_copresence = cache.runner_id_b[b_has_copresence].tolist()
+    
+    # Count unique pairs
+    unique_encounters = int(np.sum(has_sufficient_overlap))
+    
+    # Participants involved
+    all_a_bibs = set(a_bibs_overtakes + a_bibs_copresence)
+    all_b_bibs = set(b_bibs_overtakes + b_bibs_copresence)
+    participants_involved = len(all_a_bibs.union(all_b_bibs))
+    
+    return {
+        "overtaking_a": len(a_bibs_overtakes),
+        "overtaking_b": len(b_bibs_overtakes),
+        "copresence_a": len(a_bibs_copresence),
+        "copresence_b": len(b_bibs_copresence),
+        "sample_a": a_bibs_overtakes[:10],
+        "sample_b": b_bibs_overtakes[:10],
+        "unique_encounters": unique_encounters,
+        "participants_involved": participants_involved,
+    }
+
+
+def calculate_zone_metrics_vectorized(
+    zone: ConflictZone,
+    cache: SegmentFlowCache,
+    min_overlap_duration: float,
+    conflict_length_m: float,
+    overlap_duration_minutes: float,
+) -> Dict[str, Any]:
+    """
+    Calculate metrics for a single conflict zone using vectorized operations and pre-cached arrays.
+    
+    Issue #613: Optimized version that uses SegmentFlowCache and ConflictZone boundaries directly,
+    eliminating repeated DataFrame filtering, array conversion, and boundary computation.
+    
+    This function checks if binning is needed and uses optimized vectorized binning paths when appropriate.
+    
+    Args:
+        zone: ConflictZone object with pre-computed boundaries
+        cache: SegmentFlowCache with pre-computed event arrays
+        min_overlap_duration: Minimum overlap duration threshold (seconds)
+        conflict_length_m: Conflict length in meters (for binning decision)
+        overlap_duration_minutes: Overlap duration in minutes (for binning decision)
+        
+    Returns:
+        Dictionary with zone metrics (overtaking_a, overtaking_b, copresence_a, etc.)
+    """
+    # Check if binning is needed (Issue #612: binning is always-on, but decide between time/distance)
+    use_time_bins = overlap_duration_minutes > TEMPORAL_BINNING_THRESHOLD_MINUTES
+    use_distance_bins = conflict_length_m > SPATIAL_BINNING_THRESHOLD_METERS
+    
+    # Use optimized binning paths if needed
+    if use_time_bins or use_distance_bins:
+        return calculate_zone_metrics_vectorized_binned(
+            zone, cache, min_overlap_duration, conflict_length_m,
+            overlap_duration_minutes, use_time_bins, use_distance_bins
+        )
+    
+    # Direct vectorized calculation (no binning needed)
+    return calculate_zone_metrics_vectorized_direct(zone, cache, min_overlap_duration)
+
+
 def calculate_zone_metrics(
     zone: ConflictZone,
     df_a: pd.DataFrame,
@@ -721,6 +1174,7 @@ def calculate_zone_metrics(
     min_overlap_duration: float,
     conflict_length_m: float,
     overlap_duration_minutes: float,
+    cache: Optional[SegmentFlowCache] = None,
 ) -> Dict[str, Any]:
     """
     Calculate metrics for a single conflict zone.
@@ -728,8 +1182,8 @@ def calculate_zone_metrics(
     Issue #612: Uses calculate_convergence_zone_overlaps_with_binning to compute
     zone-level metrics (overtakes, copresence, etc.).
     
-    Note: The function recalculates zone boundaries from cp_km internally,
-    which should match the zone boundaries computed by build_conflict_zones.
+    Issue #613: If cache is provided, uses optimized vectorized path. Otherwise falls back
+    to original implementation for backward compatibility.
     
     Args:
         zone: ConflictZone object with zone boundaries
@@ -745,10 +1199,18 @@ def calculate_zone_metrics(
         min_overlap_duration: Minimum overlap duration threshold
         conflict_length_m: Conflict length in meters
         overlap_duration_minutes: Overlap duration in minutes
+        cache: Optional SegmentFlowCache for optimized path (Issue #613)
         
     Returns:
         Dictionary with zone metrics (overtaking_a, overtaking_b, copresence_a, etc.)
     """
+    # Issue #613: Use vectorized path if cache is provided
+    if cache is not None:
+        return calculate_zone_metrics_vectorized(
+            zone, cache, min_overlap_duration, conflict_length_m, overlap_duration_minutes
+        )
+    
+    # Fallback to original implementation (for backward compatibility and binning path)
     # Use the zone's CP km location
     cp_km = zone.cp.km
     
@@ -3286,12 +3748,20 @@ def analyze_temporal_flow_segments(
             dynamic_conflict_length_m
         )
         
+        # Issue #613: Build segment cache once per segment (shared across all zones)
+        cache = build_segment_flow_cache(
+            df_a, df_b, event_a, event_b, start_times,
+            from_km_a, to_km_a, from_km_b, to_km_b
+        )
+        
         # Calculate metrics for all zones
         for zone in zones:
+            # Issue #613: Use cache if available (vectorized path), otherwise fallback to original
             zone_metrics = calculate_zone_metrics(
                 zone, df_a, df_b, event_a, event_b, start_times,
                 from_km_a, to_km_a, from_km_b, to_km_b,
-                min_overlap_duration, dynamic_conflict_length_m, overlap_duration_minutes
+                min_overlap_duration, dynamic_conflict_length_m, overlap_duration_minutes,
+                cache=cache  # Pass cache for optimized path
             )
             zone.metrics = zone_metrics
         
