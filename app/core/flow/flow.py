@@ -1134,6 +1134,8 @@ def calculate_zone_metrics_vectorized_direct(
     return {
         "overtaking_a": len(a_bibs_overtakes),
         "overtaking_b": len(b_bibs_overtakes),
+        "overtaken_a": len(a_bibs_overtaken),  # Issue #620: A runners who were overtaken by B
+        "overtaken_b": len(b_bibs_overtaken),  # Issue #620: B runners who were overtaken by A
         "copresence_a": len(a_bibs_copresence),
         "copresence_b": len(b_bibs_copresence),
         "sample_a": a_bibs_overtakes[:10],  # Limited samples for CSV display
@@ -1251,6 +1253,8 @@ def calculate_zone_metrics(
     return {
         "overtaking_a": overtakes_a,
         "overtaking_b": overtakes_b,
+        "overtaken_a": 0,  # Issue #620: Fallback path doesn't compute separately (export-only gap)
+        "overtaken_b": 0,  # Issue #620: Fallback path doesn't compute separately (export-only gap)
         "copresence_a": copresence_a,
         "copresence_b": copresence_b,
         "sample_a": bibs_a[:10],
