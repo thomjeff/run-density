@@ -14,6 +14,7 @@ A2a spans Queen/Regent to WSB midpoint. It includes 5 zones created during analy
 
 ![A2a Flow Visualization](https://raw.githubusercontent.com/thomjeff/run-density/refs/heads/main/docs/user-guide/a2segment.png?token=GHSAT0AAAAAADQKQF4OFDQHN3G4FFL3R6MI2K5QQHQ) 
 
+
 **Event Start Times and Participant Counts**
 
 The two race events involved in this analysis started at different times:
