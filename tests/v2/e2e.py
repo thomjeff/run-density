@@ -64,6 +64,7 @@ class TestV2E2EScenarios:
         """Wait for background analysis to complete by polling for metadata.json files.
         
         Issue #554: After API returns immediately, we need to wait for background analysis.
+        Issue #620: Also verify report files exist to avoid race conditions with filesystem sync.
         
         Args:
             run_id: Run ID to wait for
@@ -83,8 +84,19 @@ class TestV2E2EScenarios:
                 if not metadata_path.exists():
                     all_complete = False
                     break
+                
+                # Issue #620: Also verify critical report files exist to avoid race conditions
+                # Reports are written before metadata.json, so if metadata exists, reports should too
+                density_path = run_dir / day / "reports" / "Density.md"
+                flow_path = run_dir / day / "reports" / "Flow.csv"
+                if not density_path.exists() or not flow_path.exists():
+                    # Files not ready yet, keep waiting
+                    all_complete = False
+                    break
             
             if all_complete:
+                # Add small delay to ensure filesystem sync completes
+                time.sleep(0.5)
                 elapsed = time.time() - start_time
                 print(f"✅ Analysis completed in {elapsed:.1f}s")
                 return
