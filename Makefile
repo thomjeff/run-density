@@ -37,6 +37,11 @@ help usage --help: ## Show this help message
 	@echo "Configuration:"
 	@echo "  PORT=$(PORT)  (Docker container port)"
 	@echo ""
+	@echo "Note: E2E tests support ENABLE_AUDIT flag to control audit generation."
+	@echo "      To disable audit (faster runs): make e2e ENABLE_AUDIT=n"
+	@echo "      To enable audit (default):     make e2e ENABLE_AUDIT=y"
+	@echo "      Applies to: e2e, e2e-sat"
+	@echo ""
 
 # ============================================================================
 # Core Commands

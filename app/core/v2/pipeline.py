@@ -40,23 +40,34 @@ def _convert_dataclasses_to_dicts(obj: Any) -> Any:
     Issue #612: Properly serialize ConvergencePoint and ConflictZone dataclasses
     instead of using default=str which converts them to strings.
     
+    Also handles sets (converts to lists) and filters out internal fields (keys starting with '_').
+    
     Args:
-        obj: Object that may contain dataclass instances (dict, list, dataclass, or primitive)
+        obj: Object that may contain dataclass instances (dict, list, dataclass, set, or primitive)
         
     Returns:
-        Object with all dataclasses converted to dicts
+        Object with all dataclasses converted to dicts, sets converted to lists,
+        and internal fields (keys starting with '_') removed
     """
     # Handle dataclass objects
     if is_dataclass(obj):
         # Convert dataclass to dict and recursively process its fields
         return _convert_dataclasses_to_dicts(asdict(obj))
     
-    # Handle dictionaries
+    # Handle dictionaries - filter out internal fields (keys starting with '_')
     if isinstance(obj, dict):
-        return {key: _convert_dataclasses_to_dicts(value) for key, value in obj.items()}
+        return {
+            key: _convert_dataclasses_to_dicts(value)
+            for key, value in obj.items()
+            if not key.startswith('_')  # Filter out internal fields
+        }
     
     # Handle lists
     if isinstance(obj, list):
+        return [_convert_dataclasses_to_dicts(item) for item in obj]
+    
+    # Handle sets (convert to lists for JSON serialization)
+    if isinstance(obj, set):
         return [_convert_dataclasses_to_dicts(item) for item in obj]
     
     # Handle tuples (convert to lists for JSON compatibility)
