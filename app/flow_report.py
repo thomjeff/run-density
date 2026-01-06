@@ -657,12 +657,11 @@ def _format_convergence_points_json(convergence_points: Optional[List[Any]]) -> 
     if not convergence_points:
         return ""
     
-    # Convert ConvergencePoint dataclasses to dicts
-    # Handle dataclass objects (from direct analysis), dicts (from proper JSON serialization),
-    # and strings (from default=str JSON serialization - should be fixed in pipeline)
+    # Convert ConvergencePoint objects to dicts for JSON serialization
+    # Handle both dict (from JSON deserialization) and dataclass objects (from direct analysis)
     cp_dicts = []
     for cp in convergence_points:
-        # Handle dict (from proper JSON deserialization in v2 pipeline)
+        # Handle dict (from JSON deserialization in v2 pipeline - Issue #612: now properly serialized)
         if isinstance(cp, dict):
             cp_dict = {
                 "km": round(float(cp.get("km", 0)), 2),
@@ -671,28 +670,15 @@ def _format_convergence_points_json(convergence_points: Optional[List[Any]]) -> 
             if "overlap_count" in cp and cp["overlap_count"] is not None:
                 cp_dict["overlap_count"] = cp["overlap_count"]
             cp_dicts.append(cp_dict)
-        # Handle string (from default=str JSON serialization - temporary workaround)
-        elif isinstance(cp, str):
-            # Skip strings - they can't be parsed reliably
-            # TODO: Fix pipeline to use asdict() for dataclass serialization
-            import logging
-            logging.warning(f"Skipping string-serialized ConvergencePoint: {cp}")
-            continue
         # Handle ConvergencePoint dataclass object (direct from analysis)
         else:
-            try:
-                cp_dict = {
-                    "km": round(cp.km, 2),
-                    "type": cp.type
-                }
-                if cp.overlap_count is not None:
-                    cp_dict["overlap_count"] = cp.overlap_count
-                cp_dicts.append(cp_dict)
-            except AttributeError:
-                # Skip invalid objects
-                import logging
-                logging.warning(f"Skipping invalid ConvergencePoint object: {type(cp)}")
-                continue
+            cp_dict = {
+                "km": round(cp.km, 2),
+                "type": cp.type
+            }
+            if cp.overlap_count is not None:
+                cp_dict["overlap_count"] = cp.overlap_count
+            cp_dicts.append(cp_dict)
     
     return json.dumps(cp_dicts)
 
@@ -1025,24 +1011,34 @@ def export_flow_zones_parquet(segments: List[Dict[str, Any]], output_dir: str, r
             continue
         
         # Convert each zone to a row
-        # Handle both ConflictZone objects (from direct analysis) and strings (from default=str JSON serialization)
+        # Handle both dict (from JSON deserialization) and ConflictZone dataclass objects (from direct analysis)
         for zone in zones:
-            # Skip strings - they can't be parsed reliably
-            # TODO: Fix pipeline to use asdict() for dataclass serialization
-            if isinstance(zone, str):
-                import logging
-                logging.warning(f"Skipping string-serialized ConflictZone: {zone[:100]}...")
-                continue
-            
-            # Handle dict (from proper JSON deserialization - not currently used, but future-proof)
+            # Handle dict (from JSON deserialization in v2 pipeline - Issue #612: now properly serialized)
             if isinstance(zone, dict):
-                # TODO: Implement dict handling if pipeline is updated to serialize properly
-                import logging
-                logging.warning(f"Skipping dict-serialized ConflictZone (not yet supported): {zone}")
-                continue
-            
+                cp = zone.get("cp", {})
+                metrics = zone.get("metrics", {})
+                zone_row = {
+                    "seg_id": seg_id,
+                    "event_a": event_a,
+                    "event_b": event_b,
+                    "zone_index": zone.get("zone_index", 0),
+                    "cp_km": round(float(cp.get("km", 0)), 2) if isinstance(cp, dict) else 0.0,
+                    "cp_type": str(cp.get("type", "unknown")) if isinstance(cp, dict) else "unknown",
+                    "zone_source": str(zone.get("source", "unknown")),
+                    "zone_start_km_a": round(float(zone.get("zone_start_km_a", 0)), 2),
+                    "zone_end_km_a": round(float(zone.get("zone_end_km_a", 0)), 2),
+                    "zone_start_km_b": round(float(zone.get("zone_start_km_b", 0)), 2),
+                    "zone_end_km_b": round(float(zone.get("zone_end_km_b", 0)), 2),
+                    "overtaking_a": metrics.get("overtaking_a", 0) if isinstance(metrics, dict) else 0,
+                    "overtaking_b": metrics.get("overtaking_b", 0) if isinstance(metrics, dict) else 0,
+                    "copresence_a": metrics.get("copresence_a", 0) if isinstance(metrics, dict) else 0,
+                    "copresence_b": metrics.get("copresence_b", 0) if isinstance(metrics, dict) else 0,
+                    "unique_encounters": metrics.get("unique_encounters", 0) if isinstance(metrics, dict) else 0,
+                    "participants_involved": metrics.get("participants_involved", 0) if isinstance(metrics, dict) else 0,
+                }
+                zones_rows.append(zone_row)
             # Handle ConflictZone dataclass object (direct from analysis)
-            try:
+            else:
                 metrics = zone.metrics
                 zone_row = {
                     "seg_id": seg_id,
@@ -1064,11 +1060,6 @@ def export_flow_zones_parquet(segments: List[Dict[str, Any]], output_dir: str, r
                     "participants_involved": metrics.get("participants_involved", 0),
                 }
                 zones_rows.append(zone_row)
-            except AttributeError as e:
-                # Skip invalid objects
-                import logging
-                logging.warning(f"Skipping invalid ConflictZone object: {type(zone)}, error: {e}")
-                continue
     
     if not zones_rows:
         # No zones to export
