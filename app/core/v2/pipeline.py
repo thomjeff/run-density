@@ -32,6 +32,41 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+def _convert_dataclasses_to_dicts(obj: Any) -> Any:
+    """
+    Recursively convert dataclass objects to dictionaries for JSON serialization.
+    
+    Issue #612: Properly serialize ConvergencePoint and ConflictZone dataclasses
+    instead of using default=str which converts them to strings.
+    
+    Args:
+        obj: Object that may contain dataclass instances (dict, list, dataclass, or primitive)
+        
+    Returns:
+        Object with all dataclasses converted to dicts
+    """
+    # Handle dataclass objects
+    if is_dataclass(obj):
+        # Convert dataclass to dict and recursively process its fields
+        return _convert_dataclasses_to_dicts(asdict(obj))
+    
+    # Handle dictionaries
+    if isinstance(obj, dict):
+        return {key: _convert_dataclasses_to_dicts(value) for key, value in obj.items()}
+    
+    # Handle lists
+    if isinstance(obj, list):
+        return [_convert_dataclasses_to_dicts(item) for item in obj]
+    
+    # Handle tuples (convert to lists for JSON compatibility)
+    if isinstance(obj, tuple):
+        return [_convert_dataclasses_to_dicts(item) for item in obj]
+    
+    # Return primitives as-is (str, int, float, bool, None, etc.)
+    return obj
+
+
 # Issue #581: Phase mapping for Issue #574 pipeline structure
 PHASE_MAPPING = {
     "phase_1_pre_analysis": {"number": "Phase 1", "description": "Pre-Analysis & Validation"},
