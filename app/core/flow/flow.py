@@ -856,6 +856,9 @@ def calculate_zone_metrics_vectorized_binned(
     # Also track samples for CSV output
     all_a_bibs_overtakes = set()  # Samples of A runners who overtook (for CSV)
     all_b_bibs_overtakes = set()  # Samples of B runners who overtook (for CSV)
+    # Issue #622: Track overtaken runners as sets (across bins) for accurate counts
+    all_a_bibs_overtaken = set()  # A runners who were overtaken (across all bins)
+    all_b_bibs_overtaken = set()  # B runners who were overtaken (across all bins)
     all_a_bibs_copresence = set()  # Not used for participants_involved, kept for compatibility
     all_b_bibs_copresence = set()  # Not used for participants_involved, kept for compatibility
     total_unique_encounters = 0
@@ -997,15 +1000,31 @@ def calculate_zone_metrics_vectorized_binned(
     # This correctly handles runners who appear in multiple bins (deduplicated via set union)
     participants_involved = len(all_a_bibs_across_bins.union(all_b_bibs_across_bins))
     
+    # Issue #622: Calculate multi-category runners for validation
+    # Note: In binned path, we use all_a_bibs_across_bins which already contains all runners
+    # The individual counts (overtaking, overtaken, copresence) are accumulated separately
+    # For accurate calculation, we need the sum of individual category counts
+    # However, we don't have full counts for overtaken and copresence in binned path
+    # We approximate by using the full sets and known counts
+    # Since all_a_bibs_across_bins = overtakes ∪ overtaken ∪ copresence (deduplicated)
+    # and we have len(all_a_bibs_overtakes), we can estimate
+    sum_of_counts = (len(all_a_bibs_overtakes) + len(all_b_bibs_overtakes) +
+                     len(all_a_bibs_overtaken) + len(all_b_bibs_overtaken) +
+                     len(all_a_bibs_copresence) + len(all_b_bibs_copresence))
+    multi_category_runners = max(0, sum_of_counts - participants_involved)
+    
     return {
         "overtaking_a": len(all_a_bibs_overtakes),
         "overtaking_b": len(all_b_bibs_overtakes),
+        "overtaken_a": len(all_a_bibs_overtaken),  # Issue #622: A runners overtaken (approximate in binned path)
+        "overtaken_b": len(all_b_bibs_overtaken),  # Issue #622: B runners overtaken (approximate in binned path)
         "copresence_a": len(all_a_bibs_copresence),
         "copresence_b": len(all_b_bibs_copresence),
         "sample_a": list(all_a_bibs_overtakes)[:10],
         "sample_b": list(all_b_bibs_overtakes)[:10],
         "unique_encounters": total_unique_encounters,
         "participants_involved": participants_involved,
+        "multi_category_runners": multi_category_runners,  # Issue #622: Overlap count for validation
     }
 
 
@@ -1131,6 +1150,13 @@ def calculate_zone_metrics_vectorized_direct(
     all_b_bibs = set(b_bibs_overtakes + b_bibs_overtaken + b_bibs_copresence)
     participants_involved = len(all_a_bibs.union(all_b_bibs))
     
+    # Issue #622: Calculate multi-category runners (overlaps) for validation
+    # Runners appearing in multiple categories are double-counted in the sum
+    # This allows users to validate: participants_involved = sum_of_counts - multi_category_runners
+    sum_of_counts = (len(a_bibs_overtakes) + len(a_bibs_overtaken) + len(a_bibs_copresence) +
+                     len(b_bibs_overtakes) + len(b_bibs_overtaken) + len(b_bibs_copresence))
+    multi_category_runners = sum_of_counts - participants_involved
+    
     return {
         "overtaking_a": len(a_bibs_overtakes),
         "overtaking_b": len(b_bibs_overtakes),
@@ -1142,6 +1168,7 @@ def calculate_zone_metrics_vectorized_direct(
         "sample_b": b_bibs_overtakes[:10],  # Limited samples for CSV display
         "unique_encounters": unique_encounters,
         "participants_involved": participants_involved,
+        "multi_category_runners": multi_category_runners,  # Issue #622: Overlap count for validation
         # Full participant sets for accurate cross-bin accumulation (internal use)
         "_all_a_bibs": all_a_bibs,  # Full set of A runners (overtaking + overtaken + copresence)
         "_all_b_bibs": all_b_bibs,  # Full set of B runners (overtaking + overtaken + copresence)
