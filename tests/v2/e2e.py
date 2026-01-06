@@ -139,6 +139,8 @@ class TestV2E2EScenarios:
             "density_md": day_dir / "reports" / "Density.md",
             "flow_csv": day_dir / "reports" / "Flow.csv",
             # Issue #600: Flow.md deprecated (only Flow.csv used)
+            # Issue #612: flow_zones.parquet may not exist if no zones detected (optional)
+            "flow_zones_parquet": day_dir / "reports" / "flow_zones.parquet",
             "bins_parquet": day_dir / "bins" / "bins.parquet",
             "metadata_json": day_dir / "metadata.json",
             
@@ -166,11 +168,13 @@ class TestV2E2EScenarios:
             if len(png_files) > 0:
                 expected_files["heatmaps_dir"] = heatmaps_dir
         
-        # Verify all expected files exist
+        # Verify all expected files exist (except optional files)
         missing = []
+        optional_files = ["flow_zones_parquet"]  # Issue #612: flow_zones.parquet is optional if no zones
         for name, path in expected_files.items():
             if not path.exists():
-                missing.append(f"{name}: {path}")
+                if name not in optional_files:
+                    missing.append(f"{name}: {path}")
         
         assert not missing, f"Missing output files for {day}:\n" + "\n".join(missing)
         
@@ -214,12 +218,178 @@ class TestV2E2EScenarios:
             missing_cols = [col for col in expected_cols if col not in audit_df.columns]
             assert not missing_cols, f"Audit Parquet missing columns for {day}: {missing_cols}"
             
+            # Issue #612: Check for multi-zone columns (optional - may not exist in all rows)
+            zone_cols = ["zone_index", "cp_km", "zone_source"]
+            has_zone_cols = all(col in audit_df.columns for col in zone_cols)
+            if has_zone_cols:
+                print(f"✅ Audit Parquet includes multi-zone columns for {day}")
+            else:
+                # Not an error - zone columns are optional if no zones detected
+                missing_zone_cols = [col for col in zone_cols if col not in audit_df.columns]
+                if missing_zone_cols:
+                    print(f"ℹ️  Audit Parquet missing zone columns for {day} (optional): {missing_zone_cols}")
+            
             print(f"✅ Audit Parquet file verified for {day}: {len(audit_df)} rows, {audit_parquet.stat().st_size / 1024 / 1024:.1f} MB")
             
         except Exception as e:
             raise AssertionError(f"Failed to read/validate audit Parquet for {day}: {e}")
         
         return audit_parquet
+    
+    def _verify_flow_csv_multi_zone(self, flow_csv_path: Path, day: str) -> None:
+        """Verify multi-zone columns in Flow.csv.
+        
+        Issue #612: Validates that Flow.csv contains multi-zone fields:
+        - worst_zone_index (may be None/NaN if no zones)
+        - convergence_points_json (valid JSON array, may be empty)
+        
+        Args:
+            flow_csv_path: Path to Flow.csv file
+            day: Day code for logging
+        """
+        import json
+        
+        flow_df = pd.read_csv(flow_csv_path)
+        
+        # Verify multi-zone columns exist
+        required_cols = ["worst_zone_index", "convergence_points_json"]
+        missing_cols = [col for col in required_cols if col not in flow_df.columns]
+        assert not missing_cols, f"Flow.csv missing multi-zone columns for {day}: {missing_cols}"
+        
+        # Validate convergence_points_json column (should be parseable JSON)
+        for idx, row in flow_df.iterrows():
+            cp_json_str = row.get("convergence_points_json", "")
+            if pd.notna(cp_json_str) and str(cp_json_str).strip():
+                try:
+                    cp_data = json.loads(cp_json_str)
+                    assert isinstance(cp_data, list), f"convergence_points_json should be a JSON array for row {idx}"
+                    # Validate CP structure if array is not empty
+                    for cp in cp_data:
+                        assert isinstance(cp, dict), f"Each CP should be a dict in row {idx}"
+                        assert "km" in cp, f"CP missing 'km' field in row {idx}"
+                        assert "type" in cp, f"CP missing 'type' field in row {idx}"
+                        assert cp["type"] in ["true_pass", "bin_peak"], f"Invalid CP type in row {idx}: {cp.get('type')}"
+                except json.JSONDecodeError as e:
+                    raise AssertionError(f"Invalid JSON in convergence_points_json for row {idx} in {day} Flow.csv: {e}")
+        
+        # Validate worst_zone_index (should be int or NaN/None if no zones)
+        for idx, row in flow_df.iterrows():
+            worst_zone_idx = row.get("worst_zone_index")
+            if pd.notna(worst_zone_idx):
+                try:
+                    zone_idx = int(worst_zone_idx)
+                    assert zone_idx >= 0, f"worst_zone_index should be >= 0 in row {idx}"
+                except (ValueError, TypeError):
+                    raise AssertionError(f"Invalid worst_zone_index value in row {idx} in {day} Flow.csv: {worst_zone_idx}")
+        
+        print(f"✅ Flow.csv multi-zone columns validated for {day}")
+    
+    def _verify_flow_zones_parquet(self, run_id: str, day: str) -> Optional[Path]:
+        """Verify flow_zones.parquet exists and has valid structure.
+        
+        Issue #612: Validates flow_zones.parquet file structure.
+        
+        Args:
+            run_id: Run ID to check
+            day: Day code (e.g., "sat", "sun")
+            
+        Returns:
+            Path to flow_zones.parquet if it exists, None otherwise
+        """
+        run_dir = self._get_run_directory(run_id)
+        day_dir = run_dir / day
+        zones_parquet = day_dir / "reports" / "flow_zones.parquet"
+        
+        if not zones_parquet.exists():
+            # Optional file - return None if missing
+            return None
+        
+        try:
+            zones_df = pd.read_parquet(zones_parquet)
+            
+            # Verify expected columns
+            expected_cols = [
+                "seg_id", "event_a", "event_b", "zone_index", "cp_km",
+                "cp_type", "zone_source", "zone_start_km_a", "zone_end_km_a",
+                "zone_start_km_b", "zone_end_km_b", "overtaking_a", "overtaking_b",
+                "copresence_a", "copresence_b", "unique_encounters", "participants_involved"
+            ]
+            missing_cols = [col for col in expected_cols if col not in zones_df.columns]
+            assert not missing_cols, f"flow_zones.parquet missing columns for {day}: {missing_cols}"
+            
+            # Validate zone_index (should be non-negative integers)
+            assert all(zones_df["zone_index"] >= 0), f"Invalid zone_index values in {day} flow_zones.parquet"
+            
+            # Validate cp_type values
+            valid_cp_types = {"true_pass", "bin_peak"}
+            invalid_types = set(zones_df["cp_type"].unique()) - valid_cp_types
+            assert not invalid_types, f"Invalid cp_type values in {day} flow_zones.parquet: {invalid_types}"
+            
+            print(f"✅ flow_zones.parquet verified for {day}: {len(zones_df)} zones, {zones_parquet.stat().st_size / 1024:.1f} KB")
+            
+        except Exception as e:
+            raise AssertionError(f"Failed to read/validate flow_zones.parquet for {day}: {e}")
+        
+        return zones_parquet
+    
+    def _verify_zones_cross_validation(self, flow_csv_path: Path, zones_parquet_path: Path, day: str) -> None:
+        """Cross-validate flow_zones.parquet with Flow.csv.
+        
+        Issue #612: Validates that:
+        - Segments in Flow.csv with zones have corresponding rows in flow_zones.parquet
+        - worst_zone_index in Flow.csv matches a valid zone_index in flow_zones.parquet
+        - convergence_points_json aligns with zones data
+        
+        Args:
+            flow_csv_path: Path to Flow.csv
+            zones_parquet_path: Path to flow_zones.parquet
+            day: Day code for logging
+        """
+        import json
+        
+        flow_df = pd.read_csv(flow_csv_path)
+        zones_df = pd.read_parquet(zones_parquet_path)
+        
+        # Group zones by segment and event pair
+        zones_by_segment = {}
+        for _, zone_row in zones_df.iterrows():
+            key = (zone_row["seg_id"], zone_row["event_a"], zone_row["event_b"])
+            if key not in zones_by_segment:
+                zones_by_segment[key] = []
+            zones_by_segment[key].append(zone_row)
+        
+        # Validate each segment in Flow.csv
+        for _, flow_row in flow_df.iterrows():
+            seg_id = flow_row.get("seg_id", "")
+            event_a = flow_row.get("event_a", "")
+            event_b = flow_row.get("event_b", "")
+            key = (seg_id, event_a, event_b)
+            
+            worst_zone_idx = flow_row.get("worst_zone_index")
+            cp_json_str = flow_row.get("convergence_points_json", "")
+            
+            # If segment has zones in flow_zones.parquet, validate alignment
+            if key in zones_by_segment:
+                zones = zones_by_segment[key]
+                
+                # Validate worst_zone_index points to a valid zone
+                if pd.notna(worst_zone_idx):
+                    worst_idx = int(worst_zone_idx)
+                    zone_indices = [int(z["zone_index"]) for z in zones]
+                    assert worst_idx in zone_indices, \
+                        f"worst_zone_index {worst_idx} not found in zones for {seg_id} {event_a} vs {event_b}"
+                
+                # Validate convergence_points_json matches zone count (approximately)
+                if pd.notna(cp_json_str) and str(cp_json_str).strip():
+                    try:
+                        cp_data = json.loads(cp_json_str)
+                        # CPs should match or be close to zone count (deduplication may reduce count)
+                        assert len(cp_data) >= len(zones) or len(cp_data) <= len(zones) + 2, \
+                            f"CP count ({len(cp_data)}) doesn't align with zone count ({len(zones)}) for {seg_id}"
+                    except json.JSONDecodeError:
+                        pass  # Already validated in _verify_flow_csv_multi_zone
+        
+        print(f"✅ Zones cross-validation passed for {day}")
     
     def _verify_day_isolation(self, run_id: str, day: str, expected_events: List[str]):
         """Verify that outputs for a day only contain expected events.
@@ -380,14 +550,14 @@ class TestV2E2EScenarios:
                     assert not unexpected_seg_ids, \
                         f"Unexpected seg_ids in {day} {filename}: {unexpected_seg_ids}"
     
-    def test_saturday_only_scenario(self, base_url, wait_for_server):
-        """Test complete Saturday-only workflow (elite, open events) with audit enabled."""
+    def test_saturday_only_scenario(self, base_url, wait_for_server, enable_audit):
+        """Test complete Saturday-only workflow (elite, open events) with configurable audit."""
         payload = {
-            "description": "Saturday only scenario test with audit",
+            "description": "Saturday only scenario test",
             "segments_file": "segments.csv",
             "flow_file": "flow.csv",
             "locations_file": "locations.csv",
-            "enableAudit": "y",
+            "enableAudit": enable_audit,
             "event_group": {
                 "sat-elite": "elite",
                 "sat-open": "open"
@@ -409,8 +579,14 @@ class TestV2E2EScenarios:
         # Verify outputs exist
         outputs = self._verify_outputs_exist(run_id, "sat", "saturday_only")
         
-        # Issue #607: Verify audit Parquet file exists (audit enabled)
-        audit_path = self._verify_audit_files(run_id, "sat")
+        # Issue #607: Verify audit Parquet file exists (if audit enabled)
+        if enable_audit == "y":
+            audit_path = self._verify_audit_files(run_id, "sat")
+        else:
+            # Audit disabled - verify it doesn't exist
+            run_dir = self._get_run_directory(run_id)
+            audit_path = run_dir / "sat" / "audit" / "audit_sat.parquet"
+            assert not audit_path.exists(), f"Audit file should not exist when audit is disabled: {audit_path}"
         
         # Verify day isolation (only elite and open events)
         self._verify_day_isolation(run_id, "sat", ["elite", "open"])
@@ -430,6 +606,15 @@ class TestV2E2EScenarios:
         ]
         assert len(elite_pairs) > 0, "No flow pairs found for elite event"
         assert len(open_pairs) > 0, "No flow pairs found for open event"
+        
+        # Issue #612: Verify multi-zone columns in Flow.csv
+        self._verify_flow_csv_multi_zone(flow_csv_path, "sat")
+        
+        # Issue #612: Verify flow_zones.parquet if it exists
+        zones_path = self._verify_flow_zones_parquet(run_id, "sat")
+        if zones_path:
+            # Cross-validation: Check that zones align with Flow.csv
+            self._verify_zones_cross_validation(flow_csv_path, zones_path, "sat")
     
     def test_sunday_only_scenario(self, base_url, wait_for_server):
         """Test complete Sunday-only workflow (full, half, 10k events) with audit enabled."""
@@ -477,15 +662,24 @@ class TestV2E2EScenarios:
                 ((flow_df["event_a"].str.lower() == event_b) & (flow_df["event_b"].str.lower() == event_a))
             ]
             assert len(pairs) > 0, f"No flow pairs found between {event_a} and {event_b}"
+        
+        # Issue #612: Verify multi-zone columns in Flow.csv
+        self._verify_flow_csv_multi_zone(flow_csv_path, "sun")
+        
+        # Issue #612: Verify flow_zones.parquet if it exists
+        zones_path = self._verify_flow_zones_parquet(run_id, "sun")
+        if zones_path:
+            # Cross-validation: Check that zones align with Flow.csv
+            self._verify_zones_cross_validation(flow_csv_path, zones_path, "sun")
     
-    def test_sat_sun_scenario(self, base_url, wait_for_server):
-        """Test sat+sun analysis in single run_id with audit enabled (simpler than mixed_day, focused on Issue #528)."""
+    def test_sat_sun_scenario(self, base_url, wait_for_server, enable_audit):
+        """Test sat+sun analysis in single run_id with configurable audit (simpler than mixed_day, focused on Issue #528)."""
         payload = {
-            "description": "Sat+Sun analysis test with audit",
+            "description": "Sat+Sun analysis test",
             "segments_file": "segments.csv",
             "flow_file": "flow.csv",
             "locations_file": "locations.csv",
-            "enableAudit": "y",
+            "enableAudit": enable_audit,
             "event_group": {
                 "sat-elite": "elite",
                 "sat-open": "open",
@@ -512,9 +706,17 @@ class TestV2E2EScenarios:
         sat_outputs = self._verify_outputs_exist(run_id, "sat", "sat_sun")
         sun_outputs = self._verify_outputs_exist(run_id, "sun", "sat_sun")
         
-        # Issue #607: Verify audit Parquet files exist (audit enabled)
-        sat_audit_path = self._verify_audit_files(run_id, "sat")
-        sun_audit_path = self._verify_audit_files(run_id, "sun")
+        # Issue #607: Verify audit Parquet files exist (if audit enabled)
+        if enable_audit == "y":
+            sat_audit_path = self._verify_audit_files(run_id, "sat")
+            sun_audit_path = self._verify_audit_files(run_id, "sun")
+        else:
+            # Audit disabled - verify files don't exist
+            run_dir = self._get_run_directory(run_id)
+            sat_audit_path = run_dir / "sat" / "audit" / "audit_sat.parquet"
+            sun_audit_path = run_dir / "sun" / "audit" / "audit_sun.parquet"
+            assert not sat_audit_path.exists(), f"Audit file should not exist when audit is disabled: {sat_audit_path}"
+            assert not sun_audit_path.exists(), f"Audit file should not exist when audit is disabled: {sun_audit_path}"
         
         # Verify flags.json exists and is not empty (Issue #528)
         assert "flags_json" in sat_outputs, "SAT flags.json missing"

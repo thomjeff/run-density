@@ -641,6 +641,48 @@ def generate_deep_dive_analysis(segment: Dict[str, Any]) -> List[str]:
     return content
 
 
+def _format_convergence_points_json(convergence_points: Optional[List[Any]]) -> str:
+    """
+    Format convergence points list as JSON string for CSV export.
+    
+    Issue #612: Converts list of ConvergencePoint objects to JSON array.
+    
+    Args:
+        convergence_points: List of ConvergencePoint objects (or None)
+        
+    Returns:
+        JSON string representation of convergence points, or empty string if None/empty
+    """
+    import json
+    if not convergence_points:
+        return ""
+    
+    # Convert ConvergencePoint objects to dicts for JSON serialization
+    # Handle both dict (from JSON deserialization) and dataclass objects (from direct analysis)
+    cp_dicts = []
+    for cp in convergence_points:
+        # Handle dict (from JSON deserialization in v2 pipeline - Issue #612: now properly serialized)
+        if isinstance(cp, dict):
+            cp_dict = {
+                "km": round(float(cp.get("km", 0)), 2),
+                "type": str(cp.get("type", "unknown"))
+            }
+            if "overlap_count" in cp and cp["overlap_count"] is not None:
+                cp_dict["overlap_count"] = cp["overlap_count"]
+            cp_dicts.append(cp_dict)
+        # Handle ConvergencePoint dataclass object (direct from analysis)
+        else:
+            cp_dict = {
+                "km": round(cp.km, 2),
+                "type": cp.type
+            }
+            if cp.overlap_count is not None:
+                cp_dict["overlap_count"] = cp.overlap_count
+            cp_dicts.append(cp_dict)
+    
+    return json.dumps(cp_dicts)
+
+
 def _format_start_times_for_csv(start_times: Dict[str, float]) -> str:
     """
     Format start times for CSV metadata display.
@@ -738,6 +780,8 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
             "spatial_zone_exists", "temporal_overlap_exists", "true_pass_exists",
             "has_convergence_policy", "has_convergence", "convergence_zone_start",
             "convergence_zone_end", "no_pass_reason_code", "conflict_length_m",
+            # Issue #612: Multi-zone fields
+            "worst_zone_index", "convergence_points_json",
             
             # Group 5: Metadata (moved to end as requested)
             "analysis_timestamp", "app_version", "environment", "data_source",
@@ -849,6 +893,9 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
                 conv_end,
                 segment.get("no_pass_reason_code", ""),
                 segment.get('conflict_length_m', 100.0),  # conflict_length_m from analysis
+                # Issue #612: Multi-zone fields
+                segment.get("worst_zone_index"),
+                _format_convergence_points_json(segment.get("convergence_points")),
                 
                 # Group 5: Metadata (moved to end as requested)
                 datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
@@ -881,6 +928,15 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
         except Exception as e:
             print(f"⚠️ Failed to save flow CSV to storage: {e}")
     
+    # Issue #612: Generate flow_zones.parquet if any segments have zone data
+    zones_segments = [seg for seg in segments if "zones" in seg and seg.get("zones")]
+    if zones_segments:
+        output_dir = os.path.dirname(full_path)
+        zones_path = export_flow_zones_parquet(segments, output_dir, run_id)
+        print(f"📊 Flow zones Parquet exported to: {zones_path}")
+    else:
+        print("ℹ️  No zone data to export to flow_zones.parquet")
+    
     # Generate Flow Audit CSV if any segments have audit data
     audit_segments = [seg for seg in segments if "flow_audit_data" in seg]
     if audit_segments:
@@ -890,7 +946,7 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
         print(f"🔍 Flow Audit data exported to: {audit_path}")
     else:
         print("ℹ️  No Flow Audit data to export")
-
+    
     return full_path
 
 
@@ -922,6 +978,104 @@ def format_bib_range(bib_list: List[str], max_individual: int = 3) -> str:
     sorted_bibs = sorted(bib_list, key=lambda x: int(x) if str(x).isdigit() else x)
     first_few = sorted_bibs[:max_individual]
     return f"{', '.join(map(str, first_few))}, ... ({len(bib_list)} total)"
+
+
+def export_flow_zones_parquet(segments: List[Dict[str, Any]], output_dir: str, run_id: str = None) -> str:
+    """
+    Export flow zones data to Parquet format.
+    
+    Issue #612: Creates flow_zones.parquet with one row per zone, containing:
+    - seg_id, event_a, event_b, zone_index, cp_km, zone boundaries, metrics
+    
+    Args:
+        segments: List of segment result dictionaries with zone data
+        output_dir: Directory to save the Parquet file
+        run_id: Optional run ID for path organization
+        
+    Returns:
+        Path to the created Parquet file
+    """
+    from dataclasses import asdict
+    from pathlib import Path
+    
+    # Collect all zones from all segments
+    zones_rows = []
+    
+    for segment in segments:
+        seg_id = segment.get("seg_id", "")
+        event_a = segment.get("event_a", "")
+        event_b = segment.get("event_b", "")
+        zones = segment.get("zones", [])
+        
+        if not zones:
+            continue
+        
+        # Convert each zone to a row
+        # Handle both dict (from JSON deserialization) and ConflictZone dataclass objects (from direct analysis)
+        for zone in zones:
+            # Handle dict (from JSON deserialization in v2 pipeline - Issue #612: now properly serialized)
+            if isinstance(zone, dict):
+                cp = zone.get("cp", {})
+                metrics = zone.get("metrics", {})
+                zone_row = {
+                    "seg_id": seg_id,
+                    "event_a": event_a,
+                    "event_b": event_b,
+                    "zone_index": zone.get("zone_index", 0),
+                    "cp_km": round(float(cp.get("km", 0)), 2) if isinstance(cp, dict) else 0.0,
+                    "cp_type": str(cp.get("type", "unknown")) if isinstance(cp, dict) else "unknown",
+                    "zone_source": str(zone.get("source", "unknown")),
+                    "zone_start_km_a": round(float(zone.get("zone_start_km_a", 0)), 2),
+                    "zone_end_km_a": round(float(zone.get("zone_end_km_a", 0)), 2),
+                    "zone_start_km_b": round(float(zone.get("zone_start_km_b", 0)), 2),
+                    "zone_end_km_b": round(float(zone.get("zone_end_km_b", 0)), 2),
+                    "overtaking_a": metrics.get("overtaking_a", 0) if isinstance(metrics, dict) else 0,
+                    "overtaking_b": metrics.get("overtaking_b", 0) if isinstance(metrics, dict) else 0,
+                    "copresence_a": metrics.get("copresence_a", 0) if isinstance(metrics, dict) else 0,
+                    "copresence_b": metrics.get("copresence_b", 0) if isinstance(metrics, dict) else 0,
+                    "unique_encounters": metrics.get("unique_encounters", 0) if isinstance(metrics, dict) else 0,
+                    "participants_involved": metrics.get("participants_involved", 0) if isinstance(metrics, dict) else 0,
+                }
+                zones_rows.append(zone_row)
+            # Handle ConflictZone dataclass object (direct from analysis)
+            else:
+                metrics = zone.metrics
+                zone_row = {
+                    "seg_id": seg_id,
+                    "event_a": event_a,
+                    "event_b": event_b,
+                    "zone_index": zone.zone_index,
+                    "cp_km": round(zone.cp.km, 2),
+                    "cp_type": zone.cp.type,
+                    "zone_source": zone.source,
+                    "zone_start_km_a": round(zone.zone_start_km_a, 2),
+                    "zone_end_km_a": round(zone.zone_end_km_a, 2),
+                    "zone_start_km_b": round(zone.zone_start_km_b, 2),
+                    "zone_end_km_b": round(zone.zone_end_km_b, 2),
+                    "overtaking_a": metrics.get("overtaking_a", 0),
+                    "overtaking_b": metrics.get("overtaking_b", 0),
+                    "copresence_a": metrics.get("copresence_a", 0),
+                    "copresence_b": metrics.get("copresence_b", 0),
+                    "unique_encounters": metrics.get("unique_encounters", 0),
+                    "participants_involved": metrics.get("participants_involved", 0),
+                }
+                zones_rows.append(zone_row)
+    
+    if not zones_rows:
+        # No zones to export
+        return ""
+    
+    # Create DataFrame and write to Parquet
+    zones_df = pd.DataFrame(zones_rows)
+    
+    # Determine output path
+    output_path = Path(output_dir)
+    zones_path = output_path / "flow_zones.parquet"
+    
+    # Write Parquet file
+    zones_df.to_parquet(zones_path, index=False, engine='pyarrow')
+    
+    return str(zones_path)
 
 
 def generate_flow_audit_csv(
@@ -960,7 +1114,9 @@ def generate_flow_audit_csv(
         "pct_overtake_raw_a", "pct_overtake_raw_b", 
         "pct_overtake_strict_a", "pct_overtake_strict_b",
         "time_bins_used", "distance_bins_used", "dedup_passes_applied",
-        "reason_codes", "audit_trigger"
+        "reason_codes", "audit_trigger",
+        # Issue #612: Multi-zone fields
+        "zone_index", "cp_km", "zone_source"
     ]
     
     import csv
@@ -1009,7 +1165,11 @@ def generate_flow_audit_csv(
                     audit_data.get("distance_bins_used", False),
                     audit_data.get("dedup_passes_applied", False),
                     audit_data.get("reason_codes", ""),
-                    audit_data.get("audit_trigger", "")
+                    audit_data.get("audit_trigger", ""),
+                    # Issue #612: Multi-zone fields
+                    audit_data.get("zone_index"),
+                    audit_data.get("cp_km"),
+                    audit_data.get("zone_source", "")
                 ])
     
     return full_path

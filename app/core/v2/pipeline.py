@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timezone
+from dataclasses import is_dataclass, asdict
 
 from app.core.v2.models import Day, Event
 from app.core.v2.timeline import generate_day_timelines
@@ -30,6 +31,41 @@ from app.utils.metadata import update_latest_pointer, append_to_run_index
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _convert_dataclasses_to_dicts(obj: Any) -> Any:
+    """
+    Recursively convert dataclass objects to dictionaries for JSON serialization.
+    
+    Issue #612: Properly serialize ConvergencePoint and ConflictZone dataclasses
+    instead of using default=str which converts them to strings.
+    
+    Args:
+        obj: Object that may contain dataclass instances (dict, list, dataclass, or primitive)
+        
+    Returns:
+        Object with all dataclasses converted to dicts
+    """
+    # Handle dataclass objects
+    if is_dataclass(obj):
+        # Convert dataclass to dict and recursively process its fields
+        return _convert_dataclasses_to_dicts(asdict(obj))
+    
+    # Handle dictionaries
+    if isinstance(obj, dict):
+        return {key: _convert_dataclasses_to_dicts(value) for key, value in obj.items()}
+    
+    # Handle lists
+    if isinstance(obj, list):
+        return [_convert_dataclasses_to_dicts(item) for item in obj]
+    
+    # Handle tuples (convert to lists for JSON compatibility)
+    if isinstance(obj, tuple):
+        return [_convert_dataclasses_to_dicts(item) for item in obj]
+    
+    # Return primitives as-is (str, int, float, bool, None, etc.)
+    return obj
+
 
 # Issue #581: Phase mapping for Issue #574 pipeline structure
 PHASE_MAPPING = {
@@ -726,16 +762,17 @@ def create_full_analysis_pipeline(
             if day_flow:
                 flow_json_path = computation_dir / "flow_results.json"
                 # Convert Day enum keys to strings for JSON serialization
+                # Issue #612: Convert dataclasses (ConvergencePoint, ConflictZone) to dicts before JSON serialization
                 flow_for_json = {
                     "day": day_code,
                     "events": day_flow.get("events", []),
                     "ok": day_flow.get("ok", False),
                     "total_segments": day_flow.get("total_segments", 0),
                     "segments_with_convergence": day_flow.get("segments_with_convergence", 0),
-                    "segments": day_flow.get("segments", {})
+                    "segments": _convert_dataclasses_to_dicts(day_flow.get("segments", {}))
                 }
                 with open(flow_json_path, 'w', encoding='utf-8') as f:
-                    json.dump(flow_for_json, f, indent=2, default=str)
+                    json.dump(flow_for_json, f, indent=2)
                 logger.info(f"  → Persisted flow_results.json: {flow_json_path}")
                 persisted_files.append(f"flow_results.json ({day_code})")
         
