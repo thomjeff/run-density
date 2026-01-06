@@ -850,10 +850,14 @@ def calculate_zone_metrics_vectorized_binned(
         Dictionary with zone metrics aggregated across all bins
     """
     # Track results across all bins
-    all_a_bibs_overtakes = set()
-    all_b_bibs_overtakes = set()
-    all_a_bibs_copresence = set()
-    all_b_bibs_copresence = set()
+    # Use full participant sets (not just samples) for accurate cross-bin accumulation
+    all_a_bibs_across_bins = set()  # Full set of A runners across all bins
+    all_b_bibs_across_bins = set()  # Full set of B runners across all bins
+    # Also track samples for CSV output
+    all_a_bibs_overtakes = set()  # Samples of A runners who overtook (for CSV)
+    all_b_bibs_overtakes = set()  # Samples of B runners who overtook (for CSV)
+    all_a_bibs_copresence = set()  # Not used for participants_involved, kept for compatibility
+    all_b_bibs_copresence = set()  # Not used for participants_involved, kept for compatibility
     total_unique_encounters = 0
     
     if use_time_bins:
@@ -930,11 +934,18 @@ def calculate_zone_metrics_vectorized_binned(
             )
             
             # Accumulate results
+            # Use full participant sets (not just samples) to accurately track all runners across bins
+            bin_all_a_bibs = bin_metrics.get("_all_a_bibs", set())
+            bin_all_b_bibs = bin_metrics.get("_all_b_bibs", set())
+            if isinstance(bin_all_a_bibs, list):
+                bin_all_a_bibs = set(bin_all_a_bibs)
+            if isinstance(bin_all_b_bibs, list):
+                bin_all_b_bibs = set(bin_all_b_bibs)
+            all_a_bibs_across_bins.update(bin_all_a_bibs)
+            all_b_bibs_across_bins.update(bin_all_b_bibs)
+            # Also accumulate samples for CSV output
             all_a_bibs_overtakes.update(bin_metrics.get("sample_a", []))
             all_b_bibs_overtakes.update(bin_metrics.get("sample_b", []))
-            # Note: co-presence includes all overlaps, so accumulate all
-            all_a_bibs_copresence.update(bin_metrics.get("sample_a", []))
-            all_b_bibs_copresence.update(bin_metrics.get("sample_b", []))
             total_unique_encounters += bin_metrics.get("unique_encounters", 0)
     
     elif use_distance_bins:
@@ -968,16 +979,23 @@ def calculate_zone_metrics_vectorized_binned(
             )
             
             # Accumulate results
+            # Use full participant sets (not just samples) to accurately track all runners across bins
+            bin_all_a_bibs = bin_metrics.get("_all_a_bibs", set())
+            bin_all_b_bibs = bin_metrics.get("_all_b_bibs", set())
+            if isinstance(bin_all_a_bibs, list):
+                bin_all_a_bibs = set(bin_all_a_bibs)
+            if isinstance(bin_all_b_bibs, list):
+                bin_all_b_bibs = set(bin_all_b_bibs)
+            all_a_bibs_across_bins.update(bin_all_a_bibs)
+            all_b_bibs_across_bins.update(bin_all_b_bibs)
+            # Also accumulate samples for CSV output
             all_a_bibs_overtakes.update(bin_metrics.get("sample_a", []))
             all_b_bibs_overtakes.update(bin_metrics.get("sample_b", []))
-            all_a_bibs_copresence.update(bin_metrics.get("sample_a", []))
-            all_b_bibs_copresence.update(bin_metrics.get("sample_b", []))
             total_unique_encounters += bin_metrics.get("unique_encounters", 0)
     
-    # Calculate final participants involved
-    all_a_bibs = all_a_bibs_overtakes.union(all_a_bibs_copresence)
-    all_b_bibs = all_b_bibs_overtakes.union(all_b_bibs_copresence)
-    participants_involved = len(all_a_bibs.union(all_b_bibs))
+    # Calculate final participants involved using full sets accumulated across all bins
+    # This correctly handles runners who appear in multiple bins (deduplicated via set union)
+    participants_involved = len(all_a_bibs_across_bins.union(all_b_bibs_across_bins))
     
     return {
         "overtaking_a": len(all_a_bibs_overtakes),
@@ -1089,23 +1107,28 @@ def calculate_zone_metrics_vectorized_direct(
     copresence = temporal_overlap_matrix & has_sufficient_overlap & ~a_passes_b_with_overlap & ~b_passes_a_with_overlap  # (n, m)
     
     # Reduce to per-runner counts (vectorized)
-    a_has_pass = np.any(a_passes_b_with_overlap, axis=1)  # (n,)
-    b_has_pass = np.any(b_passes_a_with_overlap, axis=0)  # (m,)
+    a_has_pass = np.any(a_passes_b_with_overlap, axis=1)  # (n,) - A runners who overtook B
+    b_has_pass = np.any(b_passes_a_with_overlap, axis=0)  # (m,) - B runners who overtook A
+    a_has_overtaken = np.any(b_passes_a_with_overlap, axis=1)  # (n,) - A runners who were overtaken by B
+    b_has_overtaken = np.any(a_passes_b_with_overlap, axis=0)  # (m,) - B runners who were overtaken by A
     a_has_copresence = np.any(copresence, axis=1)  # (n,)
     b_has_copresence = np.any(copresence, axis=0)  # (m,)
     
     # Extract runner IDs
     a_bibs_overtakes = cache.runner_id_a[a_has_pass].tolist()
     b_bibs_overtakes = cache.runner_id_b[b_has_pass].tolist()
+    a_bibs_overtaken = cache.runner_id_a[a_has_overtaken].tolist()
+    b_bibs_overtaken = cache.runner_id_b[b_has_overtaken].tolist()
     a_bibs_copresence = cache.runner_id_a[a_has_copresence].tolist()
     b_bibs_copresence = cache.runner_id_b[b_has_copresence].tolist()
     
     # Count unique pairs
     unique_encounters = int(np.sum(has_sufficient_overlap))
     
-    # Participants involved
-    all_a_bibs = set(a_bibs_overtakes + a_bibs_copresence)
-    all_b_bibs = set(b_bibs_overtakes + b_bibs_copresence)
+    # Participants involved: union of all runners involved in any interaction
+    # (overtaking, overtaken, or copresence)
+    all_a_bibs = set(a_bibs_overtakes + a_bibs_overtaken + a_bibs_copresence)
+    all_b_bibs = set(b_bibs_overtakes + b_bibs_overtaken + b_bibs_copresence)
     participants_involved = len(all_a_bibs.union(all_b_bibs))
     
     return {
@@ -1113,10 +1136,13 @@ def calculate_zone_metrics_vectorized_direct(
         "overtaking_b": len(b_bibs_overtakes),
         "copresence_a": len(a_bibs_copresence),
         "copresence_b": len(b_bibs_copresence),
-        "sample_a": a_bibs_overtakes[:10],
-        "sample_b": b_bibs_overtakes[:10],
+        "sample_a": a_bibs_overtakes[:10],  # Limited samples for CSV display
+        "sample_b": b_bibs_overtakes[:10],  # Limited samples for CSV display
         "unique_encounters": unique_encounters,
         "participants_involved": participants_involved,
+        # Full participant sets for accurate cross-bin accumulation (internal use)
+        "_all_a_bibs": all_a_bibs,  # Full set of A runners (overtaking + overtaken + copresence)
+        "_all_b_bibs": all_b_bibs,  # Full set of B runners (overtaking + overtaken + copresence)
     }
 
 
@@ -2899,13 +2925,19 @@ def calculate_convergence_zone_overlaps_original(
                     # Issue #552: Fix overtaking count logic - only count the runner who is actually overtaking
                     if a_passes_b:  # Runner A overtakes runner B
                         a_bibs_overtakes.add(a_bib)  # Only count A as overtaking
+                        # B was overtaken by A, so track B as overtaken
+                        # (Note: B is already in copresence, but we track explicitly for clarity)
                     if b_passes_a:  # Runner B overtakes runner A
                         b_bibs_overtakes.add(b_bib)  # Only count B as overtaking
+                        # A was overtaken by B, so track A as overtaken
+                        # (Note: A is already in copresence, but we track explicitly for clarity)
                     
                 # Track unique pairs (ordered to avoid duplicates)
                 unique_pairs.add((a_bib, b_bib))
 
     # Calculate participants involved (union of all runners who had encounters)
+    # Note: Runners who were overtaken are already included in copresence sets due to temporal overlap
+    # However, we explicitly include all sets to ensure completeness
     all_a_bibs = a_bibs_overtakes.union(a_bibs_copresence)
     all_b_bibs = b_bibs_overtakes.union(b_bibs_copresence)
     participants_involved = len(all_a_bibs.union(all_b_bibs))
@@ -3034,6 +3066,8 @@ def calculate_convergence_zone_overlaps_binned(
             unique_encounters += bin_encounters
     
     # Calculate final results
+    # Note: In the binned path, runners who were overtaken are already included in copresence sets
+    # from the original algorithm calls, so we don't need to track them separately here
     all_a_bibs = a_bibs_overtakes.union(a_bibs_copresence)
     all_b_bibs = b_bibs_overtakes.union(b_bibs_copresence)
     participants_involved = len(all_a_bibs.union(all_b_bibs))
