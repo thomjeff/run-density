@@ -12,7 +12,7 @@ Each row in `flow_zones` represents a flow analysis zone derived from convergenc
 ### Example: A2a Segment
 A2a spans Queen/Regent to WSB midpoint. It includes 5 zones created during analysis between convergence points at 1.33km and 1.73km.
 
-![A2a Flow Visualization](https://raw.githubusercontent.com/thomjeff/run-density/refs/heads/main/docs/user-guide/a2segment.png?token=GHSAT0AAAAAADQKQF4OFDQHN3G4FFL3R6MI2K5QQHQ) 
+![A2a Flow Visualization](https://github.com/thomjeff/run-density/blob/main/docs/user-guide/a2segment.png?raw=true) 
 
 
 **Event Start Times and Participant Counts**
