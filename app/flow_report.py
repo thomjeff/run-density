@@ -1025,28 +1025,50 @@ def export_flow_zones_parquet(segments: List[Dict[str, Any]], output_dir: str, r
             continue
         
         # Convert each zone to a row
+        # Handle both ConflictZone objects (from direct analysis) and strings (from default=str JSON serialization)
         for zone in zones:
-            metrics = zone.metrics
-            zone_row = {
-                "seg_id": seg_id,
-                "event_a": event_a,
-                "event_b": event_b,
-                "zone_index": zone.zone_index,
-                "cp_km": round(zone.cp.km, 2),
-                "cp_type": zone.cp.type,
-                "zone_source": zone.source,
-                "zone_start_km_a": round(zone.zone_start_km_a, 2),
-                "zone_end_km_a": round(zone.zone_end_km_a, 2),
-                "zone_start_km_b": round(zone.zone_start_km_b, 2),
-                "zone_end_km_b": round(zone.zone_end_km_b, 2),
-                "overtaking_a": metrics.get("overtaking_a", 0),
-                "overtaking_b": metrics.get("overtaking_b", 0),
-                "copresence_a": metrics.get("copresence_a", 0),
-                "copresence_b": metrics.get("copresence_b", 0),
-                "unique_encounters": metrics.get("unique_encounters", 0),
-                "participants_involved": metrics.get("participants_involved", 0),
-            }
-            zones_rows.append(zone_row)
+            # Skip strings - they can't be parsed reliably
+            # TODO: Fix pipeline to use asdict() for dataclass serialization
+            if isinstance(zone, str):
+                import logging
+                logging.warning(f"Skipping string-serialized ConflictZone: {zone[:100]}...")
+                continue
+            
+            # Handle dict (from proper JSON deserialization - not currently used, but future-proof)
+            if isinstance(zone, dict):
+                # TODO: Implement dict handling if pipeline is updated to serialize properly
+                import logging
+                logging.warning(f"Skipping dict-serialized ConflictZone (not yet supported): {zone}")
+                continue
+            
+            # Handle ConflictZone dataclass object (direct from analysis)
+            try:
+                metrics = zone.metrics
+                zone_row = {
+                    "seg_id": seg_id,
+                    "event_a": event_a,
+                    "event_b": event_b,
+                    "zone_index": zone.zone_index,
+                    "cp_km": round(zone.cp.km, 2),
+                    "cp_type": zone.cp.type,
+                    "zone_source": zone.source,
+                    "zone_start_km_a": round(zone.zone_start_km_a, 2),
+                    "zone_end_km_a": round(zone.zone_end_km_a, 2),
+                    "zone_start_km_b": round(zone.zone_start_km_b, 2),
+                    "zone_end_km_b": round(zone.zone_end_km_b, 2),
+                    "overtaking_a": metrics.get("overtaking_a", 0),
+                    "overtaking_b": metrics.get("overtaking_b", 0),
+                    "copresence_a": metrics.get("copresence_a", 0),
+                    "copresence_b": metrics.get("copresence_b", 0),
+                    "unique_encounters": metrics.get("unique_encounters", 0),
+                    "participants_involved": metrics.get("participants_involved", 0),
+                }
+                zones_rows.append(zone_row)
+            except AttributeError as e:
+                # Skip invalid objects
+                import logging
+                logging.warning(f"Skipping invalid ConflictZone object: {type(zone)}, error: {e}")
+                continue
     
     if not zones_rows:
         # No zones to export
