@@ -1031,6 +1031,8 @@ def export_flow_zones_parquet(segments: List[Dict[str, Any]], output_dir: str, r
                     "zone_end_km_b": round(float(zone.get("zone_end_km_b", 0)), 2),
                     "overtaking_a": metrics.get("overtaking_a", 0) if isinstance(metrics, dict) else 0,
                     "overtaking_b": metrics.get("overtaking_b", 0) if isinstance(metrics, dict) else 0,
+                    "overtaken_a": metrics.get("overtaken_a", 0) if isinstance(metrics, dict) else 0,  # Issue #620: A runners overtaken by B
+                    "overtaken_b": metrics.get("overtaken_b", 0) if isinstance(metrics, dict) else 0,  # Issue #620: B runners overtaken by A
                     "copresence_a": metrics.get("copresence_a", 0) if isinstance(metrics, dict) else 0,
                     "copresence_b": metrics.get("copresence_b", 0) if isinstance(metrics, dict) else 0,
                     "unique_encounters": metrics.get("unique_encounters", 0) if isinstance(metrics, dict) else 0,
@@ -1054,6 +1056,8 @@ def export_flow_zones_parquet(segments: List[Dict[str, Any]], output_dir: str, r
                     "zone_end_km_b": round(zone.zone_end_km_b, 2),
                     "overtaking_a": metrics.get("overtaking_a", 0),
                     "overtaking_b": metrics.get("overtaking_b", 0),
+                    "overtaken_a": metrics.get("overtaken_a", 0),  # Issue #620: A runners overtaken by B
+                    "overtaken_b": metrics.get("overtaken_b", 0),  # Issue #620: B runners overtaken by A
                     "copresence_a": metrics.get("copresence_a", 0),
                     "copresence_b": metrics.get("copresence_b", 0),
                     "unique_encounters": metrics.get("unique_encounters", 0),
