@@ -1037,6 +1037,7 @@ def export_flow_zones_parquet(segments: List[Dict[str, Any]], output_dir: str, r
                     "copresence_b": metrics.get("copresence_b", 0) if isinstance(metrics, dict) else 0,
                     "unique_encounters": metrics.get("unique_encounters", 0) if isinstance(metrics, dict) else 0,
                     "participants_involved": metrics.get("participants_involved", 0) if isinstance(metrics, dict) else 0,
+                    "multi_category_runners": metrics.get("multi_category_runners", 0) if isinstance(metrics, dict) else 0,  # Issue #622: Overlap count for validation
                 }
                 zones_rows.append(zone_row)
             # Handle ConflictZone dataclass object (direct from analysis)
@@ -1062,6 +1063,7 @@ def export_flow_zones_parquet(segments: List[Dict[str, Any]], output_dir: str, r
                     "copresence_b": metrics.get("copresence_b", 0),
                     "unique_encounters": metrics.get("unique_encounters", 0),
                     "participants_involved": metrics.get("participants_involved", 0),
+                    "multi_category_runners": metrics.get("multi_category_runners", 0),  # Issue #622: Overlap count for validation
                 }
                 zones_rows.append(zone_row)
     

@@ -856,6 +856,9 @@ def calculate_zone_metrics_vectorized_binned(
     # Also track samples for CSV output
     all_a_bibs_overtakes = set()  # Samples of A runners who overtook (for CSV)
     all_b_bibs_overtakes = set()  # Samples of B runners who overtook (for CSV)
+    # Issue #622: Track overtaken runners as sets (across bins) for accurate counts
+    all_a_bibs_overtaken = set()  # A runners who were overtaken (across all bins)
+    all_b_bibs_overtaken = set()  # B runners who were overtaken (across all bins)
     all_a_bibs_copresence = set()  # Not used for participants_involved, kept for compatibility
     all_b_bibs_copresence = set()  # Not used for participants_involved, kept for compatibility
     total_unique_encounters = 0
@@ -943,9 +946,32 @@ def calculate_zone_metrics_vectorized_binned(
                 bin_all_b_bibs = set(bin_all_b_bibs)
             all_a_bibs_across_bins.update(bin_all_a_bibs)
             all_b_bibs_across_bins.update(bin_all_b_bibs)
-            # Also accumulate samples for CSV output
-            all_a_bibs_overtakes.update(bin_metrics.get("sample_a", []))
-            all_b_bibs_overtakes.update(bin_metrics.get("sample_b", []))
+            # Issue #622: Accumulate separate category sets for accurate multi_category_runners calculation
+            bin_a_overtakes = bin_metrics.get("_a_bibs_overtakes", set())
+            bin_b_overtakes = bin_metrics.get("_b_bibs_overtakes", set())
+            bin_a_overtaken = bin_metrics.get("_a_bibs_overtaken", set())
+            bin_b_overtaken = bin_metrics.get("_b_bibs_overtaken", set())
+            bin_a_copresence = bin_metrics.get("_a_bibs_copresence", set())
+            bin_b_copresence = bin_metrics.get("_b_bibs_copresence", set())
+            # Convert to sets if they're lists
+            if isinstance(bin_a_overtakes, list):
+                bin_a_overtakes = set(bin_a_overtakes)
+            if isinstance(bin_b_overtakes, list):
+                bin_b_overtakes = set(bin_b_overtakes)
+            if isinstance(bin_a_overtaken, list):
+                bin_a_overtaken = set(bin_a_overtaken)
+            if isinstance(bin_b_overtaken, list):
+                bin_b_overtaken = set(bin_b_overtaken)
+            if isinstance(bin_a_copresence, list):
+                bin_a_copresence = set(bin_a_copresence)
+            if isinstance(bin_b_copresence, list):
+                bin_b_copresence = set(bin_b_copresence)
+            all_a_bibs_overtakes.update(bin_a_overtakes)
+            all_b_bibs_overtakes.update(bin_b_overtakes)
+            all_a_bibs_overtaken.update(bin_a_overtaken)
+            all_b_bibs_overtaken.update(bin_b_overtaken)
+            all_a_bibs_copresence.update(bin_a_copresence)
+            all_b_bibs_copresence.update(bin_b_copresence)
             total_unique_encounters += bin_metrics.get("unique_encounters", 0)
     
     elif use_distance_bins:
@@ -988,24 +1014,57 @@ def calculate_zone_metrics_vectorized_binned(
                 bin_all_b_bibs = set(bin_all_b_bibs)
             all_a_bibs_across_bins.update(bin_all_a_bibs)
             all_b_bibs_across_bins.update(bin_all_b_bibs)
-            # Also accumulate samples for CSV output
-            all_a_bibs_overtakes.update(bin_metrics.get("sample_a", []))
-            all_b_bibs_overtakes.update(bin_metrics.get("sample_b", []))
+            # Issue #622: Accumulate separate category sets for accurate multi_category_runners calculation
+            bin_a_overtakes = bin_metrics.get("_a_bibs_overtakes", set())
+            bin_b_overtakes = bin_metrics.get("_b_bibs_overtakes", set())
+            bin_a_overtaken = bin_metrics.get("_a_bibs_overtaken", set())
+            bin_b_overtaken = bin_metrics.get("_b_bibs_overtaken", set())
+            bin_a_copresence = bin_metrics.get("_a_bibs_copresence", set())
+            bin_b_copresence = bin_metrics.get("_b_bibs_copresence", set())
+            # Convert to sets if they're lists
+            if isinstance(bin_a_overtakes, list):
+                bin_a_overtakes = set(bin_a_overtakes)
+            if isinstance(bin_b_overtakes, list):
+                bin_b_overtakes = set(bin_b_overtakes)
+            if isinstance(bin_a_overtaken, list):
+                bin_a_overtaken = set(bin_a_overtaken)
+            if isinstance(bin_b_overtaken, list):
+                bin_b_overtaken = set(bin_b_overtaken)
+            if isinstance(bin_a_copresence, list):
+                bin_a_copresence = set(bin_a_copresence)
+            if isinstance(bin_b_copresence, list):
+                bin_b_copresence = set(bin_b_copresence)
+            all_a_bibs_overtakes.update(bin_a_overtakes)
+            all_b_bibs_overtakes.update(bin_b_overtakes)
+            all_a_bibs_overtaken.update(bin_a_overtaken)
+            all_b_bibs_overtaken.update(bin_b_overtaken)
+            all_a_bibs_copresence.update(bin_a_copresence)
+            all_b_bibs_copresence.update(bin_b_copresence)
             total_unique_encounters += bin_metrics.get("unique_encounters", 0)
     
     # Calculate final participants involved using full sets accumulated across all bins
     # This correctly handles runners who appear in multiple bins (deduplicated via set union)
     participants_involved = len(all_a_bibs_across_bins.union(all_b_bibs_across_bins))
     
+    # Issue #622: Calculate multi-category runners for validation
+    # Now that we're tracking separate category sets, we can calculate accurately
+    sum_of_counts = (len(all_a_bibs_overtakes) + len(all_b_bibs_overtakes) +
+                     len(all_a_bibs_overtaken) + len(all_b_bibs_overtaken) +
+                     len(all_a_bibs_copresence) + len(all_b_bibs_copresence))
+    multi_category_runners = max(0, sum_of_counts - participants_involved)
+    
     return {
         "overtaking_a": len(all_a_bibs_overtakes),
         "overtaking_b": len(all_b_bibs_overtakes),
+        "overtaken_a": len(all_a_bibs_overtaken),  # Issue #622: A runners overtaken (accurate with full sets)
+        "overtaken_b": len(all_b_bibs_overtaken),  # Issue #622: B runners overtaken (accurate with full sets)
         "copresence_a": len(all_a_bibs_copresence),
         "copresence_b": len(all_b_bibs_copresence),
         "sample_a": list(all_a_bibs_overtakes)[:10],
         "sample_b": list(all_b_bibs_overtakes)[:10],
         "unique_encounters": total_unique_encounters,
         "participants_involved": participants_involved,
+        "multi_category_runners": multi_category_runners,  # Issue #622: Overlap count for validation
     }
 
 
@@ -1131,6 +1190,13 @@ def calculate_zone_metrics_vectorized_direct(
     all_b_bibs = set(b_bibs_overtakes + b_bibs_overtaken + b_bibs_copresence)
     participants_involved = len(all_a_bibs.union(all_b_bibs))
     
+    # Issue #622: Calculate multi-category runners (overlaps) for validation
+    # Runners appearing in multiple categories are double-counted in the sum
+    # This allows users to validate: participants_involved = sum_of_counts - multi_category_runners
+    sum_of_counts = (len(a_bibs_overtakes) + len(a_bibs_overtaken) + len(a_bibs_copresence) +
+                     len(b_bibs_overtakes) + len(b_bibs_overtaken) + len(b_bibs_copresence))
+    multi_category_runners = sum_of_counts - participants_involved
+    
     return {
         "overtaking_a": len(a_bibs_overtakes),
         "overtaking_b": len(b_bibs_overtakes),
@@ -1142,9 +1208,17 @@ def calculate_zone_metrics_vectorized_direct(
         "sample_b": b_bibs_overtakes[:10],  # Limited samples for CSV display
         "unique_encounters": unique_encounters,
         "participants_involved": participants_involved,
+        "multi_category_runners": multi_category_runners,  # Issue #622: Overlap count for validation
         # Full participant sets for accurate cross-bin accumulation (internal use)
         "_all_a_bibs": all_a_bibs,  # Full set of A runners (overtaking + overtaken + copresence)
         "_all_b_bibs": all_b_bibs,  # Full set of B runners (overtaking + overtaken + copresence)
+        # Issue #622: Separate category sets for accurate binned path accumulation
+        "_a_bibs_overtakes": set(a_bibs_overtakes),  # A runners who overtook (full set)
+        "_b_bibs_overtakes": set(b_bibs_overtakes),  # B runners who overtook (full set)
+        "_a_bibs_overtaken": set(a_bibs_overtaken),  # A runners who were overtaken (full set)
+        "_b_bibs_overtaken": set(b_bibs_overtaken),  # B runners who were overtaken (full set)
+        "_a_bibs_copresence": set(a_bibs_copresence),  # A runners with copresence (full set)
+        "_b_bibs_copresence": set(b_bibs_copresence),  # B runners with copresence (full set)
     }
 
 
