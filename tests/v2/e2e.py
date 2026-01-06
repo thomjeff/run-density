@@ -550,14 +550,14 @@ class TestV2E2EScenarios:
                     assert not unexpected_seg_ids, \
                         f"Unexpected seg_ids in {day} {filename}: {unexpected_seg_ids}"
     
-    def test_saturday_only_scenario(self, base_url, wait_for_server):
-        """Test complete Saturday-only workflow (elite, open events) with audit enabled."""
+    def test_saturday_only_scenario(self, base_url, wait_for_server, enable_audit):
+        """Test complete Saturday-only workflow (elite, open events) with configurable audit."""
         payload = {
-            "description": "Saturday only scenario test with audit",
+            "description": "Saturday only scenario test",
             "segments_file": "segments.csv",
             "flow_file": "flow.csv",
             "locations_file": "locations.csv",
-            "enableAudit": "y",
+            "enableAudit": enable_audit,
             "event_group": {
                 "sat-elite": "elite",
                 "sat-open": "open"
@@ -579,8 +579,14 @@ class TestV2E2EScenarios:
         # Verify outputs exist
         outputs = self._verify_outputs_exist(run_id, "sat", "saturday_only")
         
-        # Issue #607: Verify audit Parquet file exists (audit enabled)
-        audit_path = self._verify_audit_files(run_id, "sat")
+        # Issue #607: Verify audit Parquet file exists (if audit enabled)
+        if enable_audit == "y":
+            audit_path = self._verify_audit_files(run_id, "sat")
+        else:
+            # Audit disabled - verify it doesn't exist
+            run_dir = self._get_run_directory(run_id)
+            audit_path = run_dir / "sat" / "audit" / "audit_sat.parquet"
+            assert not audit_path.exists(), f"Audit file should not exist when audit is disabled: {audit_path}"
         
         # Verify day isolation (only elite and open events)
         self._verify_day_isolation(run_id, "sat", ["elite", "open"])
@@ -666,14 +672,14 @@ class TestV2E2EScenarios:
             # Cross-validation: Check that zones align with Flow.csv
             self._verify_zones_cross_validation(flow_csv_path, zones_path, "sun")
     
-    def test_sat_sun_scenario(self, base_url, wait_for_server):
-        """Test sat+sun analysis in single run_id with audit enabled (simpler than mixed_day, focused on Issue #528)."""
+    def test_sat_sun_scenario(self, base_url, wait_for_server, enable_audit):
+        """Test sat+sun analysis in single run_id with configurable audit (simpler than mixed_day, focused on Issue #528)."""
         payload = {
-            "description": "Sat+Sun analysis test with audit",
+            "description": "Sat+Sun analysis test",
             "segments_file": "segments.csv",
             "flow_file": "flow.csv",
             "locations_file": "locations.csv",
-            "enableAudit": "y",
+            "enableAudit": enable_audit,
             "event_group": {
                 "sat-elite": "elite",
                 "sat-open": "open",
@@ -700,9 +706,17 @@ class TestV2E2EScenarios:
         sat_outputs = self._verify_outputs_exist(run_id, "sat", "sat_sun")
         sun_outputs = self._verify_outputs_exist(run_id, "sun", "sat_sun")
         
-        # Issue #607: Verify audit Parquet files exist (audit enabled)
-        sat_audit_path = self._verify_audit_files(run_id, "sat")
-        sun_audit_path = self._verify_audit_files(run_id, "sun")
+        # Issue #607: Verify audit Parquet files exist (if audit enabled)
+        if enable_audit == "y":
+            sat_audit_path = self._verify_audit_files(run_id, "sat")
+            sun_audit_path = self._verify_audit_files(run_id, "sun")
+        else:
+            # Audit disabled - verify files don't exist
+            run_dir = self._get_run_directory(run_id)
+            sat_audit_path = run_dir / "sat" / "audit" / "audit_sat.parquet"
+            sun_audit_path = run_dir / "sun" / "audit" / "audit_sun.parquet"
+            assert not sat_audit_path.exists(), f"Audit file should not exist when audit is disabled: {sat_audit_path}"
+            assert not sun_audit_path.exists(), f"Audit file should not exist when audit is disabled: {sun_audit_path}"
         
         # Verify flags.json exists and is not empty (Issue #528)
         assert "flags_json" in sat_outputs, "SAT flags.json missing"

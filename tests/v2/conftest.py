@@ -16,6 +16,12 @@ def pytest_addoption(parser):
         default=None,
         help="Base URL for API requests (default: http://localhost:8080 or BASE_URL env var)"
     )
+    parser.addoption(
+        "--enable-audit",
+        action="store",
+        default="y",
+        help="Enable audit generation (y/n, default: y)"
+    )
 
 
 @pytest.fixture(scope="class")
@@ -34,4 +40,19 @@ def base_url(request):
     
     # Fall back to environment variable or default
     return os.getenv("BASE_URL", "http://localhost:8080")
+
+
+@pytest.fixture(scope="class")
+def enable_audit(request):
+    """Enable audit generation flag.
+    
+    Can be configured via:
+    - --enable-audit pytest CLI argument (y/n)
+    - Defaults to "y" (enabled)
+    """
+    audit_arg = request.config.getoption("--enable-audit")
+    # Normalize to "y" or "n"
+    if audit_arg and audit_arg.lower() in ("n", "no", "false", "0"):
+        return "n"
+    return "y"
 

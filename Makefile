@@ -55,8 +55,9 @@ build: ## Build Docker image
 	@echo "🔨 Building Docker image..."
 	@docker-compose build
 
-e2e: ## Run sat+sun E2E test (single run_id with both days)
-	@echo "🧪 Running sat+sun E2E test..."
+e2e: ENABLE_AUDIT ?= y
+e2e: ## Run sat+sun E2E test (single run_id with both days). Usage: make e2e ENABLE_AUDIT=n
+	@echo "🧪 Running sat+sun E2E test (enableAudit=$(ENABLE_AUDIT))..."
 	@echo "🛑 Stopping existing containers (if any)..."
 	@docker-compose down 2>/dev/null || true
 	@echo "🛑 Stopping any containers using port 8080..."
@@ -71,7 +72,7 @@ e2e: ## Run sat+sun E2E test (single run_id with both days)
 	@echo "⏳ Waiting for server to be ready (10s)..."
 	@sleep 10
 	@echo "▶️  Running pytest test_sat_sun_scenario..."
-	@docker exec run-density-dev python -m pytest tests/v2/e2e.py::TestV2E2EScenarios::test_sat_sun_scenario -v --base-url http://localhost:8080 || (echo "❌ E2E test failed" && echo "💡 Container still running for debugging. Use 'make stop' to stop it." && exit 1)
+	@docker exec run-density-dev python -m pytest tests/v2/e2e.py::TestV2E2EScenarios::test_sat_sun_scenario -v --base-url http://localhost:8080 --enable-audit $(ENABLE_AUDIT) || (echo "❌ E2E test failed" && echo "💡 Container still running for debugging. Use 'make stop' to stop it." && exit 1)
 	@echo "✅ E2E test completed"
 	@echo "💡 Container still running. Use 'make stop' to stop it."
 
@@ -95,8 +96,9 @@ e2e-full: ## Run full E2E test suite (all scenarios)
 	@echo "✅ E2E tests completed"
 	@echo "💡 Container still running. Use 'make stop' to stop it."
 
-e2e-sat: ## Run Saturday-only E2E test
-	@echo "🧪 Running Saturday-only E2E test..."
+e2e-sat: ENABLE_AUDIT ?= y
+e2e-sat: ## Run Saturday-only E2E test. Usage: make e2e-sat ENABLE_AUDIT=n
+	@echo "🧪 Running Saturday-only E2E test (enableAudit=$(ENABLE_AUDIT))..."
 	@echo "🛑 Stopping existing containers (if any)..."
 	@docker-compose down 2>/dev/null || true
 	@echo "🛑 Stopping any containers using port 8080..."
@@ -111,7 +113,7 @@ e2e-sat: ## Run Saturday-only E2E test
 	@echo "⏳ Waiting for server to be ready (10s)..."
 	@sleep 10
 	@echo "▶️  Running pytest test_saturday_only_scenario..."
-	@docker exec run-density-dev python -m pytest tests/v2/e2e.py::TestV2E2EScenarios::test_saturday_only_scenario -v --base-url http://localhost:8080 || (echo "❌ E2E test failed" && echo "💡 Container still running for debugging. Use 'make stop' to stop it." && exit 1)
+	@docker exec run-density-dev python -m pytest tests/v2/e2e.py::TestV2E2EScenarios::test_saturday_only_scenario -v --base-url http://localhost:8080 --enable-audit $(ENABLE_AUDIT) || (echo "❌ E2E test failed" && echo "💡 Container still running for debugging. Use 'make stop' to stop it." && exit 1)
 	@echo "✅ E2E test completed"
 	@echo "💡 Container still running. Use 'make stop' to stop it."
 
