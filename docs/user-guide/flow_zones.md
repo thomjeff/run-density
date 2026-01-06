@@ -12,13 +12,10 @@ Each row in `flow_zones` represents a flow analysis zone derived from convergenc
 ### Example: A2a Segment
 A2a spans Queen/Regent to WSB midpoint. It includes 5 zones created during analysis between convergence points at 1.33km and 1.73km.
 
-_A2a Segment Flow (Illustrative Example)_
-
-![A2a Flow Visualization](/Users/jthompson/Documents/GitHub/run-density/docs/user-guide/a2segment.png)
-
-> _Replace the above path with the actual image filename when embedding in a markdown-rendering environment._
+![A2a Flow Visualization](https://raw.githubusercontent.com/thomjeff/run-density/refs/heads/main/docs/user-guide/a2segment.png?token=GHSAT0AAAAAADQKQF4OFDQHN3G4FFL3R6MI2K5QQHQ) 
 
 **Event Start Times and Participant Counts**
+
 The two race events involved in this analysis started at different times:
 | Event | Start Time | Runners | 
 |-------|------------|---------|
@@ -28,15 +25,16 @@ The two race events involved in this analysis started at different times:
 This 20-minute gap is essential context for understanding overtaking patterns — the Half field begins behind but at a faster pace.
 
 
-Key metrics:
+## Flow Zone Key metrics:
 
-| zone_index | cp_km  | overtaking_b | copresence_b | unique_encounters | participants_involved |
-|------------|--------|---------------|---------------|--------------------|------------------------|
-| 0          | 1.33   | 5             | 0             | 5                  | 5                      |
-| 1          | 1.40   | 14            | 0             | 14                 | 14                     |
-| 2          | 1.47   | 26            | 2             | 26                 | 28                     |
-| 3          | 1.60   | 31            | 15            | 33                 | 49                     |
-| 4          | 1.73   | 27            | 13            | 42                 | 57                     |
+|seg_id| event_a | event_b | zone_index | cp_km | zone_start_km_a | zone_end_km_a | zone_start_km_b | zone_end_km_b | overtaking_a | overtaking_b | copresence_a | copresence_b | unique_encounters | participants_involved |
+|---|---------|---------|------------|-------|------------------|----------------|------------------|----------------|---------------|---------------|----------------|----------------|----------------------|--------------------------|
+| A2a | 10k     | half    | 0          | 1.33  | 1.28             | 1.38           | 1.28             | 1.38           | 0             | 5             | 0              | 0              | 5                    | 6                        |
+| A2a | 10k     | half    | 1          | 1.43  | 1.38             | 1.48           | 1.38             | 1.48           | 0             | 14            | 0              | 0              | 14                   | 15                       |
+| A2a | 10k     | half    | 2          | 1.53  | 1.48             | 1.58           | 1.48             | 1.58           | 0             | 26            | 0              | 0              | 26                   | 27                       |
+| A2a | 10k     | half    | 3          | 1.63  | 1.58             | 1.68           | 1.58             | 1.68           | 0             | 31            | 1              | 2              | 33                   | 34                       |
+| A2a | 10k     | half    | 4          | 1.73  | 1.68             | 1.78           | 1.68             | 1.78           | 0             | 27            | 1              | 15             | 42                   | 43                       |
+
 
 ---
 
@@ -47,22 +45,27 @@ The segment identifier, e.g., `A2a`. Used to group zones by segment.
 
 ---
 
-### `zone_index`
-The index of the zone within the segment, starting at 0 and increasing with each additional CP.
+### `event_a`
+The first event in the pair being compared in a shared segment. This is typically the earlier or slower-starting event. Metrics like cp_km, zone_start_km_a, and zone_end_km_a are measured relative to this event’s course. In A2a, event_a = 10k means the 10K runners are used to anchor the segment, and all zone distances are aligned to the 10K course.
 
-For example, A2a has 5 zones, numbered 0 through 4.
+---
+
+### `event_b`
+The second event in the comparison, typically the later or faster-moving one (e.g., Half). This is the event whose participants may overtake runners from event_a in shared segments. Metrics like zone_start_km_b and zone_end_km_b are measured on this event’s course. In A2a, event_b = half means Half Marathon runners are compared to 10K runners for interactions during overlap in the shared course section.
+
+---
+### `zone_index`
+The index of the zone within the segment, starting at 0 and increasing with each additional CP. For example, A2a has 5 zones, numbered 0 through 4.
 
 ---
 
 ### `cp_km`
-The kilometer mark on Event A’s course is where an interaction zone begins. It is not a measure of overtaking, speed, or dominance. It is a spatial anchor that answers the question:
-
-_“Where on Event A’s course does this interaction zone start?”_
+The kilometer mark on Event A’s course is where an interaction zone begins. It is not a measure of overtaking, speed, or dominance. It is a spatial anchor that answers the question: _“Where on Event A’s course does this interaction zone start?”_
 
 **Key clarifications:**
 - `cp_km` always refers to Event A’s distance scale, regardless of which event is faster or doing the overtaking.
 - It is effectively equivalent to zone_start_km_a.
-- The value represents the entry point into the zone, not the midpoint and not a normalized percentage.
+- The value represents the entry point into the zone, not the midpoint, and not a normalized percentage.
 - All zone boundaries and metrics are evaluated after this point.
 
 This design allows all interaction zones to be described in a single, consistent spatial reference frame, even when:
@@ -73,7 +76,7 @@ This design allows all interaction zones to be described in a single, consistent
 **Examples**
 - A2a (10K vs Half)
    - `cp_km` = 1.33
-   - The first interaction zone begins at 1.33 km on the 10K and Half course as both events started from the same starting point and followed the same course from 0.00 km to 1.33 km. 
+   - The first interaction zone begins at 1.33 km on the 10K and Half course, as both events started from the same starting point and followed the same course from 0.00 km to 1.33 km. 
 - F1a (10K vs Half)
    - cp_km = 5.8
    - In this example, the 10k `zone_start_km_a` = 5.8, while the Half `zone_start_km_b` ≈ 2.7
@@ -131,8 +134,8 @@ This metric measures how many runners were co-located in time and space with run
 
 **Example (A2a):**  
 At `zone_index = 3`,  
-- `copresence_b = 15`: 15 Half runners were near 10K runners (they may or may not have overtaken them).  
-- `copresence_a = 1`: One 10K runner was overlapped by Half runners but not necessarily overtaken.
+- `copresence_b = 2`: 2 Half runners were near 10K runners (they may or may not have overtaken them).  
+- `copresence_a = 1`: 1 10K runner was overlapped by Half runners but not necessarily overtaken.
 
 **Note:**  
 Copresence may be 0 even when overtaking is > 0. This happens in sparse zones or when fast runners pass quickly through the zone without sustained interaction.
@@ -142,26 +145,19 @@ Copresence may be 0 even when overtaking is > 0. This happens in sparse zones or
 ### `unique_encounters`
 
 **Definition:**  
-The number of unique A–B runner *pairs* that interacted in the zone, either through overtaking or co-presence. Each pair consists of one runner from event A and one from event B who share space in the zone according to time-based proximity criteria.
-
-**Interpretation:**  
-This metric represents distinct cross-event runner combinations (e.g., A3 with B2), where interaction could mean:
+The number of unique A–B runner *pairs* that interacted in the zone, either through overtaking or co-presence. Each pair consists of one runner from event A and one from event B who share space in the zone according to time-based proximity criteria. This metric represents distinct cross-event runner combinations (e.g., A3 with B2), where interaction could mean:
 - B overtook A (or vice versa), or
 - A and B were in the zone at the same time long enough to be considered co-present.
 
-Each qualifying A–B pair counts as **one encounter**, regardless of how long they were near each other or whether overtaking occurred.
-
-**Example Table (A2a, zone_index = 0):**
+Each qualifying A–B pair counts as **one encounter**, regardless of how long they were near each other or whether overtaking occurred. Example Table (A2a, zone_index = 0) **5 unique encounters** are recorded—one for each A–B pair. Even though only one B runner is involved (B1), each distinct interaction with an A runner counts individually:
 
 | Encounter     | Counted? |
 |---------------|----------|
-| B1 → A1       | ✅       |
-| B1 → A2       | ✅       |
-| B1 → A3       | ✅       |
-| B1 → A4       | ✅       |
-| B1 → A5       | ✅       |
-
-In this example, **5 unique encounters** are recorded—one for each A–B pair. Even though only one B runner is involved (B1), each distinct interaction with an A runner counts individually.
+| B1 → A1       | Y       |
+| B1 → A2       | Y       |
+| B1 → A3       | Y       |
+| B1 → A4       | Y       |
+| B1 → A5       | Y       |
 
 ---
 
@@ -186,18 +182,13 @@ participants_involved = len(
 )
 ```
 
-This ensures all unique bibs from both events are included — whether they initiated or received interaction.
-
-**Interpretation:**
-This value represents the total number of unique runners (from A and B) that interacted within the zone. It offers a realistic view of runner exposure and density during multi-event convergence. Example (A2a, zone_index = 3):
+This ensures all unique bibs from both events are included — whether they initiated or received interaction. This value represents the total number of unique runners (from A and B) that interacted within the zone. It offers a realistic view of runner exposure and density during multi-event convergence. Example (A2a, zone_index = 3):
 - overtaking_b = 31 → 31 A runners passed by B
-- copresence_a = 1, copresence_b = 15
+- copresence_a = 1, copresence_b = 2
 - → Participants:
    - A runners: 31 overtaken + 1 co-present = 32
-   - B runners: X overtaking + 15 co-present = (at least 2 or more, depending on how many unique B runners overtook the A group)
-   - participants_involved = 34
-
-This now aligns with expected counts after the fix — previously undercounted overtaken runners are now included.
+   - B runners: 0 overtaking + 2 co-present = 2 
+   - A + B runners = participants_involved = 34
 
 Note:
 - This field does not double-count participants.
