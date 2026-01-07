@@ -33,19 +33,25 @@ async def get_flow_segments(
     day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)")
 ):
     """
-    Get flow analysis data for all segments from Flow CSV.
+    Get flow analysis data for all segments from UI artifacts.
+    
+    Issue #628: Updated to read from metrics/flow_segments.json instead of Flow.csv.
+    Returns segment-level data with worst zone metrics and nested zones.
     
     Args:
         run_id: Optional run ID (defaults to latest)
         day: Optional day code (fri|sat|sun|mon) for day-scoped data
     
     Returns:
-        Array of flow records with event pairs.
-        Each row represents a segment-event_a-event_b combination.
+        Dictionary with:
+        - selected_day: Day code
+        - available_days: List of available days
+        - flow: Dictionary keyed by composite key (seg_id_event_a_event_b) with:
+            - Segment metadata
+            - Worst zone metrics
+            - Nested zones array
     """
     try:
-        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
-        import pandas as pd
         from app.utils.run_id import get_latest_run_id, resolve_selected_day
         from app.storage import create_runflow_storage
         
@@ -55,51 +61,72 @@ async def get_flow_segments(
         selected_day, available_days = resolve_selected_day(run_id, day)
         storage = create_runflow_storage(run_id)
         
-        # Load Flow CSV from day-scoped path
+        # Issue #628: Load flow_segments.json from metrics/ subdirectory
         try:
-            # Flow.csv is at: runflow/<run_id>/<day>/reports/Flow.csv
-            csv_content = storage.read_text(f"{selected_day}/reports/Flow.csv")
+            # flow_segments.json is at: runflow/<run_id>/<day>/ui/metrics/flow_segments.json
+            flow_segments_content = storage.read_text(f"{selected_day}/ui/metrics/flow_segments.json")
             
-            if not csv_content:
-                logger.error("Failed to read Flow CSV: file is empty")
-                return JSONResponse(content=[])
+            if not flow_segments_content:
+                logger.error("Failed to read flow_segments.json: file is empty")
+                return JSONResponse(content={
+                    "selected_day": selected_day,
+                    "available_days": available_days,
+                    "flow": {}
+                })
             
-            # Parse CSV content
-            from io import StringIO
-            df = pd.read_csv(StringIO(csv_content))
+            # Parse JSON content
+            flow_segments = json.loads(flow_segments_content)
         
+        except FileNotFoundError:
+            logger.warning(f"flow_segments.json not found for day {selected_day}, returning empty flow")
+            flow_segments = {}
         except Exception as e:
-            logger.error(f"Failed to load Flow CSV: {e}")
-            return JSONResponse(content=[])
+            logger.error(f"Failed to load flow_segments.json: {e}")
+            flow_segments = {}
         
-        # Convert to the format expected by the frontend
-        flow_records = []
-        for _, row in df.iterrows():
-            # Skip empty rows
-            if pd.isna(row['seg_id']):
+        # Issue #628: Load zone_captions.json from visualizations/ subdirectory
+        zone_captions = []
+        try:
+            # zone_captions.json is at: runflow/<run_id>/<day>/ui/visualizations/zone_captions.json
+            zone_captions_content = storage.read_text(f"{selected_day}/ui/visualizations/zone_captions.json")
+            if zone_captions_content:
+                zone_captions = json.loads(zone_captions_content)
+        except FileNotFoundError:
+            logger.debug(f"zone_captions.json not found for day {selected_day}")
+        except Exception as e:
+            logger.warning(f"Failed to load zone_captions.json: {e}")
+        
+        # Issue #628: Create lookup for zone captions (keyed by seg_id_event_a_event_b_zone_index)
+        captions_lookup = {}
+        for caption in zone_captions:
+            if isinstance(caption, dict):
+                key = f"{caption.get('seg_id', '')}_{caption.get('event_a', '')}_{caption.get('event_b', '')}_{caption.get('zone_index', 0)}"
+                captions_lookup[key] = caption
+        
+        # Issue #628: Enrich flow_segments with zone captions
+        for composite_key, segment_data in flow_segments.items():
+            if not isinstance(segment_data, dict):
                 continue
-                
-            flow_record = {
-                "id": str(row['seg_id']),
-                "name": str(row['segment_label']),
-                "event_a": str(row['event_a']),
-                "event_b": str(row['event_b']),
-                "flow_type": str(row['flow_type']),
-                "overtaking_a": float(row['overtaking_a']) if pd.notna(row['overtaking_a']) else 0.0,
-                "pct_a": float(row['pct_a']) if pd.notna(row['pct_a']) else 0.0,
-                "overtaking_b": float(row['overtaking_b']) if pd.notna(row['overtaking_b']) else 0.0,
-                "pct_b": float(row['pct_b']) if pd.notna(row['pct_b']) else 0.0,
-                "copresence_a": float(row['copresence_a']) if pd.notna(row['copresence_a']) else 0.0,
-                "copresence_b": float(row['copresence_b']) if pd.notna(row['copresence_b']) else 0.0
-            }
-            flow_records.append(flow_record)
+            
+            # Add captions to each zone in the zones array
+            zones = segment_data.get("zones", [])
+            enriched_zones = []
+            for zone in zones:
+                if isinstance(zone, dict):
+                    zone_key = f"{segment_data.get('seg_id', '')}_{segment_data.get('event_a', '')}_{segment_data.get('event_b', '')}_{zone.get('zone_index', 0)}"
+                    caption = captions_lookup.get(zone_key)
+                    if caption:
+                        zone["caption"] = caption
+                    enriched_zones.append(zone)
+            
+            segment_data["zones"] = enriched_zones
         
-        logger.info(f"Loaded {len(flow_records)} flow records for day {selected_day}")
+        logger.info(f"Loaded {len(flow_segments)} flow segment entries for day {selected_day} with {len(captions_lookup)} zone captions")
         
         response = JSONResponse(content={
             "selected_day": selected_day,
             "available_days": available_days,
-            "flow": flow_records
+            "flow": flow_segments
         })
         response.headers["Cache-Control"] = "public, max-age=60"
         return response
