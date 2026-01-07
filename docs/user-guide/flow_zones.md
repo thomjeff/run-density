@@ -1,13 +1,11 @@
-
 # Flow Zones Data Guide
+**Version:** {tbd}
 
-This document provides a detailed explanation of each field in the `flow_zones` dataset, with narrative examples using real data from the A2a segment (Sunday event). It is intended for data analysts and reviewers interpreting flow dynamics in multi-convergence-point (multi‑CP) race segments.
+**Date:** 2026-01-06
 
----
 
 ## Overview
-
-Each row in `flow_zones` represents a flow analysis zone derived from convergence points (CPs) between two events (e.g., 10K and Half-Marathon) on the same segment. Zones are ~100–150m in length and are used to detect interactions such as overtaking and co-presence.
+This document provides a detailed explanation of each field in the `flow_zones` dataset, with narrative examples using real data from the A2a segment (Sunday event). It is intended for data analysts and reviewers interpreting flow dynamics in multi-convergence-point (multi‑CP) race segments. Each row in `flow_zones` represents a flow analysis zone derived from convergence points (CPs) between two events (e.g., 10K and Half-Marathon) on the same segment. Zones are ~100–150m in length and are used to detect interactions such as overtaking and co-presence.
 
 ### Example: A2a Segment
 A2a spans Queen/Regent to WSB midpoint. It includes 5 zones created during analysis between convergence points at 1.33km and 1.73km.
@@ -17,7 +15,7 @@ A2a spans Queen/Regent to WSB midpoint. It includes 5 zones created during analy
 
 **Event Start Times and Participant Counts**
 
-The two race events involved in this analysis started at different times:
+This document is based on two race events involved in an analysis that started at different times with the following runner counts:
 | Event | Start Time | Runners | 
 |-------|------------|---------|
 |10k|07:20 (440)|618|
@@ -25,34 +23,38 @@ The two race events involved in this analysis started at different times:
 
 This 20-minute gap is essential context for understanding overtaking patterns — the Half field begins behind but at a faster pace.
 
+Runners from both events shared segment A2a.
 
-## Flow Zone Key metrics:
 
-|seg_id| event_a | event_b | zone_index | cp_km | zone_start_km_a | zone_end_km_a | zone_start_km_b | zone_end_km_b | overtaking_a | overtaking_b | copresence_a | copresence_b | unique_encounters | participants_involved |
-|---|---------|---------|------------|-------|------------------|----------------|------------------|----------------|---------------|---------------|----------------|----------------|----------------------|--------------------------|
-| A2a | 10k     | half    | 0          | 1.33  | 1.28             | 1.38           | 1.28             | 1.38           | 0             | 5             | 0              | 0              | 5                    | 6                        |
-| A2a | 10k     | half    | 1          | 1.43  | 1.38             | 1.48           | 1.38             | 1.48           | 0             | 14            | 0              | 0              | 14                   | 15                       |
-| A2a | 10k     | half    | 2          | 1.53  | 1.48             | 1.58           | 1.48             | 1.58           | 0             | 26            | 0              | 0              | 26                   | 27                       |
-| A2a | 10k     | half    | 3          | 1.63  | 1.58             | 1.68           | 1.58             | 1.68           | 0             | 31            | 1              | 2              | 33                   | 34                       |
-| A2a | 10k     | half    | 4          | 1.73  | 1.68             | 1.78           | 1.68             | 1.78           | 0             | 27            | 1              | 15             | 42                   | 43                       |
+## A2a Flow Zone Metrics:
+While there are 200+ flow zones across 20+ segments, we are using A2a to provide the reader an overview of `flow_zone.parquet` The file contains the following fields with data for A2a:
+
+|seg_id| event_a | event_b | zone_index | cp_km | zone_start_km_a | zone_end_km_a | zone_start_km_b | zone_end_km_b | overtaking_a | overtaking_b | copresence_a | copresence_b | unique_encounters | participants_involved | multi_category_runners |
+|---|---------|---------|------------|-------|------------------|----------------|------------------|----------------|---------------|---------------|----------------|----------------|----------------------|--------------------------| ----- |
+| A2a | 10k     | half    | 0          | 1.33  | 1.28             | 1.38           | 1.28             | 1.38           | 0             | 5             | 0              | 0              | 5                    | 6       | 0 |                 |
+| A2a | 10k     | half    | 1          | 1.43  | 1.38             | 1.48           | 1.38             | 1.48           | 0             | 14            | 0              | 0              | 14                   | 15    | 0 |                     |
+| A2a | 10k     | half    | 2          | 1.53  | 1.48             | 1.58           | 1.48             | 1.58           | 0             | 26            | 0              | 0              | 26                   | 27   | 0 |                      |
+| A2a | 10k     | half    | 3          | 1.63  | 1.58             | 1.68           | 1.58             | 1.68           | 0             | 31            | 1              | 2              | 33                   | 34    | 1 |                     |
+| A2a | 10k     | half    | 4          | 1.73  | 1.68             | 1.78           | 1.68             | 1.78           | 0             | 27            | 1              | 15             | 42                   | 43     | 1 |                    |
 
 
 ---
 
 ## Field Definitions
+The following are field definitions with examples, where appropriate to aid in understanding:
 
 ### `seg_id`
-The segment identifier, e.g., `A2a`. Used to group zones by segment.
+The segment identifier, e.g., `A2a`. Used to group zones by segment. Segment identifiers are provided in `/data/segments.csv` provided as part of the analysis. 
 
 ---
 
 ### `event_a`
-The first event in the pair being compared in a shared segment. This is typically the earlier or slower-starting event. Metrics like cp_km, zone_start_km_a, and zone_end_km_a are measured relative to this event’s course. In A2a, event_a = 10k means the 10K runners are used to anchor the segment, and all zone distances are aligned to the 10K course.
+The first event in the pair being compared is in a shared segment. This is typically the earlier or slower-starting event. Metrics like cp_km, zone_start_km_a, and zone_end_km_a are measured relative to this event’s course. In A2a, event_a = 10k means the 10K runners are used to anchor the segment, and all zone distances are aligned to the 10K course.
 
 ---
 
 ### `event_b`
-The second event in the comparison, typically the later or faster-moving one (e.g., Half). This is the event whose participants may overtake runners from event_a in shared segments. Metrics like zone_start_km_b and zone_end_km_b are measured on this event’s course. In A2a, event_b = half means Half Marathon runners are compared to 10K runners for interactions during overlap in the shared course section.
+The second event in the comparison is typically the later or faster-moving one (e.g., Half). This is the event whose participants may overtake runners from event_a in shared segments. Metrics like zone_start_km_b and zone_end_km_b are measured on this event’s course. In A2a, event_b = half means that Half Marathon runners are compared to 10K runners for interactions during the overlap on the shared course section.
 
 ---
 ### `zone_index`
@@ -172,9 +174,8 @@ Total number of *individual* runners from either event involved in any cross-eve
 - Runners who were co-present (in the same zone at the same time)
 
 **Calculation:**
-After the recent fix (vectorized path + binned path parity), this field now uses the _full participant_ sets tracked in memory:
-
-```python
+Participants are computed by tracking full sets of bibs in memory for each interaction category. Overlapping runners (those involved in multiple categories) are deduplicated using set logic. 
+```markdown
 participants_involved = len(
     set(a_bibs_overtakes + a_bibs_overtaken + a_bibs_copresence)
     .union(
@@ -183,17 +184,84 @@ participants_involved = len(
 )
 ```
 
-This ensures all unique bibs from both events are included — whether they initiated or received interaction. This value represents the total number of unique runners (from A and B) that interacted within the zone. It offers a realistic view of runner exposure and density during multi-event convergence. Example (A2a, zone_index = 3):
-- overtaking_b = 31 → 31 A runners passed by B
-- copresence_a = 1, copresence_b = 2
-- → Participants:
-   - A runners: 31 overtaken + 1 co-present = 32
-   - B runners: 0 overtaking + 2 co-present = 2 
-   - A + B runners = participants_involved = 34
+This ensures all unique bibs from both events are included — whether they initiated or received interaction. This value represents the total number of unique runners (from A and B) that interacted within the zone. It offers a realistic view of runner exposure and density during multi-event convergence. 
+
+For exported data in `flow_zone.parquet`, the following formula validates the count:
+
+```markdown
+participants_involved = sum_of_counts - multi_category_runners
+```
+
+where:
+- sum_of_counts = overtaking_a + overtaking_b + overtaken_a + overtaken_b + copresence_a + copresence_b
+- multi_category_runners = number of runners involved in multiple interaction types (deduplication overlap)
+
+Example (A2a, zone_index = 3):
+```markdown
+overtaking_b = 31
+copresence_a = 1
+copresence_b = 2
+overtaken_a = 31 #implicit from overtaking_b
+multi_category_runners = 1
+→ sum_of_counts = 31 + 0 + 31 + 0 + 1 + 2 = 65
+→ participants_involved = 65 - 31 = 34
+```
+
+Key Notes:
+- multi_category_runners is a new field that enables validation by capturing overlaps.
+- This calculation is now accurate for both vectorized direct and binned execution paths.
+- The field is designed for accurate impact measurement across event boundaries — useful for analyzing congestion and runner experience.
 
 Note:
 - This field does not double-count participants.
 - It uses set() operations to ensure each bib is only counted once, even if a runner participated in multiple types of interactions.
+
+---
+
+### `multi_category_runners` 
+
+**Definition:**  
+The number of unique runners who participated in more than one interaction category within the same zone. An interaction category is one of:
+- Overtaking (initiated a pass)
+- Overtaken (was passed)
+- Co-present (shared the zone at the same time without a pass)
+
+If a runner appears in two or more of these categories within a zone, they are counted once in participants_involved but multiple times in the individual category counts. `multi_category_runners` captures this overlap so totals can be reconciled. This field exists to explain why:
+
+```text
+participants_involved < overtaking_a + overtaking_b + overtaken_a + overtaken_b + copresence_a + copresence_b
+```
+
+and to make the participant math auditable.
+
+**Calculation Conceptually:**
+```python
+multi_category_runners = (
+    total category counts
+    − number of unique runners across all categories
+)
+```
+
+or equivalently:
+```text
+participants_involved = sum_of_counts − multi_category_runners
+```
+
+Example (A2a, zone_index = 3):
+- One 10K runner was both:
+   - overtaken by Half runners, and
+   - co-present in the zone
+- That runner appears in multiple category counts but should only be counted once as a participant
+
+Result:
+- multi_category_runners = 1
+- Ensures participants_involved reflects unique runners only
+
+**Interpretation:**
+- A value of 0 means all runners were involved in only one type of interaction
+- Higher values indicate denser, more complex interaction patterns where runners both pass and linger near others
+
+This field enables accurate validation, precise analytics, and trustworthy interpretation of runner exposure in multi-event flow zones.
 
 ---
 
