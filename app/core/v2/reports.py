@@ -505,11 +505,14 @@ def generate_flow_report_v2(
         # export_temporal_flow_csv expects a directory path, not a file path
         # It will create Flow.csv inside that directory with timestamp
         try:
+            # Issue #627: Pass day prefix for filename (e.g., "sat", "sun")
+            day_prefix = day.value[:3]  # "saturday" -> "sat", "sunday" -> "sun"
             export_temporal_flow_csv(
                 results=v1_flow_results,
                 output_path=str(reports_path),
                 start_times=start_times,
-                run_id=run_id
+                run_id=run_id,
+                day=day_prefix
             )
             
             # Find the generated Flow.csv (might have timestamp in name)

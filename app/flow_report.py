@@ -732,7 +732,7 @@ def generate_simple_temporal_flow_report(
     )
 
 
-def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_times: Dict[str, float] = None, min_overlap_duration: float = 5.0, conflict_length_m: float = 100.0, environment: str = "local", run_id: str = None) -> None:
+def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_times: Dict[str, float] = None, min_overlap_duration: float = 5.0, conflict_length_m: float = 100.0, environment: str = "local", run_id: str = None, day: str = None) -> None:
     """Export temporal flow analysis results to CSV with enhanced formatting."""
     import csv
     import pandas as pd
@@ -928,14 +928,22 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
         except Exception as e:
             print(f"⚠️ Failed to save flow CSV to storage: {e}")
     
-    # Issue #612: Generate flow_zones.parquet if any segments have zone data
+    # Issue #627: Generate fz.parquet (renamed from flow_zones.parquet) if any segments have zone data
     zones_segments = [seg for seg in segments if "zones" in seg and seg.get("zones")]
     if zones_segments:
         output_dir = os.path.dirname(full_path)
-        zones_path = export_flow_zones_parquet(segments, output_dir, run_id)
+        zones_path = export_flow_zones_parquet(segments, output_dir, run_id, day=day)
         print(f"📊 Flow zones Parquet exported to: {zones_path}")
+        
+        # Issue #627: Generate fz_runners.parquet alongside fz.parquet
+        # This file is NOT gated by audit - it's always exported when zones exist
+        runners_path = export_fz_runners_parquet(segments, output_dir, run_id, day=day)
+        if runners_path:
+            print(f"📊 Flow zone runners Parquet exported to: {runners_path}")
+        else:
+            print("ℹ️  No runner-zone-role data to export to fz_runners.parquet")
     else:
-        print("ℹ️  No zone data to export to flow_zones.parquet")
+        print("ℹ️  No zone data to export to fz.parquet")
     
     # Generate Flow Audit CSV if any segments have audit data
     audit_segments = [seg for seg in segments if "flow_audit_data" in seg]
@@ -980,17 +988,18 @@ def format_bib_range(bib_list: List[str], max_individual: int = 3) -> str:
     return f"{', '.join(map(str, first_few))}, ... ({len(bib_list)} total)"
 
 
-def export_flow_zones_parquet(segments: List[Dict[str, Any]], output_dir: str, run_id: str = None) -> str:
+def export_flow_zones_parquet(segments: List[Dict[str, Any]], output_dir: str, run_id: str = None, day: str = None) -> str:
     """
     Export flow zones data to Parquet format.
     
-    Issue #612: Creates flow_zones.parquet with one row per zone, containing:
+    Issue #627: Creates {day}_fz.parquet with one row per zone, containing:
     - seg_id, event_a, event_b, zone_index, cp_km, zone boundaries, metrics
     
     Args:
         segments: List of segment result dictionaries with zone data
         output_dir: Directory to save the Parquet file
         run_id: Optional run ID for path organization
+        day: Day prefix for filename (e.g., "sat", "sun") - if None, no prefix
         
     Returns:
         Path to the created Parquet file
@@ -1074,14 +1083,285 @@ def export_flow_zones_parquet(segments: List[Dict[str, Any]], output_dir: str, r
     # Create DataFrame and write to Parquet
     zones_df = pd.DataFrame(zones_rows)
     
-    # Determine output path
+    # Determine output path with day prefix
     output_path = Path(output_dir)
-    zones_path = output_path / "flow_zones.parquet"
+    if day:
+        filename = f"{day}_fz.parquet"
+    else:
+        filename = "fz.parquet"
+    zones_path = output_path / filename
     
     # Write Parquet file
     zones_df.to_parquet(zones_path, index=False, engine='pyarrow')
     
     return str(zones_path)
+
+
+def export_fz_runners_parquet(segments: List[Dict[str, Any]], output_dir: str, run_id: str = None, day: str = None) -> str:
+    """
+    Export flow zone participants to Parquet format.
+    
+    Issue #627: Creates {day}_fz_runners.parquet with one row per (runner, zone, role).
+    This file contains runner-level participation in flow zones, enabling:
+    - Traceability: which runners were involved in each zone
+    - Runner-centric analytics: experience scores, density exposure
+    - Drill-downs: who was overtaken, where, how many times
+    
+    Schema:
+    - seg_id: Segment ID (e.g., A2a)
+    - zone_index: Index of the zone within the segment
+    - runner_id: Unique runner ID (bib number)
+    - event: Event name (e.g., "10k", "half")
+    - role: One of "overtaking", "overtaken", "copresent"
+    - side: "a" or "b" (event A or event B)
+    
+    Args:
+        segments: List of segment result dictionaries with zone data
+        output_dir: Directory to save the Parquet file
+        run_id: Optional run ID for path organization
+        day: Day prefix for filename (e.g., "sat", "sun") - if None, no prefix
+        
+    Returns:
+        Path to the created Parquet file, or empty string if no zones/runners
+    """
+    from pathlib import Path
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Collect all runner-zone-role rows
+    runners_rows = []
+    
+    # Debug: Track segments and zones with/without internal sets
+    segments_processed = 0
+    segments_with_runner_data = 0
+    zones_with_internal_sets = 0
+    zones_without_internal_sets = 0
+    segments_skipped_no_zones = 0
+    
+    for segment in segments:
+        seg_id = segment.get("seg_id", "")
+        event_a = segment.get("event_a", "")
+        event_b = segment.get("event_b", "")
+        zones = segment.get("zones", [])
+        
+        if not zones:
+            segments_skipped_no_zones += 1
+            continue
+        
+        segments_processed += 1
+        segment_has_runner_data = False
+        segment_zones_with_sets = 0
+        segment_zones_without_sets = 0
+        rows_before_segment = len(runners_rows)
+        
+        # Process each zone
+        for zone in zones:
+            # Handle both dict (from JSON deserialization) and ConflictZone dataclass objects
+            if isinstance(zone, dict):
+                metrics = zone.get("metrics", {})
+                zone_index = zone.get("zone_index", 0)
+            else:
+                metrics = zone.metrics
+                zone_index = zone.zone_index
+            
+            if not isinstance(metrics, dict):
+                continue
+            
+            # Extract runner sets from metrics (internal sets used for zone aggregation)
+            # Issue #627: These sets are available in zone metrics from calculate_zone_metrics_vectorized_direct
+            # and calculate_zone_metrics_vectorized_binned
+            a_bibs_overtakes = metrics.get("_a_bibs_overtakes", set())
+            a_bibs_overtaken = metrics.get("_a_bibs_overtaken", set())
+            a_bibs_copresence = metrics.get("_a_bibs_copresence", set())
+            b_bibs_overtakes = metrics.get("_b_bibs_overtakes", set())
+            b_bibs_overtaken = metrics.get("_b_bibs_overtaken", set())
+            b_bibs_copresence = metrics.get("_b_bibs_copresence", set())
+            
+            # Debug: Check if internal sets are present and non-empty
+            internal_set_keys = [
+                "_a_bibs_overtakes",
+                "_a_bibs_overtaken",
+                "_a_bibs_copresence",
+                "_b_bibs_overtakes",
+                "_b_bibs_overtaken",
+                "_b_bibs_copresence",
+            ]
+            has_internal_sets = any(
+                k in metrics and metrics[k] and len(metrics[k]) > 0
+                for k in internal_set_keys
+            )
+            
+            # Check if zone has zero counts (all interaction metrics are 0)
+            # This indicates the zone exists but has no runner interactions
+            has_zero_counts = (
+                metrics.get("overtaking_a", 0) == 0 and
+                metrics.get("overtaking_b", 0) == 0 and
+                metrics.get("overtaken_a", 0) == 0 and
+                metrics.get("overtaken_b", 0) == 0 and
+                metrics.get("copresence_a", 0) == 0 and
+                metrics.get("copresence_b", 0) == 0
+            )
+            
+            if has_internal_sets:
+                zones_with_internal_sets += 1
+                segment_zones_with_sets += 1
+                segment_has_runner_data = True
+            else:
+                zones_without_internal_sets += 1
+                segment_zones_without_sets += 1
+                
+                # Log zones skipped due to zero counts (zone exists but has no interactions)
+                if has_zero_counts:
+                    # Log at INFO level since this is expected behavior for empty zones
+                    logger.info(
+                        f"[fz_runners] Zone {seg_id} index={zone_index} skipped - zero counts "
+                        f"(no runner interactions: overtaking_a=0, overtaking_b=0, overtaken_a=0, "
+                        f"overtaken_b=0, copresence_a=0, copresence_b=0)"
+                    )
+                else:
+                    # Log missing internal sets for debugging (limit to avoid log spam)
+                    # This case indicates internal sets are missing (not just empty)
+                    if zones_without_internal_sets <= 10:
+                        logger.debug(
+                            f"[fz_runners] Zone {seg_id} index={zone_index} - no internal runner sets. "
+                            f"Metrics keys: {list(metrics.keys())[:10]}..."
+                        )
+            
+            # Convert sets to lists if needed (handle JSON deserialization)
+            def normalize_set(s):
+                if isinstance(s, list):
+                    return set(s)
+                elif isinstance(s, set):
+                    return s
+                else:
+                    return set()
+            
+            a_bibs_overtakes = normalize_set(a_bibs_overtakes)
+            a_bibs_overtaken = normalize_set(a_bibs_overtaken)
+            a_bibs_copresence = normalize_set(a_bibs_copresence)
+            b_bibs_overtakes = normalize_set(b_bibs_overtakes)
+            b_bibs_overtaken = normalize_set(b_bibs_overtaken)
+            b_bibs_copresence = normalize_set(b_bibs_copresence)
+            
+            # Emit rows for event A runners
+            # Role: overtaking (A runners who overtook B runners)
+            for runner_id in a_bibs_overtakes:
+                runners_rows.append({
+                    "seg_id": seg_id,
+                    "zone_index": zone_index,
+                    "runner_id": int(runner_id) if isinstance(runner_id, (int, str)) and str(runner_id).isdigit() else runner_id,
+                    "event": event_a,
+                    "role": "overtaking",
+                    "side": "a",
+                })
+            
+            # Role: overtaken (A runners who were overtaken by B runners)
+            for runner_id in a_bibs_overtaken:
+                runners_rows.append({
+                    "seg_id": seg_id,
+                    "zone_index": zone_index,
+                    "runner_id": int(runner_id) if isinstance(runner_id, (int, str)) and str(runner_id).isdigit() else runner_id,
+                    "event": event_a,
+                    "role": "overtaken",
+                    "side": "a",
+                })
+            
+            # Role: copresent (A runners who were copresent with B runners)
+            for runner_id in a_bibs_copresence:
+                runners_rows.append({
+                    "seg_id": seg_id,
+                    "zone_index": zone_index,
+                    "runner_id": int(runner_id) if isinstance(runner_id, (int, str)) and str(runner_id).isdigit() else runner_id,
+                    "event": event_a,
+                    "role": "copresent",
+                    "side": "a",
+                })
+            
+            # Emit rows for event B runners
+            # Role: overtaking (B runners who overtook A runners)
+            for runner_id in b_bibs_overtakes:
+                runners_rows.append({
+                    "seg_id": seg_id,
+                    "zone_index": zone_index,
+                    "runner_id": int(runner_id) if isinstance(runner_id, (int, str)) and str(runner_id).isdigit() else runner_id,
+                    "event": event_b,
+                    "role": "overtaking",
+                    "side": "b",
+                })
+            
+            # Role: overtaken (B runners who were overtaken by A runners)
+            for runner_id in b_bibs_overtaken:
+                runners_rows.append({
+                    "seg_id": seg_id,
+                    "zone_index": zone_index,
+                    "runner_id": int(runner_id) if isinstance(runner_id, (int, str)) and str(runner_id).isdigit() else runner_id,
+                    "event": event_b,
+                    "role": "overtaken",
+                    "side": "b",
+                })
+            
+            # Role: copresent (B runners who were copresent with A runners)
+            for runner_id in b_bibs_copresence:
+                runners_rows.append({
+                    "seg_id": seg_id,
+                    "zone_index": zone_index,
+                    "runner_id": int(runner_id) if isinstance(runner_id, (int, str)) and str(runner_id).isdigit() else runner_id,
+                    "event": event_b,
+                    "role": "copresent",
+                    "side": "b",
+                })
+        
+        # Track segments that contributed runner data
+        rows_after_segment = len(runners_rows)
+        rows_added_this_segment = rows_after_segment - rows_before_segment
+        
+        if segment_has_runner_data:
+            segments_with_runner_data += 1
+            logger.debug(
+                f"[fz_runners] Segment {seg_id}: {segment_zones_with_sets} zones with sets, "
+                f"{segment_zones_without_sets} zones without sets, {rows_added_this_segment} runner rows added"
+            )
+        elif segment_zones_without_sets > 0:
+            # Log segments that have zones but no internal sets (helpful for debugging)
+            logger.debug(
+                f"[fz_runners] Segment {seg_id}: {len(zones)} zones, but none have internal sets "
+                f"({segment_zones_without_sets} zones checked)"
+            )
+    
+    # Debug: Log summary statistics
+    logger.info(
+        f"[fz_runners] Export summary: {segments_processed} segments processed, "
+        f"{segments_with_runner_data} segments with runner data, "
+        f"{segments_skipped_no_zones} segments skipped (no zones), "
+        f"{zones_with_internal_sets} zones with internal sets, "
+        f"{zones_without_internal_sets} zones without internal sets, "
+        f"{len(runners_rows)} total runner rows"
+    )
+    
+    if not runners_rows:
+        # No runner-zone-role data to export
+        logger.warning(
+            f"[fz_runners] No runner rows generated. "
+            f"Processed {segments_processed} segments with zones, "
+            f"but {zones_without_internal_sets} zones had no internal sets."
+        )
+        return ""
+    
+    # Create DataFrame and write to Parquet
+    runners_df = pd.DataFrame(runners_rows)
+    
+    # Determine output path with day prefix
+    output_path = Path(output_dir)
+    if day:
+        filename = f"{day}_fz_runners.parquet"
+    else:
+        filename = "fz_runners.parquet"
+    runners_path = output_path / filename
+    
+    # Write Parquet file
+    runners_df.to_parquet(runners_path, index=False, engine='pyarrow')
+    
+    return str(runners_path)
 
 
 def generate_flow_audit_csv(

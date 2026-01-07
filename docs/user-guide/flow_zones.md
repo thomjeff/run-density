@@ -7,7 +7,36 @@
 ## Overview
 This document provides a detailed explanation of each field in the `flow_zones` dataset, with narrative examples using real data from the A2a segment (Sunday event). It is intended for data analysts and reviewers interpreting flow dynamics in multi-convergence-point (multi‑CP) race segments. Each row in `flow_zones` represents a flow analysis zone derived from convergence points (CPs) between two events (e.g., 10K and Half-Marathon) on the same segment. Zones are ~100–150m in length and are used to detect interactions such as overtaking and co-presence.
 
-### Example: A2a Segment
+## Flow Zone Metrics: Direct vs. Binned Execution Paths
+
+The flow zone computation engine supports two different execution paths depending on the size and complexity of the zone:
+
+### `calculate_zone_metrics_vectorized_direct`
+This path is used when the zone size is small enough to safely process all pairwise overlaps in memory.
+
+- **Trigger:** Zones that fall below defined thresholds for size and overlap count.
+- **Behavior:** Processes all overlaps in a fully vectorized manner.
+- **Pros:** Fast, precise, and accumulates full runner interaction sets (e.g., `_a_bibs_overtaken`).
+- **Use Case:** Small segments like A2a or A3a.
+
+### `calculate_zone_metrics_vectorized_binned`
+This path is used for larger zones with more runners or denser overlap windows.
+
+- **Trigger:** Exceeds internal thresholds on runner count or interaction density.
+- **Behavior:** Splits the zone into smaller time/distance bins, processes each bin individually, and aggregates the results.
+- **Pros:** Scalable and avoids memory issues.
+- **Caveat (now fixed):** Previously did **not** return internal runner sets, which meant runner-level exports like `fz_runners.parquet` lacked data for zones processed this way.
+
+> ✅ As of 2026-01, both paths now return full internal runner sets to support downstream exports like `fz_runners.parquet`.
+
+### Why Two Paths?
+This dual-path architecture balances:
+- **Performance** for large events with thousands of runners.
+- **Precision** for zones where full in-memory computation is feasible.
+
+This design allows the flow zone engine to scale across a wide range of course types, event sizes, and concurrency levels.
+
+## Flow Zome Example: A2a Segment
 A2a spans Queen/Regent to WSB midpoint. It includes 5 zones created during analysis between convergence points at 1.33km and 1.73km.
 
 ![A2a Flow Visualization](https://github.com/thomjeff/run-density/blob/main/docs/user-guide/a2segment.png?raw=true) 
@@ -27,7 +56,7 @@ Runners from both events shared segment A2a.
 
 
 ## A2a Flow Zone Metrics:
-While there are 200+ flow zones across 20+ segments, we are using A2a to provide the reader an overview of `flow_zones.parquet` The file contains the following fields with data for A2a:
+While there are 200+ flow zones across 20+ segments, we are using A2a to provide the reader an overview of `{day}_fz.parquet` (renamed from `flow_zones.parquet` in Issue #627). The file contains the following fields with data for A2a:
 
 
 | seg_id   | event_a   | event_b   |   zone_index |   cp_km | cp_type   | zone_source   |   zone_start_km_a |   zone_end_km_a |   zone_start_km_b |   zone_end_km_b |   overtaking_a |   overtaking_b |   overtaken_a |   overtaken_b |   copresence_a |   copresence_b |   unique_encounters |   participants_involved |   multi_category_runners |
@@ -190,18 +219,47 @@ Copresence may be 0 even when overtaking is > 0. This happens in sparse zones or
 
 **Definition:**  
 The number of unique A–B runner *pairs* that interacted in the zone, either through overtaking or co-presence. Each pair consists of one runner from event A and one from event B who share space in the zone according to time-based proximity criteria. This metric represents distinct cross-event runner combinations (e.g., A3 with B2), where interaction could mean:
+
 - B overtook A (or vice versa), or
 - A and B were in the zone at the same time long enough to be considered co-present.
 
-Each qualifying A–B pair counts as **one encounter**, regardless of how long they were near each other or whether overtaking occurred. Example Table (A2a, zone_index = 0) **5 unique encounters** are recorded—one for each A–B pair. Even though only one B runner is involved (B1), each distinct interaction with an A runner counts individually:
+Each qualifying A–B pair counts as **one encounter**, regardless of how long they were near each other or whether overtaking occurred.
 
-| Encounter     | Counted? |
-|---------------|----------|
-| B1 → A1       | Y       |
-| B1 → A2       | Y       |
-| B1 → A3       | Y       |
-| B1 → A4       | Y       |
-| B1 → A5       | Y       |
+#### Example Table (A2a, zone_index = 0) 
+**5 unique encounters** are recorded—one for each A–B pair. Even though only one B runner is involved (B1), each distinct interaction with an A runner counts individually:
+
+| Encounter     | Counted? | Cumulative Count | 
+|---------------|----------|------------------|
+| B1 → A1       | Y        | 1                |
+| B1 → A2       | Y        | 2                |
+| B1 → A3       | Y        | 3                |
+| B1 → A4       | Y        | 4                |
+| B1 → A5       | Y        | 5                |
+
+---
+
+#### Example: I1, Zone 7 (event_a = Half, event_b = Full)
+
+| Metric               | Value   |
+|----------------------|---------|
+| unique_encounters    | 12,974  |
+| overtaking_a         | 0       |
+| overtaking_b         | 0       |
+| overtaken_a          | 0       |
+| overtaken_b          | 0       |
+| copresence_a         | 0       |
+| copresence_b         | 0       |
+
+In this case, **12,974 unique A–B pairs** were detected as being in proximity within the zone — yet none met the stricter rules to qualify as overtaking or copresent.
+
+This can happen when:
+- Runners from both events overlap briefly within bins but not long enough for classification.
+- Their time offsets don't allow for sustained zone overlap.
+- They were detected in the same bin once, which qualifies as an encounter but not an interaction.
+
+This illustrates the distinction between *potential interaction* (`unique_encounters`) and *confirmed interaction* (the other metrics).
+
+**Usage tip:** `unique_encounters` is excellent for identifying zones of *latent crowding risk* — even when the zone appears "quiet" by other metrics.
 
 ---
 
@@ -250,8 +308,11 @@ overtaken_a = 1
 overtaken_b = 0
 copresence_a = 1
 copresence_b = 2
-multi_category_runners = 1
+multi_category_runners = 1 (see below)
+#count:
 → sum_of_counts = 0 + 31 + 1 + 0 + 1 + 2 = 35
+#calculate multi-category:
+→ participants_involved = sum_of_counts = multi_category_runners 
 → participants_involved = 35 - 1 = 34
 ```
 
@@ -269,18 +330,22 @@ Note:
 ### `multi_category_runners` 
 
 **Definition:**  
-The number of unique runners who participated in more than one interaction category within the same zone. An interaction category is one of:
+The number of unique runners who participated in more than one interaction role within the same zone. Interaction roles include:
 - Overtaking (initiated a pass)
-- Overtaken (was passed)
-- Co-present (shared the zone at the same time without a pass)
+- Overtaken (was passed by another runner)
+- Copresent (shared the zone with another runner without a pass)
 
-If a runner appears in two or more of these categories within a zone, they are counted once in participants_involved but multiple times in the individual category counts. `multi_category_runners` captures this overlap so totals can be reconciled. This field exists to explain why:
+These roles are captured in fz_runners.parquet as role values. If a runner appears in multiple roles within a zone (e.g., both overtaken and copresent), they are:
+- Counted multiple times in the individual role totals (e.g., overtaken_a, copresence_a),
+- But only once in participants_involved.
+
+`multi_category_runners` quantifies this overlap, allowing accurate reconstruction of unique participant counts using the equation:
 
 ```text
 participants_involved < overtaking_a + overtaking_b + overtaken_a + overtaken_b + copresence_a + copresence_b
 ```
 
-and to make the participants_involved calculation auditable.
+and to make the `participants_involved` calculation auditable.
 
 **Calculation Conceptually:**
 ```python
@@ -301,13 +366,51 @@ Example (A2a, zone_index = 3):
    - co-present in the zone
 - That runner appears in multiple category counts but should only be counted once as a participant
 
+Result is `multi_category_runners` = 1 and ensures participants_involved reflects unique runners only
+
+```text
+overtaking_a = 0
+overtaking_b = 31
+overtaken_a = 1
+overtaken_b = 0
+copresence_a = 1
+copresence_b = 2
+sum_of_counts = 35
+participants_involved = 34
+multi_category_runners = 1
+```
+
+This means one runner appears in two roles (overtaken + copresent).
+
+```sql
+SELECT
+  seg_id,
+  zone_index,
+  runner_id,
+  COUNT(DISTINCT role) AS role_count,
+  ARRAY_AGG(role) AS roles
+FROM
+  sun_fz_runners
+WHERE
+  seg_id = 'A2a'
+  AND zone_index = 3
+GROUP BY
+  seg_id,
+  zone_index,
+  runner_id
+HAVING
+  COUNT(DISTINCT role) > 1;
+```
+
 Result:
-- multi_category_runners = 1
-- Ensures participants_involved reflects unique runners only
+
+| seg_id | zone_index | runner_id | role_count | roles |
+|---|---|---|---|---|
+| A2a | 3 | 1529 | 2 | overtaken, copresent | 
 
 **Interpretation:**
-- A value of 0 means all runners were involved in only one type of interaction
-- Higher values indicate denser, more complex interaction patterns where runners both pass and linger near others
+- A multi_category_runners value of 0 means all runners were only involved in a single interaction role.
+- A value >0 indicates more complex interactions — e.g., runners who were overtaken but also remained near other runners (copresence), or overtook multiple people and lingered.
 
 This field enables accurate validation, precise analytics, and trustworthy interpretation of runner exposure in multi-event flow zones.
 
@@ -366,6 +469,37 @@ To improve user interpretability, a future enhancement could display in the runf
 - Add `num_overtakers_b` to measure how many B runners did the overtaking.
 - Add `dwell_time_*` to support experience-focused metrics.
 - In reports/UI, show `zone_index/total_zones` to help locate interaction zones.
+
+---
+
+## Related Artifacts
+
+### `{day}_fz_runners.parquet` (Issue #627)
+
+The `{day}_fz_runners.parquet` file (e.g., `sat_fz_runners.parquet`, `sun_fz_runners.parquet`) provides runner-level participation data for flow zones. This file contains one row per (runner, zone, role) combination, enabling:
+
+- **Traceability**: Identify which specific runners were involved in each zone
+- **Runner-centric analytics**: Build experience scores, density exposure metrics
+- **Drill-downs**: Analyze who was overtaken, where, and how many times
+
+**Schema:**
+- `seg_id`: Segment ID (e.g., A2a)
+- `zone_index`: Index of the zone within the segment
+- `runner_id`: Unique runner ID (bib number)
+- `event`: Event name (e.g., "10k", "half")
+- `role`: One of "overtaking", "overtaken", "copresent"
+- `side`: "a" or "b" (event A or event B)
+
+**Key Notes:**
+- A single runner may appear multiple times in a zone (e.g., both "overtaken" and "copresent")
+- This file is derived from zone metrics only (not audit logic) and is always exported alongside `{day}_fz.parquet`
+- Pass flags (`pass_flag_raw`, `pass_flag_strict`) are not included in v1 as they require audit logic
+- Files are prefixed with day (e.g., `sat_`, `sun_`) for multi-day analysis
+
+**Relationship to `{day}_fz.parquet`:**
+- Join using `seg_id` + `zone_index` to link runner participation to zone metrics
+- Use `runner_id` to trace individual runner experiences across zones
+- Aggregate by `role` to understand interaction patterns
 
 ---
 
