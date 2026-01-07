@@ -795,6 +795,38 @@ def analyze_temporal_flow_segments_v2(
             else:
                 logger.info(f"Day {day.value}: Audit generation skipped - enable_audit={enable_audit}, run_path={run_path}")
             
+            # Issue #627: Export fz_runners.parquet before JSON serialization
+            # (internal runner sets are filtered out during JSON serialization)
+            # This export is NOT gated by audit - it's always exported when zones exist
+            if run_path is not None:
+                # Export fz_runners.parquet from in-memory zones (before serialization)
+                day_path = run_path / day.value
+                reports_path = day_path / "reports"
+                reports_path.mkdir(parents=True, exist_ok=True)
+                
+                try:
+                    from app.flow_report import export_fz_runners_parquet
+                    segments_list = flow_results.get('segments', [])
+                    if segments_list:
+                        # Debug: Log segment count and which segments have zones
+                        segments_with_zones = [s for s in segments_list if s.get('zones')]
+                        logger.info(f"Day {day.value}: Exporting fz_runners.parquet - {len(segments_list)} total segments, {len(segments_with_zones)} with zones")
+                        if len(segments_with_zones) < len(segments_list):
+                            seg_ids_with_zones = [s.get('seg_id') for s in segments_with_zones]
+                            seg_ids_without_zones = [s.get('seg_id') for s in segments_list if not s.get('zones')]
+                            logger.debug(f"Day {day.value}: Segments with zones: {seg_ids_with_zones[:5]}... (showing first 5)")
+                            logger.debug(f"Day {day.value}: Segments without zones: {seg_ids_without_zones[:5]}... (showing first 5)")
+                        
+                        # Issue #627: Pass day prefix for filename (e.g., "sat", "sun")
+                        day_prefix = day.value[:3]  # "saturday" -> "sat", "sunday" -> "sun"
+                        runners_path = export_fz_runners_parquet(segments_list, str(reports_path), run_id, day=day_prefix)
+                        if runners_path:
+                            logger.info(f"Day {day.value}: Exported fz_runners.parquet to {runners_path}")
+                        else:
+                            logger.debug(f"Day {day.value}: No runner-zone-role data to export")
+                except Exception as e:
+                    logger.warning(f"Day {day.value}: Failed to export fz_runners.parquet: {e}", exc_info=True)
+            
             results_by_day[day] = flow_results
             
             logger.info(

@@ -1065,6 +1065,16 @@ def calculate_zone_metrics_vectorized_binned(
         "unique_encounters": total_unique_encounters,
         "participants_involved": participants_involved,
         "multi_category_runners": multi_category_runners,  # Issue #622: Overlap count for validation
+        # Full participant sets for accurate cross-bin accumulation (internal use)
+        "_all_a_bibs": all_a_bibs_across_bins,  # Full set of A runners (overtaking + overtaken + copresence)
+        "_all_b_bibs": all_b_bibs_across_bins,  # Full set of B runners (overtaking + overtaken + copresence)
+        # Issue #627: Include internal sets for fz_runners.parquet export
+        "_a_bibs_overtakes": all_a_bibs_overtakes,  # A runners who overtook (full set)
+        "_b_bibs_overtakes": all_b_bibs_overtakes,  # B runners who overtook (full set)
+        "_a_bibs_overtaken": all_a_bibs_overtaken,  # A runners who were overtaken (full set)
+        "_b_bibs_overtaken": all_b_bibs_overtaken,  # B runners who were overtaken (full set)
+        "_a_bibs_copresence": all_a_bibs_copresence,  # A runners who were copresent (full set)
+        "_b_bibs_copresence": all_b_bibs_copresence,  # B runners who were copresent (full set)
     }
 
 

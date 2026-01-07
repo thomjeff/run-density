@@ -151,8 +151,8 @@ class TestV2E2EScenarios:
             "density_md": day_dir / "reports" / "Density.md",
             "flow_csv": day_dir / "reports" / "Flow.csv",
             # Issue #600: Flow.md deprecated (only Flow.csv used)
-            # Issue #612: flow_zones.parquet may not exist if no zones detected (optional)
-            "flow_zones_parquet": day_dir / "reports" / "flow_zones.parquet",
+            # Issue #627: {day}_fz.parquet may not exist if no zones detected (optional)
+            "flow_zones_parquet": day_dir / "reports" / f"{day}_fz.parquet",
             "bins_parquet": day_dir / "bins" / "bins.parquet",
             "metadata_json": day_dir / "metadata.json",
             
@@ -182,7 +182,7 @@ class TestV2E2EScenarios:
         
         # Verify all expected files exist (except optional files)
         missing = []
-        optional_files = ["flow_zones_parquet"]  # Issue #612: flow_zones.parquet is optional if no zones
+        optional_files = ["flow_zones_parquet"]  # Issue #627: {day}_fz.parquet is optional if no zones
         for name, path in expected_files.items():
             if not path.exists():
                 if name not in optional_files:
@@ -297,20 +297,20 @@ class TestV2E2EScenarios:
         print(f"✅ Flow.csv multi-zone columns validated for {day}")
     
     def _verify_flow_zones_parquet(self, run_id: str, day: str) -> Optional[Path]:
-        """Verify flow_zones.parquet exists and has valid structure.
+        """Verify {day}_fz.parquet exists and has valid structure.
         
-        Issue #612: Validates flow_zones.parquet file structure.
+        Issue #627: Validates {day}_fz.parquet file structure (renamed from flow_zones.parquet).
         
         Args:
             run_id: Run ID to check
             day: Day code (e.g., "sat", "sun")
             
         Returns:
-            Path to flow_zones.parquet if it exists, None otherwise
+            Path to {day}_fz.parquet if it exists, None otherwise
         """
         run_dir = self._get_run_directory(run_id)
         day_dir = run_dir / day
-        zones_parquet = day_dir / "reports" / "flow_zones.parquet"
+        zones_parquet = day_dir / "reports" / f"{day}_fz.parquet"
         
         if not zones_parquet.exists():
             # Optional file - return None if missing
@@ -327,34 +327,34 @@ class TestV2E2EScenarios:
                 "copresence_a", "copresence_b", "unique_encounters", "participants_involved"
             ]
             missing_cols = [col for col in expected_cols if col not in zones_df.columns]
-            assert not missing_cols, f"flow_zones.parquet missing columns for {day}: {missing_cols}"
+            assert not missing_cols, f"{day}_fz.parquet missing columns for {day}: {missing_cols}"
             
             # Validate zone_index (should be non-negative integers)
-            assert all(zones_df["zone_index"] >= 0), f"Invalid zone_index values in {day} flow_zones.parquet"
+            assert all(zones_df["zone_index"] >= 0), f"Invalid zone_index values in {day} {day}_fz.parquet"
             
             # Validate cp_type values
             valid_cp_types = {"true_pass", "bin_peak"}
             invalid_types = set(zones_df["cp_type"].unique()) - valid_cp_types
-            assert not invalid_types, f"Invalid cp_type values in {day} flow_zones.parquet: {invalid_types}"
+            assert not invalid_types, f"Invalid cp_type values in {day} {day}_fz.parquet: {invalid_types}"
             
-            print(f"✅ flow_zones.parquet verified for {day}: {len(zones_df)} zones, {zones_parquet.stat().st_size / 1024:.1f} KB")
+            print(f"✅ {day}_fz.parquet verified for {day}: {len(zones_df)} zones, {zones_parquet.stat().st_size / 1024:.1f} KB")
             
         except Exception as e:
-            raise AssertionError(f"Failed to read/validate flow_zones.parquet for {day}: {e}")
+            raise AssertionError(f"Failed to read/validate {day}_fz.parquet for {day}: {e}")
         
         return zones_parquet
     
     def _verify_zones_cross_validation(self, flow_csv_path: Path, zones_parquet_path: Path, day: str) -> None:
-        """Cross-validate flow_zones.parquet with Flow.csv.
+        """Cross-validate {day}_fz.parquet with Flow.csv.
         
-        Issue #612: Validates that:
-        - Segments in Flow.csv with zones have corresponding rows in flow_zones.parquet
-        - worst_zone_index in Flow.csv matches a valid zone_index in flow_zones.parquet
+        Issue #627: Validates that:
+        - Segments in Flow.csv with zones have corresponding rows in {day}_fz.parquet
+        - worst_zone_index in Flow.csv matches a valid zone_index in {day}_fz.parquet
         - convergence_points_json aligns with zones data
         
         Args:
             flow_csv_path: Path to Flow.csv
-            zones_parquet_path: Path to flow_zones.parquet
+            zones_parquet_path: Path to {day}_fz.parquet
             day: Day code for logging
         """
         import json
@@ -380,7 +380,7 @@ class TestV2E2EScenarios:
             worst_zone_idx = flow_row.get("worst_zone_index")
             cp_json_str = flow_row.get("convergence_points_json", "")
             
-            # If segment has zones in flow_zones.parquet, validate alignment
+            # If segment has zones in {day}_fz.parquet, validate alignment
             if key in zones_by_segment:
                 zones = zones_by_segment[key]
                 
