@@ -5,6 +5,7 @@ _This is part of Flow enhancements for the end-user via UI (this issue) and CSV 
 - Are located in /codex/7iHmDgGFMZdpjLmZRVgYWY
 - UI artifacts (sunday): /codex/7iHmDgGFMZdpjLmZRVgYWY/sun/ui
 - captions.json: /codex/7iHmDgGFMZdpjLmZRVgYWY/sun/ui/visualizations
+- seg_id F1a and zone_index = 8 export to csv for reference: sun_fz_202601071257.csv in /codex/issue628
 
 **Definition of Done:** this enhancement will require changes to the UI, the .json files that serve the UI and the API. The issue is considered complete when the end-to-end from analysis that produces the UI artifacts to rendering the UI is successful._
 
@@ -80,7 +81,7 @@ Add a contextual, human-readable summary for each zone, helping users interpret 
 ---
 
 ### Future Enhancements
-- Visualization like Density that shows a heatmap type visual across all zones in a segment.
+- Visualization like Density that shows a heatmap type visual across all zones in a segment. TODO: Ask Codex for ideas on how to visualize zone_index metrics for a segment. Sample for seg_id = F1a and zone_index = 8: [sun_fz_202601071257.csv](https://github.com/user-attachments/files/24482817/sun_fz_202601071257.csv) (Codex: see sun_fz_202601071257.csv in /codex/issue628)
 
 ---
 
