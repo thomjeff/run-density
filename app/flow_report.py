@@ -733,10 +733,26 @@ def generate_simple_temporal_flow_report(
 
 
 def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_times: Dict[str, float] = None, min_overlap_duration: float = 5.0, conflict_length_m: float = 100.0, environment: str = "local", run_id: str = None, day: str = None) -> None:
-    """Export temporal flow analysis results to CSV with enhanced formatting."""
+    """
+    Export temporal flow analysis results to CSV with zone-level granularity.
+    
+    Issue #629: Updated to output one row per zone (seg_id + zone_index) instead of one row per segment.
+    This aligns flow.csv with the zone-level structure used in fz.parquet.
+    
+    Args:
+        results: Flow analysis results containing segments with zones
+        output_path: Base output directory
+        start_times: Event start times (deprecated, kept for backward compatibility)
+        min_overlap_duration: Minimum overlap duration (deprecated, kept for backward compatibility)
+        conflict_length_m: Conflict length in meters (deprecated, kept for backward compatibility)
+        environment: Environment name (deprecated, kept for backward compatibility)
+        run_id: Run ID for path organization
+        day: Day prefix for filename (e.g., "sat", "sun")
+    """
     import csv
     import pandas as pd
-    from datetime import datetime
+    import logging
+    logger = logging.getLogger(__name__)
     
     # Use date-based organization and standardized naming
     full_path, relative_path = get_report_paths("Flow", "csv", output_path)
@@ -760,155 +776,159 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
     
     segments = sorted(segments, key=sort_key)
     
+    # Issue #629: Collect zone-level rows instead of segment-level
+    zone_rows = []
+    
+    for segment in segments:
+        seg_id = segment.get("seg_id", "")
+        zones = segment.get("zones", [])
+        
+        if not zones:
+            # Skip segments without zones
+            continue
+        
+        # Get segment-level metadata (repeated for each zone)
+        segment_label = segment.get("segment_label", "")
+        event_a = segment.get("event_a", "")
+        event_b = segment.get("event_b", "")
+        total_a = segment.get("total_a", 0)
+        total_b = segment.get("total_b", 0)
+        flow_type = segment.get("flow_type", "")
+        has_convergence = segment.get("has_convergence", False)
+        
+        # Get width from segments.csv
+        seg_row = segments_df[segments_df['seg_id'] == seg_id]
+        if not seg_row.empty:
+            width_val = seg_row['width_m'].iloc[0]
+            if pd.isna(width_val) or width_val == '':
+                from app.utils.constants import DEFAULT_CONFLICT_LENGTH_METERS
+                width_m = DEFAULT_CONFLICT_LENGTH_METERS
+            else:
+                width_m = float(width_val)
+        else:
+            from app.utils.constants import DEFAULT_CONFLICT_LENGTH_METERS
+            width_m = DEFAULT_CONFLICT_LENGTH_METERS
+        
+        # Process each zone in this segment
+        # Sort zones by zone_index to ensure consistent ordering
+        sorted_zones = sorted(zones, key=lambda z: (
+            z.get("zone_index", 0) if isinstance(z, dict) else z.zone_index
+        ))
+        
+        for zone in sorted_zones:
+            # Handle both dict (from JSON deserialization) and ConflictZone dataclass objects
+            if isinstance(zone, dict):
+                metrics = zone.get("metrics", {})
+                zone_index = zone.get("zone_index", 0)
+                cp_km = zone.get("cp", {}).get("km", 0) if isinstance(zone.get("cp"), dict) else None
+                cp_type = zone.get("cp", {}).get("type", "") if isinstance(zone.get("cp"), dict) else ""
+                zone_source = zone.get("source", "")
+                zone_start_km_a = zone.get("zone_start_km_a", 0)
+                zone_end_km_a = zone.get("zone_end_km_a", 0)
+                zone_start_km_b = zone.get("zone_start_km_b", 0)
+                zone_end_km_b = zone.get("zone_end_km_b", 0)
+            else:
+                # ConflictZone dataclass object
+                metrics = zone.metrics
+                zone_index = zone.zone_index
+                cp_km = zone.cp.km if zone.cp else None
+                cp_type = zone.cp.type if zone.cp else ""
+                zone_source = zone.source
+                zone_start_km_a = zone.zone_start_km_a
+                zone_end_km_a = zone.zone_end_km_a
+                zone_start_km_b = zone.zone_start_km_b
+                zone_end_km_b = zone.zone_end_km_b
+            
+            if not isinstance(metrics, dict):
+                continue
+            
+            # Extract zone-level metrics
+            zone_overtaking_a = metrics.get("overtaking_a", 0)
+            zone_overtaking_b = metrics.get("overtaking_b", 0)
+            zone_copresence_a = metrics.get("copresence_a", 0)
+            zone_copresence_b = metrics.get("copresence_b", 0)
+            zone_unique_encounters = metrics.get("unique_encounters", 0)
+            zone_participants_involved = metrics.get("participants_involved", 0)
+            
+            # Calculate zone-level percentages (using segment totals)
+            pct_a = round((zone_overtaking_a / total_a * 100), 1) if total_a > 0 else 0.0
+            pct_b = round((zone_overtaking_b / total_b * 100), 1) if total_b > 0 else 0.0
+            
+            # Issue #629: Field order matches issue table (updated: zone fields after flow_type)
+            zone_row = [
+                # Keep fields
+                seg_id,
+                segment_label,
+                event_a,
+                event_b,
+                total_a,
+                total_b,
+                flow_type,
+                # Zone identification fields (moved after flow_type)
+                zone_index,
+                round(float(cp_km), 2) if cp_km is not None else None,
+                cp_type,
+                zone_source,
+                # Replace fields (zone boundaries)
+                round(float(zone_start_km_a), 2),
+                round(float(zone_end_km_a), 2),
+                round(float(zone_start_km_b), 2),
+                round(float(zone_end_km_b), 2),
+                width_m,
+                # Update fields (zone-level metrics)
+                zone_overtaking_a,
+                zone_overtaking_b,
+                # pct_a, pct_b (keep, calculated at zone level)
+                pct_a,
+                pct_b,
+                zone_copresence_a,
+                zone_copresence_b,
+                zone_unique_encounters,
+                zone_participants_involved,
+                # has_convergence (segment-level, repeated per zone)
+                has_convergence,
+            ]
+            
+            zone_rows.append(zone_row)
+    
+    # Write CSV with zone-level rows
     with open(full_path, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         
-        # Reorganized header with logical column grouping for better readability
+        # Issue #629: Header matches field order from issue table (updated: zone fields after flow_type)
         writer.writerow([
-            # Group 1: Segment Identification & Context
-            "seg_id", "segment_label", "event_a", "event_b", "total_a", "total_b", 
-            "flow_type", "from_km_a", "to_km_a", "from_km_b", "to_km_b", "width_m",
-            
-            # Group 2: Encounter Results & Analysis  
-            "overtaking_a", "overtaking_b", "sample_a", "sample_b", "pct_a", "pct_b",
-            "copresence_a", "copresence_b", "unique_encounters", "participants_involved",
-            
-            # Group 3: Runner Experience Analysis (Overtaking Loads)
-            "overtaking_load_a", "overtaking_load_b", "max_overtaking_load_a", "max_overtaking_load_b",
-            
-            # Group 4: Technical & Debugging
-            "spatial_zone_exists", "temporal_overlap_exists", "true_pass_exists",
-            "has_convergence_policy", "has_convergence", "convergence_zone_start",
-            "convergence_zone_end", "no_pass_reason_code", "conflict_length_m",
-            # Issue #612: Multi-zone fields
-            "worst_zone_index", "convergence_points_json",
-            
-            # Group 5: Metadata (moved to end as requested)
-            "analysis_timestamp", "app_version", "environment", "data_source",
-            "start_times", "min_overlap_duration", "conflict_length_m"
+            "seg_id",
+            "segment_label",
+            "event_a",
+            "event_b",
+            "total_a",
+            "total_b",
+            "flow_type",
+            "zone_index",
+            "cp_km",
+            "cp_type",
+            "zone_source",
+            "zone_start_km_a",
+            "zone_end_km_a",
+            "zone_start_km_b",
+            "zone_end_km_b",
+            "width_m",
+            "overtaking_a",
+            "overtaking_b",
+            "pct_a",
+            "pct_b",
+            "copresence_a",
+            "copresence_b",
+            "unique_encounters",
+            "participants_involved",
+            "has_convergence",
         ])
         
-        # Enhanced data rows with proper formatting
-        for segment in segments:
-            seg_id = segment.get("seg_id", "")
-            
-            # Get width from segments_new.csv - fix NA values
-            seg_row = segments_df[segments_df['seg_id'] == seg_id]
-            if not seg_row.empty:
-                width_val = seg_row['width_m'].iloc[0]
-                # Handle NaN/NA values
-                if pd.isna(width_val) or width_val == '':
-                    from app.utils.constants import DEFAULT_CONFLICT_LENGTH_METERS
-                    width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
-                else:
-                    width_m = float(width_val)
-            else:
-                from app.utils.constants import DEFAULT_CONFLICT_LENGTH_METERS
-                width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
-            
-            # Fix convergence point normalization and decimal formatting (max 3 decimals)
-            if segment.get('has_convergence', False):
-                cp_km = segment.get('convergence_point')
-                from_km_a = segment.get('from_km_a', 0)
-                to_km_a = segment.get('to_km_a', 0)
-                
-                # Round convergence point to max 2 decimal places for consistency
-                cp_km = format_decimal_places(cp_km, 2)
-                
-                # Normalize convergence point to segment (0.0 to 1.0)
-                segment_len = to_km_a - from_km_a
-                if segment_len > 0 and cp_km is not None:
-                    # Calculate raw fraction
-                    raw_fraction = (cp_km - from_km_a) / segment_len
-                    # Apply fraction clamping to ensure [0.0, 1.0] range
-                    from app.utils.constants import MIN_NORMALIZED_FRACTION, MAX_NORMALIZED_FRACTION
-                    if raw_fraction < MIN_NORMALIZED_FRACTION:
-                        normalized_cp = MIN_NORMALIZED_FRACTION
-                        logging.warning(f"Clamped negative convergence fraction {raw_fraction:.3f} to {MIN_NORMALIZED_FRACTION} for {seg_id} {segment.get('event_a', 'A')} vs {segment.get('event_b', 'B')}")
-                    elif raw_fraction > MAX_NORMALIZED_FRACTION:
-                        normalized_cp = MAX_NORMALIZED_FRACTION
-                        logging.warning(f"Clamped convergence fraction {raw_fraction:.3f} > 1.0 to {MAX_NORMALIZED_FRACTION} for {seg_id} {segment.get('event_a', 'A')} vs {segment.get('event_b', 'B')}")
-                    else:
-                        normalized_cp = raw_fraction
-                    normalized_cp = format_decimal_places(normalized_cp, 2)  # Max 2 decimal places
-                else:
-                    normalized_cp = 0.0
-            else:
-                cp_km = None
-                normalized_cp = None
-            
-            # Fix decimal formatting (max 2 decimals for consistency)
-            conv_start = format_decimal_places(segment.get('convergence_zone_start'), 2)
-            conv_end = format_decimal_places(segment.get('convergence_zone_end'), 2)
-            
-            # Calculate percentages
-            total_a = segment.get('total_a', 0)
-            total_b = segment.get('total_b', 0)
-            overtaking_a = segment.get('overtaking_a', 0)
-            overtaking_b = segment.get('overtaking_b', 0)
-            
-            pct_a = round((overtaking_a / total_a * 100), 1) if total_a > 0 else 0.0
-            pct_b = round((overtaking_b / total_b * 100), 1) if total_b > 0 else 0.0
-            
-            writer.writerow([
-                # Group 1: Segment Identification & Context
-                seg_id,
-                segment.get("segment_label", ""),
-                segment.get("event_a", ""),
-                segment.get("event_b", ""),
-                segment.get("total_a", ""),
-                segment.get("total_b", ""),
-                segment.get("flow_type", ""),
-                round(segment.get('from_km_a', 0), 2),
-                round(segment.get('to_km_a', 0), 2),
-                round(segment.get('from_km_b', 0), 2),
-                round(segment.get('to_km_b', 0), 2),
-                width_m,
-                
-                # Group 2: Encounter Results & Analysis
-                segment.get("overtaking_a", ""),
-                segment.get("overtaking_b", ""),
-                format_sample_data(segment.get("sample_a", [])),
-                format_sample_data(segment.get("sample_b", [])),
-                pct_a,
-                pct_b,
-                segment.get("copresence_a", ""),
-                segment.get("copresence_b", ""),
-                segment.get("unique_encounters", 0),
-                segment.get("participants_involved", 0),
-                
-                # Group 3: Runner Experience Analysis (Overtaking Loads)
-                segment.get("overtaking_load_a", 0.0),
-                segment.get("overtaking_load_b", 0.0),
-                segment.get("max_overtaking_load_a", 0),
-                segment.get("max_overtaking_load_b", 0),
-                
-                # Group 4: Technical & Debugging
-                segment.get("spatial_zone_exists", False),
-                segment.get("temporal_overlap_exists", False),
-                segment.get("true_pass_exists", False),
-                segment.get("has_convergence_policy", False),
-                segment.get("has_convergence", False),
-                conv_start,
-                conv_end,
-                segment.get("no_pass_reason_code", ""),
-                segment.get('conflict_length_m', 100.0),  # conflict_length_m from analysis
-                # Issue #612: Multi-zone fields
-                segment.get("worst_zone_index"),
-                _format_convergence_points_json(segment.get("convergence_points")),
-                
-                # Group 5: Metadata (moved to end as requested)
-                datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
-                APP_VERSION,
-                environment,  # Use passed environment parameter
-                "runners.csv, segments.csv",
-                # Issue #553 Phase 5.2: Use dynamic start times from analysis.json (no hardcoded fallbacks)
-                _format_start_times_for_csv(start_times) if start_times else "N/A",
-                min_overlap_duration,
-                conflict_length_m
-            ])
+        # Write all zone rows
+        writer.writerows(zone_rows)
     
-    print(f"📊 Temporal flow analysis exported to: {full_path}")
+    logger.info(f"Issue #629: Exported zone-level flow.csv with {len(zone_rows)} zones (was segment-level)")
+    print(f"📊 Temporal flow analysis exported to: {full_path} ({len(zone_rows)} zones)")
     
     # Issue #455: Skip storage_service for runflow mode (already written to correct location)
     # Also save to storage service for persistence (legacy mode only)

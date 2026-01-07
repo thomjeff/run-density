@@ -249,52 +249,51 @@ class TestV2E2EScenarios:
         return audit_parquet
     
     def _verify_flow_csv_multi_zone(self, flow_csv_path: Path, day: str) -> None:
-        """Verify multi-zone columns in Flow.csv.
+        """Verify zone-level structure in Flow.csv.
         
-        Issue #612: Validates that Flow.csv contains multi-zone fields:
-        - worst_zone_index (may be None/NaN if no zones)
-        - convergence_points_json (valid JSON array, may be empty)
+        Issue #629: Validates that Flow.csv contains zone-level fields:
+        - zone_index (required for zone-level structure)
+        - cp_km, cp_type, zone_source (zone identification)
+        - zone_start_km_a, zone_end_km_a, zone_start_km_b, zone_end_km_b (zone boundaries)
+        - Zone-level metrics (overtaking_a, copresence_a, etc.)
         
         Args:
             flow_csv_path: Path to Flow.csv file
             day: Day code for logging
         """
-        import json
-        
         flow_df = pd.read_csv(flow_csv_path)
         
-        # Verify multi-zone columns exist
-        required_cols = ["worst_zone_index", "convergence_points_json"]
-        missing_cols = [col for col in required_cols if col not in flow_df.columns]
-        assert not missing_cols, f"Flow.csv missing multi-zone columns for {day}: {missing_cols}"
+        # Check for zone-level columns (Issue #629)
+        expected_cols = [
+            "seg_id", "zone_index", "cp_km", "cp_type", "zone_source",
+            "zone_start_km_a", "zone_end_km_a", "zone_start_km_b", "zone_end_km_b",
+            "overtaking_a", "overtaking_b", "copresence_a", "copresence_b",
+            "unique_encounters", "participants_involved", "has_convergence"
+        ]
+        missing_cols = [col for col in expected_cols if col not in flow_df.columns]
+        assert not missing_cols, f"Flow.csv missing zone-level columns for {day}: {missing_cols}"
         
-        # Validate convergence_points_json column (should be parseable JSON)
-        for idx, row in flow_df.iterrows():
-            cp_json_str = row.get("convergence_points_json", "")
-            if pd.notna(cp_json_str) and str(cp_json_str).strip():
-                try:
-                    cp_data = json.loads(cp_json_str)
-                    assert isinstance(cp_data, list), f"convergence_points_json should be a JSON array for row {idx}"
-                    # Validate CP structure if array is not empty
-                    for cp in cp_data:
-                        assert isinstance(cp, dict), f"Each CP should be a dict in row {idx}"
-                        assert "km" in cp, f"CP missing 'km' field in row {idx}"
-                        assert "type" in cp, f"CP missing 'type' field in row {idx}"
-                        assert cp["type"] in ["true_pass", "bin_peak"], f"Invalid CP type in row {idx}: {cp.get('type')}"
-                except json.JSONDecodeError as e:
-                    raise AssertionError(f"Invalid JSON in convergence_points_json for row {idx} in {day} Flow.csv: {e}")
+        # Validate zone_index (should be non-negative integers)
+        assert all(flow_df["zone_index"] >= 0), f"Invalid zone_index values in {day} Flow.csv"
         
-        # Validate worst_zone_index (should be int or NaN/None if no zones)
-        for idx, row in flow_df.iterrows():
-            worst_zone_idx = row.get("worst_zone_index")
-            if pd.notna(worst_zone_idx):
-                try:
-                    zone_idx = int(worst_zone_idx)
-                    assert zone_idx >= 0, f"worst_zone_index should be >= 0 in row {idx}"
-                except (ValueError, TypeError):
-                    raise AssertionError(f"Invalid worst_zone_index value in row {idx} in {day} Flow.csv: {worst_zone_idx}")
+        # Validate zone boundaries (zone_end should be >= zone_start)
+        assert all(flow_df["zone_end_km_a"] >= flow_df["zone_start_km_a"]), \
+            f"Invalid zone boundaries (zone_end_km_a < zone_start_km_a) in {day} Flow.csv"
+        assert all(flow_df["zone_end_km_b"] >= flow_df["zone_start_km_b"]), \
+            f"Invalid zone boundaries (zone_end_km_b < zone_start_km_b) in {day} Flow.csv"
         
-        print(f"✅ Flow.csv multi-zone columns validated for {day}")
+        # Validate cp_km (should be numeric or None)
+        cp_km_valid = flow_df["cp_km"].apply(lambda x: pd.isna(x) or (isinstance(x, (int, float)) and x >= 0))
+        assert cp_km_valid.all(), f"Invalid cp_km values in {day} Flow.csv"
+        
+        # Validate that rows are ordered by seg_id, then zone_index
+        for seg_id in flow_df["seg_id"].unique():
+            seg_rows = flow_df[flow_df["seg_id"] == seg_id]
+            zone_indices = seg_rows["zone_index"].values
+            assert all(zone_indices[i] <= zone_indices[i+1] for i in range(len(zone_indices)-1)), \
+                f"Zones not ordered by zone_index for {seg_id} in {day} Flow.csv"
+        
+        print(f"✅ Flow.csv zone-level structure validated for {day}: {len(flow_df)} zones")
     
     def _verify_flow_zones_parquet(self, run_id: str, day: str) -> Optional[Path]:
         """Verify {day}_fz.parquet exists and has valid structure.
@@ -399,7 +398,7 @@ class TestV2E2EScenarios:
                         assert len(cp_data) >= len(zones) or len(cp_data) <= len(zones) + 2, \
                             f"CP count ({len(cp_data)}) doesn't align with zone count ({len(zones)}) for {seg_id}"
                     except json.JSONDecodeError:
-                        pass  # Already validated in _verify_flow_csv_multi_zone
+                        pass  # Already validated in _verify_flow_csv_zone_level
         
         print(f"✅ Zones cross-validation passed for {day}")
     
@@ -620,7 +619,7 @@ class TestV2E2EScenarios:
         assert len(open_pairs) > 0, "No flow pairs found for open event"
         
         # Issue #612: Verify multi-zone columns in Flow.csv
-        self._verify_flow_csv_multi_zone(flow_csv_path, "sat")
+        self._verify_flow_csv_zone_level(flow_csv_path, "sat")
         
         # Issue #612: Verify flow_zones.parquet if it exists
         zones_path = self._verify_flow_zones_parquet(run_id, "sat")
@@ -676,7 +675,7 @@ class TestV2E2EScenarios:
             assert len(pairs) > 0, f"No flow pairs found between {event_a} and {event_b}"
         
         # Issue #612: Verify multi-zone columns in Flow.csv
-        self._verify_flow_csv_multi_zone(flow_csv_path, "sun")
+        self._verify_flow_csv_zone_level(flow_csv_path, "sun")
         
         # Issue #612: Verify flow_zones.parquet if it exists
         zones_path = self._verify_flow_zones_parquet(run_id, "sun")
