@@ -792,17 +792,34 @@ def _generate_flow_segments_json(
         event_a = segment.get("event_a", "")
         event_b = segment.get("event_b", "")
         
+        # Issue #628: Debug logging for D1 (full / full) to investigate missing segment
+        is_d1_full_full = (str(seg_id) == "D1" and str(event_a) == "full" and str(event_b) == "full")
+        if is_d1_full_full:
+            logger.info(
+                f"Day {day.value}: Found D1 (full / full) in flow_results - "
+                f"seg_id={seg_id}, event_a={event_a}, event_b={event_b}, "
+                f"has_zones_key={'zones' in segment}, zones_type={type(segment.get('zones'))}, "
+                f"zones_value={segment.get('zones')}, zones_len={len(segment.get('zones', []))}"
+            )
+        
         # Only include day-scoped segments
         # Issue #628: Normalize segment ID check - flow_results may have composite IDs (e.g., "A2a")
         # while day_segment_ids contains base IDs (e.g., "A2"). Check both composite and base ID.
         seg_id_str = str(seg_id)
         base_seg_id = seg_id_str.rstrip('abcdefghijklmnopqrstuvwxyz')
         if seg_id_str not in day_segment_ids and base_seg_id not in day_segment_ids:
+            if is_d1_full_full:
+                logger.warning(f"Day {day.value}: D1 (full / full) filtered out - not in day_segment_ids (seg_id_str={seg_id_str}, base_seg_id={base_seg_id}, day_segment_ids sample={sorted(day_segment_ids)[:10]})")
             continue
         
         # Skip segments without zones
         zones = segment.get("zones", [])
         if not zones:
+            if is_d1_full_full:
+                logger.warning(
+                    f"Day {day.value}: D1 (full / full) filtered out - no zones "
+                    f"(zones type: {type(zones)}, zones value: {zones}, zones len: {len(zones) if zones else 0})"
+                )
             continue
         
         # Create composite key
