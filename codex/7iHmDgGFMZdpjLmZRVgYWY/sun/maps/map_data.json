@@ -1,0 +1,268 @@
+{
+  "ok": true,
+  "source": "density_analysis",
+  "timestamp": "2026-01-07T19:22:42.899053",
+  "segments": {
+    "A1": {
+      "segment_id": "A1",
+      "segment_label": "Start to Queen/Regent",
+      "peak_areal_density": 0.2028888888888889,
+      "peak_crowd_density": 1.0144444444444445,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "A2": {
+      "segment_id": "A2",
+      "segment_label": "Queen/Regent to WSB mid-point",
+      "peak_areal_density": 0.19844444444444445,
+      "peak_crowd_density": 0.9922222222222222,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "A3": {
+      "segment_id": "A3",
+      "segment_label": "WSB mid-point to Friel",
+      "peak_areal_density": 0.16177777777777774,
+      "peak_crowd_density": 0.8088888888888888,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "B1": {
+      "segment_id": "B1",
+      "segment_label": "Friel to 10K Turn (Out)",
+      "peak_areal_density": 0.25075268817204305,
+      "peak_crowd_density": 0.37612903225806454,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "B2": {
+      "segment_id": "B2",
+      "segment_label": "10K Turn to Friel (Back)",
+      "peak_areal_density": 0.23096774193548378,
+      "peak_crowd_density": 0.3464516129032257,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "B3": {
+      "segment_id": "B3",
+      "segment_label": "10K Turn to Friel (Slow/Fast 10k)",
+      "peak_areal_density": 0.3784946236559141,
+      "peak_crowd_density": 0.5677419354838711,
+      "zone": "yellow",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "D1a": {
+      "segment_id": "D1a",
+      "segment_label": "10K Turn to Full Turn Blake (Out)",
+      "peak_areal_density": 0.0465528146742568,
+      "peak_crowd_density": 0.0698292220113852,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "D1b": {
+      "segment_id": "D1b",
+      "segment_label": "Full Turn Blake to 10K Turn (Return)",
+      "peak_areal_density": 0.03749999999999999,
+      "peak_crowd_density": 0.05624999999999999,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "F1": {
+      "segment_id": "F1",
+      "segment_label": "Friel to Station Rd.",
+      "peak_areal_density": 0.2163768115942029,
+      "peak_crowd_density": 0.6491304347826087,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "G1": {
+      "segment_id": "G1",
+      "segment_label": "Full Loop around QS to Trail/Aberdeen",
+      "peak_areal_density": 0.017878787878787914,
+      "peak_crowd_density": 0.05363636363636374,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "H1": {
+      "segment_id": "H1",
+      "segment_label": "Trail/Aberdeen to/from Station Rd",
+      "peak_areal_density": 0.25454545454545424,
+      "peak_crowd_density": 0.38181818181818133,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "I1": {
+      "segment_id": "I1",
+      "segment_label": "Station Rd to Bridge/Mill",
+      "peak_areal_density": 0.0649855072463768,
+      "peak_crowd_density": 0.19495652173913045,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "J1": {
+      "segment_id": "J1",
+      "segment_label": "Bridge/Mill to Half Turn (Outbound)",
+      "peak_areal_density": 0.1355721393034826,
+      "peak_crowd_density": 0.2033582089552239,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "J2": {
+      "segment_id": "J2",
+      "segment_label": "Half Turn to Full Turn (Out)",
+      "peak_areal_density": 0.02222222222222224,
+      "peak_crowd_density": 0.03333333333333336,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "J3": {
+      "segment_id": "J3",
+      "segment_label": "Full Turn to Half Turn (Return)",
+      "peak_areal_density": 0.022764227642276348,
+      "peak_crowd_density": 0.03414634146341452,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "J4": {
+      "segment_id": "J4",
+      "segment_label": "Half Turn to Bridge/Mill",
+      "peak_areal_density": 0.12072072072072072,
+      "peak_crowd_density": 0.1810810810810811,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "J5": {
+      "segment_id": "J5",
+      "segment_label": "Half Turn to Bridge/Mill (Slow Half)",
+      "peak_areal_density": 0.1355721393034826,
+      "peak_crowd_density": 0.2033582089552239,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "K1": {
+      "segment_id": "K1",
+      "segment_label": "Bridge/Mill to Station Rd",
+      "peak_areal_density": 0.05062801932367146,
+      "peak_crowd_density": 0.15188405797101437,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "L1": {
+      "segment_id": "L1",
+      "segment_label": "Trail/Aberdeen to/from Station Rd",
+      "peak_areal_density": 0.2274747474747472,
+      "peak_crowd_density": 0.3412121212121208,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "L2": {
+      "segment_id": "L2",
+      "segment_label": "Station Rd to Trail/Aberdeen (Full Only)",
+      "peak_areal_density": 0.010144927536231866,
+      "peak_crowd_density": 0.015217391304347799,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "M1": {
+      "segment_id": "M1",
+      "segment_label": "Trail/Aberdeen to Finish (Full to Loop)",
+      "peak_areal_density": 0.18266666666666667,
+      "peak_crowd_density": 0.548,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "M2": {
+      "segment_id": "M2",
+      "segment_label": "Trail/Aberdeen to Finish",
+      "peak_areal_density": 0.012,
+      "peak_crowd_density": 0.036,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "N1": {
+      "segment_id": "N1",
+      "segment_label": "5K Elite Lap 1 (Start to Queen/York)",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "N2": {
+      "segment_id": "N2",
+      "segment_label": "5K Elite Lap 2 (Queen/York to Queen/York)",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "N3": {
+      "segment_id": "N3",
+      "segment_label": "5K Elite Finish (Queen/York to Finish)",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "O1": {
+      "segment_id": "O1",
+      "segment_label": "5K Open Lap 1 (Start to Queen/York)",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "O2": {
+      "segment_id": "O2",
+      "segment_label": "5K Open Lap 2 (Queen/York to Queen/York)",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "O3": {
+      "segment_id": "O3",
+      "segment_label": "5K Open Finish (Queen/York to Finish)",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    }
+  },
+  "metadata": {
+    "total_segments": 28,
+    "analysis_type": "density",
+    "start_times": {
+      "full": 420.0,
+      "10k": 440.0,
+      "half": 460.0
+    }
+  }
+}

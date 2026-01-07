@@ -1,0 +1,118 @@
+{
+  "description": "Sat+Sun analysis test",
+  "data_dir": "data",
+  "segments_file": "segments.csv",
+  "flow_file": "flow.csv",
+  "locations_file": "locations.csv",
+  "runners": 2487,
+  "event_summary": {
+    "days": 2,
+    "events": 5,
+    "events_by_day": {
+      "sat": {
+        "count": 2,
+        "events": [
+          "elite",
+          "open"
+        ]
+      },
+      "sun": {
+        "count": 3,
+        "events": [
+          "full",
+          "10k",
+          "half"
+        ]
+      }
+    }
+  },
+  "events": [
+    {
+      "name": "elite",
+      "day": "sat",
+      "start_time": 480,
+      "event_duration_minutes": 45,
+      "runners_file": "elite_runners.csv",
+      "gpx_file": "elite.gpx",
+      "runners": 39
+    },
+    {
+      "name": "open",
+      "day": "sat",
+      "start_time": 510,
+      "event_duration_minutes": 75,
+      "runners_file": "open_runners.csv",
+      "gpx_file": "open.gpx",
+      "runners": 550
+    },
+    {
+      "name": "full",
+      "day": "sun",
+      "start_time": 420,
+      "event_duration_minutes": 390,
+      "runners_file": "full_runners.csv",
+      "gpx_file": "full.gpx",
+      "runners": 368
+    },
+    {
+      "name": "10k",
+      "day": "sun",
+      "start_time": 440,
+      "event_duration_minutes": 120,
+      "runners_file": "10k_runners.csv",
+      "gpx_file": "10k.gpx",
+      "runners": 618
+    },
+    {
+      "name": "half",
+      "day": "sun",
+      "start_time": 460,
+      "event_duration_minutes": 180,
+      "runners_file": "half_runners.csv",
+      "gpx_file": "half.gpx",
+      "runners": 912
+    }
+  ],
+  "event_days": [
+    "sat",
+    "sun"
+  ],
+  "event_names": [
+    "elite",
+    "open",
+    "full",
+    "10k",
+    "half"
+  ],
+  "start_times": {
+    "elite": 480,
+    "open": 510,
+    "full": 420,
+    "10k": 440,
+    "half": 460
+  },
+  "data_files": {
+    "segments": "data/segments.csv",
+    "flow": "data/flow.csv",
+    "locations": "data/locations.csv",
+    "runners": {
+      "elite": "data/elite_runners.csv",
+      "open": "data/open_runners.csv",
+      "full": "data/full_runners.csv",
+      "10k": "data/10k_runners.csv",
+      "half": "data/half_runners.csv"
+    },
+    "gpx": {
+      "elite": "data/elite.gpx",
+      "open": "data/open.gpx",
+      "full": "data/full.gpx",
+      "10k": "data/10k.gpx",
+      "half": "data/half.gpx"
+    }
+  },
+  "event_group": {
+    "sat-elite": "elite",
+    "sat-open": "open",
+    "sun-all": "full, 10k, half"
+  }
+}

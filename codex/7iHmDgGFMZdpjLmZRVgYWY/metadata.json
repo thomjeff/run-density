@@ -1,0 +1,320 @@
+{
+  "run_id": "7iHmDgGFMZdpjLmZRVgYWY",
+  "created_at": "2026-01-07T19:22:46.757591Z",
+  "status": "PASS",
+  "days": [
+    "sat",
+    "sun"
+  ],
+  "day_paths": {
+    "sat": "runflow/7iHmDgGFMZdpjLmZRVgYWY/sat",
+    "sun": "runflow/7iHmDgGFMZdpjLmZRVgYWY/sun"
+  },
+  "runtime_env": "local_docker",
+  "storage_target": "filesystem",
+  "app_version": "v2.0.3",
+  "git_sha": "unknown",
+  "files_created": {
+    "reports": [
+      "sat/reports/Density.md",
+      "sat/reports/Flow.csv",
+      "sat/reports/Locations.csv",
+      "sat/reports/sat_fz.parquet",
+      "sat/reports/sat_fz_runners.parquet",
+      "sat/reports/segments.parquet",
+      "sun/reports/Density.md",
+      "sun/reports/Flow.csv",
+      "sun/reports/Locations.csv",
+      "sun/reports/segments.parquet",
+      "sun/reports/sun_fz.parquet",
+      "sun/reports/sun_fz_runners.parquet"
+    ],
+    "bins": [
+      "sat/bins/bin_summary.json",
+      "sat/bins/bins.geojson.gz",
+      "sat/bins/bins.parquet",
+      "sat/bins/segment_windows_from_bins.parquet",
+      "sun/bins/bin_summary.json",
+      "sun/bins/bins.geojson.gz",
+      "sun/bins/bins.parquet",
+      "sun/bins/segment_windows_from_bins.parquet"
+    ],
+    "maps": [
+      "sat/maps/map_data.json",
+      "sun/maps/map_data.json"
+    ],
+    "ui": [
+      "sat/ui/geospatial/flow.json",
+      "sat/ui/geospatial/segments.geojson",
+      "sat/ui/metadata/health.json",
+      "sat/ui/metadata/meta.json",
+      "sat/ui/metadata/schema_density.json",
+      "sat/ui/metrics/flags.json",
+      "sat/ui/metrics/segment_metrics.json",
+      "sat/ui/visualizations/N1.png",
+      "sat/ui/visualizations/N2.png",
+      "sat/ui/visualizations/N3.png",
+      "sat/ui/visualizations/O1.png",
+      "sat/ui/visualizations/O2.png",
+      "sat/ui/visualizations/O3.png",
+      "sat/ui/visualizations/captions.json",
+      "sun/ui/geospatial/flow.json",
+      "sun/ui/geospatial/segments.geojson",
+      "sun/ui/metadata/health.json",
+      "sun/ui/metadata/meta.json",
+      "sun/ui/metadata/schema_density.json",
+      "sun/ui/metrics/flags.json",
+      "sun/ui/metrics/segment_metrics.json",
+      "sun/ui/visualizations/A1.png",
+      "sun/ui/visualizations/A2.png",
+      "sun/ui/visualizations/A3.png",
+      "sun/ui/visualizations/B1.png",
+      "sun/ui/visualizations/B2.png",
+      "sun/ui/visualizations/B3.png",
+      "sun/ui/visualizations/D1a.png",
+      "sun/ui/visualizations/D1b.png",
+      "sun/ui/visualizations/F1.png",
+      "sun/ui/visualizations/H1.png",
+      "sun/ui/visualizations/I1.png",
+      "sun/ui/visualizations/J1.png",
+      "sun/ui/visualizations/J4.png",
+      "sun/ui/visualizations/J5.png",
+      "sun/ui/visualizations/K1.png",
+      "sun/ui/visualizations/L1.png",
+      "sun/ui/visualizations/M1.png",
+      "sun/ui/visualizations/captions.json"
+    ],
+    "heatmaps": [
+      "sat/heatmaps/N1.png",
+      "sat/heatmaps/N2.png",
+      "sat/heatmaps/N3.png",
+      "sat/heatmaps/O1.png",
+      "sat/heatmaps/O2.png",
+      "sat/heatmaps/O3.png",
+      "sat/heatmaps/captions.json",
+      "sun/heatmaps/A1.png",
+      "sun/heatmaps/A2.png",
+      "sun/heatmaps/A3.png",
+      "sun/heatmaps/B1.png",
+      "sun/heatmaps/B2.png",
+      "sun/heatmaps/B3.png",
+      "sun/heatmaps/D1a.png",
+      "sun/heatmaps/D1b.png",
+      "sun/heatmaps/F1.png",
+      "sun/heatmaps/H1.png",
+      "sun/heatmaps/I1.png",
+      "sun/heatmaps/J1.png",
+      "sun/heatmaps/J4.png",
+      "sun/heatmaps/J5.png",
+      "sun/heatmaps/K1.png",
+      "sun/heatmaps/L1.png",
+      "sun/heatmaps/M1.png",
+      "sun/heatmaps/captions.json"
+    ]
+  },
+  "file_counts": {
+    "reports": 12,
+    "bins": 8,
+    "maps": 2,
+    "ui": 39,
+    "heatmaps": 25
+  },
+  "output_verification": {
+    "status": "PASS",
+    "missing_critical": [],
+    "missing_required": []
+  },
+  "request": {
+    "description": "Sat+Sun analysis test",
+    "segments_file": "segments.csv",
+    "locations_file": "locations.csv",
+    "flow_file": "flow.csv",
+    "events": [
+      {
+        "name": "elite",
+        "day": "sat",
+        "start_time": 480,
+        "event_duration_minutes": 45,
+        "runners_file": "elite_runners.csv",
+        "gpx_file": "elite.gpx"
+      },
+      {
+        "name": "open",
+        "day": "sat",
+        "start_time": 510,
+        "event_duration_minutes": 75,
+        "runners_file": "open_runners.csv",
+        "gpx_file": "open.gpx"
+      },
+      {
+        "name": "full",
+        "day": "sun",
+        "start_time": 420,
+        "event_duration_minutes": 390,
+        "runners_file": "full_runners.csv",
+        "gpx_file": "full.gpx"
+      },
+      {
+        "name": "10k",
+        "day": "sun",
+        "start_time": 440,
+        "event_duration_minutes": 120,
+        "runners_file": "10k_runners.csv",
+        "gpx_file": "10k.gpx"
+      },
+      {
+        "name": "half",
+        "day": "sun",
+        "start_time": 460,
+        "event_duration_minutes": 180,
+        "runners_file": "half_runners.csv",
+        "gpx_file": "half.gpx"
+      }
+    ],
+    "event_group": {
+      "sat-elite": "elite",
+      "sat-open": "open",
+      "sun-all": "full, 10k, half"
+    },
+    "enableAudit": "n"
+  },
+  "density": {
+    "sat": {
+      "processed_segments": 0,
+      "skipped_segments": 6,
+      "total_segments": 6,
+      "has_error": false
+    },
+    "sun": {
+      "processed_segments": 0,
+      "skipped_segments": 22,
+      "total_segments": 22,
+      "has_error": false
+    }
+  },
+  "flow": {
+    "sat": {
+      "ok": true,
+      "total_segments": 10,
+      "segments_with_convergence": 10,
+      "has_error": false
+    },
+    "sun": {
+      "ok": true,
+      "total_segments": 35,
+      "segments_with_convergence": 27,
+      "has_error": false
+    }
+  },
+  "performance": {
+    "run_id": "7iHmDgGFMZdpjLmZRVgYWY",
+    "total_elapsed_seconds": 315.585,
+    "total_elapsed_minutes": 5.26,
+    "phases": [
+      {
+        "phase": "phase_1_pre_analysis",
+        "elapsed_seconds": 0.0,
+        "elapsed_ms": 0,
+        "percentage": 0.0,
+        "feature_count": null,
+        "bin_count": null
+      },
+      {
+        "phase": "phase_2_data_loading",
+        "elapsed_seconds": 0.015,
+        "elapsed_ms": 14,
+        "percentage": 0.0,
+        "feature_count": null,
+        "bin_count": null
+      },
+      {
+        "phase": "phase_3_1_computation",
+        "elapsed_seconds": 280.021,
+        "elapsed_ms": 280021,
+        "percentage": 88.7,
+        "feature_count": null,
+        "bin_count": null
+      },
+      {
+        "phase": "phase_3_2_persistence",
+        "elapsed_seconds": 0.388,
+        "elapsed_ms": 388,
+        "percentage": 0.1,
+        "feature_count": null,
+        "bin_count": null
+      },
+      {
+        "phase": "bin_generation_sat",
+        "elapsed_seconds": 1.404,
+        "elapsed_ms": 1404,
+        "percentage": 0.4,
+        "feature_count": 3900,
+        "bin_count": null
+      },
+      {
+        "phase": "bin_generation_sun",
+        "elapsed_seconds": 23.004,
+        "elapsed_ms": 23003,
+        "percentage": 7.3,
+        "feature_count": 19440,
+        "bin_count": null
+      },
+      {
+        "phase": "phase_4_1_ui_artifacts",
+        "elapsed_seconds": 6.833,
+        "elapsed_ms": 6833,
+        "percentage": 2.2,
+        "feature_count": null,
+        "bin_count": null
+      },
+      {
+        "phase": "phase_4_2_derived_metrics",
+        "elapsed_seconds": 0.02,
+        "elapsed_ms": 20,
+        "percentage": 0.0,
+        "feature_count": null,
+        "bin_count": null
+      },
+      {
+        "phase": "phase_5_reports",
+        "elapsed_seconds": 3.819,
+        "elapsed_ms": 3819,
+        "percentage": 1.2,
+        "feature_count": null,
+        "bin_count": null
+      }
+    ],
+    "total_memory_mb": null,
+    "timestamp": "2026-01-07T19:22:46.758214+00:00"
+  },
+  "logs": {
+    "app_log": "logs/app.log"
+  },
+  "response": {
+    "status": "success",
+    "code": 200,
+    "run_id": "7iHmDgGFMZdpjLmZRVgYWY",
+    "days": [
+      "sat",
+      "sun"
+    ],
+    "output_paths": {
+      "sat": {
+        "day": "sat",
+        "reports": "runflow/7iHmDgGFMZdpjLmZRVgYWY/sat/reports",
+        "bins": "runflow/7iHmDgGFMZdpjLmZRVgYWY/sat/bins",
+        "maps": "runflow/7iHmDgGFMZdpjLmZRVgYWY/sat/maps",
+        "ui": "runflow/7iHmDgGFMZdpjLmZRVgYWY/sat/ui",
+        "metadata": "runflow/7iHmDgGFMZdpjLmZRVgYWY/sat/metadata.json"
+      },
+      "sun": {
+        "day": "sun",
+        "reports": "runflow/7iHmDgGFMZdpjLmZRVgYWY/sun/reports",
+        "bins": "runflow/7iHmDgGFMZdpjLmZRVgYWY/sun/bins",
+        "maps": "runflow/7iHmDgGFMZdpjLmZRVgYWY/sun/maps",
+        "ui": "runflow/7iHmDgGFMZdpjLmZRVgYWY/sun/ui",
+        "metadata": "runflow/7iHmDgGFMZdpjLmZRVgYWY/sun/metadata.json"
+      }
+    }
+  }
+}
