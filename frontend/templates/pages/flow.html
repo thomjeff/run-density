@@ -157,7 +157,8 @@
         sortedSegments.forEach(segment => {
             // Issue #628: Use worst zone metrics from segment data
             const worstZone = segment.worst_zone || {};
-            const worstZoneDisplay = worstZone.display || "—";
+            // Issue #628: Display only zone_index (not zone_index/zone_count)
+            const worstZoneDisplay = worstZone.zone_index !== undefined ? worstZone.zone_index.toString() : "—";
             
             // Get worst zone metrics or fallback to segment metrics
             const overtakingA = worstZone.overtaking_a !== null && worstZone.overtaking_a !== undefined ? worstZone.overtaking_a : (segment.overtaking_a !== null && segment.overtaking_a !== undefined ? segment.overtaking_a : 0);
@@ -167,15 +168,15 @@
             const pctA = worstZone.pct_a !== null && worstZone.pct_a !== undefined ? worstZone.pct_a : (segment.pct_a !== null && segment.pct_a !== undefined ? segment.pct_a : 0);
             const pctB = worstZone.pct_b !== null && worstZone.pct_b !== undefined ? worstZone.pct_b : (segment.pct_b !== null && segment.pct_b !== undefined ? segment.pct_b : 0);
             
-            // Format display values
+            // Format display values - Issue #628: Show "0" instead of "—" for zero values
             const eventA = segment.event_a || "—";
             const eventB = segment.event_b || "—";
-            const overtakingADisplay = overtakingA > 0 ? overtakingA.toFixed(0) : "—";
-            const overtakingBDisplay = overtakingB > 0 ? overtakingB.toFixed(0) : "—";
-            const pctADisplay = pctA > 0 ? pctA.toFixed(1) + "%" : "—";
-            const pctBDisplay = pctB > 0 ? pctB.toFixed(1) + "%" : "—";
-            const copresenceADisplay = copresenceA > 0 ? copresenceA.toFixed(0) : "—";
-            const copresenceBDisplay = copresenceB > 0 ? copresenceB.toFixed(0) : "—";
+            const overtakingADisplay = overtakingA.toFixed(0);
+            const overtakingBDisplay = overtakingB.toFixed(0);
+            const pctADisplay = pctA > 0 ? pctA.toFixed(1) + "%" : "0%";
+            const pctBDisplay = pctB > 0 ? pctB.toFixed(1) + "%" : "0%";
+            const copresenceADisplay = copresenceA.toFixed(0);
+            const copresenceBDisplay = copresenceB.toFixed(0);
             
             // Create main segment row
             const row = document.createElement('tr');
@@ -190,7 +191,7 @@
                 <td>${segment.segment_label || segment.name || "—"}</td>
                 <td class="event-pair">${eventA} / ${eventB}</td>
                 <td>${segment.flow_type || 'overtake'}</td>
-                <td class="worst-zone" style="font-weight: 500;">${worstZoneDisplay}</td>
+                <td>${worstZoneDisplay}</td>
                 <td class="numeric-pair">${overtakingADisplay} / ${overtakingBDisplay}</td>
                 <td class="numeric-pair">${pctADisplay} / ${pctBDisplay}</td>
                 <td class="numeric-pair">${copresenceADisplay} / ${copresenceBDisplay}</td>
@@ -265,14 +266,10 @@
         html += '<div style="overflow-x: auto;"><table id="zone-table-' + segment.seg_id + '-' + segment.event_a + '-' + segment.event_b + '" class="zone-table">';
         html += '<thead><tr>';
         html += '<th class="sortable" data-sort="zone_index">Zone <span class="sort-indicator"></span></th>';
-        html += '<th class="sortable" data-sort="cp_km">CP (km) <span class="sort-indicator"></span></th>';
-        html += '<th>Type</th>';
-        html += '<th class="sortable" data-sort="overtaking_a">Overtaking A <span class="sort-indicator"></span></th>';
-        html += '<th class="sortable" data-sort="overtaking_b">Overtaking B <span class="sort-indicator"></span></th>';
-        html += '<th class="sortable" data-sort="overtaken_a">Overtaken A <span class="sort-indicator"></span></th>';
-        html += '<th class="sortable" data-sort="overtaken_b">Overtaken B <span class="sort-indicator"></span></th>';
-        html += '<th class="sortable" data-sort="copresence_a">Co-presence A <span class="sort-indicator"></span></th>';
-        html += '<th class="sortable" data-sort="copresence_b">Co-presence B <span class="sort-indicator"></span></th>';
+        html += '<th class="sortable" data-sort="cp_km">Distance <span class="sort-indicator"></span></th>';
+        html += '<th class="sortable" data-sort="overtaking_a">Overtaking <span class="sort-indicator"></span></th>';
+        html += '<th class="sortable" data-sort="overtaken_a">Overtaken <span class="sort-indicator"></span></th>';
+        html += '<th class="sortable" data-sort="copresence_a">Co-presence <span class="sort-indicator"></span></th>';
         html += '<th class="sortable" data-sort="unique_encounters">Unique Encounters <span class="sort-indicator"></span></th>';
         html += '<th class="sortable" data-sort="participants_involved">Participants <span class="sort-indicator"></span></th>';
         html += '<th class="sortable" data-sort="multi_category_runners">Multi-category <span class="sort-indicator"></span></th>';
@@ -283,24 +280,21 @@
             const captionSummary = caption.summary || '';
             
             html += '<tr class="zone-row">';
-            html += '<td><strong>' + (zone.zone_index !== undefined ? zone.zone_index : '—') + '</strong></td>';
-            html += '<td>' + (zone.cp_km !== undefined ? zone.cp_km.toFixed(2) : '—') + '</td>';
-            html += '<td>' + (zone.cp_type || '—') + '</td>';
-            html += '<td class="numeric">' + (zone.overtaking_a !== undefined ? zone.overtaking_a : '—') + '</td>';
-            html += '<td class="numeric">' + (zone.overtaking_b !== undefined ? zone.overtaking_b : '—') + '</td>';
-            html += '<td class="numeric">' + (zone.overtaken_a !== undefined ? zone.overtaken_a : '—') + '</td>';
-            html += '<td class="numeric">' + (zone.overtaken_b !== undefined ? zone.overtaken_b : '—') + '</td>';
-            html += '<td class="numeric">' + (zone.copresence_a !== undefined ? zone.copresence_a : '—') + '</td>';
-            html += '<td class="numeric">' + (zone.copresence_b !== undefined ? zone.copresence_b : '—') + '</td>';
-            html += '<td class="numeric">' + (zone.unique_encounters !== undefined ? zone.unique_encounters.toLocaleString() : '—') + '</td>';
-            html += '<td class="numeric">' + (zone.participants_involved !== undefined ? zone.participants_involved : '—') + '</td>';
-            html += '<td class="numeric">' + (zone.multi_category_runners !== undefined ? zone.multi_category_runners : '—') + '</td>';
+            html += '<td><strong>' + (zone.zone_index !== undefined ? zone.zone_index : '0') + '</strong></td>';
+            html += '<td>' + (zone.cp_km !== undefined ? zone.cp_km.toFixed(2) : '0.00') + '</td>';
+            // Issue #628: Merge Overtaking, Overtaken, Co-Presence into A/B format
+            html += '<td class="numeric-pair">' + (zone.overtaking_a !== undefined ? zone.overtaking_a : 0) + ' / ' + (zone.overtaking_b !== undefined ? zone.overtaking_b : 0) + '</td>';
+            html += '<td class="numeric-pair">' + (zone.overtaken_a !== undefined ? zone.overtaken_a : 0) + ' / ' + (zone.overtaken_b !== undefined ? zone.overtaken_b : 0) + '</td>';
+            html += '<td class="numeric-pair">' + (zone.copresence_a !== undefined ? zone.copresence_a : 0) + ' / ' + (zone.copresence_b !== undefined ? zone.copresence_b : 0) + '</td>';
+            html += '<td class="numeric">' + (zone.unique_encounters !== undefined ? zone.unique_encounters.toLocaleString() : '0') + '</td>';
+            html += '<td class="numeric">' + (zone.participants_involved !== undefined ? zone.participants_involved : 0) + '</td>';
+            html += '<td class="numeric">' + (zone.multi_category_runners !== undefined ? zone.multi_category_runners : 0) + '</td>';
             html += '</tr>';
             
             // Issue #628: Add caption row below zone row
             if (captionSummary) {
                 html += '<tr class="zone-caption-row">';
-                html += '<td colspan="12" style="padding: 0.75rem 1rem; background: #fff; border-bottom: 1px solid #e0e0e0;">';
+                html += '<td colspan="8" style="padding: 0.75rem 1rem; background: #fff; border-bottom: 1px solid #e0e0e0;">';
                 html += '<div style="font-size: 0.9rem; line-height: 1.5; color: #2c3e50; font-style: italic;">' + escapeHtml(captionSummary) + '</div>';
                 html += '</td>';
                 html += '</tr>';
@@ -532,9 +526,5 @@
         padding: 0.75rem 1rem;
     }
     
-    .worst-zone {
-        color: #dc3545;
-        font-weight: 500;
-    }
 </style>
 {% endblock %}

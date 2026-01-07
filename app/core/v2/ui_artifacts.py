@@ -877,7 +877,7 @@ def _generate_flow_segments_json(
             worst_zone_data = {
                 "zone_index": worst_zone_index,
                 "zone_count": len(zones),
-                "display": f"{worst_zone_index}/{len(zones)}",
+                "display": str(worst_zone_index),  # Issue #628: Show only zone_index, not zone_index/zone_count
                 "cp_km": round(float(worst_cp_km), 2),
                 "cp_type": str(worst_cp_type),
                 "zone_source": str(worst_zone_source),
@@ -1222,22 +1222,22 @@ def _build_zone_caption_summary(
     """
     Build narrative summary caption for a zone.
     
+    Issue #628: Updated format - removed repetitive segment info, use lowercase event names.
+    
     Example:
-    "In Zone 8 of segment F1a (230m), 89.6% of 10K runners and 100% of Half runners were co-present. 
-    555 Half runners overtook 275 10K runners, forming a 2:1 overtaking ratio. 
-    Meanwhile, 127 fast 10K runners overtook slower Half runners. 
+    "89.6% of 10k runners and 100% of half runners were co-present. 
+    555 half runners overtook 275 10k runners, forming a 2:1 overtaking ratio. 
+    Meanwhile, 127 fast 10k runners overtook slower half runners. 
     This zone demonstrates peak congestion and bidirectional overtaking pressure."
     """
-    # Segment reference
-    seg_ref = f"{seg_id} ({segment_label})" if segment_label else seg_id
-    summary_parts = [f"In Zone {zone_index} of segment {seg_ref} ({zone_length_m}m)"]
+    summary_parts = []
     
     # Co-presence statement
     copresence_parts = []
     if copresence_pct_a > 0:
-        copresence_parts.append(f"{copresence_pct_a}% of {event_a.upper()} runners")
+        copresence_parts.append(f"{copresence_pct_a}% of {event_a} runners")
     if copresence_pct_b > 0:
-        copresence_parts.append(f"{copresence_pct_b}% of {event_b.upper()} runners")
+        copresence_parts.append(f"{copresence_pct_b}% of {event_b} runners")
     
     if copresence_parts:
         if len(copresence_parts) == 1:
@@ -1246,25 +1246,26 @@ def _build_zone_caption_summary(
             summary_parts.append(f"{', '.join(copresence_parts[:-1])} and {copresence_parts[-1]} were co-present.")
     
     # Overtaking statement (primary direction)
+    # Issue #628: Use lowercase event names to match main table style
     if overtaking_b > 0 and overtaking_a > 0:
         summary_parts.append(
-            f"{overtaking_b} {event_b.upper()} runners overtook {overtaking_a} {event_a.upper()} runners, "
+            f"{overtaking_b} {event_b} runners overtook {overtaking_a} {event_a} runners, "
             f"forming a {overtaking_ratio} overtaking ratio."
         )
     elif overtaking_b > 0:
-        summary_parts.append(f"{overtaking_b} {event_b.upper()} runners overtook {overtaking_a} {event_a.upper()} runners.")
+        summary_parts.append(f"{overtaking_b} {event_b} runners overtook {overtaking_a} {event_a} runners.")
     elif overtaking_a > 0:
-        summary_parts.append(f"{overtaking_a} {event_a.upper()} runners overtook {overtaking_b} {event_b.upper()} runners.")
+        summary_parts.append(f"{overtaking_a} {event_a} runners overtook {overtaking_b} {event_b} runners.")
     
     # Bidirectional overtaking (if applicable)
     if overtaken_a > 0 or overtaken_b > 0:
         if overtaken_a > 0 and overtaking_a > 0:
             summary_parts.append(
-                f"Meanwhile, {overtaking_a} fast {event_a.upper()} runners overtook slower {event_b.upper()} runners."
+                f"Meanwhile, {overtaking_a} fast {event_a} runners overtook slower {event_b} runners."
             )
         elif overtaken_b > 0 and overtaking_b > 0:
             summary_parts.append(
-                f"Meanwhile, {overtaking_b} fast {event_b.upper()} runners overtook slower {event_a.upper()} runners."
+                f"Meanwhile, {overtaking_b} fast {event_b} runners overtook slower {event_a} runners."
             )
     
     # Overall characterization
