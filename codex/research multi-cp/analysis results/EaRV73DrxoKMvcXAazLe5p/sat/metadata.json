@@ -1,0 +1,231 @@
+{
+  "run_id": "EaRV73DrxoKMvcXAazLe5p",
+  "day": "sat",
+  "created_at": "2026-01-07T00:33:49.616117Z",
+  "status": "PASS",
+  "events": {
+    "elite": {
+      "start_time": "08:00",
+      "participants": 39
+    },
+    "open": {
+      "start_time": "08:30",
+      "participants": 550
+    }
+  },
+  "runtime_env": "local_docker",
+  "storage_target": "filesystem",
+  "app_version": "v2.0.3",
+  "git_sha": "unknown",
+  "files_created": {
+    "reports": [
+      "Density.md",
+      "Flow.csv",
+      "Locations.csv",
+      "flow_zones.parquet",
+      "segments.parquet"
+    ],
+    "bins": [
+      "bin_summary.json",
+      "bins.geojson.gz",
+      "bins.parquet",
+      "segment_windows_from_bins.parquet"
+    ],
+    "maps": [
+      "map_data.json"
+    ],
+    "ui": [
+      "geospatial/flow.json",
+      "geospatial/segments.geojson",
+      "metadata/health.json",
+      "metadata/meta.json",
+      "metadata/schema_density.json",
+      "metrics/flags.json",
+      "metrics/segment_metrics.json",
+      "visualizations/N1.png",
+      "visualizations/N2.png",
+      "visualizations/N3.png",
+      "visualizations/O1.png",
+      "visualizations/O2.png",
+      "visualizations/O3.png",
+      "visualizations/captions.json"
+    ],
+    "heatmaps": [
+      "N1.png",
+      "N2.png",
+      "N3.png",
+      "O1.png",
+      "O2.png",
+      "O3.png",
+      "captions.json"
+    ]
+  },
+  "file_counts": {
+    "reports": 5,
+    "bins": 4,
+    "maps": 1,
+    "ui": 14,
+    "heatmaps": 7
+  },
+  "output_verification": {
+    "status": "PASS",
+    "missing_critical": [],
+    "missing_required": [],
+    "checks": {
+      "reports": {
+        "present": [
+          "Density.md",
+          "Flow.csv",
+          "Locations.csv",
+          "flow_zones.parquet",
+          "segments.parquet"
+        ]
+      },
+      "bins": {
+        "present": [
+          "bin_summary.json",
+          "bins.geojson.gz",
+          "bins.parquet",
+          "segment_windows_from_bins.parquet"
+        ]
+      },
+      "ui": {
+        "present": [
+          "geospatial/flow.json",
+          "geospatial/segments.geojson",
+          "metadata/health.json",
+          "metadata/meta.json",
+          "metadata/schema_density.json",
+          "metrics/flags.json",
+          "metrics/segment_metrics.json",
+          "visualizations/N1.png",
+          "visualizations/N2.png",
+          "visualizations/N3.png",
+          "visualizations/O1.png",
+          "visualizations/O2.png",
+          "visualizations/O3.png",
+          "visualizations/captions.json"
+        ]
+      },
+      "heatmaps": {
+        "present": [
+          "N1.png",
+          "N2.png",
+          "N3.png",
+          "O1.png",
+          "O2.png",
+          "O3.png",
+          "captions.json"
+        ]
+      }
+    }
+  },
+  "request": {
+    "description": "Sat+Sun analysis test",
+    "segments_file": "segments.csv",
+    "locations_file": "locations.csv",
+    "flow_file": "flow.csv",
+    "events": [
+      {
+        "name": "elite",
+        "day": "sat",
+        "start_time": 480,
+        "event_duration_minutes": 45,
+        "runners_file": "elite_runners.csv",
+        "gpx_file": "elite.gpx"
+      },
+      {
+        "name": "open",
+        "day": "sat",
+        "start_time": 510,
+        "event_duration_minutes": 75,
+        "runners_file": "open_runners.csv",
+        "gpx_file": "open.gpx"
+      },
+      {
+        "name": "full",
+        "day": "sun",
+        "start_time": 420,
+        "event_duration_minutes": 390,
+        "runners_file": "full_runners.csv",
+        "gpx_file": "full.gpx"
+      },
+      {
+        "name": "10k",
+        "day": "sun",
+        "start_time": 440,
+        "event_duration_minutes": 120,
+        "runners_file": "10k_runners.csv",
+        "gpx_file": "10k.gpx"
+      },
+      {
+        "name": "half",
+        "day": "sun",
+        "start_time": 460,
+        "event_duration_minutes": 180,
+        "runners_file": "half_runners.csv",
+        "gpx_file": "half.gpx"
+      }
+    ],
+    "event_group": {
+      "sat-elite": "elite",
+      "sat-open": "open",
+      "sun-all": "full, 10k, half"
+    },
+    "enableAudit": "y"
+  },
+  "density": {
+    "processed_segments": 0,
+    "skipped_segments": 6,
+    "total_segments": 6,
+    "has_error": false
+  },
+  "flow": {
+    "ok": true,
+    "total_segments": 10,
+    "segments_with_convergence": 10,
+    "has_error": false
+  },
+  "operational_status": "Moderate",
+  "event_groups": {
+    "sat-elite": {
+      "events": [
+        "elite"
+      ],
+      "res": 5.0
+    },
+    "sat-open": {
+      "events": [
+        "open"
+      ],
+      "res": 5.0
+    }
+  },
+  "response": {
+    "status": "success",
+    "code": 200,
+    "run_id": "EaRV73DrxoKMvcXAazLe5p",
+    "days": [
+      "sat",
+      "sun"
+    ],
+    "output_paths": {
+      "sat": {
+        "day": "sat",
+        "reports": "runflow/EaRV73DrxoKMvcXAazLe5p/sat/reports",
+        "bins": "runflow/EaRV73DrxoKMvcXAazLe5p/sat/bins",
+        "maps": "runflow/EaRV73DrxoKMvcXAazLe5p/sat/maps",
+        "ui": "runflow/EaRV73DrxoKMvcXAazLe5p/sat/ui",
+        "metadata": "runflow/EaRV73DrxoKMvcXAazLe5p/sat/metadata.json"
+      },
+      "sun": {
+        "day": "sun",
+        "reports": "runflow/EaRV73DrxoKMvcXAazLe5p/sun/reports",
+        "bins": "runflow/EaRV73DrxoKMvcXAazLe5p/sun/bins",
+        "maps": "runflow/EaRV73DrxoKMvcXAazLe5p/sun/maps",
+        "ui": "runflow/EaRV73DrxoKMvcXAazLe5p/sun/ui",
+        "metadata": "runflow/EaRV73DrxoKMvcXAazLe5p/sun/metadata.json"
+      }
+    }
+  }
+}
