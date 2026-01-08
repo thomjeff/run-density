@@ -242,7 +242,7 @@ def _evaluate_row_with_rulebook(row: pd.Series) -> pd.Series:
         util_percentile=row.get('util_percentile')
     )
     return pd.Series({
-        'los': result.los_class,
+        'los_class': result.los_class,
         'rate_per_m_per_min': result.rate_per_m_per_min,
         'util_percent': result.util_percent,
         'util_percentile': result.util_percentile,
@@ -254,7 +254,7 @@ def _evaluate_row_with_rulebook(row: pd.Series) -> pd.Series:
 def _apply_rulebook_evaluation(result_df: pd.DataFrame) -> pd.DataFrame:
     """Apply rulebook evaluation to all rows and update DataFrame."""
     eval_results = result_df.apply(_evaluate_row_with_rulebook, axis=1)
-    result_df['los'] = eval_results['los']
+    result_df['los_class'] = eval_results['los_class']
     result_df['rate_per_m_per_min'] = eval_results['rate_per_m_per_min']
     result_df['util_percent'] = eval_results['util_percent']
     result_df['util_percentile'] = eval_results['util_percentile']
@@ -382,7 +382,7 @@ def summarize_segment_flags_new(df: pd.DataFrame) -> pd.DataFrame:
             worst_bin_t_start = worst_bin.get('t_start', None)
             worst_bin_rate = worst_bin.get('rate', 0)
             worst_bin_density = worst_bin['density']
-            worst_bin_los = worst_bin['los']
+            worst_bin_los = worst_bin['los_class']
         else:
             worst_severity = 'none'
             worst_reason = 'none'
@@ -412,7 +412,7 @@ def summarize_segment_flags_new(df: pd.DataFrame) -> pd.DataFrame:
             'worst_bin_los': worst_bin_los,
             'peak_density': group['density'].max(),
             'peak_rate_per_m_per_min': group['rate_per_m_per_min'].max(),
-            'peak_los': group['los'].max()  # Highest LOS letter
+            'peak_los': group['los_class'].max()  # Highest LOS letter
         })
     
     return pd.DataFrame(summaries).sort_values('worst_severity', key=lambda x: x.map(get_severity_rank_new), ascending=False)
@@ -430,7 +430,7 @@ def get_flagging_statistics_new(df: pd.DataFrame) -> Dict[str, any]:
     # Get worst severity and LOS
     if flagged_count > 0:
         worst_severity = flagged.sort_values('flag_severity', key=lambda x: x.map(get_severity_rank_new), ascending=False).iloc[0]['flag_severity']
-        worst_los = df['los'].max()
+        worst_los = df['los_class'].max()
     else:
         worst_severity = 'none'
         worst_los = 'A'

@@ -25,7 +25,6 @@ import subprocess
 
 # Add parent directory to path for imports
 
-from app.common.config import load_rulebook, load_reporting
 
 # Issue #283: Import SSOT for flagging logic parity
 from app import flagging as ssot_flagging
@@ -100,42 +99,6 @@ def compute_rulebook_hash() -> str:
     except Exception as e:
         print(f"Warning: Could not compute rulebook hash: {e}")
         return "sha256:unknown"
-
-
-def classify_los(density: float, los_thresholds: Dict[str, Any]) -> str:
-    """
-    Classify density into LOS grade using rulebook thresholds.
-    
-    Args:
-        density: Peak density in persons/m²
-        los_thresholds: Dictionary with keys A-F mapping to threshold dicts (min/max) or floats
-    
-    Returns:
-        LOS grade (A-F)
-    """
-    # Handle both old format (flat thresholds) and new format (min/max dicts)
-    grades_with_ranges = []
-    
-    for grade, threshold_info in los_thresholds.items():
-        if isinstance(threshold_info, dict):
-            # New format: {"min": 0.0, "max": 0.36, "label": "..."}
-            min_val = threshold_info.get("min", 0.0)
-            max_val = threshold_info.get("max", float('inf'))
-            grades_with_ranges.append((grade, min_val, max_val))
-        else:
-            # Old format: just a number (upper bound)
-            grades_with_ranges.append((grade, 0.0, threshold_info))
-    
-    # Sort by min value
-    grades_with_ranges.sort(key=lambda x: x[1])
-    
-    # Find the appropriate grade
-    for grade, min_val, max_val in grades_with_ranges:
-        if min_val <= density < max_val:
-            return grade
-    
-    # If above all ranges, return the last grade (F)
-    return grades_with_ranges[-1][0] if grades_with_ranges else "F"
 
 
 def generate_meta_json(run_id: str, environment: str = "local") -> Dict[str, Any]:
@@ -223,7 +186,6 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
             worst_bin_row = group.iloc[0] if len(group) > 0 else None
             peak_density = 0.0
             peak_rate = 0.0
-            worst_los = "A"
             active_window = "N/A"
         else:
             worst_bin_row = group.loc[worst_bin_idx]
@@ -247,18 +209,9 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
                 peak_rate = 0.0
             
             # Issue #603: Extract LOS from worst bin (not recalculated)
-            if 'los_class' in worst_bin_row:
-                worst_los = str(worst_bin_row['los_class'])
-            elif 'los' in worst_bin_row:
-                worst_los = str(worst_bin_row['los'])
-            else:
-                # Fallback: classify from density if los_class not available
-                try:
-                    rulebook = load_rulebook()
-                    los_thresholds = rulebook.get("globals", {}).get("los_thresholds", {})
-                    worst_los = classify_los(peak_density, los_thresholds)
-                except Exception:
-                    worst_los = "A"
+            if 'los_class' not in worst_bin_row:
+                raise ValueError("Missing los_class in bins.parquet; LOS must be computed upstream.")
+            worst_los = str(worst_bin_row['los_class'])
             
             # Issue #603: Extract active_window from worst bin's t_start/t_end
             active_window = "N/A"
@@ -275,6 +228,15 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
                 except (ValueError, TypeError) as e:
                     pass  # Fallback to "N/A" if parsing fails
         
+        if worst_bin_row is None:
+            raise ValueError("Missing bins for segment; cannot determine los_class.")
+
+        if 'los_class' not in worst_bin_row:
+            raise ValueError("Missing los_class in bins.parquet; LOS must be computed upstream.")
+
+        if worst_bin_idx is None:
+            worst_los = str(worst_bin_row['los_class'])
+
         # Get schema_key from the first bin in the group (all bins in a segment should have the same schema_key)
         schema_key = group['schema_key'].iloc[0] if 'schema_key' in group.columns else 'on_course_open'
         
@@ -1180,4 +1142,3 @@ def generate_health_json(artifacts_dir: Path, run_id: str, environment: str = "l
 
 if __name__ == "__main__":
     main()
-

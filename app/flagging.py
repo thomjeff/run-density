@@ -5,7 +5,7 @@ This module provides the canonical API for flag computation and summarization.
 Both the Density report and UI artifacts consume from this SSOT to ensure parity.
 
 Architecture:
-- Reads authoritative flags from bins.parquet (with flag_severity, flag_reason, los)
+- Reads authoritative flags from bins.parquet (with flag_severity, flag_reason, los_class)
 - Does NOT recompute flags (trusts the upstream binning/flagging pipeline)
 - Provides two public functions: compute_bin_flags() and summarize_flags()
 - Tied to rulebook version/hash for reproducibility
@@ -43,7 +43,7 @@ class BinFlag:
     t_end: str    # ISO 8601 with timezone
     density: float  # persons per m² (p/m²)
     rate: float  # persons per second (p/s) - CANONICAL
-    los: str  # Level of Service (A-F)
+    los_class: str  # Level of Service (A-F)
     severity: str  # WATCH, ALERT, CRITICAL, or none
     reason: str  # Short code: utilization, density, rate, etc.
     
@@ -68,7 +68,7 @@ class BinFlag:
             "t_end": self.t_end,
             "density": float(self.density),
             "rate": float(self.rate),  # p/s - canonical
-            "los": self.los,
+            "los_class": self.los_class,
             "severity": self.severity,
             "reason": self.reason,
         }
@@ -97,7 +97,7 @@ def compute_bin_flags(bins: pd.DataFrame, rulebook: Optional[Dict[str, Any]] = N
     
     Args:
         bins: DataFrame with columns: segment_id, t_start, t_end, density, rate,
-              los, flag_severity, flag_reason (+ optional: bin_id, start_km, end_km)
+              los_class, flag_severity, flag_reason (+ optional: bin_id, start_km, end_km)
         rulebook: Optional rulebook config (for validation/metadata only)
     
     Returns:
@@ -107,7 +107,7 @@ def compute_bin_flags(bins: pd.DataFrame, rulebook: Optional[Dict[str, Any]] = N
         ValueError: If required columns are missing
     """
     # Validate required columns
-    required_cols = {'segment_id', 't_start', 't_end', 'density', 'rate', 'los', 'flag_severity', 'flag_reason'}
+    required_cols = {'segment_id', 't_start', 't_end', 'density', 'rate', 'los_class', 'flag_severity', 'flag_reason'}
     missing = required_cols - set(bins.columns)
     if missing:
         raise ValueError(f"Missing required columns in bins DataFrame: {missing}")
@@ -123,7 +123,7 @@ def compute_bin_flags(bins: pd.DataFrame, rulebook: Optional[Dict[str, Any]] = N
             t_end=str(row['t_end']),
             density=float(row['density']),
             rate=float(row['rate']),  # Already in p/s (canonical)
-            los=str(row['los']),
+            los_class=str(row['los_class']),
             severity=str(row['flag_severity']),
             reason=str(row['flag_reason']),
             bin_id=str(row.get('bin_id', '')),
@@ -187,8 +187,8 @@ def summarize_flags(bin_flags: List[BinFlag]) -> Dict[str, Any]:
             d["worst_severity"] = flag.severity
         
         # Update worst LOS (F > E > D > C > B > A)
-        if flag.los > d["worst_los"]:
-            d["worst_los"] = flag.los
+        if flag.los_class > d["worst_los"]:
+            d["worst_los"] = flag.los_class
         
         # Update peak values
         if flag.density > d["peak_density"]:
@@ -244,7 +244,9 @@ def get_flagging_summary_for_report(bins: pd.DataFrame, rulebook: Optional[Dict[
     }
     if len(bin_flags) > 0:
         worst_severity = max(bin_flags, key=lambda f: severity_order.get(f.severity, 0)).severity
-        worst_los = bins['los'].max() if 'los' in bins.columns else 'A'
+        if 'los_class' not in bins.columns:
+            raise ValueError("Missing los_class in bins DataFrame; LOS must be computed upstream.")
+        worst_los = bins['los_class'].max()
     else:
         worst_severity = 'none'
         worst_los = 'A'
@@ -305,4 +307,3 @@ def rate_per_m_per_min_to_rate(rate_per_m_per_min: float, width_m: float) -> flo
     if width_m <= 0:
         raise ValueError(f"width_m must be > 0, got {width_m}")
     return (rate_per_m_per_min / 60.0) * width_m
-
