@@ -755,10 +755,8 @@
             payload.description = description;
         }
 
-        // Issue #635: Add enableAudit to payload (use "y" or "n" format)
-        if (enableAudit) {
-            payload.enableAudit = enableAudit;
-        }
+        // Issue #635: Add enableAudit to payload (always include, default "n")
+        payload.enableAudit = enableAudit || "n";
 
         return payload;
     }

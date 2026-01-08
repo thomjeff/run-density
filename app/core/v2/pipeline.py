@@ -1414,12 +1414,13 @@ def create_full_analysis_pipeline(
             derived_metrics = derived_metrics_by_day.get(day_code, {})
             if derived_metrics:
                 metadata["operational_status"] = derived_metrics.get("operational_status", "Unknown")
-                if derived_metrics.get("event_groups"):
-                    metadata["event_groups"] = derived_metrics["event_groups"]
+                event_groups = derived_metrics.get("event_groups")
+                if event_groups:
+                    metadata["event_groups"] = event_groups
                 logger.info(
                     f"Issue #574: Added derived metrics to metadata for {day_code}: "
                     f"operational_status={derived_metrics.get('operational_status')}, "
-                    f"res_groups={len(derived_metrics.get('event_groups', {}))}"
+                    f"res_groups={len(event_groups) if event_groups else 0}"
                 )
             else:
                 metadata["operational_status"] = "Unknown"

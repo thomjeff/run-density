@@ -330,92 +330,13 @@ async def get_runs_list():
                 except Exception:
                     formatted_date = created_at[:16] if len(created_at) > 16 else created_at
             
-            # Issue #636: Load predicted_timings from day metadata files
-            # For multi-day runs, aggregate across all days
-            day_first_finisher = None
-            day_last_finisher = None
-            day_duration_minutes = None
-            total_elapsed_minutes = None
-            
-            try:
-                # Get days from event_summary
-                event_summary = run.get("event_summary", {})
-                days = event_summary.get("events_by_day", {}).keys() if isinstance(event_summary.get("events_by_day"), dict) else []
-                
-                if days:
-                    # Load metadata.json for each day to get predicted_timings
-                    first_finishers = []
-                    last_finishers = []
-                    durations_minutes = []
-                    
-                    for day_code in days:
-                        day_metadata_path = runflow_root / run_id / day_code / "metadata.json"
-                        if day_metadata_path.exists():
-                            try:
-                                with open(day_metadata_path, 'r', encoding='utf-8') as f:
-                                    day_metadata = json.load(f)
-                                    predicted_timings = day_metadata.get("predicted_timings", {})
-                                    
-                                    if predicted_timings:
-                                        # Collect first/last finisher times
-                                        day_first = predicted_timings.get("day_first_finisher")
-                                        day_last = predicted_timings.get("day_last_finisher")
-                                        day_dur_str = predicted_timings.get("day_duration")
-                                        
-                                        if day_first:
-                                            first_finishers.append(day_first)
-                                        if day_last:
-                                            last_finishers.append(day_last)
-                                        
-                                        # Parse day_duration (hh:mm) to minutes
-                                        if day_dur_str:
-                                            try:
-                                                parts = day_dur_str.split(":")
-                                                if len(parts) == 2:
-                                                    hours = int(parts[0])
-                                                    minutes = int(parts[1])
-                                                    durations_minutes.append(hours * 60 + minutes)
-                                            except (ValueError, IndexError):
-                                                pass
-                            except Exception as e:
-                                logger.debug(f"Could not load day metadata for {day_code}: {e}")
-                    
-                    # Aggregate across all days
-                    if first_finishers:
-                        # Find earliest first finisher (earliest time string)
-                        day_first_finisher = min(first_finishers)
-                    if last_finishers:
-                        # Find latest last finisher (latest time string)
-                        day_last_finisher = max(last_finishers)
-                    if durations_minutes:
-                        # Sum all day durations
-                        day_duration_minutes = sum(durations_minutes)
-                
-                # Load total_elapsed_minutes from root metadata.json
-                root_metadata_path = runflow_root / run_id / "metadata.json"
-                if root_metadata_path.exists():
-                    try:
-                        with open(root_metadata_path, 'r', encoding='utf-8') as f:
-                            root_metadata = json.load(f)
-                            performance = root_metadata.get("performance", {})
-                            total_elapsed_minutes = performance.get("total_elapsed_minutes")
-                    except Exception as e:
-                        logger.debug(f"Could not load root metadata for total_elapsed_minutes: {e}")
-            except Exception as e:
-                logger.debug(f"Could not load predicted_timings for run {run_id}: {e}")
-            
             run_entry = {
                 "run_id": run_id,
                 "description": description or f"Run {run_id[:8]}...",
                 "created_at": created_at,
                 "formatted_date": formatted_date,
                 "event_summary": run.get("event_summary", {}),
-                "status": run.get("status", "complete"),
-                # Issue #636: Add new columns
-                "day_first_finisher": day_first_finisher,
-                "day_last_finisher": day_last_finisher,
-                "day_duration_minutes": day_duration_minutes,
-                "total_elapsed_minutes": total_elapsed_minutes
+                "status": run.get("status", "complete")
             }
             runs_list.append(run_entry)
         
@@ -528,9 +449,16 @@ async def get_run_summary(run_id: str):
                 # Issue #573: Get event_groups RES data from metadata
                 event_groups_res = day_meta.get("event_groups", {})
                 
+                # Issue #636: Get predicted_timings for day_first_finisher and day_last_finisher
+                predicted_timings = day_meta.get("predicted_timings", {})
+                day_first_finisher = predicted_timings.get("day_first_finisher") if predicted_timings else None
+                day_last_finisher = predicted_timings.get("day_last_finisher") if predicted_timings else None
+                
                 metrics_by_day[day] = {
                     "participants": total_participants,
                     "events": event_names,
+                    "day_first_finisher": day_first_finisher,  # Issue #636: Add to Run Details table
+                    "day_last_finisher": day_last_finisher,    # Issue #636: Add to Run Details table
                     "segments_with_flags": f"{segments_flagged} / {segments_total}",
                     "peak_density": round(peak_density, 3),
                     "peak_density_los": peak_density_los,
