@@ -1,0 +1,17 @@
+loc_id,loc_label,loc_type,loc_direction,lat,lon,zone,buffer,interval,first_runner,peak_start,peak_end,last_runner,loc_start,loc_end,duration,timing_source,awp_count,caf_count,fdsa_count,fpf_count,ofc_count,sja_count,vol_count,yssr_count,awp_mins,caf_mins,fdsa_mins,fpf_mins,ofc_mins,sja_mins,vol_mins,yssr_mins,notes
+100,Regent / Queen,course,Uni Direction from PSAB heading west on Queen,45.961152,-66.638708,8,10,5,08:06:24,08:44:29,08:59:31,09:20:40,07:15:00,09:35:00,140,modeled,0,0,0,1,0,0,0,4,0,0,0,140,0,0,0,560,Westbound on Queen
+101,Carleton at Queen,course,Uni - west on Queen,45.96209,-66.640924,8,10,5,08:06:59,08:45:45,09:00:49,09:22:54,07:15:00,09:35:00,140,modeled,0,0,0,0,0,0,2,0,0,0,0,0,0,0,280,0,Southbound from Library / Garrison
+102,Carleton at King,traffic,N/A - Traffic Countrol,45.96119,-66.64169,8,10,5,,,,,07:15:00,09:35:00,140,proxy:101,0,0,0,1,0,0,0,1,0,0,0,140,0,0,0,140,Northbound to Queen
+103,Wilmot Alley at King,course,Uni - west on Queen,45.961597,-66.642755,8,10,5,08:03:44,08:38:40,09:01:27,09:24:00,07:15:00,09:35:00,140,modeled,0,0,0,0,0,0,1,0,0,0,0,0,0,0,140,0,Northbound to Queen
+104,York at Queen,course,Uni - west on Queen,45.963062,-66.643097,8,10,5,08:01:05,08:33:09,08:57:46,09:25:10,07:15:00,09:40:00,145,modeled,0,0,0,0,0,0,2,0,0,0,0,0,0,0,290,0,Southbound to King
+105,York at King,traffic,N/A - Traffic Countrol,45.962135,-66.643915,8,10,5,,,,,07:15:00,09:40:00,145,proxy:104,0,0,0,1,0,0,0,1,0,0,0,145,0,0,0,145,Northbound to Queen
+106,Campbell at York,course,Runners heading north on York to finish,45.963779,-66.64262,8,10,5,08:14:16,08:57:21,09:07:13,09:26:07,07:15:00,09:40:00,145,modeled,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,290,Eastbound to York
+107,Queen at Canabis NB,course,Uni - west on Queen,45.963254,-66.643762,8,10,5,08:01:15,08:33:12,08:47:57,09:00:46,07:15:00,09:15:00,120,modeled,0,0,0,0,0,0,1,0,0,0,0,0,0,0,120,0,Traffic exiting  alleys
+108,Westmorland at King,traffic,N/A - Traffic Countrol,45.963083,-66.646123,8,10,5,,,,,07:15:00,09:15:00,120,proxy:109,0,0,0,1,0,0,0,1,0,0,0,120,0,0,0,120,Northbound to Queen
+109,Westmorland at Queen,course,Uni - west on Queen,45.963989,-66.645371,8,10,5,08:01:41,08:34:09,08:48:57,09:02:27,07:15:00,09:15:00,120,modeled,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,240,Southbound from WSB
+110,Queen at Frederik Sq Garage,course,Uni - west on Queen,45.964322,-66.646313,8,10,5,08:01:55,08:34:41,08:49:29,09:03:21,07:15:00,09:15:00,120,modeled,0,0,0,0,0,0,1,0,0,0,0,0,0,0,120,0,Westbound on Queen
+111,Queen at Westpointe,course,Uni - west on Queen,45.964628,-66.646724,8,10,5,08:02:03,08:34:58,08:49:46,09:03:52,07:15:00,09:15:00,120,modeled,0,0,0,0,0,0,1,0,0,0,0,0,0,0,120,0,Westbound on Queen
+112,Northumberland at Queen,course,Uni - west on Queen,45.96478,-66.647751,8,10,5,08:02:17,08:35:28,08:50:17,09:04:45,07:15:00,09:15:00,120,modeled,0,0,0,0,0,0,1,2,0,0,0,0,0,0,120,240,Traffic apts/senior home lots
+113,Queen at Smythe,course,Uni - west on Queen,45.965119,-66.649656,8,10,5,08:02:43,08:36:26,08:51:15,09:06:28,07:15:00,09:20:00,125,modeled,0,0,0,0,0,0,2,0,0,0,0,0,0,0,250,0,Turn onto Sainte Anne Pointe Drive
+114,Victoria Traffic Circle,traffic,N/A - Traffic Countrol,45.964298,-66.651403,8,10,5,,,,,07:15:00,09:35:00,140,proxy:100,0,0,0,1,0,0,0,1,0,0,0,140,0,0,0,140,Northside Access
+115,WSB Smythe St Exit/Ramp,traffic,N/A - Traffic Countrol,45.96684,-66.643575,8,10,5,,,,,07:15:00,09:35:00,140,proxy:100,0,0,0,1,0,0,0,0,0,0,0,140,0,0,0,0,Southbound from WSB
