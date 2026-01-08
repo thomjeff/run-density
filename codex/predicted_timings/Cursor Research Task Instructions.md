@@ -1,5 +1,7 @@
 # Determine Correct Implementation for `predicted_timings` in Analysis Pipeline
 
+_IMPORTANT NOTE: This is a research only task. You are not authorized to make changes to the main repository._
+
 ## Background
 
 During the implementation of [Issue #594](/codex/predicted_timings/issue594.md), it was discovered that the `predicted_timings` fields in `{day}/metadata.json` — including:
