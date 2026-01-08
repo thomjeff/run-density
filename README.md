@@ -13,7 +13,7 @@ It provides comprehensive reporting capabilities with both Markdown and CSV outp
 - **Day selector UI**: Global day selector across all pages (Dashboard, Segments, Density, Flow, Locations, Reports)
 - **E2E test suite**: Comprehensive regression testing with golden file comparisons
 
-**Current Version: v2.0.0** - Runflow v2: Multi-day, multi-event race analysis with day-scoped outputs, E2E test suite, and enhanced UI with day selector
+**Current Version: v2.0.4** - Flow UI zone-level enhancements, multi-convergence point support, vectorized zone metrics, and comprehensive UI improvements
 
 ## Key Features
 - **Density Analysis**: Spatial concentration analysis with areal and crowd density calculations

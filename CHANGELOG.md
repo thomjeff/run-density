@@ -1,5 +1,78 @@
 # Changelog
 
+## [v2.0.4] - 2026-01-08
+
+### Summary
+- **Issue #628 Complete**: Flow UI zone-level enhancements with drilldown and narrative captions
+- **Issue #629 Complete**: Flow.csv restructured to zone-level format for better granularity
+- **Issue #612 Complete**: Multi-convergence point support and zone-based flow analysis
+- **Issue #613 Complete**: Flow zone metric vectorization optimization for performance
+- **Major UI improvements**: Locations UI enhancements, Flow UI zone drilldown, resource filtering
+- **Data integrity**: Fixed overtaking count logic, added validation fields, improved audit exports
+
+### New Features
+
+#### Flow UI Zone-Level Enhancements (Issue #628)
+- **Zone drilldown**: Accordion pattern for expanding segment rows to show all zones
+- **Worst zone display**: Main table shows worst zone index per segment (based on overtaking + co-presence)
+- **Zone-level table**: Sortable table with Distance, Overtaking (A/B), Overtaken (A/B), Co-presence (A/B), Unique Encounters, Participants, Multi-category
+- **Narrative captions**: Human-readable summaries for each zone with co-presence percentages, overtaking ratios, and interaction characterization
+- **UI artifacts**: New `flow_segments.json` and `zone_captions.json` files generated during analysis
+- **API updates**: `/api/flow/segments` endpoint now reads from JSON artifacts instead of CSV
+
+#### Flow Analysis Improvements
+- **Zone-level Flow.csv** (Issue #629): Restructured to one row per zone with explicit `zone_index`, `cp_km`, `cp_type`, and zone-specific metrics
+- **Multi-convergence point support** (Issue #612): Segments can now have multiple convergence points, each generating separate zones
+- **Vectorized zone metrics** (Issue #613): Optimized zone metric calculations using numpy/pandas vectorized operations for 3-5x performance improvement
+- **Overtaken metrics export** (Issue #620): Added `overtaken_a` and `overtaken_b` to `flow_zones.parquet`
+- **Multi-category runners** (Issue #622): Added `multi_category_runners` field for participants_involved validation
+
+#### Locations UI Enhancements
+- **Resource dropdown filter** (Issue #591): Filter locations by resource type (medical, traffic, access)
+- **Simplified UI** (Issue #592): Combined columns, added resource counts to tooltips/popups, improved layout
+- **Enhanced locations.csv** (Issue #589): Added new fields and resource calculations
+
+#### Pipeline & Infrastructure
+- **Organized UI artifacts** (Issues #574, #579, #580): Restructured UI artifacts into `metadata/`, `metrics/`, `geospatial/`, `visualizations/` subdirectories
+- **Enhanced phase logging** (Issue #581): Improved pipeline phase logging for better visibility
+- **Persisted JSON artifacts** (Issue #600): Reports now use persisted JSON artifacts as single source of truth
+- **Postman collections** (Issue #576): Added `event_group` field to Postman collections
+
+### Improvements
+- **Overtaking count logic fix** (Issue #552): Corrected overtaking count calculation to match temporal flow analysis
+- **Audit refactoring** (Issue #607): Refactored audit generation to use Parquet format instead of CSV
+- **Field deduplication** (Issue #549): Removed overlapping fields from flow.csv and segments.csv
+- **Duplicate bins.parquet fix** (Issues #519, #542): Removed duplicate bins.parquet files from reports directory
+- **Metadata verification** (PR #601): Fixed metadata verification and density report discrepancies
+- **Pointer files** (Issue #586): Added missing `update_pointer_files()` call
+- **fz_runners.parquet export** (Issue #627): Fixed export to include all segments
+
+### Bug Fixes
+- **JSON serialization** (Issue #612): Fixed dataclass serialization in pipeline using `asdict()` and `_convert_dataclasses_to_dicts()` helper
+- **Participants involved calculation** (Commit 4198c36): Fixed to include overtaken runners
+- **Segment ID filtering** (Issue #628): Fixed composite segment ID handling (e.g., A2a → A2 normalization)
+
+### UI Corrections (Issue #628)
+- Show "0" instead of "--" for zero values in main table and accordion
+- Removed color styling from worst zone column
+- Changed "CP (km)" column heading to "Distance"
+- Removed "Type" column from zone table
+- Merged Overtaking, Overtaken, Co-Presence columns into A/B format
+- Updated caption text to remove repetitive segment info and use lowercase event names
+
+### Technical Details
+- **Flow zone captions**: Currently generated in code (Issue #632 created to move to YAML rulebook)
+- **Composite segment IDs**: Properly handled and displayed (e.g., A2a, F1b)
+- **Zone-based analysis**: Flow analysis now operates at zone-level granularity with proper zone indexing
+
+### Migration Notes
+- Flow.csv structure changed to zone-level format - each row represents one zone within a segment+event-pair
+- New UI artifacts: `metrics/flow_segments.json` and `visualizations/zone_captions.json`
+- Flow API endpoint now reads from JSON artifacts instead of CSV
+- Locations UI requires resource filtering configuration
+
+---
+
 ## [v2.0.2] - 2025-12-25
 
 ### Summary
