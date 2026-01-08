@@ -44,90 +44,11 @@ class NewFlaggingConfig:
     require_min_bin_len_m: float = 10.0
 
 
-def get_los_thresholds() -> Dict[str, float]:
-    """Get LOS density thresholds from rulebook."""
-    # These match the current LOS_AREAL_THRESHOLDS
-    return {
-        'A': 0.0,
-        'B': 0.36,
-        'C': 0.54,
-        'D': 0.72,
-        'E': 1.08,
-        'F': 1.63
-    }
-
-
-def classify_density_los(density: float) -> str:
-    """Classify density into LOS level (A-F)."""
-    thresholds = get_los_thresholds()
-    
-    if density < thresholds['B']:
-        return 'A'
-    elif density < thresholds['C']:
-        return 'B'
-    elif density < thresholds['D']:
-        return 'C'
-    elif density < thresholds['E']:
-        return 'D'
-    elif density < thresholds['F']:
-        return 'E'
-    else:
-        return 'F'
-
-
-def meets_density_threshold(density: float, los_threshold: str) -> bool:
-    """Check if density meets or exceeds LOS threshold."""
-    thresholds = get_los_thresholds()
-    threshold_value = thresholds.get(los_threshold, float('inf'))
-    return density >= threshold_value
-
-
 def calculate_rate_per_m_per_min(rate: float, width_m: float) -> float:
     """Calculate rate per meter per minute: (rate / width_m) × 60"""
     if width_m <= 0:
         return 0.0
     return (rate / width_m) * 60.0
-
-
-def classify_flag_reason_new(
-    density: float,
-    rate_per_m_per_min: float,
-    config: NewFlaggingConfig
-) -> Tuple[str, str]:
-    """
-    Classify flag reason and severity based on new Issue #246 logic.
-    
-    Args:
-        density: Areal density (p/m²)
-        rate_per_m_per_min: Rate per meter per minute (p/m/min)
-        config: Flagging configuration
-        
-    Returns:
-        Tuple of (reason, severity)
-        - reason: 'los_high', 'rate_high', 'both', or 'none'
-        - severity: 'critical', 'watch', or 'none'
-    """
-    # Check density conditions
-    density_watch = meets_density_threshold(density, config.density_watch_los)
-    density_critical = meets_density_threshold(density, config.density_critical_los)
-    
-    # Check rate conditions
-    rate_watch = rate_per_m_per_min >= config.rate_warn_threshold
-    rate_critical = rate_per_m_per_min >= config.rate_critical_threshold
-    
-    # Determine reason and severity
-    if density_critical and rate_critical:
-        return 'both', 'critical'
-    elif density_critical or rate_critical:
-        return 'both', 'critical'  # Either condition critical = critical
-    elif density_watch and rate_watch:
-        return 'both', 'watch'
-    elif density_watch:
-        return 'los_high', 'watch'
-    elif rate_watch:
-        return 'rate_high', 'watch'
-    else:
-        return 'none', 'none'
 
 
 def _load_and_apply_segment_metadata(

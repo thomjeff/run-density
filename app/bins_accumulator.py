@@ -31,7 +31,7 @@ class BinFeature:
     t_end: datetime
     density: float                          # p / m^2
     rate: float                             # p / s (throughput rate) - renamed from 'flow' to avoid confusion with Flow analysis
-    los_class: str                          # derived from density thresholds
+    los_class: Optional[str]                # set by rulebook flagging (SSOT)
     bin_size_km: float
 
 @dataclass
@@ -39,29 +39,13 @@ class BinBuildResult:
     features: List[BinFeature]
     metadata: Dict[str, Any]
 
-# LOS thresholds example: change to your canonical values
-DEFAULT_LOS_THRESHOLDS = {
-    "A": (0.00, 0.20),
-    "B": (0.20, 0.40),
-    "C": (0.40, 0.70),
-    "D": (0.70, 1.20),
-    "E": (1.20, 2.00),
-    "F": (2.00, float("inf")),
-}
-
 # -----------------------------------
-# Validation & LOS classification
+# Validation
 # -----------------------------------
 
 def _validate_positive_finite(value: float, name: str) -> None:
     if value is None or not np.isfinite(value) or value <= 0.0:
         raise ValueError(f"{name} must be positive and finite (got {value}).")
-
-def los_classify(density: float, thresholds: Dict[str, Tuple[float, float]]) -> str:
-    for k, (lo, hi) in thresholds.items():
-        if lo <= density < hi:
-            return k
-    return "F"  # fallback
 
 # ----------------------------------------------------
 # Vectorized accumulation: one segment, one time window
@@ -129,7 +113,8 @@ def build_bin_features(
     - Density is computed as p/m^2 within the bin area (bin_len_m * width_m).
     - Flow (p/s) is density * width_m * mean_speed_mps (absolute per bin/window).
     """
-    los_thresholds = los_thresholds or DEFAULT_LOS_THRESHOLDS
+    if los_thresholds is not None:
+        raise ValueError("LOS thresholds must be sourced from rulebook flagging; bins_accumulator should not classify LOS.")
     bin_len_m = bin_size_km * 1000.0
     _validate_positive_finite(bin_len_m, "bin_len_m")
 
@@ -192,7 +177,6 @@ def build_bin_features(
                 end_m = min((b + 1) * bin_len_m, seg.length_m)
                 d = float(density[b])
                 r = float(rate[b])
-                los = los_classify(d, los_thresholds)
                 bf = BinFeature(
                     segment_id=seg_id,
                     bin_index=b,
@@ -202,7 +186,7 @@ def build_bin_features(
                     t_end=t_end,
                     density=d,
                     rate=r,
-                    los_class=los,
+                    los_class=None,
                     bin_size_km=bin_size_km,
                 )
                 all_features.append(bf)
