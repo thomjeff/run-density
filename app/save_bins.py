@@ -311,7 +311,7 @@ def _update_features_with_severity(features: t.List[Feature], rows: t.List[JsonD
         severity_lookup = {row['bin_id']: {
             'flag_severity': row.get('flag_severity', 'none'),
             'flag_reason': row.get('flag_reason', 'none'),
-            'los': row.get('los', row.get('los_class', 'A')),
+            'los_class': row.get('los_class', 'A'),
             'rate_per_m_per_min': row.get('rate_per_m_per_min', 0.0)
         } for row in rows}
         

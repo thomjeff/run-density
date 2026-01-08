@@ -218,7 +218,7 @@ def generate_bin_summary(
                 "end_time": format_time_for_display(str(bin_row["t_end"])),
                 "density": round(float(bin_row["density"]), 3),  # Use density column (NOT density_peak)
                 "rate": round(float(bin_row["rate"]), 3),
-                "los": str(bin_row["los_class"]),  # Use los_class column
+                "los_class": str(bin_row["los_class"]),  # Use los_class column
                 "flag": bin_row["flag_reason"] if pd.notna(bin_row["flag_reason"]) else "flagged"
             }
             bins_list.append(bin_data)

@@ -249,8 +249,6 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
             # Issue #603: Extract LOS from worst bin (not recalculated)
             if 'los_class' in worst_bin_row:
                 worst_los = str(worst_bin_row['los_class'])
-            elif 'los' in worst_bin_row:
-                worst_los = str(worst_bin_row['los'])
             else:
                 # Fallback: classify from density if los_class not available
                 try:
@@ -1015,7 +1013,7 @@ def generate_density_schema_json(dataset_version: str = "unknown") -> Dict[str, 
         "units": {
             "density": "persons_per_m2",
             "rate": "persons_per_second", 
-            "los": "A-F",
+            "los_class": "A-F",
             "severity": "NONE|WATCH|ALERT|CRITICAL",
             "time": "ISO8601"
         },
@@ -1051,7 +1049,7 @@ def generate_density_schema_json(dataset_version: str = "unknown") -> Dict[str, 
                 "description": "Persons per second (p/s)."
             },
             {
-                "name": "los",
+                "name": "los_class",
                 "type": "string",
                 "required": True,
                 "description": "Level of Service classification (A–F)."
@@ -1180,4 +1178,3 @@ def generate_health_json(artifacts_dir: Path, run_id: str, environment: str = "l
 
 if __name__ == "__main__":
     main()
-
