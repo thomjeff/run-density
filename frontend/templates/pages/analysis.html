@@ -7,34 +7,6 @@
     <h2>Request Analysis</h2>
 </div>
 
-<!-- Instructions Section -->
-<div class="card">
-    <h3 style="margin-bottom: 1rem;">How to Use</h3>
-    <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
-        Submit an analysis request to generate density, flow, and location reports for one or more events.
-        All required files must exist in the <code>/data</code> directory.
-    </p>
-    <details style="margin-top: 1rem;">
-        <summary style="cursor: pointer; color: #3498db; font-weight: 600;">View Example Request</summary>
-        <pre style="background: #f8f9fa; padding: 1rem; border-radius: 4px; margin-top: 0.5rem; overflow-x: auto;"><code>{
-  "description": "Saturday and Sunday race analysis",
-  "segments_file": "segments.csv",
-  "flow_file": "flow.csv",
-  "locations_file": "locations.csv",
-  "events": [
-    {
-      "name": "elite",
-      "day": "sat",
-      "start_time": 480,
-      "event_duration_minutes": 45,
-      "runners_file": "elite_runners.csv",
-      "gpx_file": "elite.gpx"
-    }
-  ]
-}</code></pre>
-    </details>
-</div>
-
 <!-- Error Banner -->
 <div id="error-banner" class="card" style="display: none; background: #fee; border-left: 4px solid #e74c3c; margin-bottom: 1.5rem;">
     <h3 style="color: #e74c3c; margin-bottom: 0.5rem;">Error</h3>
@@ -123,9 +95,25 @@
             </div>
         </div>
 
-        <!-- Events Inputs -->
+        <!-- Enable Audit -->
         <div style="margin-bottom: 1.5rem;">
-            <h3 style="margin-bottom: 1rem; color: #2c3e50;">Events Inputs</h3>
+            <label for="enable_audit" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
+                Enable Audit <span style="color: #95a5a6; font-weight: normal;">(optional)</span>
+            </label>
+            <select 
+                id="enable_audit" 
+                name="enable_audit" 
+                style="width: 100%; max-width: 200px; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"
+            >
+                <option value="n">No</option>
+                <option value="y">Yes</option>
+            </select>
+            <small style="color: #7f8c8d; font-size: 0.875rem;">Enable audit file generation for detailed analysis debugging.</small>
+        </div>
+
+        <!-- Events -->
+        <div style="margin-bottom: 1.5rem;">
+            <h3 style="margin-bottom: 1rem; color: #2c3e50;">Events</h3>
             <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
                 Add at least one event. Use the <strong>+</strong> button to add more events, or <strong>-</strong> to remove.
             </p>
@@ -154,6 +142,35 @@
             </button>
         </div>
     </form>
+</div>
+
+<!-- Instructions Section -->
+<div class="card" style="margin-top: 2rem;">
+    <h3 style="margin-bottom: 1rem;">How to Use</h3>
+    <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
+        Submit an analysis request to generate density, flow, and location reports for one or more events.
+        All required files must exist in the <code>/data</code> directory.
+    </p>
+    <details style="margin-top: 1rem;">
+        <summary style="cursor: pointer; color: #3498db; font-weight: 600;">View Example Request</summary>
+        <pre style="background: #f8f9fa; padding: 1rem; border-radius: 4px; margin-top: 0.5rem; overflow-x: auto;"><code>{
+  "description": "Saturday and Sunday race analysis",
+  "segments_file": "segments.csv",
+  "flow_file": "flow.csv",
+  "locations_file": "locations.csv",
+  "enableAudit": "y",
+  "events": [
+    {
+      "name": "elite",
+      "day": "sat",
+      "start_time": 480,
+      "event_duration_minutes": 45,
+      "runners_file": "elite_runners.csv",
+      "gpx_file": "elite.gpx"
+    }
+  ]
+}</code></pre>
+    </details>
 </div>
 
 <!-- Response View (hidden initially) -->
@@ -704,6 +721,7 @@
         const segmentsFile = document.getElementById('segments_file').value.trim();
         const flowFile = document.getElementById('flow_file').value.trim();
         const locationsFile = document.getElementById('locations_file').value.trim();
+        const enableAudit = document.getElementById('enable_audit').value;
 
         const events = [];
         const eventRows = document.querySelectorAll('.event-row');
@@ -735,6 +753,11 @@
 
         if (description) {
             payload.description = description;
+        }
+
+        // Issue #635: Add enableAudit to payload (use "y" or "n" format)
+        if (enableAudit) {
+            payload.enableAudit = enableAudit;
         }
 
         return payload;
