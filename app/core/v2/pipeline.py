@@ -1411,16 +1411,18 @@ def create_full_analysis_pipeline(
             metadata["flow"] = flow_summary_by_day[day_code]
             
             # Issue #574: Use pre-calculated derived metrics from Phase 4.2
-            derived_metrics = derived_metrics_by_day.get(day_code, {})
+            derived_metrics = derived_metrics_by_day.get(day_code)
             if derived_metrics:
                 metadata["operational_status"] = derived_metrics.get("operational_status", "Unknown")
                 event_groups = derived_metrics.get("event_groups")
                 if event_groups:
                     metadata["event_groups"] = event_groups
+                # Safely get res_groups count (handle None case)
+                res_groups_count = len(event_groups) if event_groups and isinstance(event_groups, dict) else 0
                 logger.info(
                     f"Issue #574: Added derived metrics to metadata for {day_code}: "
                     f"operational_status={derived_metrics.get('operational_status')}, "
-                    f"res_groups={len(event_groups) if event_groups else 0}"
+                    f"res_groups={res_groups_count}"
                 )
             else:
                 metadata["operational_status"] = "Unknown"

@@ -138,6 +138,7 @@ def generate_analysis_json(
     locations_file = request_payload.get("locations_file")
     events = request_payload.get("events", [])
     event_group = request_payload.get("event_group")  # Issue #573: Optional event grouping for RES
+    enableAudit = request_payload.get("enableAudit", "n")  # Issue #635: Enable audit flag (default "n")
     
     # Generate default description if not provided
     if not description:
@@ -237,6 +238,9 @@ def generate_analysis_json(
     # Issue #573: Add event_group to analysis.json if provided
     if event_group is not None:
         analysis_json["event_group"] = event_group
+    
+    # Issue #635: Add enableAudit to analysis.json (always include, default "n")
+    analysis_json["enableAudit"] = enableAudit
     
     # Write to run directory
     analysis_json_path = run_path / "analysis.json"
