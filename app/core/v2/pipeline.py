@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timezone
 from dataclasses import is_dataclass, asdict
+import pandas as pd
 
 from app.core.v2.models import Day, Event
 from app.core.v2.timeline import generate_day_timelines
@@ -377,6 +378,14 @@ def calculate_predicted_timings(
     analysis_config: Optional[Dict[str, Any]] = None
 ) -> Optional[Dict[str, Any]]:
     """
+    DEPRECATED: This function is no longer used.
+    
+    Issue #638: Replaced by app.core.v2.timings.compute_predicted_timings()
+    which correctly computes finish times from runner data instead of bin windows.
+    
+    This function incorrectly used bins.parquet timestamps (analysis windows)
+    instead of actual runner finish times, leading to incorrect predicted_timings.
+    
     Calculate predicted timings from bin data (DRY principle - use existing computations).
     
     Issue #594: Extract timing data from bins.parquet without recalculating.
@@ -1384,7 +1393,9 @@ def create_full_analysis_pipeline(
             }
             
             # Participants per event for this day (re-use combine_runners_for_events)
+            # Also load runners_df for predicted_timings computation (Issue #638)
             participants_by_event: Dict[str, int] = {}
+            day_runners_df = pd.DataFrame()  # Initialize empty DataFrame
             try:
                 from app.core.v2.density import combine_runners_for_events
                 event_names = [e.name.lower() for e in day_events]
@@ -1428,17 +1439,20 @@ def create_full_analysis_pipeline(
                 metadata["operational_status"] = "Unknown"
                 logger.warning(f"Issue #574: No derived metrics found for {day_code}, using defaults")
             
-            # Issue #594: Calculate predicted_timings from bins.parquet (DRY principle)
-            predicted_timings = calculate_predicted_timings(
-                day_path=day_path,
+            # Issue #638: Calculate predicted_timings from runner data (vectorized)
+            from app.core.v2.timings import compute_predicted_timings
+            
+            # Use day_runners_df already loaded above for participants calculation
+            predicted_timings = compute_predicted_timings(
                 events=day_events,
-                analysis_config=analysis_config
+                analysis_config=analysis_config,
+                runners_df=day_runners_df
             )
             if predicted_timings:
                 metadata["predicted_timings"] = predicted_timings
-                logger.info(f"Issue #594: Added predicted_timings to metadata for {day_code}")
+                logger.info(f"Issue #638: Added predicted_timings to metadata for {day_code}")
             else:
-                logger.warning(f"Issue #594: Could not calculate predicted_timings for {day_code}")
+                logger.warning(f"Issue #638: Could not calculate predicted_timings for {day_code}")
             
             metadata_path = day_path / "metadata.json"
             with open(metadata_path, 'w', encoding='utf-8') as f:
