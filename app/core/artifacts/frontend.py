@@ -180,7 +180,10 @@ def generate_meta_json(run_id: str, environment: str = "local") -> Dict[str, Any
 
 def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]]:
     """
-    Generate segment_metrics.json from segment_windows_from_bins.parquet.
+    Generate segment_metrics.json from bins.parquet.
+    
+    Issue #603: Active Window, Peak Rate, and LOS now come from the worst bin (max density bin)
+    to ensure consistency with heatmap generation and Bin-Level Details table.
     
     Args:
         reports_dir: Path to reports/<run_id>/ directory
@@ -194,27 +197,9 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
         print(f"Warning: {parquet_path} not found, returning empty metrics")
         return {}
     
-    # Load rulebook for LOS classification
-    try:
-        rulebook = load_rulebook()
-        los_thresholds = rulebook.get("globals", {}).get("los_thresholds", {})
-    except Exception as e:
-        print(f"Warning: Could not load rulebook for LOS classification: {e}")
-        # Fallback thresholds
-        los_thresholds = {"A": 0.2, "B": 0.4, "C": 0.6, "D": 0.8, "E": 1.0, "F": float('inf')}
-    
     # Read parquet
     df = pd.read_parquet(parquet_path)
     
-    # Load segment_windows for active_window calculation (bug fix: use actual windows, not all bins)
-    segment_windows_path = reports_dir.parent / "bins" / "segment_windows_from_bins.parquet"
-    segment_windows_df = pd.DataFrame()
-    if segment_windows_path.exists():
-        try:
-            segment_windows_df = pd.read_parquet(segment_windows_path)
-        except Exception as e:
-            print(f"Warning: Could not load segment_windows_from_bins.parquet: {e}")
-
     # Group by segment_id and aggregate metrics
     metrics = {}
     
@@ -222,44 +207,73 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
     group_col = 'segment_id' if 'segment_id' in df.columns else 'seg_id'
     
     for seg_id, group in df.groupby(group_col):
-        # Compute peak density (use density_peak if available, else density_mean or density)
-        if 'density_peak' in group.columns:
-            peak_density = group['density_peak'].max()
+        # Issue #603: Find worst bin by max density (same approach as load_density_metrics_from_bins)
+        # This ensures all metrics (active_window, peak_rate, worst_los) come from the same bin
+        if 'density' in group.columns:
+            worst_bin_idx = group['density'].idxmax() if len(group) > 0 else None
+        elif 'density_peak' in group.columns:
+            worst_bin_idx = group['density_peak'].idxmax() if len(group) > 0 else None
         elif 'density_mean' in group.columns:
-            peak_density = group['density_mean'].max()
-        elif 'density' in group.columns:
-            peak_density = group['density'].max()
+            worst_bin_idx = group['density_mean'].idxmax() if len(group) > 0 else None
         else:
+            worst_bin_idx = None
+        
+        if worst_bin_idx is None:
+            # Fallback: use first bin if no density column found
+            worst_bin_row = group.iloc[0] if len(group) > 0 else None
             peak_density = 0.0
-        
-        # Peak rate will be computed from bins.parquet separately
-        # Set to 0.0 for now, will be updated later
-        peak_rate = 0.0
-        
-        # Active window: calculate from segment_windows_df (actual active windows)
-        # Bug fix: Use segment_windows_from_bins.parquet instead of bins.parquet
-        # to get actual active windows per segment, not day-level windows
-        active_window = "N/A"
-        if len(segment_windows_df) > 0 and "segment_id" in segment_windows_df.columns:
-            seg_windows = segment_windows_df[segment_windows_df["segment_id"] == seg_id]
-            if len(seg_windows) > 0 and "t_start" in seg_windows.columns and "t_end" in seg_windows.columns:
+            peak_rate = 0.0
+            worst_los = "A"
+            active_window = "N/A"
+        else:
+            worst_bin_row = group.loc[worst_bin_idx]
+            
+            # Extract peak_density from worst bin
+            if 'density' in worst_bin_row:
+                peak_density = float(worst_bin_row['density'])
+            elif 'density_peak' in worst_bin_row:
+                peak_density = float(worst_bin_row['density_peak'])
+            elif 'density_mean' in worst_bin_row:
+                peak_density = float(worst_bin_row['density_mean'])
+            else:
+                peak_density = 0.0
+            
+            # Issue #603: Extract peak_rate from worst bin (not separate calculation)
+            if 'rate' in worst_bin_row:
+                peak_rate = float(worst_bin_row['rate'])
+            elif 'rate_p_s' in worst_bin_row:
+                peak_rate = float(worst_bin_row['rate_p_s'])
+            else:
+                peak_rate = 0.0
+            
+            # Issue #603: Extract LOS from worst bin (not recalculated)
+            if 'los_class' in worst_bin_row:
+                worst_los = str(worst_bin_row['los_class'])
+            elif 'los' in worst_bin_row:
+                worst_los = str(worst_bin_row['los'])
+            else:
+                # Fallback: classify from density if los_class not available
                 try:
-                    windows_copy = seg_windows.copy()
-                    if not pd.api.types.is_datetime64_any_dtype(windows_copy["t_start"]):
-                        windows_copy["t_start"] = pd.to_datetime(windows_copy["t_start"], utc=True, errors="coerce")
-                    if not pd.api.types.is_datetime64_any_dtype(windows_copy["t_end"]):
-                        windows_copy["t_end"] = pd.to_datetime(windows_copy["t_end"], utc=True, errors="coerce")
-                    min_start = windows_copy["t_start"].min()
-                    max_end = windows_copy["t_end"].max()
-                    if pd.notna(min_start) and pd.notna(max_end):
-                        start_str = min_start.strftime("%H:%M") if hasattr(min_start, "strftime") else str(min_start)[:5]
-                        end_str = max_end.strftime("%H:%M") if hasattr(max_end, "strftime") else str(max_end)[:5]
-                        active_window = f"{start_str}–{end_str}"
-                except Exception as e:
-                    pass  # Fallback to "N/A" if calculation fails
-        
-        # Classify LOS
-        worst_los = classify_los(peak_density, los_thresholds)
+                    rulebook = load_rulebook()
+                    los_thresholds = rulebook.get("globals", {}).get("los_thresholds", {})
+                    worst_los = classify_los(peak_density, los_thresholds)
+                except Exception:
+                    worst_los = "A"
+            
+            # Issue #603: Extract active_window from worst bin's t_start/t_end
+            active_window = "N/A"
+            t_start = worst_bin_row.get("t_start", "")
+            t_end = worst_bin_row.get("t_end", "")
+            if t_start and t_end:
+                try:
+                    from datetime import datetime
+                    start_dt = datetime.fromisoformat(str(t_start).replace('Z', '+00:00'))
+                    end_dt = datetime.fromisoformat(str(t_end).replace('Z', '+00:00'))
+                    start_str = start_dt.strftime("%H:%M")
+                    end_str = end_dt.strftime("%H:%M")
+                    active_window = f"{start_str}–{end_str}"
+                except (ValueError, TypeError) as e:
+                    pass  # Fallback to "N/A" if parsing fails
         
         # Get schema_key from the first bin in the group (all bins in a segment should have the same schema_key)
         schema_key = group['schema_key'].iloc[0] if 'schema_key' in group.columns else 'on_course_open'
@@ -273,6 +287,7 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
         }
     
     return metrics
+
 
 
 def generate_flags_json(reports_dir: Path, segment_metrics: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:

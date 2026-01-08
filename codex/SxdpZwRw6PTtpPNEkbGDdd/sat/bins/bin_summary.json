@@ -1,0 +1,2158 @@
+{
+  "generated_at": "2026-01-08T18:00:41.220542+00:00",
+  "summary": {
+    "total_bins": 3900,
+    "flagged_bins": 210,
+    "segments_with_flags": 6
+  },
+  "segments": {
+    "N1": {
+      "meta": {
+        "total_bins": 975,
+        "flagged_bins": 20
+      },
+      "bins": [
+        {
+          "start_km": 0.0,
+          "end_km": 0.2,
+          "start_time": "08:00",
+          "end_time": "08:02",
+          "density": 0.039,
+          "rate": 0.955,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.2,
+          "end_km": 0.4,
+          "start_time": "08:00",
+          "end_time": "08:02",
+          "density": 0.01,
+          "rate": 0.214,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.4,
+          "end_km": 0.6,
+          "start_time": "08:00",
+          "end_time": "08:02",
+          "density": 0.029,
+          "rate": 0.741,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.4,
+          "end_km": 0.6,
+          "start_time": "08:02",
+          "end_time": "08:04",
+          "density": 0.001,
+          "rate": 0.02,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.6,
+          "end_km": 0.8,
+          "start_time": "08:02",
+          "end_time": "08:04",
+          "density": 0.029,
+          "rate": 0.682,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.8,
+          "end_km": 1.0,
+          "start_time": "08:02",
+          "end_time": "08:04",
+          "density": 0.028,
+          "rate": 0.676,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.0,
+          "end_km": 1.2,
+          "start_time": "08:02",
+          "end_time": "08:04",
+          "density": 0.018,
+          "rate": 0.473,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.2,
+          "end_km": 1.4,
+          "start_time": "08:02",
+          "end_time": "08:04",
+          "density": 0.002,
+          "rate": 0.057,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.0,
+          "end_km": 1.2,
+          "start_time": "08:04",
+          "end_time": "08:06",
+          "density": 0.008,
+          "rate": 0.169,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.2,
+          "end_km": 1.4,
+          "start_time": "08:04",
+          "end_time": "08:06",
+          "density": 0.024,
+          "rate": 0.557,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.4,
+          "end_km": 1.6,
+          "start_time": "08:04",
+          "end_time": "08:06",
+          "density": 0.029,
+          "rate": 0.724,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "08:04",
+          "end_time": "08:06",
+          "density": 0.009,
+          "rate": 0.234,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "08:04",
+          "end_time": "08:06",
+          "density": 0.008,
+          "rate": 0.226,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "08:06",
+          "end_time": "08:08",
+          "density": 0.013,
+          "rate": 0.283,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "08:06",
+          "end_time": "08:08",
+          "density": 0.019,
+          "rate": 0.437,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "08:06",
+          "end_time": "08:08",
+          "density": 0.024,
+          "rate": 0.596,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.2,
+          "end_km": 2.4,
+          "start_time": "08:06",
+          "end_time": "08:08",
+          "density": 0.012,
+          "rate": 0.321,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.4,
+          "end_km": 2.58,
+          "start_time": "08:06",
+          "end_time": "08:08",
+          "density": 0.007,
+          "rate": 0.195,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.2,
+          "end_km": 2.4,
+          "start_time": "08:08",
+          "end_time": "08:10",
+          "density": 0.016,
+          "rate": 0.355,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.4,
+          "end_km": 2.58,
+          "start_time": "08:08",
+          "end_time": "08:10",
+          "density": 0.013,
+          "rate": 0.305,
+          "los": "A",
+          "flag": "utilization"
+        }
+      ]
+    },
+    "N2": {
+      "meta": {
+        "total_bins": 900,
+        "flagged_bins": 29
+      },
+      "bins": [
+        {
+          "start_km": 0.0,
+          "end_km": 0.2,
+          "start_time": "08:06",
+          "end_time": "08:08",
+          "density": 0.002,
+          "rate": 0.057,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.2,
+          "start_time": "08:08",
+          "end_time": "08:10",
+          "density": 0.018,
+          "rate": 0.44,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.2,
+          "end_km": 0.4,
+          "start_time": "08:08",
+          "end_time": "08:10",
+          "density": 0.013,
+          "rate": 0.353,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.4,
+          "end_km": 0.6,
+          "start_time": "08:08",
+          "end_time": "08:10",
+          "density": 0.005,
+          "rate": 0.134,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.6,
+          "end_km": 0.8,
+          "start_time": "08:08",
+          "end_time": "08:10",
+          "density": 0.007,
+          "rate": 0.198,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.2,
+          "end_km": 0.4,
+          "start_time": "08:10",
+          "end_time": "08:12",
+          "density": 0.015,
+          "rate": 0.336,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.4,
+          "end_km": 0.6,
+          "start_time": "08:10",
+          "end_time": "08:12",
+          "density": 0.013,
+          "rate": 0.305,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.6,
+          "end_km": 0.8,
+          "start_time": "08:10",
+          "end_time": "08:12",
+          "density": 0.015,
+          "rate": 0.367,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.8,
+          "end_km": 1.0,
+          "start_time": "08:10",
+          "end_time": "08:12",
+          "density": 0.011,
+          "rate": 0.294,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.0,
+          "end_km": 1.2,
+          "start_time": "08:10",
+          "end_time": "08:12",
+          "density": 0.007,
+          "rate": 0.193,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.2,
+          "end_km": 1.4,
+          "start_time": "08:10",
+          "end_time": "08:12",
+          "density": 0.008,
+          "rate": 0.226,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.8,
+          "end_km": 1.0,
+          "start_time": "08:12",
+          "end_time": "08:14",
+          "density": 0.017,
+          "rate": 0.391,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.0,
+          "end_km": 1.2,
+          "start_time": "08:12",
+          "end_time": "08:14",
+          "density": 0.007,
+          "rate": 0.162,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.2,
+          "end_km": 1.4,
+          "start_time": "08:12",
+          "end_time": "08:14",
+          "density": 0.013,
+          "rate": 0.318,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.4,
+          "end_km": 1.6,
+          "start_time": "08:12",
+          "end_time": "08:14",
+          "density": 0.007,
+          "rate": 0.183,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "08:12",
+          "end_time": "08:14",
+          "density": 0.012,
+          "rate": 0.33,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "08:12",
+          "end_time": "08:14",
+          "density": 0.006,
+          "rate": 0.167,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.2,
+          "end_km": 1.4,
+          "start_time": "08:14",
+          "end_time": "08:16",
+          "density": 0.01,
+          "rate": 0.217,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.4,
+          "end_km": 1.6,
+          "start_time": "08:14",
+          "end_time": "08:16",
+          "density": 0.014,
+          "rate": 0.325,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "08:14",
+          "end_time": "08:16",
+          "density": 0.009,
+          "rate": 0.21,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "08:14",
+          "end_time": "08:16",
+          "density": 0.009,
+          "rate": 0.221,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "08:14",
+          "end_time": "08:16",
+          "density": 0.007,
+          "rate": 0.182,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.2,
+          "end_km": 1.4,
+          "start_time": "08:16",
+          "end_time": "08:18",
+          "density": 0.001,
+          "rate": 0.02,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.4,
+          "end_km": 1.6,
+          "start_time": "08:16",
+          "end_time": "08:18",
+          "density": 0.005,
+          "rate": 0.103,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "08:16",
+          "end_time": "08:18",
+          "density": 0.005,
+          "rate": 0.107,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "08:16",
+          "end_time": "08:18",
+          "density": 0.008,
+          "rate": 0.177,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "08:16",
+          "end_time": "08:18",
+          "density": 0.014,
+          "rate": 0.324,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "08:18",
+          "end_time": "08:20",
+          "density": 0.001,
+          "rate": 0.02,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "08:18",
+          "end_time": "08:20",
+          "density": 0.006,
+          "rate": 0.125,
+          "los": "A",
+          "flag": "utilization"
+        }
+      ]
+    },
+    "N3": {
+      "meta": {
+        "total_bins": 75,
+        "flagged_bins": 4
+      },
+      "bins": [
+        {
+          "start_km": 0.0,
+          "end_km": 0.19,
+          "start_time": "08:14",
+          "end_time": "08:16",
+          "density": 0.01,
+          "rate": 0.278,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.19,
+          "start_time": "08:16",
+          "end_time": "08:18",
+          "density": 0.014,
+          "rate": 0.334,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.19,
+          "start_time": "08:18",
+          "end_time": "08:20",
+          "density": 0.008,
+          "rate": 0.172,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.19,
+          "start_time": "08:20",
+          "end_time": "08:22",
+          "density": 0.001,
+          "rate": 0.02,
+          "los": "A",
+          "flag": "utilization"
+        }
+      ]
+    },
+    "O1": {
+      "meta": {
+        "total_bins": 975,
+        "flagged_bins": 48
+      },
+      "bins": [
+        {
+          "start_km": 0.0,
+          "end_km": 0.2,
+          "start_time": "08:30",
+          "end_time": "08:32",
+          "density": 0.692,
+          "rate": 8.729,
+          "los": "C",
+          "flag": "both"
+        },
+        {
+          "start_km": 0.2,
+          "end_km": 0.4,
+          "start_time": "08:30",
+          "end_time": "08:32",
+          "density": 0.153,
+          "rate": 2.448,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.4,
+          "end_km": 0.6,
+          "start_time": "08:30",
+          "end_time": "08:32",
+          "density": 0.006,
+          "rate": 0.139,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.2,
+          "start_time": "08:32",
+          "end_time": "08:34",
+          "density": 0.064,
+          "rate": 0.593,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.2,
+          "end_km": 0.4,
+          "start_time": "08:32",
+          "end_time": "08:34",
+          "density": 0.563,
+          "rate": 6.511,
+          "los": "C",
+          "flag": "both"
+        },
+        {
+          "start_km": 0.4,
+          "end_km": 0.6,
+          "start_time": "08:32",
+          "end_time": "08:34",
+          "density": 0.36,
+          "rate": 5.054,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.6,
+          "end_km": 0.8,
+          "start_time": "08:32",
+          "end_time": "08:34",
+          "density": 0.085,
+          "rate": 1.506,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.8,
+          "end_km": 1.0,
+          "start_time": "08:32",
+          "end_time": "08:34",
+          "density": 0.025,
+          "rate": 0.513,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.0,
+          "end_km": 1.2,
+          "start_time": "08:32",
+          "end_time": "08:34",
+          "density": 0.002,
+          "rate": 0.049,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.2,
+          "end_km": 0.4,
+          "start_time": "08:34",
+          "end_time": "08:36",
+          "density": 0.037,
+          "rate": 0.302,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.4,
+          "end_km": 0.6,
+          "start_time": "08:34",
+          "end_time": "08:36",
+          "density": 0.356,
+          "rate": 3.77,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.6,
+          "end_km": 0.8,
+          "start_time": "08:34",
+          "end_time": "08:36",
+          "density": 0.416,
+          "rate": 5.309,
+          "los": "B",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.8,
+          "end_km": 1.0,
+          "start_time": "08:34",
+          "end_time": "08:36",
+          "density": 0.179,
+          "rate": 2.733,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.0,
+          "end_km": 1.2,
+          "start_time": "08:34",
+          "end_time": "08:36",
+          "density": 0.07,
+          "rate": 1.26,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.2,
+          "end_km": 1.4,
+          "start_time": "08:34",
+          "end_time": "08:36",
+          "density": 0.033,
+          "rate": 0.67,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.6,
+          "end_km": 0.8,
+          "start_time": "08:36",
+          "end_time": "08:38",
+          "density": 0.2,
+          "rate": 1.949,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.8,
+          "end_km": 1.0,
+          "start_time": "08:36",
+          "end_time": "08:38",
+          "density": 0.372,
+          "rate": 4.422,
+          "los": "B",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.0,
+          "end_km": 1.2,
+          "start_time": "08:36",
+          "end_time": "08:38",
+          "density": 0.256,
+          "rate": 3.485,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.2,
+          "end_km": 1.4,
+          "start_time": "08:36",
+          "end_time": "08:38",
+          "density": 0.116,
+          "rate": 1.826,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.4,
+          "end_km": 1.6,
+          "start_time": "08:36",
+          "end_time": "08:38",
+          "density": 0.069,
+          "rate": 1.235,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "08:36",
+          "end_time": "08:38",
+          "density": 0.031,
+          "rate": 0.62,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.8,
+          "end_km": 1.0,
+          "start_time": "08:38",
+          "end_time": "08:40",
+          "density": 0.139,
+          "rate": 1.292,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.0,
+          "end_km": 1.2,
+          "start_time": "08:38",
+          "end_time": "08:40",
+          "density": 0.259,
+          "rate": 2.936,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.2,
+          "end_km": 1.4,
+          "start_time": "08:38",
+          "end_time": "08:40",
+          "density": 0.285,
+          "rate": 3.58,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.4,
+          "end_km": 1.6,
+          "start_time": "08:38",
+          "end_time": "08:40",
+          "density": 0.165,
+          "rate": 2.342,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "08:38",
+          "end_time": "08:40",
+          "density": 0.094,
+          "rate": 1.507,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "08:38",
+          "end_time": "08:40",
+          "density": 0.055,
+          "rate": 0.977,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.0,
+          "end_km": 1.2,
+          "start_time": "08:40",
+          "end_time": "08:42",
+          "density": 0.11,
+          "rate": 0.996,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.2,
+          "end_km": 1.4,
+          "start_time": "08:40",
+          "end_time": "08:42",
+          "density": 0.176,
+          "rate": 1.898,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.4,
+          "end_km": 1.6,
+          "start_time": "08:40",
+          "end_time": "08:42",
+          "density": 0.272,
+          "rate": 3.271,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "08:40",
+          "end_time": "08:42",
+          "density": 0.19,
+          "rate": 2.525,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "08:40",
+          "end_time": "08:42",
+          "density": 0.116,
+          "rate": 1.703,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "08:40",
+          "end_time": "08:42",
+          "density": 0.073,
+          "rate": 1.179,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.4,
+          "end_km": 1.6,
+          "start_time": "08:42",
+          "end_time": "08:44",
+          "density": 0.112,
+          "rate": 1.154,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "08:42",
+          "end_time": "08:44",
+          "density": 0.233,
+          "rate": 2.679,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "08:42",
+          "end_time": "08:44",
+          "density": 0.207,
+          "rate": 2.618,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "08:42",
+          "end_time": "08:44",
+          "density": 0.143,
+          "rate": 1.966,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.2,
+          "end_km": 2.4,
+          "start_time": "08:42",
+          "end_time": "08:44",
+          "density": 0.09,
+          "rate": 1.355,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.4,
+          "end_km": 2.58,
+          "start_time": "08:42",
+          "end_time": "08:44",
+          "density": 0.055,
+          "rate": 0.893,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "08:44",
+          "end_time": "08:46",
+          "density": 0.103,
+          "rate": 1.025,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "08:44",
+          "end_time": "08:46",
+          "density": 0.166,
+          "rate": 1.864,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "08:44",
+          "end_time": "08:46",
+          "density": 0.207,
+          "rate": 2.494,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.2,
+          "end_km": 2.4,
+          "start_time": "08:44",
+          "end_time": "08:46",
+          "density": 0.167,
+          "rate": 2.2,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.4,
+          "end_km": 2.58,
+          "start_time": "08:44",
+          "end_time": "08:46",
+          "density": 0.092,
+          "rate": 1.3,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "08:46",
+          "end_time": "08:48",
+          "density": 0.121,
+          "rate": 1.324,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.2,
+          "end_km": 2.4,
+          "start_time": "08:46",
+          "end_time": "08:48",
+          "density": 0.179,
+          "rate": 2.082,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.4,
+          "end_km": 2.58,
+          "start_time": "08:46",
+          "end_time": "08:48",
+          "density": 0.157,
+          "rate": 1.982,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.4,
+          "end_km": 2.58,
+          "start_time": "08:48",
+          "end_time": "08:50",
+          "density": 0.153,
+          "rate": 1.736,
+          "los": "A",
+          "flag": "utilization"
+        }
+      ]
+    },
+    "O2": {
+      "meta": {
+        "total_bins": 900,
+        "flagged_bins": 94
+      },
+      "bins": [
+        {
+          "start_km": 0.0,
+          "end_km": 0.2,
+          "start_time": "08:44",
+          "end_time": "08:46",
+          "density": 0.075,
+          "rate": 1.138,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.2,
+          "start_time": "08:46",
+          "end_time": "08:48",
+          "density": 0.134,
+          "rate": 1.801,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.2,
+          "end_km": 0.4,
+          "start_time": "08:46",
+          "end_time": "08:48",
+          "density": 0.079,
+          "rate": 1.137,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.4,
+          "end_km": 0.6,
+          "start_time": "08:46",
+          "end_time": "08:48",
+          "density": 0.067,
+          "rate": 1.027,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.2,
+          "start_time": "08:48",
+          "end_time": "08:50",
+          "density": 0.165,
+          "rate": 1.99,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.2,
+          "end_km": 0.4,
+          "start_time": "08:48",
+          "end_time": "08:50",
+          "density": 0.134,
+          "rate": 1.742,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.4,
+          "end_km": 0.6,
+          "start_time": "08:48",
+          "end_time": "08:50",
+          "density": 0.102,
+          "rate": 1.396,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.6,
+          "end_km": 0.8,
+          "start_time": "08:48",
+          "end_time": "08:50",
+          "density": 0.071,
+          "rate": 1.041,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.8,
+          "end_km": 1.0,
+          "start_time": "08:48",
+          "end_time": "08:50",
+          "density": 0.056,
+          "rate": 0.865,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.2,
+          "start_time": "08:50",
+          "end_time": "08:52",
+          "density": 0.125,
+          "rate": 1.391,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.2,
+          "end_km": 0.4,
+          "start_time": "08:50",
+          "end_time": "08:52",
+          "density": 0.152,
+          "rate": 1.775,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.4,
+          "end_km": 0.6,
+          "start_time": "08:50",
+          "end_time": "08:52",
+          "density": 0.131,
+          "rate": 1.649,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.6,
+          "end_km": 0.8,
+          "start_time": "08:50",
+          "end_time": "08:52",
+          "density": 0.123,
+          "rate": 1.631,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.8,
+          "end_km": 1.0,
+          "start_time": "08:50",
+          "end_time": "08:52",
+          "density": 0.076,
+          "rate": 1.066,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.0,
+          "end_km": 1.2,
+          "start_time": "08:50",
+          "end_time": "08:52",
+          "density": 0.058,
+          "rate": 0.859,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.2,
+          "end_km": 0.4,
+          "start_time": "08:52",
+          "end_time": "08:54",
+          "density": 0.085,
+          "rate": 0.928,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.4,
+          "end_km": 0.6,
+          "start_time": "08:52",
+          "end_time": "08:54",
+          "density": 0.151,
+          "rate": 1.73,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.6,
+          "end_km": 0.8,
+          "start_time": "08:52",
+          "end_time": "08:54",
+          "density": 0.123,
+          "rate": 1.494,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.8,
+          "end_km": 1.0,
+          "start_time": "08:52",
+          "end_time": "08:54",
+          "density": 0.122,
+          "rate": 1.581,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.0,
+          "end_km": 1.2,
+          "start_time": "08:52",
+          "end_time": "08:54",
+          "density": 0.093,
+          "rate": 1.257,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.2,
+          "end_km": 1.4,
+          "start_time": "08:52",
+          "end_time": "08:54",
+          "density": 0.066,
+          "rate": 0.942,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.6,
+          "end_km": 0.8,
+          "start_time": "08:54",
+          "end_time": "08:56",
+          "density": 0.127,
+          "rate": 1.432,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.8,
+          "end_km": 1.0,
+          "start_time": "08:54",
+          "end_time": "08:56",
+          "density": 0.128,
+          "rate": 1.508,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.0,
+          "end_km": 1.2,
+          "start_time": "08:54",
+          "end_time": "08:56",
+          "density": 0.106,
+          "rate": 1.332,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.2,
+          "end_km": 1.4,
+          "start_time": "08:54",
+          "end_time": "08:56",
+          "density": 0.11,
+          "rate": 1.445,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.4,
+          "end_km": 1.6,
+          "start_time": "08:54",
+          "end_time": "08:56",
+          "density": 0.082,
+          "rate": 1.132,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "08:54",
+          "end_time": "08:56",
+          "density": 0.052,
+          "rate": 0.752,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.8,
+          "end_km": 1.0,
+          "start_time": "08:56",
+          "end_time": "08:58",
+          "density": 0.098,
+          "rate": 1.088,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.0,
+          "end_km": 1.2,
+          "start_time": "08:56",
+          "end_time": "08:58",
+          "density": 0.134,
+          "rate": 1.55,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.2,
+          "end_km": 1.4,
+          "start_time": "08:56",
+          "end_time": "08:58",
+          "density": 0.103,
+          "rate": 1.258,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.4,
+          "end_km": 1.6,
+          "start_time": "08:56",
+          "end_time": "08:58",
+          "density": 0.101,
+          "rate": 1.308,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "08:56",
+          "end_time": "08:58",
+          "density": 0.09,
+          "rate": 1.201,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "08:56",
+          "end_time": "08:58",
+          "density": 0.056,
+          "rate": 0.784,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.2,
+          "end_km": 1.4,
+          "start_time": "08:58",
+          "end_time": "09:00",
+          "density": 0.131,
+          "rate": 1.49,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.4,
+          "end_km": 1.6,
+          "start_time": "08:58",
+          "end_time": "09:00",
+          "density": 0.1,
+          "rate": 1.19,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "08:58",
+          "end_time": "09:00",
+          "density": 0.095,
+          "rate": 1.195,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "08:58",
+          "end_time": "09:00",
+          "density": 0.099,
+          "rate": 1.295,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "08:58",
+          "end_time": "09:00",
+          "density": 0.071,
+          "rate": 0.965,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.2,
+          "end_km": 1.4,
+          "start_time": "09:00",
+          "end_time": "09:02",
+          "density": 0.051,
+          "rate": 0.547,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.4,
+          "end_km": 1.6,
+          "start_time": "09:00",
+          "end_time": "09:02",
+          "density": 0.109,
+          "rate": 1.227,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "09:00",
+          "end_time": "09:02",
+          "density": 0.111,
+          "rate": 1.294,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "09:00",
+          "end_time": "09:02",
+          "density": 0.086,
+          "rate": 1.053,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "09:00",
+          "end_time": "09:02",
+          "density": 0.088,
+          "rate": 1.134,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.2,
+          "end_km": 1.4,
+          "start_time": "09:02",
+          "end_time": "09:04",
+          "density": 0.05,
+          "rate": 0.498,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.4,
+          "end_km": 1.6,
+          "start_time": "09:02",
+          "end_time": "09:04",
+          "density": 0.039,
+          "rate": 0.413,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "09:02",
+          "end_time": "09:04",
+          "density": 0.082,
+          "rate": 0.91,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "09:02",
+          "end_time": "09:04",
+          "density": 0.122,
+          "rate": 1.402,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "09:02",
+          "end_time": "09:04",
+          "density": 0.08,
+          "rate": 0.959,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.2,
+          "end_km": 1.4,
+          "start_time": "09:04",
+          "end_time": "09:06",
+          "density": 0.033,
+          "rate": 0.314,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.4,
+          "end_km": 1.6,
+          "start_time": "09:04",
+          "end_time": "09:06",
+          "density": 0.051,
+          "rate": 0.505,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "09:04",
+          "end_time": "09:06",
+          "density": 0.033,
+          "rate": 0.345,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "09:04",
+          "end_time": "09:06",
+          "density": 0.059,
+          "rate": 0.645,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "09:04",
+          "end_time": "09:06",
+          "density": 0.112,
+          "rate": 1.27,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.2,
+          "end_km": 1.4,
+          "start_time": "09:06",
+          "end_time": "09:08",
+          "density": 0.03,
+          "rate": 0.266,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.4,
+          "end_km": 1.6,
+          "start_time": "09:06",
+          "end_time": "09:08",
+          "density": 0.027,
+          "rate": 0.255,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "09:06",
+          "end_time": "09:08",
+          "density": 0.048,
+          "rate": 0.473,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "09:06",
+          "end_time": "09:08",
+          "density": 0.033,
+          "rate": 0.339,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "09:06",
+          "end_time": "09:08",
+          "density": 0.045,
+          "rate": 0.486,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.8,
+          "end_km": 1.0,
+          "start_time": "09:08",
+          "end_time": "09:10",
+          "density": 0.025,
+          "rate": 0.19,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.4,
+          "end_km": 1.6,
+          "start_time": "09:08",
+          "end_time": "09:10",
+          "density": 0.028,
+          "rate": 0.249,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "09:08",
+          "end_time": "09:10",
+          "density": 0.025,
+          "rate": 0.234,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "09:08",
+          "end_time": "09:10",
+          "density": 0.043,
+          "rate": 0.422,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "09:08",
+          "end_time": "09:10",
+          "density": 0.036,
+          "rate": 0.365,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.0,
+          "end_km": 1.2,
+          "start_time": "09:10",
+          "end_time": "09:12",
+          "density": 0.025,
+          "rate": 0.19,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.4,
+          "end_km": 1.6,
+          "start_time": "09:10",
+          "end_time": "09:12",
+          "density": 0.022,
+          "rate": 0.186,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "09:10",
+          "end_time": "09:12",
+          "density": 0.024,
+          "rate": 0.212,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "09:10",
+          "end_time": "09:12",
+          "density": 0.022,
+          "rate": 0.203,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "09:10",
+          "end_time": "09:12",
+          "density": 0.043,
+          "rate": 0.42,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.2,
+          "end_km": 1.4,
+          "start_time": "09:12",
+          "end_time": "09:14",
+          "density": 0.025,
+          "rate": 0.19,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.4,
+          "end_km": 1.6,
+          "start_time": "09:12",
+          "end_time": "09:14",
+          "density": 0.018,
+          "rate": 0.144,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "09:12",
+          "end_time": "09:14",
+          "density": 0.021,
+          "rate": 0.177,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "09:12",
+          "end_time": "09:14",
+          "density": 0.023,
+          "rate": 0.202,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "09:12",
+          "end_time": "09:14",
+          "density": 0.022,
+          "rate": 0.203,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.2,
+          "end_km": 1.4,
+          "start_time": "09:14",
+          "end_time": "09:16",
+          "density": 0.008,
+          "rate": 0.059,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.4,
+          "end_km": 1.6,
+          "start_time": "09:14",
+          "end_time": "09:16",
+          "density": 0.026,
+          "rate": 0.198,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "09:14",
+          "end_time": "09:16",
+          "density": 0.015,
+          "rate": 0.121,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "09:14",
+          "end_time": "09:16",
+          "density": 0.021,
+          "rate": 0.177,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "09:14",
+          "end_time": "09:16",
+          "density": 0.022,
+          "rate": 0.193,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.4,
+          "end_km": 1.6,
+          "start_time": "09:16",
+          "end_time": "09:18",
+          "density": 0.011,
+          "rate": 0.082,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "09:16",
+          "end_time": "09:18",
+          "density": 0.025,
+          "rate": 0.192,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "09:16",
+          "end_time": "09:18",
+          "density": 0.013,
+          "rate": 0.105,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "09:16",
+          "end_time": "09:18",
+          "density": 0.02,
+          "rate": 0.168,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.2,
+          "end_km": 2.23,
+          "start_time": "09:16",
+          "end_time": "09:18",
+          "density": 0.002,
+          "rate": 0.017,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.6,
+          "end_km": 1.8,
+          "start_time": "09:18",
+          "end_time": "09:20",
+          "density": 0.013,
+          "rate": 0.097,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "09:18",
+          "end_time": "09:20",
+          "density": 0.023,
+          "rate": 0.177,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "09:18",
+          "end_time": "09:20",
+          "density": 0.015,
+          "rate": 0.122,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.2,
+          "end_km": 2.23,
+          "start_time": "09:18",
+          "end_time": "09:20",
+          "density": 0.003,
+          "rate": 0.025,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 1.8,
+          "end_km": 2.0,
+          "start_time": "09:20",
+          "end_time": "09:22",
+          "density": 0.017,
+          "rate": 0.127,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "09:20",
+          "end_time": "09:22",
+          "density": 0.019,
+          "rate": 0.147,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.2,
+          "end_km": 2.23,
+          "start_time": "09:20",
+          "end_time": "09:22",
+          "density": 0.001,
+          "rate": 0.008,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "09:22",
+          "end_time": "09:24",
+          "density": 0.018,
+          "rate": 0.135,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.2,
+          "end_km": 2.23,
+          "start_time": "09:22",
+          "end_time": "09:24",
+          "density": 0.002,
+          "rate": 0.015,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.0,
+          "end_km": 2.2,
+          "start_time": "09:24",
+          "end_time": "09:26",
+          "density": 0.002,
+          "rate": 0.015,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 2.2,
+          "end_km": 2.23,
+          "start_time": "09:24",
+          "end_time": "09:26",
+          "density": 0.002,
+          "rate": 0.015,
+          "los": "A",
+          "flag": "utilization"
+        }
+      ]
+    },
+    "O3": {
+      "meta": {
+        "total_bins": 75,
+        "flagged_bins": 15
+      },
+      "bins": [
+        {
+          "start_km": 0.0,
+          "end_km": 0.19,
+          "start_time": "08:58",
+          "end_time": "09:00",
+          "density": 0.052,
+          "rate": 0.74,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.19,
+          "start_time": "09:00",
+          "end_time": "09:02",
+          "density": 0.082,
+          "rate": 1.094,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.19,
+          "start_time": "09:02",
+          "end_time": "09:04",
+          "density": 0.074,
+          "rate": 0.938,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.19,
+          "start_time": "09:04",
+          "end_time": "09:06",
+          "density": 0.09,
+          "rate": 1.066,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.19,
+          "start_time": "09:06",
+          "end_time": "09:08",
+          "density": 0.099,
+          "rate": 1.116,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.19,
+          "start_time": "09:08",
+          "end_time": "09:10",
+          "density": 0.036,
+          "rate": 0.386,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.19,
+          "start_time": "09:10",
+          "end_time": "09:12",
+          "density": 0.03,
+          "rate": 0.302,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.19,
+          "start_time": "09:12",
+          "end_time": "09:14",
+          "density": 0.037,
+          "rate": 0.361,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.19,
+          "start_time": "09:14",
+          "end_time": "09:16",
+          "density": 0.02,
+          "rate": 0.184,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.19,
+          "start_time": "09:16",
+          "end_time": "09:18",
+          "density": 0.021,
+          "rate": 0.184,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.19,
+          "start_time": "09:18",
+          "end_time": "09:20",
+          "density": 0.016,
+          "rate": 0.136,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.19,
+          "start_time": "09:20",
+          "end_time": "09:22",
+          "density": 0.016,
+          "rate": 0.13,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.19,
+          "start_time": "09:22",
+          "end_time": "09:24",
+          "density": 0.017,
+          "rate": 0.131,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.19,
+          "start_time": "09:24",
+          "end_time": "09:26",
+          "density": 0.019,
+          "rate": 0.144,
+          "los": "A",
+          "flag": "utilization"
+        },
+        {
+          "start_km": 0.0,
+          "end_km": 0.19,
+          "start_time": "09:26",
+          "end_time": "09:28",
+          "density": 0.004,
+          "rate": 0.029,
+          "los": "A",
+          "flag": "utilization"
+        }
+      ]
+    }
+  }
+}

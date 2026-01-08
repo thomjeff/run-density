@@ -1,0 +1,162 @@
+{
+  "peak_density": 0.755,
+  "peak_rate": 10.19,
+  "segments_with_flags": 17,
+  "flagged_bins": 1875,
+  "overtaking_segments": 24,
+  "co_presence_segments": 26,
+  "A1": {
+    "schema": "start_corral",
+    "worst_los": "B",
+    "peak_density": 0.755,
+    "peak_rate": 10.19,
+    "active_window": "07:42\u201307:44"
+  },
+  "A2": {
+    "schema": "on_course_open",
+    "worst_los": "B",
+    "peak_density": 0.469,
+    "peak_rate": 6.61,
+    "active_window": "07:46\u201307:48"
+  },
+  "A3": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.291,
+    "peak_rate": 4.45,
+    "active_window": "07:50\u201307:52"
+  },
+  "B1": {
+    "schema": "on_course_narrow",
+    "worst_los": "D",
+    "peak_density": 0.72,
+    "peak_rate": 3.05,
+    "active_window": "07:36\u201307:38"
+  },
+  "B2": {
+    "schema": "on_course_narrow",
+    "worst_los": "B",
+    "peak_density": 0.4833,
+    "peak_rate": 2.06,
+    "active_window": "07:46\u201307:48"
+  },
+  "B3": {
+    "schema": "on_course_narrow",
+    "worst_los": "B",
+    "peak_density": 0.4833,
+    "peak_rate": 2.06,
+    "active_window": "07:46\u201307:48"
+  },
+  "D1a": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.2333,
+    "peak_rate": 1.05,
+    "active_window": "07:24\u201307:26"
+  },
+  "D1b": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.1433,
+    "peak_rate": 0.64,
+    "active_window": "07:58\u201308:00"
+  },
+  "F1": {
+    "schema": "on_course_open",
+    "worst_los": "C",
+    "peak_density": 0.56,
+    "peak_rate": 4.98,
+    "active_window": "07:56\u201307:58"
+  },
+  "G1": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.0417,
+    "peak_rate": 0.37,
+    "active_window": "09:00\u201309:02"
+  },
+  "H1": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.3267,
+    "peak_rate": 1.38,
+    "active_window": "08:08\u201308:10"
+  },
+  "I1": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.2667,
+    "peak_rate": 2.35,
+    "active_window": "08:10\u201308:12"
+  },
+  "J1": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.2667,
+    "peak_rate": 1.19,
+    "active_window": "08:42\u201308:44"
+  },
+  "J2": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.05,
+    "peak_rate": 0.25,
+    "active_window": "09:38\u201309:40"
+  },
+  "J3": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.04,
+    "peak_rate": 0.21,
+    "active_window": "09:38\u201309:40"
+  },
+  "J4": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.2233,
+    "peak_rate": 0.97,
+    "active_window": "08:58\u201309:00"
+  },
+  "J5": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.2667,
+    "peak_rate": 1.19,
+    "active_window": "08:42\u201308:44"
+  },
+  "K1": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.1017,
+    "peak_rate": 0.91,
+    "active_window": "09:12\u201309:14"
+  },
+  "L1": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.3267,
+    "peak_rate": 1.38,
+    "active_window": "08:08\u201308:10"
+  },
+  "L2": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.0,
+    "peak_rate": 0.0,
+    "active_window": "07:00\u201307:02"
+  },
+  "M1": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.1417,
+    "peak_rate": 1.19,
+    "active_window": "08:18\u201308:20"
+  },
+  "M2": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.0,
+    "peak_rate": 0.0,
+    "active_window": "07:00\u201307:02"
+  }
+}

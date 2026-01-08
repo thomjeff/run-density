@@ -373,9 +373,8 @@ def _export_ui_artifacts_v2(
         try:
             if aggregated_bins is not None and not aggregated_bins.empty and temp_reports:
                 segment_metrics = generate_segment_metrics_json(temp_reports)
-                # Compute peak_rate from day-filtered bins
-                from app.core.artifacts.frontend import _compute_peak_rate_per_segment
-                peak_rate_map = _compute_peak_rate_per_segment(aggregated_bins)
+                # Issue #603: peak_rate is now computed from worst bin in generate_segment_metrics_json()
+                # No need for separate peak_rate calculation
                 
                 # CRITICAL FIX: Filter segment_metrics to only include day segments
                 segment_metrics_filtered = {
@@ -383,15 +382,6 @@ def _export_ui_artifacts_v2(
                     for seg_id, metrics in segment_metrics.items()
                     if str(seg_id) in day_segment_ids
                 }
-                
-                # Merge peak_rate data for filtered segments
-                for seg_id, seg_metrics in segment_metrics_filtered.items():
-                    if seg_id in peak_rate_map:
-                        seg_metrics["peak_rate"] = peak_rate_map[seg_id]["peak_rate"]
-                        seg_metrics["peak_rate_time"] = peak_rate_map[seg_id]["peak_rate_time"]
-                        seg_metrics["peak_rate_km"] = peak_rate_map[seg_id]["peak_rate_km"]
-                    else:
-                        seg_metrics.setdefault("peak_rate", 0.0)
                 
                 segment_metrics = segment_metrics_filtered
                 logger.info(
