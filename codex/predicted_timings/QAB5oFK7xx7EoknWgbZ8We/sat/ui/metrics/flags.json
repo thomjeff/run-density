@@ -1,0 +1,74 @@
+[
+  {
+    "segment_id": "N1",
+    "flagged_bins": 20,
+    "worst_severity": "watch",
+    "worst_los": "A",
+    "peak_density": 0.039,
+    "peak_rate": 0.955,
+    "seg_id": "N1",
+    "flagged_bin_count": 20,
+    "type": "density",
+    "note": "watch: 20 bins flagged"
+  },
+  {
+    "segment_id": "N2",
+    "flagged_bins": 29,
+    "worst_severity": "watch",
+    "worst_los": "A",
+    "peak_density": 0.018,
+    "peak_rate": 0.44,
+    "seg_id": "N2",
+    "flagged_bin_count": 29,
+    "type": "density",
+    "note": "watch: 29 bins flagged"
+  },
+  {
+    "segment_id": "N3",
+    "flagged_bins": 4,
+    "worst_severity": "watch",
+    "worst_los": "A",
+    "peak_density": 0.014,
+    "peak_rate": 0.334,
+    "seg_id": "N3",
+    "flagged_bin_count": 4,
+    "type": "density",
+    "note": "watch: 4 bins flagged"
+  },
+  {
+    "segment_id": "O1",
+    "flagged_bins": 48,
+    "worst_severity": "critical",
+    "worst_los": "C",
+    "peak_density": 0.692,
+    "peak_rate": 8.729,
+    "seg_id": "O1",
+    "flagged_bin_count": 48,
+    "type": "density",
+    "note": "critical: 48 bins flagged"
+  },
+  {
+    "segment_id": "O2",
+    "flagged_bins": 94,
+    "worst_severity": "watch",
+    "worst_los": "A",
+    "peak_density": 0.165,
+    "peak_rate": 1.99,
+    "seg_id": "O2",
+    "flagged_bin_count": 94,
+    "type": "density",
+    "note": "watch: 94 bins flagged"
+  },
+  {
+    "segment_id": "O3",
+    "flagged_bins": 15,
+    "worst_severity": "watch",
+    "worst_los": "A",
+    "peak_density": 0.099,
+    "peak_rate": 1.116,
+    "seg_id": "O3",
+    "flagged_bin_count": 15,
+    "type": "density",
+    "note": "watch: 15 bins flagged"
+  }
+]
