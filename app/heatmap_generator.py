@@ -29,6 +29,21 @@ from app.common.config import load_reporting
 
 logger = logging.getLogger(__name__)
 
+HEATMAP_POWER_NORM_GAMMA = 0.5
+HEATMAP_NAN_COLOR = "white"
+HEATMAP_DENSITY_VMIN = 0
+HEATMAP_DENSITY_VMAX = 2.0
+
+
+def _assert_heatmap_invariants(norm: mcolors.Normalize, cmap: mcolors.Colormap) -> None:
+    """Regression guard for heatmap normalization + NaN rendering invariants."""
+    if not isinstance(norm, mcolors.PowerNorm) or norm.gamma != HEATMAP_POWER_NORM_GAMMA:
+        raise ValueError(
+            "Heatmap normalization must remain PowerNorm(gamma=0.5) for density rendering."
+        )
+    if not np.allclose(cmap.get_bad(), mcolors.to_rgba(HEATMAP_NAN_COLOR)):
+        raise ValueError("Heatmap NaN values must render as white (no data).")
+
 
 def create_los_colormap(los_colors: Dict[str, str]) -> mcolors.LinearSegmentedColormap:
     """
@@ -227,6 +242,9 @@ def generate_segment_heatmap(
 ) -> bool:
     """
     Generate heatmap PNG for a single segment.
+
+    Invariants: heatmaps are density-only (no LOS recompute), use the rulebook palette,
+    PowerNorm(gamma=0.5), and NaN=white for missing data.
     
     Args:
         seg_id: Segment identifier (e.g., "A1")
@@ -262,15 +280,19 @@ def generate_segment_heatmap(
         # Transpose matrix so X=time, Y=distance (proper spatiotemporal visualization)
         matrix_transposed = matrix.T
         
-        # Create LOS-compliant colormap from rulebook
+        # Create LOS-compliant colormap from rulebook (palette must remain unchanged)
         los_cmap = create_los_colormap(los_colors)
         
         # Set NaN values to white (no data) to match Epic #279 mock-ups
-        los_cmap.set_bad(color="white")
+        los_cmap.set_bad(color=HEATMAP_NAN_COLOR)
         
         # Enhanced contrast for better visual separation
-        from matplotlib.colors import PowerNorm
-        norm = PowerNorm(gamma=0.5, vmin=0, vmax=2.0)
+        norm = mcolors.PowerNorm(
+            gamma=HEATMAP_POWER_NORM_GAMMA,
+            vmin=HEATMAP_DENSITY_VMIN,
+            vmax=HEATMAP_DENSITY_VMAX,
+        )
+        _assert_heatmap_invariants(norm, los_cmap)
         
         # Use LOS colormap with enhanced contrast for density visualization
         im = ax.imshow(matrix_transposed, cmap=los_cmap, norm=norm, aspect='auto', origin='lower')
@@ -373,4 +395,3 @@ def generate_heatmaps_for_run(run_id: str) -> Tuple[int, List[str]]:
 # Phase 3 cleanup: Removed unused function get_heatmap_files()
 # - Was imported by api_heatmaps.py but never called
 # - Functionality can be recreated if needed using Path.glob() directly
-

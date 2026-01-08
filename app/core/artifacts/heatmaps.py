@@ -29,6 +29,21 @@ import sys
 from app.common.config import load_rulebook, load_reporting
 # Issue #466 Step 2: Storage consolidated to app.storage=None
 
+HEATMAP_POWER_NORM_GAMMA = 0.5
+HEATMAP_NAN_COLOR = "white"
+HEATMAP_DENSITY_VMIN = 0
+HEATMAP_DENSITY_VMAX = 2.0
+
+
+def _assert_heatmap_invariants(norm: mcolors.Normalize, cmap: mcolors.Colormap) -> None:
+    """Regression guard for heatmap normalization + NaN rendering invariants."""
+    if not isinstance(norm, mcolors.PowerNorm) or norm.gamma != HEATMAP_POWER_NORM_GAMMA:
+        raise ValueError(
+            "Heatmap normalization must remain PowerNorm(gamma=0.5) for density rendering."
+        )
+    if not np.allclose(cmap.get_bad(), mcolors.to_rgba(HEATMAP_NAN_COLOR)):
+        raise ValueError("Heatmap NaN values must render as white (no data).")
+
 
 def create_los_colormap(los_colors: Dict[str, str]) -> mcolors.LinearSegmentedColormap:
     """
@@ -128,12 +143,16 @@ def _create_density_matrix(segment_bins, times, distances):
 def _setup_heatmap_plot(matrix, times, distances, seg_id, los_cmap):
     """Set up matplotlib heatmap plot."""
     import matplotlib.pyplot as plt
-    from matplotlib.colors import PowerNorm
     
     fig, ax = plt.subplots(figsize=(12, 6))
     matrix_transposed = matrix.T
-    los_cmap.set_bad(color="white")
-    norm = PowerNorm(gamma=0.5, vmin=0, vmax=2.0)
+    los_cmap.set_bad(color=HEATMAP_NAN_COLOR)
+    norm = mcolors.PowerNorm(
+        gamma=HEATMAP_POWER_NORM_GAMMA,
+        vmin=HEATMAP_DENSITY_VMIN,
+        vmax=HEATMAP_DENSITY_VMAX,
+    )
+    _assert_heatmap_invariants(norm, los_cmap)
     im = ax.imshow(matrix_transposed, cmap=los_cmap, norm=norm, aspect='auto', origin='lower')
     
     segment_labels = {
@@ -197,6 +216,9 @@ def generate_segment_heatmap(
 ) -> bool:
     """
     Generate heatmap PNG for a single segment.
+
+    Invariants: heatmaps are density-only (no LOS recompute), use the rulebook palette,
+    PowerNorm(gamma=0.5), and NaN=white for missing data.
     
     Args:
         seg_id: Segment identifier (e.g., "A1")
