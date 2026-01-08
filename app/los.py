@@ -47,7 +47,7 @@ def los_from_density(
     
     Args:
         density: Areal density (people per square meter)
-        thresholds: Custom LOS thresholds or rulebook LosBands (optional; defaults to rulebook globals)
+        thresholds: Optional rulebook LosBands or dict (optional; defaults to rulebook globals via SSOT)
         
     Returns:
         LOS classification ('A', 'B', 'C', 'D', 'E', or 'F')
@@ -60,11 +60,13 @@ def los_from_density(
         >>> los_from_density(3.5)  # Above F threshold
         'F'
     """
+    # Issue #640: Use rulebook SSOT - allow LosBands from rulebook or default to rulebook globals
     if thresholds is None:
         bands = rulebook.get_thresholds("on_course_open").los
     elif isinstance(thresholds, rulebook.LosBands):
-        bands = thresholds
+        bands = thresholds  # Already from rulebook (SSOT)
     else:
+        # Legacy support: convert dict to LosBands (should come from rulebook source)
         missing = [key for key in ("A", "B", "C", "D", "E", "F") if key not in thresholds]
         if missing:
             raise ValueError(f"Missing LOS threshold keys: {missing}")
@@ -152,7 +154,7 @@ def classify_bins_los(
     Args:
         df: DataFrame with density data
         density_field: Column name containing density values (default: 'density_peak')
-        thresholds: Custom LOS thresholds (optional)
+        thresholds: Custom LOS thresholds (not supported; rulebook SSOT only)
         
     Returns:
         DataFrame with added 'los' and 'los_rank' columns
@@ -161,10 +163,10 @@ def classify_bins_los(
         logger.error(f"Density field '{density_field}' not found in DataFrame")
         return df
     
+    # Issue #640: classify_bins_los uses los_from_density which handles rulebook SSOT
+    # No need to check thresholds here as los_from_density handles it
     # Classify each bin
-    df['los'] = df[density_field].apply(
-        lambda d: los_from_density(d, thresholds)
-    )
+    df['los'] = df[density_field].apply(los_from_density)
     
     # Add numeric rank for sorting/filtering
     df['los_rank'] = df['los'].apply(los_rank)

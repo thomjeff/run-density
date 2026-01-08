@@ -25,6 +25,7 @@ import subprocess
 
 # Add parent directory to path for imports
 
+from app.common.config import load_reporting
 
 # Issue #283: Import SSOT for flagging logic parity
 from app import flagging as ssot_flagging
@@ -54,6 +55,7 @@ def _load_bins_df(reports_root: Path, run_id: str) -> pd.DataFrame:
     # Basic guards
     assert "segment_id" in df.columns, f"segment_id column not found. Available: {list(df.columns)}"
     assert "rate_p_s" in df.columns, f"rate_p_s column not found. Available: {list(df.columns)}"
+    assert "los_class" in df.columns, f"los_class column not found. Available: {list(df.columns)}"
     
     return df
 
@@ -99,6 +101,8 @@ def compute_rulebook_hash() -> str:
     except Exception as e:
         print(f"Warning: Could not compute rulebook hash: {e}")
         return "sha256:unknown"
+
+
 
 
 def generate_meta_json(run_id: str, environment: str = "local") -> Dict[str, Any]:
@@ -209,8 +213,9 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
                 peak_rate = 0.0
             
             # Issue #603: Extract LOS from worst bin (not recalculated)
-            if 'los_class' not in worst_bin_row:
-                raise ValueError("Missing los_class in bins.parquet; LOS must be computed upstream.")
+            # Issue #640: LOS must be present (computed via rulebook SSOT upstream)
+            if 'los_class' not in worst_bin_row or not worst_bin_row['los_class']:
+                raise ValueError(f"Missing los_class for segment {seg_id} worst bin; LOS must be computed upstream via rulebook SSOT.")
             worst_los = str(worst_bin_row['los_class'])
             
             # Issue #603: Extract active_window from worst bin's t_start/t_end
@@ -977,7 +982,7 @@ def generate_density_schema_json(dataset_version: str = "unknown") -> Dict[str, 
         "units": {
             "density": "persons_per_m2",
             "rate": "persons_per_second", 
-            "los": "A-F",
+            "los_class": "A-F",
             "severity": "NONE|WATCH|ALERT|CRITICAL",
             "time": "ISO8601"
         },
@@ -1013,7 +1018,7 @@ def generate_density_schema_json(dataset_version: str = "unknown") -> Dict[str, 
                 "description": "Persons per second (p/s)."
             },
             {
-                "name": "los",
+                "name": "los_class",
                 "type": "string",
                 "required": True,
                 "description": "Level of Service classification (A–F)."

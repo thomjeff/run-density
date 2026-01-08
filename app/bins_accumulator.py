@@ -32,7 +32,7 @@ class BinFeature:
     t_end: datetime
     density: float                          # p / m^2
     rate: float                             # p / s (throughput rate) - renamed from 'flow' to avoid confusion with Flow analysis
-    los_class: str                          # derived from density thresholds
+    los_class: Optional[str]                # set by rulebook flagging (SSOT)
     bin_size_km: float
 
 @dataclass
@@ -116,6 +116,7 @@ def build_bin_features(
     - Flow (p/s) is density * width_m * mean_speed_mps (absolute per bin/window).
     - LOS bands must be provided from app.rulebook (no local defaults).
     """
+    # Issue #640: LOS bands must be provided from rulebook (SSOT)
     if los_bands_by_segment is None and los_bands is None:
         raise ValueError("LOS bands are required; provide los_bands_by_segment or los_bands from app.rulebook.")
     bin_len_m = bin_size_km * 1000.0
@@ -189,6 +190,7 @@ def build_bin_features(
                 end_m = min((b + 1) * bin_len_m, seg.length_m)
                 d = float(density[b])
                 r = float(rate[b])
+                # Issue #640: Classify LOS using rulebook bands (SSOT)
                 los = rulebook.classify_los(d, bands)
                 bf = BinFeature(
                     segment_id=seg_id,

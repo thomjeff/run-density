@@ -405,11 +405,10 @@ def _export_ui_artifacts_v2(
             # Issue #528: Use bins with 'rate' column (not 'rate_p_s') for flagging
             if aggregated_bins_for_flags is not None and not aggregated_bins_for_flags.empty and temp_reports:
                 # Ensure bins have required columns for flagging
-                required_cols = {'segment_id', 't_start', 't_end', 'density', 'rate', 'los', 'flag_severity', 'flag_reason'}
+                required_cols = {'segment_id', 't_start', 't_end', 'density', 'rate', 'los_class', 'flag_severity', 'flag_reason'}
                 missing_cols = required_cols - set(aggregated_bins_for_flags.columns)
                 if missing_cols:
-                    logger.warning(f"   ⚠️  Bins DataFrame missing required columns for flagging: {missing_cols}")
-                    flags = []
+                    raise ValueError(f"Bins DataFrame missing required columns for flagging: {missing_cols}")
                 else:
                     # Save bins with 'rate' column to temp_reports for generate_flags_json
                     # This overwrites the bins.parquet saved earlier (which had 'rate_p_s')
@@ -426,10 +425,10 @@ def _export_ui_artifacts_v2(
             else:
                 flags = []
         except Exception as e:
-            logger.warning(f"   ⚠️  Could not generate flags: {e}")
+            logger.error(f"   ❌ Could not generate flags: {e}")
             import traceback
             logger.debug(f"   Traceback: {traceback.format_exc()}")
-            flags = []
+            raise
         
         segments_with_flags = len(flags)
         flagged_bins = sum(flag.get("flagged_bins", 0) for flag in flags)
@@ -1269,4 +1268,3 @@ def _build_zone_caption_summary(
         summary_parts.append("This zone shows limited interaction between events.")
     
     return " ".join(summary_parts)
-

@@ -1196,18 +1196,9 @@ def parse_latest_density_report_segments():
 
 def _determine_los_from_density(peak_areal_density: float) -> str:
     """Determine LOS from peak areal density value."""
-    if peak_areal_density < 0.5:
-        return "A"
-    elif peak_areal_density < 1.0:
-        return "B"
-    elif peak_areal_density < 1.5:
-        return "C"
-    elif peak_areal_density < 2.0:
-        return "D"
-    elif peak_areal_density < 3.0:
-        return "E"
-    else:
-        return "F"
+    from app import rulebook
+    bands = rulebook.get_thresholds("on_course_open").los
+    return rulebook.classify_los(peak_areal_density, bands)
 
 
 def _determine_status_from_los_and_severity(los: str, severity: str) -> str:

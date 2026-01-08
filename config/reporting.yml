@@ -191,7 +191,7 @@ schemas:
       - t_start
       - t_end
       - density
-      - los
+      - los_class
   
   flow_csv:
     type: csv

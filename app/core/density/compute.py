@@ -89,52 +89,15 @@ def get_event_intervals(event: str, density_cfg: Dict[str, Any]) -> Optional[Tup
     return None
 
 
-def _get_los_thresholds(rulebook: Dict[str, Any], schema_name: str) -> Dict[str, Dict[str, float]]:
-    """
-    Extract LOS thresholds from rulebook configuration.
-    
-    Args:
-        rulebook: Rulebook configuration dictionary
-        schema_name: Schema name to use for threshold lookup
-        
-    Returns:
-        Dictionary mapping LOS letters to min/max threshold ranges
-        
-    Raises:
-        ValueError: If no valid thresholds found
-    """
-    if "schemas" not in rulebook:
-        # Legacy v1.x rulebook structure - not supported for LOS classification
-        raise ValueError("Legacy v1.x rulebook structure not supported for LOS classification")
-    
-    # v2.0 rulebook - use schema-specific or global LOS thresholds
-    schemas = rulebook.get("schemas", {})
-    schema_config = schemas.get(schema_name, {})
-    los_thresholds = schema_config.get("los_thresholds", 
-                                     rulebook.get("globals", {}).get("los_thresholds", {}))
-    
-    if not los_thresholds:
-        raise ValueError(f"No LOS thresholds found for schema '{schema_name}'")
-    
-    return los_thresholds
-
-
 def classify_density(value, rulebook, schema_name="on_course_open"):
     """
     Returns LOS letter (A-F) based on density value and schema.
     Uses the rulebook thresholds verbatim (units must match computed metric).
     """
     try:
-        los_thresholds = _get_los_thresholds(rulebook, schema_name)
-        
-        # Map density to LOS letter
-        for letter in ["A", "B", "C", "D", "E", "F"]:
-            rng = los_thresholds.get(letter, {})
-            mn = rng.get("min", float("-inf"))
-            mx = rng.get("max", float("inf"))
-            if value >= mn and value < mx:
-                return letter
-        return "F"  # Default to worst case if no range matches
+        from app import rulebook as rulebook_ssot
+        bands = rulebook_ssot.get_thresholds(schema_name).los
+        return rulebook_ssot.classify_los(value, bands)
         
     except ValueError as e:
         logger.warning(f"LOS classification failed: {e}, defaulting to 'F'")
