@@ -39,11 +39,23 @@
                     <th style="padding: 0.75rem; text-align: center; cursor: pointer; user-select: none;">
                         Events <span class="sort-indicator">↕</span>
                     </th>
+                    <th style="padding: 0.75rem; text-align: center; cursor: pointer; user-select: none;">
+                        First Finisher <span class="sort-indicator">↕</span>
+                    </th>
+                    <th style="padding: 0.75rem; text-align: center; cursor: pointer; user-select: none;">
+                        Last Finisher <span class="sort-indicator">↕</span>
+                    </th>
+                    <th style="padding: 0.75rem; text-align: center; cursor: pointer; user-select: none;">
+                        Day Duration <span class="sort-indicator">↕</span>
+                    </th>
+                    <th style="padding: 0.75rem; text-align: center; cursor: pointer; user-select: none;">
+                        Elapsed (min) <span class="sort-indicator">↕</span>
+                    </th>
                 </tr>
             </thead>
             <tbody id="run-history-tbody">
                 <tr>
-                    <td colspan="5" style="padding: 2rem; text-align: center; color: #6c757d;">Loading runs...</td>
+                    <td colspan="9" style="padding: 2rem; text-align: center; color: #6c757d;">Loading runs...</td>
                 </tr>
             </tbody>
         </table>
@@ -226,7 +238,7 @@
         if (!tbody) return;
         
         if (filteredRuns.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="padding: 2rem; text-align: center; color: #6c757d;">No runs found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" style="padding: 2rem; text-align: center; color: #6c757d;">No runs found</td></tr>';
             return;
         }
         
@@ -238,6 +250,12 @@
             const isSelected = run.run_id === selectedRunId;
             const rowStyle = isSelected ? 'background: #e3f2fd; font-weight: 600;' : '';
             
+            // Issue #636: Format new columns
+            const dayFirstFinisher = run.day_first_finisher || '—';
+            const dayLastFinisher = run.day_last_finisher || '—';
+            const dayDuration = run.day_duration_minutes != null ? `${run.day_duration_minutes}` : '—';
+            const totalElapsed = run.total_elapsed_minutes != null ? run.total_elapsed_minutes.toFixed(2) : '—';
+            
             return `
                 <tr data-run-id="${run.run_id}" style="${rowStyle} cursor: pointer;" onclick="selectRun('${run.run_id}')">
                     <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6;" title="${run.run_id}">${runIdShort}</td>
@@ -245,6 +263,10 @@
                     <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6;">${run.formatted_date || run.created_at}</td>
                     <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6; text-align: center;">${days}</td>
                     <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6; text-align: center;">${events}</td>
+                    <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6; text-align: center;">${dayFirstFinisher}</td>
+                    <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6; text-align: center;">${dayLastFinisher}</td>
+                    <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6; text-align: center;">${dayDuration}</td>
+                    <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6; text-align: center;">${totalElapsed}</td>
                 </tr>
             `;
         }).join('');
@@ -269,7 +291,7 @@
         const headers = document.querySelectorAll('#run-history-table thead th');
         headers.forEach((header, index) => {
             header.addEventListener('click', () => {
-                const columns = ['run_id', 'description', 'created_at', 'days', 'events'];
+                const columns = ['run_id', 'description', 'created_at', 'days', 'events', 'day_first_finisher', 'day_last_finisher', 'day_duration_minutes', 'total_elapsed_minutes'];
                 if (index < columns.length) {
                     if (sortColumn === columns[index]) {
                         sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
@@ -309,6 +331,24 @@
                     aVal = a.event_summary?.events || 0;
                     bVal = b.event_summary?.events || 0;
                     break;
+                case 'day_first_finisher':
+                    // Sort by time string (hh:mm format)
+                    aVal = a.day_first_finisher || '';
+                    bVal = b.day_first_finisher || '';
+                    break;
+                case 'day_last_finisher':
+                    // Sort by time string (hh:mm format)
+                    aVal = a.day_last_finisher || '';
+                    bVal = b.day_last_finisher || '';
+                    break;
+                case 'day_duration_minutes':
+                    aVal = a.day_duration_minutes != null ? a.day_duration_minutes : 0;
+                    bVal = b.day_duration_minutes != null ? b.day_duration_minutes : 0;
+                    break;
+                case 'total_elapsed_minutes':
+                    aVal = a.total_elapsed_minutes != null ? a.total_elapsed_minutes : 0;
+                    bVal = b.total_elapsed_minutes != null ? b.total_elapsed_minutes : 0;
+                    break;
                 default:
                     return 0;
             }
@@ -321,7 +361,7 @@
     
     function updateSortIndicators() {
         const headers = document.querySelectorAll('#run-history-table thead th');
-        const columns = ['run_id', 'description', 'created_at', 'days', 'events'];
+        const columns = ['run_id', 'description', 'created_at', 'days', 'events', 'day_first_finisher', 'day_last_finisher', 'day_duration_minutes', 'total_elapsed_minutes'];
         headers.forEach((header, index) => {
             const indicator = header.querySelector('.sort-indicator');
             if (indicator) {
