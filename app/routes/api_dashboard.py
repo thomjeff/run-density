@@ -449,9 +449,16 @@ async def get_run_summary(run_id: str):
                 # Issue #573: Get event_groups RES data from metadata
                 event_groups_res = day_meta.get("event_groups", {})
                 
+                # Issue #636: Get predicted_timings for day_first_finisher and day_last_finisher
+                predicted_timings = day_meta.get("predicted_timings", {})
+                day_first_finisher = predicted_timings.get("day_first_finisher") if predicted_timings else None
+                day_last_finisher = predicted_timings.get("day_last_finisher") if predicted_timings else None
+                
                 metrics_by_day[day] = {
                     "participants": total_participants,
                     "events": event_names,
+                    "day_first_finisher": day_first_finisher,  # Issue #636: Add to Run Details table
+                    "day_last_finisher": day_last_finisher,    # Issue #636: Add to Run Details table
                     "segments_with_flags": f"{segments_flagged} / {segments_total}",
                     "peak_density": round(peak_density, 3),
                     "peak_density_los": peak_density_los,

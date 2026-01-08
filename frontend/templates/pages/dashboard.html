@@ -429,6 +429,8 @@
         const metricRows = [
             { key: 'participants', label: 'Total Participants' },
             { key: 'events', label: 'Events', format: (val) => Array.isArray(val) ? val.join(', ') : val },
+            { key: 'day_first_finisher', label: 'First Finisher', format: (val) => val || '—' },  // Issue #636: Add to Run Details
+            { key: 'day_last_finisher', label: 'Last Finisher', format: (val) => val || '—' },      // Issue #636: Add to Run Details
             { key: 'segments_with_flags', label: 'Segments with Flags' },
             { key: 'peak_density', label: 'Peak Density (P/m²)' },
             { key: 'peak_rate', label: 'Peak Rate (P/s)' },

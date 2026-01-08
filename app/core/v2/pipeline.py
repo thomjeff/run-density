@@ -371,6 +371,134 @@ def _verify_outputs(files_created: Dict[str, List[str]]) -> Dict[str, Any]:
     }
 
 
+def calculate_predicted_timings(
+    day_path: Path,
+    events: List[Event],
+    analysis_config: Optional[Dict[str, Any]] = None
+) -> Optional[Dict[str, Any]]:
+    """
+    Calculate predicted timings from bin data (DRY principle - use existing computations).
+    
+    Issue #594: Extract timing data from bins.parquet without recalculating.
+    
+    Args:
+        day_path: Path to day directory containing bins.parquet
+        events: List of Event objects for this day
+        analysis_config: Optional analysis.json config for start times
+        
+    Returns:
+        Dictionary with predicted_timings structure, or None if bins.parquet not available
+    """
+    try:
+        import pandas as pd
+        from datetime import datetime, timezone
+        
+        bins_parquet = day_path / "bins" / "bins.parquet"
+        if not bins_parquet.exists():
+            logger.warning(f"bins.parquet not found at {bins_parquet}, skipping predicted_timings")
+            return None
+        
+        # Load bins.parquet
+        bins_df = pd.read_parquet(bins_parquet)
+        if bins_df.empty:
+            logger.warning(f"bins.parquet is empty for {day_path}, skipping predicted_timings")
+            return None
+        
+        # Ensure t_start and t_end are datetime
+        if 't_start' in bins_df.columns and 't_end' in bins_df.columns:
+            bins_df['t_start'] = pd.to_datetime(bins_df['t_start'], utc=True)
+            bins_df['t_end'] = pd.to_datetime(bins_df['t_end'], utc=True)
+        else:
+            logger.warning(f"bins.parquet missing t_start or t_end columns, skipping predicted_timings")
+            return None
+        
+        # Get event names (lowercase)
+        event_names = [e.name.lower() for e in events]
+        
+        # Calculate day_start: earliest t_start from bins (actual data, not just event start times)
+        day_start_dt = bins_df['t_start'].min()
+        day_start_str = day_start_dt.strftime("%H:%M")
+        day_start_hours = day_start_dt.hour
+        day_start_minutes = day_start_dt.minute
+        
+        # Calculate day-level timings (across all events)
+        day_first_finisher_dt = bins_df['t_end'].min()
+        day_last_finisher_dt = bins_df['t_end'].max()
+        
+        # Format as hh:mm
+        day_first_finisher_str = day_first_finisher_dt.strftime("%H:%M")
+        day_last_finisher_str = day_last_finisher_dt.strftime("%H:%M")
+        day_end_str = day_last_finisher_str  # day_end = day_last_finisher
+        
+        # Calculate day_duration: day_end - day_start (in minutes, then format as hh:mm)
+        day_duration_minutes = (day_last_finisher_dt - day_start_dt).total_seconds() / 60
+        day_duration_hours = int(day_duration_minutes // 60)
+        day_duration_mins = int(day_duration_minutes % 60)
+        day_duration_str = f"{day_duration_hours:02d}:{day_duration_mins:02d}"
+        
+        # Calculate event-level timings
+        event_first_finisher = {}
+        event_last_finisher = {}
+        actual_event_duration = {}
+        
+        for event in events:
+            event_name = event.name.lower()
+            
+            # Filter bins where this event is in the event list
+            # The 'event' column can be a list, string, or other type
+            if 'event' in bins_df.columns:
+                # Handle different data types: list, string, or scalar
+                def event_matches(x):
+                    if isinstance(x, list):
+                        return event_name in x
+                    elif isinstance(x, str):
+                        return event_name == x.lower()
+                    else:
+                        return False
+                
+                event_bins = bins_df[bins_df['event'].apply(event_matches)]
+            else:
+                # Fallback: if no event column, use all bins (less accurate)
+                event_bins = bins_df
+                logger.warning(f"No 'event' column in bins.parquet, using all bins for event {event_name}")
+            
+            if not event_bins.empty:
+                event_first_finisher_dt = event_bins['t_end'].min()
+                event_last_finisher_dt = event_bins['t_end'].max()
+                
+                event_first_finisher[event_name] = event_first_finisher_dt.strftime("%H:%M")
+                event_last_finisher[event_name] = event_last_finisher_dt.strftime("%H:%M")
+                
+                # Calculate actual_event_duration: event_last_finisher - event_first_finisher
+                duration_minutes = (event_last_finisher_dt - event_first_finisher_dt).total_seconds() / 60
+                duration_hours = int(duration_minutes // 60)
+                duration_mins = int(duration_minutes % 60)
+                actual_event_duration[event_name] = f"{duration_hours:02d}:{duration_mins:02d}"
+            else:
+                logger.warning(f"No bins found for event {event_name}, skipping event timings")
+        
+        # Build predicted_timings structure
+        predicted_timings = {
+            "day_start": day_start_str,
+            "event_first_finisher": event_first_finisher,
+            "day_first_finisher": day_first_finisher_str,
+            "event_last_finisher": event_last_finisher,
+            "day_last_finisher": day_last_finisher_str,
+            "day_end": day_end_str,
+            "actual_event_duration": actual_event_duration,
+            "day_duration": day_duration_str
+        }
+        
+        logger.info(f"Issue #594: Calculated predicted_timings for {day_path.name}: day_start={day_start_str}, day_end={day_end_str}")
+        return predicted_timings
+        
+    except Exception as e:
+        logger.warning(f"Issue #594: Failed to calculate predicted_timings: {e}")
+        import traceback
+        logger.debug(f"Traceback: {traceback.format_exc()}")
+        return None
+
+
 def create_metadata_json(
     run_id: str,
     day: str,
@@ -1283,19 +1411,34 @@ def create_full_analysis_pipeline(
             metadata["flow"] = flow_summary_by_day[day_code]
             
             # Issue #574: Use pre-calculated derived metrics from Phase 4.2
-            derived_metrics = derived_metrics_by_day.get(day_code, {})
+            derived_metrics = derived_metrics_by_day.get(day_code)
             if derived_metrics:
                 metadata["operational_status"] = derived_metrics.get("operational_status", "Unknown")
-                if derived_metrics.get("event_groups"):
-                    metadata["event_groups"] = derived_metrics["event_groups"]
+                event_groups = derived_metrics.get("event_groups")
+                if event_groups:
+                    metadata["event_groups"] = event_groups
+                # Safely get res_groups count (handle None case)
+                res_groups_count = len(event_groups) if event_groups and isinstance(event_groups, dict) else 0
                 logger.info(
                     f"Issue #574: Added derived metrics to metadata for {day_code}: "
                     f"operational_status={derived_metrics.get('operational_status')}, "
-                    f"res_groups={len(derived_metrics.get('event_groups', {}))}"
+                    f"res_groups={res_groups_count}"
                 )
             else:
                 metadata["operational_status"] = "Unknown"
                 logger.warning(f"Issue #574: No derived metrics found for {day_code}, using defaults")
+            
+            # Issue #594: Calculate predicted_timings from bins.parquet (DRY principle)
+            predicted_timings = calculate_predicted_timings(
+                day_path=day_path,
+                events=day_events,
+                analysis_config=analysis_config
+            )
+            if predicted_timings:
+                metadata["predicted_timings"] = predicted_timings
+                logger.info(f"Issue #594: Added predicted_timings to metadata for {day_code}")
+            else:
+                logger.warning(f"Issue #594: Could not calculate predicted_timings for {day_code}")
             
             metadata_path = day_path / "metadata.json"
             with open(metadata_path, 'w', encoding='utf-8') as f:

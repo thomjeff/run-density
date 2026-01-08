@@ -35,7 +35,7 @@ Begin familiarizing yourself with repo structure, especially:
 - `postman/`: collections and environment variables for using the main v2 API endpoint
 - `app/utils/constants.py`: Application constants (deprecated constants removed in Issue #553)
 - `docs/user-guide/api-user-guide.md`: API user guide (v2.0.2+)
-- `docs/dev-guides/developer-guide-v2.md`: Developer guide (v2.0.2+)
+- `docs/dev-guides/developer-guide.md`: Developer guide (v2.0.2+)
 - `docs/dev-guides/ai-developer-guide.md`: This document (AI assistant onboarding)
 
 **Only after completing all three steps above should you proceed with development tasks.**
@@ -48,7 +48,7 @@ Before starting ANY work, you **MUST** reference these documents:
 
 - `@docs/README.md` – Documentation index and architecture overview
 - `@docs/user-guide/api-user-guide.md` – API user guide (v2.0.2+)
-- `@docs/dev-guides/developer-guide-v2.md` – Developer guide (v2.0.2+)
+- `@docs/dev-guides/developer-guide.md` – Developer guide (v2.0.2+)
 - `@docs/reference/quick-reference.md` – Authoritative variable names and field mappings
 - `@docs/dev-guides/docker-dev.md` – Development workflow and commands
 
@@ -65,9 +65,9 @@ Before any code or tests are written, confirm the following:
 3. START TIME CONSTANTS – Use get_start_time() from analysis.json (Issue #553)
 4. API TESTING ONLY – Always test using e2e.py defined tests; if not an option via POST /runflow/v2/analyze endpoint
 5. MINIMAL CHANGES – Make small, testable commits
-6. NO ENDLESS LOOPS – Stop after 3 failed analysis attempts and ask
+6. NO ENDLESS LOOPS – Stop after 3 failed code implementation attempts and ask for human assistance
 7. STRICT TYPOS – Match variable names exactly to references
-8. NAMING CONVENTIONS – Use field names from QUICK_REFERENCE.md
+8. NAMING CONVENTIONS – Use field names from quick-reference.md
 9. TODO PERMISSION – Ask before creating task lists or suggestions
 10. GITHUB CONTEXT – Read entire GitHub issue + all comments
 11. CLARITY FIRST – STOP and ask if any instruction is unclear
@@ -104,12 +104,19 @@ event_names = ['full', 'half', '10k']  # NO!
 ```
 
 **Helper Functions:**
-- `load_analysis_json(run_id)` - Load analysis.json
-- `get_segments_file(analysis_config)` - Get segments file path
-- `get_flow_file(analysis_config)` - Get flow file path
-- `get_locations_file(analysis_config)` - Get locations file path
-- `get_event_duration(analysis_config, event_name)` - Get event duration
-- `get_start_time(analysis_config, event_name)` - Get event start time
+- `load_analysis_json(run_path)` - Load analysis.json from run directory (Path)
+- `get_segments_file(analysis_config=None, run_path=None)` - Get segments file path (provide either config or path)
+- `get_flow_file(analysis_config=None, run_path=None)` - Get flow file path (provide either config or path)
+- `get_locations_file(analysis_config=None, run_path=None)` - Get locations file path (provide either config or path)
+- `get_event_duration_minutes(event_name, analysis_config=None, run_path=None)` - Get event duration in minutes
+- `get_start_time(event_name, analysis_config=None, run_path=None)` - Get event start time
+- `get_all_start_times(analysis_config=None, run_path=None)` - Get all event start times as dictionary
+- `get_event_names(analysis_config=None, run_path=None)` - Get list of all event names
+- `get_events_by_day(day, analysis_config=None, run_path=None)` - Get events for a specific day
+- `get_runners_file(event_name, analysis_config=None, run_path=None)` - Get runners file path for event
+- `get_gpx_file(event_name, analysis_config=None, run_path=None)` - Get GPX file path for event
+
+**Note:** Most helper functions accept either `analysis_config` (pre-loaded dict) or `run_path` (Path to run directory). If `analysis_config` is provided, it will be used; otherwise, `analysis.json` will be loaded from `run_path`.
 
 ### 2. PERMANENT CODE ONLY
 
@@ -185,7 +192,24 @@ analysis_config_1 = load_analysis_json(run_id)  # In function A
 analysis_config_2 = load_analysis_json(run_id)  # In function B - NO!
 ```
 
-### 6. MINIMAL CHANGES
+### 6. NO ENDLESS LOOPS
+
+**Rule:** If an AI developer (like Cursor) attempts to implement a code change more than 3 times and fails to successfully implement the requirement, it must STOP and ask the human-user for assistance. The human-user may then consult with ChatGPT acting as Senior Developer if needed.
+
+**What This Means:**
+- After 3 failed attempts to implement the same requirement, STOP
+- Do not continue trying different approaches
+- Clearly communicate what was attempted and what failed
+- Ask the human-user for guidance, clarification, or alternative approach
+- The human-user may escalate to ChatGPT as Senior Developer for architectural guidance
+
+**Examples:**
+- ❌ Attempt 1: Try approach A → fails
+- ❌ Attempt 2: Try approach B → fails  
+- ❌ Attempt 3: Try approach C → fails
+- ✅ STOP and ask: "I've tried 3 different approaches (A, B, C) and all failed. Please provide guidance."
+
+### 7. MINIMAL CHANGES
 
 **Rule:** Make small, testable commits. One logical change per commit.
 
@@ -197,7 +221,7 @@ analysis_config_2 = load_analysis_json(run_id)  # In function B - NO!
 **Bad:**
 - Commit 1: Refactor entire pipeline, update 20 files, add tests, fix bugs
 
-### 7. STRICT TYPOS & NAMING
+### 8. STRICT TYPOS & NAMING
 
 **Rule:** Match variable names exactly to references in `quick-reference.md`.
 
@@ -209,7 +233,7 @@ analysis_config_2 = load_analysis_json(run_id)  # In function B - NO!
 **Reference:**
 - See `docs/reference/quick-reference.md` for exact field names
 
-### 8. GITHUB CONTEXT
+### 9. GITHUB CONTEXT
 
 **Rule:** Read entire GitHub issue + all comments before starting work.
 
@@ -220,7 +244,7 @@ analysis_config_2 = load_analysis_json(run_id)  # In function B - NO!
 4. Understand acceptance criteria
 5. Ask clarifying questions if needed
 
-### 9. CLARITY FIRST
+### 10. CLARITY FIRST
 
 **Rule:** If any instruction is unclear, STOP and ask. Don't guess.
 
@@ -286,7 +310,7 @@ analysis_config_2 = load_analysis_json(run_id)  # In function B - NO!
 ## 📚 Additional Resources
 
 - **API Usage:** `docs/user-guide/api-user-guide.md`
-- **Developer Guide:** `docs/dev-guides/developer-guide-v2.md`
+- **Developer Guide:** `docs/dev-guides/developer-guide.md`
 - **Docker Workflow:** `docs/dev-guides/docker-dev.md`
 - **Quick Reference:** `docs/reference/quick-reference.md`
 - **Testing Guide:** `docs/testing/testing-guide.md`

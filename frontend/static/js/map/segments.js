@@ -262,12 +262,16 @@ async function renderSegments(map) {
     window.filterMapToSegment = filterMapToSegment;
     window.clearMapFilter = clearMapFilter;
     window.segmentsLayer = segmentsLayer;
+    window.updateTable = updateTable;  // Issue #634: Make updateTable globally available for bounds filtering
     
     // Fit map to segments bounds with padding
     if (data.features.length > 0) {
         const bounds = segmentsLayer.getBounds();
         console.log('🗺️ Segment bounds:', bounds);
         console.log('🗺️ Map center before fitBounds:', map.getCenter());
+        
+        // Issue #634: Store initial bounds for reset functionality
+        window.segmentsInitialBounds = bounds;
         
         map.fitBounds(bounds, { 
             padding: [20, 20],
@@ -286,6 +290,9 @@ async function renderSegments(map) {
         loadingOverlay.style.display = 'none';
         console.log('✅ Hidden loading overlay');
     }
+    
+    // Issue #634: Store all features globally for bounds filtering
+    window.allSegmentsFeatures = data.features;
     
     // Update the table with segment data
     updateTable(data.features);
@@ -312,6 +319,9 @@ async function refreshSegmentsOnDayChange() {
     await renderSegments(window.map);
 }
 
+// Flag to track programmatic map movements (to avoid filtering during table row clicks)
+let isProgrammaticMapMove = false;
+
 /**
  * Filter map to show only the selected segment
  * @param {string} segmentId - ID of the segment to show
@@ -337,13 +347,18 @@ function filterMapToSegment(segmentId) {
             const style = getSegmentStyle(feature);
             layer.setStyle(style);
             
-            // Fit map to this segment's bounds
+            // Fit map to this segment's bounds (programmatic move - disable bounds filtering temporarily)
             const bounds = layer.getBounds();
             if (bounds.isValid()) {
+                isProgrammaticMapMove = true;
                 window.map.fitBounds(bounds, { 
                     padding: [20, 20],
                     maxZoom: 18
                 });
+                // Re-enable bounds filtering after animation completes
+                setTimeout(() => {
+                    isProgrammaticMapMove = false;
+                }, 600);
                 console.log(`✅ Focused map on segment ${segmentId}`);
             }
         }
@@ -379,12 +394,19 @@ function clearMapFilter() {
         }
     });
     
-    // Fit map to all segments bounds
+    // Fit map to all segments bounds (programmatic move - disable bounds filtering temporarily)
     if (window.segmentsLayer.getBounds().isValid()) {
+        isProgrammaticMapMove = true;
         window.map.fitBounds(window.segmentsLayer.getBounds(), { 
             padding: [20, 20],
             maxZoom: 16
         });
+        // Re-enable bounds filtering after animation completes
+        setTimeout(() => {
+            isProgrammaticMapMove = false;
+            // Now filter table based on the new bounds
+            filterTableByMapBounds();
+        }, 600);
     }
     
     // Clear table row highlighting
@@ -395,6 +417,11 @@ function clearMapFilter() {
 
     // Hide heatmap preview
     hideHeatmapPreview();
+    
+    // Restore full table (show all segments)
+    if (window.allSegmentsFeatures && window.updateTable) {
+        updateTable(window.allSegmentsFeatures);
+    }
 }
 
 /**
@@ -523,6 +550,79 @@ function hideHeatmapPreview() {
 }
 
 /**
+ * Issue #634: Filter table rows based on current map bounds
+ * Only shows segments that are currently visible in the map viewport
+ */
+function filterTableByMapBounds() {
+    // Skip filtering if this is a programmatic map movement (e.g., from table row click)
+    if (isProgrammaticMapMove) {
+        return;
+    }
+    
+    if (!window.map || !window.allSegmentsFeatures) {
+        return;
+    }
+    
+    const bounds = window.map.getBounds();
+    if (!bounds || !bounds.isValid()) {
+        return;
+    }
+    
+    // Find segments within current map bounds
+    // For LineString/MultiLineString, check if any part of the geometry intersects bounds
+    const visibleFeatures = window.allSegmentsFeatures.filter(feature => {
+        if (!feature.geometry || !feature.geometry.coordinates) {
+            return false;
+        }
+        
+        const geometry = feature.geometry;
+        
+        // For LineString: check if any coordinate is within bounds
+        if (geometry.type === 'LineString') {
+            return geometry.coordinates.some(coord => {
+                const [lon, lat] = coord;
+                return bounds.contains([lat, lon]);
+            });
+        }
+        
+        // For MultiLineString: check if any line has any coordinate within bounds
+        if (geometry.type === 'MultiLineString') {
+            return geometry.coordinates.some(line => {
+                return line.some(coord => {
+                    const [lon, lat] = coord;
+                    return bounds.contains([lat, lon]);
+                });
+            });
+        }
+        
+        return false;
+    });
+    
+    // Only log if count changed significantly (reduce console noise)
+    const prevCount = window.lastVisibleCount || 0;
+    if (Math.abs(visibleFeatures.length - prevCount) > 5 || visibleFeatures.length === 0) {
+        console.log(`🔍 Map bounds filter: ${visibleFeatures.length} of ${window.allSegmentsFeatures.length} segments visible`);
+        window.lastVisibleCount = visibleFeatures.length;
+    }
+    
+    // Update table with filtered segments
+    updateTable(visibleFeatures);
+}
+
+/**
+ * Issue #634: Debounced version of filterTableByMapBounds to avoid excessive updates while panning
+ */
+let boundsFilterTimeout = null;
+function debouncedFilterTableByMapBounds() {
+    if (boundsFilterTimeout) {
+        clearTimeout(boundsFilterTimeout);
+    }
+    boundsFilterTimeout = setTimeout(() => {
+        filterTableByMapBounds();
+    }, 150); // 150ms debounce delay
+}
+
+/**
  * Update the segments table with data
  * @param {Array} features - GeoJSON features array
  */
@@ -605,6 +705,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Render/refresh segments for current day/run_id
         await renderSegments(window.map);
         
+        // Issue #634: Add event listeners for map pan/zoom to filter table
+        window.map.on('moveend', debouncedFilterTableByMapBounds);
+        window.map.on('zoomend', debouncedFilterTableByMapBounds);
+        
         // If day selector exists, trigger refresh on change to re-fetch correct day/run_id
         const daySelector = document.getElementById('day-selector');
         if (daySelector) {
@@ -613,7 +717,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             });
         }
         
-        console.log('✅ Segments map initialized successfully');
+        console.log('✅ Segments map initialized successfully with bounds filtering');
         
     } catch (error) {
         console.error('❌ Failed to initialize segments map:', error);
