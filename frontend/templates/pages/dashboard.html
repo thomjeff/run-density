@@ -39,11 +39,14 @@
                     <th style="padding: 0.75rem; text-align: center; cursor: pointer; user-select: none;">
                         Events <span class="sort-indicator">↕</span>
                     </th>
+                    <th style="padding: 0.75rem; text-align: center; cursor: pointer; user-select: none;">
+                        Run Time <span class="sort-indicator">↕</span>
+                    </th>
                 </tr>
             </thead>
             <tbody id="run-history-tbody">
                 <tr>
-                    <td colspan="5" style="padding: 2rem; text-align: center; color: #6c757d;">Loading runs...</td>
+                    <td colspan="6" style="padding: 2rem; text-align: center; color: #6c757d;">Loading runs...</td>
                 </tr>
             </tbody>
         </table>
@@ -217,7 +220,7 @@
             .catch(error => {
                 console.error('Error loading runs list:', error);
                 document.getElementById('run-history-tbody').innerHTML = 
-                    '<tr><td colspan="5" style="padding: 2rem; text-align: center; color: #e74c3c;">Error loading runs</td></tr>';
+                    '<tr><td colspan="6" style="padding: 2rem; text-align: center; color: #e74c3c;">Error loading runs</td></tr>';
             });
     }
     
@@ -226,7 +229,7 @@
         if (!tbody) return;
         
         if (filteredRuns.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="padding: 2rem; text-align: center; color: #6c757d;">No runs found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="padding: 2rem; text-align: center; color: #6c757d;">No runs found</td></tr>';
             return;
         }
         
@@ -235,6 +238,7 @@
             const description = (run.description || '').substring(0, 25) + (run.description && run.description.length > 25 ? '...' : '');
             const days = run.event_summary?.days || 0;
             const events = run.event_summary?.events || 0;
+            const runTime = run.total_elapsed_minutes || '—';  // Issue #638: Add Run Time column
             const isSelected = run.run_id === selectedRunId;
             const rowStyle = isSelected ? 'background: #e3f2fd; font-weight: 600;' : '';
             
@@ -245,6 +249,7 @@
                     <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6;">${run.formatted_date || run.created_at}</td>
                     <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6; text-align: center;">${days}</td>
                     <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6; text-align: center;">${events}</td>
+                    <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6; text-align: center;">${runTime}</td>
                 </tr>
             `;
         }).join('');
@@ -269,7 +274,7 @@
         const headers = document.querySelectorAll('#run-history-table thead th');
         headers.forEach((header, index) => {
             header.addEventListener('click', () => {
-                const columns = ['run_id', 'description', 'created_at', 'days', 'events'];
+                const columns = ['run_id', 'description', 'created_at', 'days', 'events', 'total_elapsed_minutes'];
                 if (index < columns.length) {
                     if (sortColumn === columns[index]) {
                         sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
@@ -309,6 +314,11 @@
                     aVal = a.event_summary?.events || 0;
                     bVal = b.event_summary?.events || 0;
                     break;
+                case 'total_elapsed_minutes':
+                    // Issue #638: Sort by hh:mm format (convert to minutes for comparison)
+                    aVal = _parseHhmmToMinutes(a.total_elapsed_minutes);
+                    bVal = _parseHhmmToMinutes(b.total_elapsed_minutes);
+                    break;
                 default:
                     return 0;
             }
@@ -321,7 +331,7 @@
     
     function updateSortIndicators() {
         const headers = document.querySelectorAll('#run-history-table thead th');
-        const columns = ['run_id', 'description', 'created_at', 'days', 'events'];
+        const columns = ['run_id', 'description', 'created_at', 'days', 'events', 'total_elapsed_minutes'];
         headers.forEach((header, index) => {
             const indicator = header.querySelector('.sort-indicator');
             if (indicator) {
@@ -431,6 +441,7 @@
             { key: 'events', label: 'Events', format: (val) => Array.isArray(val) ? val.join(', ') : val },
             { key: 'day_first_finisher', label: 'First Finisher', format: (val) => val || '—' },  // Issue #636: Add to Run Details
             { key: 'day_last_finisher', label: 'Last Finisher', format: (val) => val || '—' },      // Issue #636: Add to Run Details
+            { key: 'day_duration', label: 'Day Duration', format: (val) => val || '—' },            // Issue #638: Add Day Duration row after Last Finisher
             { key: 'segments_with_flags', label: 'Segments with Flags' },
             { key: 'peak_density', label: 'Peak Density (P/m²)' },
             { key: 'peak_rate', label: 'Peak Rate (P/s)' },

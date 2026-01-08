@@ -319,6 +319,19 @@ async def get_runs_list():
                 except Exception as e:
                     logger.warning(f"Could not load analysis.json for {run_id}: {e}")
             
+            # Load root metadata.json for total_elapsed_minutes (Issue #638 follow-up)
+            metadata_path = runflow_root / run_id / "metadata.json"
+            total_elapsed_minutes = None
+            if metadata_path.exists():
+                try:
+                    with open(metadata_path, 'r', encoding='utf-8') as f:
+                        metadata_data = json.load(f)
+                        performance = metadata_data.get("performance", {})
+                        # total_elapsed_minutes is now stored as hh:mm format (Issue #638)
+                        total_elapsed_minutes = performance.get("total_elapsed_minutes")
+                except Exception as e:
+                    logger.warning(f"Could not load metadata.json for {run_id}: {e}")
+            
             # Format created_at for display (MM-DD HH:MM)
             created_at = run.get("created_at", "")
             formatted_date = ""
@@ -336,7 +349,8 @@ async def get_runs_list():
                 "created_at": created_at,
                 "formatted_date": formatted_date,
                 "event_summary": run.get("event_summary", {}),
-                "status": run.get("status", "complete")
+                "status": run.get("status", "complete"),
+                "total_elapsed_minutes": total_elapsed_minutes  # Issue #638: Add Run Time column
             }
             runs_list.append(run_entry)
         
@@ -450,15 +464,18 @@ async def get_run_summary(run_id: str):
                 event_groups_res = day_meta.get("event_groups", {})
                 
                 # Issue #636: Get predicted_timings for day_first_finisher and day_last_finisher
+                # Issue #638 follow-up: Get day_duration from predicted_timings
                 predicted_timings = day_meta.get("predicted_timings", {})
                 day_first_finisher = predicted_timings.get("day_first_finisher") if predicted_timings else None
                 day_last_finisher = predicted_timings.get("day_last_finisher") if predicted_timings else None
+                day_duration = predicted_timings.get("day_duration") if predicted_timings else None
                 
                 metrics_by_day[day] = {
                     "participants": total_participants,
                     "events": event_names,
                     "day_first_finisher": day_first_finisher,  # Issue #636: Add to Run Details table
                     "day_last_finisher": day_last_finisher,    # Issue #636: Add to Run Details table
+                    "day_duration": day_duration,              # Issue #638: Add Day Duration row after Last Finisher
                     "segments_with_flags": f"{segments_flagged} / {segments_total}",
                     "peak_density": round(peak_density, 3),
                     "peak_density_los": peak_density_los,
