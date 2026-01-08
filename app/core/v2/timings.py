@@ -96,12 +96,14 @@ def compute_predicted_timings(
         event_start_times = {event.name.lower(): event.start_time for event in events}
         
         # Build lookup from analysis_config for fallback durations
+        # Note: analysis_config["events"] is a list, not a dict
         event_durations = {}
         if analysis_config and "events" in analysis_config:
-            for event_name, event_data in analysis_config["events"].items():
-                event_name_lower = event_name.lower()
-                if "event_duration_minutes" in event_data:
-                    event_durations[event_name_lower] = event_data["event_duration_minutes"]
+            for event_data in analysis_config["events"]:
+                if isinstance(event_data, dict):
+                    event_name = event_data.get("name", "").lower()
+                    if event_name and "event_duration_minutes" in event_data:
+                        event_durations[event_name] = event_data["event_duration_minutes"]
         
         # Initialize result dictionaries
         event_first_finisher = {}
