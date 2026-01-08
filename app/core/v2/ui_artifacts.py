@@ -552,6 +552,38 @@ def _export_ui_artifacts_v2(
         (geospatial_dir / "segments.geojson").write_text(json.dumps(segments_geojson, indent=2))
         logger.info(f"   ✅ segments.geojson: {len(segments_geojson.get('features', []))} features (in geospatial/)")
         
+        # 5.5. Generate flow_segments.json (Issue #628)
+        logger.info("5️⃣.5️⃣  Generating flow_segments.json...")
+        try:
+            day_flow_result = flow_results.get(day, {})
+            if isinstance(day_flow_result, dict) and day_flow_result.get("ok") and "segments" in day_flow_result:
+                flow_segments = _generate_flow_segments_json(flow_results, day_segment_ids, day)
+            else:
+                flow_segments = {}
+        except Exception as e:
+            logger.warning(f"   ⚠️  Could not generate flow_segments.json: {e}")
+            flow_segments = {}
+        
+        # Issue #628: Write to metrics/ subdirectory
+        (metrics_dir / "flow_segments.json").write_text(json.dumps(flow_segments, indent=2))
+        logger.info(f"   ✅ flow_segments.json: {len(flow_segments)} segment+event-pair entries (in metrics/)")
+        
+        # 5.6. Generate zone_captions.json (Issue #628)
+        logger.info("5️⃣.6️⃣  Generating zone_captions.json...")
+        try:
+            day_flow_result = flow_results.get(day, {})
+            if isinstance(day_flow_result, dict) and day_flow_result.get("ok") and "segments" in day_flow_result:
+                zone_captions = _generate_zone_captions_json(flow_results, day_segment_ids, day, segments_df)
+            else:
+                zone_captions = []
+        except Exception as e:
+            logger.warning(f"   ⚠️  Could not generate zone_captions.json: {e}")
+            zone_captions = []
+        
+        # Issue #628: Write to visualizations/ subdirectory
+        (visualizations_dir / "zone_captions.json").write_text(json.dumps(zone_captions, indent=2))
+        logger.info(f"   ✅ zone_captions.json: {len(zone_captions)} zone captions (in visualizations/)")
+        
         # 6. Generate schema_density.json (Issue #574: in metadata/ subdirectory)
         logger.info("6️⃣  Generating schema_density.json...")
         schema_density = generate_density_schema_json(meta.get('dataset_version', 'unknown'))
@@ -716,4 +748,535 @@ def _aggregate_bins_from_all_days(run_id: str) -> Optional[pd.DataFrame]:
     logger.info(f"Aggregated {len(aggregated)} bins from {len(all_bins)} day(s)")
     
     return aggregated
+
+
+def _generate_flow_segments_json(
+    flow_results: Dict[str, Any],
+    day_segment_ids: set,
+    day: Any  # Day enum
+) -> Dict[str, Any]:
+    """
+    Generate flow_segments.json for Flow UI.
+    
+    Issue #628: Creates segment-level data with worst zone metrics and nested zones.
+    Each segment+event-pair combination gets one entry with worst zone metrics.
+    
+    Args:
+        flow_results: Flow results dict keyed by Day enum
+        day_segment_ids: Set of segment IDs for the specific day
+        day: Day enum for filtering
+        
+    Returns:
+        Dictionary keyed by composite key (seg_id_event_a_event_b)
+    """
+    from app.core.flow.flow import select_worst_zone, ConflictZone
+    
+    flow_segments = {}
+    
+    # Get day-specific flow results
+    day_flow_result = flow_results.get(day, {})
+    if not isinstance(day_flow_result, dict) or not day_flow_result.get("ok"):
+        logger.warning(f"Day {day.value} flow_results not available or invalid")
+        return flow_segments
+    
+    segments_list = day_flow_result.get("segments", [])
+    if not segments_list:
+        logger.debug(f"Day {day.value}: No segments in flow results")
+        return flow_segments
+    
+    for segment in segments_list:
+        if not isinstance(segment, dict):
+            continue
+            
+        seg_id = segment.get("seg_id", "")
+        event_a = segment.get("event_a", "")
+        event_b = segment.get("event_b", "")
+        
+        # Issue #628: Debug logging for D1 (full / full) to investigate missing segment
+        is_d1_full_full = (str(seg_id) == "D1" and str(event_a) == "full" and str(event_b) == "full")
+        if is_d1_full_full:
+            logger.info(
+                f"Day {day.value}: Found D1 (full / full) in flow_results - "
+                f"seg_id={seg_id}, event_a={event_a}, event_b={event_b}, "
+                f"has_zones_key={'zones' in segment}, zones_type={type(segment.get('zones'))}, "
+                f"zones_value={segment.get('zones')}, zones_len={len(segment.get('zones', []))}"
+            )
+        
+        # Only include day-scoped segments
+        # Issue #628: Normalize segment ID check - flow_results may have composite IDs (e.g., "A2a")
+        # while day_segment_ids contains base IDs (e.g., "A2"). Check both composite and base ID.
+        seg_id_str = str(seg_id)
+        base_seg_id = seg_id_str.rstrip('abcdefghijklmnopqrstuvwxyz')
+        if seg_id_str not in day_segment_ids and base_seg_id not in day_segment_ids:
+            if is_d1_full_full:
+                logger.warning(f"Day {day.value}: D1 (full / full) filtered out - not in day_segment_ids (seg_id_str={seg_id_str}, base_seg_id={base_seg_id}, day_segment_ids sample={sorted(day_segment_ids)[:10]})")
+            continue
+        
+        # Skip segments without zones
+        zones = segment.get("zones", [])
+        if not zones:
+            if is_d1_full_full:
+                logger.warning(
+                    f"Day {day.value}: D1 (full / full) filtered out - no zones "
+                    f"(zones type: {type(zones)}, zones value: {zones}, zones len: {len(zones) if zones else 0})"
+                )
+            continue
+        
+        # Create composite key
+        composite_key = f"{seg_id}_{event_a}_{event_b}"
+        
+        # Get segment-level metadata
+        segment_label = segment.get("segment_label", "")
+        flow_type = segment.get("flow_type", "overtake")
+        total_a = segment.get("total_a", 0)
+        total_b = segment.get("total_b", 0)
+        width_m = segment.get("width_m", 0.0)
+        has_convergence = segment.get("has_convergence", False)
+        
+        # Convert zones to ConflictZone objects if needed (for select_worst_zone)
+        conflict_zones = []
+        zone_dicts = []
+        
+        for zone in zones:
+            if isinstance(zone, ConflictZone):
+                conflict_zones.append(zone)
+                zone_dicts.append(_zone_to_dict(zone))
+            elif isinstance(zone, dict):
+                # Normalize zone dict
+                zone_dict = _normalize_zone_dict(zone)
+                zone_dicts.append(zone_dict)
+                # For worst zone selection, we need ConflictZone objects
+                try:
+                    conflict_zone = _dict_to_conflict_zone(zone)
+                    if conflict_zone:
+                        conflict_zones.append(conflict_zone)
+                except Exception as e:
+                    logger.debug(f"Could not convert zone dict to ConflictZone: {e}")
+        
+        # Select worst zone
+        worst_zone = select_worst_zone(conflict_zones) if conflict_zones else None
+        
+        # Calculate worst zone metrics
+        worst_zone_data = None
+        if worst_zone:
+            worst_metrics = worst_zone.metrics if isinstance(worst_zone, ConflictZone) else worst_zone.get("metrics", {})
+            worst_zone_index = worst_zone.zone_index if isinstance(worst_zone, ConflictZone) else worst_zone.get("zone_index", 0)
+            worst_cp_km = worst_zone.cp.km if isinstance(worst_zone, ConflictZone) and worst_zone.cp else worst_zone.get("cp", {}).get("km", 0)
+            worst_cp_type = worst_zone.cp.type if isinstance(worst_zone, ConflictZone) and worst_zone.cp else worst_zone.get("cp", {}).get("type", "")
+            worst_zone_source = worst_zone.source if isinstance(worst_zone, ConflictZone) else worst_zone.get("source", "")
+            
+            overtaking_a = worst_metrics.get("overtaking_a", 0) if isinstance(worst_metrics, dict) else 0
+            overtaking_b = worst_metrics.get("overtaking_b", 0) if isinstance(worst_metrics, dict) else 0
+            copresence_a = worst_metrics.get("copresence_a", 0) if isinstance(worst_metrics, dict) else 0
+            copresence_b = worst_metrics.get("copresence_b", 0) if isinstance(worst_metrics, dict) else 0
+            
+            # Calculate percentages
+            pct_a = round((overtaking_a / total_a * 100), 1) if total_a > 0 else 0.0
+            pct_b = round((overtaking_b / total_b * 100), 1) if total_b > 0 else 0.0
+            
+            worst_zone_data = {
+                "zone_index": worst_zone_index,
+                "zone_count": len(zones),
+                "display": str(worst_zone_index),  # Issue #628: Show only zone_index, not zone_index/zone_count
+                "cp_km": round(float(worst_cp_km), 2),
+                "cp_type": str(worst_cp_type),
+                "zone_source": str(worst_zone_source),
+                "overtaking_a": int(overtaking_a),
+                "overtaking_b": int(overtaking_b),
+                "overtaken_a": int(worst_metrics.get("overtaken_a", 0) if isinstance(worst_metrics, dict) else 0),
+                "overtaken_b": int(worst_metrics.get("overtaken_b", 0) if isinstance(worst_metrics, dict) else 0),
+                "copresence_a": int(copresence_a),
+                "copresence_b": int(copresence_b),
+                "pct_a": pct_a,
+                "pct_b": pct_b,
+                "unique_encounters": int(worst_metrics.get("unique_encounters", 0) if isinstance(worst_metrics, dict) else 0),
+                "participants_involved": int(worst_metrics.get("participants_involved", 0) if isinstance(worst_metrics, dict) else 0),
+                "multi_category_runners": int(worst_metrics.get("multi_category_runners", 0) if isinstance(worst_metrics, dict) else 0)
+            }
+        
+        # Build segment entry
+        flow_segments[composite_key] = {
+            "seg_id": seg_id,
+            "event_a": event_a,
+            "event_b": event_b,
+            "segment_label": segment_label,
+            "flow_type": flow_type,
+            "total_a": int(total_a),
+            "total_b": int(total_b),
+            "width_m": float(width_m) if width_m else 0.0,
+            "has_convergence": bool(has_convergence),
+            "worst_zone": worst_zone_data,
+            "zones": zone_dicts
+        }
+    
+    logger.info(f"Generated flow_segments.json: {len(flow_segments)} segment+event-pair entries")
+    return flow_segments
+
+
+def _normalize_zone_dict(zone: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize zone dict to standard format."""
+    metrics = zone.get("metrics", {})
+    cp = zone.get("cp", {})
+    
+    return {
+        "zone_index": zone.get("zone_index", 0),
+        "cp_km": round(float(cp.get("km", 0)), 2) if isinstance(cp, dict) else 0.0,
+        "cp_type": str(cp.get("type", "")) if isinstance(cp, dict) else "",
+        "zone_source": str(zone.get("source", "")),
+        "zone_start_km_a": round(float(zone.get("zone_start_km_a", 0)), 2),
+        "zone_end_km_a": round(float(zone.get("zone_end_km_a", 0)), 2),
+        "zone_start_km_b": round(float(zone.get("zone_start_km_b", 0)), 2),
+        "zone_end_km_b": round(float(zone.get("zone_end_km_b", 0)), 2),
+        "overtaking_a": int(metrics.get("overtaking_a", 0) if isinstance(metrics, dict) else 0),
+        "overtaking_b": int(metrics.get("overtaking_b", 0) if isinstance(metrics, dict) else 0),
+        "overtaken_a": int(metrics.get("overtaken_a", 0) if isinstance(metrics, dict) else 0),
+        "overtaken_b": int(metrics.get("overtaken_b", 0) if isinstance(metrics, dict) else 0),
+        "copresence_a": int(metrics.get("copresence_a", 0) if isinstance(metrics, dict) else 0),
+        "copresence_b": int(metrics.get("copresence_b", 0) if isinstance(metrics, dict) else 0),
+        "unique_encounters": int(metrics.get("unique_encounters", 0) if isinstance(metrics, dict) else 0),
+        "participants_involved": int(metrics.get("participants_involved", 0) if isinstance(metrics, dict) else 0),
+        "multi_category_runners": int(metrics.get("multi_category_runners", 0) if isinstance(metrics, dict) else 0)
+    }
+
+
+def _zone_to_dict(zone: Any) -> Dict[str, Any]:
+    """Convert ConflictZone object to dict."""
+    from app.core.flow.flow import ConflictZone
+    
+    if isinstance(zone, ConflictZone):
+        metrics = zone.metrics
+        return {
+            "zone_index": zone.zone_index,
+            "cp_km": round(zone.cp.km, 2) if zone.cp else 0.0,
+            "cp_type": zone.cp.type if zone.cp else "",
+            "zone_source": zone.source,
+            "zone_start_km_a": round(zone.zone_start_km_a, 2),
+            "zone_end_km_a": round(zone.zone_end_km_a, 2),
+            "zone_start_km_b": round(zone.zone_start_km_b, 2),
+            "zone_end_km_b": round(zone.zone_end_km_b, 2),
+            "overtaking_a": int(metrics.get("overtaking_a", 0)),
+            "overtaking_b": int(metrics.get("overtaking_b", 0)),
+            "overtaken_a": int(metrics.get("overtaken_a", 0)),
+            "overtaken_b": int(metrics.get("overtaken_b", 0)),
+            "copresence_a": int(metrics.get("copresence_a", 0)),
+            "copresence_b": int(metrics.get("copresence_b", 0)),
+            "unique_encounters": int(metrics.get("unique_encounters", 0)),
+            "participants_involved": int(metrics.get("participants_involved", 0)),
+            "multi_category_runners": int(metrics.get("multi_category_runners", 0))
+        }
+    return _normalize_zone_dict(zone)
+
+
+def _dict_to_conflict_zone(zone_dict: Dict[str, Any]) -> Optional[Any]:
+    """
+    Convert zone dict to ConflictZone for select_worst_zone.
+    
+    Note: This creates a minimal ConflictZone-like object for selection purposes only.
+    """
+    from app.core.flow.flow import ConvergencePoint
+    
+    try:
+        cp_dict = zone_dict.get("cp", {})
+        cp = ConvergencePoint(
+            km=float(cp_dict.get("km", 0)),
+            type=str(cp_dict.get("type", "unknown"))
+        ) if cp_dict else None
+        
+        if cp is None:
+            return None
+        
+        # Create minimal ConflictZone-like object
+        # Note: select_worst_zone only needs metrics and cp.km, so we can create a minimal object
+        class MinimalConflictZone:
+            def __init__(self, zone_index, cp, source, metrics):
+                self.zone_index = zone_index
+                self.cp = cp
+                self.source = source
+                self.metrics = metrics
+                # Add other required attributes with defaults
+                self.zone_start_km_a = zone_dict.get("zone_start_km_a", 0)
+                self.zone_end_km_a = zone_dict.get("zone_end_km_a", 0)
+                self.zone_start_km_b = zone_dict.get("zone_start_km_b", 0)
+                self.zone_end_km_b = zone_dict.get("zone_end_km_b", 0)
+        
+        metrics = zone_dict.get("metrics", {})
+        return MinimalConflictZone(
+            zone_index=zone_dict.get("zone_index", 0),
+            cp=cp,
+            source=zone_dict.get("source", ""),
+            metrics=metrics
+        )
+    except Exception as e:
+        logger.debug(f"Could not create ConflictZone from dict: {e}")
+        return None
+
+
+def _generate_zone_captions_json(
+    flow_results: Dict[str, Any],
+    day_segment_ids: set,
+    day: Any,  # Day enum
+    segments_df: pd.DataFrame
+) -> List[Dict[str, Any]]:
+    """
+    Generate zone_captions.json for Flow UI.
+    
+    Issue #628: Creates narrative captions for each zone following density caption pattern.
+    
+    Returns array of caption objects with explicit keys:
+    [
+      {
+        "seg_id": "F1a",
+        "event_a": "10k",
+        "event_b": "half",
+        "zone_index": 8,
+        "summary": "In Zone 8 of segment F1a (230m)...",
+        "copresence_pct_a": 89.6,
+        "copresence_pct_b": 100.0,
+        "overtaking_ratio": "2:1",
+        "participants_involved": 830,
+        ...
+      },
+      ...
+    ]
+    
+    Args:
+        flow_results: Flow results dict keyed by Day enum
+        day_segment_ids: Set of segment IDs for the specific day
+        day: Day enum for filtering
+        segments_df: Segments DataFrame for metadata lookup
+        
+    Returns:
+        List of caption dictionaries
+    """
+    zone_captions = []
+    
+    # Get day-specific flow results
+    day_flow_result = flow_results.get(day, {})
+    if not isinstance(day_flow_result, dict) or not day_flow_result.get("ok"):
+        logger.warning(f"Day {day.value} flow_results not available or invalid")
+        return zone_captions
+    
+    segments_list = day_flow_result.get("segments", [])
+    if not segments_list:
+        logger.debug(f"Day {day.value}: No segments in flow results")
+        return zone_captions
+    
+    for segment in segments_list:
+        if not isinstance(segment, dict):
+            continue
+            
+        seg_id = segment.get("seg_id", "")
+        event_a = segment.get("event_a", "")
+        event_b = segment.get("event_b", "")
+        
+        # Only include day-scoped segments
+        # Issue #628: Normalize segment ID check - flow_results may have composite IDs (e.g., "A2a")
+        # while day_segment_ids contains base IDs (e.g., "A2"). Check both composite and base ID.
+        seg_id_str = str(seg_id)
+        base_seg_id = seg_id_str.rstrip('abcdefghijklmnopqrstuvwxyz')
+        if seg_id_str not in day_segment_ids and base_seg_id not in day_segment_ids:
+            continue
+        
+        # Skip segments without zones
+        zones = segment.get("zones", [])
+        if not zones:
+            continue
+        
+        # Get segment metadata for label
+        segment_label = segment.get("segment_label", "")
+        total_a = segment.get("total_a", 0)
+        total_b = segment.get("total_b", 0)
+        
+        # Generate caption for each zone
+        for zone in zones:
+            # Normalize zone to dict format
+            if isinstance(zone, dict):
+                zone_dict = zone
+            else:
+                # Convert ConflictZone to dict
+                zone_dict = _zone_to_dict(zone)
+            
+            zone_index = zone_dict.get("zone_index", 0)
+            metrics = zone_dict  # Metrics are at top level in normalized dict
+            
+            # Extract zone metrics
+            overtaking_a = metrics.get("overtaking_a", 0)
+            overtaking_b = metrics.get("overtaking_b", 0)
+            overtaken_a = metrics.get("overtaken_a", 0)
+            overtaken_b = metrics.get("overtaken_b", 0)
+            copresence_a = metrics.get("copresence_a", 0)
+            copresence_b = metrics.get("copresence_b", 0)
+            participants_involved = metrics.get("participants_involved", 0)
+            unique_encounters = metrics.get("unique_encounters", 0)
+            multi_category_runners = metrics.get("multi_category_runners", 0)
+            
+            # Calculate zone length in meters
+            zone_start_km_a = metrics.get("zone_start_km_a", 0)
+            zone_end_km_a = metrics.get("zone_end_km_a", 0)
+            zone_length_m = int((zone_end_km_a - zone_start_km_a) * 1000)
+            
+            # Calculate co-presence percentages
+            copresence_pct_a = round((copresence_a / total_a * 100), 1) if total_a > 0 else 0.0
+            copresence_pct_b = round((copresence_b / total_b * 100), 1) if total_b > 0 else 0.0
+            
+            # Calculate overtaking ratio
+            overtaking_ratio = _calculate_overtaking_ratio(overtaking_a, overtaking_b)
+            
+            # Generate summary text
+            summary = _build_zone_caption_summary(
+                seg_id=seg_id,
+                segment_label=segment_label,
+                zone_index=zone_index,
+                zone_length_m=zone_length_m,
+                event_a=event_a,
+                event_b=event_b,
+                copresence_pct_a=copresence_pct_a,
+                copresence_pct_b=copresence_pct_b,
+                overtaking_a=overtaking_a,
+                overtaking_b=overtaking_b,
+                overtaken_a=overtaken_a,
+                overtaken_b=overtaken_b,
+                overtaking_ratio=overtaking_ratio,
+                participants_involved=participants_involved
+            )
+            
+            # Build caption object
+            caption = {
+                "seg_id": seg_id,
+                "event_a": event_a,
+                "event_b": event_b,
+                "zone_index": zone_index,
+                "summary": summary,
+                "zone_length_m": zone_length_m,
+                "cp_km": metrics.get("cp_km", 0),
+                "cp_type": metrics.get("cp_type", ""),
+                "zone_source": metrics.get("zone_source", ""),
+                "overtaking_a": int(overtaking_a),
+                "overtaking_b": int(overtaking_b),
+                "overtaken_a": int(overtaken_a),
+                "overtaken_b": int(overtaken_b),
+                "copresence_a": int(copresence_a),
+                "copresence_b": int(copresence_b),
+                "copresence_pct_a": copresence_pct_a,
+                "copresence_pct_b": copresence_pct_b,
+                "overtaking_ratio": overtaking_ratio,
+                "unique_encounters": int(unique_encounters),
+                "participants_involved": int(participants_involved),
+                "multi_category_runners": int(multi_category_runners)
+            }
+            
+            zone_captions.append(caption)
+    
+    logger.info(f"Generated zone_captions.json: {len(zone_captions)} zone captions")
+    return zone_captions
+
+
+def _calculate_overtaking_ratio(overtaking_a: int, overtaking_b: int) -> str:
+    """
+    Calculate overtaking ratio as simplified fraction.
+    
+    Examples:
+        (555, 275) -> "2:1" (Half:10K)
+        (127, 0) -> "127:0"
+        (0, 50) -> "0:50"
+        (10, 10) -> "1:1"
+    """
+    if overtaking_a == 0 and overtaking_b == 0:
+        return "0:0"
+    
+    if overtaking_a == 0:
+        return f"0:{overtaking_b}"
+    
+    if overtaking_b == 0:
+        return f"{overtaking_a}:0"
+    
+    # Find GCD for simplified ratio
+    def gcd(a: int, b: int) -> int:
+        while b:
+            a, b = b, a % b
+        return a
+    
+    common = gcd(overtaking_b, overtaking_a)
+    simplified_a = overtaking_a // common
+    simplified_b = overtaking_b // common
+    
+    return f"{simplified_b}:{simplified_a}"  # event_b:event_a
+
+
+def _build_zone_caption_summary(
+    seg_id: str,
+    segment_label: str,
+    zone_index: int,
+    zone_length_m: int,
+    event_a: str,
+    event_b: str,
+    copresence_pct_a: float,
+    copresence_pct_b: float,
+    overtaking_a: int,
+    overtaking_b: int,
+    overtaken_a: int,
+    overtaken_b: int,
+    overtaking_ratio: str,
+    participants_involved: int
+) -> str:
+    """
+    Build narrative summary caption for a zone.
+    
+    Issue #628: Updated format - removed repetitive segment info, use lowercase event names.
+    
+    Example:
+    "89.6% of 10k runners and 100% of half runners were co-present. 
+    555 half runners overtook 275 10k runners, forming a 2:1 overtaking ratio. 
+    Meanwhile, 127 fast 10k runners overtook slower half runners. 
+    This zone demonstrates peak congestion and bidirectional overtaking pressure."
+    """
+    summary_parts = []
+    
+    # Co-presence statement
+    copresence_parts = []
+    if copresence_pct_a > 0:
+        copresence_parts.append(f"{copresence_pct_a}% of {event_a} runners")
+    if copresence_pct_b > 0:
+        copresence_parts.append(f"{copresence_pct_b}% of {event_b} runners")
+    
+    if copresence_parts:
+        if len(copresence_parts) == 1:
+            summary_parts.append(f"{copresence_parts[0]} were co-present.")
+        else:
+            summary_parts.append(f"{', '.join(copresence_parts[:-1])} and {copresence_parts[-1]} were co-present.")
+    
+    # Overtaking statement (primary direction)
+    # Issue #628: Use lowercase event names to match main table style
+    if overtaking_b > 0 and overtaking_a > 0:
+        summary_parts.append(
+            f"{overtaking_b} {event_b} runners overtook {overtaking_a} {event_a} runners, "
+            f"forming a {overtaking_ratio} overtaking ratio."
+        )
+    elif overtaking_b > 0:
+        summary_parts.append(f"{overtaking_b} {event_b} runners overtook {overtaking_a} {event_a} runners.")
+    elif overtaking_a > 0:
+        summary_parts.append(f"{overtaking_a} {event_a} runners overtook {overtaking_b} {event_b} runners.")
+    
+    # Bidirectional overtaking (if applicable)
+    if overtaken_a > 0 or overtaken_b > 0:
+        if overtaken_a > 0 and overtaking_a > 0:
+            summary_parts.append(
+                f"Meanwhile, {overtaking_a} fast {event_a} runners overtook slower {event_b} runners."
+            )
+        elif overtaken_b > 0 and overtaking_b > 0:
+            summary_parts.append(
+                f"Meanwhile, {overtaking_b} fast {event_b} runners overtook slower {event_a} runners."
+            )
+    
+    # Overall characterization
+    if participants_involved > 500:
+        summary_parts.append("This zone demonstrates peak congestion and bidirectional overtaking pressure.")
+    elif participants_involved > 200:
+        summary_parts.append("This zone shows significant interaction with bidirectional overtaking.")
+    elif participants_involved > 100:
+        summary_parts.append("This zone has moderate interaction between events.")
+    else:
+        summary_parts.append("This zone shows limited interaction between events.")
+    
+    return " ".join(summary_parts)
 

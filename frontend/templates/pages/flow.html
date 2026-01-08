@@ -19,10 +19,12 @@
         <table id="flow-table">
             <thead>
                 <tr>
+                    <th></th> <!-- Expand/collapse icon -->
                     <th>ID</th>
                     <th>NAME</th>
                     <th>EVENT</th>
                     <th>FLOW TYPE</th>
+                    <th>WORST ZONE</th>
                     <th class="sortable" data-sort="overtaking">OVERTAKING <span class="sort-indicator"></span></th>
                     <th>PCT</th>
                     <th class="sortable" data-sort="copresence">CO-PRESENCE <span class="sort-indicator"></span></th>
@@ -30,7 +32,7 @@
             </thead>
             <tbody id="flow-tbody">
                 <tr>
-                    <td colspan="7" class="placeholder">Loading flow data...</td>
+                    <td colspan="9" class="placeholder">Loading flow data...</td>
                 </tr>
             </tbody>
         </table>
@@ -139,7 +141,7 @@
         const segments = Object.values(flow);
         
         if (!segments || segments.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="placeholder">No flow data available</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="placeholder">No flow data available</td></tr>';
             return;
         }
         
@@ -148,69 +150,166 @@
         if (currentSort.column) {
             sortedSegments = sortSegments(segments, currentSort.column, currentSort.direction);
         } else {
-            // Default sort by id
-            sortedSegments = [...segments].sort((a, b) => a.id.localeCompare(b.id));
+            // Default sort by seg_id
+            sortedSegments = [...segments].sort((a, b) => (a.seg_id || '').localeCompare(b.seg_id || ''));
         }
         
         sortedSegments.forEach(segment => {
-            const row = document.createElement('tr');
+            // Issue #628: Use worst zone metrics from segment data
+            const worstZone = segment.worst_zone || {};
+            // Issue #628: Display only zone_index (not zone_index/zone_count)
+            const worstZoneDisplay = worstZone.zone_index !== undefined ? worstZone.zone_index.toString() : "—";
             
-            // Handle null/missing values with fallback to "—"
+            // Get worst zone metrics or fallback to segment metrics
+            const overtakingA = worstZone.overtaking_a !== null && worstZone.overtaking_a !== undefined ? worstZone.overtaking_a : (segment.overtaking_a !== null && segment.overtaking_a !== undefined ? segment.overtaking_a : 0);
+            const overtakingB = worstZone.overtaking_b !== null && worstZone.overtaking_b !== undefined ? worstZone.overtaking_b : (segment.overtaking_b !== null && segment.overtaking_b !== undefined ? segment.overtaking_b : 0);
+            const copresenceA = worstZone.copresence_a !== null && worstZone.copresence_a !== undefined ? worstZone.copresence_a : (segment.copresence_a !== null && segment.copresence_a !== undefined ? segment.copresence_a : 0);
+            const copresenceB = worstZone.copresence_b !== null && worstZone.copresence_b !== undefined ? worstZone.copresence_b : (segment.copresence_b !== null && segment.copresence_b !== undefined ? segment.copresence_b : 0);
+            const pctA = worstZone.pct_a !== null && worstZone.pct_a !== undefined ? worstZone.pct_a : (segment.pct_a !== null && segment.pct_a !== undefined ? segment.pct_a : 0);
+            const pctB = worstZone.pct_b !== null && worstZone.pct_b !== undefined ? worstZone.pct_b : (segment.pct_b !== null && segment.pct_b !== undefined ? segment.pct_b : 0);
+            
+            // Format display values - Issue #628: Show "0" instead of "—" for zero values
             const eventA = segment.event_a || "—";
             const eventB = segment.event_b || "—";
-            const overtakingA = segment.overtaking_a !== null && segment.overtaking_a !== undefined ? segment.overtaking_a.toFixed(0) : "—";
-            const overtakingB = segment.overtaking_b !== null && segment.overtaking_b !== undefined ? segment.overtaking_b.toFixed(0) : "—";
-            const pctA = segment.pct_a !== null && segment.pct_a !== undefined ? segment.pct_a.toFixed(1) + "%" : "—";
-            const pctB = segment.pct_b !== null && segment.pct_b !== undefined ? segment.pct_b.toFixed(1) + "%" : "—";
-            const copresenceA = segment.copresence_a !== null && segment.copresence_a !== undefined ? segment.copresence_a.toFixed(0) : "—";
-            const copresenceB = segment.copresence_b !== null && segment.copresence_b !== undefined ? segment.copresence_b.toFixed(0) : "—";
+            const overtakingADisplay = overtakingA.toFixed(0);
+            const overtakingBDisplay = overtakingB.toFixed(0);
+            const pctADisplay = pctA > 0 ? pctA.toFixed(1) + "%" : "0%";
+            const pctBDisplay = pctB > 0 ? pctB.toFixed(1) + "%" : "0%";
+            const copresenceADisplay = copresenceA.toFixed(0);
+            const copresenceBDisplay = copresenceB.toFixed(0);
+            
+            // Create main segment row
+            const row = document.createElement('tr');
+            row.className = 'segment-row';
+            row.dataset.segmentKey = `${segment.seg_id}_${segment.event_a}_${segment.event_b}`;
             
             row.innerHTML = `
-                <td>${segment.id}</td>
-                <td>${segment.name}</td>
+                <td class="expand-icon" style="cursor: pointer; text-align: center; width: 30px;">
+                    <span class="expand-symbol">▶</span>
+                </td>
+                <td>${segment.seg_id || "—"}</td>
+                <td>${segment.segment_label || segment.name || "—"}</td>
                 <td class="event-pair">${eventA} / ${eventB}</td>
                 <td>${segment.flow_type || 'overtake'}</td>
-                <td class="numeric-pair">${overtakingA} / ${overtakingB}</td>
-                <td class="numeric-pair">${pctA} / ${pctB}</td>
-                <td class="numeric-pair">${copresenceA} / ${copresenceB}</td>
+                <td>${worstZoneDisplay}</td>
+                <td class="numeric-pair">${overtakingADisplay} / ${overtakingBDisplay}</td>
+                <td class="numeric-pair">${pctADisplay} / ${pctBDisplay}</td>
+                <td class="numeric-pair">${copresenceADisplay} / ${copresenceBDisplay}</td>
             `;
             
             tbody.appendChild(row);
+            
+            // Issue #628: Add zone drilldown row (initially hidden)
+            if (segment.zones && segment.zones.length > 0) {
+                const zoneRow = document.createElement('tr');
+                zoneRow.className = 'zone-drilldown-row';
+                zoneRow.style.display = 'none';
+                zoneRow.dataset.segmentKey = `${segment.seg_id}_${segment.event_a}_${segment.event_b}`;
+                
+                const zoneCell = document.createElement('td');
+                zoneCell.colSpan = 9;
+                zoneCell.className = 'zone-drilldown-cell';
+                zoneCell.style.padding = '1rem';
+                zoneCell.style.backgroundColor = '#f8f9fa';
+                
+                // Build zone table HTML
+                zoneCell.innerHTML = buildZoneTable(segment.zones, segment);
+                zoneRow.appendChild(zoneCell);
+                tbody.appendChild(zoneRow);
+                
+                // Add click handler to expand/collapse
+                row.querySelector('.expand-icon').addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    toggleZoneDrilldown(row, zoneRow);
+                });
+                
+                // Issue #628: Initialize zone table sorting after DOM is updated
+                setTimeout(() => {
+                    initializeZoneTableSorting(zoneCell, segment.zones, segment);
+                }, 0);
+            } else {
+                // No zones - disable expand
+                const expandIcon = row.querySelector('.expand-icon');
+                expandIcon.style.cursor = 'default';
+                expandIcon.style.opacity = '0.3';
+            }
         });
-        
-        // Add summary row
-        const totalRow = document.createElement('tr');
-        totalRow.style.fontWeight = '600';
-        totalRow.style.background = '#f8f9fa';
-        
-        const totals = {
-            overtaking_a: 0,
-            overtaking_b: 0,
-            copresence_a: 0,
-            copresence_b: 0
-        };
-        
-        sortedSegments.forEach(seg => {
-            totals.overtaking_a += (seg.overtaking_a || 0);
-            totals.overtaking_b += (seg.overtaking_b || 0);
-            totals.copresence_a += (seg.copresence_a || 0);
-            totals.copresence_b += (seg.copresence_b || 0);
-        });
-        
-        totalRow.innerHTML = `
-            <td>TOTAL</td>
-            <td>${sortedSegments.length} segments</td>
-            <td class="event-pair">— / —</td>
-            <td>—</td>
-            <td class="numeric-pair">${totals.overtaking_a.toFixed(0)} / ${totals.overtaking_b.toFixed(0)}</td>
-            <td class="numeric-pair">— / —</td>
-            <td class="numeric-pair">${totals.copresence_a.toFixed(0)} / ${totals.copresence_b.toFixed(0)}</td>
-        `;
-        
-        tbody.appendChild(totalRow);
         
         // Update sort indicators
         updateSortIndicators();
+    }
+    
+    function toggleZoneDrilldown(segmentRow, zoneRow) {
+        const isExpanded = zoneRow.style.display !== 'none';
+        const expandSymbol = segmentRow.querySelector('.expand-symbol');
+        
+        if (isExpanded) {
+            zoneRow.style.display = 'none';
+            expandSymbol.textContent = '▶';
+            expandSymbol.style.transform = 'rotate(0deg)';
+        } else {
+            zoneRow.style.display = '';
+            expandSymbol.textContent = '▼';
+            expandSymbol.style.transform = 'rotate(0deg)';
+        }
+    }
+    
+    function buildZoneTable(zones, segment) {
+        if (!zones || zones.length === 0) {
+            return '<p style="color: #666; font-style: italic;">No zone data available for this segment.</p>';
+        }
+        
+        // Sort zones by zone_index
+        const sortedZones = [...zones].sort((a, b) => (a.zone_index || 0) - (b.zone_index || 0));
+        
+        let html = '<div style="margin-bottom: 1rem;"><h4 style="margin: 0 0 0.75rem 0;">Zone-Level Details</h4></div>';
+        html += '<div style="overflow-x: auto;"><table id="zone-table-' + segment.seg_id + '-' + segment.event_a + '-' + segment.event_b + '" class="zone-table">';
+        html += '<thead><tr>';
+        html += '<th class="sortable" data-sort="zone_index">Zone <span class="sort-indicator"></span></th>';
+        html += '<th class="sortable" data-sort="cp_km">Distance <span class="sort-indicator"></span></th>';
+        html += '<th class="sortable" data-sort="overtaking_a">Overtaking <span class="sort-indicator"></span></th>';
+        html += '<th class="sortable" data-sort="overtaken_a">Overtaken <span class="sort-indicator"></span></th>';
+        html += '<th class="sortable" data-sort="copresence_a">Co-presence <span class="sort-indicator"></span></th>';
+        html += '<th class="sortable" data-sort="unique_encounters">Unique Encounters <span class="sort-indicator"></span></th>';
+        html += '<th class="sortable" data-sort="participants_involved">Participants <span class="sort-indicator"></span></th>';
+        html += '<th class="sortable" data-sort="multi_category_runners">Multi-category <span class="sort-indicator"></span></th>';
+        html += '</tr></thead><tbody>';
+        
+        sortedZones.forEach(zone => {
+            const caption = zone.caption || {};
+            const captionSummary = caption.summary || '';
+            
+            html += '<tr class="zone-row">';
+            html += '<td><strong>' + (zone.zone_index !== undefined ? zone.zone_index : '0') + '</strong></td>';
+            html += '<td>' + (zone.cp_km !== undefined ? zone.cp_km.toFixed(2) : '0.00') + '</td>';
+            // Issue #628: Merge Overtaking, Overtaken, Co-Presence into A/B format
+            html += '<td class="numeric-pair">' + (zone.overtaking_a !== undefined ? zone.overtaking_a : 0) + ' / ' + (zone.overtaking_b !== undefined ? zone.overtaking_b : 0) + '</td>';
+            html += '<td class="numeric-pair">' + (zone.overtaken_a !== undefined ? zone.overtaken_a : 0) + ' / ' + (zone.overtaken_b !== undefined ? zone.overtaken_b : 0) + '</td>';
+            html += '<td class="numeric-pair">' + (zone.copresence_a !== undefined ? zone.copresence_a : 0) + ' / ' + (zone.copresence_b !== undefined ? zone.copresence_b : 0) + '</td>';
+            html += '<td class="numeric">' + (zone.unique_encounters !== undefined ? zone.unique_encounters.toLocaleString() : '0') + '</td>';
+            html += '<td class="numeric">' + (zone.participants_involved !== undefined ? zone.participants_involved : 0) + '</td>';
+            html += '<td class="numeric">' + (zone.multi_category_runners !== undefined ? zone.multi_category_runners : 0) + '</td>';
+            html += '</tr>';
+            
+            // Issue #628: Add caption row below zone row
+            if (captionSummary) {
+                html += '<tr class="zone-caption-row">';
+                html += '<td colspan="8" style="padding: 0.75rem 1rem; background: #fff; border-bottom: 1px solid #e0e0e0;">';
+                html += '<div style="font-size: 0.9rem; line-height: 1.5; color: #2c3e50; font-style: italic;">' + escapeHtml(captionSummary) + '</div>';
+                html += '</td>';
+                html += '</tr>';
+            }
+        });
+        
+        html += '</tbody></table></div>';
+        
+        return html;
+    }
+    
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
     
     function sortSegments(segments, column, direction) {
@@ -219,18 +318,22 @@
         sorted.sort((a, b) => {
             let aVal, bVal;
             
+            // Issue #628: Use worst zone metrics for sorting
+            const aWorstZone = a.worst_zone || {};
+            const bWorstZone = b.worst_zone || {};
+            
             switch (column) {
                 case 'overtaking':
-                    // Sort by sum of A + B (Issue #596)
-                    const aOvertaking = (a.overtaking_a || 0) + (a.overtaking_b || 0);
-                    const bOvertaking = (b.overtaking_a || 0) + (b.overtaking_b || 0);
+                    // Sort by worst zone overtaking sum
+                    const aOvertaking = (aWorstZone.overtaking_a || a.overtaking_a || 0) + (aWorstZone.overtaking_b || a.overtaking_b || 0);
+                    const bOvertaking = (bWorstZone.overtaking_a || b.overtaking_a || 0) + (bWorstZone.overtaking_b || b.overtaking_b || 0);
                     aVal = aOvertaking;
                     bVal = bOvertaking;
                     break;
                 case 'copresence':
-                    // Sort by sum of A + B (Issue #596)
-                    const aCopresence = (a.copresence_a || 0) + (a.copresence_b || 0);
-                    const bCopresence = (b.copresence_a || 0) + (b.copresence_b || 0);
+                    // Sort by worst zone copresence sum
+                    const aCopresence = (aWorstZone.copresence_a || a.copresence_a || 0) + (aWorstZone.copresence_b || a.copresence_b || 0);
+                    const bCopresence = (bWorstZone.copresence_a || b.copresence_a || 0) + (bWorstZone.copresence_b || b.copresence_b || 0);
                     aVal = aCopresence;
                     bVal = bCopresence;
                     break;
@@ -289,7 +392,7 @@
     
     function showFlowError() {
         const tbody = document.getElementById('flow-tbody');
-        tbody.innerHTML = '<tr><td colspan="7" class="placeholder">Error loading flow data</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="placeholder">Error loading flow data</td></tr>';
     }
 </script>
 {% endblock %}
@@ -349,5 +452,79 @@
         color: #9ca3af; /* Tailwind gray-400 equivalent */
         margin: 0 2px;
     }
+    
+    /* Issue #628: Accordion styling for zone drilldown */
+    .expand-icon {
+        user-select: none;
+        transition: transform 0.2s;
+    }
+    
+    .expand-icon:hover {
+        color: #007bff;
+    }
+    
+    .expand-symbol {
+        display: inline-block;
+        transition: transform 0.2s;
+    }
+    
+    .segment-row {
+        cursor: pointer;
+    }
+    
+    .segment-row:hover {
+        background: #f8f9fa;
+    }
+    
+    .zone-drilldown-row {
+        background: #f8f9fa;
+    }
+    
+    .zone-drilldown-cell {
+        padding: 1rem !important;
+    }
+    
+    .zone-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+    }
+    
+    .zone-table th {
+        background: #e9ecef;
+        font-weight: 600;
+        padding: 0.5rem 0.75rem;
+        text-align: left;
+        border-bottom: 2px solid #dee2e6;
+    }
+    
+    .zone-table th.sortable {
+        cursor: pointer;
+        user-select: none;
+    }
+    
+    .zone-table th.sortable:hover {
+        background: #dee2e6;
+    }
+    
+    .zone-table td {
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid #e0e0e0;
+    }
+    
+    .zone-table tbody tr.zone-row:hover {
+        background: #fff;
+    }
+    
+    .zone-table td.numeric {
+        text-align: right;
+    }
+    
+    .zone-caption-row td {
+        font-style: italic;
+        color: #495057;
+        padding: 0.75rem 1rem;
+    }
+    
 </style>
 {% endblock %}
