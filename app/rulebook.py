@@ -6,9 +6,10 @@ This module is the ONLY place that reads density_rulebook.yml and implements
 threshold evaluation. All consumers (reports, maps, UI) must use this module
 to ensure consistency.
 
-LOS computation is centralized here as well. LOS must never be recomputed or
-defaulted elsewhere; downstream systems should only consume los_class outputs
-from this module.
+LOS computation is centralized here as well. LOS is derived from areal density
+only (p/m²). Flow/rate metrics may influence severity/flagging, but they must
+never change the LOS class. Downstream systems should only consume los_class
+outputs from this module.
 
 Issue #254: Centralize Rulebook Logic
 """
@@ -352,4 +353,3 @@ def evaluate_flags(
         severity=severity,
         flag_reason=reason
     )
-
