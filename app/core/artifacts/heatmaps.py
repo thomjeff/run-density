@@ -332,24 +332,12 @@ def _compute_caption_peak(segment_bins):
 def _get_los_grade(peak_density):
     """Determine LOS grade for a density value."""
     try:
-        from app.common.config import load_rulebook
-        los_thresholds = load_rulebook().get("globals", {}).get("los_thresholds", {})
+        from app import rulebook
     except Exception:
-        los_thresholds = {}
-    
-    los_grade = "F"
-    if isinstance(los_thresholds, dict) and los_thresholds:
-        for grade, rng in los_thresholds.items():
-            try:
-                min_v = float(rng.get("min", 0.0))
-                max_v = float(rng.get("max", float("inf")))
-                if min_v <= peak_density < max_v:
-                    los_grade = grade
-                    break
-            except Exception:
-                continue
-    
-    return los_grade
+        return "F"
+
+    bands = rulebook.get_thresholds("on_course_open").los
+    return rulebook.classify_los(peak_density, bands)
 
 
 

@@ -307,11 +307,14 @@ def _update_features_with_severity(features: t.List[Feature], rows: t.List[JsonD
     """Update features with severity information if flagging was applied."""
     updated_features = features.copy()
     if len(rows) > 0 and 'flag_severity' in rows[0]:
+        missing_los = [row.get('bin_id') for row in rows if not row.get('los_class')]
+        if missing_los:
+            raise ValueError(f"los_class missing for {len(missing_los)} bins during severity update")
         # Create a lookup for severity data
         severity_lookup = {row['bin_id']: {
             'flag_severity': row.get('flag_severity', 'none'),
             'flag_reason': row.get('flag_reason', 'none'),
-            'los_class': row.get('los_class', 'A'),
+            'los_class': row.get('los_class'),
             'rate_per_m_per_min': row.get('rate_per_m_per_min', 0.0)
         } for row in rows}
         

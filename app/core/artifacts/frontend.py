@@ -25,7 +25,7 @@ import subprocess
 
 # Add parent directory to path for imports
 
-from app.common.config import load_rulebook, load_reporting
+from app.common.config import load_reporting
 
 # Issue #283: Import SSOT for flagging logic parity
 from app import flagging as ssot_flagging
@@ -55,6 +55,7 @@ def _load_bins_df(reports_root: Path, run_id: str) -> pd.DataFrame:
     # Basic guards
     assert "segment_id" in df.columns, f"segment_id column not found. Available: {list(df.columns)}"
     assert "rate_p_s" in df.columns, f"rate_p_s column not found. Available: {list(df.columns)}"
+    assert "los_class" in df.columns, f"los_class column not found. Available: {list(df.columns)}"
     
     return df
 
@@ -101,41 +102,6 @@ def compute_rulebook_hash() -> str:
         print(f"Warning: Could not compute rulebook hash: {e}")
         return "sha256:unknown"
 
-
-def classify_los(density: float, los_thresholds: Dict[str, Any]) -> str:
-    """
-    Classify density into LOS grade using rulebook thresholds.
-    
-    Args:
-        density: Peak density in persons/m²
-        los_thresholds: Dictionary with keys A-F mapping to threshold dicts (min/max) or floats
-    
-    Returns:
-        LOS grade (A-F)
-    """
-    # Handle both old format (flat thresholds) and new format (min/max dicts)
-    grades_with_ranges = []
-    
-    for grade, threshold_info in los_thresholds.items():
-        if isinstance(threshold_info, dict):
-            # New format: {"min": 0.0, "max": 0.36, "label": "..."}
-            min_val = threshold_info.get("min", 0.0)
-            max_val = threshold_info.get("max", float('inf'))
-            grades_with_ranges.append((grade, min_val, max_val))
-        else:
-            # Old format: just a number (upper bound)
-            grades_with_ranges.append((grade, 0.0, threshold_info))
-    
-    # Sort by min value
-    grades_with_ranges.sort(key=lambda x: x[1])
-    
-    # Find the appropriate grade
-    for grade, min_val, max_val in grades_with_ranges:
-        if min_val <= density < max_val:
-            return grade
-    
-    # If above all ranges, return the last grade (F)
-    return grades_with_ranges[-1][0] if grades_with_ranges else "F"
 
 
 def generate_meta_json(run_id: str, environment: str = "local") -> Dict[str, Any]:
@@ -247,16 +213,10 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
                 peak_rate = 0.0
             
             # Issue #603: Extract LOS from worst bin (not recalculated)
-            if 'los_class' in worst_bin_row:
+            if 'los_class' in worst_bin_row and worst_bin_row['los_class']:
                 worst_los = str(worst_bin_row['los_class'])
             else:
-                # Fallback: classify from density if los_class not available
-                try:
-                    rulebook = load_rulebook()
-                    los_thresholds = rulebook.get("globals", {}).get("los_thresholds", {})
-                    worst_los = classify_los(peak_density, los_thresholds)
-                except Exception:
-                    worst_los = "A"
+                raise ValueError(f"los_class missing for segment {seg_id} worst bin")
             
             # Issue #603: Extract active_window from worst bin's t_start/t_end
             active_window = "N/A"

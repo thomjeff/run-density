@@ -342,7 +342,7 @@ def convert_json_to_segment_summary(
                 'worst_bin_t_start': worst_bin.get('t_start'),
                 'worst_bin_rate': worst_bin.get('rate', 0.0),
                 'worst_bin_density': worst_bin.get('density', 0.0),
-                'worst_bin_los': worst_bin.get('los', 'A')
+                'worst_bin_los': worst_bin['los_class']
             }
     
     # Build segment_summary DataFrame

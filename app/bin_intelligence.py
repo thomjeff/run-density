@@ -28,14 +28,11 @@ from dataclasses import dataclass
 import pandas as pd
 import numpy as np
 
-from app.los import (
-    los_from_density,
-    los_rank,
-    meets_los_threshold,
-    classify_bins_los
-)
+from app import rulebook
 
 logger = logging.getLogger(__name__)
+
+LOS_ORDER = {"A": 0, "B": 1, "C": 2, "D": 3, "E": 4, "F": 5}
 
 
 @dataclass
@@ -187,15 +184,14 @@ def filter_by_min_bin_length(
 
 def apply_bin_flagging(
     df: pd.DataFrame,
-    config: FlaggingConfig,
-    los_thresholds: Optional[Dict[str, float]] = None
+    config: FlaggingConfig
 ) -> pd.DataFrame:
     """
     Apply operational intelligence flagging to bins.
     
     This is the main entry point for bin intelligence analysis.
     Adds the following columns to the DataFrame:
-    - los: LOS classification (A-F)
+    - los_class: LOS classification (A-F)
     - los_rank: Numeric rank for LOS (0-5)
     - flag_reason: Why bin was flagged (BOTH, LOS_HIGH, UTILIZATION_HIGH, NONE)
     - severity: Severity level (CRITICAL, CAUTION, WATCH, NONE)
@@ -205,8 +201,6 @@ def apply_bin_flagging(
     Args:
         df: DataFrame with canonical bins data
         config: Flagging configuration
-        los_thresholds: Custom LOS thresholds (optional)
-        
     Returns:
         DataFrame with added flagging columns
     """
@@ -223,12 +217,14 @@ def apply_bin_flagging(
         logger.warning("No bins remaining after length filter")
         return result
     
-    # Step 2: Classify bins by LOS
-    result = classify_bins_los(
-        result,
-        density_field=config.density_field,
-        thresholds=los_thresholds
+    # Step 2: Classify bins by LOS using rulebook SSOT
+    if config.density_field not in result.columns:
+        raise ValueError(f"Density field '{config.density_field}' not found in DataFrame")
+    bands = rulebook.get_thresholds("on_course_open").los
+    result['los_class'] = result[config.density_field].apply(
+        lambda d: rulebook.classify_los(d, bands)
     )
+    result['los_rank'] = result['los_class'].map(LOS_ORDER).fillna(-1).astype(int)
     
     # Step 3: Compute global utilization threshold
     util_threshold = compute_utilization_threshold(
@@ -238,8 +234,8 @@ def apply_bin_flagging(
     )
     
     # Step 4: Determine which bins meet each threshold
-    result['meets_los_threshold'] = result['los'].apply(
-        lambda los: meets_los_threshold(los, config.min_los_flag)
+    result['meets_los_threshold'] = result['los_class'].apply(
+        lambda los_class: rulebook.los_ge(los_class, config.min_los_flag)
     )
     
     result['meets_util_threshold'] = result[config.density_field] >= util_threshold
@@ -357,7 +353,7 @@ def summarize_segment_flags(
             'seg_label': worst_bin.get('seg_label', segment_id),
             'worst_bin_start_km': worst_bin['start_km'],
             'worst_bin_end_km': worst_bin['end_km'],
-            'worst_los': worst_bin['los'],
+            'worst_los': worst_bin['los_class'],
             'peak_density': worst_bin['density_peak'],
             'flagged_bin_count': len(seg_bins),
             'severity': worst_bin['severity'],
@@ -401,9 +397,9 @@ def get_flagging_statistics(df: pd.DataFrame) -> Dict[str, any]:
         'flagged_percentage': (len(flagged) / len(df) * 100) if len(df) > 0 else 0,
         'severity_distribution': df['severity'].value_counts().to_dict(),
         'flag_reason_distribution': df['flag_reason'].value_counts().to_dict(),
-        'los_distribution': df['los'].value_counts().to_dict(),
+        'los_distribution': df['los_class'].value_counts().to_dict(),
         'worst_severity': df['severity'].iloc[df['severity_rank'].idxmax()] if len(df) > 0 else 'NONE',
-        'worst_los': df['los'].iloc[df['los_rank'].idxmax()] if len(df) > 0 else 'A',
+        'worst_los': df['los_class'].iloc[df['los_rank'].idxmax()] if len(df) > 0 else 'A',
         'peak_density_range': {
             'min': float(df['density_peak'].min()) if 'density_peak' in df.columns else None,
             'max': float(df['density_peak'].max()) if 'density_peak' in df.columns else None,
@@ -412,4 +408,3 @@ def get_flagging_statistics(df: pd.DataFrame) -> Dict[str, any]:
     }
     
     return stats
-

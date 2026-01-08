@@ -381,7 +381,7 @@ class NewDensityTemplateEngine:
                 
                 # Calculate Util% based on segment schema
                 # Issue #548 Bug 4: Load flow_ref.critical from rulebook dynamically
-                from app.rulebook import get_thresholds, classify_los
+                from app.rulebook import get_thresholds
                 segment_type = row.get('segment_type', 'on_course_open')
                 thresholds = get_thresholds(segment_type)
                 flow_ref_critical = thresholds.flow_ref.critical if thresholds.flow_ref else None
@@ -400,11 +400,8 @@ class NewDensityTemplateEngine:
                 else:
                     peak_rate_display = "N/A"
                 
-                # Bug fix: Recalculate LOS from worst_bin_density to ensure it matches the density shown
-                # The worst_bin_los field is the LOS of the worst bin (by severity), which may not match
-                # the density value shown. Recalculate LOS from the density to ensure consistency.
                 worst_bin_density = row['worst_bin_density']
-                los_from_density = classify_los(worst_bin_density, thresholds.los)
+                worst_bin_los = row['worst_bin_los']
                 
                 # Bug fix: Use consistent round-half-up for percentage formatting
                 flagged_pct = self._round_half_up(row['flagged_percentage'], 1)
@@ -412,7 +409,7 @@ class NewDensityTemplateEngine:
                 lines.append(
                     f"| {row['segment_id']} | {row['seg_label']} | {row['flagged_bins']} | {row['total_bins']} | "
                     f"{flagged_pct:.1f}% | {worst_km} | {worst_time} | {worst_bin_density:.4f} | {peak_rate_display} | {util_display} | "
-                    f"{los_from_density} | {row['worst_severity']} | {row['worst_reason']} |"
+                    f"{worst_bin_los} | {row['worst_severity']} | {row['worst_reason']} |"
                 )
         
         return "\n".join(lines)
@@ -506,7 +503,7 @@ class NewDensityTemplateEngine:
             
             lines.append(
                 f"| {row.get('start_km', 0):.1f} | {row.get('end_km', 0):.1f} | {start_time} | {end_time} | "
-                f"{row['density']:.3f} | {row['rate']:.3f} | {row['los']} |"
+                f"{row['density']:.3f} | {row['rate']:.3f} | {row['los_class']} |"
             )
         
         return "\n".join(lines)

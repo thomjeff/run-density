@@ -230,17 +230,11 @@ def generate_key_takeaway(segment_id: str, segment_data: Dict[str, Any], v2_cont
             return f"Low density ({density_str} p/m²) - comfortable flow"
 
 
-def _determine_los_from_thresholds(areal_density: float, los_thresholds: Dict[str, Any]) -> str:
-    """Determine LOS letter from areal density using schema thresholds."""
-    los_letter = "F"  # Default to worst case
-    for letter in ["A", "B", "C", "D", "E", "F"]:
-        rng = los_thresholds.get(letter, {})
-        mn = rng.get("min", float("-inf"))
-        mx = rng.get("max", float("inf"))
-        if areal_density >= mn and areal_density < mx:
-            los_letter = letter
-            break
-    return los_letter
+def _determine_los_from_thresholds(areal_density: float, schema_name: str) -> str:
+    """Determine LOS letter from areal density using rulebook SSOT."""
+    from app import rulebook as rulebook_ssot
+    bands = rulebook_ssot.get_thresholds(schema_name).los
+    return rulebook_ssot.classify_los(areal_density, bands)
 
 
 def _render_metrics_table_v2(md, ctx, schema_name: str, areal_density: float, 
@@ -387,13 +381,9 @@ def render_segment_v2(md, ctx, rulebook):
     schemas = rulebook.get("schemas", {})
     schema_config = schemas.get(schema_name, {})
     
-    # Get LOS thresholds for this schema
-    los_thresholds = schema_config.get("los_thresholds", 
-                                     rulebook.get("globals", {}).get("los_thresholds", {}))
-    
-    # Determine LOS from areal density
+    # Determine LOS from areal density using rulebook SSOT
     areal_density = ctx.get("peak_areal_density", 0.0)
-    los_letter = _determine_los_from_thresholds(areal_density, los_thresholds)
+    los_letter = _determine_los_from_thresholds(areal_density, schema_name)
     
     # Render header with schema info
     md.write(f"### Segment {ctx['segment_id']} — {ctx['seg_label']}\n\n")
@@ -1160,7 +1150,7 @@ def _generate_operational_intelligence_content(
                     density_field='density_peak'
                 )
                 
-                bins_flagged = apply_bin_flagging(bins_df, flagging_cfg, los_thresholds=config.get('los'))
+                bins_flagged = apply_bin_flagging(bins_df, flagging_cfg)
                 stats = get_flagging_statistics(bins_flagged)
                 segment_summary = summarize_segment_flags(bins_flagged)
                 
@@ -1309,7 +1299,7 @@ def _generate_appendix_content(results: Dict[str, Any]) -> List[str]:
                     end_km = f"{bin_row['end_km']:.3f}"
                     length_m = f"{bin_row.get('bin_len_m', 0):.0f}"
                     density = f"{bin_row['density_peak']:.4f}"  # Use 4 decimals to show small values
-                    los = bin_row['los']
+                    los = bin_row['los_class']
                     severity = bin_row['severity']
                     reason = bin_row['flag_reason']
                     
@@ -2113,14 +2103,18 @@ def _apply_flagging_to_bin_features(
             props["width_m"] = flags_df.iloc[idx]["width_m"]
             # Update LOS from rulebook (may differ from bins_accumulator default)
             props["los_class"] = result.los_class
+
+        missing_los = [f for f in geojson_features if not f["properties"].get("los_class")]
+        if missing_los:
+            raise ValueError(f"LOS classification missing for {len(missing_los)} bins after rulebook flagging.")
         
         flag_time = int((time.monotonic() - flag_start) * 1000)
         flagged_count = sum(1 for r in flag_results if r.severity != "none")
         logger.info(f"✅ Flagging complete: {flagged_count}/{len(flag_results)} bins flagged ({flag_time}ms)")
         
     except Exception as flag_error:
-        logger.warning(f"⚠️ Flagging failed, bins will have no flags: {flag_error}")
-        # Continue without flags - bins will still have base properties
+        logger.error(f"⚠️ Flagging failed; LOS classification is required: {flag_error}")
+        raise
 
 
 def _add_geometries_to_bin_features(
@@ -3146,6 +3140,9 @@ def _build_parquet_row_from_feature(feature: Dict[str, Any]) -> Dict[str, Any]:
     geometry_coords = feature.get("geometry", {}).get("coordinates", [])
     geometry_wkb = _convert_geometry_to_wkb(geometry_coords, props.get('bin_id', 'unknown'))
     
+    if not props.get("los_class"):
+        raise ValueError(f"los_class is required for bin {props.get('bin_id', 'unknown')}")
+
     return {
         "bin_id": str(props.get("bin_id", "")),
         "segment_id": str(props.get("segment_id", "")),
@@ -3156,7 +3153,7 @@ def _build_parquet_row_from_feature(feature: Dict[str, Any]) -> Dict[str, Any]:
         "window_idx": int(props.get("window_idx", 0)),
         "density": float(props.get("density", 0.0)),
         "rate": float(props.get("rate", 0.0)),
-        "los_class": str(props.get("los_class", "A")),
+        "los_class": str(props.get("los_class")),
         # Issue #254: Unified flagging fields
         "flag_severity": str(props.get("flag_severity", "none")),
         "flag_reason": str(props.get("flag_reason") or ""),
@@ -3353,20 +3350,8 @@ def generate_bins_geojson_with_temporal_windows(all_bins_data, start_times: Dict
             if "bin_id" not in props:
                 props["bin_id"] = f"{segment_id}:{start_km:.1f}-{end_km:.1f}"
             
-            # Ensure LOS class is properly calculated
-            if "los_class" not in props:
-                if density >= 2.0:
-                    props["los_class"] = "F"
-                elif density >= 1.5:
-                    props["los_class"] = "E"
-                elif density >= 1.0:
-                    props["los_class"] = "D"
-                elif density >= 0.5:
-                    props["los_class"] = "C"
-                elif density >= 0.2:
-                    props["los_class"] = "B"
-                else:
-                    props["los_class"] = "A"
+            if "los_class" not in props or not props["los_class"]:
+                raise ValueError("los_class is required for bins geojson; rulebook must supply LOS classification.")
             
             enhanced_features.append(feature)
         

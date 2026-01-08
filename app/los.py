@@ -23,16 +23,6 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-# Default LOS thresholds (areal density in people per square meter)
-DEFAULT_LOS_THRESHOLDS = {
-    'A': 0.0,   # Free flow
-    'B': 0.5,   # Stable flow, minor restrictions
-    'C': 1.0,   # Stable flow, significant restrictions
-    'D': 1.5,   # Unstable flow, severe restrictions
-    'E': 2.0,   # Very unstable flow, stop-and-go
-    'F': 3.0    # Breakdown flow, gridlock
-}
-
 # LOS rank ordering (for comparisons and severity assignment)
 LOS_RANKS = {
     'A': 0,
@@ -56,7 +46,7 @@ def los_from_density(
     
     Args:
         density: Areal density (people per square meter)
-        thresholds: Custom LOS thresholds (optional, uses defaults if not provided)
+        thresholds: Custom LOS thresholds (not supported; rulebook SSOT only)
         
     Returns:
         LOS classification ('A', 'B', 'C', 'D', 'E', or 'F')
@@ -69,28 +59,17 @@ def los_from_density(
         >>> los_from_density(3.5)  # Above F threshold
         'F'
     """
-    if thresholds is None:
-        thresholds = DEFAULT_LOS_THRESHOLDS
+    if thresholds is not None:
+        raise ValueError("Custom LOS thresholds are not allowed; rulebook SSOT must be used.")
+    from app import rulebook
+    bands = rulebook.get_thresholds("on_course_open").los
     
     # Handle edge cases
     if pd.isna(density) or density < 0:
         logger.warning(f"Invalid density value: {density}, defaulting to LOS A")
         return 'A'
     
-    # Sort thresholds by value (descending) to find highest threshold met
-    sorted_thresholds = sorted(
-        thresholds.items(),
-        key=lambda x: x[1],
-        reverse=True
-    )
-    
-    # Find the highest threshold that density meets or exceeds
-    for los_level, threshold in sorted_thresholds:
-        if density >= threshold:
-            return los_level
-    
-    # If no threshold is met, return the lowest LOS (A)
-    return 'A'
+    return rulebook.classify_los(density, bands)
 
 
 def los_rank(los_level: str) -> int:
@@ -160,7 +139,7 @@ def classify_bins_los(
     Args:
         df: DataFrame with density data
         density_field: Column name containing density values (default: 'density_peak')
-        thresholds: Custom LOS thresholds (optional)
+        thresholds: Custom LOS thresholds (not supported; rulebook SSOT only)
         
     Returns:
         DataFrame with added 'los' and 'los_rank' columns
@@ -169,13 +148,11 @@ def classify_bins_los(
         logger.error(f"Density field '{density_field}' not found in DataFrame")
         return df
     
-    if thresholds is None:
-        thresholds = DEFAULT_LOS_THRESHOLDS
+    if thresholds is not None:
+        raise ValueError("Custom LOS thresholds are not allowed; rulebook SSOT must be used.")
     
     # Classify each bin
-    df['los'] = df[density_field].apply(
-        lambda d: los_from_density(d, thresholds)
-    )
+    df['los'] = df[density_field].apply(los_from_density)
     
     # Add numeric rank for sorting/filtering
     df['los_rank'] = df['los'].apply(los_rank)
@@ -213,4 +190,3 @@ def get_los_description(los_level: str) -> str:
 # - summarize_los_distribution() - Not imported
 # - get_worst_los() - Not imported
 # - filter_by_los_threshold() - Not imported
-
