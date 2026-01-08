@@ -80,7 +80,7 @@ def load_bins_data(run_id: Optional[str] = None, day: Optional[str] = None) -> L
                     "t_end": bin_data.get("end_time", ""),
                     "density": float(bin_data.get("density", 0.0)),
                     "rate": float(bin_data.get("rate", 0.0)),
-                    "los_class": str(bin_data.get("los", "Unknown")),
+                    "los_class": str(bin_data.get("los_class", "Unknown")),
                     "flag": bin_data.get("flag", "flagged")
                 }
                 bins_data.append(bin_record)

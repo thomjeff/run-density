@@ -202,7 +202,7 @@ schemas:
       - t_start
       - t_end
       - density
-      - los
+      - los_class
   
   flow_csv:
     type: csv
@@ -220,4 +220,3 @@ validation_options:
   strict_mode: false                 # If true, required = critical (no partial pass)
   validate_api_consistency: true     # Check APIs serve from correct run_id
   validate_latest_json: true         # Verify latest.json matches index.json
-
