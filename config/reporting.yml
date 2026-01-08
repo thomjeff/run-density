@@ -8,17 +8,6 @@
 schema_version: "1.1.0"
 density_method: "segments_from_bins"
 
-# LOS (Level of Service) threshold definitions
-# Based on Fruin's pedestrian level of service standards
-# Values represent areal density (people per square meter)
-los:
-  A: 0.0   # Free flow, no restrictions
-  B: 0.5   # Stable flow, minor speed restrictions
-  C: 1.0   # Stable flow, significant speed restrictions
-  D: 1.5   # Unstable flow, severe restrictions
-  E: 2.0   # Very unstable flow, stop-and-go
-  F: 3.0   # Breakdown flow, gridlock
-
 # Flagging rules for operational intelligence
 flagging:
   min_los_flag: "C"              # Flag bins with LOS >= C (1.0 people/m²)
@@ -220,4 +209,3 @@ validation_options:
   strict_mode: false                 # If true, required = critical (no partial pass)
   validate_api_consistency: true     # Check APIs serve from correct run_id
   validate_latest_json: true         # Verify latest.json matches index.json
-

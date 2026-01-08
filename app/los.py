@@ -17,21 +17,13 @@ Issue #233: Operational Intelligence - LOS Classification
 
 from __future__ import annotations
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 import pandas as pd
 
-logger = logging.getLogger(__name__)
+from app import rulebook
 
-# Default LOS thresholds (areal density in people per square meter)
-DEFAULT_LOS_THRESHOLDS = {
-    'A': 0.0,   # Free flow
-    'B': 0.5,   # Stable flow, minor restrictions
-    'C': 1.0,   # Stable flow, significant restrictions
-    'D': 1.5,   # Unstable flow, severe restrictions
-    'E': 2.0,   # Very unstable flow, stop-and-go
-    'F': 3.0    # Breakdown flow, gridlock
-}
+logger = logging.getLogger(__name__)
 
 # LOS rank ordering (for comparisons and severity assignment)
 LOS_RANKS = {
@@ -46,17 +38,16 @@ LOS_RANKS = {
 
 def los_from_density(
     density: float,
-    thresholds: Optional[Dict[str, float]] = None
+    thresholds: Optional[Union[Dict[str, float], rulebook.LosBands]] = None
 ) -> str:
     """
     Classify density into Level of Service (A-F).
     
-    Uses lower-bound thresholds: density >= threshold_X assigns LOS X.
-    The highest threshold met determines the LOS level.
+    Uses rulebook SSOT classification (upper-bound thresholds).
     
     Args:
         density: Areal density (people per square meter)
-        thresholds: Custom LOS thresholds (optional, uses defaults if not provided)
+        thresholds: Custom LOS thresholds or rulebook LosBands (optional; defaults to rulebook globals)
         
     Returns:
         LOS classification ('A', 'B', 'C', 'D', 'E', or 'F')
@@ -70,27 +61,28 @@ def los_from_density(
         'F'
     """
     if thresholds is None:
-        thresholds = DEFAULT_LOS_THRESHOLDS
+        bands = rulebook.get_thresholds("on_course_open").los
+    elif isinstance(thresholds, rulebook.LosBands):
+        bands = thresholds
+    else:
+        missing = [key for key in ("A", "B", "C", "D", "E", "F") if key not in thresholds]
+        if missing:
+            raise ValueError(f"Missing LOS threshold keys: {missing}")
+        bands = rulebook.LosBands(
+            A=float(thresholds["A"]),
+            B=float(thresholds["B"]),
+            C=float(thresholds["C"]),
+            D=float(thresholds["D"]),
+            E=float(thresholds["E"]),
+            F=float(thresholds["F"])
+        )
     
     # Handle edge cases
     if pd.isna(density) or density < 0:
         logger.warning(f"Invalid density value: {density}, defaulting to LOS A")
         return 'A'
     
-    # Sort thresholds by value (descending) to find highest threshold met
-    sorted_thresholds = sorted(
-        thresholds.items(),
-        key=lambda x: x[1],
-        reverse=True
-    )
-    
-    # Find the highest threshold that density meets or exceeds
-    for los_level, threshold in sorted_thresholds:
-        if density >= threshold:
-            return los_level
-    
-    # If no threshold is met, return the lowest LOS (A)
-    return 'A'
+    return rulebook.classify_los(density, bands)
 
 
 def los_rank(los_level: str) -> int:
@@ -150,7 +142,7 @@ def meets_los_threshold(los_level: str, min_threshold: str) -> bool:
 def classify_bins_los(
     df: pd.DataFrame,
     density_field: str = 'density_peak',
-    thresholds: Optional[Dict[str, float]] = None
+    thresholds: Optional[Union[Dict[str, float], rulebook.LosBands]] = None
 ) -> pd.DataFrame:
     """
     Classify all bins in a DataFrame by LOS level.
@@ -168,9 +160,6 @@ def classify_bins_los(
     if density_field not in df.columns:
         logger.error(f"Density field '{density_field}' not found in DataFrame")
         return df
-    
-    if thresholds is None:
-        thresholds = DEFAULT_LOS_THRESHOLDS
     
     # Classify each bin
     df['los'] = df[density_field].apply(
@@ -213,4 +202,3 @@ def get_los_description(los_level: str) -> str:
 # - summarize_los_distribution() - Not imported
 # - get_worst_los() - Not imported
 # - filter_by_los_threshold() - Not imported
-

@@ -8,6 +8,7 @@ from typing import Dict, List, Tuple, Iterable, Optional, Any
 from datetime import datetime, timezone, timedelta
 import math
 import numpy as np
+from app import rulebook
 
 # -----------------------------
 # Types and small configuration
@@ -39,29 +40,13 @@ class BinBuildResult:
     features: List[BinFeature]
     metadata: Dict[str, Any]
 
-# LOS thresholds example: change to your canonical values
-DEFAULT_LOS_THRESHOLDS = {
-    "A": (0.00, 0.20),
-    "B": (0.20, 0.40),
-    "C": (0.40, 0.70),
-    "D": (0.70, 1.20),
-    "E": (1.20, 2.00),
-    "F": (2.00, float("inf")),
-}
-
 # -----------------------------------
-# Validation & LOS classification
+# Validation
 # -----------------------------------
 
 def _validate_positive_finite(value: float, name: str) -> None:
     if value is None or not np.isfinite(value) or value <= 0.0:
         raise ValueError(f"{name} must be positive and finite (got {value}).")
-
-def los_classify(density: float, thresholds: Dict[str, Tuple[float, float]]) -> str:
-    for k, (lo, hi) in thresholds.items():
-        if lo <= density < hi:
-            return k
-    return "F"  # fallback
 
 # ----------------------------------------------------
 # Vectorized accumulation: one segment, one time window
@@ -117,7 +102,8 @@ def build_bin_features(
     # dict[segment_id][window_index] = dict with 'pos_m' (np.ndarray), 'speed_mps' (np.ndarray)
     runners_by_segment_and_window: Dict[str, Dict[int, Dict[str, np.ndarray]]],
     bin_size_km: float,
-    los_thresholds: Optional[Dict[str, Tuple[float, float]]] = None,
+    los_bands_by_segment: Optional[Dict[str, rulebook.LosBands]] = None,
+    los_bands: Optional[rulebook.LosBands] = None,
     logger: Optional[Any] = None,
 ) -> BinBuildResult:
     """
@@ -128,8 +114,10 @@ def build_bin_features(
       of equal length per window: pos_m[i], speed_mps[i] for runner i.
     - Density is computed as p/m^2 within the bin area (bin_len_m * width_m).
     - Flow (p/s) is density * width_m * mean_speed_mps (absolute per bin/window).
+    - LOS bands must be provided from app.rulebook (no local defaults).
     """
-    los_thresholds = los_thresholds or DEFAULT_LOS_THRESHOLDS
+    if los_bands_by_segment is None and los_bands is None:
+        raise ValueError("LOS bands are required; provide los_bands_by_segment or los_bands from app.rulebook.")
     bin_len_m = bin_size_km * 1000.0
     _validate_positive_finite(bin_len_m, "bin_len_m")
 
@@ -185,6 +173,15 @@ def build_bin_features(
             occupied_bins_total += occupied_bins
             nonzero_density_bins_total += nonzero_density_bins
 
+            if los_bands_by_segment is not None:
+                bands = los_bands_by_segment.get(seg_id)
+                if bands is None:
+                    raise ValueError(f"Missing LOS bands for segment {seg_id}.")
+            else:
+                bands = los_bands
+            if bands is None:
+                raise ValueError(f"Missing LOS bands for segment {seg_id}.")
+
             # Build features (tight loop over nbins is OK; vectors are already computed)
             # If you prefer, you can filter to occupied bins only to shrink payload.
             for b in range(nbins):
@@ -192,7 +189,7 @@ def build_bin_features(
                 end_m = min((b + 1) * bin_len_m, seg.length_m)
                 d = float(density[b])
                 r = float(rate[b])
-                los = los_classify(d, los_thresholds)
+                los = rulebook.classify_los(d, bands)
                 bf = BinFeature(
                     segment_id=seg_id,
                     bin_index=b,
