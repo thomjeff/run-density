@@ -368,8 +368,29 @@ async def get_runs_list():
                     with open(metadata_path, 'r', encoding='utf-8') as f:
                         metadata_data = json.load(f)
                         performance = metadata_data.get("performance", {})
-                        # total_elapsed_minutes is now stored as hh:mm format (Issue #638)
-                        total_elapsed_minutes = performance.get("total_elapsed_minutes")
+                        stored_format = performance.get("total_elapsed_minutes")
+                        total_elapsed_seconds = performance.get("total_elapsed_seconds")
+                        
+                        # Issue #638: Reformat if stored in old hh:mm format
+                        # Use total_elapsed_seconds to calculate correct mm:ss format
+                        if total_elapsed_seconds is not None and stored_format:
+                            # Check if stored format is legacy hh:mm (e.g., "00:05")
+                            if ':' in str(stored_format):
+                                parts = str(stored_format).split(':')
+                                if len(parts) == 2 and parts[0] == '00' and int(parts[1]) < 60:
+                                    # Legacy hh:mm format - reformat using total_elapsed_seconds
+                                    total_minutes_int = int(total_elapsed_seconds // 60)
+                                    seconds = int(total_elapsed_seconds % 60)
+                                    total_elapsed_minutes = f"{total_minutes_int:02d}:{seconds:02d}"
+                                else:
+                                    # Already in mm:ss format or other format
+                                    total_elapsed_minutes = stored_format
+                            else:
+                                # Not a time format, use as-is (decimal format)
+                                total_elapsed_minutes = stored_format
+                        else:
+                            # Fallback to stored format
+                            total_elapsed_minutes = stored_format
                 except Exception as e:
                     logger.warning(f"Could not load metadata.json for {run_id}: {e}")
             
