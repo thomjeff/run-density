@@ -39,14 +39,25 @@ router = APIRouter()
 
 def calculate_peak_density_los(peak_density: float) -> str:
     """
-    Calculate LOS for peak density using rulebook thresholds.
+    DEPRECATED: Calculate LOS for peak density using hardcoded thresholds.
+    
+    This function is deprecated because it:
+    1. Uses hardcoded thresholds instead of rulebook SSOT
+    2. Ignores schema-specific thresholds (e.g., start_corral for A1)
+    3. Causes LOS inconsistencies between Dashboard and other UI pages
+    
+    Issue #640: Use worst_los from segment_metrics.json instead.
     
     Args:
         peak_density: Peak density value (persons/m²)
         
     Returns:
-        LOS grade (A-F)
+        LOS grade (A-F) - INCORRECT for schema-specific segments
+    
+    .. deprecated:: Issue #640
+        Use worst_los from segment_metrics.json (SSOT) instead.
     """
+    logger.warning("DEPRECATED: calculate_peak_density_los() called. Use worst_los from segment_metrics.json instead.")
     try:
         rulebook = load_rulebook()
         thresholds = rulebook.get("globals", {}).get("los_thresholds", {})
@@ -111,16 +122,37 @@ def _calculate_flags_metrics(flags) -> tuple:
 
 
 def _calculate_peak_metrics(segment_metrics: dict) -> tuple:
-    """Calculate peak density and rate from segment metrics."""
+    """
+    Calculate peak density and rate from segment metrics.
+    
+    Returns:
+        Tuple of (peak_density, peak_rate, peak_segment_id)
+        where peak_segment_id is the segment with peak density.
+    """
     peak_density = 0.0
     peak_rate = 0.0
+    peak_segment_id = None
     
     for seg_id, metrics in segment_metrics.items():
         if isinstance(metrics, dict):
-            peak_density = max(peak_density, metrics.get("peak_density", 0.0))
-            peak_rate = max(peak_rate, metrics.get("peak_rate", 0.0))
+            seg_peak_density = metrics.get("peak_density", 0.0)
+            seg_peak_rate = metrics.get("peak_rate", 0.0)
+            
+            if seg_peak_density > peak_density:
+                peak_density = seg_peak_density
+                peak_segment_id = seg_id
+            elif seg_peak_density == peak_density and peak_segment_id:
+                # Tie-breaker: use segment with worse LOS if same density
+                current_los = segment_metrics.get(peak_segment_id, {}).get("worst_los", "A")
+                candidate_los = metrics.get("worst_los", "A")
+                # LOS ranking: F > E > D > C > B > A
+                los_order = {"F": 6, "E": 5, "D": 4, "C": 3, "B": 2, "A": 1}
+                if los_order.get(candidate_los, 0) > los_order.get(current_los, 0):
+                    peak_segment_id = seg_id
+            
+            peak_rate = max(peak_rate, seg_peak_rate)
     
-    return peak_density, peak_rate
+    return peak_density, peak_rate, peak_segment_id
 
 
 @router.get("/api/dashboard/summary")
@@ -199,8 +231,17 @@ async def get_dashboard_summary(
         logger.info(f"Loaded flow metrics from segment_metrics.json: overtaking={segments_overtaking}, co-presence={segments_copresence}")
         
         # Calculate peak density and rate from segment-level data
-        peak_density, peak_rate = _calculate_peak_metrics(segment_metrics)
-        peak_density_los = calculate_peak_density_los(peak_density)
+        # Issue #640: Get peak LOS from segment_metrics.json (SSOT) instead of recalculating
+        peak_density, peak_rate, peak_segment_id = _calculate_peak_metrics(segment_metrics)
+        
+        # Get canonical LOS from segment with peak density (SSOT from bins.parquet via segment_metrics.json)
+        if peak_segment_id and peak_segment_id in segment_metrics:
+            peak_density_los = segment_metrics[peak_segment_id].get("worst_los", "A")
+            logger.info(f"Using SSOT LOS for peak density segment {peak_segment_id}: {peak_density_los} (density={peak_density})")
+        else:
+            # Fallback if no segment found (should not happen, but be defensive)
+            logger.warning(f"Peak density segment {peak_segment_id} not found in segment_metrics, defaulting to LOS A")
+            peak_density_los = "A"
         
         # Load flags data (Issue #580: Updated path to metrics/ subdirectory)
         flags = _load_ui_artifact_safe(storage, f"{selected_day}/ui/metrics/flags.json", warnings)
@@ -447,9 +488,17 @@ async def get_run_summary(run_id: str):
                 segment_level_data = {k: v for k, v in segment_metrics.items() if k not in summary_fields}
                 segments_total = len(segment_level_data)
                 
-                # Calculate peak density and rate
-                peak_density, peak_rate = _calculate_peak_metrics(segment_level_data)
-                peak_density_los = calculate_peak_density_los(peak_density)
+                # Calculate peak density and rate from segment-level data
+                # Issue #640: Get peak LOS from segment_metrics.json (SSOT) instead of recalculating
+                peak_density, peak_rate, peak_segment_id = _calculate_peak_metrics(segment_level_data)
+                
+                # Get canonical LOS from segment with peak density (SSOT from bins.parquet via segment_metrics.json)
+                if peak_segment_id and peak_segment_id in segment_level_data:
+                    peak_density_los = segment_level_data[peak_segment_id].get("worst_los", "A")
+                else:
+                    # Fallback if no segment found (should not happen, but be defensive)
+                    logger.warning(f"Peak density segment {peak_segment_id} not found in segment_metrics for day {day}, defaulting to LOS A")
+                    peak_density_los = "A"
                 
                 # Load flags
                 flags = _load_ui_artifact_safe(storage, f"{day}/ui/metrics/flags.json", [])
