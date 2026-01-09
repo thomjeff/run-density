@@ -6,65 +6,103 @@ Maps segment IDs to rulebook schema keys (start_corral, on_course_narrow, on_cou
 This enables schema-specific thresholds for LOS and rate-based flagging.
 
 Issue #254: Centralize Rulebook Logic
+Issue #648: Load schema mappings from segments.csv (SSOT) instead of hardcoded EXPLICIT dict
 """
+import functools
+import logging
 from typing import Dict, Optional
+from pathlib import Path
 
-# Explicit mapping for known segments
-# Expand this as needed for operational hot spots
-EXPLICIT: Dict[str, str] = {
-    # Start corral (wide, managed release)
-    "A1": "start_corral",
+logger = logging.getLogger(__name__)
+
+# Issue #648: Schema mappings now loaded from segments.csv (SSOT)
+# Removed hardcoded EXPLICIT dictionary - all mappings come from CSV
+
+@functools.lru_cache(maxsize=1)
+def _load_schema_map(csv_path: str = "data/segments.csv") -> Dict[str, str]:
+    """
+    Load segment-to-schema mapping from segments.csv (SSOT).
     
-    # Narrow corridors (1.5m width, high congestion risk)
-    "B1": "on_course_narrow",  # Friel to 10K Turn
-    "B2": "on_course_narrow",  # 10K Turn to Friel
-    "B3": "on_course_narrow",  # 10K Turn to Friel
-    "D1": "on_course_narrow",  # 10K Turn to Full Turn Blake (Out)
-    "D2": "on_course_narrow",  # Full Turn Blake to 10K Turn (Return)
-    "H1": "on_course_narrow",  # Trail/Aberdeen to/from Station Rd
-    "J1": "on_course_narrow",  # Bridge/Mill to Half Turn (Outbound)
-    "J2": "on_course_narrow",  # Half Turn to Full Turn (Out)
-    "J3": "on_course_narrow",  # Full Turn to Half Turn (Return)
-    "J4": "on_course_narrow",  # Half Turn to Bridge/Mill
-    "J5": "on_course_narrow",  # Half Turn to Bridge/Mill (Slow Half)
-    "L1": "on_course_narrow",  # Trail/Aberdeen to/from Station Rd
-    "L2": "on_course_narrow",  # Station Rd to Trail/Aberdeen
+    Issue #648: This replaces the hardcoded EXPLICIT dictionary with CSV-based SSOT.
     
-    # Open course (3.0-5.0m width, lower congestion risk)
-    "A2": "on_course_open",  # Queen/Regent to WSB mid-point
-    "A3": "on_course_open",  # WSB mid-point to Friel
-    "F1": "on_course_open",  # Friel to Station Rd.
-    "G1": "on_course_open",  # Full Loop around QS to Trail/Aberdeen
-    "I1": "on_course_open",  # Station Rd to Bridge/Mill
-    "K1": "on_course_open",  # Bridge/Mill to Station Rd
-    "M1": "on_course_open",  # Trail/Aberdeen to Finish (Full to Loop)
-    "M2": "on_course_open",  # Trail/Aberdeen to Finish
-}
+    Args:
+        csv_path: Path to segments.csv file (default: "data/segments.csv")
+        
+    Returns:
+        Dictionary mapping segment_id to schema_key
+        
+    Raises:
+        FileNotFoundError: If segments.csv not found
+        ValueError: If required columns (seg_id, schema) are missing
+    """
+    try:
+        from app.io.loader import load_segments
+        
+        csv_file = Path(csv_path)
+        if not csv_file.exists():
+            raise FileNotFoundError(f"segments.csv not found at {csv_file.absolute()}")
+        
+        df = load_segments(str(csv_file))
+        
+        # Validate required columns
+        if 'seg_id' not in df.columns:
+            raise ValueError(f"segments.csv missing required column: seg_id")
+        if 'schema' not in df.columns:
+            raise ValueError(f"segments.csv missing required column: schema")
+        
+        # Build schema mapping
+        schema_map = {}
+        for _, row in df.iterrows():
+            seg_id = str(row['seg_id']).strip()
+            schema = str(row.get('schema', '')).strip()
+            
+            if seg_id and schema:
+                # Validate schema value (must be valid rulebook schema)
+                valid_schemas = {'start_corral', 'on_course_narrow', 'on_course_open'}
+                if schema not in valid_schemas:
+                    logger.warning(
+                        f"Invalid schema value '{schema}' for segment {seg_id} in segments.csv. "
+                        f"Must be one of: {valid_schemas}. Defaulting to 'on_course_open'."
+                    )
+                    schema = 'on_course_open'
+                schema_map[seg_id] = schema
+        
+        logger.info(f"Loaded {len(schema_map)} segment-to-schema mappings from {csv_file}")
+        return schema_map
+        
+    except Exception as e:
+        logger.error(f"Failed to load schema map from {csv_path}: {e}")
+        raise
 
 def resolve_schema(segment_id: str, segment_type: Optional[str] = None) -> str:
     """
-    Resolve segment ID to rulebook schema key.
+    Resolve segment ID to rulebook schema key from segments.csv (SSOT).
+    
+    Issue #648: Schema mappings now loaded from segments.csv instead of hardcoded EXPLICIT dict.
     
     Resolution order:
-    1. Explicit ID mapping (EXPLICIT dict)
-    2. Type-based mapping (if segment_type provided)
+    1. segments.csv schema column (SSOT)
+    2. Type-based mapping (if segment_type provided, as fallback only)
     3. Default to on_course_open
     
     Args:
-        segment_id: Segment identifier (e.g., "A1", "B1")
-        segment_type: Optional segment type from segments.csv
+        segment_id: Segment identifier (e.g., "A1", "B1", "D1a", "N1")
+        segment_type: Optional segment type from segments.csv (used as fallback only)
         
     Returns:
         Schema key: "start_corral", "on_course_narrow", or "on_course_open"
     
     Raises:
         TypeError: If segment_type is not a string (Issue #557)
+        FileNotFoundError: If segments.csv not found
+        ValueError: If segments.csv is invalid
     """
-    # 1) Explicit ID mapping (highest priority)
-    if segment_id in EXPLICIT:
-        return EXPLICIT[segment_id]
+    # 1) Load from segments.csv (SSOT)
+    schema_map = _load_schema_map()
+    if segment_id in schema_map:
+        return schema_map[segment_id]
     
-    # 2) Type-based mapping (when segment_type is present)
+    # 2) Type-based fallback (preserve existing logic for backward compatibility)
     if segment_type:
         # Type guard: ensure segment_type is a string (Issue #557)
         if not isinstance(segment_type, str):
@@ -76,24 +114,41 @@ def resolve_schema(segment_id: str, segment_type: Optional[str] = None) -> str:
         
         # Narrow/constrained segments
         if t in {"funnel", "merge", "bridge", "chute", "finish", "narrow"}:
+            logger.warning(
+                f"Segment {segment_id} not found in segments.csv, using type-based fallback: "
+                f"segment_type='{segment_type}' → on_course_narrow"
+            )
             return "on_course_narrow"
         
         # Start corrals
         if t in {"start", "corral"}:
+            logger.warning(
+                f"Segment {segment_id} not found in segments.csv, using type-based fallback: "
+                f"segment_type='{segment_type}' → start_corral"
+            )
             return "start_corral"
     
-    # 3) Default to open course
+    # 3) Default fallback (should not happen in production if CSV is complete)
+    logger.warning(
+        f"Segment {segment_id} not found in segments.csv and no segment_type provided, "
+        f"defaulting to on_course_open"
+    )
     return "on_course_open"
 
 def get_schema_stats() -> Dict[str, int]:
     """
-    Get statistics on explicit schema mappings.
+    Get statistics on schema mappings from segments.csv (SSOT).
+    
+    Issue #648: Now loads from CSV instead of hardcoded EXPLICIT dict.
     
     Returns:
-        Dict with counts per schema type
+        Dict with counts per schema type (e.g., {"start_corral": 1, "on_course_narrow": 13, ...})
     """
+    schema_map = _load_schema_map()
+    
     stats = {}
-    for schema in EXPLICIT.values():
+    for schema in schema_map.values():
         stats[schema] = stats.get(schema, 0) + 1
+    
     return stats
 
