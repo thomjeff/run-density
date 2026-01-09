@@ -174,6 +174,53 @@ def _build_label_lookup_from_geojson(segments_geojson: Dict[str, Any]) -> Dict[s
     return label_lookup
 
 
+def _enrich_label_lookup_from_csv(label_lookup: Dict[str, Dict[str, Any]], segments_csv_path: str = "data/segments.csv") -> Dict[str, Dict[str, Any]]:
+    """Enrich label lookup with data from segments.csv (e.g., length_km if missing from geojson)."""
+    try:
+        from app.io.loader import load_segments
+        from pathlib import Path
+        
+        segments_df = load_segments(segments_csv_path)
+        
+        for _, row in segments_df.iterrows():
+            seg_id = str(row.get("seg_id", "")).strip()
+            if not seg_id:
+                continue
+            
+            # Initialize if not present
+            if seg_id not in label_lookup:
+                label_lookup[seg_id] = {
+                    "label": seg_id,
+                    "length_km": 0.0,
+                    "width_m": 0.0,
+                    "direction": "",
+                    "events": []
+                }
+            
+            # Update length_km from CSV if missing or 0 in geojson
+            if label_lookup[seg_id].get("length_km", 0.0) == 0.0:
+                length_km = row.get("length_km")
+                if pd.notna(length_km):
+                    label_lookup[seg_id]["length_km"] = float(length_km)
+            
+            # Update other fields if missing
+            if not label_lookup[seg_id].get("label") or label_lookup[seg_id]["label"] == seg_id:
+                name = row.get("name")
+                if pd.notna(name):
+                    label_lookup[seg_id]["label"] = str(name)
+            
+            if label_lookup[seg_id].get("width_m", 0.0) == 0.0:
+                width_m = row.get("width_m")
+                if pd.notna(width_m):
+                    label_lookup[seg_id]["width_m"] = float(width_m)
+        
+        logger.info(f"Enriched label lookup with {len(segments_df)} segments from CSV")
+    except Exception as e:
+        logger.warning(f"Could not enrich label lookup from CSV: {e}")
+    
+    return label_lookup
+
+
 def _load_flagged_segment_ids(storage_service) -> set:
     """Load flagged segment IDs from flags.json."""
     flagged_seg_ids = set()
@@ -289,6 +336,9 @@ async def get_density_segments(
         
         # Build label lookup
         label_lookup = _build_label_lookup_from_geojson(segments_geojson or {})
+        
+        # Issue #652: Enrich with data from segments.csv (especially length_km)
+        label_lookup = _enrich_label_lookup_from_csv(label_lookup)
         
         # Load flags from day-scoped path (Issue #580: Updated path to metrics/ subdirectory)
         flags_data = storage.read_json(f"{selected_day}/ui/metrics/flags.json")
