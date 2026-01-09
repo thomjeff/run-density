@@ -550,27 +550,36 @@ def _get_segment_operational_schema(seg_id: str, segment_metrics: Dict[str, Dict
     Issue #285: Returns operational schema tag (e.g., start_corral, on_course_open, on_course_narrow)
     instead of density data schema.
     
+    Issue #648: Uses schema_resolver.resolve_schema() as SSOT (loads from segments.csv).
+    Prefers schema from segment_metrics if available (should already be resolved from CSV),
+    otherwise resolves directly from CSV.
+    
     Args:
         seg_id: Segment identifier
-        segment_metrics: Dictionary of segment metrics
+        segment_metrics: Dictionary of segment metrics (may contain pre-resolved schema)
         
     Returns:
         String with operational schema tag
     """
+    from app.schema_resolver import resolve_schema as resolve_schema_from_csv
+    
     try:
+        # Try to get schema from segment_metrics first (should already be resolved from CSV)
         if seg_id in segment_metrics:
             metrics = segment_metrics[seg_id]
             # Issue #308: Validate that metrics is a dictionary before calling .get()
             if isinstance(metrics, dict):
-                schema_tag = metrics.get("schema", "on_course_open")
-                return schema_tag
+                schema_tag = metrics.get("schema", None)
+                if schema_tag:
+                    return schema_tag
             else:
                 logger.warning(f"⚠️ Invalid metrics type for segment {seg_id}: {type(metrics).__name__}")
-                return "on_course_open"  # Default fallback
-        else:
-            return "on_course_open"  # Default fallback
+        
+        # Fallback: resolve directly from CSV (Issue #648: CSV is SSOT)
+        return resolve_schema_from_csv(seg_id, None)
             
     except Exception as e:
         logger.warning(f"Could not get operational schema for {seg_id}: {e}")
-        return "on_course_open"
+        # Fallback: resolve directly from CSV (Issue #648: CSV is SSOT)
+        return resolve_schema_from_csv(seg_id, None)
 
