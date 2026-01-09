@@ -1,0 +1,198 @@
+/* Common CSS - Shared Styles for All Pages
+ * Issue #652: UI Styling Consistency
+ * Following "define one, use many" principle
+ */
+
+/* ============================================
+   Scrollable Table Container
+   ============================================ */
+.scrollable-table-container {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: 50vh;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+}
+
+/* ============================================
+   Table Sticky Header
+   ============================================ */
+.table-sticky-header thead th {
+    position: sticky;
+    top: 0;
+    background: #f8f9fa;
+    z-index: 10;
+    box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* ============================================
+   Consistent Table Styles
+   ============================================ */
+/* Override base template table styles for consistency */
+.scrollable-table-container table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+}
+
+.scrollable-table-container table th,
+.scrollable-table-container table td {
+    padding: 0.875rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.scrollable-table-container table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.scrollable-table-container table tbody tr:hover {
+    background: #f8f9fa;
+}
+
+/* ============================================
+   Sortable Column Styles
+   ============================================ */
+.table-sortable {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+}
+
+.table-sortable:hover {
+    background: #e9ecef;
+}
+
+.table-sortable-indicator {
+    color: #007bff;
+    font-size: 0.75rem;
+    margin-left: 0.25rem;
+}
+
+/* ============================================
+   Reference Table Card
+   ============================================ */
+.reference-table-card {
+    /* Consistent styling for reference tables */
+    /* Uses base .card class, this is for any reference-specific overrides */
+}
+
+.reference-table-card table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.reference-table-card table th,
+.reference-table-card table td {
+    padding: 0.875rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.reference-table-card table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+/* ============================================
+   Filter Control Styles
+   ============================================ */
+.filter-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: end;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    position: relative;
+    z-index: 100;
+}
+
+.filter-container > div {
+    position: relative;
+    z-index: 101;
+}
+
+.filter-container label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    font-size: 0.9rem;
+    color: #2c3e50;
+}
+
+.filter-input {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    background: white;
+}
+
+.filter-select {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    position: relative;
+    z-index: 102;
+    background: white;
+}
+
+.filter-button {
+    padding: 0.5rem 1rem;
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    width: auto;
+}
+
+.filter-button:hover {
+    background-color: #5a6268;
+}
+
+/* Visual separator for filter controls */
+.filter-separator {
+    width: 1px;
+    background-color: #ddd;
+    align-self: stretch;
+    margin: 0 0.5rem;
+}
+
+/* ============================================
+   Card Spacing Classes
+   ============================================ */
+.card-spacing-sm {
+    margin-bottom: 1rem;
+}
+
+.card-spacing-md {
+    margin-bottom: 1.5rem;
+}
+
+.card-spacing-lg {
+    margin-bottom: 2rem;
+}
+
+/* ============================================
+   Placeholder Text
+   ============================================ */
+.placeholder {
+    padding: 2rem;
+    text-align: center;
+    color: #6c757d;
+}
