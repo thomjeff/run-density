@@ -79,6 +79,123 @@ def format_time_hhmmss(seconds: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
+def parse_segment_ids(seg_id_value: Any) -> List[str]:
+    """
+    Parse seg_id from locations.csv, handling both single and comma-separated values.
+    
+    Issue #598: Helper function to parse segment IDs for flag propagation.
+    
+    Handles formats:
+    - Single: "G1"
+    - Multiple: "A2,A3"
+    - Quoted multiple: ""\"A2,A3""\"
+    - Empty/NaN: []
+    
+    Args:
+        seg_id_value: Value from seg_id column (can be string, NaN, None, etc.)
+        
+    Returns:
+        List of segment ID strings (empty list if missing/NaN)
+    """
+    if pd.isna(seg_id_value) or seg_id_value is None or seg_id_value == "":
+        return []
+    
+    # Convert to string and strip whitespace
+    seg_id_str = str(seg_id_value).strip()
+    
+    if not seg_id_str:
+        return []
+    
+    # Handle quoted strings (e.g., ""\"A2,A3""\"")
+    # Remove outer quotes if present
+    if seg_id_str.startswith('"') and seg_id_str.endswith('"'):
+        seg_id_str = seg_id_str[1:-1]
+    if seg_id_str.startswith("'") and seg_id_str.endswith("'"):
+        seg_id_str = seg_id_str[1:-1]
+    
+    # Split by comma and clean up each segment ID
+    segment_ids = [s.strip() for s in seg_id_str.split(',') if s.strip()]
+    
+    return segment_ids
+
+
+def load_flagged_segments(run_id: Optional[str] = None, day: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+    """
+    Load flagged segments from flags.json.
+    
+    Issue #598: Loads flag data for segment-to-location flag propagation.
+    
+    Args:
+        run_id: Optional run ID for runflow structure
+        day: Optional day code (fri|sat|sun|mon) for day-scoped data
+        
+    Returns:
+        Dictionary mapping seg_id to flag data (severity, worst_los, etc.)
+        Empty dict if flags.json not found or invalid
+    """
+    flagged_segments = {}
+    
+    try:
+        from app.storage import create_runflow_storage
+        
+        if not run_id:
+            logger.warning("load_flagged_segments: run_id not provided, cannot load flags.json")
+            return flagged_segments
+        
+        storage = create_runflow_storage(run_id)
+        
+        # Determine path to flags.json
+        if day:
+            flags_path = f"{day}/ui/metrics/flags.json"
+        else:
+            flags_path = "ui/metrics/flags.json"
+        
+        if not storage.exists(flags_path):
+            logger.debug(f"flags.json not found at {flags_path} for run_id={run_id}")
+            return flagged_segments
+        
+        # Load flags.json
+        flags_data = storage.read_json(flags_path)
+        
+        if not flags_data:
+            logger.debug(f"flags.json is empty at {flags_path}")
+            return flagged_segments
+        
+        # Handle different formats of flags.json
+        flags_list = []
+        if isinstance(flags_data, list):
+            flags_list = flags_data
+        elif isinstance(flags_data, dict):
+            # Check for 'flagged_segments' key
+            if 'flagged_segments' in flags_data:
+                flags_list = flags_data['flagged_segments']
+            else:
+                logger.warning(f"flags.json has unexpected dict format at {flags_path}")
+                return flagged_segments
+        
+        # Build lookup dictionary: {seg_id: flag_data}
+        for flag_entry in flags_list:
+            # Extract seg_id (try both 'seg_id' and 'segment_id' for compatibility)
+            seg_id = flag_entry.get('seg_id') or flag_entry.get('segment_id')
+            if seg_id:
+                flagged_segments[str(seg_id)] = {
+                    'worst_severity': flag_entry.get('worst_severity'),
+                    'worst_los': flag_entry.get('worst_los'),
+                    'peak_density': flag_entry.get('peak_density'),
+                    'peak_rate': flag_entry.get('peak_rate'),
+                    'flagged_bins': flag_entry.get('flagged_bins') or flag_entry.get('flagged_bin_count', 0),
+                    'note': flag_entry.get('note', ''),
+                    'type': flag_entry.get('type', 'density')
+                }
+        
+        logger.info(f"Loaded {len(flagged_segments)} flagged segments from {flags_path}")
+        
+    except Exception as e:
+        logger.warning(f"Could not load flagged segments from flags.json: {e}")
+    
+    return flagged_segments
+
+
 def get_segment_ranges_for_event(
     segments_df: pd.DataFrame,
     segment_ids: List[str],
@@ -528,7 +645,8 @@ def generate_location_report(
     segments_csv: str = "data/segments.csv",
     start_times: Optional[Dict[str, float]] = None,
     output_dir: str = "reports",
-    run_id: Optional[str] = None
+    run_id: Optional[str] = None,
+    day: Optional[str] = None  # Issue #598: Day code for loading flags.json
 ) -> Dict[str, Any]:
     """
     Generate locations report with arrival modeling and operational timing.
@@ -575,12 +693,20 @@ def generate_location_report(
         return {"ok": False, "error": "No locations to process"}
     
     # Determine output path
-    if run_id:
+    # Issue #598: Only override output_dir if run_id is provided AND output_dir is default
+    # For v2, output_dir is already set correctly, so don't override
+    if run_id and output_dir == "reports":
         output_dir = get_runflow_category_path(run_id, "reports")
     
     # Calculate earliest start time for loc_start calculation
     earliest_start_min = min(start_times.values()) if start_times else 0
     loc_start_base_sec = (earliest_start_min - LOCATION_SETUP_BUFFER_MINUTES) * SECONDS_PER_MINUTE
+    
+    # Issue #598: Load flagged segments for flag propagation
+    flagged_segments = {}
+    if run_id:
+        flagged_segments = load_flagged_segments(run_id=run_id, day=day)
+        logger.info(f"Issue #598: Loaded {len(flagged_segments)} flagged segments for flag propagation (day={day})")
     
     # Process each location
     report_rows = []
@@ -596,6 +722,7 @@ def generate_location_report(
         
         # Initialize report row
         # Issue #589: Field order matches loc_expected.csv specification
+        # Issue #598: Add flag fields for flag propagation
         report_row = {
             "loc_id": loc_id,
             "loc_label": loc_label,
@@ -615,7 +742,13 @@ def generate_location_report(
             "duration": None,
             "timing_source": "modeled",  # Default to modeled, will be updated for proxy-based traffic locations
             # Issue #589: Resource counts and minutes will be added dynamically below
-            "notes": location.get("notes", "")
+            "notes": location.get("notes", ""),
+            # Issue #598: Flag propagation fields
+            "flag": False,
+            "flagged_seg_id": None,
+            "flag_severity": None,
+            "flag_worst_los": None,
+            "flag_note": None
         }
         
         # Check if timing_source is set to proxy:n in input locations.csv
@@ -671,6 +804,63 @@ def generate_location_report(
             logger.warning(
                 f"Location {loc_id} ({loc_label}): proxy_loc_id={proxy_loc_id} provided but loc_type={loc_type} is not 'traffic'. "
                 f"Ignoring proxy_loc_id for non-traffic locations."
+            )
+        
+        # Issue #598: Propagate flags from segments
+        # 1. Get seg_id(s) for this location (direct or via proxy)
+        location_seg_ids = []
+        seg_id_value = location.get("seg_id")
+        
+        if pd.notna(seg_id_value) and seg_id_value != "":
+            # Direct seg_id match
+            location_seg_ids = parse_segment_ids(seg_id_value)
+        elif pd.notna(proxy_loc_id) and proxy_loc_id != "":
+            # Proxy location: use proxy location's seg_id
+            proxy_location_row = locations_df[locations_df['loc_id'] == proxy_loc_id]
+            if not proxy_location_row.empty:
+                proxy_seg_id = proxy_location_row.iloc[0].get("seg_id")
+                if pd.notna(proxy_seg_id) and proxy_seg_id != "":
+                    location_seg_ids = parse_segment_ids(proxy_seg_id)
+                    logger.debug(
+                        f"Location {loc_id} ({loc_label}): Using proxy location {proxy_loc_id}'s seg_id: {location_seg_ids}"
+                    )
+        
+        # 2. Check if ANY of the location's segment IDs are flagged
+        flagged_seg_id = None
+        flag_severity = None
+        flag_worst_los = None
+        flag_note = None
+        is_flagged = False
+        
+        for seg_id in location_seg_ids:
+            if seg_id in flagged_segments:
+                flag_data = flagged_segments[seg_id]
+                is_flagged = True
+                # Record first flagged segment as the trigger
+                if not flagged_seg_id:
+                    flagged_seg_id = seg_id
+                    flag_severity = flag_data.get('worst_severity')
+                    flag_worst_los = flag_data.get('worst_los')
+                    # Build note from flag data
+                    note_parts = []
+                    if flag_data.get('flagged_bins'):
+                        note_parts.append(f"{flag_data['flagged_bins']} bins flagged")
+                    if flag_severity:
+                        note_parts.append(f"severity: {flag_severity}")
+                    flag_note = ", ".join(note_parts) if note_parts else flag_data.get('note', '')
+                break  # Use first flagged segment found
+        
+        # 3. Set flag fields in report_row
+        report_row["flag"] = is_flagged
+        report_row["flagged_seg_id"] = flagged_seg_id
+        report_row["flag_severity"] = flag_severity
+        report_row["flag_worst_los"] = flag_worst_los
+        report_row["flag_note"] = flag_note
+        
+        if is_flagged:
+            logger.debug(
+                f"Location {loc_id} ({loc_label}): Flagged via segment {flagged_seg_id} "
+                f"(severity={flag_severity}, los={flag_worst_los})"
             )
         
         # Skip arrival modeling for traffic locations

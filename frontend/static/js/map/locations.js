@@ -25,6 +25,7 @@ function convertToGeoJSON(locations) {
         .filter(loc => loc.lat != null && loc.lon != null && !isNaN(loc.lat) && !isNaN(loc.lon))
         .map(loc => {
             // Issue #591: Include all resource count and mins fields dynamically
+            // Issue #598: Include flag fields
             const properties = {
                 loc_id: loc.loc_id,
                 loc_label: loc.loc_label || 'Unknown',
@@ -38,7 +39,12 @@ function convertToGeoJSON(locations) {
                 timing_source: loc.timing_source,
                 notes: loc.notes,
                 first_runner: loc.first_runner,  // Issue #483: Include first_runner
-                last_runner: loc.last_runner     // Issue #483: Include last_runner
+                last_runner: loc.last_runner,     // Issue #483: Include last_runner
+                flag: loc.flag,                   // Issue #598: Include flag
+                flagged_seg_id: loc.flagged_seg_id,  // Issue #598: Include flagged_seg_id
+                flag_severity: loc.flag_severity,     // Issue #598: Include flag_severity
+                flag_worst_los: loc.flag_worst_los,   // Issue #598: Include flag_worst_los
+                flag_note: loc.flag_note              // Issue #598: Include flag_note
             };
             
             // Issue #591: Dynamically add all resource count and mins fields
@@ -140,6 +146,12 @@ function createLocationTooltip(properties) {
         tooltip += `<br>Resources: ${resourceCounts.join(', ')}`;
     }
     
+    // Issue #598: Add flag to tooltip
+    const locationFlag = props.flag;
+    if (locationFlag === true || locationFlag === "true" || locationFlag === "Y") {
+        tooltip += `<br><span style="color: #F44336; font-weight: bold;">Flag: Y</span>`;
+    }
+    
     if (timingSourceTooltip) {
         tooltip += timingSourceTooltip;
     }
@@ -223,6 +235,15 @@ function createLocationPopup(properties) {
     });
     if (resourceCounts.length > 0) {
         popup += `<div style="margin-bottom: 0.5rem;"><strong>Resources:</strong> ${resourceCounts.join(', ')}</div>`;
+    }
+    
+    // Issue #598: Add flag to popup
+    const locationFlag = props.flag;
+    if (locationFlag === true || locationFlag === "true" || locationFlag === "Y") {
+        const flaggedSegId = props.flagged_seg_id || 'N/A';
+        const flagSeverity = props.flag_severity || 'N/A';
+        const flagWorstLos = props.flag_worst_los || 'N/A';
+        popup += `<div style="margin-bottom: 0.5rem;"><strong>Flag:</strong> <span style="color: #F44336; font-weight: bold;">Y</span> (Segment: ${flaggedSegId}, Severity: ${flagSeverity}, LOS: ${flagWorstLos})</div>`;
     }
     
     // Add timing source (Issue #479)

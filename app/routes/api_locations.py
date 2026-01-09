@@ -84,6 +84,10 @@ async def get_locations_report(
             df = pd.read_csv(io.StringIO(csv_data))
             # Replace NaN/Inf values with None for JSON serialization
             df = df.replace([np.nan, np.inf, -np.inf], None)
+            # Issue #598: Convert flag column to proper boolean (pandas may read as string)
+            if 'flag' in df.columns:
+                # Convert flag column: handle both boolean and string representations
+                df['flag'] = df['flag'].apply(lambda x: True if (x is True or str(x).lower() in ['true', '1', 'y', 'yes']) else False)
             report_data = df.to_dict('records')
         elif generate:
             # Generate new report

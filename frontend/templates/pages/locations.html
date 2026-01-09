@@ -106,6 +106,19 @@
             <!-- Visual Separator -->
             <div style="width: 1px; background-color: #ddd; align-self: stretch; margin: 0 0.5rem;"></div>
             
+            <!-- Flag Filter (Issue #598) -->
+            <div style="position: relative; z-index: 101;">
+                <label for="filter-flag" style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.9rem; color: #2c3e50;">Flag</label>
+                <select id="filter-flag" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem; position: relative; z-index: 102; background: white;">
+                    <option value="">All</option>
+                    <option value="Y">Flagged</option>
+                    <option value="N">Not Flagged</option>
+                </select>
+            </div>
+            
+            <!-- Visual Separator -->
+            <div style="width: 1px; background-color: #ddd; align-self: stretch; margin: 0 0.5rem;"></div>
+            
             <!-- Last Runner Filter -->
             <div>
                 <label style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.9rem; color: #2c3e50;">Last Runner</label>
@@ -137,6 +150,7 @@
                     <th>Location</th>
                     <th class="sortable" data-sort="loc_type">Type <span class="sort-indicator"></span></th>
                     <th class="sortable" data-sort="zone">Zone <span class="sort-indicator"></span></th>
+                    <th class="sortable" data-sort="flag">Flag <span class="sort-indicator"></span></th>
                     <th class="sortable" data-sort="first_runner">First/Last Runner <span class="sort-indicator"></span></th>
                     <th>Operational Window</th>
                     <th>Peak Window</th>
@@ -323,8 +337,9 @@
                 last_runner: feature.properties.last_runner
             };
             // Issue #591: Dynamically add all resource count and mins fields
+            // Issue #598: Include flag fields
             Object.keys(feature.properties).forEach(key => {
-                if (key.endsWith('_count') || key.endsWith('_mins')) {
+                if (key.endsWith('_count') || key.endsWith('_mins') || key === 'flag' || key === 'flagged_seg_id' || key === 'flag_severity' || key === 'flag_worst_los' || key === 'flag_note') {
                     location[key] = feature.properties[key];
                 }
             });
@@ -377,18 +392,20 @@
                 last_runner: feature.properties.last_runner
             };
             // Issue #591: Dynamically add all resource count and mins fields
+            // Issue #598: Include flag fields
             Object.keys(feature.properties).forEach(key => {
-                if (key.endsWith('_count') || key.endsWith('_mins')) {
+                if (key.endsWith('_count') || key.endsWith('_mins') || key === 'flag' || key === 'flagged_seg_id' || key === 'flag_severity' || key === 'flag_worst_los' || key === 'flag_note') {
                     location[key] = feature.properties[key];
                 }
             });
             return location;
         });
         
-        // Apply UI filters (Type, Zone, Resource, First Runner, Last Runner) to the map-bounds-filtered locations
+        // Apply UI filters (Type, Zone, Resource, Flag, First Runner, Last Runner) to the map-bounds-filtered locations
         const typeFilter = document.getElementById('filter-type')?.value || '';
         const zoneFilter = document.getElementById('filter-zone')?.value || '';
         const resourceFilter = document.getElementById('filter-resource')?.value || '';  // Issue #591
+        const flagFilter = document.getElementById('filter-flag')?.value || '';  // Issue #598
         const lastRunnerMin = document.getElementById('filter-last-runner-min')?.value || '';
         const lastRunnerMax = document.getElementById('filter-last-runner-max')?.value || '';
         
@@ -413,6 +430,15 @@
                 const locationCount = location[countField];
                 // Check if count exists and is greater than 0
                 if (!locationCount || locationCount === 0 || locationCount === "0" || locationCount === null || locationCount === undefined) {
+                    return false;
+                }
+            }
+            
+            // Issue #598: Flag filter
+            if (flagFilter) {
+                const locationFlag = location.flag;
+                const flagValue = locationFlag === true || locationFlag === "true" || locationFlag === "Y" ? "Y" : "N";
+                if (flagValue !== flagFilter) {
                     return false;
                 }
             }
@@ -678,6 +704,7 @@
         const typeFilter = document.getElementById('filter-type')?.value || '';
         const zoneFilter = document.getElementById('filter-zone')?.value || '';
         const resourceFilter = document.getElementById('filter-resource')?.value || '';  // Issue #591
+        const flagFilter = document.getElementById('filter-flag')?.value || '';  // Issue #598
         const lastRunnerMin = document.getElementById('filter-last-runner-min')?.value || '';
         const lastRunnerMax = document.getElementById('filter-last-runner-max')?.value || '';
         
@@ -869,6 +896,10 @@
                     aVal = timeToHHMM(a.last_runner) || '';
                     bVal = timeToHHMM(b.last_runner) || '';
                     break;
+                case 'flag':
+                    aVal = (a.flag === true || a.flag === "true" || a.flag === "Y") ? "Y" : "N";
+                    bVal = (b.flag === true || b.flag === "true" || b.flag === "Y") ? "Y" : "N";
+                    break;
                 default:
                     return 0;
             }
@@ -917,6 +948,16 @@
             });
         }
         
+        // Issue #598: Flag filter
+        const flagFilter = document.getElementById('filter-flag');
+        if (flagFilter) {
+            flagFilter.addEventListener('change', function(e) {
+                setTimeout(() => {
+                    applyFiltersAndRender();
+                }, 10);
+            });
+        }
+        
         // Last Runner filters
         const lastRunnerMin = document.getElementById('filter-last-runner-min');
         const lastRunnerMax = document.getElementById('filter-last-runner-max');
@@ -943,6 +984,8 @@
                 if (zoneFilter) zoneFilter.value = '';
                 const resourceFilter = document.getElementById('filter-resource');  // Issue #591
                 if (resourceFilter) resourceFilter.value = '';
+                const flagFilter = document.getElementById('filter-flag');  // Issue #598
+                if (flagFilter) flagFilter.value = '';
                 if (lastRunnerMin) lastRunnerMin.value = '';
                 if (lastRunnerMax) lastRunnerMax.value = '';
                 
@@ -1010,7 +1053,7 @@
         tbody.innerHTML = '';
         
         if (!locations || locations.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="placeholder">No locations data available</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="placeholder">No locations data available</td></tr>';
             return;
         }
         
@@ -1060,12 +1103,17 @@
                 ? `${firstRunnerFormatted} → ${lastRunnerFormatted}`
                 : "—";
             
-            // Updated table structure - includes Type column, combined First/Last Runner
+            // Issue #598: Format flag value
+            const flagValue = location.flag === true || location.flag === "true" || location.flag === "Y" ? "Y" : "N";
+            const flagDisplay = flagValue;
+            
+            // Updated table structure - includes Type column, Flag column, combined First/Last Runner
             row.innerHTML = `
                 <td>${locId}</td>
                 <td>${locLabel}</td>
                 <td>${locType}</td>
                 <td>${zone}</td>
+                <td>${flagDisplay}</td>
                 <td>${firstLastRunner}</td>
                 <td>${operationalWindow}</td>
                 <td>${peakWindow}</td>

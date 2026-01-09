@@ -720,7 +720,8 @@ def generate_locations_report_v2(
                     segments_csv=tmp_segments_path,
                     start_times=start_times,
                     output_dir=str(reports_path),
-                    run_id=None  # Don't pass run_id - use output_dir directly for v2 day-partitioned structure
+                    run_id=run_id,  # Issue #598: Pass run_id for flag propagation (loads flags.json)
+                    day=day.value  # Issue #598: Pass day for day-scoped flags.json path
                 )
                 logger.info(f"generate_location_report returned for day {day.value}: ok={result.get('ok', False)}")
             except Exception as e:
