@@ -198,10 +198,24 @@ def _enrich_label_lookup_from_csv(label_lookup: Dict[str, Dict[str, Any]], segme
                 }
             
             # Update length_km from CSV if missing or 0 in geojson
+            # Try event-specific length columns (full_length, half_length, 10k_length, etc.)
             if label_lookup[seg_id].get("length_km", 0.0) == 0.0:
-                length_km = row.get("length_km")
-                if pd.notna(length_km):
-                    label_lookup[seg_id]["length_km"] = float(length_km)
+                # Try full_length first, then half_length, then 10k_length
+                length_km = None
+                for col in ["full_length", "half_length", "10k_length", "elite_length", "open_length"]:
+                    if col in row and pd.notna(row[col]) and row[col] > 0:
+                        length_km = float(row[col])
+                        break
+                
+                # Fallback: calculate from full_to_km - full_from_km
+                if length_km is None or length_km == 0.0:
+                    full_from = row.get("full_from_km")
+                    full_to = row.get("full_to_km")
+                    if pd.notna(full_from) and pd.notna(full_to):
+                        length_km = float(full_to) - float(full_from)
+                
+                if length_km and length_km > 0:
+                    label_lookup[seg_id]["length_km"] = length_km
             
             # Update other fields if missing
             if not label_lookup[seg_id].get("label") or label_lookup[seg_id]["label"] == seg_id:
