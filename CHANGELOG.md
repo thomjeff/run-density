@@ -1,5 +1,61 @@
 # Changelog
 
+## [v2.0.5] - 2026-01-09
+
+### Summary
+- **Issue #598 Complete**: Location flag propagation from segments to locations
+- **Issue #648 Complete**: Schema resolver SSOT migration to segments.csv
+- **Issue #640 Complete**: LOS classification cleanup and SSOT enforcement
+- **Issue #638 Complete**: Run time format standardization (mm:ss)
+- **Issue #603 Complete**: Active window calculation fix for segment details
+- **UI Enhancements**: Flag column in locations table, improved styling consistency
+
+### New Features
+
+#### Location Flag Propagation (Issue #598)
+- **Backend flag propagation**: Locations are now automatically flagged based on their associated segments
+- **Proxy location support**: Proxy locations inherit flags from their proxy location's segments
+- **Flag column in UI**: Added Flag column to locations table showing Y/N status
+- **Flag filter dropdown**: Filter locations by flagged status with dynamic map updates
+- **Tooltip integration**: Flag status displayed in location tooltips and popups
+- **Multi-segment support**: Locations with multiple seg_ids are flagged if any associated segment is flagged
+
+#### Schema Resolver SSOT (Issue #648)
+- **segments.csv as SSOT**: Schema mappings now loaded from `segments.csv` instead of hardcoded dictionaries
+- **Centralized resolution**: All schema resolution now goes through `schema_resolver.py`
+- **Backward compatibility**: Type-based fallback maintained for segments not in CSV
+- **Validation**: Schema values validated against rulebook schema keys
+
+#### LOS Classification Cleanup (Issue #640)
+- **SSOT enforcement**: All LOS classification now uses rulebook thresholds exclusively
+- **Removed hardcoded thresholds**: Eliminated `DEFAULT_LOS_THRESHOLDS` and fallback logic
+- **Dashboard LOS fix**: Dashboard now uses canonical `worst_los` from `segment_metrics.json`
+- **Consistent classification**: LOS values now consistent across Dashboard, Density UI, and reports
+
+### Improvements
+- **Run time format** (Issue #638): Standardized to `mm:ss` format across backend and UI
+- **Active window calculation** (Issue #603): Fixed to use worst bin's time window instead of day-level aggregation
+- **Flag boolean conversion**: Fixed API to correctly convert flag values from CSV to boolean
+- **UI styling consistency**: Removed bold red formatting from flag column to match table style
+
+### Bug Fixes
+- **Active window display**: Fixed to show bin-specific time windows instead of day-level ranges
+- **Peak rate/density mismatch**: Fixed to derive both from same worst bin (max density)
+- **LOS inconsistency**: Fixed Dashboard LOS calculation to use SSOT values
+- **Flag display**: Fixed boolean conversion in locations API to correctly display flags in UI
+
+### Technical Details
+- **Location flag logic**: Flags loaded from `flags.json` and propagated based on `seg_id` or `proxy_loc_id`
+- **Schema resolution**: `_load_schema_map()` with LRU cache for efficient CSV loading
+- **LOS pipeline**: All LOS classification now uses `rulebook.classify_los()` with schema-specific thresholds
+
+### Migration Notes
+- `segments.csv` now requires `schema` column for all segments
+- Location reports now include `flag`, `flagged_seg_id`, `flag_severity`, `flag_worst_los`, `flag_note` fields
+- Run time format changed from decimal minutes to `mm:ss` format
+
+---
+
 ## [v2.0.4] - 2026-01-08
 
 ### Summary
