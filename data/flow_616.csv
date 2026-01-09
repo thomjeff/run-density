@@ -1,0 +1,83 @@
+﻿seg_id,seg_label,event_a,event_b,from_km_a,to_km_a,from_km_b,to_km_b,flow_type,prior_seg_id,notes
+A1a,Start to Queen/Regent (10K/Half),10k,half,0,0.9,0,0.9,overtake,,Start along St John Street; Overtake unlikely.
+A1b,Start to Queen/Regent (10K/Full),10k,full,0,0.9,0,0.9,overtake,,Start along St John Street; No Overtake expected
+A1c,Start to Queen/Regent (Half/Full),half,full,0,0.9,0,0.9,overtake,,Start along St John Street; Overtake unlikely.
+A2a,Queen/Regent to WSB mid-point (10K/Half),10k,half,0.9,1.8,0.9,1.8,overtake,A1a,Pointe St. Anne Blvd to half-way on WSB; Overtake unlikely.
+A2b,Queen/Regent to WSB mid-point (10K/Full),10k,full,0.9,1.8,0.9,1.8,overtake,A1b,Pointe St. Anne Blvd to half-way on WSB; Overtake unlikely.
+A2c,Queen/Regent to WSB mid-point (Half/Full),half,full,0.9,1.8,0.9,1.8,overtake,A1c,Pointe St. Anne Blvd to half-way on WSB; Overtake unlikely.
+A3a,WSB mid-point to Friel (10K/Half),10k,half,1.8,2.7,1.8,2.7,overtake,A2a,Half-way on WSB; Overtake likely.
+A3b,WSB mid-point to Friel (10K/Full),10k,full,1.8,2.7,1.8,2.7,overtake,A2b,Half-way on WSB; Overtake possible (Fast 10K / Slow Full).
+A3c,WSB mid-point to Friel (Half/Full),half,full,1.8,2.7,1.8,2.7,overtake,A2c,Half-way on WSB; Overtake possible (Fast Half / Slow Full).
+B1,Friel to 10K Turn (Out),10k,full,2.7,4.25,2.7,4.25,overtake,,On Trail (1.5m lane); Overtake expected (Fast 10K / Slow Full).
+B1a,Friel to 10K Turn (Late Overlaps),10k,full,2.7,4.25,14.8,16.35,overtake,,On Trail (1.5m lane) where slow 10K out to 10K Turn meet Fast Full on their return from Blake Crt. Density only as in opposite direction of flow.
+B2,10K Turn to Friel (Back),full,10k,14.8,16.35,4.25,5.8,overtake,,On Trail (1.5m lane); Expect Overtake by Fast Full / Slow 10K)
+B3,10K Turn to Friel (Slow/Fast 10k),10k,10k,2.7,4.25,4.25,5.8,overtake,,On Trail (1.5m lane); 10K outbound and return from 10K Turn. No Overtake - simply Density.
+C1,10K Turn to Royal (Full Out/Back),full,full,4.25,5.08,13.96,14.79,none,B3,"On Trail (1.5m lane, shared with Full Back) where this is Full Out from 10K Turn to Full Turn at Blake."
+C2,Royal to Sunset at Claremont (Full Out/Back),full,full,5.08,7.41,11.63,13.96,none,C1,"On Trail (1.5m lane, shared with Full Back) where this is Full Out from 10K Turn to Full Turn at Blake."
+C3,Sunset at Claremont to Full Turn at Blake (Full Out/Back),full,full,7.41,9.52,9.52,11.63,none,C2,"On Trail (1.5m lane, shared with Full Back) where this is Full Out from 10K Turn to Full Turn at Blake."
+D1,Full Turn at Blake to Sunset at Claremont (Full Back),full,full,13.96,14.79,13.96,14.79,none,C3,"On Trail (1.5m lane, shared with Full Out) where this is Full Back from Full Turn at Blake to 10K Turn"
+D2,Sunset at Claremont to Royal (Full Back),full,full,11.63,13.96,11.63,13.96,none,D1,"On Trail (1.5m lane, shared with Full Out) where this is Full Back from Full Turn at Blake to 10K Turn"
+D3,Royal to 10K Turn (Full Back),full,full,9.52,11.63,9.52,11.63,none,D2,"On Trail (1.5m lane, shared with Full Out) where this is Full Back from Full Turn at Blake to 10K Turn"
+E1a,Friel to Hughes,10k,half,5.8,6.43,2.7,3.33,merge,,"On Trail (3.0m, two lanes); Overtake expected (fast 10k / slow half). Keep right critical."
+E1b,Friel to Hughes,10k,full,5.8,6.43,16.35,16.98,merge,,"On Trail (3.0m, two lanes); Overtake expected (slow 10K / fast full). Keep right critical."
+E1c,Friel to Hughes,half,full,2.7,3.33,16.35,16.98,merge,,"On Trail (3.0m, two lanes); Overtake expected (slow half / fast full returning from Full turn at Blake). Keep right critical."
+E2a,Hughes to Neil,10k,half,6.43,7.09,3.33,3.99,merge,E1a,"On Trail (3.0m, two lanes); Overtake expected (fast 10k / slow half). Keep right critical."
+E2b,Hughes to Neil,10k,full,6.43,7.09,16.98,17.64,merge,E1b,"On Trail (3.0m, two lanes); Overtake expected (slow 10K / fast full). Keep right critical."
+E2c,Hughes to Neil,half,full,3.33,3.99,16.98,17.64,merge,E1c,"On Trail (3.0m, two lanes); Overtake expected (slow half / fast full returning from Full turn at Blake). Keep right critical."
+E3a,Neil to Gibson,10k,half,7.09,7.63,3.99,4.53,merge,E2a,"On Trail (3.0m, two lanes); Overtake expected (fast 10k / slow half). Keep right critical."
+E3b,Neil to Gibson,10k,full,7.09,7.63,17.64,18.18,merge,E2b,"On Trail (3.0m, two lanes); Overtake expected (slow 10K / fast full). Keep right critical."
+E3c,Neil to Gibson,half,full,3.99,4.53,17.64,18.18,merge,E2c,"On Trail (3.0m, two lanes); Overtake expected (slow half / fast full returning from Full turn at Blake). Keep right critical."
+E4a,Gibson to Station Rd.,10k,half,7.63,8.10,4.53,5.00,merge,E3a,"On Trail (3.0m, two lanes); Overtake expected (fast 10k / slow half). Keep right critical."
+E4b,Gibson to Station Rd.,10k,full,7.63,8.10,18.18,18.65,merge,E3b,"On Trail (3.0m, two lanes); Overtake expected (slow 10K / fast full). Keep right critical."
+E4c,Gibson to Station Rd.,half,full,4.53,5.00,18.18,18.65,merge,E3c,"On Trail (3.0m, two lanes); Overtake expected (slow half / fast full returning from Full turn at Blake). Keep right critical."
+G1,Full Loop QS to Trail/Aberdeen (Full Only),full,full,20.55,21.65,20.55,21.65,none,,"Full Only on Aberdeen, St John, McLeod, Lincoln Trail (Queen Sq. Loop)"
+H1a,Trail/Aberdeen to Station Rd (Full outbound to Station vs 10K finish),full,10k,21.65,23.26,8.1,10,counterflow,,Trail at Aberdeen (by water pump station) to Station Rd. where Full runners go right to Gibson Trail. 10K heading southbound to Finish. Shared segment with Half.
+H1b,Trail/Aberdeen to Station Rd. (Full outbound to Station vs Half finish),full,half,21.65,23.26,19.35,20.85,counterflow,,Trail at Aberdeen (by water pump station) to Station Rd. where Full and Half runners go right to Gibson Trail. Shared segment with 10K.
+I1,Station Rd to Greenwood Dr (Watters),half,full,5.00,5.71,23.26,23.97,counterflow,,"On Trail (3.0m, two lanes) Full/Half runners from Station/Rd. on to the Gibson Trail to Marysville. "
+I2,Greenwood Dr (Watters) to Greenwood (2nd Crossing),half,full,5.71,6.91,23.97,25.17,counterflow,,"On Trail (3.0m, two lanes) Full/Half runners from Station/Rd. on to the Gibson Trail to Marysville. "
+I3,Greenwood (2nd Crossing) to Water Stop,half,full,6.91,7.92,25.17,26.18,counterflow,,"On Trail (3.0m, two lanes) Full/Half runners from Station/Rd. on to the Gibson Trail to Marysville. "
+I4,Gibson Trail Water Stop to McGloin,half,full,7.92,10.29,26.18,28.55,counterflow,,"On Trail (3.0m, two lanes) Full/Half runners from Station/Rd. on to the Gibson Trail to Marysville. "
+I5,McGloing to Bridge/Mill,half,full,10.29,10.75,28.55,29.01,counterflow,,"On Trail (3.0m, two lanes) Full/Half runners from Station/Rd. on to the Gibson Trail to Marysville. "
+J1,Bridge/Mill to Half Turn (Half + Full co-direction),half,full,10.75,13.43,29.01,31.64,counterflow,,On Trial (1.5m lane) Half to Half Turn. Will continue to Full Turn. Shared with Half.
+J2,Half Turn to Full Turn (Full outbound spur),full,full,31.64,33.11,31.64,33.11,none,,On Trail (1.5m lane) Full outbound to Full Turn.
+J3,Full Turn to Half Turn (Full returning spur),full,full,33.11,34.34,33.11,34.34,none,,On Trail (1.5m lane) Full returning from Full Turn to Half Turn.
+J4,Half Turn to Bridge/Mill (Half + Full co-direction return),half,full,13.43,16.02,34.34,36.93,counterflow,,On Trail (1.5m lane) from Half Turn to Bridge/Mill. Full & Half
+J5,Half Turn to Bridge/Mill (Slow Half / Fast Full),full,half,34.34,36.93,10.75,13.43,counterflow,,On Trail (1.5m lane) with Slow Half meeting Fast Full on Bridge/Mill to Half Turn.
+K1,Bridge/Mill to Kaine Street,full,half,37.12,37.82,16.02,16.72,overtake,,"On Trail (3.0m, two lanes), with Full/Half returning from Marysville to Station Rd."
+K2,Kaine to Gilbert,full,half,37.82,38.42,16.72,17.32,overtake,,"On Trail (3.0m, two lanes), with Full/Half returning from Marysville to Station Rd."
+K3,Gilbert ot Canada St,full,half,38.42,39.07,17.32,17.97,overtake,,"On Trail (3.0m, two lanes), with Full/Half returning from Marysville to Station Rd."
+K4,Canada St to Station/Barker,full,half,39.07,40.57,17.97,19.47,overtake,,"On Trail (3.0m, two lanes), with Full/Half returning from Marysville to Station Rd."
+L1a,Station Rd. to Trail/Aberdeen,10k,half,8.1,9.75,19.2,20.85,merge,,On Trail (1.5m lane) with this segment having runners from all events.
+L1b,Station Rd. to Trail/Aberdeen,10k,full,8.1,9.75,18.65,20.3,merge,M1a,On Trail (1.5m lane) with this segment having runners from all events.
+L1c,Station Rd. to Trail/Aberdeen,half,full,19.2,20.85,18.65,20.3,overtake,M1a,On Trail (1.5m lane) with this segment having runners from all events.
+L2,Station Rd. to Trail/Aberdeen,full,full,40.57,41.95,40.57,41.95,counterflow,M1a,On Trail (1.5m lane) with the Full only on their final leg to Finish.
+M2a,Trail/Aberdeen to Finish,10k,half,9.75,10,20.85,21.1,none,,Aberdeen Street to Finish
+M2b,Trail/Aberdeen to Finish (Full QS Loop),10k,full,9.75,10,20.3,20.55,none,M2a,Aberdeen Street to Finish
+M2c,Trail/Aberdeen to Finish (Full QS Loop),half,full,20.85,21.1,20.3,20.55,none,M2a,Aberdeen Street to Finish
+M2d,Trail/Aberdeen to Finish,full,full,41.95,42.2,41.95,42.2,none,M2a,Aberdeen Street to Finish
+N1,Start to Queen/Westmorland,elite,elite,0,0.57,0,0.57,overtake,,Start to Queen/Westmorland
+N2,Queen/Westmorland to PSAB/WSB,elite,elite,0.57,1.45,0.57,1.45,overtake,N1,Queen/Westmorland to PSAB/WSB
+N3,PSAB/WSB to 104th Bridge,elite,elite,1.45,1.88,1.45,1.88,overtake,N2,PSAB/WSB to 104th Bridge
+N4,104th to Queen/York,elite,elite,1.88,2.58,1.88,2.58,overtake,N3,104th to Queen/York
+N5,Queen/York to Queen at PSAB,elite,elite,2.58,3.15,2.58,3.15,overtake,N4,Queen/York to Queen at PSAB
+N6,Queen at PSAB to PSAB/WSB,elite,elite,3.15,3.68,3.15,3.68,overtake,N5,Queen at PSAB to PSAB/WSB
+N7,PSAB/WSB to 104th Bridge,elite,elite,3.68,4.11,3.68,4.11,overtake,N6,PSAB/WSB to 104th Bridge
+N8,104th to Queen/York,elite,elite,4.11,4.81,4.11,4.81,overtake,N7,104th to Queen/York
+N9,Queen/York to Finish,elite,elite,4.81,5,4.81,5,overtake,N8,Queen/York to Finish
+O1,Start to Queen/Westmorland,open,open,0,0.57,0,0.57,overtake,,Start to Queen/Westmorland
+O2,Queen/Westmorland to PSAB/WSB,open,open,0.57,1.45,0.57,1.45,overtake,O1,Queen/Westmorland to PSAB/WSB
+O3,PSAB/WSB to 104th Bridge,open,open,1.45,1.88,1.45,1.88,overtake,O2,PSAB/WSB to 104th Bridge
+O4,104th to Queen/York,open,open,1.88,2.58,1.88,2.58,overtake,O3,104th to Queen/York
+O5,Queen/York to Queen at PSAB,open,open,2.58,3.15,2.58,3.15,overtake,O4,Queen/York to Queen at PSAB
+O6,Queen at PSAB to PSAB/WSB,open,open,3.15,3.68,3.15,3.68,overtake,O5,Queen at PSAB to PSAB/WSB
+O7,PSAB/WSB to 104th Bridge,open,open,3.68,4.11,3.68,4.11,overtake,O6,PSAB/WSB to 104th Bridge
+O8,104th to Queen/York,open,open,4.11,4.81,4.11,4.81,overtake,O7,104th to Queen/York
+O9,Queen/York to Finish,open,open,4.81,5,4.81,5,overtake,O8,Queen/York to Finish
+N5a,Queen/York to Queen at PSAB,elite,elite,2.58,3.15,0,0.57,overtake,N4,Queen/York to Queen at PSAB (Lap 2 overtake Lap 1)
+N6a,Queen at PSAB to PSAB/WSB,elite,elite,3.15,3.68,0.57,1.45,overtake,N5,Queen at PSAB to PSAB/WSB (Lap 2 overtake Lap 1)
+N7a,PSAB/WSB to 104th Bridge,elite,elite,3.68,4.11,1.45,1.88,overtake,N6,PSAB/WSB to 104th Bridge (Lap 2 overtake Lap 1)
+N8a,104th to Queen/York,elite,elite,4.11,4.81,1.88,2.58,overtake,N7,104th to Queen/York (Lap 2 overtake Lap 1)
+O5a,Queen/York to Queen at PSAB,open,open,2.58,3.15,0,0.57,overtake,O4,Queen/York to Queen at PSAB (Lap 2 overtake Lap 1)
+O6a,Queen at PSAB to PSAB/WSB,open,open,3.15,3.68,0.57,1.45,overtake,O5,Queen at PSAB to PSAB/WSB (Lap 2 overtake Lap 1)
+O7a,PSAB/WSB to 104th Bridge,open,open,3.68,4.11,1.45,1.88,overtake,O6,PSAB/WSB to 104th Bridge (Lap 2 overtake Lap 1)
+O8a,104th to Queen/York,open,open,4.11,4.81,1.88,2.58,overtake,O7,104th to Queen/York (Lap 2 overtake Lap 1)
