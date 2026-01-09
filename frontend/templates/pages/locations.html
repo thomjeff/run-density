@@ -151,14 +151,14 @@
                     <th class="sortable" data-sort="loc_type">Type <span class="sort-indicator"></span></th>
                     <th class="sortable" data-sort="zone">Zone <span class="sort-indicator"></span></th>
                     <th class="sortable" data-sort="flag">Flag <span class="sort-indicator"></span></th>
-                    <th class="sortable" data-sort="first_runner">First/Last Runner <span class="sort-indicator"></span></th>
                     <th>Operational Window</th>
+                    <th class="sortable" data-sort="first_runner">First/Last Runner <span class="sort-indicator"></span></th>
                     <th>Peak Window</th>
                 </tr>
             </thead>
             <tbody id="locations-tbody">
                 <tr>
-                    <td colspan="7" class="placeholder">Loading locations data...</td>
+                    <td colspan="8" class="placeholder">Loading locations data...</td>
                 </tr>
             </tbody>
         </table>
@@ -188,20 +188,20 @@
                 <td>The location type: <em>traffic</em> (traffic control point), <em>course</em> (on-course location), <em>water</em> (water stop), <em>aid</em> (aid station), or <em>marshal</em> (marshal point).</td>
             </tr>
             <tr>
+                <td><strong>Zone</strong></td>
+                <td>A predefined operational area used to organize mobile first-aid responders and support personnel. A zone may include one or more course segments and is designed to improve coverage, communication, and response times along the course.</td>
+            </tr>
+            <tr>
+                <td><strong>Flag</strong></td>
+                <td>Indicates that this location is on—or near—a course segment that has been flagged for high density or flow concerns. Flags are derived from density analysis and may represent areas of congestion, crowding risk, or operational attention. In some cases, the location is linked via a nearby proxy point to the flagged segment.</td>
+            </tr>
+            <tr>
                 <td><strong>Operational Window</strong></td>
                 <td>The time window from <em>loc_start</em> to <em>loc_end</em>, indicating when resources should be deployed at this location. <em>loc_start</em> is 45 minutes before the earliest scheduled runner start time.</td>
             </tr>
             <tr>
-                <td><strong>Duration</strong></td>
-                <td>The total duration in minutes from <em>loc_start</em> to <em>loc_end</em>.</td>
-            </tr>
-            <tr>
                 <td><strong>Peak Window</strong></td>
                 <td>The time window from <em>peak_start</em> (25th percentile arrival) to <em>peak_end</em> (75th percentile arrival), representing when the majority of runners pass this location. For traffic locations, this will be null/NA.</td>
-            </tr>
-            <tr>
-                <td><strong>Source</strong></td>
-                <td>Indicates how the timing data was derived: <em>Modeled</em> (calculated from runner arrival times), <em>Proxy: {id}</em> (end time derived from another location's timing), or <em>Error: proxy not found</em> (proxy location was not available).</td>
             </tr>
         </tbody>
     </table>
@@ -1108,14 +1108,15 @@
             const flagDisplay = flagValue;
             
             // Updated table structure - includes Type column, Flag column, combined First/Last Runner
+            // Column order: ID, Location, Type, Zone, Flag, Operational Window, First/Last Runner, Peak Window
             row.innerHTML = `
                 <td>${locId}</td>
                 <td>${locLabel}</td>
                 <td>${locType}</td>
                 <td>${zone}</td>
                 <td>${flagDisplay}</td>
-                <td>${firstLastRunner}</td>
                 <td>${operationalWindow}</td>
+                <td>${firstLastRunner}</td>
                 <td>${peakWindow}</td>
             `;
             
@@ -1156,7 +1157,7 @@
     
     function showLocationsError(message) {
         const tbody = document.getElementById('locations-tbody');
-        tbody.innerHTML = `<tr><td colspan="7" class="placeholder">${message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="placeholder">${message}</td></tr>`;
     }
     
     // Make updateLocationsTable globally available for locations.js
