@@ -245,7 +245,7 @@ def get_flagging_summary_for_report(bins: pd.DataFrame, rulebook: Optional[Dict[
     if len(bin_flags) > 0:
         worst_severity = max(bin_flags, key=lambda f: severity_order.get(f.severity, 0)).severity
         if 'los_class' not in bins.columns:
-            raise ValueError("los_class column missing from bins DataFrame")
+            raise ValueError("Missing los_class in bins DataFrame; LOS must be computed upstream.")
         worst_los = bins['los_class'].max()
     else:
         worst_severity = 'none'

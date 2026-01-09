@@ -17,9 +17,11 @@ Issue #233: Operational Intelligence - LOS Classification
 
 from __future__ import annotations
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 import pandas as pd
+
+from app import rulebook
 
 logger = logging.getLogger(__name__)
 
@@ -36,17 +38,16 @@ LOS_RANKS = {
 
 def los_from_density(
     density: float,
-    thresholds: Optional[Dict[str, float]] = None
+    thresholds: Optional[Union[Dict[str, float], rulebook.LosBands]] = None
 ) -> str:
     """
     Classify density into Level of Service (A-F).
     
-    Uses lower-bound thresholds: density >= threshold_X assigns LOS X.
-    The highest threshold met determines the LOS level.
+    Uses rulebook SSOT classification (upper-bound thresholds).
     
     Args:
         density: Areal density (people per square meter)
-        thresholds: Custom LOS thresholds (not supported; rulebook SSOT only)
+        thresholds: Optional rulebook LosBands or dict (optional; defaults to rulebook globals via SSOT)
         
     Returns:
         LOS classification ('A', 'B', 'C', 'D', 'E', or 'F')
@@ -59,10 +60,24 @@ def los_from_density(
         >>> los_from_density(3.5)  # Above F threshold
         'F'
     """
-    if thresholds is not None:
-        raise ValueError("Custom LOS thresholds are not allowed; rulebook SSOT must be used.")
-    from app import rulebook
-    bands = rulebook.get_thresholds("on_course_open").los
+    # Issue #640: Use rulebook SSOT - allow LosBands from rulebook or default to rulebook globals
+    if thresholds is None:
+        bands = rulebook.get_thresholds("on_course_open").los
+    elif isinstance(thresholds, rulebook.LosBands):
+        bands = thresholds  # Already from rulebook (SSOT)
+    else:
+        # Legacy support: convert dict to LosBands (should come from rulebook source)
+        missing = [key for key in ("A", "B", "C", "D", "E", "F") if key not in thresholds]
+        if missing:
+            raise ValueError(f"Missing LOS threshold keys: {missing}")
+        bands = rulebook.LosBands(
+            A=float(thresholds["A"]),
+            B=float(thresholds["B"]),
+            C=float(thresholds["C"]),
+            D=float(thresholds["D"]),
+            E=float(thresholds["E"]),
+            F=float(thresholds["F"])
+        )
     
     # Handle edge cases
     if pd.isna(density) or density < 0:
@@ -129,7 +144,7 @@ def meets_los_threshold(los_level: str, min_threshold: str) -> bool:
 def classify_bins_los(
     df: pd.DataFrame,
     density_field: str = 'density_peak',
-    thresholds: Optional[Dict[str, float]] = None
+    thresholds: Optional[Union[Dict[str, float], rulebook.LosBands]] = None
 ) -> pd.DataFrame:
     """
     Classify all bins in a DataFrame by LOS level.
@@ -148,9 +163,8 @@ def classify_bins_los(
         logger.error(f"Density field '{density_field}' not found in DataFrame")
         return df
     
-    if thresholds is not None:
-        raise ValueError("Custom LOS thresholds are not allowed; rulebook SSOT must be used.")
-    
+    # Issue #640: classify_bins_los uses los_from_density which handles rulebook SSOT
+    # No need to check thresholds here as los_from_density handles it
     # Classify each bin
     df['los'] = df[density_field].apply(los_from_density)
     

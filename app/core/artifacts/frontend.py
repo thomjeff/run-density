@@ -104,6 +104,7 @@ def compute_rulebook_hash() -> str:
 
 
 
+
 def generate_meta_json(run_id: str, environment: str = "local") -> Dict[str, Any]:
     """
     Generate meta.json with run metadata.
@@ -189,7 +190,6 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
             worst_bin_row = group.iloc[0] if len(group) > 0 else None
             peak_density = 0.0
             peak_rate = 0.0
-            worst_los = "A"
             active_window = "N/A"
         else:
             worst_bin_row = group.loc[worst_bin_idx]
@@ -213,10 +213,10 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
                 peak_rate = 0.0
             
             # Issue #603: Extract LOS from worst bin (not recalculated)
-            if 'los_class' in worst_bin_row and worst_bin_row['los_class']:
-                worst_los = str(worst_bin_row['los_class'])
-            else:
-                raise ValueError(f"los_class missing for segment {seg_id} worst bin")
+            # Issue #640: LOS must be present (computed via rulebook SSOT upstream)
+            if 'los_class' not in worst_bin_row or not worst_bin_row['los_class']:
+                raise ValueError(f"Missing los_class for segment {seg_id} worst bin; LOS must be computed upstream via rulebook SSOT.")
+            worst_los = str(worst_bin_row['los_class'])
             
             # Issue #603: Extract active_window from worst bin's t_start/t_end
             active_window = "N/A"
@@ -233,6 +233,15 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
                 except (ValueError, TypeError) as e:
                     pass  # Fallback to "N/A" if parsing fails
         
+        if worst_bin_row is None:
+            raise ValueError("Missing bins for segment; cannot determine los_class.")
+
+        if 'los_class' not in worst_bin_row:
+            raise ValueError("Missing los_class in bins.parquet; LOS must be computed upstream.")
+
+        if worst_bin_idx is None:
+            worst_los = str(worst_bin_row['los_class'])
+
         # Get schema_key from the first bin in the group (all bins in a segment should have the same schema_key)
         schema_key = group['schema_key'].iloc[0] if 'schema_key' in group.columns else 'on_course_open'
         

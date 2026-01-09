@@ -84,6 +84,14 @@ class NewDensityTemplateEngine:
         
         content = []
         
+        if stats.get("worst_los") is None:
+            raise ValueError("Missing worst_los in stats; los_class is required for report generation.")
+        if "los_class" not in flagged_bins_df.columns:
+            raise ValueError("Missing los_class in flagged_bins_df; los_class is required for report generation.")
+        for required_col in ("worst_bin_los", "peak_los"):
+            if required_col not in segment_summary_df.columns:
+                raise ValueError(f"Missing {required_col} in segment_summary_df; los_class is required for report generation.")
+        
         try:
             # 1. Title & Metadata
             logger.info("Template: Generating title & metadata...")
@@ -197,7 +205,7 @@ class NewDensityTemplateEngine:
         peak_rate_ps = peak_rate_per_m_per_min / 60.0  # Convert to persons/second
         
         lines.extend([
-            f"- **Peak Density:** {stats.get('peak_density', 0):.4f} p/m² (LOS {stats.get('worst_los', 'A')})",
+            f"- **Peak Density:** {stats.get('peak_density', 0):.4f} p/m² (LOS {stats['worst_los']})",
             f"- **Peak Rate:** {peak_rate_ps:.2f} p/s",
             f"- **Segments with Flags:** {len(segment_summary_df[segment_summary_df['flagged_bins'] > 0])} / {len(segment_summary_df)}",
             f"- **Flagged Bins:** {stats.get('flagged_bins', 0)} / {stats.get('total_bins', 0)}"
@@ -247,9 +255,9 @@ class NewDensityTemplateEngine:
             f"- **Window Size:** {context.get('window_s', 30)} s; **Bin Size:** {context.get('bin_km', 0.2)} km",
             "",
             "### LOS and Rate Triggers (from Rulebook)",
-            "- **LOS thresholds** define crowding levels based on density (p/m²):",
+            "- **LOS thresholds** define crowding levels based on density (p/m²) only (rate does not affect LOS):",
             "  - A: < 0.36 | B: 0.36–0.54 | C: 0.54–0.72 | D: 0.72–1.08 | E: 1.08–1.63 | F: > 1.63",
-            "- **Rate thresholds** define throughput risk based on flow references (persons/m/min):",
+            "- **Rate thresholds** define throughput risk based on flow references (persons/m/min) and influence severity flags:",
             f"  - Warning: {context.get('rate_warn_threshold', 0):.1f} | Critical: {context.get('rate_critical_threshold', 0):.1f}",
             "",
             "These thresholds come from the Fredericton Marathon rulebook and align with crowd management standards for mass participation events."
@@ -636,7 +644,7 @@ class NewDensityTemplateEngine:
             "- **Rate (q):** Throughput rate in persons per second (p/s)",
             "- **Rate per meter per minute:** (rate / width_m) × 60 in persons/m/min",
             "- **Utilization (%):** Current flow rate / reference flow rate (critical). Shows \"N/A\" when \`flow_ref.critical\` is not defined for the segment schema in the rulebook.",
-            "- **LOS (Level of Service):** Crowd comfort class (A–F)",
+            "- **LOS (Level of Service):** Crowd comfort class (A–F) derived from density only",
             "- **Bin:** Space–time cell [segment_id, start_km–end_km, t_start–t_end]",
             "",
             "### LOS Thresholds",
@@ -650,9 +658,9 @@ class NewDensityTemplateEngine:
             "| F | 1.63+ | Extremely Dense |",
             "",
             "### Trigger Logic & Severity",
-            "- **los_high:** Density ≥ LOS C threshold",
+            "- **los_high:** Density ≥ LOS C threshold (LOS is density-only)",
             "- **rate_high:** Rate per m per min ≥ warning threshold",
-            "- **both:** Both density and rate conditions met",
+            "- **both:** Both density and rate conditions met (rate affects severity, not LOS)",
             "- **Severity:** critical > watch > none",
             "",
             "### Terminology Notes",

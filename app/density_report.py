@@ -2373,6 +2373,7 @@ def generate_bin_features_with_coarsening(segments: dict, time_windows: list, ru
     - Soft-timeout reaction with auto-coarsening
     """
     from app.bins_accumulator import build_bin_features
+    from app import rulebook
     from app.utils.constants import MAX_BIN_GENERATION_TIME_SECONDS, BIN_MAX_FEATURES, HOTSPOT_SEGMENTS
     import time
     
@@ -2401,7 +2402,7 @@ def generate_bin_features_with_coarsening(segments: dict, time_windows: list, ru
         time_windows=time_windows,
         runners_by_segment_and_window=coarsened_runners,
         bin_size_km=bin_size_km,
-        los_thresholds=None,
+        los_bands=rulebook.get_thresholds("on_course_open").los,
         logger=logger,
     )
     
@@ -2493,7 +2494,7 @@ def generate_bin_features_with_coarsening(segments: dict, time_windows: list, ru
             time_windows=coarsened_time_windows,
             runners_by_segment_and_window=re_mapped_runners,  # Use re-mapped data
             bin_size_km=new_bin_size_km,
-            los_thresholds=None,
+            los_bands=rulebook.get_thresholds("on_course_open").los,
             logger=logger,
         )
         
