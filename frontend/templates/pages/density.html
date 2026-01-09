@@ -20,6 +20,7 @@
                 <th>ID</th>
                 <th>Name</th>
                 <th>Schema</th>
+                <th>Length (km)</th>
                 <th>Active Window</th>
                 <th>Peak Density</th>
                 <th>LOS</th>
@@ -29,7 +30,7 @@
         </thead>
             <tbody>
                 <tr>
-                    <td colspan="8" class="placeholder">Loading density data...</td>
+                    <td colspan="9" class="placeholder">Loading density data...</td>
                 </tr>
             </tbody>
         </table>
@@ -428,7 +429,7 @@
         if (!segments || segments.length === 0) {
             // Issue #361: Show informative message with run_id when artifacts are missing
             const runId = '{{ run_id if run_id else "latest run" }}';
-            tbody.innerHTML = `<tr><td colspan="8" class="placeholder">⚠️ No density data available for latest run ID: ${runId}. Check logs.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="9" class="placeholder">⚠️ No density data available for latest run ID: ${runId}. Check logs.</td></tr>`;
             return;
         }
         
@@ -446,10 +447,16 @@
             const worstBin = segment.worst_bin ? {...segment.worst_bin, segment_id: segment.seg_id} : null;
             const worstBinLabel = formatWorstBinLabel(worstBin);
             
+            // Format length: show "N/A" if 0 or missing, otherwise show with 1 decimal place
+            const lengthDisplay = (segment.length_km && segment.length_km > 0) 
+                ? segment.length_km.toFixed(1) 
+                : 'N/A';
+            
             row.innerHTML = `
                 <td>${segment.seg_id}</td>
                 <td>${segment.name}</td>
                 <td>${segment.schema}</td>
+                <td>${lengthDisplay}</td>
                 <td>${segment.active}</td>
                 <td>${segment.peak_density.toFixed(3)}</td>
                 <td>${losBadge}</td>
@@ -467,7 +474,7 @@
         // Issue #361: Show informative message with run_id when artifacts are missing
         const tbody = document.querySelector('#density-table tbody');
         const runId = '{{ run_id if run_id else "latest run" }}';
-        tbody.innerHTML = `<tr><td colspan="8" class="placeholder">⚠️ Error loading density data for run ID: ${runId}. Check logs.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="placeholder">⚠️ Error loading density data for run ID: ${runId}. Check logs.</td></tr>`;
     }
     
     function showSegmentDetail(seg_id) {

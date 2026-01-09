@@ -227,6 +227,7 @@ def _build_segment_record(
         "seg_id": seg_id,
         "name": label_info.get("label", seg_id),
         "schema": schema,
+        "length_km": label_info.get("length_km", 0.0),  # Issue #652: Add segment length
         "active": metrics.get("active_window", "N/A"),
         "peak_density": metrics.get("peak_density", 0.0),
         "worst_los": metrics.get("worst_los", "Unknown"),
