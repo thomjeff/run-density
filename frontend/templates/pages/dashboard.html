@@ -16,37 +16,37 @@
     <!-- Search/Filter -->
     <div style="margin-bottom: 1rem;">
         <input type="text" id="run-search" placeholder="Search by description, run ID, or date..." 
-               style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.875rem;">
+               class="filter-input">
     </div>
     
     <!-- Table -->
-    <div style="overflow-x: auto;">
-        <table id="run-history-table" style="width: 100%; border-collapse: collapse;">
+    <div class="scrollable-table-container">
+        <table id="run-history-table" class="table-sticky-header">
             <thead>
-                <tr style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
-                    <th style="padding: 0.75rem; text-align: left; cursor: pointer; user-select: none;">
-                        Run ID <span class="sort-indicator">↕</span>
+                <tr>
+                    <th class="table-sortable" data-sort="run_id">
+                        Run ID <span class="table-sortable-indicator">↕</span>
                     </th>
-                    <th style="padding: 0.75rem; text-align: left; cursor: pointer; user-select: none;">
-                        Description <span class="sort-indicator">↕</span>
+                    <th class="table-sortable" data-sort="description">
+                        Description <span class="table-sortable-indicator">↕</span>
                     </th>
-                    <th style="padding: 0.75rem; text-align: left; cursor: pointer; user-select: none;">
-                        Date/Time <span class="sort-indicator">↕</span>
+                    <th class="table-sortable" data-sort="date_time">
+                        Date/Time <span class="table-sortable-indicator">↕</span>
                     </th>
-                    <th style="padding: 0.75rem; text-align: center; cursor: pointer; user-select: none;">
-                        Days <span class="sort-indicator">↕</span>
+                    <th class="table-sortable" data-sort="days" style="text-align: center;">
+                        Days <span class="table-sortable-indicator">↕</span>
                     </th>
-                    <th style="padding: 0.75rem; text-align: center; cursor: pointer; user-select: none;">
-                        Events <span class="sort-indicator">↕</span>
+                    <th class="table-sortable" data-sort="events" style="text-align: center;">
+                        Events <span class="table-sortable-indicator">↕</span>
                     </th>
-                    <th style="padding: 0.75rem; text-align: center; cursor: pointer; user-select: none;">
-                        Run Time <span class="sort-indicator">↕</span>
+                    <th class="table-sortable" data-sort="total_elapsed_minutes" style="text-align: center;">
+                        Run Time <span class="table-sortable-indicator">↕</span>
                     </th>
                 </tr>
             </thead>
             <tbody id="run-history-tbody">
                 <tr>
-                    <td colspan="6" style="padding: 2rem; text-align: center; color: #6c757d;">Loading runs...</td>
+                    <td colspan="6" class="placeholder">Loading runs...</td>
                 </tr>
             </tbody>
         </table>
@@ -124,26 +124,8 @@
     .badge-E { background-color: #9b59b6; }
     .badge-F { background-color: #34495e; }
     
-    /* Issue #565: Run History Table Styles */
-    /* Font size matches other tables (default from base.html) */
-    
-    #run-history-table tbody tr:hover {
-        background: #f8f9fa !important;
-    }
-    
-    #run-history-table thead th {
-        position: relative;
-    }
-    
-    #run-history-table .sort-indicator {
-        margin-left: 0.5rem;
-        opacity: 0.5;
-        font-size: 0.75rem;
-    }
-    
-    #run-history-table thead th:hover {
-        background: #e9ecef;
-    }
+    /* Issue #652: Run History Table Styles - now using common.css classes */
+    /* Removed duplicate styles - using .scrollable-table-container, .table-sticky-header, .table-sortable */
     
     #run-search {
         font-size: 0.875rem;
@@ -389,7 +371,7 @@
         const headers = document.querySelectorAll('#run-history-table thead th');
         const columns = ['run_id', 'description', 'created_at', 'days', 'events', 'total_elapsed_minutes'];
         headers.forEach((header, index) => {
-            const indicator = header.querySelector('.sort-indicator');
+            const indicator = header.querySelector('.table-sortable-indicator');
             if (indicator) {
                 if (columns[index] === sortColumn) {
                     indicator.textContent = sortDirection === 'asc' ? '↑' : '↓';
