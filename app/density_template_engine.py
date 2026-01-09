@@ -126,38 +126,48 @@ def compute_flow_rate(runners_crossing: int, width_m: float, bin_seconds: int) -
 
 
 def resolve_schema(segment_id: str, segment_type: str, rulebook: dict) -> str:
-    """Resolve which schema to use for a segment based on rulebook binding rules."""
-    # Check explicit segment_id matches first
-    for binding in rulebook.get("binding", []):
-        when = binding.get("when", {})
-        if when.get("segment_id") == segment_id:
-            return binding.get("use_schema", "on_course_open")
+    """
+    Resolve which schema to use for a segment.
     
-    # Check segment_type matches
-    for binding in rulebook.get("binding", []):
-        when = binding.get("when", {})
-        if segment_type in when.get("segment_type", []):
-            return binding.get("use_schema", "on_course_open")
+    Issue #648: Uses schema_resolver.resolve_schema() as SSOT (loads from segments.csv).
+    Rulebook bindings are no longer used as they duplicate CSV logic.
     
-    # Default to on_course_open
-    return "on_course_open"
+    Args:
+        segment_id: Segment identifier (e.g., "A1", "D1a")
+        segment_type: Segment type (kept for backward compatibility, but CSV is SSOT)
+        rulebook: Rulebook dict (kept for backward compatibility, but not used for schema resolution)
+        
+    Returns:
+        Schema key: "start_corral", "on_course_narrow", or "on_course_open"
+    """
+    # Issue #648: Use schema_resolver as SSOT (loads from segments.csv)
+    from app.schema_resolver import resolve_schema as resolve_schema_from_csv
+    
+    # Convert segment_type to optional for schema_resolver compatibility
+    segment_type_opt = segment_type if segment_type else None
+    return resolve_schema_from_csv(segment_id, segment_type_opt)
 
 
 def resolve_schema_with_flow_type(segment_id: str, flow_type: str, rulebook: dict) -> str:
-    """Resolve schema using flow_type for segments that don't have segment_type."""
-    # Check explicit segment_id matches first
-    for binding in rulebook.get("binding", []):
-        when = binding.get("when", {})
-        if when.get("segment_id") == segment_id:
-            return binding.get("use_schema", "on_course_open")
+    """
+    Resolve schema using flow_type for segments that don't have segment_type.
     
-    # Map flow_type to appropriate schema
-    if flow_type in ["merge", "parallel", "counterflow"]:
-        return "on_course_narrow"
-    elif flow_type in ["overtake"]:
-        return "on_course_open"
-    else:
-        return "on_course_open"
+    Issue #648: Uses schema_resolver.resolve_schema() as SSOT (loads from segments.csv).
+    Flow_type mapping is no longer used as CSV is the source of truth.
+    
+    Args:
+        segment_id: Segment identifier (e.g., "A1", "D1a")
+        flow_type: Flow type (kept for backward compatibility, but CSV is SSOT)
+        rulebook: Rulebook dict (kept for backward compatibility, but not used)
+        
+    Returns:
+        Schema key: "start_corral", "on_course_narrow", or "on_course_open"
+    """
+    # Issue #648: Use schema_resolver as SSOT (loads from segments.csv)
+    from app.schema_resolver import resolve_schema as resolve_schema_from_csv
+    
+    # CSV is SSOT - flow_type is ignored, schema comes from segments.csv
+    return resolve_schema_from_csv(segment_id, None)
 
 
 def get_schema_config(schema_name: str, rulebook: dict) -> Schema:
