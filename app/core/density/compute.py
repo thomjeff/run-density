@@ -135,19 +135,15 @@ def build_segment_context_v2(segment_id: str, segment_data: dict, summary_dict: 
     Returns:
         dict: Complete v2 segment context ready for rendering
     """
-    from app.density_template_engine import resolve_schema, resolve_schema_with_flow_type, get_schema_config, compute_flow_rate, evaluate_triggers
+    from app.density_template_engine import get_schema_config, compute_flow_rate, evaluate_triggers
+    from app.schema_resolver import resolve_schema as resolve_schema_from_csv
     
-    # Resolve schema for this segment
-    # Try segment_type first, then fall back to flow_type
-    segment_type = segment_data.get("segment_type", "road")
-    flow_type = segment_data.get("flow_type", "default")
-    
-    if segment_type != "road" or segment_id == "A1":
-        # Use segment_type for explicit cases
-        schema_name = resolve_schema(segment_id, segment_type, rulebook)
-    else:
-        # Use flow_type for segments without explicit segment_type
-        schema_name = resolve_schema_with_flow_type(segment_id, flow_type, rulebook)
+    # Issue #648: Resolve schema from segments.csv (SSOT)
+    # segment_type kept for backward compatibility but CSV is the source of truth
+    segment_type = segment_data.get("segment_type", None)
+    # Convert to optional string for schema_resolver compatibility
+    segment_type_opt = str(segment_type) if segment_type else None
+    schema_name = resolve_schema_from_csv(segment_id, segment_type_opt)
     
     schema_config = get_schema_config(schema_name, rulebook)
     

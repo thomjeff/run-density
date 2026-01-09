@@ -245,16 +245,16 @@ class PerformanceMonitor:
                     "bin_count": m.bin_count
                 })
         
-        # Format total_elapsed_minutes as hh:mm (Issue #638 follow-up)
-        total_minutes = total_elapsed / 60
-        hours = int(total_minutes // 60)
-        minutes = int(total_minutes % 60)
-        total_elapsed_minutes_formatted = f"{hours:02d}:{minutes:02d}"
+        # Format total_elapsed_minutes as mm:ss (Issue #638 follow-up)
+        # User feedback: Backend should return mm:ss format, not hh:mm
+        total_minutes_int = int(total_elapsed // 60)
+        seconds = int(total_elapsed % 60)
+        total_elapsed_minutes_formatted = f"{total_minutes_int:02d}:{seconds:02d}"
         
         return {
             "run_id": self.run_id,
             "total_elapsed_seconds": round(total_elapsed, 3),
-            "total_elapsed_minutes": total_elapsed_minutes_formatted,  # Issue #638: Format as hh:mm instead of decimal
+            "total_elapsed_minutes": total_elapsed_minutes_formatted,  # Issue #638: Format as mm:ss instead of decimal
             "phases": phase_summaries,
             "total_memory_mb": round(self.total_memory_mb, 2) if self.total_memory_mb else None,
             "timestamp": datetime.now(timezone.utc).isoformat()
@@ -274,7 +274,7 @@ class PerformanceMonitor:
         logger.info("═" * 65)
         logger.info("📊 Performance Summary")
         logger.info("═" * 65)
-        # Issue #638: total_elapsed_minutes is now hh:mm format, not decimal
+        # Issue #638: total_elapsed_minutes is now mm:ss format, not decimal
         total_elapsed_minutes_decimal = round(summary['total_elapsed_seconds'] / 60, 2)
         logger.info(f"Total runtime: {summary['total_elapsed_minutes']} ({total_elapsed_minutes_decimal:.2f} minutes, {summary['total_elapsed_seconds']:.2f}s)")
         

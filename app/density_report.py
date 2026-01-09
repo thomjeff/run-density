@@ -586,29 +586,27 @@ def render_methodology(md, rulebook):
 
 
 def _determine_schema_for_segment(segment_id, ctx, rulebook):
-    """Determine which schema to use for a segment based on v2.0 rulebook binding rules."""
-    binding_rules = rulebook.get("binding", [])
+    """
+    Determine which schema to use for a segment.
     
-    for rule in binding_rules:
-        when = rule.get("when", {})
-        
-        # Check segment_id match
-        if "segment_id" in when and when["segment_id"] == segment_id:
-            return rule.get("use_schema", "on_course_open")
-        
-        # Check segment_type match
-        if "segment_type" in when:
-            segment_types = when["segment_type"]
-            if isinstance(segment_types, str):
-                segment_types = [segment_types]
-            
-            # Use flow_type from context if available, otherwise map segment_id
-            segment_type = ctx.get("flow_type", _map_segment_id_to_type(segment_id))
-            if segment_type in segment_types:
-                return rule.get("use_schema", "on_course_open")
+    Issue #648: Uses schema_resolver.resolve_schema() as SSOT (loads from segments.csv).
+    Rulebook bindings are no longer used as they duplicate CSV logic.
     
-    # Default fallback
-    return "on_course_open"
+    Args:
+        segment_id: Segment identifier
+        ctx: Context dict (may contain segment_type)
+        rulebook: Rulebook dict (kept for backward compatibility, but not used for schema resolution)
+        
+    Returns:
+        Schema key: "start_corral", "on_course_narrow", or "on_course_open"
+    """
+    from app.schema_resolver import resolve_schema as resolve_schema_from_csv
+    
+    # Issue #648: Use schema_resolver as SSOT (loads from segments.csv)
+    # Use segment_type from context if available, otherwise None
+    segment_type = ctx.get("segment_type", None)
+    segment_type_opt = str(segment_type) if segment_type else None
+    return resolve_schema_from_csv(segment_id, segment_type_opt)
 
 
 def _map_segment_id_to_type(segment_id):
