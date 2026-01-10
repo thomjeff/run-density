@@ -88,7 +88,8 @@ def generate_bins_v2(
     run_id: str,
     day: Day,
     events: List[Event],
-    data_dir: str = "data"
+    data_dir: str = "data",
+    segments_csv_path: Optional[str] = None  # Issue #616: Use segments_file from analysis.json
 ) -> Optional[Path]:
     """
     Generate bin artifacts for a specific day using v1 bin generation logic.
@@ -107,7 +108,9 @@ def generate_bins_v2(
         run_id: Run identifier
         day: Day enum
         events: List of events for this day
-        data_dir: Base directory for data files
+        data_dir: Base directory for data files (used as fallback)
+        segments_csv_path: Optional path to segments CSV file. If None, defaults to data_dir/segments.csv.
+                          Issue #616: Should be provided from analysis.json segments_file.
         
     Returns:
         Path to bins directory if successful, None otherwise
@@ -126,8 +129,15 @@ def generate_bins_v2(
         bins_dir = get_day_output_path(run_id, day, "bins")
         bins_dir.mkdir(parents=True, exist_ok=True)
         
-        # Get segments CSV path
-        segments_csv_path = str(Path(data_dir) / "segments.csv")
+        # Issue #616: Use segments_csv_path from analysis.json if provided, otherwise fallback to data_dir/segments.csv
+        if segments_csv_path is None:
+            segments_csv_path = str(Path(data_dir) / "segments.csv")
+            logger.warning(
+                f"segments_csv_path not provided to generate_bins_v2, defaulting to {segments_csv_path}. "
+                f"This should come from analysis.json segments_file."
+            )
+        else:
+            logger.info(f"Issue #616: Using segments_csv_path={segments_csv_path} from analysis.json")
         
         # CRITICAL FIX: build_runner_window_mapping() hardcodes reading from "data/runners.csv"
         # We need to temporarily replace it with our day-filtered runners

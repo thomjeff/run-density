@@ -128,10 +128,10 @@ def load_flow_csv(
     
     try:
         flow_df = pd.read_csv(flow_path)
-        logger.info(f"Loaded {len(flow_df)} rows from flow.csv")
+        logger.info(f"Loaded {len(flow_df)} rows from {flow_path}")
         return flow_df
     except Exception as e:
-        logger.warning(f"Failed to load flow.csv: {e}, proceeding without flow.csv")
+        logger.warning(f"Failed to load flow file from {flow_path}: {e}, proceeding without flow file")
         return pd.DataFrame()
 
 
@@ -521,8 +521,8 @@ def analyze_temporal_flow_segments_v2(
     
     if not flow_path.exists():
         error_msg = (
-            f"flow.csv file not found at {flow_path}. "
-            "flow.csv is required for flow analysis and must be provided in the request. "
+            f"Flow file not found at {flow_path}. "
+            "Flow file is required for flow analysis and must be provided in the request. "
             "No fallback or auto-generation of event pairs is allowed per Issue #553."
         )
         logger.error(error_msg)
@@ -530,19 +530,19 @@ def analyze_temporal_flow_segments_v2(
     
     try:
         flow_df = pd.read_csv(flow_path)
-        logger.info(f"Loaded {len(flow_df)} rows from flow.csv at {flow_path}")
+        logger.info(f"Loaded {len(flow_df)} rows from {flow_path}")
     except Exception as e:
         error_msg = (
-            f"Failed to load flow.csv from {flow_path}: {e}. "
-            "flow.csv must be readable and valid. No fallback is allowed per Issue #553."
+            f"Failed to load flow file from {flow_path}: {e}. "
+            "Flow file must be readable and valid. No fallback is allowed per Issue #553."
         )
         logger.error(error_msg)
         raise ValueError(error_msg) from e
     
     if flow_df.empty:
         error_msg = (
-            f"flow.csv at {flow_path} is empty. "
-            "flow.csv must contain valid event pairs. No fallback is allowed per Issue #553."
+            f"Flow file at {flow_path} is empty. "
+            "Flow file must contain valid event pairs. No fallback is allowed per Issue #553."
         )
         logger.error(error_msg)
         raise ValueError(error_msg)
@@ -554,14 +554,14 @@ def analyze_temporal_flow_segments_v2(
     if not flow_csv_pairs:
         requested_event_names = {e.name.lower() for e in events}
         error_msg = (
-            f"No valid event pairs found in flow.csv for requested events: {sorted(requested_event_names)}. "
-            "flow.csv must contain pairs for all requested events (including same-event pairs like elite-elite, open-open). "
+            f"No valid event pairs found in {flow_path} for requested events: {sorted(requested_event_names)}. "
+            f"Flow file must contain pairs for all requested events (including same-event pairs like elite-elite, open-open). "
             "No fallback or auto-generation of event pairs is allowed per Issue #553."
         )
         logger.error(error_msg)
         raise ValueError(error_msg)
     
-    # Validate that all requested events have at least one pair in flow.csv
+    # Validate that all requested events have at least one pair in the flow file
     requested_event_names = {e.name.lower() for e in events}
     flow_csv_event_names = set()
     for pair in flow_csv_pairs:
@@ -571,15 +571,15 @@ def analyze_temporal_flow_segments_v2(
     missing_events = requested_event_names - flow_csv_event_names
     if missing_events:
         error_msg = (
-            f"Requested events {sorted(missing_events)} have no pairs defined in flow.csv. "
-            f"flow.csv contains pairs for: {sorted(flow_csv_event_names)}. "
-            "All requested events must have at least one pair (including same-event pairs) in flow.csv. "
+            f"Requested events {sorted(missing_events)} have no pairs defined in {flow_path}. "
+            f"Flow file contains pairs for: {sorted(flow_csv_event_names)}. "
+            f"All requested events must have at least one pair (including same-event pairs) in {flow_path}. "
             "No fallback or auto-generation of event pairs is allowed per Issue #553."
         )
         logger.error(error_msg)
         raise ValueError(error_msg)
     
-    logger.info(f"Extracted {len(flow_csv_pairs)} event pairs from flow.csv for events: {sorted(requested_event_names)}")
+    logger.info(f"Extracted {len(flow_csv_pairs)} event pairs from {flow_path} for events: {sorted(requested_event_names)}")
     
     # Use only pairs from flow.csv - no fallback, no auto-generation
     all_pairs = flow_csv_pairs
