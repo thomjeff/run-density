@@ -151,19 +151,17 @@ def build_segment_context_v2(segment_id: str, segment_data: dict, summary_dict: 
         # Fallback: If schema not in segment_data or is empty, try schema_resolver (should not happen if CSV is complete)
         # Issue #616: Must pass segments_csv_path to use correct file, not default to "data/segments.csv"
         if not segments_csv_path:
-            logger.error(
+            raise ValueError(
                 f"Segment {segment_id} missing 'schema' in density_cfg and no segments_csv_path provided. "
-                f"Cannot resolve schema. This should not happen if the segments CSV includes a schema column."
+                f"Cannot resolve schema without analysis.json path."
             )
-            schema_name = "on_course_open"  # Last resort default
-        else:
-            logger.warning(
-                f"Segment {segment_id} missing or empty 'schema' in density_cfg (value: {repr(schema_name)}), "
-                f"falling back to schema_resolver using {segments_csv_path}. "
-                f"This should not happen if the segments CSV includes a schema column."
-            )
-            # Issue #616: Pass the correct CSV path to schema_resolver (no default fallback)
-            schema_name = resolve_schema_from_csv(segment_id, None, segments_csv_path)
+        logger.warning(
+            f"Segment {segment_id} missing or empty 'schema' in density_cfg (value: {repr(schema_name)}), "
+            f"falling back to schema_resolver using {segments_csv_path}. "
+            f"This should not happen if the segments CSV includes a schema column."
+        )
+        # Issue #616: Pass the correct CSV path to schema_resolver (no default fallback)
+        schema_name = resolve_schema_from_csv(segment_id, None, segments_csv_path)
     else:
         # Schema found in segment_data - use it directly (Issue #616 fix)
         schema_name = str(schema_name).strip()
