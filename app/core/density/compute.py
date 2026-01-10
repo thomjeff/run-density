@@ -176,7 +176,11 @@ def build_segment_context_v2(segment_id: str, segment_data: dict, summary_dict: 
         # Calculate flow rate from peak concurrency
         # Use active_peak_concurrency which is the correct field name
         peak_concurrency = summary_dict.get("active_peak_concurrency", 0)
-        width_m = segment_data.get("width_m", 1.0)
+        width_m = segment_data.get("width_m")
+        if width_m is None or (isinstance(width_m, float) and pd.isna(width_m)) or width_m <= 0:
+            raise ValueError(
+                f"Segment {segment_id} missing valid width_m for flow rate computation."
+            )
         from app.utils.constants import DEFAULT_BIN_TIME_WINDOW_SECONDS
         bin_seconds = DEFAULT_BIN_TIME_WINDOW_SECONDS  # Use constant (Issue #512)
         flow_rate = compute_flow_rate(peak_concurrency, width_m, bin_seconds)
@@ -201,7 +205,7 @@ def build_segment_context_v2(segment_id: str, segment_data: dict, summary_dict: 
         "segment_id": segment_id,
         "seg_label": segment_data.get("seg_label", "Unknown"),
         "segment_type": segment_data.get("segment_type", None),  # Optional field (not used for schema resolution)
-        "flow_type": segment_data.get("flow_type", "default"),
+        "flow_type": segment_data.get("flow_type"),
         
         # Schema information
         "schema_name": schema_name,

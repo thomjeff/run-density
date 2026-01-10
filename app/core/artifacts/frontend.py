@@ -605,7 +605,6 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
         GeoJSON FeatureCollection with real course coordinates in Web Mercator (EPSG:3857)
     """
     from app.core.gpx.processor import load_all_courses, generate_segment_coordinates, create_geojson_from_segments
-    from app.io.loader import load_segments
     from pyproj import Transformer
     from app.utils.run_id import get_runflow_root
     
@@ -653,7 +652,7 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
     
     # Load segments data to get segment definitions
     try:
-        segments_df = load_segments(segments_csv_path)
+        segments_df = analysis_context.get_segments_df()
         segments_list = []
         for _, seg in segments_df.iterrows():
             seg_id = seg.get("seg_id")

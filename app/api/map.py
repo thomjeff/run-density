@@ -213,7 +213,7 @@ async def get_map_segments():
         if not segments_path.exists():
             raise HTTPException(status_code=404, detail=f"Segments metadata not found at {segments_path}")
 
-        segments_df = pd.read_csv(segments_path)
+        segments_df = analysis_context.get_segments_df()
         
         # Load GPX centerlines
         try:

@@ -251,7 +251,6 @@ def generate_bins_geojson(segments_data: Dict[str, SegmentBinData], analysis_con
     # Load real segment coordinates from GPX data
     try:
         from app.core.gpx.processor import load_all_courses, generate_segment_coordinates
-        from app.io.loader import load_segments
 
         if not analysis_context:
             raise ValueError("analysis_context is required for generate_bins_geojson.")
@@ -275,7 +274,7 @@ def generate_bins_geojson(segments_data: Dict[str, SegmentBinData], analysis_con
         courses = load_all_courses(gpx_paths)
 
         # Load segments data to get segment definitions
-        segments_df = load_segments(segments_csv_path)
+        segments_df = analysis_context.get_segments_df()
         segments_list = []
         for _, seg in segments_df.iterrows():
             seg_id = seg.get("seg_id")

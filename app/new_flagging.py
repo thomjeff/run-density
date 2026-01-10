@@ -65,7 +65,13 @@ def _load_and_apply_segment_metadata(
                 seg_lookup_cols.append('schema')
             
             seg_lookup = segments_df[seg_lookup_cols].set_index(segment_id_col)
-            result_df['width_m'] = result_df['segment_id'].map(seg_lookup['width_m']).fillna(3.0)
+            result_df['width_m'] = result_df['segment_id'].map(seg_lookup['width_m'])
+            if result_df['width_m'].isna().any():
+                missing_segments = result_df.loc[result_df['width_m'].isna(), 'segment_id'].unique().tolist()
+                raise ValueError(
+                    f"Missing width_m for segments: {missing_segments}. "
+                    "width_m is required for flagging and cannot default."
+                )
             result_df['seg_label'] = result_df['segment_id'].map(seg_lookup['seg_label']).fillna(result_df['segment_id'])
             
             # Issue #616: Use schema column directly from segments_df (SSOT) - NO fallback to resolve_schema()
@@ -164,7 +170,7 @@ def _evaluate_row_with_rulebook(row: pd.Series) -> pd.Series:
     result = rulebook.evaluate_flags(
         density_pm2=row['density'],
         rate_p_s=row.get('rate'),
-        width_m=row.get('width_m', 3.0),
+        width_m=row['width_m'],
         schema_key=row.get('schema_key'),
         util_percentile=row.get('util_percentile')
     )

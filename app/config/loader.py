@@ -7,7 +7,7 @@ Loads analysis.json once, validates required fields, and resolves runtime paths.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -28,6 +28,10 @@ class AnalysisContext:
     segments_csv_path: Path
     flow_csv_path: Path
     locations_csv_path: Optional[Path]
+    segments_df: Optional[pd.DataFrame] = None
+    flow_df: Optional[pd.DataFrame] = None
+    locations_df: Optional[pd.DataFrame] = None
+    runners_df_by_event: Dict[str, pd.DataFrame] = field(default_factory=dict)
 
     def runners_csv_path(self, event_name: str) -> Path:
         runners = self.data_files.get("runners", {})
@@ -48,6 +52,42 @@ class AnalysisContext:
                 f"analysis.json missing data_files.gpx entry for event '{event_name}'."
             )
         return _resolve_path(str(gpx_path), self.data_dir)
+
+    def get_segments_df(self) -> pd.DataFrame:
+        if self.segments_df is None:
+            from app.io.loader import load_segments
+
+            df = load_segments(str(self.segments_csv_path))
+            object.__setattr__(self, "segments_df", df)
+        return self.segments_df
+
+    def get_flow_df(self) -> pd.DataFrame:
+        if self.flow_df is None:
+            df = pd.read_csv(self.flow_csv_path)
+            if df.empty:
+                raise AnalysisConfigError("flow.csv must contain at least one row")
+            object.__setattr__(self, "flow_df", df)
+        return self.flow_df
+
+    def get_locations_df(self) -> Optional[pd.DataFrame]:
+        if self.locations_csv_path is None:
+            return None
+        if self.locations_df is None:
+            from app.io.loader import load_locations
+
+            df = load_locations(str(self.locations_csv_path))
+            object.__setattr__(self, "locations_df", df)
+        return self.locations_df
+
+    def get_runners_df(self, event_name: str) -> pd.DataFrame:
+        event_key = event_name.lower()
+        if event_key not in self.runners_df_by_event:
+            from app.io.loader import load_runners_by_event
+
+            runners_path = self.runners_csv_path(event_name)
+            df = load_runners_by_event(str(runners_path))
+            self.runners_df_by_event[event_key] = df
+        return self.runners_df_by_event[event_key]
 
 
 def load_analysis_context(run_path: Path) -> AnalysisContext:
