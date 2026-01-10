@@ -798,7 +798,7 @@ def create_full_analysis_pipeline(
 
         # Load segments DataFrame
         segments_path_str = str(analysis_context.segments_csv_path)
-        segments_df = load_segments(segments_path_str)
+        segments_df = analysis_context.get_segments_df()
         logger.info(f"Loaded {len(segments_df)} segments from {segments_path_str}")
         
         # Load all runners for events (Phase 4)

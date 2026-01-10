@@ -647,7 +647,10 @@ def generate_location_report(
     output_dir: str = "reports",
     run_id: Optional[str] = None,
     day: Optional[str] = None,  # Issue #598: Day code for loading flags.json
-    gpx_paths: Optional[Dict[str, str]] = None
+    gpx_paths: Optional[Dict[str, str]] = None,
+    locations_df: Optional[pd.DataFrame] = None,
+    runners_df: Optional[pd.DataFrame] = None,
+    segments_df: Optional[pd.DataFrame] = None
 ) -> Dict[str, Any]:
     """
     Generate locations report with arrival modeling and operational timing.
@@ -677,11 +680,13 @@ def generate_location_report(
     
     logger.info("Starting location report generation...")
     
-    # Load data
     try:
-        locations_df = load_locations(locations_csv)
-        runners_df = load_runners(runners_csv)
-        segments_df = load_segments(segments_csv)
+        if locations_df is None:
+            locations_df = load_locations(locations_csv)
+        if runners_df is None:
+            runners_df = load_runners(runners_csv)
+        if segments_df is None:
+            segments_df = load_segments(segments_csv)
         if not gpx_paths:
             raise ValueError("gpx_paths is required for location report GPX loading.")
         courses = load_all_courses(gpx_paths)

@@ -311,11 +311,21 @@ def create_flow_segments_from_flow_csv(
         
         # Get additional metadata from segments_df (physical properties)
         # Issue #549: direction and width_m are physical properties, only in segments.csv
-        width_m = 0
-        direction = ""
-        if not seg_metadata.empty:
-            width_m = seg_metadata.iloc[0].get("width_m", 0)
-            direction = seg_metadata.iloc[0].get("direction", "")
+        if seg_metadata.empty:
+            raise ValueError(
+                f"Segment {base_seg_id} missing from segments.csv while processing flow segment {seg_id}. "
+                "segments.csv must include all flow segments for width_m and direction."
+            )
+        width_m = seg_metadata.iloc[0].get("width_m")
+        direction = seg_metadata.iloc[0].get("direction")
+        if width_m is None or (isinstance(width_m, float) and pd.isna(width_m)) or width_m <= 0:
+            raise ValueError(
+                f"Segment {base_seg_id} has invalid width_m for flow segment {seg_id}."
+            )
+        if direction in (None, ""):
+            raise ValueError(
+                f"Segment {base_seg_id} missing direction for flow segment {seg_id}."
+            )
         
         # Create flow-format segment using flow.csv data
         flow_segment = {
@@ -329,7 +339,7 @@ def create_flow_segments_from_flow_csv(
             "to_km_b": to_km_b,  # From flow.csv
             "direction": direction,  # Issue #549: Always from segments.csv (physical property)
             "width_m": width_m,  # Issue #549: Always from segments.csv (physical property)
-            "flow_type": flow_row.get("flow_type", "none"),  # Issue #549: Flow-specific, from flow.csv
+            "flow_type": _get_required_flow_type(flow_row, seg_id, event_a, event_b),
             "prior_segment_id": flow_row.get("prior_seg_id", "") if pd.notna(flow_row.get("prior_seg_id", "")) else "",
             "notes": flow_row.get("notes", ""),
             "length_km": to_km_a - from_km_a if to_km_a > from_km_a else 0
