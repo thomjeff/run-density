@@ -776,15 +776,15 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
                 "segment_label": seg_label,
                 "elite": seg.get("elite", "n"),  # Issue #655: Add elite and open columns for Saturday events
                 "open": seg.get("open", "n"),
-                "10k": seg.get("10k", seg.get("10K", "n")),
+                "10k": seg.get("10k") if seg.get("10k") is not None else seg.get("10K", "n"),
                 "half": seg.get("half", "n"),
                 "full": seg.get("full", "n"),
                 "elite_from_km": seg.get("elite_from_km"),  # Issue #655: Add elite and open from_km/to_km fields
                 "elite_to_km": seg.get("elite_to_km"),
                 "open_from_km": seg.get("open_from_km"),
                 "open_to_km": seg.get("open_to_km"),
-                "10k_from_km": seg.get("10k_from_km") or seg.get("10K_from_km"),
-                "10k_to_km": seg.get("10k_to_km") or seg.get("10K_to_km"),
+                "10k_from_km": seg.get("10k_from_km") if seg.get("10k_from_km") is not None else seg.get("10K_from_km"),
+                "10k_to_km": seg.get("10k_to_km") if seg.get("10k_to_km") is not None else seg.get("10K_to_km"),
                 "half_from_km": seg.get("half_from_km"),
                 "half_to_km": seg.get("half_to_km"),
                 "full_from_km": seg.get("full_from_km"),
