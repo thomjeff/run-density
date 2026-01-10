@@ -75,6 +75,11 @@ def build_analysis_context(
     if not data_dir_value:
         raise AnalysisConfigError("analysis.json missing required field: data_dir")
     data_dir = Path(data_dir_value).resolve()
+    if not data_dir.exists():
+        raise FileNotFoundError(f"data_dir not found at {data_dir}")
+
+    _require_top_level_field(analysis_config, "segments_file")
+    _require_top_level_field(analysis_config, "flow_file")
 
     data_files = analysis_config.get("data_files")
     if not isinstance(data_files, dict):
@@ -83,6 +88,11 @@ def build_analysis_context(
     segments_path = _resolve_required_path(data_files, "segments", data_dir)
     flow_path = _resolve_required_path(data_files, "flow", data_dir)
     locations_path = _resolve_optional_path(data_files, "locations", data_dir)
+
+    _validate_data_file_exists(segments_path, "segments.csv")
+    _validate_data_file_exists(flow_path, "flow.csv")
+    if locations_path:
+        _validate_data_file_exists(locations_path, "locations.csv")
 
     events = analysis_config.get("events", [])
     if not events:
@@ -111,6 +121,10 @@ def build_analysis_context(
         if event_name:
             _validate_event_file_mapping(runners, "runners", event_name)
             _validate_event_file_mapping(gpx, "gpx", event_name)
+            runners_path = _resolve_path(str(runners.get(event_name.lower()) or runners.get(event_name)), data_dir)
+            gpx_path = _resolve_path(str(gpx.get(event_name.lower()) or gpx.get(event_name)), data_dir)
+            _validate_data_file_exists(runners_path, f"runners file for event '{event_name}'")
+            _validate_data_file_exists(gpx_path, f"gpx file for event '{event_name}'")
 
     return AnalysisContext(
         analysis_config=analysis_config,
@@ -128,6 +142,10 @@ def _resolve_required_path(data_files: Dict[str, Any], key: str, data_dir: Path)
     value = data_files.get(key)
     if not value:
         raise AnalysisConfigError(f"analysis.json missing required field: data_files.{key}")
+    if not isinstance(value, str):
+        raise AnalysisConfigError(
+            f"analysis.json field data_files.{key} must be a string path"
+        )
     return _resolve_path(value, data_dir)
 
 
@@ -135,6 +153,10 @@ def _resolve_optional_path(data_files: Dict[str, Any], key: str, data_dir: Path)
     value = data_files.get(key)
     if not value:
         return None
+    if not isinstance(value, str):
+        raise AnalysisConfigError(
+            f"analysis.json field data_files.{key} must be a string path"
+        )
     return _resolve_path(value, data_dir)
 
 
@@ -147,6 +169,11 @@ def _resolve_path(path_value: str, data_dir: Path) -> Path:
     return (data_dir / candidate).resolve()
 
 
+def _require_top_level_field(analysis_config: Dict[str, Any], field: str) -> None:
+    if analysis_config.get(field) in (None, ""):
+        raise AnalysisConfigError(f"analysis.json missing required field: {field}")
+
+
 def _require_field(container: Dict[str, Any], field: str, scope: str) -> None:
     if container.get(field) in (None, ""):
         raise AnalysisConfigError(f"analysis.json missing required field: {scope}.{field}")
@@ -155,13 +182,28 @@ def _require_field(container: Dict[str, Any], field: str, scope: str) -> None:
 def _validate_segments_csv_fields(segments_path: Path) -> None:
     if not segments_path.exists():
         raise FileNotFoundError(f"segments.csv not found at {segments_path}")
-    df = pd.read_csv(segments_path, nrows=0)
+    df = pd.read_csv(segments_path)
     required_columns = {"seg_id", "seg_label", "schema", "width_m", "direction"}
     missing = required_columns - set(df.columns)
     if missing:
         missing_list = ", ".join(sorted(missing))
         raise AnalysisConfigError(
             f"segments.csv missing required columns: {missing_list}"
+        )
+    if df.empty:
+        raise AnalysisConfigError("segments.csv must contain at least one row")
+
+    for column in ("schema", "direction"):
+        empty_values = df[column].isna() | df[column].astype(str).str.strip().eq("")
+        if empty_values.any():
+            raise AnalysisConfigError(
+                f"segments.csv has empty values in required column: {column}"
+            )
+
+    width_values = pd.to_numeric(df["width_m"], errors="coerce")
+    if width_values.isna().any() or (width_values <= 0).any():
+        raise AnalysisConfigError(
+            "segments.csv has invalid values in required column: width_m"
         )
 
 
@@ -171,3 +213,8 @@ def _validate_event_file_mapping(mapping: Dict[str, Any], mapping_name: str, eve
         raise AnalysisConfigError(
             f"analysis.json missing data_files.{mapping_name} entry for event '{event_name}'"
         )
+
+
+def _validate_data_file_exists(path: Path, label: str) -> None:
+    if not path.exists():
+        raise FileNotFoundError(f"{label} not found at {path}")

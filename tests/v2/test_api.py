@@ -5,8 +5,6 @@ Phase 2: API Route (Issue #496)
 """
 
 import pytest
-import tempfile
-from pathlib import Path
 import pandas as pd
 from fastapi.testclient import TestClient
 
@@ -29,6 +27,10 @@ def setup_test_data(tmp_path):
     # Create segments.csv with event flags and spans
     segments_df = pd.DataFrame({
         "seg_id": ["A1", "A2"],
+        "seg_label": ["Start", "Mid"],
+        "schema": ["on_course_open", "on_course_open"],
+        "width_m": [4.0, 5.0],
+        "direction": ["uni", "uni"],
         "full": ["y", "y"],
         "half": ["y", "n"],
         "10k": ["y", "y"],
@@ -109,6 +111,30 @@ class TestV2AnalyzeEndpoint:
             assert "status" in data
             assert "days" in data
             assert "output_paths" in data
+
+    def test_config_error_returns_500(self, client, tmp_path, monkeypatch):
+        """Test endpoint returns 500 when analysis config generation fails."""
+        monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+
+        payload = {
+            "segments_file": "segments.csv",
+            "locations_file": "locations.csv",
+            "flow_file": "flow.csv",
+            "events": [
+                {
+                    "name": "full",
+                    "day": "sun",
+                    "start_time": 420,
+                    "runners_file": "full_runners.csv",
+                    "gpx_file": "full.gpx"
+                }
+            ]
+        }
+
+        response = client.post("/runflow/v2/analyze", json=payload)
+        assert response.status_code == 500
+        data = response.json()
+        assert data["error"].startswith("Failed to generate analysis configuration")
     
     def test_missing_events_field(self, client):
         """Test endpoint rejects request without events field."""
@@ -199,4 +225,3 @@ class TestV2Models:
             ]
         )
         assert len(request.events) == 1
-
