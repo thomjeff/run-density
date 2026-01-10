@@ -158,8 +158,8 @@ def generate_reports_per_day(
                     day_events=day_events,
                     density_results=density_results[day],
                     reports_path=reports_path,
-                    segments_df=day_segments_df,
                     data_dir=data_dir,
+                    segments_df=day_segments_df,
                     segments_file_path=segments_file_path  # Issue #553 Phase 6.2, Issue #616
                 )
                 if density_path:
@@ -248,8 +248,8 @@ def generate_density_report_v2(
     day_events: List[Event],
     density_results: Dict[str, Any],
     reports_path: Path,
-    segments_df: Optional[Any] = None,  # pd.DataFrame - day-filtered segments
     data_dir: str,  # Data directory for loading runner files
+    segments_df: Optional[Any] = None,  # pd.DataFrame - day-filtered segments
     segments_file_path: Optional[str] = None  # Issue #553 Phase 6.2: Path to segments file
 ) -> Optional[Path]:
     """
