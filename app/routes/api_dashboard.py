@@ -350,15 +350,13 @@ async def get_runs_list():
                 continue
             
             # Load analysis.json for description
-            analysis_path = runflow_root / run_id / "analysis.json"
             description = None
-            if analysis_path.exists():
-                try:
-                    with open(analysis_path, 'r', encoding='utf-8') as f:
-                        analysis_data = json.load(f)
-                        description = analysis_data.get("description")
-                except Exception as e:
-                    logger.warning(f"Could not load analysis.json for {run_id}: {e}")
+            try:
+                from app.config.loader import load_analysis_context
+                analysis_context = load_analysis_context(runflow_root / run_id)
+                description = analysis_context.analysis_config.get("description")
+            except Exception as e:
+                logger.warning(f"Could not load analysis.json for {run_id}: {e}")
             
             # Load root metadata.json for total_elapsed_minutes (Issue #638 follow-up)
             metadata_path = runflow_root / run_id / "metadata.json"
@@ -465,12 +463,12 @@ async def get_run_summary(run_id: str):
             runflow_root = Path(RUNFLOW_ROOT_LOCAL)
         
         # Load analysis.json for description and days
-        analysis_path = runflow_root / run_id / "analysis.json"
-        if not analysis_path.exists():
+        from app.config.loader import load_analysis_context
+        try:
+            analysis_context = load_analysis_context(runflow_root / run_id)
+        except FileNotFoundError:
             raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
-        
-        with open(analysis_path, 'r', encoding='utf-8') as f:
-            analysis_data = json.load(f)
+        analysis_data = analysis_context.analysis_config
         
         description = analysis_data.get("description", f"Run {run_id[:8]}...")
         event_summary = analysis_data.get("event_summary", {})

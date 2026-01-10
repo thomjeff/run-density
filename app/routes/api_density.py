@@ -306,11 +306,11 @@ def _build_segment_record(
 
 def _get_segments_csv_path_for_run(run_id: str) -> str:
     from app.utils.run_id import get_runflow_root
-    from app.core.v2.analysis_config import get_segments_file
+    from app.config.loader import load_analysis_context
 
     runflow_root = get_runflow_root()
     run_path = runflow_root / run_id
-    return get_segments_file(run_path=run_path)
+    return str(load_analysis_context(run_path).segments_csv_path)
 
 
 @router.get("/api/density/segments")

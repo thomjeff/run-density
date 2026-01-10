@@ -68,7 +68,6 @@ def run_analysis_background(
         )
         
         # Update metadata.json files with response payload
-        from app.core.v2.analysis_config import load_analysis_json
         from pathlib import Path
         import json
         
@@ -254,4 +253,3 @@ async def analyze_v2(request: V2AnalyzeRequest, background_tasks: BackgroundTask
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=error_response.model_dump()
         )
-

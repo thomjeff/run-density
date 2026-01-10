@@ -1340,13 +1340,13 @@ async def get_segments():
     try:
         from app.utils.run_id import get_latest_run_id
         from app.utils.run_id import get_runflow_root
-        from app.core.v2.analysis_config import load_analysis_json, get_segments_file
+        from app.config.loader import load_analysis_context
 
         run_id = get_latest_run_id()
         runflow_root = get_runflow_root()
         run_path = runflow_root / run_id
-        analysis_config = load_analysis_json(run_path)
-        segments_csv_path = get_segments_file(analysis_config=analysis_config)
+        analysis_context = load_analysis_context(run_path)
+        segments_csv_path = str(analysis_context.segments_csv_path)
 
         # Issue #237: Load operational intelligence from tooltips.json
         tooltips_data = _load_tooltips_json()
