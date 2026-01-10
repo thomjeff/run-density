@@ -608,6 +608,7 @@ def load_segments_metadata(reports_dir: Optional[Path] = None, run_id: Optional[
         Dictionary mapping seg_id to metadata
     """
     segments_path = None
+    analysis_context = None
     
     # Issue #616: Get segments_csv_path from analysis.json
     if reports_dir is not None:
@@ -643,7 +644,10 @@ def load_segments_metadata(reports_dir: Optional[Path] = None, run_id: Optional[
     segments_meta = {}
     if segments_path.exists():
         try:
-            df = pd.read_csv(segments_path)
+            if analysis_context is not None:
+                df = analysis_context.get_segments_df()
+            else:
+                df = pd.read_csv(segments_path)
             for _, row in df.iterrows():
                 segments_meta[row.get('seg_id', '')] = {
                     'label': row.get('label', ''),

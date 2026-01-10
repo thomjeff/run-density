@@ -294,22 +294,10 @@ def generate_density_report_v2(
         
         # Get day-filtered segments
         if segments_df is None:
-            from app.io.loader import load_segments
-            # Issue #616: Use segments_file_path from analysis.json, fail if not provided
-            if segments_file_path is None:
-                error_msg = (
-                    "segments_df is None in generate_density_report_v2 and no segments_file_path provided. "
-                    "This should not happen in v2 pipeline - segments_df should be passed from pipeline. "
-                    "Cannot fall back to default CSV as it may not match the analysis configuration."
-                )
-                logger.error(error_msg)
-                raise ValueError(error_msg)
-            logger.warning(
-                f"segments_df is None in generate_density_report_v2 - falling back to {segments_file_path}. "
-                "This should not happen in v2 pipeline - segments_df should be passed from pipeline."
+            raise ValueError(
+                "segments_df is required in generate_density_report_v2. "
+                "Pass day-filtered segments from the pipeline; no CSV fallback is allowed."
             )
-            all_segments_df = load_segments(segments_file_path)
-            segments_df = filter_segments_by_events(all_segments_df, day_events)
         
         # Get list of day segment IDs
         day_segment_ids = set(segments_df['seg_id'].astype(str).unique())
@@ -666,22 +654,10 @@ def generate_locations_report_v2(
         # Issue #616: Get day-filtered segments if not provided
         # In v2 pipeline, segments_df should always be provided - this is a fallback only
         if segments_df is None:
-            from app.io.loader import load_segments
-            # Issue #616: Use segments_file_path from analysis.json if provided, otherwise fail
-            if segments_file_path is None:
-                error_msg = (
-                    "segments_df is None in generate_locations_report_v2 and no segments_file_path provided. "
-                    "This should not happen in v2 pipeline - segments_df should be passed from pipeline. "
-                    "Cannot fall back to default CSV as it may not match the analysis configuration."
-                )
-                logger.error(error_msg)
-                raise ValueError(error_msg)
-            logger.warning(
-                f"segments_df is None in generate_locations_report_v2 - falling back to {segments_file_path}. "
-                "This should not happen in v2 pipeline - segments_df should be passed from pipeline."
+            raise ValueError(
+                "segments_df is required in generate_locations_report_v2. "
+                "Pass day-filtered segments from the pipeline; no CSV fallback is allowed."
             )
-            all_segments_df = load_segments(segments_file_path)
-            segments_df = filter_segments_by_events(all_segments_df, day_events)
         
         # Get day segment IDs
         day_segment_ids = set(segments_df['seg_id'].astype(str).unique())
@@ -787,7 +763,10 @@ def generate_locations_report_v2(
                     output_dir=str(reports_path),
                     run_id=run_id,  # Issue #598: Pass run_id for flag propagation (loads flags.json)
                     day=day.value,  # Issue #598: Pass day for day-scoped flags.json path
-                    gpx_paths=gpx_paths
+                    gpx_paths=gpx_paths,
+                    locations_df=day_locations_df,
+                    runners_df=day_runners_df,
+                    segments_df=segments_df
                 )
                 logger.info(f"generate_location_report returned for day {day.value}: ok={result.get('ok', False)}")
             except Exception as e:
