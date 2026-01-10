@@ -701,9 +701,34 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
         )
     
     # Load GPX courses
-    events = analysis_context.analysis_config.get("events", [])
-    if not events:
+    all_events = analysis_context.analysis_config.get("events", [])
+    if not all_events:
         raise ValueError("analysis.json missing events for GPX loading in generate_segments_geojson.")
+    
+    # Issue #655: Filter events by day for multi-day runs
+    # Extract day from reports_dir path: {run_id}/{day}/reports_temp
+    # For sat+sun runs, we should only process events for the current day
+    current_day = None
+    try:
+        # reports_dir is {run_id}/{day}/reports_temp, so parent is {day} directory
+        day_dir = reports_dir.parent
+        if day_dir.name in ["sat", "sun", "fri", "mon"]:
+            current_day = day_dir.name.lower()
+    except Exception:
+        pass  # If we can't determine day, process all events (backward compatibility)
+    
+    # Filter events by day if we can determine the current day
+    if current_day:
+        events = [e for e in all_events if e.get("day", "").lower() == current_day]
+        if not events:
+            # If no events found for this day, fall back to all events (shouldn't happen, but be defensive)
+            events = all_events
+            print(f"   ⚠️  No events found for day {current_day}, using all events")
+        else:
+            print(f"   ✅ Filtered events for day {current_day}: {[e.get('name') for e in events]}")
+    else:
+        # Can't determine day from path, use all events (backward compatibility for v1)
+        events = all_events
     
     # Get list of available event names (lowercase for matching)
     available_event_names = {event.get("name", "").lower() for event in events if event.get("name")}
