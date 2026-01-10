@@ -268,8 +268,11 @@ def generate_bins_v2(
         temp_output_dir = tempfile.mkdtemp()
         
         try:
+            # Issue #655: Pass SSOT ConfigAnalysisContext to _generate_bin_dataset_with_retry
+            # instead of BinGenerationContext, because build_runner_window_mapping expects
+            # the SSOT context with runners_csv_path() method
             daily_folder_path, bin_metadata, bin_data = _generate_bin_dataset_with_retry(
-                filtered_density_results, start_times, temp_output_dir, bin_gen_context, 
+                filtered_density_results, start_times, temp_output_dir, config_analysis_context, 
                 day_event_durations, event_names
             )
             

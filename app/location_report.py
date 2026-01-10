@@ -504,9 +504,20 @@ def calculate_arrival_times_for_location(
             for seg_id, from_km, to_km in segment_ranges:
                 logger.debug(f"Location {location.get('loc_id')} ({event}): Processing segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km")
                 
+                # Get segment_label from segments_df (required by generate_segment_coordinates)
+                seg_row = segments_df[segments_df['seg_id'] == seg_id]
+                if seg_row.empty:
+                    logger.warning(f"Location {location.get('loc_id')} ({event}): Segment {seg_id} not found in segments_df, skipping")
+                    continue
+                seg_label = seg_row.iloc[0].get('seg_label') or seg_row.iloc[0].get('segment_label')
+                if not seg_label:
+                    logger.warning(f"Location {location.get('loc_id')} ({event}): Segment {seg_id} missing seg_label/segment_label in segments_df, skipping")
+                    continue
+                
                 # Get segment centerline for this event
                 segments_for_gpx = [{
                     "seg_id": seg_id,
+                    "segment_label": seg_label,  # Issue #655: Add segment_label required by generate_segment_coordinates
                     event_col_gpx: "y",
                     f"{event_col_gpx}_from_km": from_km,
                     f"{event_col_gpx}_to_km": to_km
