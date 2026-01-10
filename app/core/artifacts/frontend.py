@@ -480,23 +480,47 @@ def _load_schema_keys(reports_dir):
     """Load schema keys from bins.parquet."""
     import pandas as pd
     from pathlib import Path
+    from app.utils.run_id import get_runflow_root
     
     schema_keys = {}
-    bins_parquet_path = reports_dir / "bins.parquet"
+    # Issue #655: Check multiple possible paths for bins.parquet
+    # 1. v2 temp_reports structure: reports_dir/bins/bins.parquet
+    # 2. v1 structure: reports_dir/bins.parquet  
+    # 3. v2 actual bins location: {run_path}/{day}/bins/bins.parquet (if reports_dir is temp_reports)
+    bins_parquet_path = None
     
-    if bins_parquet_path.exists():
+    # Try temp_reports/bins/bins.parquet first (v2 structure)
+    if (reports_dir / "bins" / "bins.parquet").exists():
+        bins_parquet_path = reports_dir / "bins" / "bins.parquet"
+    # Try reports_dir/bins.parquet (v1 structure)
+    elif (reports_dir / "bins.parquet").exists():
+        bins_parquet_path = reports_dir / "bins.parquet"
+    # If reports_dir is reports_temp, try the actual bins location
+    elif reports_dir.name == "reports_temp" and reports_dir.parent.parent.exists():
+        # reports_dir = {run_path}/{day}/reports_temp, so go to {run_path}/{day}/bins/bins.parquet
+        actual_bins_path = reports_dir.parent / "bins" / "bins.parquet"
+        if actual_bins_path.exists():
+            bins_parquet_path = actual_bins_path
+    
+    if bins_parquet_path and bins_parquet_path.exists():
         try:
             bins_df = pd.read_parquet(bins_parquet_path)
+            # Issue #655: Handle both 'segment_id' and 'seg_id' column names
+            seg_id_col = 'segment_id' if 'segment_id' in bins_df.columns else 'seg_id'
+            if seg_id_col not in bins_df.columns:
+                print(f"   ⚠️  Neither 'segment_id' nor 'seg_id' column found in bins.parquet")
+                return schema_keys
+            
             if 'schema_key' in bins_df.columns:
-                for seg_id, group in bins_df.groupby('segment_id'):
+                for seg_id, group in bins_df.groupby(seg_id_col):
                     schema_keys[seg_id] = group['schema_key'].iloc[0]
-                print(f"   ✅ Loaded schema keys for {len(schema_keys)} segments from bins.parquet")
+                print(f"   ✅ Loaded schema keys for {len(schema_keys)} segments from {bins_parquet_path}")
             else:
                 print(f"   ⚠️  schema_key column not found in bins.parquet")
         except Exception as e:
             print(f"   ⚠️  Could not load schema keys from bins.parquet: {e}")
     else:
-        print(f"   ⚠️  bins.parquet not found at {bins_parquet_path}")
+        print(f"   ⚠️  bins.parquet not found. Checked: {reports_dir / 'bins' / 'bins.parquet'}, {reports_dir / 'bins.parquet'}, and actual bins location")
     
     return schema_keys
 
@@ -759,9 +783,13 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
             direction = dims.get("direction")
             if not direction:
                 raise ValueError(f"Segment {seg_id} missing direction in segments metadata.")
+            # Issue #655: Make schema_key optional - if not found in bins, try to get from segments_df or use default
             schema_key = schema_keys.get(seg_id)
             if not schema_key:
-                raise ValueError(f"Segment {seg_id} missing schema_key in bins metadata.")
+                # Try to infer schema from segment dimensions or use a default
+                # This prevents failure if bins.parquet is not accessible but we still want to generate segments.geojson
+                schema_key = dims.get("schema_key") or "on_course_open"  # Default schema
+                print(f"   ⚠️  Segment {seg_id} missing schema_key in bins metadata, using default: {schema_key}")
             # Update properties with dimensions
             props["label"] = seg_label
             props["length_km"] = float(dims.get("full_length", dims.get("half_length", dims.get("10K_length", 0.0))))
