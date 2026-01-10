@@ -496,6 +496,7 @@ def _export_ui_artifacts_v2(
         
         # 5. Generate segments.geojson (day-scoped)
         logger.info("5️⃣  Generating segments.geojson...")
+        segments_geojson = None
         try:
             if aggregated_bins is not None and not aggregated_bins.empty and temp_reports:
                 segments_geojson = generate_segments_geojson(temp_reports)
@@ -522,6 +523,20 @@ def _export_ui_artifacts_v2(
                         f"   ✅ Filtered segments.geojson: {original_count} -> "
                         f"{len(segments_geojson['features'])} features for day {day.value}"
                     )
+                    
+                    # Issue #655: HARD FAIL if segments.geojson has 0 features after filtering
+                    # This indicates a critical failure - segments.geojson is required for UI
+                    if len(segments_geojson["features"]) == 0:
+                        error_msg = (
+                            f"CRITICAL: segments.geojson generation produced 0 features for day {day.value}. "
+                            f"Expected {len(day_segment_ids)} segments but got 0. "
+                            f"This is a hard failure - segments.geojson is required for the UI to function. "
+                            f"The analysis pipeline will now stop."
+                        )
+                        logger.error("=" * 80)
+                        logger.error(error_msg)
+                        logger.error("=" * 80)
+                        raise RuntimeError(error_msg)
                     
                     # Issue #548 Bug 1 & 2: Add events property from segments_df to each feature
                     # Extract events from segments.csv (lowercase: full, half, 10k, elite, open)
@@ -550,10 +565,44 @@ def _export_ui_artifacts_v2(
                                     feature["properties"] = props
                         logger.info(f"   ✅ Added events property to segments.geojson features from segments_df")
             else:
-                segments_geojson = {"type": "FeatureCollection", "features": []}
+                if aggregated_bins is None or aggregated_bins.empty:
+                    error_msg = (
+                        f"CRITICAL: Cannot generate segments.geojson for day {day.value} - no bins data available. "
+                        f"Expected aggregated_bins to contain data for {len(day_segment_ids)} segments. "
+                        f"This is a hard failure - segments.geojson is required for the UI."
+                    )
+                    logger.error("=" * 80)
+                    logger.error(error_msg)
+                    logger.error("=" * 80)
+                    raise RuntimeError(error_msg)
+                elif not temp_reports:
+                    error_msg = (
+                        f"CRITICAL: Cannot generate segments.geojson for day {day.value} - temp_reports directory not created. "
+                        f"This indicates a failure in bins aggregation. "
+                        f"This is a hard failure - segments.geojson is required for the UI."
+                    )
+                    logger.error("=" * 80)
+                    logger.error(error_msg)
+                    logger.error("=" * 80)
+                    raise RuntimeError(error_msg)
+                else:
+                    segments_geojson = {"type": "FeatureCollection", "features": []}
+        except RuntimeError:
+            # Re-raise RuntimeError (hard failures) - don't catch these
+            raise
         except Exception as e:
-            logger.warning(f"   ⚠️  Could not generate segments.geojson: {e}")
-            segments_geojson = {"type": "FeatureCollection", "features": []}
+            # For other exceptions, log the full traceback and raise as RuntimeError to stop the pipeline
+            import traceback
+            error_msg = (
+                f"CRITICAL: Failed to generate segments.geojson for day {day.value}: {e}\n"
+                f"Traceback: {traceback.format_exc()}\n"
+                f"This is a hard failure - segments.geojson is required for the UI to function. "
+                f"The analysis pipeline will now stop."
+            )
+            logger.error("=" * 80)
+            logger.error(error_msg)
+            logger.error("=" * 80)
+            raise RuntimeError(error_msg) from e
         
         # Issue #574: Write to geospatial/ subdirectory
         (geospatial_dir / "segments.geojson").write_text(json.dumps(segments_geojson, indent=2))
