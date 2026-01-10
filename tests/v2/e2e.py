@@ -28,7 +28,7 @@ TIMEOUT = 600  # 10 minutes for full analysis
 
 # Expected segment ID patterns per day (for day isolation validation)
 EXPECTED_SEG_IDS = {
-    "sat": {"N1", "N2", "N3", "O1", "O2", "O3"},  # Saturday segments
+    "sat": {"N1", "N2", "N3", "N4", "N5", "N6", "N7", "N8", "N9", "O1", "O2", "O3","O4","O5","O6","O7","O8","O9"},  # Saturday segments
     "sun": {"A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "D1", "D2",
             "E1", "E2", "F1", "G1", "H1", "I1", "J1", "J2", "J3", "J4", "J5", "K1",
             "L1", "L2", "M1", "M2"}  # Sunday segments (includes sub-segments C1, C2, E1, E2 from Flow.csv)
