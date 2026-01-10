@@ -120,7 +120,7 @@ def build_segment_context(seg, metrics, rulebook):
     return ctx
 
 
-def build_segment_context_v2(segment_id: str, segment_data: dict, summary_dict: dict, rulebook: dict) -> dict:
+def build_segment_context_v2(segment_id: str, segment_data: dict, summary_dict: dict, rulebook: dict, segments_csv_path: Optional[str] = None) -> dict:
     """
     Build v2 segment context with schema binding, flow calculations, and trigger evaluation.
     
@@ -131,6 +131,7 @@ def build_segment_context_v2(segment_id: str, segment_data: dict, summary_dict: 
         segment_data: Segment configuration from density_cfg
         summary_dict: Density analysis summary data
         rulebook: v2 rulebook configuration
+        segments_csv_path: Optional path to segments CSV file (Issue #616: required if schema missing from segment_data)
         
     Returns:
         dict: Complete v2 segment context ready for rendering
@@ -138,12 +139,35 @@ def build_segment_context_v2(segment_id: str, segment_data: dict, summary_dict: 
     from app.density_template_engine import get_schema_config, compute_flow_rate, evaluate_triggers
     from app.schema_resolver import resolve_schema as resolve_schema_from_csv
     
-    # Issue #648: Resolve schema from segments.csv (SSOT)
-    # segment_type kept for backward compatibility but CSV is the source of truth
-    segment_type = segment_data.get("segment_type", None)
-    # Convert to optional string for schema_resolver compatibility
-    segment_type_opt = str(segment_type) if segment_type else None
-    schema_name = resolve_schema_from_csv(segment_id, segment_type_opt)
+    # Issue #616: Use schema directly from segment_data (loaded from user-specified CSV file)
+    # This ensures we use the schema from segments_616.csv (or other specified file), not the hardcoded segments.csv
+    # Schema is the SSOT - segment_type does not exist in CSV and should not be used for schema resolution
+    
+    # Get schema from segment_data - it should be present if load_density_cfg() included it
+    schema_name = segment_data.get("schema")
+    
+    # Handle empty string, None, or missing schema
+    if not schema_name or (isinstance(schema_name, str) and schema_name.strip() == ""):
+        # Fallback: If schema not in segment_data or is empty, try schema_resolver (should not happen if CSV is complete)
+        # Issue #616: Must pass segments_csv_path to use correct file, not default to "data/segments.csv"
+        if not segments_csv_path:
+            logger.error(
+                f"Segment {segment_id} missing 'schema' in density_cfg and no segments_csv_path provided. "
+                f"Cannot resolve schema. This should not happen if the segments CSV includes a schema column."
+            )
+            schema_name = "on_course_open"  # Last resort default
+        else:
+            logger.warning(
+                f"Segment {segment_id} missing or empty 'schema' in density_cfg (value: {repr(schema_name)}), "
+                f"falling back to schema_resolver using {segments_csv_path}. "
+                f"This should not happen if the segments CSV includes a schema column."
+            )
+            # Issue #616: Pass the correct CSV path to schema_resolver (no default fallback)
+            schema_name = resolve_schema_from_csv(segment_id, None, segments_csv_path)
+    else:
+        # Schema found in segment_data - use it directly (Issue #616 fix)
+        schema_name = str(schema_name).strip()
+        logger.debug(f"Segment {segment_id}: Using schema from segment_data: {schema_name}")
     
     schema_config = get_schema_config(schema_name, rulebook)
     
@@ -178,7 +202,7 @@ def build_segment_context_v2(segment_id: str, segment_data: dict, summary_dict: 
         # Basic segment info
         "segment_id": segment_id,
         "seg_label": segment_data.get("seg_label", "Unknown"),
-        "segment_type": segment_type,
+        "segment_type": segment_data.get("segment_type", None),  # Optional field (not used for schema resolution)
         "flow_type": segment_data.get("flow_type", "default"),
         
         # Schema information
@@ -252,10 +276,32 @@ def load_density_cfg(path: str) -> Dict[str, dict]:
         tenk_from_val = r.get("10K_from_km") or r.get("10k_from_km")
         tenk_to_val = r.get("10K_to_km") or r.get("10k_to_km")
         
+        # Issue #616: Include schema column from CSV in density_cfg
+        # Handle pandas NaN values - check if schema exists and is not NaN
+        schema_raw = r.get("schema")
+        if schema_raw is not None and pd.notna(schema_raw):
+            schema = str(schema_raw).strip()
+            if schema:
+                # Validate schema value (must be valid rulebook schema)
+                valid_schemas = {'start_corral', 'on_course_narrow', 'on_course_open'}
+                if schema not in valid_schemas:
+                    logger.warning(
+                        f"Invalid schema value '{schema}' for segment {r['seg_id']} in segments CSV. "
+                        f"Must be one of: {valid_schemas}. Defaulting to 'on_course_open'."
+                    )
+                    schema = 'on_course_open'
+            else:
+                # Empty string after stripping
+                schema = None
+        else:
+            # No schema provided (None or NaN) - will fallback to schema_resolver if needed
+            schema = None
+        
         cfg[r["seg_id"]] = dict(
             seg_label=str(r.get("seg_label", "")),
             width_m=float(r["width_m"]),
             direction=str(r.get("direction", "uni")),
+            schema=schema,  # Issue #616: Include schema from CSV (SSOT for this analysis run)
             flow_type=str(r.get("flow_type", "default")),
             flow_enabled=str(r.get("flow_enabled", "n")),
             events=events,
@@ -1861,7 +1907,8 @@ def analyze_density_segments(pace_data: pd.DataFrame,
                 summary_dict = summary.__dict__.copy()
                 
                 # Build v2 context using the new integration function
-                v2_context = build_segment_context_v2(seg_id, d, summary_dict, rulebook)
+                # Issue #616: Pass density_csv_path so schema_resolver can use the correct file if needed
+                v2_context = build_segment_context_v2(seg_id, d, summary_dict, rulebook, density_csv_path)
                 
                 # Add v2 data to summary_dict for backward compatibility
                 summary_dict["schema_name"] = v2_context["schema_name"]
@@ -1871,7 +1918,9 @@ def analyze_density_segments(pace_data: pd.DataFrame,
                 logger.info(f"Segment {seg_id}: schema_name={v2_context['schema_name']}, flow_enabled={v2_context['flow_enabled']}, flow_rate={v2_context['flow_rate']}")
                 
             except Exception as e:
+                import traceback
                 logger.warning(f"Failed to load v2 rulebook for segment {seg_id}: {e}")
+                logger.debug(f"Full traceback for segment {seg_id}:\n{traceback.format_exc()}")
                 summary_dict = summary.__dict__.copy()
                 summary_dict["schema_name"] = "on_course_open"
                 summary_dict["flow_rate"] = None

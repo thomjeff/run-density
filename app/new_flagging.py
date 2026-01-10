@@ -24,7 +24,7 @@ import numpy as np
 
 # Issue #254: Use centralized rulebook for all flagging
 from . import rulebook
-from .schema_resolver import resolve_schema
+# Issue #616: Removed resolve_schema import - schema should come from segments_df, not re-read from CSV
 
 logger = logging.getLogger(__name__)
 
@@ -61,33 +61,56 @@ def _load_and_apply_segment_metadata(
         
         if segment_id_col in segments_df.columns:
             seg_lookup_cols = [segment_id_col, 'width_m', 'seg_label']
-            if 'segment_type' in segments_df.columns:
-                seg_lookup_cols.append('segment_type')
+            if 'schema' in segments_df.columns:
+                seg_lookup_cols.append('schema')
             
             seg_lookup = segments_df[seg_lookup_cols].set_index(segment_id_col)
             result_df['width_m'] = result_df['segment_id'].map(seg_lookup['width_m']).fillna(3.0)
             result_df['seg_label'] = result_df['segment_id'].map(seg_lookup['seg_label']).fillna(result_df['segment_id'])
             
-            # Resolve schema using schema_resolver (Issue #254)
-            def get_schema(segment_id):
-                segment_type = None
-                if 'segment_type' in segments_df.columns and segment_id in seg_lookup.index:
-                    try:
-                        lookup = seg_lookup.loc[segment_id, 'segment_type']
-                        segment_type = lookup if pd.notna(lookup) else None
-                    except (KeyError, IndexError):
-                        segment_type = None
-                return resolve_schema(segment_id, segment_type)
-            
-            result_df['schema_key'] = result_df['segment_id'].apply(get_schema)
+            # Issue #616: Use schema column directly from segments_df (SSOT) - NO fallback to resolve_schema()
+            # If segments_df is provided, it should already have schema column from the CSV file
+            if 'schema' in seg_lookup.columns:
+                def get_schema_from_df(segment_id):
+                    if segment_id in seg_lookup.index:
+                        schema_val = seg_lookup.loc[segment_id, 'schema']
+                        if pd.notna(schema_val) and str(schema_val).strip():
+                            return str(schema_val).strip()
+                    # Segment not found or schema is empty - use default but log warning
+                    logger.warning(
+                        f"Segment {segment_id} not found in segments_df or schema is empty. "
+                        f"Defaulting to 'on_course_open'. This should not happen if segments_df includes all segments."
+                    )
+                    return "on_course_open"
+                result_df['schema_key'] = result_df['segment_id'].apply(get_schema_from_df)
+            else:
+                # Schema column missing from segments_df - this is an error condition in v2
+                logger.error(
+                    "segments_df provided but missing 'schema' column. "
+                    "This should not happen - ensure segments CSV is loaded with schema column included."
+                )
+                # Still default to on_course_open to avoid crashes, but this is wrong
+                result_df['schema_key'] = "on_course_open"
         else:
             result_df['width_m'] = 3.0
             result_df['seg_label'] = result_df['segment_id']
-            result_df['schema_key'] = result_df['segment_id'].apply(lambda sid: resolve_schema(sid, None))
+            # Issue #616: segments_df provided but missing segment_id column - use default schema
+            logger.warning(
+                "segments_df provided but missing segment_id column. "
+                "Defaulting all segments to 'on_course_open'. This should not happen in v2."
+            )
+            result_df['schema_key'] = "on_course_open"
     else:
+        # Issue #616: segments_df is None - legacy code path, default to on_course_open
+        # In v2 pipeline, segments_df should always be provided
+        logger.warning(
+            "segments_df is None in apply_new_flagging. "
+            "Defaulting all segments to 'on_course_open'. "
+            "In v2 pipeline, segments_df should always be provided to avoid schema resolution issues."
+        )
         result_df['width_m'] = 3.0
         result_df['seg_label'] = result_df['segment_id']
-        result_df['schema_key'] = result_df['segment_id'].apply(lambda sid: resolve_schema(sid, None))
+        result_df['schema_key'] = "on_course_open"
     
     return result_df
 
