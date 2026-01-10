@@ -93,13 +93,13 @@ async def get_map_manifest():
         
         from app.utils.run_id import get_latest_run_id
         from app.utils.run_id import get_runflow_root
-        from app.core.v2.analysis_config import load_analysis_json, get_segments_file
+        from app.config.loader import load_analysis_context
 
         run_id = get_latest_run_id()
         runflow_root = get_runflow_root()
         run_path = runflow_root / run_id
-        analysis_config = load_analysis_json(run_path)
-        segments_path = Path(get_segments_file(analysis_config=analysis_config))
+        analysis_context = load_analysis_context(run_path)
+        segments_path = Path(analysis_context.segments_csv_path)
 
         if not segments_path.exists():
             raise HTTPException(status_code=404, detail=f"Segments metadata not found at {segments_path}")
@@ -199,13 +199,13 @@ async def get_map_segments():
         
         from app.utils.run_id import get_latest_run_id
         from app.utils.run_id import get_runflow_root
-        from app.core.v2.analysis_config import load_analysis_json, get_segments_file
+        from app.config.loader import load_analysis_context
 
         run_id = get_latest_run_id()
         runflow_root = get_runflow_root()
         run_path = runflow_root / run_id
-        analysis_config = load_analysis_json(run_path)
-        segments_path = Path(get_segments_file(analysis_config=analysis_config))
+        analysis_context = load_analysis_context(run_path)
+        segments_path = Path(analysis_context.segments_csv_path)
 
         if not segments_path.exists():
             raise HTTPException(status_code=404, detail=f"Segments metadata not found at {segments_path}")

@@ -579,7 +579,6 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
     from app.core.gpx.processor import load_all_courses, generate_segment_coordinates, create_geojson_from_segments
     from app.io.loader import load_segments
     from pyproj import Transformer
-    import json
     from app.utils.run_id import get_runflow_root
     
     # Issue #616: Get segments_csv_path from analysis.json
@@ -587,6 +586,7 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
     # analysis.json is at {runflow_root}/{run_id}/analysis.json
     segments_csv_path = None
     try:
+        from app.config.loader import load_analysis_context
         runflow_root = get_runflow_root()
         # Navigate from reports_dir back to run_id directory
         # reports_dir: {runflow_root}/{run_id}/{day}/reports_temp
@@ -595,23 +595,13 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
         if run_id_dir.name == "reports_temp":
             # If reports_dir is actually reports_temp, go up one more level
             run_id_dir = reports_dir.parent
-        analysis_json_path = run_id_dir / "analysis.json"
-        if not analysis_json_path.exists():
+        if not (run_id_dir / "analysis.json").exists():
             # Try alternative: reports_dir might be {runflow_root}/{run_id}/reports_temp
             alt_run_id_dir = reports_dir.parent
             if (alt_run_id_dir / "analysis.json").exists():
-                analysis_json_path = alt_run_id_dir / "analysis.json"
-        if analysis_json_path.exists():
-            with open(analysis_json_path, 'r') as af:
-                analysis_config = json.load(af)
-                data_files = analysis_config.get("data_files", {})
-                segments_csv_path = data_files.get("segments")
-                if not segments_csv_path:
-                    # Fallback to segments_file + data_dir
-                    segments_file = analysis_config.get("segments_file")
-                    data_dir = analysis_config.get("data_dir", "data")
-                    if segments_file:
-                        segments_csv_path = f"{data_dir}/{segments_file}"
+                run_id_dir = alt_run_id_dir
+        analysis_context = load_analysis_context(run_id_dir)
+        segments_csv_path = str(analysis_context.segments_csv_path)
     except Exception as e:
         print(f"Warning: Could not load segments_csv_path from analysis.json: {e}")
     

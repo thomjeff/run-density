@@ -22,7 +22,7 @@ from app.save_bins import save_bin_artifacts
 from app.core.bin.summary import generate_bin_summary_artifact
 from app.utils.constants import BIN_SCHEMA_VERSION
 from app.core.v2.models import Day, Event
-from app.core.v2.analysis_config import load_analysis_json
+from app.config.loader import AnalysisContext as ConfigAnalysisContext, load_analysis_context
 from app.utils.run_id import get_runflow_root
 
 logger = logging.getLogger(__name__)
@@ -89,7 +89,8 @@ def generate_bins_v2(
     day: Day,
     events: List[Event],
     data_dir: str,
-    segments_csv_path: Optional[str] = None  # Issue #616: Use segments_file from analysis.json
+    segments_csv_path: Optional[str] = None,  # Issue #616: Use segments_file from analysis.json
+    analysis_context: Optional[ConfigAnalysisContext] = None
 ) -> Optional[Path]:
     """
     Generate bin artifacts for a specific day using v1 bin generation logic.
@@ -111,6 +112,7 @@ def generate_bins_v2(
         data_dir: Base directory for data files (used as fallback)
         segments_csv_path: Optional path to segments CSV file. If None, defaults to data_dir/segments.csv.
                           Issue #616: Should be provided from analysis.json segments_file.
+        analysis_context: Optional analysis context loaded from analysis.json to avoid reloading config.
         
     Returns:
         Path to bins directory if successful, None otherwise
@@ -216,9 +218,11 @@ def generate_bins_v2(
         event_durations = {}
         event_names = []
         try:
-            runflow_root = get_runflow_root()
-            run_path = runflow_root / run_id
-            analysis_config = load_analysis_json(run_path)
+            if analysis_context is None:
+                runflow_root = get_runflow_root()
+                run_path = runflow_root / run_id
+                analysis_context = load_analysis_context(run_path)
+            analysis_config = analysis_context.analysis_config
             
             # Extract event names and durations from analysis.json
             events_list = analysis_config.get("events", [])

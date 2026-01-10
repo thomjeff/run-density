@@ -719,14 +719,16 @@ def create_full_analysis_pipeline(
     # Issue #553 Phase 7.1: Load analysis.json at pipeline start (single source of truth)
     # If analysis.json exists, use it; otherwise, use provided parameters (backward compatibility)
     analysis_config = None
+    analysis_context = None
     analysis_json_path = run_path / "analysis.json"
     if analysis_json_path.exists():
-        from app.core.v2.analysis_config import load_analysis_json
-        analysis_config = load_analysis_json(run_path)
-        logger.info(f"Loaded analysis.json from {analysis_json_path}")
+        from app.config.loader import load_analysis_context
+        analysis_context = load_analysis_context(run_path)
+        analysis_config = analysis_context.analysis_config
+        logger.info(f"Loaded analysis.json from {analysis_context.analysis_json_path}")
         
         # Override parameters with values from analysis.json (single source of truth)
-        data_dir = analysis_config.get("data_dir", data_dir)
+        data_dir = str(analysis_context.data_dir)
         segments_file = analysis_config.get("segments_file", segments_file)
         locations_file = analysis_config.get("locations_file", locations_file)
         flow_file = analysis_config.get("flow_file", flow_file)
@@ -761,10 +763,11 @@ def create_full_analysis_pipeline(
         # Validation already done above (analysis.json loading, file existence checks)
         event_count = len(events)
         days_count = len(events_by_day)
+        config_for_counts = analysis_config or {}
         data_files_count = sum([
-            1 if analysis_config.get("segments_file") else 0,
-            1 if analysis_config.get("flow_file") else 0,
-            1 if analysis_config.get("locations_file") else 0,
+            1 if config_for_counts.get("segments_file") else 0,
+            1 if config_for_counts.get("flow_file") else 0,
+            1 if config_for_counts.get("locations_file") else 0,
         ])
         # Timeline Generation (part of Phase 1)
         timelines = generate_day_timelines(events)
@@ -787,8 +790,7 @@ def create_full_analysis_pipeline(
         # Load segments DataFrame
         # Issue #553 Phase 7.1: Use file path from analysis.json if available
         if analysis_config:
-            from app.core.v2.analysis_config import get_segments_file
-            segments_path_str = get_segments_file(analysis_config=analysis_config)
+            segments_path_str = str(analysis_context.segments_csv_path)
         else:
             segments_path_str = str(Path(data_dir) / segments_file)
         segments_df = load_segments(segments_path_str)
@@ -843,8 +845,7 @@ def create_full_analysis_pipeline(
         logger.info("[Phase 3.1] Processing flow analysis...")
         # Issue #553 Phase 7.1: Use file path from analysis.json if available
         if analysis_config:
-            from app.core.v2.analysis_config import get_flow_file
-            flow_file_path = get_flow_file(analysis_config=analysis_config)
+            flow_file_path = str(analysis_context.flow_csv_path)
         else:
             raise ValueError("analysis_config is required to resolve flow_file for v2 pipeline.")
         flow_results = analyze_temporal_flow_segments_v2(
@@ -977,7 +978,8 @@ def create_full_analysis_pipeline(
                 day=day,
                 events=day_events,
                 data_dir=data_dir,
-                segments_csv_path=segments_path_str  # Issue #616: Use segments_file from analysis.json
+                segments_csv_path=segments_path_str,  # Issue #616: Use segments_file from analysis.json
+                analysis_context=analysis_context
             )
             
             # Try to get feature count from bins if available
@@ -1019,8 +1021,9 @@ def create_full_analysis_pipeline(
         locations_df = None
         if locations_file:
             if analysis_config:
-                from app.core.v2.analysis_config import get_locations_file
-                locations_path_str = get_locations_file(analysis_config=analysis_config)
+                if analysis_context.locations_csv_path is None:
+                    raise ValueError("analysis_config is missing locations file configuration.")
+                locations_path_str = str(analysis_context.locations_csv_path)
             else:
                 locations_path_str = str(Path(data_dir) / locations_file)
             
@@ -1537,9 +1540,9 @@ def create_full_analysis_pipeline(
         # Use day-partitioned bins directories
         # Issue #553 Phase 7.1: Use file paths from analysis.json (already loaded at pipeline start)
         if analysis_config:
-            segments_file_path = analysis_config.get("data_files", {}).get("segments", segments_path_str)
-            flow_file_path = analysis_config.get("data_files", {}).get("flow", flow_file_path)
-            locations_file_path = analysis_config.get("data_files", {}).get("locations", locations_path_str) if locations_file else None
+            segments_file_path = segments_path_str
+            flow_file_path = flow_file_path
+            locations_file_path = locations_path_str if locations_file else None
         else:
             # Issue #616: This fallback should not happen in v2 pipeline - analysis.json should always exist
             # If analysis.json is missing, these paths should already be set from earlier in the pipeline
