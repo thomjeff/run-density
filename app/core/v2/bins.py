@@ -7,6 +7,7 @@ Also provides segment filtering utilities used by density and flow analysis.
 
 import logging
 import os
+import shutil
 import tempfile
 import time
 from pathlib import Path
@@ -278,6 +279,7 @@ def generate_bins_v2(
             
             # Move bin artifacts from temp location to day-partitioned bins directory
             temp_bins_dir = Path(daily_folder_path)
+            bins_successfully_copied = False
             if temp_bins_dir.exists():
                 # Safety check: Filter bins.parquet by day segments before copying
                 # After Issue #519, this should be a no-op since density_results is filtered
@@ -298,6 +300,7 @@ def generate_bins_v2(
                         logger.warning(f"segments_df missing 'seg_id' or 'segment_id' column, cannot filter bins by day")
                         logger.warning(f"segments_df columns: {list(segments_df.columns)}")
                         shutil.copy2(bins_parquet_src, bins_dir / "bins.parquet")
+                        bins_successfully_copied = True
                     else:
                         day_segment_ids = set(segments_df[seg_id_col].astype(str).unique().tolist())
                         logger.debug(f"Day {day.value} segments_df has {len(segments_df)} segments with IDs: {sorted(day_segment_ids)}")
@@ -357,10 +360,12 @@ def generate_bins_v2(
                             bins_parquet_dst = bins_dir / "bins.parquet"
                             bins_df_filtered.to_parquet(bins_parquet_dst, compression="zstd", compression_level=3)
                             logger.debug(f"Saved filtered bins.parquet to {bins_parquet_dst}")
+                            bins_successfully_copied = True
                         else:
                             # Fallback: copy without filtering if segment column not found
                             logger.warning(f"bins.parquet missing 'segment_id' or 'seg_id' column, cannot filter by day")
                             shutil.copy2(bins_parquet_src, bins_dir / "bins.parquet")
+                            bins_successfully_copied = True
                 
                 # Copy other bin artifacts
                 bin_files = [
@@ -401,15 +406,38 @@ def generate_bins_v2(
             if occupied_bins == 0:
                 logger.warning(f"⚠️ No occupied bins found for day {day.value} - runner mapping may have failed")
             
+            # Issue #655: Verify bins.parquet was successfully created before returning
+            bins_parquet_final = bins_dir / "bins.parquet"
+            if not bins_parquet_final.exists():
+                error_msg = (
+                    f"CRITICAL: bins.parquet was not created at {bins_parquet_final} "
+                    f"despite bin generation completing. This indicates a file copy/save failure."
+                )
+                logger.error(error_msg)
+                raise FileNotFoundError(error_msg)
+            
+            logger.info(f"✅ Bin generation completed successfully for day {day.value}: {bins_parquet_final}")
             return bins_dir
             
         finally:
-            # Clean up temp files
+            # Clean up temp files (non-critical - don't fail if cleanup fails)
             try:
                 shutil.rmtree(temp_output_dir)
             except Exception as e:
                 logger.warning(f"Failed to clean up temp directory {temp_output_dir}: {e}")
+                # Note: Cleanup failure is non-critical - bins are already saved, so we don't re-raise
         
     except Exception as e:
-        logger.error(f"Failed to generate bins for day {day.value}: {e}", exc_info=True)
-        return None
+        # Issue #655: Only return None if bins were not successfully created
+        # Check if bins.parquet exists despite the exception (e.g., copy succeeded but cleanup failed)
+        bins_parquet_check = bins_dir / "bins.parquet"
+        if bins_parquet_check.exists():
+            logger.warning(
+                f"Exception occurred during bin generation for day {day.value}: {e}, "
+                f"but bins.parquet exists at {bins_parquet_check}. "
+                f"Continuing with existing bins file."
+            )
+            return bins_dir
+        else:
+            logger.error(f"Failed to generate bins for day {day.value}: {e}", exc_info=True)
+            return None
