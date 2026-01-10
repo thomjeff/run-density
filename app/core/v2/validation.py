@@ -165,7 +165,7 @@ def validate_event_group(
 
 def validate_file_existence(
     segments_file: str,
-    locations_file: str,
+    locations_file: Optional[str],
     flow_file: str,
     events: List[Dict[str, Any]],
     data_dir: str
@@ -188,9 +188,10 @@ def validate_file_existence(
     # Check segments, locations, flow files
     required_files = [
         ("segments_file", segments_file),
-        ("locations_file", locations_file),
         ("flow_file", flow_file),
     ]
+    if locations_file:
+        required_files.append(("locations_file", locations_file))
     
     for file_type, filename in required_files:
         file_path = data_path / filename
@@ -574,9 +575,13 @@ def validate_api_payload(
         )
     
     # Get file references
-    segments_file = payload.get("segments_file", "segments.csv")
-    locations_file = payload.get("locations_file", "locations.csv")
-    flow_file = payload.get("flow_file", "flow.csv")
+    segments_file = payload.get("segments_file")
+    locations_file = payload.get("locations_file")
+    flow_file = payload.get("flow_file")
+    if not segments_file:
+        raise ValidationError("segments_file is required in payload", code=400)
+    if not flow_file:
+        raise ValidationError("flow_file is required in payload", code=400)
     
     # Validate file extensions
     if not segments_file.endswith('.csv'):
@@ -584,7 +589,7 @@ def validate_api_payload(
             f"segments_file must have .csv extension, got '{segments_file}'",
             code=400
         )
-    if not locations_file.endswith('.csv'):
+    if locations_file is not None and not locations_file.endswith('.csv'):
         raise ValidationError(
             f"locations_file must have .csv extension, got '{locations_file}'",
             code=400
@@ -615,6 +620,7 @@ def validate_api_payload(
     validate_segment_spans(segments_file, events, data_dir)
     validate_runner_uniqueness(events, data_dir)
     validate_gpx_files(events, data_dir)
-    validate_locations_resource_counts(locations_file, data_dir)  # Issue #589
+    if locations_file:
+        validate_locations_resource_counts(locations_file, data_dir)  # Issue #589
     
     return events, segments_file, locations_file, flow_file

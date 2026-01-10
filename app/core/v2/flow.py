@@ -107,23 +107,21 @@ def get_shared_segments(
 
 
 def load_flow_csv(
-    flow_file: str,
-    data_dir: str
+    flow_path: str
 ) -> pd.DataFrame:
     """
     Load flow.csv as the authoritative source for event pairs, ordering, and distance ranges.
     
     Args:
-        flow_file: Name of flow CSV file (default: "flow.csv")
-        data_dir: Base directory for data files (default: "data")
+        flow_path: Full path to flow CSV file
         
     Returns:
         DataFrame with flow.csv data
     """
-    flow_path = Path(data_dir) / flow_file
-    
+    flow_path = Path(flow_path)
+
     if not flow_path.exists():
-        raise FileNotFoundError(f"Flow file '{flow_file}' not found in {data_dir}/")
+        raise FileNotFoundError(f"Flow file not found at {flow_path}")
     
     try:
         flow_df = pd.read_csv(flow_path)

@@ -88,7 +88,7 @@ def get_event_distance_range_v2(
 def combine_runners_for_events(
     events: List[str],
     day: str,
-    source_dir: str = "data"
+    runners_paths: Dict[str, str]
 ) -> pd.DataFrame:
     """
     Combine runners from per-event CSV files for the specified events and day.
@@ -100,7 +100,7 @@ def combine_runners_for_events(
     Args:
         events: List of lowercase event names (e.g., ["full", "half", "10k"])
         day: Day identifier (e.g., "sat", "sun")
-        source_dir: Directory containing runner CSV files (default: "data")
+        runners_paths: Mapping of event name to runner CSV path
         
     Returns:
         Combined DataFrame with all runners for the specified events and day.
@@ -123,15 +123,14 @@ def combine_runners_for_events(
     logger.info(f"Loading runners for events {events} from day '{day}'")
     
     combined_runners = []
-    source_path = Path(source_dir)
-    
     for event_name in events:
-        # Construct filename: <event>_runners.csv
-        runner_file = source_path / f"{event_name}_runners.csv"
+        runner_path = runners_paths.get(event_name.lower()) or runners_paths.get(event_name)
+        if not runner_path:
+            raise FileNotFoundError(f"Runner path not provided for event '{event_name}'")
+        runner_file = Path(runner_path)
         
         if not runner_file.exists():
-            logger.warning(f"Missing file: {runner_file} — skipping event '{event_name}'")
-            continue
+            raise FileNotFoundError(f"Missing runner file: {runner_file} for event '{event_name}'")
         
         try:
             # Load runners for this event
@@ -153,11 +152,11 @@ def combine_runners_for_events(
                 event_runners['day'] = day.lower()
             
             combined_runners.append(event_runners)
-            logger.info(f"✅ Loaded {len(event_runners)} runners from {runner_file.name}")
+            logger.info(f"✅ Loaded {len(event_runners)} runners from {runner_file}")
             
         except Exception as e:
             logger.error(f"Failed to load runners from {runner_file}: {e}")
-            continue
+            raise
     
     if not combined_runners:
         logger.warning(f"No runner files found for events {events} on day {day}")
@@ -180,7 +179,7 @@ def combine_runners_for_events(
 
 def load_all_runners_for_events(
     events: List[Event],
-    data_dir: str
+    runners_paths: Dict[str, str]
 ) -> pd.DataFrame:
     """
     Load all runners from event-specific CSV files and combine into a single DataFrame.
@@ -190,7 +189,7 @@ def load_all_runners_for_events(
     
     Args:
         events: List of Event objects
-        data_dir: Base directory for data files
+        runners_paths: Mapping of event name to runner CSV path
         
     Returns:
         Combined DataFrame with all runners from all events
@@ -200,26 +199,19 @@ def load_all_runners_for_events(
     all_runners = []
     event_names = {event.name.lower() for event in events}
     
-    # Issue #548 Bug 1: Use lowercase events consistently (no v1 uppercase compatibility)
-    # Try event-specific files first (v2 format: {event}_runners.csv)
     for event in events:
-        try:
-            runners_df = load_runners_by_event(event.name, data_dir)
-            # Ensure event column is lowercase for consistency
-            runners_df = runners_df.copy()
-            runners_df["event"] = event.name.lower()
-            all_runners.append(runners_df)
-            logger.debug(f"Loaded {len(runners_df)} runners from {event.runners_file} for event '{event.name}'")
-        except FileNotFoundError:
-            # Event-specific file doesn't exist, will try v1 format below
-            logger.debug(f"Event-specific file '{event.runners_file}' not found for event '{event.name}', will try v1 format")
-            continue
+        runner_path = runners_paths.get(event.name.lower()) or runners_paths.get(event.name)
+        if not runner_path:
+            raise FileNotFoundError(f"Runner path not provided for event '{event.name}'")
+        runners_df = load_runners_by_event(runner_path)
+        # Ensure event column is lowercase for consistency
+        runners_df = runners_df.copy()
+        runners_df["event"] = event.name.lower()
+        all_runners.append(runners_df)
+        logger.debug(f"Loaded {len(runners_df)} runners from {runner_path} for event '{event.name}'")
     
-    # Issue #548: Removed fallback to v1 runners.csv format - file no longer exists
-    # All events must have individual {event}_runners.csv files
     if not all_runners:
         logger.warning(f"No runner files found for events: {[e.name for e in events]}")
-        logger.warning("Expected individual event files: {event}_runners.csv (e.g., full_runners.csv, 10k_runners.csv)")
         return pd.DataFrame(columns=["runner_id", "event", "pace", "distance", "start_offset"])
     
     # Combine all runners

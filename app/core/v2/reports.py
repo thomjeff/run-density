@@ -56,7 +56,8 @@ def generate_reports_per_day(
     data_dir: str,  # Data directory for loading runner files
     segments_file_path: Optional[str] = None,  # Issue #553 Phase 6.2: Path to segments file
     flow_file_path: Optional[str] = None,  # Issue #553 Phase 6.2: Path to flow file
-    locations_file_path: Optional[str] = None  # Issue #553 Phase 6.2: Path to locations file
+    locations_file_path: Optional[str] = None,  # Issue #553 Phase 6.2: Path to locations file
+    gpx_paths: Optional[Dict[str, str]] = None
 ) -> Dict[Day, Dict[str, str]]:
     """
     Generate all reports per day in day-partitioned structure.
@@ -110,6 +111,11 @@ def generate_reports_per_day(
         raise ValueError(
             "flow_file_path is required in v2 pipeline. "
             "It should be provided from analysis.json flow_file."
+        )
+    if not gpx_paths:
+        raise ValueError(
+            "gpx_paths are required in v2 pipeline. "
+            "They should be provided from analysis.json data_files.gpx."
         )
     # locations_file_path can be None if locations_file is not provided (optional)
     # But if it's provided, it should come from analysis.json
@@ -780,7 +786,8 @@ def generate_locations_report_v2(
                     start_times=start_times,
                     output_dir=str(reports_path),
                     run_id=run_id,  # Issue #598: Pass run_id for flag propagation (loads flags.json)
-                    day=day.value  # Issue #598: Pass day for day-scoped flags.json path
+                    day=day.value,  # Issue #598: Pass day for day-scoped flags.json path
+                    gpx_paths=gpx_paths
                 )
                 logger.info(f"generate_location_report returned for day {day.value}: ok={result.get('ok', False)}")
             except Exception as e:

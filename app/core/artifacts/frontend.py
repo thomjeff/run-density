@@ -243,7 +243,11 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
             worst_los = str(worst_bin_row['los_class'])
 
         # Get schema_key from the first bin in the group (all bins in a segment should have the same schema_key)
-        schema_key = group['schema_key'].iloc[0] if 'schema_key' in group.columns else 'on_course_open'
+        if 'schema_key' not in group.columns:
+            raise ValueError("bins.parquet missing schema_key column for segment metrics.")
+        schema_key = group['schema_key'].iloc[0]
+        if not schema_key:
+            raise ValueError(f"Segment {seg_id} missing schema_key in bins.parquet.")
         
         metrics[seg_id] = {
             "schema": schema_key,  # Issue #285: Add operational schema tag
@@ -500,6 +504,18 @@ def _load_schema_keys(reports_dir):
 def _create_segment_feature(seg_id, segment_dims, schema_keys):
     """Create a GeoJSON feature for a segment."""
     dims = segment_dims.get(seg_id, {})
+    seg_label = dims.get("seg_label") or dims.get("name")
+    if not seg_label:
+        raise ValueError(f"Segment {seg_id} missing label in segments metadata.")
+    width_val = dims.get("width_m")
+    if width_val is None or (isinstance(width_val, float) and pd.isna(width_val)):
+        raise ValueError(f"Segment {seg_id} missing width_m in segments metadata.")
+    direction = dims.get("direction")
+    if not direction:
+        raise ValueError(f"Segment {seg_id} missing direction in segments metadata.")
+    schema_key = schema_keys.get(seg_id)
+    if not schema_key:
+        raise ValueError(f"Segment {seg_id} missing schema_key in bins metadata.")
     
     return {
         "type": "Feature",
@@ -509,12 +525,12 @@ def _create_segment_feature(seg_id, segment_dims, schema_keys):
         },
         "properties": {
             "seg_id": seg_id,
-            "label": dims.get("seg_label", dims.get("name", seg_id)),
+            "label": seg_label,
             "length_km": float(dims.get("full_length", dims.get("half_length", dims.get("10K_length", 0.0)))),
-            "width_m": float(dims.get("width_m", 0.0)),
-            "direction": dims.get("direction", "uni"),
+            "width_m": float(width_val),
+            "direction": direction,
             "events": [event for event in ["Full", "Half", "10K"] if dims.get(event.lower() if event != "10K" else "10K", "") == "y"],
-            "schema": schema_keys.get(seg_id, "on_course_open"),
+            "schema": schema_key,
             "description": dims.get("description", "No description available")
         }
     }
@@ -543,16 +559,28 @@ def _load_segment_schema_keys(reports_dir):
 def _build_segment_feature_properties(seg_id, segment_dims, schema_keys):
     """Build GeoJSON feature properties for a segment."""
     dims = segment_dims.get(seg_id, {})
+    seg_label = dims.get("seg_label") or dims.get("name")
+    if not seg_label:
+        raise ValueError(f"Segment {seg_id} missing label in segments metadata.")
+    width_val = dims.get("width_m")
+    if width_val is None or (isinstance(width_val, float) and pd.isna(width_val)):
+        raise ValueError(f"Segment {seg_id} missing width_m in segments metadata.")
+    direction = dims.get("direction")
+    if not direction:
+        raise ValueError(f"Segment {seg_id} missing direction in segments metadata.")
+    schema_key = schema_keys.get(seg_id)
+    if not schema_key:
+        raise ValueError(f"Segment {seg_id} missing schema_key in bins metadata.")
     
     return {
         "seg_id": seg_id,
-        "label": dims.get("seg_label", dims.get("name", seg_id)),
+        "label": seg_label,
         "length_km": float(dims.get("full_length", dims.get("half_length", dims.get("10K_length", 0.0)))),
-        "width_m": float(dims.get("width_m", 0.0)),
-        "direction": dims.get("direction", "uni"),
+        "width_m": float(width_val),
+        "direction": direction,
         "events": [event for event in ["Full", "Half", "10K"] 
                    if dims.get(event.lower() if event != "10K" else "10K", "") == "y"],
-        "schema": schema_keys.get(seg_id, "on_course_open"),
+        "schema": schema_key,
         "description": dims.get("description", "No description available")
     }
 
@@ -606,23 +634,49 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
         print(f"Warning: Could not load segments_csv_path from analysis.json: {e}")
     
     if not segments_csv_path:
-        error_msg = (
+        raise ValueError(
             "segments_csv_path not found in analysis.json for generate_segments_geojson. "
             "This should not happen in v2 pipeline - analysis.json should include segments_file."
         )
-        print(f"ERROR: {error_msg}")
-        return {"type": "FeatureCollection", "features": []}
     
     # Load GPX courses
-    courses = load_all_courses(os.path.dirname(segments_csv_path))
-    if not courses:
-        print("Warning: No GPX courses found, returning empty GeoJSON")
-        return {"type": "FeatureCollection", "features": []}
+    events = analysis_context.analysis_config.get("events", [])
+    if not events:
+        raise ValueError("analysis.json missing events for GPX loading in generate_segments_geojson.")
+    gpx_paths = {}
+    for event in events:
+        event_name = event.get("name")
+        if not event_name:
+            raise ValueError("analysis.json events missing name for GPX loading in generate_segments_geojson.")
+        gpx_paths[event_name.lower()] = str(analysis_context.gpx_path(event_name))
+    courses = load_all_courses(gpx_paths)
     
     # Load segments data to get segment definitions
     try:
         segments_df = load_segments(segments_csv_path)
-        segments_list = segments_df.to_dict('records')
+        segments_list = []
+        for _, seg in segments_df.iterrows():
+            seg_id = seg.get("seg_id")
+            seg_label = seg.get("seg_label")
+            if not seg_id:
+                raise ValueError("segments.csv missing seg_id for generate_segments_geojson.")
+            if not seg_label:
+                raise ValueError(f"Segment {seg_id} missing seg_label for generate_segments_geojson.")
+            segments_list.append({
+                "seg_id": seg_id,
+                "segment_label": seg_label,
+                "10k": seg.get("10k", seg.get("10K", "n")),
+                "half": seg.get("half", "n"),
+                "full": seg.get("full", "n"),
+                "10k_from_km": seg.get("10k_from_km") or seg.get("10K_from_km"),
+                "10k_to_km": seg.get("10k_to_km") or seg.get("10K_to_km"),
+                "half_from_km": seg.get("half_from_km"),
+                "half_to_km": seg.get("half_to_km"),
+                "full_from_km": seg.get("full_from_km"),
+                "full_to_km": seg.get("full_to_km"),
+                "direction": seg.get("direction"),
+                "width_m": seg.get("width_m"),
+            })
     except Exception as e:
         print(f"ERROR: Could not load segments.csv from {segments_csv_path}: {e}")
         return {"type": "FeatureCollection", "features": []}
@@ -663,14 +717,26 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
             dims = segment_dims[seg_id]
             props = feature["properties"]
             
+            seg_label = dims.get("seg_label") or dims.get("name")
+            if not seg_label:
+                raise ValueError(f"Segment {seg_id} missing label in segments metadata.")
+            width_val = dims.get("width_m")
+            if width_val is None or (isinstance(width_val, float) and pd.isna(width_val)):
+                raise ValueError(f"Segment {seg_id} missing width_m in segments metadata.")
+            direction = dims.get("direction")
+            if not direction:
+                raise ValueError(f"Segment {seg_id} missing direction in segments metadata.")
+            schema_key = schema_keys.get(seg_id)
+            if not schema_key:
+                raise ValueError(f"Segment {seg_id} missing schema_key in bins metadata.")
             # Update properties with dimensions
-            props["label"] = dims.get("seg_label", dims.get("name", seg_id))
+            props["label"] = seg_label
             props["length_km"] = float(dims.get("full_length", dims.get("half_length", dims.get("10K_length", 0.0))))
-            props["width_m"] = float(dims.get("width_m", 0.0))
-            props["direction"] = dims.get("direction", "uni")
+            props["width_m"] = float(width_val)
+            props["direction"] = direction
             props["events"] = [event for event in ["Full", "Half", "10K"] 
                               if dims.get(event.lower() if event != "10K" else "10K", "") == "y"]
-            props["schema"] = schema_keys.get(seg_id, "on_course_open")
+            props["schema"] = schema_key
             props["description"] = dims.get("description", "No description available")
     
     return geojson
