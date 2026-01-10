@@ -642,6 +642,10 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
     events = analysis_context.analysis_config.get("events", [])
     if not events:
         raise ValueError("analysis.json missing events for GPX loading in generate_segments_geojson.")
+    
+    # Get list of available event names (lowercase for matching)
+    available_event_names = {event.get("name", "").lower() for event in events if event.get("name")}
+    
     gpx_paths = {}
     for event in events:
         event_name = event.get("name")
@@ -661,6 +665,25 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
                 raise ValueError("segments.csv missing seg_id for generate_segments_geojson.")
             if not seg_label:
                 raise ValueError(f"Segment {seg_id} missing seg_label for generate_segments_geojson.")
+            
+            # Issue #655: Filter segments to only include those that belong to events in the analysis
+            # Check if segment belongs to any available event (elite, open, 10k, half, full)
+            segment_events = []
+            if seg.get("elite", "").lower() == "y" and "elite" in available_event_names:
+                segment_events.append("elite")
+            if seg.get("open", "").lower() == "y" and "open" in available_event_names:
+                segment_events.append("open")
+            if (seg.get("10k", "") or seg.get("10K", "")).lower() == "y" and "10k" in available_event_names:
+                segment_events.append("10k")
+            if seg.get("half", "").lower() == "y" and "half" in available_event_names:
+                segment_events.append("half")
+            if seg.get("full", "").lower() == "y" and "full" in available_event_names:
+                segment_events.append("full")
+            
+            # Skip segments that don't belong to any available event
+            if not segment_events:
+                continue  # Skip segments not in current analysis
+            
             segments_list.append({
                 "seg_id": seg_id,
                 "segment_label": seg_label,
@@ -680,7 +703,12 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
         print(f"ERROR: Could not load segments.csv from {segments_csv_path}: {e}")
         return {"type": "FeatureCollection", "features": []}
     
+    if not segments_list:
+        print(f"WARNING: No segments found for available events {available_event_names} in generate_segments_geojson")
+        return {"type": "FeatureCollection", "features": []}
+    
     # Generate real coordinates for all segments from GPX (returns WGS84)
+    # Note: generate_segment_coordinates will now only process segments that have matching events
     segments_with_coords = generate_segment_coordinates(courses, segments_list)
     
     # Convert to GeoJSON (coordinates are in WGS84 [lon, lat])

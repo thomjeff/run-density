@@ -288,22 +288,26 @@ def generate_segment_coordinates(
         
         # Determine which event to use based on which events use this segment
         # Priority: elite, open, 10k, half, full (covering sat/sun events)
+        # Issue #655: Only check for events that exist in the courses dict to avoid
+        # failures when segments reference events not in the current analysis
         # Note: column names are lowercase in CSV
         gpx_event = None
+        available_events = set(courses.keys())  # Only check events we have GPX data for
         for event in ["elite", "open", "10k", "half", "full"]:
-            if segment.get(event, "").lower() == "y":
+            if event in available_events and segment.get(event, "").lower() == "y":
                 gpx_event = event
                 break
         
         if gpx_event is None:
-            raise ValueError(
-                f"Segment {seg_id} missing event flag for GPX lookup; cannot infer default event."
-            )
+            # Issue #655: Skip segments that don't match any available event instead of failing
+            # This can happen when segments.csv has events not in the current analysis
+            continue  # Skip this segment - it's not part of the current analysis events
         
         # Lookup course (courses dict uses lowercase keys)
         course = courses.get(gpx_event)
         if course is None:
-            raise ValueError(f"GPX course not found for event '{gpx_event}' (segment {seg_id}).")
+            # This should not happen since we filtered above, but be defensive
+            continue  # Skip this segment
         
         # Get event-specific from_km and to_km fields
         from_km_key = f"{gpx_event}_from_km"
