@@ -233,15 +233,15 @@ def generate_segments_geojson(segments_data: Dict[str, SegmentBinData]) -> Dict[
         }
     }
 
-def generate_bins_geojson(segments_data: Dict[str, SegmentBinData], segments_csv_path: Optional[str] = None) -> Dict[str, Any]:
+def generate_bins_geojson(segments_data: Dict[str, SegmentBinData], analysis_context: Optional[Any] = None) -> Dict[str, Any]:
     """
     Generate GeoJSON for individual bins using real segment coordinates from GPX data.
     
-    Issue #616: Accept segments_csv_path parameter instead of hardcoded "data/segments.csv"
+    Issue #616: Accept analysis_context to resolve paths instead of hardcoded defaults.
     
     Args:
         segments_data: Dictionary mapping segment_id to SegmentBinData
-        segments_csv_path: Optional path to segments CSV file. If None, raises ValueError.
+        analysis_context: Analysis context with resolved data_files paths.
     
     Returns:
         GeoJSON FeatureCollection with bin features
@@ -252,24 +252,57 @@ def generate_bins_geojson(segments_data: Dict[str, SegmentBinData], segments_csv
     try:
         from app.core.gpx.processor import load_all_courses, generate_segment_coordinates
         from app.io.loader import load_segments
-        
-        # Load GPX courses
-        courses = load_all_courses(data_dir)
-        
-        # Issue #616: Require segments_csv_path parameter - no hardcoded fallback
+
+        if not analysis_context:
+            raise ValueError("analysis_context is required for generate_bins_geojson.")
+        segments_csv_path = getattr(analysis_context, "segments_csv_path", None)
         if not segments_csv_path:
             raise ValueError(
-                "segments_csv_path is required for generate_bins_geojson. "
-                "This should not happen in v2 pipeline - pass segments_csv_path from analysis.json."
+                "analysis_context.segments_csv_path is required for generate_bins_geojson."
             )
-        
+
+        events = analysis_context.analysis_config.get("events", [])
+        if not events:
+            raise ValueError("analysis.json missing events for GPX loading in generate_bins_geojson.")
+        gpx_paths = {}
+        for event in events:
+            event_name = event.get("name")
+            if not event_name:
+                raise ValueError("analysis.json events missing name for GPX loading in generate_bins_geojson.")
+            gpx_paths[event_name.lower()] = str(analysis_context.gpx_path(event_name))
+
+        # Load GPX courses
+        courses = load_all_courses(gpx_paths)
+
         # Load segments data to get segment definitions
         segments_df = load_segments(segments_csv_path)
-        segments_list = segments_df.to_dict('records')
-        
+        segments_list = []
+        for _, seg in segments_df.iterrows():
+            seg_id = seg.get("seg_id")
+            seg_label = seg.get("seg_label")
+            if not seg_id:
+                raise ValueError("segments.csv missing seg_id for generate_bins_geojson.")
+            if not seg_label:
+                raise ValueError(f"Segment {seg_id} missing seg_label for generate_bins_geojson.")
+            segments_list.append({
+                "seg_id": seg_id,
+                "segment_label": seg_label,
+                "10k": seg.get("10k", seg.get("10K", "n")),
+                "half": seg.get("half", "n"),
+                "full": seg.get("full", "n"),
+                "10k_from_km": seg.get("10k_from_km") or seg.get("10K_from_km"),
+                "10k_to_km": seg.get("10k_to_km") or seg.get("10K_to_km"),
+                "half_from_km": seg.get("half_from_km"),
+                "half_to_km": seg.get("half_to_km"),
+                "full_from_km": seg.get("full_from_km"),
+                "full_to_km": seg.get("full_to_km"),
+                "direction": seg.get("direction"),
+                "width_m": seg.get("width_m"),
+            })
+
         # Generate real coordinates for all segments
         segments_with_coords = generate_segment_coordinates(courses, segments_list)
-        
+
         # Create a lookup dictionary for segment coordinates
         segment_coords_lookup = {}
         for seg in segments_with_coords:
@@ -279,12 +312,12 @@ def generate_bins_geojson(segments_data: Dict[str, SegmentBinData], segments_csv
                     "from_km": seg["from_km"],
                     "to_km": seg["to_km"]
                 }
-        
+
         logger.info(f"Loaded coordinates for {len(segment_coords_lookup)} segments")
-        
+
     except Exception as e:
-        logger.warning(f"Could not load GPX coordinates: {e}. Using fallback coordinates.")
-        segment_coords_lookup = {}
+        logger.error(f"Could not load GPX coordinates for bin geojson: {e}")
+        raise
     
     for segment_id, segment_bins in segments_data.items():
         # Get real coordinates for this segment
@@ -304,11 +337,7 @@ def generate_bins_geojson(segments_data: Dict[str, SegmentBinData], segments_csv
             logger.info(f"Using real coordinates for segment {segment_id}: {len(line_coords)} points, {segment_length_km:.2f}km")
             
         else:
-            # Fallback to default coordinates
-            logger.warning(f"No real coordinates found for segment {segment_id}, using defaults")
-            start_lat, start_lon = DEFAULT_CENTER_LAT, DEFAULT_CENTER_LON
-            end_lat, end_lon = DEFAULT_CENTER_LAT + 0.01, DEFAULT_CENTER_LON + 0.01
-            segment_length_km = 1.0
+            raise ValueError(f"No real coordinates found for segment {segment_id} in GPX data.")
         
         # Generate bin features
         for bin_data in segment_bins.bins:

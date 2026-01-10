@@ -31,7 +31,7 @@ WGS84_TO_UTM = Transformer.from_crs("EPSG:4326", "EPSG:32619", always_xy=True)
 def validate_location_projections(
     locations_file: str,
     segments_file: str,
-    data_dir: str,
+    gpx_paths: Dict[str, str],
     output_file: Optional[str] = None
 ) -> Dict[str, Any]:
     """
@@ -43,7 +43,7 @@ def validate_location_projections(
     Args:
         locations_file: Path to locations CSV file (required)
         segments_file: Path to segments CSV file (required)
-        data_dir: Data directory path
+        gpx_paths: Mapping of event name to GPX file path
         output_file: Optional path to save bad_segments.json export
         
     Returns:
@@ -57,7 +57,9 @@ def validate_location_projections(
     try:
         locations_df = load_locations(locations_file)
         segments_df = load_segments(segments_file)
-        courses = load_all_courses(data_dir)
+        if not gpx_paths:
+            raise ValueError("gpx_paths is required for location projection validation.")
+        courses = load_all_courses(gpx_paths)
     except Exception as e:
         logger.error(f"Failed to load data files: {e}")
         return {

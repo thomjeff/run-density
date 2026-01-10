@@ -110,8 +110,7 @@ def generate_bins_v2(
         day: Day enum
         events: List of events for this day
         data_dir: Base directory for data files (used as fallback)
-        segments_csv_path: Optional path to segments CSV file. If None, defaults to data_dir/segments.csv.
-                          Issue #616: Should be provided from analysis.json segments_file.
+        segments_csv_path: Path to segments CSV file (from analysis.json).
         analysis_context: Optional analysis context loaded from analysis.json to avoid reloading config.
         
     Returns:

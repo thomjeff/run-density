@@ -646,7 +646,8 @@ def generate_location_report(
     start_times: Optional[Dict[str, float]] = None,
     output_dir: str = "reports",
     run_id: Optional[str] = None,
-    day: Optional[str] = None  # Issue #598: Day code for loading flags.json
+    day: Optional[str] = None,  # Issue #598: Day code for loading flags.json
+    gpx_paths: Optional[Dict[str, str]] = None
 ) -> Dict[str, Any]:
     """
     Generate locations report with arrival modeling and operational timing.
@@ -660,6 +661,7 @@ def generate_location_report(
         start_times: Dictionary of event start times in minutes (default: from constants)
         output_dir: Output directory for report
         run_id: Optional run ID for runflow structure
+        gpx_paths: Mapping of event name to GPX file path (required)
         
     Returns:
         Dictionary with report results and file path
@@ -680,7 +682,9 @@ def generate_location_report(
         locations_df = load_locations(locations_csv)
         runners_df = load_runners(runners_csv)
         segments_df = load_segments(segments_csv)
-        courses = load_all_courses(os.path.dirname(segments_csv))
+        if not gpx_paths:
+            raise ValueError("gpx_paths is required for location report GPX loading.")
+        courses = load_all_courses(gpx_paths)
     except FileNotFoundError as e:
         logger.error(f"Required input file not found: {e}")
         return {"ok": False, "error": str(e), "error_type": "file_not_found"}

@@ -279,24 +279,23 @@ def load_density_cfg(path: str) -> Dict[str, dict]:
         schema_raw = r.get("schema")
         if schema_raw is not None and pd.notna(schema_raw):
             schema = str(schema_raw).strip()
-            if schema:
-                # Validate schema value (must be valid rulebook schema)
-                valid_schemas = {'start_corral', 'on_course_narrow', 'on_course_open'}
-                if schema not in valid_schemas:
-                    logger.warning(
-                        f"Invalid schema value '{schema}' for segment {r['seg_id']} in segments CSV. "
-                        f"Must be one of: {valid_schemas}. Defaulting to 'on_course_open'."
-                    )
-                    schema = 'on_course_open'
-            else:
-                # Empty string after stripping
-                schema = None
+            if not schema:
+                raise ValueError(f"Segment {r['seg_id']} missing schema in segments CSV.")
+            # Validate schema value (must be valid rulebook schema)
+            valid_schemas = {'start_corral', 'on_course_narrow', 'on_course_open'}
+            if schema not in valid_schemas:
+                raise ValueError(
+                    f"Invalid schema value '{schema}' for segment {r['seg_id']} in segments CSV. "
+                    f"Must be one of: {valid_schemas}."
+                )
         else:
-            # No schema provided (None or NaN) - will fallback to schema_resolver if needed
-            schema = None
+            raise ValueError(f"Segment {r['seg_id']} missing schema in segments CSV.")
+        seg_label = r.get("seg_label")
+        if not seg_label:
+            raise ValueError(f"Segment {r['seg_id']} missing seg_label in segments CSV.")
         
         cfg[r["seg_id"]] = dict(
-            seg_label=str(r.get("seg_label", "")),
+            seg_label=str(seg_label),
             width_m=float(r["width_m"]),
             direction=str(r.get("direction", "uni")),
             schema=schema,  # Issue #616: Include schema from CSV (SSOT for this analysis run)

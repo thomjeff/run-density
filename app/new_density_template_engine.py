@@ -359,7 +359,10 @@ class NewDensityTemplateEngine:
                 'on_course_narrow': 'on_course_narrow',
                 'on_course_open': 'on_course_open'
             }
-            flagged_with_schema['segment_type'] = flagged_with_schema['schema_key'].map(schema_to_type).fillna('on_course_open')
+            flagged_with_schema['segment_type'] = flagged_with_schema['schema_key'].map(schema_to_type)
+            if flagged_with_schema['segment_type'].isna().any():
+                missing = flagged_with_schema[flagged_with_schema['segment_type'].isna()]['segment_id'].tolist()
+                raise ValueError(f"Missing schema_key mapping for segments: {missing}")
         
         if len(flagged_with_schema) == 0:
             lines.append("| *No flagged segments* | | | | | | | | | | | | |")

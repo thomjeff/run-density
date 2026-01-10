@@ -121,9 +121,12 @@ async def get_map_manifest():
             width_m = seg.get("width_m")
             if width_m is None:
                 raise HTTPException(status_code=500, detail=f"Segment {segment_id} missing width_m")
+            seg_label = seg.get("seg_label")
+            if not seg_label:
+                raise HTTPException(status_code=500, detail=f"Segment {segment_id} missing seg_label")
             segment_index.append({
                 "segment_id": segment_id,
-                "segment_label": seg.get('seg_label', segment_id),
+                "segment_label": seg_label,
                 "schema_key": schema_key,
                 "width_m": float(width_m)
             })
@@ -220,20 +223,34 @@ async def get_map_segments():
             from gpx_processor import load_all_courses, generate_segment_coordinates
             from io.loader import load_segments
         
-        data_dir = analysis_config.get("data_dir", "data")
-        courses = load_all_courses(data_dir)
+        events = analysis_context.analysis_config.get("events", [])
+        if not events:
+            raise HTTPException(status_code=500, detail="analysis.json missing events for GPX loading")
+        gpx_paths = {}
+        for event in events:
+            event_name = event.get("name")
+            if not event_name:
+                raise HTTPException(status_code=500, detail="analysis.json events missing name for GPX loading")
+            gpx_paths[event_name.lower()] = str(analysis_context.gpx_path(event_name))
+        courses = load_all_courses(gpx_paths)
         
         # Convert to format for GPX processor
         segments_list = []
         for _, seg in segments_df.iterrows():
+            seg_id = seg.get("seg_id")
+            seg_label = seg.get("seg_label")
+            if not seg_id:
+                raise HTTPException(status_code=500, detail="Segments metadata missing seg_id")
+            if not seg_label:
+                raise HTTPException(status_code=500, detail=f"Segment {seg_id} missing seg_label")
             segments_list.append({
-                "seg_id": seg['seg_id'],
-                "segment_label": seg.get('seg_label', seg['seg_id']),
-                "10K": seg.get('10K', 'n'),
+                "seg_id": seg_id,
+                "segment_label": seg_label,
+                "10k": seg.get('10k', seg.get('10K', 'n')),
                 "half": seg.get('half', 'n'),
                 "full": seg.get('full', 'n'),
-                "10K_from_km": seg.get('10K_from_km'),
-                "10K_to_km": seg.get('10K_to_km'),
+                "10k_from_km": seg.get('10k_from_km') or seg.get('10K_from_km'),
+                "10k_to_km": seg.get('10k_to_km') or seg.get('10K_to_km'),
                 "half_from_km": seg.get('half_from_km'),
                 "half_to_km": seg.get('half_to_km'),
                 "full_from_km": seg.get('full_from_km'),
@@ -660,7 +677,13 @@ async def export_bins(
         
         if format.lower() == "geojson":
             # Generate GeoJSON export
-            geojson = generate_bins_geojson(all_bins)
+            from app.config.loader import load_analysis_context
+            from app.utils.run_id import get_latest_run_id, get_runflow_root
+            run_id = get_latest_run_id()
+            if not run_id:
+                raise HTTPException(status_code=404, detail="No run_id available for analysis.json lookup.")
+            analysis_context = load_analysis_context(get_runflow_root() / run_id)
+            geojson = generate_bins_geojson(all_bins, analysis_context=analysis_context)
             return JSONResponse(content=geojson)
         else:
             # Generate CSV export

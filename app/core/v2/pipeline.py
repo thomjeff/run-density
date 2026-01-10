@@ -669,7 +669,7 @@ def update_pointer_files(run_id: str, metadata: Dict[str, Any]) -> None:
 def create_full_analysis_pipeline(
     events: List[Event],
     segments_file: str,
-    locations_file: str,
+    locations_file: Optional[str],
     flow_file: str,
     data_dir: str,
     run_id: Optional[str] = None,
@@ -690,10 +690,10 @@ def create_full_analysis_pipeline(
     
     Args:
         events: List of Event objects from validated payload
-        segments_file: Name of segments CSV file (default: "segments.csv")
-        locations_file: Name of locations CSV file (default: "locations.csv")
-        flow_file: Name of flow CSV file (default: "flow.csv")
-        data_dir: Base directory for data files (default: "data")
+        segments_file: Path to segments CSV file (from analysis.json)
+        locations_file: Optional path to locations CSV file
+        flow_file: Path to flow CSV file (from analysis.json)
+        data_dir: Base directory for data files (from analysis.json)
         run_id: Optional run ID (generates new one if not provided)
         
     Returns:
@@ -729,13 +729,13 @@ def create_full_analysis_pipeline(
         
         # Override parameters with values from analysis.json (single source of truth)
         data_dir = str(analysis_context.data_dir)
-        segments_file = analysis_config.get("segments_file", segments_file)
-        locations_file = analysis_config.get("locations_file", locations_file)
-        flow_file = analysis_config.get("flow_file", flow_file)
+        segments_file = str(analysis_context.segments_csv_path)
+        locations_file = str(analysis_context.locations_csv_path) if analysis_context.locations_csv_path else None
+        flow_file = str(analysis_context.flow_csv_path)
     else:
-        logger.warning(
+        raise FileNotFoundError(
             f"analysis.json not found at {analysis_json_path}. "
-            f"Using provided parameters. This may indicate analysis.json was not generated."
+            "analysis.json is required to resolve data file paths; default filenames are not supported."
         )
     
     # Issue #527: Set up run-level file logging
@@ -787,17 +787,22 @@ def create_full_analysis_pipeline(
             phase_description="Data Loading"
         )
         
+        runner_paths = {
+            event.name.lower(): str(analysis_context.runners_csv_path(event.name))
+            for event in events
+        }
+        gpx_paths = {
+            event.name.lower(): str(analysis_context.gpx_path(event.name))
+            for event in events
+        }
+
         # Load segments DataFrame
-        # Issue #553 Phase 7.1: Use file path from analysis.json if available
-        if analysis_config:
-            segments_path_str = str(analysis_context.segments_csv_path)
-        else:
-            segments_path_str = str(Path(data_dir) / segments_file)
+        segments_path_str = str(analysis_context.segments_csv_path)
         segments_df = load_segments(segments_path_str)
         logger.info(f"Loaded {len(segments_df)} segments from {segments_path_str}")
         
         # Load all runners for events (Phase 4)
-        all_runners_df = load_all_runners_for_events(events, data_dir)
+        all_runners_df = load_all_runners_for_events(events, runner_paths)
         runner_count = len(all_runners_df)
         segment_count = len(segments_df)
         locations_count = 0  # Will be updated if locations are loaded
@@ -950,7 +955,7 @@ def create_full_analysis_pipeline(
             # Use combine_runners_for_events() for proper per-event file loading
             from app.core.v2.density import combine_runners_for_events
             event_names = [e.name.lower() for e in day_events]
-            day_runners_df = combine_runners_for_events(event_names, day.value, data_dir)
+            day_runners_df = combine_runners_for_events(event_names, day.value, runner_paths)
             
             if day_runners_df.empty:
                 logger.warning(f"No runners found for day {day.value} events {event_names}, using fallback")
@@ -1408,7 +1413,7 @@ def create_full_analysis_pipeline(
             try:
                 from app.core.v2.density import combine_runners_for_events
                 event_names = [e.name.lower() for e in day_events]
-                day_runners_df = combine_runners_for_events(event_names, day_code, data_dir)
+                day_runners_df = combine_runners_for_events(event_names, day_code, runner_paths)
                 if not day_runners_df.empty:
                     # event column should be lowercase
                     participants_by_event = (
@@ -1573,7 +1578,8 @@ def create_full_analysis_pipeline(
                 data_dir=data_dir,
                 segments_file_path=segments_file_path,
                 flow_file_path=flow_file_path,
-                locations_file_path=locations_file_path
+                locations_file_path=locations_file_path,
+                gpx_paths=gpx_paths
             )
             
             # Count reports generated
