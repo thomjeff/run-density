@@ -582,7 +582,9 @@ def get_segments_file(
     # Fallback to segments_file + data_dir
     segments_file = analysis_config.get("segments_file")
     if segments_file:
-        data_dir = analysis_config.get("data_dir", "data")
+        data_dir = analysis_config.get("data_dir")
+        if not data_dir:
+            raise ValueError("analysis.json missing required field: data_dir")
         return f"{data_dir}/{segments_file}"
     
     raise ValueError(
@@ -627,7 +629,9 @@ def get_flow_file(
     # Fallback to flow_file + data_dir
     flow_file = analysis_config.get("flow_file")
     if flow_file:
-        data_dir = analysis_config.get("data_dir", "data")
+        data_dir = analysis_config.get("data_dir")
+        if not data_dir:
+            raise ValueError("analysis.json missing required field: data_dir")
         return f"{data_dir}/{flow_file}"
     
     raise ValueError(
@@ -672,7 +676,9 @@ def get_locations_file(
     # Fallback to locations_file + data_dir
     locations_file = analysis_config.get("locations_file")
     if locations_file:
-        data_dir = analysis_config.get("data_dir", "data")
+        data_dir = analysis_config.get("data_dir")
+        if not data_dir:
+            raise ValueError("analysis.json missing required field: data_dir")
         return f"{data_dir}/{locations_file}"
     
     raise ValueError(
@@ -729,7 +735,9 @@ def get_runners_file(
         if event_name_in_config == event_name_lower:
             runners_file = event.get("runners_file")
             if runners_file:
-                data_dir = analysis_config.get("data_dir", "data")
+                data_dir = analysis_config.get("data_dir")
+                if not data_dir:
+                    raise ValueError("analysis.json missing required field: data_dir")
                 return f"{data_dir}/{runners_file}"
     
     # Event not found - fail fast per Issue #553 requirements
@@ -788,7 +796,9 @@ def get_gpx_file(
         if event_name_in_config == event_name_lower:
             gpx_file = event.get("gpx_file")
             if gpx_file:
-                data_dir = analysis_config.get("data_dir", "data")
+                data_dir = analysis_config.get("data_dir")
+                if not data_dir:
+                    raise ValueError("analysis.json missing required field: data_dir")
                 return f"{data_dir}/{gpx_file}"
     
     # Event not found - fail fast per Issue #553 requirements
@@ -797,4 +807,3 @@ def get_gpx_file(
         f"Event '{event_name}' not found in analysis.json. "
         f"Available events: {available_events}"
     )
-

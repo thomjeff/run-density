@@ -191,7 +191,17 @@ async def analyze_v2(request: V2AnalyzeRequest, background_tasks: BackgroundTask
         events = load_events_from_payload(payload_dict)
         
         # Extract data directory and file names from analysis.json (single source of truth)
-        data_dir = analysis_config.get("data_dir", "data")
+        data_dir = analysis_config.get("data_dir")
+        if not data_dir:
+            error_response = V2ErrorResponse(
+                status="ERROR",
+                code=500,
+                error="analysis.json missing required field: data_dir"
+            )
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content=error_response.model_dump()
+            )
         segments_file = analysis_config.get("segments_file")
         locations_file = analysis_config.get("locations_file")
         flow_file = analysis_config.get("flow_file")
