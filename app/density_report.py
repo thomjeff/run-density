@@ -1760,7 +1760,11 @@ def generate_combined_sustained_periods(segment: Dict[str, Any]) -> List[str]:
 # def generate_simple_density_report(...) - REMOVED
 
 
-def generate_map_dataset(results: Dict[str, Any], start_times: Dict[str, float]) -> Dict[str, Any]:
+def generate_map_dataset(
+    results: Dict[str, Any],
+    start_times: Dict[str, float],
+    segments_csv_path: Optional[str] = None
+) -> Dict[str, Any]:
     """
     Generate map dataset from density analysis results.
     
@@ -1770,6 +1774,7 @@ def generate_map_dataset(results: Dict[str, Any], start_times: Dict[str, float])
     Args:
         results: Density analysis results
         start_times: Event start times in minutes
+        segments_csv_path: Path to segments.csv for metadata enrichment
     
     Returns:
         Map dataset dictionary
@@ -1792,19 +1797,21 @@ def generate_map_dataset(results: Dict[str, Any], start_times: Dict[str, float])
             segment_time_series = get_segment_time_series()
             
             # Load segments CSV for labels and other metadata
-            try:
-                from app.io.loader import load_segments
-                segments_df = load_segments("data/segments.csv")
-                segments_dict = {}
-                for _, row in segments_df.iterrows():
-                    segments_dict[row['seg_id']] = {
-                        'seg_label': row.get('seg_label', row['seg_id']),
-                        'width_m': row.get('width_m', 3.0),
-                        'flow_type': row.get('flow_type', 'none')
-                    }
-            except Exception as e:
-                print(f"⚠️ Could not load segments CSV: {e}, using defaults")
-                segments_dict = {}
+            segments_dict = {}
+            if segments_csv_path:
+                try:
+                    from app.io.loader import load_segments
+                    segments_df = load_segments(segments_csv_path)
+                    for _, row in segments_df.iterrows():
+                        segments_dict[row['seg_id']] = {
+                            'seg_label': row.get('seg_label', row['seg_id']),
+                            'width_m': row.get('width_m'),
+                            'flow_type': row.get('flow_type', 'none')
+                        }
+                except Exception as e:
+                    raise ValueError(
+                        f"Could not load segments CSV from {segments_csv_path}: {e}"
+                    ) from e
             
             # Generate map-friendly data structure with canonical segments
             map_data = {
@@ -1831,6 +1838,11 @@ def generate_map_dataset(results: Dict[str, Any], start_times: Dict[str, float])
                 # Use peak_areal_density from canonical data
                 peak_areal_density = peak_data["peak_areal_density"]
                 
+                width_m = segment_info.get('width_m')
+                if width_m is None:
+                    raise ValueError(
+                        f"Segment {segment_id} missing width_m in segments CSV."
+                    )
                 map_data["segments"][segment_id] = {
                     "segment_id": segment_id,
                     "segment_label": segment_info.get('seg_label', segment_id),
@@ -1838,7 +1850,7 @@ def generate_map_dataset(results: Dict[str, Any], start_times: Dict[str, float])
                     "peak_mean_density": peak_data["peak_mean_density"],
                     "zone": _determine_zone(peak_areal_density),
                     "flow_type": segment_info.get('flow_type', 'none'),
-                    "width_m": segment_info.get('width_m', 3.0),
+                    "width_m": width_m,
                     "total_windows": peak_data["total_windows"],
                     "time_series": time_series,
                     "source": "canonical_segments"
@@ -2230,7 +2242,7 @@ def _add_geometries_to_bin_features(
         segments_df = load_segments(segments_csv_path)
         
         # Load GPX courses for centerlines
-        courses = load_all_courses("data")
+        courses = load_all_courses(os.path.dirname(segments_csv_path))
         
         # Convert segments to dict format for GPX processor
         segments_list = []
@@ -3067,7 +3079,8 @@ def build_runner_window_mapping(
     time_windows: list, 
     start_times: Dict[str, float],
     event_names: Optional[List[str]] = None,
-    analysis_context: Optional[Any] = None  # Issue #616: Pass analysis_context for segments_csv_path
+    analysis_context: Optional[Any] = None,  # Issue #616: Pass analysis_context for segments_csv_path
+    data_dir: Optional[str] = None
 ) -> Dict[str, Dict[int, Dict[str, Any]]]:
     """
     Build runner→segment/window mapping adapter for bins_accumulator.
@@ -3103,7 +3116,7 @@ def build_runner_window_mapping(
         
         # Load runners from individual event files based on start_times keys
         all_runners = []
-        data_dir = "data"
+        data_dir = data_dir or "data"
         for event_name in start_times.keys():
             try:
                 event_runners = load_runners_by_event(event_name, data_dir)

@@ -168,7 +168,7 @@ def validate_file_existence(
     locations_file: str,
     flow_file: str,
     events: List[Dict[str, Any]],
-    data_dir: str = "data"
+    data_dir: str
 ) -> None:
     """
     Validate all files referenced in payload exist in /data directory.
@@ -248,7 +248,7 @@ def validate_file_existence(
 def validate_segment_spans(
     segments_file: str,
     events: List[Dict[str, Any]],
-    data_dir: str = "data"
+    data_dir: str
 ) -> None:
     """
     Validate segments.csv includes {event}_from_km and {event}_to_km columns for each requested event.
@@ -304,7 +304,7 @@ def validate_segment_spans(
 
 def validate_runner_uniqueness(
     events: List[Dict[str, Any]],
-    data_dir: str = "data"
+    data_dir: str
 ) -> None:
     """
     Validate no duplicate runner_id across all runner files.
@@ -422,7 +422,7 @@ def validate_event_duration_range(events: List[Dict[str, Any]]) -> None:
 
 def validate_gpx_files(
     events: List[Dict[str, Any]],
-    data_dir: str = "data"
+    data_dir: str
 ) -> None:
     """
     Validate GPX files are parseable (basic XML structure check).
@@ -471,7 +471,7 @@ def validate_gpx_files(
 
 def validate_locations_resource_counts(
     locations_file: str,
-    data_dir: str = "data"
+    data_dir: str
 ) -> None:
     """
     Validate locations.csv resource count fields (all *_count columns).
@@ -534,7 +534,7 @@ def validate_locations_resource_counts(
 
 def validate_api_payload(
     payload: Dict[str, Any],
-    data_dir: str = "data"
+    data_dir: str
 ) -> Tuple[List[Dict[str, Any]], str, str, str]:
     """
     Main validation entry point for API v2 payload.
@@ -618,4 +618,3 @@ def validate_api_payload(
     validate_locations_resource_counts(locations_file, data_dir)  # Issue #589
     
     return events, segments_file, locations_file, flow_file
-

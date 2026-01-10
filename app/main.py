@@ -150,19 +150,17 @@ app.include_router(v2_analyze_router, prefix="/runflow/v2", tags=["v2"])
 # CSV Data Endpoints for Reports Page
 @app.get("/data/runners.csv")
 async def get_runners_csv():
-    """Serve runners.csv file for download."""
-    file_path = "data/runners.csv"
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Runners CSV file not found")
-    return FileResponse(file_path, filename="runners.csv", media_type="text/csv")
+    raise HTTPException(
+        status_code=410,
+        detail="Direct data/*.csv endpoints are deprecated. Use analysis.json data_files paths."
+    )
 
-@app.get("/data/segments.csv") 
+@app.get("/data/segments.csv")
 async def get_segments_csv():
-    """Serve segments.csv file for download."""
-    file_path = "data/segments.csv"
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Segments CSV file not found")
-    return FileResponse(file_path, filename="segments.csv", media_type="text/csv")
+    raise HTTPException(
+        status_code=410,
+        detail="Direct data/*.csv endpoints are deprecated. Use analysis.json data_files paths."
+    )
 
 @app.get("/data/flow_expected_results.csv")
 async def get_expected_results_csv():
@@ -1215,11 +1213,11 @@ def _determine_status_from_los_and_severity(los: str, severity: str) -> str:
         return "STABLE"
 
 
-def _load_segments_csv_dict() -> Dict[str, Dict[str, str]]:
+def _load_segments_csv_dict(segments_csv_path: str) -> Dict[str, Dict[str, str]]:
     """Load segments CSV and return dictionary mapping seg_id to seg_label."""
     try:
         import pandas as pd
-        segments_df = pd.read_csv("data/segments.csv")
+        segments_df = pd.read_csv(segments_csv_path)
         segments_dict = {}
         for _, row in segments_df.iterrows():
             segments_dict[row['seg_id']] = {
@@ -1227,8 +1225,7 @@ def _load_segments_csv_dict() -> Dict[str, Dict[str, str]]:
             }
         return segments_dict
     except Exception as e:
-        print(f"⚠️ Could not load segments CSV: {e}, using defaults")
-        return {}
+        raise RuntimeError(f"Could not load segments CSV from {segments_csv_path}: {e}") from e
 
 
 def _build_segment_from_canonical_data(
@@ -1264,7 +1261,7 @@ def _build_segment_from_canonical_data(
     }
 
 
-def _load_canonical_segments_with_oi(tooltips_data) -> Optional[Dict[str, Any]]:
+def _load_canonical_segments_with_oi(tooltips_data, segments_csv_path: str) -> Optional[Dict[str, Any]]:
     """Load canonical segments with operational intelligence."""
     try:
         from app.canonical_segments import (
@@ -1282,7 +1279,7 @@ def _load_canonical_segments_with_oi(tooltips_data) -> Optional[Dict[str, Any]]:
         metadata = get_canonical_segments_metadata()
         
         # Load segments CSV for labels
-        segments_dict = _load_segments_csv_dict()
+        segments_dict = _load_segments_csv_dict(segments_csv_path)
         
         # Build operational intelligence lookup from tooltips
         oi_by_segment = _build_operational_intelligence_lookup(tooltips_data)
@@ -1308,18 +1305,15 @@ def _load_canonical_segments_with_oi(tooltips_data) -> Optional[Dict[str, Any]]:
         }
         
     except ImportError:
-        print("⚠️ Canonical segments module not available, using legacy approach")
-        return None
-    except Exception as e:
-        print(f"⚠️ Error using canonical segments: {e}, falling back to legacy approach")
+        print("⚠️ Canonical segments module not available")
         return None
 
 
-def _load_fallback_segments_from_csv() -> Dict[str, Any]:
+def _load_fallback_segments_from_csv(segments_csv_path: str) -> Dict[str, Any]:
     """Load fallback segments from CSV when no analysis data available."""
     print("⚠️ No density report found, using segments CSV fallback")
     import pandas as pd
-    segments_df = pd.read_csv("data/segments.csv")
+    segments_df = pd.read_csv(segments_csv_path)
     
     segments = []
     for _, row in segments_df.iterrows():
@@ -1344,11 +1338,21 @@ def _load_fallback_segments_from_csv() -> Dict[str, Any]:
 async def get_segments():
     """Get segments data for frontend dashboard with operational intelligence (Issue #237)."""
     try:
+        from app.utils.run_id import get_latest_run_id
+        from app.utils.run_id import get_runflow_root
+        from app.core.v2.analysis_config import load_analysis_json, get_segments_file
+
+        run_id = get_latest_run_id()
+        runflow_root = get_runflow_root()
+        run_path = runflow_root / run_id
+        analysis_config = load_analysis_json(run_path)
+        segments_csv_path = get_segments_file(analysis_config=analysis_config)
+
         # Issue #237: Load operational intelligence from tooltips.json
         tooltips_data = _load_tooltips_json()
         
         # Issue #231: Try canonical segments first (ChatGPT's roadmap)
-        canonical_result = _load_canonical_segments_with_oi(tooltips_data)
+        canonical_result = _load_canonical_segments_with_oi(tooltips_data, segments_csv_path)
         if canonical_result:
             return canonical_result
         
@@ -1366,7 +1370,7 @@ async def get_segments():
             }
         else:
             # Final fallback to hardcoded values if no report found
-            return _load_fallback_segments_from_csv()
+            return _load_fallback_segments_from_csv(segments_csv_path)
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load segments data: {str(e)}")

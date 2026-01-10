@@ -174,7 +174,7 @@ def _build_label_lookup_from_geojson(segments_geojson: Dict[str, Any]) -> Dict[s
     return label_lookup
 
 
-def _enrich_label_lookup_from_csv(label_lookup: Dict[str, Dict[str, Any]], segments_csv_path: str = "data/segments.csv") -> Dict[str, Dict[str, Any]]:
+def _enrich_label_lookup_from_csv(label_lookup: Dict[str, Dict[str, Any]], segments_csv_path: str) -> Dict[str, Dict[str, Any]]:
     """Enrich label lookup with data from segments.csv (e.g., length_km if missing from geojson)."""
     try:
         from app.io.loader import load_segments

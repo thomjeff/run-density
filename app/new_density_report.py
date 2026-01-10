@@ -85,24 +85,15 @@ def load_parquet_sources(reports_dir: Path, bins_dir: Optional[Path] = None) -> 
     # Load segments.parquet from reports_dir (v2 saves day-filtered segments there)
     # NOTE: Do NOT fall back to data/segments.parquet as it's a legacy file and won't produce valid reports
     segments_parquet_path = reports_dir / "segments.parquet"
-    segments_csv_path = Path("data/segments.csv")
     
     if segments_parquet_path.exists():
         # v2 saves day-filtered segments.parquet in reports directory
         sources['segments'] = pd.read_parquet(segments_parquet_path)
         print(f"📊 Loaded {len(sources['segments'])} segments from {segments_parquet_path}")
-    elif segments_csv_path.exists():
-        # Fallback to CSV only (for v1 compatibility or if parquet generation failed)
-        sources['segments'] = pd.read_csv(segments_csv_path)
-        # Rename seg_id to segment_id for consistency
-        if 'seg_id' in sources['segments'].columns:
-            sources['segments'] = sources['segments'].rename(columns={'seg_id': 'segment_id'})
-        print(f"📊 Loaded {len(sources['segments'])} segments from {segments_csv_path}")
-        print(f"⚠️  Warning: Using segments.csv instead of day-filtered segments.parquet - report may not be day-scoped correctly")
     else:
         raise FileNotFoundError(
-            f"segments.parquet not found at {segments_parquet_path} and segments.csv not found at {segments_csv_path}. "
-            f"v2 pipeline should generate segments.parquet in reports directory."
+            f"segments.parquet not found at {segments_parquet_path}. "
+            f"v2 pipeline must generate segments.parquet in reports directory."
         )
     
     return sources

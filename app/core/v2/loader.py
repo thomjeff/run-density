@@ -17,14 +17,14 @@ from app.core.v2.validation import validate_api_payload
 
 def load_events_from_payload(
     payload: Dict[str, Any],
-    data_dir: str = "data"
+    data_dir: str
 ) -> List[Event]:
     """
     Parse API v2 payload and create Event objects.
     
     Args:
         payload: API v2 request payload dictionary
-        data_dir: Base directory for data files (default: "data")
+        data_dir: Base directory for data files
         
     Returns:
         List of Event objects with normalized names and day assignments
@@ -85,14 +85,14 @@ def load_events_from_payload(
 
 def load_runners_for_event(
     event: Event,
-    data_dir: str = "data"
+    data_dir: str
 ) -> List[Runner]:
     """
     Load runners from CSV file and create Runner objects for an event.
     
     Args:
         event: Event object with runners_file path
-        data_dir: Base directory for data files (default: "data")
+        data_dir: Base directory for data files
         
     Returns:
         List of Runner objects with normalized event names
@@ -141,7 +141,7 @@ def load_runners_for_event(
 def load_segments_with_spans(
     segments_file: str,
     events_data: List[Dict[str, Any]],
-    data_dir: str = "data"
+    data_dir: str
 ) -> pd.DataFrame:
     """
     Load segments.csv and validate per-event span columns exist.
@@ -152,7 +152,7 @@ def load_segments_with_spans(
     Args:
         segments_file: Path to segments.csv file
         events_data: List of event dictionaries (for span validation context)
-        data_dir: Base directory for data files (default: "data")
+        data_dir: Base directory for data files
         
     Returns:
         DataFrame with segments data
@@ -201,4 +201,3 @@ def group_events_by_day(events: List[Event]) -> Dict[Day, List[Event]]:
         grouped[event.day].append(event)
     
     return grouped
-

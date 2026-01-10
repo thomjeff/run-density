@@ -668,10 +668,10 @@ def update_pointer_files(run_id: str, metadata: Dict[str, Any]) -> None:
 
 def create_full_analysis_pipeline(
     events: List[Event],
-    segments_file: str = "segments.csv",
-    locations_file: str = "locations.csv",
-    flow_file: str = "flow.csv",
-    data_dir: str = "data",
+    segments_file: str,
+    locations_file: str,
+    flow_file: str,
+    data_dir: str,
     run_id: Optional[str] = None,
     request_payload: Optional[Dict[str, Any]] = None,
     response_payload: Optional[Dict[str, Any]] = None,
@@ -846,7 +846,7 @@ def create_full_analysis_pipeline(
             from app.core.v2.analysis_config import get_flow_file
             flow_file_path = get_flow_file(analysis_config=analysis_config)
         else:
-            flow_file_path = flow_file
+            raise ValueError("analysis_config is required to resolve flow_file for v2 pipeline.")
         flow_results = analyze_temporal_flow_segments_v2(
             events=events,
             timelines=timelines,
@@ -1338,7 +1338,11 @@ def create_full_analysis_pipeline(
                     start_times_for_map[event.name.lower()] = float(event.start_time)
                 
                 # Generate map dataset from density results
-                map_data = generate_map_dataset(day_density, start_times_for_map)
+                map_data = generate_map_dataset(
+                    day_density,
+                    start_times_for_map,
+                    segments_csv_path=segments_path_str
+                )
                 
                 # Save to day-scoped maps directory
                 map_data_path = maps_dir / "map_data.json"
@@ -1703,8 +1707,8 @@ def create_full_analysis_pipeline(
 # Alias for backward compatibility
 def create_density_pipeline(
     events: List[Event],
-    segments_file: str = "segments.csv",
-    data_dir: str = "data",
+    segments_file: str,
+    data_dir: str,
     run_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
@@ -1712,10 +1716,7 @@ def create_density_pipeline(
     
     This function now runs both density and flow analysis.
     """
-    return create_full_analysis_pipeline(
-        events=events,
-        segments_file=segments_file,
-        data_dir=data_dir,
-        run_id=run_id
+    raise ValueError(
+        "create_density_pipeline requires full analysis configuration. "
+        "Use create_full_analysis_pipeline with analysis.json-derived paths."
     )
-

@@ -92,7 +92,7 @@ def generate_ui_artifacts_per_day(
     flow_results: Dict[str, Any],
     segments_df: pd.DataFrame,
     all_runners_df: pd.DataFrame,
-    data_dir: str = "data",
+    data_dir: str,
     environment: str = "local"
 ) -> Optional[Path]:
     """

@@ -180,7 +180,7 @@ def combine_runners_for_events(
 
 def load_all_runners_for_events(
     events: List[Event],
-    data_dir: str = "data"
+    data_dir: str
 ) -> pd.DataFrame:
     """
     Load all runners from event-specific CSV files and combine into a single DataFrame.
@@ -190,7 +190,7 @@ def load_all_runners_for_events(
     
     Args:
         events: List of Event objects
-        data_dir: Base directory for data files (default: "data")
+        data_dir: Base directory for data files
         
     Returns:
         Combined DataFrame with all runners from all events
@@ -266,7 +266,7 @@ def analyze_density_segments_v2(
     timelines: List[DayTimeline],
     segments_df: pd.DataFrame,
     all_runners_df: pd.DataFrame,
-    density_csv_path: str = "data/segments.csv",
+    density_csv_path: str,
     config: Optional[DensityConfig] = None
 ) -> Dict[Day, Dict[str, Any]]:
     """
@@ -404,4 +404,3 @@ def analyze_density_segments_v2(
             }
     
     return results_by_day
-

@@ -6,7 +6,7 @@ def _yn(x):
         return s
     return s  # leave as-is if unexpected; tests will catch
 
-def load_segments(path="data/segments.csv"):
+def load_segments(path: str):
     df = pd.read_csv(path)
     # normalize minimal bits required by current code
     # Issue #553 Phase 4.2: Normalize known event columns, plus dynamically discover others
@@ -25,10 +25,10 @@ def load_segments(path="data/segments.csv"):
         df["width_m"] = pd.to_numeric(df["width_m"], errors="coerce")
     return df
 
-def load_runners(path="data/runners.csv"):
+def load_runners(path: str):
     return pd.read_csv(path)
 
-def load_runners_by_event(event_name: str, data_dir: str = "data"):
+def load_runners_by_event(event_name: str, data_dir: str):
     """
     Load runners for a specific event from event-specific CSV file.
     
@@ -61,7 +61,7 @@ def load_runners_by_event(event_name: str, data_dir: str = "data"):
     
     return pd.read_csv(runners_path)
 
-def load_locations(path="data/locations.csv"):
+def load_locations(path: str):
     """
     Load locations.csv with validation and normalization.
     

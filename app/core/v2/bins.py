@@ -88,7 +88,7 @@ def generate_bins_v2(
     run_id: str,
     day: Day,
     events: List[Event],
-    data_dir: str = "data",
+    data_dir: str,
     segments_csv_path: Optional[str] = None  # Issue #616: Use segments_file from analysis.json
 ) -> Optional[Path]:
     """
@@ -129,50 +129,13 @@ def generate_bins_v2(
         bins_dir = get_day_output_path(run_id, day, "bins")
         bins_dir.mkdir(parents=True, exist_ok=True)
         
-        # Issue #616: Use segments_csv_path from analysis.json if provided, otherwise fallback to data_dir/segments.csv
         if segments_csv_path is None:
-            segments_csv_path = str(Path(data_dir) / "segments.csv")
-            logger.warning(
-                f"segments_csv_path not provided to generate_bins_v2, defaulting to {segments_csv_path}. "
-                f"This should come from analysis.json segments_file."
+            raise ValueError(
+                "segments_csv_path must be provided to generate_bins_v2 from analysis.json."
             )
-        else:
-            logger.info(f"Issue #616: Using segments_csv_path={segments_csv_path} from analysis.json")
+        logger.info(f"Issue #616: Using segments_csv_path={segments_csv_path} from analysis.json")
         
-        # CRITICAL FIX: build_runner_window_mapping() hardcodes reading from "data/runners.csv"
-        # We need to temporarily replace it with our day-filtered runners
-        # Issue #548 Bug 1: build_runner_window_mapping() now uses lowercase event names
-        import tempfile
-        import shutil
-        
-        # Create temp combined runners CSV (event names are already lowercase)
-        temp_runners_df = runners_df.copy()
-        # Ensure event column is lowercase (should already be, but double-check)
-        if 'event' in temp_runners_df.columns:
-            temp_runners_df['event'] = temp_runners_df['event'].str.lower()
-        
-        # Create temp file
-        temp_runners_csv = tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False)
-        temp_runners_df.to_csv(temp_runners_csv.name, index=False)
-        temp_runners_csv.close()
-        temp_runners_path = temp_runners_csv.name
-        
-        # Issue #548: Create temporary "data/runners.csv" from our day-filtered runners
-        # (build_runner_window_mapping hardcodes reading from this path)
-        original_runners_path = Path(data_dir) / "runners.csv"
-        runners_was_replaced = False
-        
-        try:
-            # Issue #548: runners.csv no longer exists, so we just create it from our temp file
-            # No need to back up since the file doesn't exist
-            # Copy our temp file to "data/runners.csv" (temporary file for build_runner_window_mapping)
-            shutil.copy2(temp_runners_path, original_runners_path)
-            runners_was_replaced = True
-            logger.debug(f"Created temporary data/runners.csv with day-filtered runners ({len(temp_runners_df)} runners)")
-            
-        except Exception as e:
-            logger.warning(f"Failed to temporarily replace data/runners.csv: {e}")
-            # Continue anyway - bin generation might still work
+        # Issue #616: build_runner_window_mapping uses per-event runner files; no temp data/runners.csv needed
         
         # Create AnalysisContext
         analysis_context = AnalysisContext(
@@ -182,7 +145,7 @@ def generate_bins_v2(
             params={"start_times": start_times},
             code_version="v2.0.0",
             schema_version=BIN_SCHEMA_VERSION,
-            pace_csv_path=str(original_runners_path),
+            pace_csv_path="",
             segments_csv_path=segments_csv_path
         )
         
@@ -433,28 +396,11 @@ def generate_bins_v2(
             return bins_dir
             
         finally:
-            # Issue #548: Remove temporary "data/runners.csv" if we created it
-            if runners_was_replaced:
-                try:
-                    if original_runners_path.exists():
-                        # Remove our temp file (we created it, so just delete it)
-                        os.unlink(original_runners_path)
-                        logger.debug(f"Removed temporary data/runners.csv")
-                except Exception as e:
-                    logger.warning(f"Failed to remove temporary data/runners.csv: {e}")
-            
             # Clean up temp files
             try:
                 shutil.rmtree(temp_output_dir)
             except Exception as e:
                 logger.warning(f"Failed to clean up temp directory {temp_output_dir}: {e}")
-            
-            # Clean up temp runners CSV
-            try:
-                if os.path.exists(temp_runners_path):
-                    os.unlink(temp_runners_path)
-            except Exception as e:
-                logger.warning(f"Failed to clean up temp runners CSV {temp_runners_path}: {e}")
         
     except Exception as e:
         logger.error(f"Failed to generate bins for day {day.value}: {e}", exc_info=True)
