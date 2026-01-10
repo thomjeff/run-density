@@ -147,26 +147,34 @@ def calculate_peak_density_los(peak_density: float) -> str:
             "Cannot calculate LOS without valid rulebook configuration."
         )
     
-    # Get density thresholds (assuming they're in order A->F)
-    density_thresholds = thresholds.get("density", [])
-    
-    if not density_thresholds:
-        raise ValueError(
-            "Rulebook missing 'globals.los_thresholds.density' thresholds. "
-            "Cannot calculate LOS without density thresholds."
-        )
-    
-    if not isinstance(density_thresholds, list) or len(density_thresholds) < 5:
-        raise ValueError(
-            f"Invalid density thresholds in rulebook: expected list of at least 5 values, "
-            f"got {type(density_thresholds)} with length {len(density_thresholds) if isinstance(density_thresholds, list) else 'N/A'}"
-        )
-    
-    # Find appropriate LOS grade
+    # Extract density thresholds from rulebook structure (A-F with min/max)
+    # Rulebook format: { "A": { "min": 0.0, "max": 0.36, ... }, "B": { ... }, ... }
     los_grades = ["A", "B", "C", "D", "E", "F"]
+    density_thresholds = []
     
+    for grade in los_grades:
+        if grade not in thresholds:
+            raise ValueError(
+                f"Rulebook missing 'globals.los_thresholds.{grade}'. "
+                "Cannot calculate LOS without complete threshold configuration."
+            )
+        grade_config = thresholds[grade]
+        if not isinstance(grade_config, dict) or "max" not in grade_config:
+            raise ValueError(
+                f"Invalid threshold configuration for '{grade}': expected dict with 'max' key, "
+                f"got {type(grade_config)}"
+            )
+        density_thresholds.append(float(grade_config["max"]))
+    
+    if len(density_thresholds) < 5:
+        raise ValueError(
+            f"Invalid density thresholds in rulebook: expected at least 5 values, "
+            f"got {len(density_thresholds)}"
+        )
+    
+    # Find appropriate LOS grade (thresholds are max values, inclusive upper bound)
     for i, threshold in enumerate(density_thresholds):
-        if peak_density < threshold:
+        if peak_density <= threshold:
             return los_grades[i]
     
     # If above all thresholds, return F

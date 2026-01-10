@@ -21,7 +21,7 @@ from app.api.models.v2 import (
 from app.core.v2.validation import ValidationError, validate_api_payload
 from app.core.v2.loader import load_events_from_payload
 from app.core.v2.pipeline import create_stubbed_pipeline, create_full_analysis_pipeline
-from app.core.v2.analysis_config import generate_analysis_json
+from app.core.v2.analysis_config import generate_analysis_json, get_data_directory
 from app.utils.run_id import generate_run_id, get_runflow_root
 
 # Create router
@@ -144,10 +144,13 @@ async def analyze_v2(request: V2AnalyzeRequest, background_tasks: BackgroundTask
         # Convert Pydantic model to dict for validation
         payload_dict = request.model_dump()
         
+        # Get data directory for validation (Issue #655: SSOT)
+        data_dir = get_data_directory()
+        
         # Validate payload using Phase 1 validation layer
         # This checks all rules from Issue #553
         try:
-            validate_api_payload(payload_dict)
+            validate_api_payload(payload_dict, data_dir)
         except ValidationError as e:
             # Convert ValidationError to V2ErrorResponse format (Issue #553)
             error_response = V2ErrorResponse(
@@ -187,10 +190,8 @@ async def analyze_v2(request: V2AnalyzeRequest, background_tasks: BackgroundTask
                 content=error_response.model_dump()
             )
         
-        # Load events from payload (creates Event objects)
-        events = load_events_from_payload(payload_dict)
-        
         # Extract data directory and file names from analysis.json (single source of truth)
+        # Use this data_dir for all subsequent operations
         data_dir = analysis_config.get("data_dir")
         if not data_dir:
             error_response = V2ErrorResponse(
@@ -205,6 +206,10 @@ async def analyze_v2(request: V2AnalyzeRequest, background_tasks: BackgroundTask
         segments_file = analysis_config.get("segments_file")
         locations_file = analysis_config.get("locations_file")
         flow_file = analysis_config.get("flow_file")
+        
+        # Load events from payload (creates Event objects)
+        # Must happen after we have data_dir from analysis_config (Issue #655: SSOT)
+        events = load_events_from_payload(payload_dict, data_dir)
         
         # Issue #554: Extract days from events for immediate response
         # We need to determine which days are in the request to return them in the response
