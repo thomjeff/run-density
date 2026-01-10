@@ -541,6 +541,25 @@ def _create_segment_feature(seg_id, segment_dims, schema_keys):
     if not schema_key:
         raise ValueError(f"Segment {seg_id} missing schema_key in bins metadata.")
     
+    # Issue #655: Calculate length_km from event-specific fields
+    length_km = None
+    for col in ["elite_length", "open_length", "10k_length", "half_length", "full_length"]:
+        if col in dims and dims[col] is not None and pd.notna(dims[col]) and dims[col] > 0:
+            length_km = float(dims[col])
+            break
+    
+    # Fallback: Calculate from event-specific from_km/to_km
+    if length_km is None or length_km == 0.0:
+        for event in ["elite", "open", "10k", "half", "full"]:
+            event_from = dims.get(f"{event}_from_km")
+            event_to = dims.get(f"{event}_to_km")
+            if event_from is not None and event_to is not None and pd.notna(event_from) and pd.notna(event_to):
+                length_km = float(event_to) - float(event_from)
+                break
+    
+    if length_km is None or length_km == 0.0:
+        length_km = 0.0
+    
     return {
         "type": "Feature",
         "geometry": {
@@ -550,7 +569,7 @@ def _create_segment_feature(seg_id, segment_dims, schema_keys):
         "properties": {
             "seg_id": seg_id,
             "label": seg_label,
-            "length_km": float(dims.get("full_length", dims.get("half_length", dims.get("10K_length", 0.0)))),
+            "length_km": length_km,
             "width_m": float(width_val),
             "direction": direction,
             "events": [event for event in ["Full", "Half", "10K"] if dims.get(event.lower() if event != "10K" else "10K", "") == "y"],
@@ -596,10 +615,29 @@ def _build_segment_feature_properties(seg_id, segment_dims, schema_keys):
     if not schema_key:
         raise ValueError(f"Segment {seg_id} missing schema_key in bins metadata.")
     
+    # Issue #655: Calculate length_km from event-specific fields
+    length_km = None
+    for col in ["elite_length", "open_length", "10k_length", "half_length", "full_length"]:
+        if col in dims and dims[col] is not None and pd.notna(dims[col]) and dims[col] > 0:
+            length_km = float(dims[col])
+            break
+    
+    # Fallback: Calculate from event-specific from_km/to_km
+    if length_km is None or length_km == 0.0:
+        for event in ["elite", "open", "10k", "half", "full"]:
+            event_from = dims.get(f"{event}_from_km")
+            event_to = dims.get(f"{event}_to_km")
+            if event_from is not None and event_to is not None and pd.notna(event_from) and pd.notna(event_to):
+                length_km = float(event_to) - float(event_from)
+                break
+    
+    if length_km is None or length_km == 0.0:
+        length_km = 0.0
+    
     return {
         "seg_id": seg_id,
         "label": seg_label,
-        "length_km": float(dims.get("full_length", dims.get("half_length", dims.get("10K_length", 0.0)))),
+        "length_km": length_km,
         "width_m": float(width_val),
         "direction": direction,
         "events": [event for event in ["Full", "Half", "10K"] 
@@ -792,7 +830,37 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
                 print(f"   ⚠️  Segment {seg_id} missing schema_key in bins metadata, using default: {schema_key}")
             # Update properties with dimensions
             props["label"] = seg_label
-            props["length_km"] = float(dims.get("full_length", dims.get("half_length", dims.get("10K_length", 0.0))))
+            
+            # Issue #655: Calculate length_km from event-specific fields or from_km/to_km
+            # Try event-specific length columns first (elite_length, open_length, etc.)
+            length_km = None
+            for col in ["elite_length", "open_length", "10k_length", "half_length", "full_length"]:
+                if col in dims and dims[col] is not None and pd.notna(dims[col]) and dims[col] > 0:
+                    length_km = float(dims[col])
+                    break
+            
+            # Fallback: Calculate from from_km/to_km if length column not found or is 0
+            if length_km is None or length_km == 0.0:
+                # Use from_km/to_km from the feature properties (already set by generate_segment_coordinates)
+                from_km = props.get("from_km")
+                to_km = props.get("to_km")
+                if from_km is not None and to_km is not None and pd.notna(from_km) and pd.notna(to_km):
+                    length_km = float(to_km) - float(from_km)
+                else:
+                    # Last resort: Try event-specific from_km/to_km from dims
+                    feature_events = props.get("events", [])
+                    if feature_events:
+                        event = feature_events[0].lower()  # Use first event
+                        event_from = dims.get(f"{event}_from_km")
+                        event_to = dims.get(f"{event}_to_km")
+                        if event_from is not None and event_to is not None and pd.notna(event_from) and pd.notna(event_to):
+                            length_km = float(event_to) - float(event_from)
+            
+            # Default to 0.0 if still no length found
+            if length_km is None or length_km == 0.0:
+                length_km = 0.0
+            
+            props["length_km"] = length_km
             props["width_m"] = float(width_val)
             props["direction"] = direction
             props["events"] = [event for event in ["Full", "Half", "10K"] 
