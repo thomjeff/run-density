@@ -52,8 +52,13 @@ def _validate_import_patterns():
 _validate_import_patterns()
 
 @dataclass
-class AnalysisContext:
-    """Structured context for bin dataset generation per ChatGPT specification."""
+class BinGenerationContext:
+    """
+    Structured context for bin dataset generation per ChatGPT specification.
+    
+    Issue #655: Renamed from AnalysisContext to avoid confusion with app.config.loader.AnalysisContext (SSOT).
+    This is a legacy dataclass used for bin generation parameters, not the SSOT config loader.
+    """
     course_id: str
     segments: pd.DataFrame
     runners: pd.DataFrame
@@ -2260,7 +2265,7 @@ def _apply_flagging_to_bin_features(
 
 def _add_geometries_to_bin_features(
     geojson_features: list,
-    analysis_context: Optional[AnalysisContext],
+    analysis_context: Optional[BinGenerationContext],
     logger
 ) -> None:
     """Add geometry backfill using bin_geometries.py."""
@@ -2417,7 +2422,7 @@ def generate_bin_dataset(
     results: Dict[str, Any], 
     start_times: Dict[str, float], 
     bin_size_km: float = 0.1, 
-    analysis_context: Optional[AnalysisContext] = None, 
+    analysis_context: Optional[BinGenerationContext] = None, 
     dt_seconds: int = 60,
     event_durations: Optional[Dict[str, int]] = None,
     event_names: Optional[List[str]] = None

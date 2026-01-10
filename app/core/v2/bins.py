@@ -13,7 +13,7 @@ from typing import Dict, Any, Optional, Tuple, List
 import pandas as pd
 
 from app.density_report import (
-    AnalysisContext,
+    BinGenerationContext,
     _generate_bin_dataset_with_retry,
     _save_bin_artifacts_and_metadata,
     _process_segments_from_bins
@@ -138,8 +138,9 @@ def generate_bins_v2(
         
         # Issue #616: build_runner_window_mapping uses per-event runner files; no temp data/runners.csv needed
         
-        # Create AnalysisContext
-        analysis_context = AnalysisContext(
+        # Issue #655: Create BinGenerationContext (legacy dataclass for bin generation parameters)
+        # Note: This is different from ConfigAnalysisContext (SSOT config loader from app.config.loader)
+        analysis_context = BinGenerationContext(
             course_id="fredericton_marathon",
             segments=segments_df,
             runners=runners_df,

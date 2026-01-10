@@ -122,49 +122,55 @@ def calculate_peak_density_los(peak_density: float) -> str:
     Calculate LOS for peak density using rulebook thresholds.
     
     Issue #569: Replicates logic from app/routes/api_dashboard.py
+    Issue #655: Removed hardcoded fallback thresholds - fails fast if rulebook invalid.
     
     Args:
         peak_density: Peak density value (persons/m²)
         
     Returns:
         LOS grade (A-F)
+        
+    Raises:
+        FileNotFoundError: If density_rulebook.yml not found
+        KeyError: If required thresholds missing from rulebook
+        ValueError: If thresholds invalid
     """
-    try:
-        from app.common.config import load_rulebook
-        rulebook = load_rulebook()
-        thresholds = rulebook.get("globals", {}).get("los_thresholds", {})
-        
-        # Get density thresholds (assuming they're in order A->F)
-        density_thresholds = thresholds.get("density", [])
-        
-        if not density_thresholds:
-            # Fallback to hardcoded thresholds if YAML missing
-            density_thresholds = [0.2, 0.4, 0.6, 0.8, 1.0]
-        
-        # Find appropriate LOS grade
-        los_grades = ["A", "B", "C", "D", "E", "F"]
-        
-        for i, threshold in enumerate(density_thresholds):
-            if peak_density < threshold:
-                return los_grades[i]
-        
-        # If above all thresholds, return F
-        return "F"
-    except Exception as e:
-        logger.warning(f"Error calculating LOS from rulebook: {e}, using fallback")
-        # Fallback logic
-        if peak_density < 0.36:
-            return "A"
-        elif peak_density < 0.54:
-            return "B"
-        elif peak_density < 0.72:
-            return "C"
-        elif peak_density < 1.08:
-            return "D"
-        elif peak_density < 1.63:
-            return "E"
-        else:
-            return "F"
+    from app.common.config import load_rulebook
+    
+    # Issue #655: Fail fast if rulebook missing or invalid (no fallback)
+    rulebook = load_rulebook()
+    thresholds = rulebook.get("globals", {}).get("los_thresholds", {})
+    
+    if not thresholds:
+        raise ValueError(
+            "Rulebook missing 'globals.los_thresholds'. "
+            "Cannot calculate LOS without valid rulebook configuration."
+        )
+    
+    # Get density thresholds (assuming they're in order A->F)
+    density_thresholds = thresholds.get("density", [])
+    
+    if not density_thresholds:
+        raise ValueError(
+            "Rulebook missing 'globals.los_thresholds.density' thresholds. "
+            "Cannot calculate LOS without density thresholds."
+        )
+    
+    if not isinstance(density_thresholds, list) or len(density_thresholds) < 5:
+        raise ValueError(
+            f"Invalid density thresholds in rulebook: expected list of at least 5 values, "
+            f"got {type(density_thresholds)} with length {len(density_thresholds) if isinstance(density_thresholds, list) else 'N/A'}"
+        )
+    
+    # Find appropriate LOS grade
+    los_grades = ["A", "B", "C", "D", "E", "F"]
+    
+    for i, threshold in enumerate(density_thresholds):
+        if peak_density < threshold:
+            return los_grades[i]
+    
+    # If above all thresholds, return F
+    return "F"
 
 
 def create_stubbed_pipeline(
