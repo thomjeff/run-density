@@ -1,6 +1,9 @@
 # SSOT & Fail‑Fast Enforcement Rules (Non‑Negotiable)
-Date: 2026-01-10
-Version 1.0
+
+**Version:** v2.0.4+  
+**Last Updated:** 2025-01-10
+**Audience:** AI Assistants (Cursor, ChatGPT, Codex, GitHub Copilot)  
+**Purpose:** Complete onboarding and critical rules for AI pair programming
 
 ## Canonical Rule (Short Form)
 **If a value is required, it must exist in configuration. If it does not exist, the run must fail. There are no fallbacks.**
