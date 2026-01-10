@@ -316,19 +316,20 @@ def generate_segment_coordinates(
         from_km = segment.get(from_km_key)
         to_km = segment.get(to_km_key)
         
-        # Skip if we don't have the required fields for this event or if they're NaN
-        if from_km is None or to_km is None or pd.isna(from_km) or pd.isna(to_km):
-            result.append({
-                "seg_id": seg_id,
-                "segment_label": label,
-                "from_km": None,
-                "to_km": None,
-                "line_coords": None,
-                "coord_issue": True,
-                "course": gpx_event,
-                "error": f"Missing or NaN {from_km_key} or {to_km_key} fields"
-            })
-            continue
+        # Issue #655: Fail-fast if required fields are missing - no fallback behavior
+        # All segments must have valid from_km/to_km for their active events per segments_616.csv
+        if from_km is None or to_km is None:
+            raise ValueError(
+                f"Segment {seg_id} missing required {from_km_key} or {to_km_key} fields for event '{gpx_event}'. "
+                f"All segments must have valid from_km/to_km values for their active events in segments_616.csv. "
+                f"This is a data validation error - fail-fast."
+            )
+        if pd.isna(from_km) or pd.isna(to_km):
+            raise ValueError(
+                f"Segment {seg_id} has NaN values for {from_km_key} or {to_km_key} for event '{gpx_event}'. "
+                f"All segments must have valid numeric from_km/to_km values for their active events in segments_616.csv. "
+                f"This is a data validation error - fail-fast."
+            )
         
         # Use route slicing instead of just endpoints
         line_coords = slice_polyline_by_km(
@@ -338,26 +339,49 @@ def generate_segment_coordinates(
             to_km
         )
         
-        if line_coords and len(line_coords) >= 2:
-            # Check for suspicious segments (endpoints within 25m and too few vertices)
-            coord_issue = False
-            if len(line_coords) <= 2 and metres_between(line_coords[0], line_coords[-1]) < 25.0:
-                coord_issue = True
-                print(f"⚠️ [map] warning: {seg_id} endpoints are nearly identical; using route slice.")
-            
-            result.append({
-                "seg_id": seg_id,
-                "segment_label": label,
-                "from_km": from_km,
-                "to_km": to_km,
-                "line_coords": line_coords,
-                "coord_issue": coord_issue,
-                "course": gpx_event,
-                "direction": segment.get("direction"),
-                "width_m": segment.get("width_m"),
-            })
-        else:
-            raise ValueError(f"Route slicing failed for segment {seg_id} in GPX course '{gpx_event}'.")
+        # Issue #655: Fail-fast if route slicing fails - no fallback behavior
+        # All segments with valid from_km/to_km must have valid geometry
+        if not line_coords or len(line_coords) < 2:
+            raise ValueError(
+                f"Route slicing failed for segment {seg_id} in GPX course '{gpx_event}'. "
+                f"Segment has valid from_km={from_km}, to_km={to_km} but could not generate line coordinates. "
+                f"This indicates a GPX course data issue - fail-fast."
+            )
+        
+        # Check for suspicious segments (endpoints within 25m and too few vertices)
+        coord_issue = False
+        if len(line_coords) <= 2 and metres_between(line_coords[0], line_coords[-1]) < 25.0:
+            coord_issue = True
+            print(f"⚠️ [map] warning: {seg_id} endpoints are nearly identical; using route slice.")
+        
+        # Issue #655: Validate direction and width_m are present before adding to result
+        # These are required fields from segments_616.csv and should never be missing
+        direction = segment.get("direction")
+        width_m = segment.get("width_m")
+        if direction is None or direction == "":
+            raise ValueError(
+                f"Segment {seg_id} missing required 'direction' field for event '{gpx_event}'. "
+                f"All segments must have a 'direction' field (e.g., 'uni', 'bi', 'forward', 'backward') in segments_616.csv. "
+                f"This is a data validation error - fail-fast."
+            )
+        if width_m is None or (isinstance(width_m, float) and pd.isna(width_m)):
+            raise ValueError(
+                f"Segment {seg_id} missing required 'width_m' field for event '{gpx_event}'. "
+                f"All segments must have a valid 'width_m' value in segments_616.csv. "
+                f"This is a data validation error - fail-fast."
+            )
+        
+        result.append({
+            "seg_id": seg_id,
+            "segment_label": label,
+            "from_km": from_km,
+            "to_km": to_km,
+            "line_coords": line_coords,
+            "coord_issue": coord_issue,
+            "course": gpx_event,
+            "direction": direction,
+            "width_m": width_m,
+        })
     
     return result
 
