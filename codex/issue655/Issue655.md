@@ -1,14 +1,14 @@
-# 🔍 Audit Task: Configuration Integrity, Hardcoded Fallbacks & SSOT Violations
+# Audit Task: Configuration Integrity, Hardcoded Fallbacks & SSOT Violations
 
-## 🎯 Objective
+## Objective
 
 Conduct a full audit of the `run-density` codebase to identify **technical debt and implementation violations** relating to configuration consistency and hardcoded fallbacks. This supports **Issue #616 - Configuration as Single Source of Truth (SSOT)**.
 
 ---
 
-## ✅ Scope of Investigation
+## Scope of Investigation
 
-### (A) 🔗 Hardcoded File Paths
+### 🔗 Hardcoded File Paths
 
 Search for any **explicit or implicit references** to the following files outside of `/data` or `analysis.json` configuration sources:
 
@@ -25,7 +25,7 @@ Search for any **explicit or implicit references** to the following files outsid
 
 ---
 
-### (B) ⚠️ Silent Fallbacks to Defaults
+### (B) Silent Fallbacks to Defaults
 
 Identify cases where the system silently defaults to hardcoded values **without warning or error**, including:
 
@@ -37,7 +37,7 @@ Identify cases where the system silently defaults to hardcoded values **without 
 
 ---
 
-### (C) 📦 Configuration Violations (SSOT Breaches)
+### (C) Configuration Violations (SSOT Breaches)
 
 Investigate how configuration files are loaded and propagated. Confirm that:
 
@@ -48,7 +48,7 @@ Investigate how configuration files are loaded and propagated. Confirm that:
 
 ---
 
-### (D) 🧠 Additional Checks (Suggested by ChatGPT)
+### (D) Additional Checks (Suggested by ChatGPT)
 
 - Identify any functions that **should accept a config or context object** but do not
 - Detect if **schema resolution** or **file path logic** occurs deep inside helpers/utilities instead of injected from the top level
@@ -61,7 +61,7 @@ Investigate how configuration files are loaded and propagated. Confirm that:
 
 ---
 
-## 📄 Deliverables
+## Deliverables
 
 ### 1. Audit Report
 
@@ -69,10 +69,10 @@ Create a structured markdown file and save to: codex/config_audit_report.md
 
 This should include:
 
-- ✅ Confirmed compliant areas
-- ⚠️ Violations or weak patterns (with file + line references)
-- 🛠️ Suggestions for cleanup or refactoring
-- 🚫 Deprecated or dangerous fallback patterns
+- Confirmed compliant areas
+- Violations or weak patterns (with file + line references)
+- Suggestions for cleanup or refactoring
+- Deprecated or dangerous fallback patterns
 
 ### 2. Implementation Plan (Optional, After Approval)
 
@@ -84,11 +84,11 @@ Once the report is reviewed and approved:
 
 ---
 
-## 🚀 Kickoff Instructions
+## Kickoff Instructions
 
-- Start from the **main branch**
+- Work in **655-audit-config-integrity** branch**
 - Use tools like `grep`, `ripgrep`, AST parsers, or internal tools for detection
-- Do **not** begin modifying code yet
+- Do **not** begin modifying code until your research findings have been reviewed and a plan approved.
 - Focus only on audit, investigation, and reporting
 
 ---
