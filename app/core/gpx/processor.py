@@ -372,7 +372,7 @@ def generate_segment_coordinates(
     return result
 
 
-def load_all_courses(gpx_dir: str = "data") -> Dict[str, GPXCourse]:
+def load_all_courses(gpx_dir: str) -> Dict[str, GPXCourse]:
     """
     Load all GPX courses from the data directory
     
@@ -384,6 +384,8 @@ def load_all_courses(gpx_dir: str = "data") -> Dict[str, GPXCourse]:
     
     # Standardize on lowercase {event}.gpx filenames
     # Supported events: full, half, 10k, elite, open
+    if not gpx_dir:
+        raise ValueError("gpx_dir is required to load GPX courses.")
     courses: Dict[str, GPXCourse] = {}
     for event in ["full", "half", "10k", "elite", "open"]:
         filepath = Path(gpx_dir) / f"{event}.gpx"
@@ -393,9 +395,9 @@ def load_all_courses(gpx_dir: str = "data") -> Dict[str, GPXCourse]:
                 courses[event] = course
                 print(f"✅ Loaded {event} course: {course.total_distance_km:.2f} km")
             except Exception as e:
-                print(f"❌ Failed to load {event} course: {e}")
+                raise ValueError(f"Failed to load {event} course from {filepath}: {e}") from e
         else:
-            print(f"⚠️  GPX file not found: {filepath}")
+            raise FileNotFoundError(f"GPX file not found: {filepath}")
     
     return courses
 
@@ -440,7 +442,9 @@ if __name__ == "__main__":
     print("Testing GPX processing...")
     
     try:
-        courses = load_all_courses()
+        if len(sys.argv) < 2:
+            raise SystemExit("Usage: python -m app.core.gpx.processor <gpx_dir>")
+        courses = load_all_courses(sys.argv[1])
         print(f"\nLoaded {len(courses)} courses")
         
         for event, course in courses.items():
@@ -457,4 +461,3 @@ if __name__ == "__main__":
                     
     except Exception as e:
         print(f"Error: {e}")
-

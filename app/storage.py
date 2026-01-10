@@ -18,11 +18,10 @@ import logging
 # These paths are relative to the ARTIFACTS_ROOT resolved from latest.json
 DATASET = {
     "meta": "meta.json",
-    "segments": "segments.geojson", 
+    "segments": "segments.geojson",
     "metrics": "segment_metrics.json",
     "flags": "flags.json",
-    "flow": "flow.json",
-    "runners": "data/runners.csv"  # Absolute path from project root
+    "flow": "flow.json"
 }
 
 

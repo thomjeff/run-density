@@ -174,7 +174,7 @@ def _build_label_lookup_from_geojson(segments_geojson: Dict[str, Any]) -> Dict[s
     return label_lookup
 
 
-def _enrich_label_lookup_from_csv(label_lookup: Dict[str, Dict[str, Any]], segments_csv_path: str = "data/segments.csv") -> Dict[str, Dict[str, Any]]:
+def _enrich_label_lookup_from_csv(label_lookup: Dict[str, Dict[str, Any]], segments_csv_path: str) -> Dict[str, Dict[str, Any]]:
     """Enrich label lookup with data from segments.csv (e.g., length_km if missing from geojson)."""
     try:
         from app.io.loader import load_segments
@@ -266,13 +266,14 @@ def _build_segment_record(
     label_lookup: Dict[str, Dict[str, Any]],
     flagged_seg_ids: set,
     density_metrics: Dict[str, Any],
-    segment_metrics: Dict[str, Dict[str, Any]]
+    segment_metrics: Dict[str, Dict[str, Any]],
+    segments_csv_path: str
 ) -> Dict[str, Any]:
     """Build segment record from metrics and metadata."""
     label_info = label_lookup.get(seg_id, {})
     
     # Issue #285: Use operational schema tag instead of geometry metadata
-    schema = _get_segment_operational_schema(seg_id, segment_metrics)
+    schema = _get_segment_operational_schema(seg_id, segment_metrics, segments_csv_path)
     
     # Events list
     events = label_info.get("events", [])
@@ -301,6 +302,15 @@ def _build_segment_record(
         "events": events_str,
         "bin_detail": _format_bin_detail_display(bin_detail)
     }
+
+
+def _get_segments_csv_path_for_run(run_id: str) -> str:
+    from app.utils.run_id import get_runflow_root
+    from app.core.v2.analysis_config import get_segments_file
+
+    runflow_root = get_runflow_root()
+    run_path = runflow_root / run_id
+    return get_segments_file(run_path=run_path)
 
 
 @router.get("/api/density/segments")
@@ -352,26 +362,16 @@ async def get_density_segments(
         label_lookup = _build_label_lookup_from_geojson(segments_geojson or {})
         
         # Issue #652: Enrich with data from segments.csv (especially length_km)
-        # Issue #616: Get segments_csv_path from analysis.json instead of hardcoded default
-        segments_csv_path_for_api = None
+        # Issue #616: Require segments_csv_path from analysis.json (no hardcoded fallback)
         try:
-            from app.utils.run_id import get_runflow_root
-            from app.core.v2.analysis_config import get_segments_file
-            runflow_root = get_runflow_root()
-            run_path = runflow_root / run_id
-            segments_csv_path_for_api = get_segments_file(run_path=run_path)
+            segments_csv_path_for_api = _get_segments_csv_path_for_run(run_id)
         except Exception as e:
-            logger.warning(f"Could not get segments_csv_path from analysis.json for density API: {e}")
-        
-        # Only enrich if we have a valid path (fail silently if not found to avoid breaking UI)
-        if segments_csv_path_for_api:
-            label_lookup = _enrich_label_lookup_from_csv(label_lookup, segments_csv_path_for_api)
-        else:
-            logger.warning(
-                "segments_csv_path not found in analysis.json for density API enrichment. "
-                "Skipping CSV enrichment to avoid hardcoded fallback. "
-                "UI may show missing length_km values."
+            raise HTTPException(
+                status_code=500,
+                detail=f"segments_csv_path not found in analysis.json for run {run_id}: {e}"
             )
+        
+        label_lookup = _enrich_label_lookup_from_csv(label_lookup, segments_csv_path_for_api)
         
         # Load flags from day-scoped path (Issue #580: Updated path to metrics/ subdirectory)
         flags_data = storage.read_json(f"{selected_day}/ui/metrics/flags.json")
@@ -392,7 +392,7 @@ async def get_density_segments(
             
             segment_record = _build_segment_record(
                 seg_id, metrics, label_lookup, flagged_seg_ids,
-                density_metrics, segment_metrics
+                density_metrics, segment_metrics, segments_csv_path_for_api
             )
             segments_list.append(segment_record)
         
@@ -505,13 +505,14 @@ def _build_segment_detail_response(
     is_flagged: bool,
     heatmap_url: Optional[str],
     caption: Optional[str],
-    segment_metrics: Dict[str, Dict[str, Any]]
+    segment_metrics: Dict[str, Dict[str, Any]],
+    segments_csv_path: str
 ) -> Dict[str, Any]:
     """Build segment detail response dictionary."""
     return {
         "seg_id": seg_id,
         "name": metadata["label"],
-        "schema": _get_segment_operational_schema(seg_id, segment_metrics),
+        "schema": _get_segment_operational_schema(seg_id, segment_metrics, segments_csv_path),
         "active": metrics.get("active_window", "N/A"),
         "peak_density": metrics.get("peak_density", 0.0),
         "worst_los": metrics.get("worst_los", "Unknown"),
@@ -570,6 +571,15 @@ async def get_density_segment_detail(
         
         metrics = segment_metrics[seg_id]
         
+        # Issue #616: Require segments_csv_path from analysis.json (no hardcoded fallback)
+        try:
+            segments_csv_path_for_api = _get_segments_csv_path_for_run(run_id)
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"segments_csv_path not found in analysis.json for run {run_id}: {e}"
+            )
+
         # Load segment metadata from day-scoped geojson
         segments_geojson = storage.read_json(f"{selected_day}/ui/geospatial/segments.geojson")
         metadata = {}
@@ -608,7 +618,7 @@ async def get_density_segment_detail(
         # Build detail response
         detail = _build_segment_detail_response(
             seg_id, metrics, metadata, is_flagged, heatmap_url,
-            caption, segment_metrics
+            caption, segment_metrics, segments_csv_path_for_api
         )
         
         # Issue #596: Add utilization and worst_bin to detail response
@@ -627,7 +637,11 @@ async def get_density_segment_detail(
         raise HTTPException(status_code=500, detail=f"Failed to load segment detail: {str(e)}")
 
 
-def _get_segment_operational_schema(seg_id: str, segment_metrics: Dict[str, Dict[str, Any]]) -> str:
+def _get_segment_operational_schema(
+    seg_id: str,
+    segment_metrics: Dict[str, Dict[str, Any]],
+    segments_csv_path: str
+) -> str:
     """
     Get the operational schema tag for a specific segment.
     
@@ -660,10 +674,9 @@ def _get_segment_operational_schema(seg_id: str, segment_metrics: Dict[str, Dict
                 logger.warning(f"⚠️ Invalid metrics type for segment {seg_id}: {type(metrics).__name__}")
         
         # Fallback: resolve directly from CSV (Issue #648: CSV is SSOT)
-        return resolve_schema_from_csv(seg_id, None)
+        return resolve_schema_from_csv(seg_id, None, segments_csv_path)
             
     except Exception as e:
         logger.warning(f"Could not get operational schema for {seg_id}: {e}")
         # Fallback: resolve directly from CSV (Issue #648: CSV is SSOT)
-        return resolve_schema_from_csv(seg_id, None)
-
+        return resolve_schema_from_csv(seg_id, None, segments_csv_path)

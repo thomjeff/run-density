@@ -660,12 +660,8 @@ def load_segments_metadata(reports_dir: Optional[Path] = None, run_id: Optional[
         except Exception as e:
             print(f"   ⚠️  Could not load segments_csv_path from analysis.json: {e}")
     
-    # Fallback to hardcoded path only if analysis.json lookup failed (for backward compatibility)
     if not segments_path:
-        segments_path = Path("data/segments.csv")
-        if not segments_path.exists():
-            print(f"   ⚠️  segments.csv not found at {segments_path} and analysis.json lookup failed")
-            return {}
+        raise ValueError("segments_csv_path not found in analysis.json for heatmap metadata.")
     
     segments_meta = {}
     if segments_path.exists():

@@ -53,7 +53,7 @@ def generate_reports_per_day(
     density_results: Dict[Day, Dict[str, Any]],  # Issue #600: Still used for now (will be removed when Density fully refactored)
     segments_df: Any,  # pd.DataFrame
     all_runners_df: Any,  # pd.DataFrame
-    data_dir: str = "data",  # Data directory for loading runner files
+    data_dir: str,  # Data directory for loading runner files
     segments_file_path: Optional[str] = None,  # Issue #553 Phase 6.2: Path to segments file
     flow_file_path: Optional[str] = None,  # Issue #553 Phase 6.2: Path to flow file
     locations_file_path: Optional[str] = None  # Issue #553 Phase 6.2: Path to locations file
@@ -243,7 +243,7 @@ def generate_density_report_v2(
     density_results: Dict[str, Any],
     reports_path: Path,
     segments_df: Optional[Any] = None,  # pd.DataFrame - day-filtered segments
-    data_dir: str = "data",  # Data directory for loading runner files
+    data_dir: str,  # Data directory for loading runner files
     segments_file_path: Optional[str] = None  # Issue #553 Phase 6.2: Path to segments file
 ) -> Optional[Path]:
     """
@@ -842,4 +842,3 @@ def copy_bin_artifacts(
             logger.debug(f"Bin artifact {artifact} not found at {source_path}, skipping")
     
     logger.info(f"Copied bin artifacts from {bins_dir} to {target_bins_dir}")
-

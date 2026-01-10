@@ -624,7 +624,7 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
         return {"type": "FeatureCollection", "features": []}
     
     # Load GPX courses
-    courses = load_all_courses("data")
+    courses = load_all_courses(os.path.dirname(segments_csv_path))
     if not courses:
         print("Warning: No GPX courses found, returning empty GeoJSON")
         return {"type": "FeatureCollection", "features": []}

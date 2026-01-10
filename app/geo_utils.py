@@ -254,7 +254,7 @@ def generate_bins_geojson(segments_data: Dict[str, SegmentBinData], segments_csv
         from app.io.loader import load_segments
         
         # Load GPX courses
-        courses = load_all_courses("data")
+        courses = load_all_courses(data_dir)
         
         # Issue #616: Require segments_csv_path parameter - no hardcoded fallback
         if not segments_csv_path:

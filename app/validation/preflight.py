@@ -151,12 +151,12 @@ def _raise_if_validation_failed(validation_results: Dict[str, Any]) -> None:
         raise ValidationError(f"❌ Preflight validation failed ({validation_results['checks_failed']} errors):\n{error_summary}")
 
 
-def validate_segments_csv(file_path: str = "data/segments.csv") -> Dict[str, Any]:
+def validate_segments_csv(file_path: str) -> Dict[str, Any]:
     """
     Validate segments.csv structure and content.
 
     Args:
-        file_path: Path to segments.csv file
+        file_path: Path to segments.csv file (required)
 
     Returns:
         Dictionary with validation results
@@ -204,15 +204,18 @@ def validate_segments_csv(file_path: str = "data/segments.csv") -> Dict[str, Any
     return validation_results
 
 
-def validate_preflight() -> bool:
+def validate_preflight(file_path: str) -> bool:
     """
     Run preflight validation and return success status.
+
+    Args:
+        file_path: Path to segments.csv file (required)
 
     Returns:
         True if validation passes, False otherwise
     """
     try:
-        results = validate_segments_csv()
+        results = validate_segments_csv(file_path=file_path)
         print(f"✅ Preflight validation passed: {results['checks_passed']} checks passed")
         return True
     except ValidationError as e:
@@ -225,5 +228,10 @@ def validate_preflight() -> bool:
 
 if __name__ == "__main__":
     # Run preflight validation when called directly
-    success = validate_preflight()
+    import sys
+
+    if len(sys.argv) < 2:
+        print("Usage: python -m app.validation.preflight <segments_csv_path>")
+        exit(1)
+    success = validate_preflight(file_path=sys.argv[1])
     exit(0 if success else 1)

@@ -640,9 +640,9 @@ def calculate_arrival_times_for_location(
 
 
 def generate_location_report(
-    locations_csv: str = "data/locations.csv",
-    runners_csv: str = "data/runners.csv",
-    segments_csv: str = "data/segments.csv",
+    locations_csv: str,
+    runners_csv: str,
+    segments_csv: str,
     start_times: Optional[Dict[str, float]] = None,
     output_dir: str = "reports",
     run_id: Optional[str] = None,
@@ -654,9 +654,9 @@ def generate_location_report(
     Issue #277: Main entry point for location report generation.
     
     Args:
-        locations_csv: Path to locations.csv
-        runners_csv: Path to runners.csv
-        segments_csv: Path to segments.csv
+        locations_csv: Path to locations.csv (required)
+        runners_csv: Path to runners.csv (required)
+        segments_csv: Path to segments.csv (required)
         start_times: Dictionary of event start times in minutes (default: from constants)
         output_dir: Output directory for report
         run_id: Optional run ID for runflow structure
@@ -680,7 +680,7 @@ def generate_location_report(
         locations_df = load_locations(locations_csv)
         runners_df = load_runners(runners_csv)
         segments_df = load_segments(segments_csv)
-        courses = load_all_courses("data")
+        courses = load_all_courses(os.path.dirname(segments_csv))
     except FileNotFoundError as e:
         logger.error(f"Required input file not found: {e}")
         return {"ok": False, "error": str(e), "error_type": "file_not_found"}
@@ -1160,4 +1160,3 @@ def generate_location_report(
         "locations_processed": len(report_df),
         "timestamp": datetime.now().isoformat()
     }
-
