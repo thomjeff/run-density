@@ -792,6 +792,12 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
                 "direction": seg.get("direction"),
                 "width_m": seg.get("width_m"),
             })
+            # Issue #655: Validate that direction is present - if missing, this is a data issue
+            if not segments_list[-1].get("direction"):
+                raise ValueError(
+                    f"Segment {seg_id} missing direction in segments.csv. "
+                    f"All segments must have a 'direction' field (e.g., 'uni', 'bi', 'forward', 'backward')."
+                )
     except Exception as e:
         print(f"ERROR: Could not load segments.csv from {segments_csv_path}: {e}")
         return {"type": "FeatureCollection", "features": []}

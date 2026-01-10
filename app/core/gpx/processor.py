@@ -400,8 +400,15 @@ def create_geojson_from_segments(segments_with_coords: List[Dict]) -> Dict:
     for seg in segments_with_coords:
         direction = seg.get("direction")
         width_m = seg.get("width_m")
+        # Issue #655: Validate direction is present - if missing, this indicates a bug in segment processing
+        # Direction should be included in segments_list when building from segments_df
         if direction in (None, ""):
-            raise ValueError(f"Segment {seg.get('seg_id')} missing direction for GeoJSON export.")
+            seg_id = seg.get('seg_id', 'unknown')
+            raise ValueError(
+                f"Segment {seg_id} missing direction for GeoJSON export. "
+                f"This indicates direction was not included in segments_list when building from segments.csv. "
+                f"Check that segments.csv has 'direction' column and it's being extracted correctly."
+            )
         if width_m is None or (isinstance(width_m, float) and pd.isna(width_m)):
             raise ValueError(f"Segment {seg.get('seg_id')} missing width_m for GeoJSON export.")
         if seg.get("line_coords") and len(seg["line_coords"]) >= 2:
