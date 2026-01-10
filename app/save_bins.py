@@ -262,8 +262,17 @@ def _build_parquet_rows_from_features(features: t.List[Feature], metadata: JsonD
     return rows
 
 
-def _apply_flagging_to_rows(rows: t.List[JsonDict], logger=None) -> t.List[JsonDict]:
-    """Apply rulebook-based flagging to parquet rows (Issue #254)."""
+def _apply_flagging_to_rows(rows: t.List[JsonDict], segments_df: t.Optional[pd.DataFrame] = None, segments_csv_path: t.Optional[str] = None, logger=None) -> t.List[JsonDict]:
+    """Apply rulebook-based flagging to parquet rows (Issue #254).
+    
+    Issue #616: Accept segments_df or segments_csv_path parameter instead of hardcoded "data/segments.csv"
+    
+    Args:
+        rows: List of bin row dictionaries
+        segments_df: Optional segments DataFrame (preferred - already loaded)
+        segments_csv_path: Optional path to segments CSV file (used if segments_df is None)
+        logger: Optional logger instance
+    """
     try:
         from app.new_flagging import apply_new_flagging
         from app.io.loader import load_segments
@@ -274,13 +283,28 @@ def _apply_flagging_to_rows(rows: t.List[JsonDict], logger=None) -> t.List[JsonD
         if logger:
             logger.info(f"Flagging input: {len(bins_df)} rows, columns: {list(bins_df.columns)}")
         
-        # Load segments metadata for width_m, seg_label, segment_type
-        segments_df = None
-        try:
-            segments_df = load_segments("data/segments.csv")
-        except Exception as e:
-            if logger:
-                logger.warning(f"Could not load segments.csv for flagging: {e}")
+        # Issue #616: Load segments metadata - prefer segments_df, then segments_csv_path, fail if neither
+        if segments_df is None:
+            if segments_csv_path:
+                try:
+                    segments_df = load_segments(segments_csv_path)
+                    if logger:
+                        logger.info(f"Loaded segments from {segments_csv_path} for flagging")
+                except Exception as e:
+                    if logger:
+                        logger.error(f"Could not load segments from {segments_csv_path} for flagging: {e}")
+                    # Continue without segments_df - flagging will use defaults
+            else:
+                # Issue #616: No hardcoded fallback - fail if segments not provided
+                error_msg = (
+                    "segments_df or segments_csv_path is required for _apply_flagging_to_rows. "
+                    "This should not happen in v2 pipeline - segments should be provided from analysis.json."
+                )
+                if logger:
+                    logger.error(error_msg)
+                # Continue without segments_df - flagging will use defaults, but log error
+                if logger:
+                    logger.warning("Continuing flagging without segments_df - flagging may be inaccurate")
         
         # Apply rulebook-based flagging (no config needed - thresholds from YAML)
         flagged_df = apply_new_flagging(bins_df, segments_df=segments_df)
@@ -409,12 +433,25 @@ def save_bin_artifacts(
     output_dir: str,
     *,
     base_name: str = "bins",
+    segments_df: t.Optional[pd.DataFrame] = None,
+    segments_csv_path: t.Optional[str] = None,
     logger=None,
 ) -> t.Tuple[str, str]:
     """
     Writes two artifacts:
       - {base_name}.geojson.gz (pure FeatureCollection + optional metadata)
       - {base_name}.parquet    (flat table of properties; geometry not required)
+    
+    Issue #616: Accept segments_df or segments_csv_path parameter instead of hardcoded "data/segments.csv"
+    
+    Args:
+        bin_obj: Bin data object with features and metadata
+        output_dir: Output directory for artifacts
+        base_name: Base name for output files (default: "bins")
+        segments_df: Optional segments DataFrame (preferred - already loaded)
+        segments_csv_path: Optional path to segments CSV file (used if segments_df is None)
+        logger: Optional logger instance
+    
     Returns: (geojson_path, parquet_path)
     """
     os.makedirs(output_dir, exist_ok=True)
@@ -442,8 +479,8 @@ def save_bin_artifacts(
     # Build parquet rows from features
     rows = _build_parquet_rows_from_features(features, metadata, logger=logger)
     
-    # Apply rulebook-based flagging (Issue #254)
-    rows = _apply_flagging_to_rows(rows, logger=logger)
+    # Issue #616: Apply rulebook-based flagging with segments_df or segments_csv_path (no hardcoded fallback)
+    rows = _apply_flagging_to_rows(rows, segments_df=segments_df, segments_csv_path=segments_csv_path, logger=logger)
     
     # Write parquet file
     parquet_path = _write_parquet_file(rows, output_dir, base_name)
