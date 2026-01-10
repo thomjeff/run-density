@@ -7,6 +7,7 @@ Also provides segment filtering utilities used by density and flow analysis.
 
 import logging
 import os
+import tempfile
 import time
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List
