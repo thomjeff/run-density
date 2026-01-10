@@ -594,16 +594,80 @@ def generate_segment_caption(
 
 
 
-def load_segments_metadata() -> Dict[str, Dict[str, Any]]:
+def load_segments_metadata(reports_dir: Optional[Path] = None, run_id: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
     """
     Load segment metadata from segments.csv.
+    
+    Issue #616: Get segments_csv_path from analysis.json instead of hardcoded "data/segments.csv"
+    
+    Args:
+        reports_dir: Optional path to reports directory (used to locate analysis.json)
+        run_id: Optional run_id (used with get_runflow_root to locate analysis.json)
     
     Returns:
         Dictionary mapping seg_id to metadata
     """
-    segments_path = Path("data/segments.csv")
-    segments_meta = {}
+    segments_path = None
     
+    # Issue #616: Get segments_csv_path from analysis.json
+    if reports_dir is not None:
+        try:
+            import json
+            from app.utils.run_id import get_runflow_root
+            runflow_root = get_runflow_root()
+            # Navigate from reports_dir back to run_id directory
+            # reports_dir: {runflow_root}/{run_id}/{day}/reports_heatmaps or reports_temp
+            # Need: {runflow_root}/{run_id}/analysis.json
+            run_id_dir = reports_dir.parent.parent  # Go from reports_* -> {day} -> {run_id}
+            if run_id_dir.name in ["reports_temp", "reports_heatmaps"]:
+                run_id_dir = reports_dir.parent
+            analysis_json_path = run_id_dir / "analysis.json"
+            if not analysis_json_path.exists() and run_id:
+                # Try alternative: use run_id directly
+                analysis_json_path = runflow_root / run_id / "analysis.json"
+            if analysis_json_path.exists():
+                with open(analysis_json_path, 'r') as af:
+                    analysis_config = json.load(af)
+                    data_files = analysis_config.get("data_files", {})
+                    segments_csv_path = data_files.get("segments")
+                    if not segments_csv_path:
+                        segments_file = analysis_config.get("segments_file")
+                        data_dir = analysis_config.get("data_dir", "data")
+                        if segments_file:
+                            segments_csv_path = f"{data_dir}/{segments_file}"
+                    if segments_csv_path:
+                        segments_path = Path(segments_csv_path)
+        except Exception as e:
+            print(f"   ⚠️  Could not load segments_csv_path from analysis.json: {e}")
+    elif run_id:
+        try:
+            import json
+            from app.utils.run_id import get_runflow_root
+            runflow_root = get_runflow_root()
+            analysis_json_path = runflow_root / run_id / "analysis.json"
+            if analysis_json_path.exists():
+                with open(analysis_json_path, 'r') as af:
+                    analysis_config = json.load(af)
+                    data_files = analysis_config.get("data_files", {})
+                    segments_csv_path = data_files.get("segments")
+                    if not segments_csv_path:
+                        segments_file = analysis_config.get("segments_file")
+                        data_dir = analysis_config.get("data_dir", "data")
+                        if segments_file:
+                            segments_csv_path = f"{data_dir}/{segments_file}"
+                    if segments_csv_path:
+                        segments_path = Path(segments_csv_path)
+        except Exception as e:
+            print(f"   ⚠️  Could not load segments_csv_path from analysis.json: {e}")
+    
+    # Fallback to hardcoded path only if analysis.json lookup failed (for backward compatibility)
+    if not segments_path:
+        segments_path = Path("data/segments.csv")
+        if not segments_path.exists():
+            print(f"   ⚠️  segments.csv not found at {segments_path} and analysis.json lookup failed")
+            return {}
+    
+    segments_meta = {}
     if segments_path.exists():
         try:
             df = pd.read_csv(segments_path)
@@ -614,7 +678,7 @@ def load_segments_metadata() -> Dict[str, Dict[str, Any]]:
                     'width_m': row.get('width_m', 0)
                 }
         except Exception as e:
-            print(f"   ⚠️  Could not load segments metadata: {e}")
+            print(f"   ⚠️  Could not load segments metadata from {segments_path}: {e}")
     
     return segments_meta
 
@@ -691,8 +755,8 @@ def export_heatmaps_and_captions(
     # Load bin data (canonical SSOT)
     bins_df = load_bin_data(reports_dir)
     
-    # Load segment metadata
-    segments_meta = load_segments_metadata()
+    # Load segment metadata (Issue #616: Pass reports_dir and run_id to get segments_csv_path from analysis.json)
+    segments_meta = load_segments_metadata(reports_dir=reports_dir, run_id=run_id)
     
     # Get unique segments
     segments = sorted(bins_df['segment_id'].unique())
