@@ -514,10 +514,22 @@ def calculate_arrival_times_for_location(
                     logger.warning(f"Location {location.get('loc_id')} ({event}): Segment {seg_id} missing seg_label/segment_label in segments_df, skipping")
                     continue
                 
+                # Issue #655: Extract direction and width_m from segments_df (required by generate_segment_coordinates)
+                direction = seg_row.iloc[0].get('direction')
+                width_m = seg_row.iloc[0].get('width_m')
+                if not direction:
+                    logger.warning(f"Location {location.get('loc_id')} ({event}): Segment {seg_id} missing direction in segments_df, skipping")
+                    continue
+                if width_m is None or (isinstance(width_m, float) and pd.isna(width_m)):
+                    logger.warning(f"Location {location.get('loc_id')} ({event}): Segment {seg_id} missing width_m in segments_df, skipping")
+                    continue
+                
                 # Get segment centerline for this event
                 segments_for_gpx = [{
                     "seg_id": seg_id,
                     "segment_label": seg_label,  # Issue #655: Add segment_label required by generate_segment_coordinates
+                    "direction": direction,  # Issue #655: Add direction required by generate_segment_coordinates validation
+                    "width_m": width_m,  # Issue #655: Add width_m required by generate_segment_coordinates validation
                     event_col_gpx: "y",
                     f"{event_col_gpx}_from_km": from_km,
                     f"{event_col_gpx}_to_km": to_km
