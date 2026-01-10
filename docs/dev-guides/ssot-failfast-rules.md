@@ -26,7 +26,7 @@
            |
            v
 +------------------------+
-|   Analysis Pipeline    | ---> Uses only persisted inputs
+|   Analysis Pipeline    | ---> Uses only persisted inputs; generates bins, etc..
 +------------------------+
            |
            v

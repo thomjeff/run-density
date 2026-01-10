@@ -1,0 +1,502 @@
+{
+  "ok": true,
+  "source": "density_analysis",
+  "timestamp": "2026-01-10T22:08:31.886709",
+  "segments": {
+    "A1": {
+      "segment_id": "A1",
+      "segment_label": "Start to Queen/Regent",
+      "peak_areal_density": 0.2028888888888889,
+      "peak_crowd_density": 1.0144444444444445,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 5.0
+    },
+    "A2": {
+      "segment_id": "A2",
+      "segment_label": "Queen/Regent to WSB mid-point",
+      "peak_areal_density": 0.19844444444444445,
+      "peak_crowd_density": 0.9922222222222222,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 5.0
+    },
+    "A3": {
+      "segment_id": "A3",
+      "segment_label": "WSB mid-point to Friel",
+      "peak_areal_density": 0.16177777777777774,
+      "peak_crowd_density": 0.8088888888888888,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 5.0
+    },
+    "B1": {
+      "segment_id": "B1",
+      "segment_label": "Friel to 10K Turn (Out)",
+      "peak_areal_density": 0.25075268817204305,
+      "peak_crowd_density": 0.37612903225806454,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 1.5
+    },
+    "B2": {
+      "segment_id": "B2",
+      "segment_label": "10K Turn to Friel (Back)",
+      "peak_areal_density": 0.23096774193548378,
+      "peak_crowd_density": 0.3464516129032257,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 1.5
+    },
+    "B3": {
+      "segment_id": "B3",
+      "segment_label": "10K Turn to Friel (Slow/Fast 10k)",
+      "peak_areal_density": 0.3784946236559141,
+      "peak_crowd_density": 0.5677419354838711,
+      "zone": "yellow",
+      "flow_type": "default",
+      "width_m": 1.5
+    },
+    "C1": {
+      "segment_id": "C1",
+      "segment_label": "10K Turn to Royal Rd (Full Out)",
+      "peak_areal_density": 0.13815261044176705,
+      "peak_crowd_density": 0.2072289156626506,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 1.5
+    },
+    "C2": {
+      "segment_id": "C2",
+      "segment_label": "Royal Rd to Sunset Dr at Claremont (Full Out)",
+      "peak_areal_density": 0.07982832618025751,
+      "peak_crowd_density": 0.11974248927038626,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 1.5
+    },
+    "C3": {
+      "segment_id": "C3",
+      "segment_label": "Sunset Dr at Claremont to Full Turn at Blake (Full Out)",
+      "peak_areal_density": 0.07109004739336496,
+      "peak_crowd_density": 0.10663507109004741,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 1.5
+    },
+    "D1": {
+      "segment_id": "D1",
+      "segment_label": "Full Turn at Blake to Sunset at Claremont (Full Back)",
+      "peak_areal_density": 0.05809523809523811,
+      "peak_crowd_density": 0.08714285714285716,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 1.5
+    },
+    "D2": {
+      "segment_id": "D2",
+      "segment_label": "Sunset at Claremont to Royal (Full Back)",
+      "peak_areal_density": 0.04916666666666666,
+      "peak_crowd_density": 0.07374999999999998,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 1.5
+    },
+    "D3": {
+      "segment_id": "D3",
+      "segment_label": "Royal to 10K Turn (Full Back)",
+      "peak_areal_density": 0.051666666666666625,
+      "peak_crowd_density": 0.07749999999999993,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 1.5
+    },
+    "E1": {
+      "segment_id": "E1",
+      "segment_label": "Friel to Hughes",
+      "peak_areal_density": 0.3455026455026456,
+      "peak_crowd_density": 1.0365079365079366,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "E2": {
+      "segment_id": "E2",
+      "segment_label": "Hughes to Neil",
+      "peak_areal_density": 0.308080808080808,
+      "peak_crowd_density": 0.9242424242424241,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "E3": {
+      "segment_id": "E3",
+      "segment_label": "Neil to Gibson",
+      "peak_areal_density": 0.28703703703703703,
+      "peak_crowd_density": 0.8611111111111112,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "E4": {
+      "segment_id": "E4",
+      "segment_label": "Gobson to Station Rd.",
+      "peak_areal_density": 0.2836879432624115,
+      "peak_crowd_density": 0.8510638297872345,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "G1": {
+      "segment_id": "G1",
+      "segment_label": "Full Loop around QS to Trail/Aberdeen",
+      "peak_areal_density": 0.017878787878787914,
+      "peak_crowd_density": 0.05363636363636374,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "H1": {
+      "segment_id": "H1",
+      "segment_label": "Trail/Aberdeen to/from Station Rd",
+      "peak_areal_density": 0.25454545454545424,
+      "peak_crowd_density": 0.38181818181818133,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 1.5
+    },
+    "I1": {
+      "segment_id": "I1",
+      "segment_label": "Station Rd to Greenwood Dr (Watters)",
+      "peak_areal_density": 0.14037558685446008,
+      "peak_crowd_density": 0.4211267605633803,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "I2": {
+      "segment_id": "I2",
+      "segment_label": "Greenwood Dr (Watters) to Greenwood (2nd Crossing)",
+      "peak_areal_density": 0.11361111111111086,
+      "peak_crowd_density": 0.34083333333333254,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "I3": {
+      "segment_id": "I3",
+      "segment_label": "Greenwood (2nd Crossing) to Water Stop",
+      "peak_areal_density": 0.10231023102310234,
+      "peak_crowd_density": 0.306930693069307,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "I4": {
+      "segment_id": "I4",
+      "segment_label": "Gibson Trail Water Stop to McGloin",
+      "peak_areal_density": 0.07791842475386776,
+      "peak_crowd_density": 0.23375527426160328,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "I5": {
+      "segment_id": "I5",
+      "segment_label": "McGloing to Bridge/Mill",
+      "peak_areal_density": 0.09999999999999983,
+      "peak_crowd_density": 0.29999999999999943,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "J1": {
+      "segment_id": "J1",
+      "segment_label": "Bridge/Mill to Half Turn (Outbound)",
+      "peak_areal_density": 0.1355721393034826,
+      "peak_crowd_density": 0.2033582089552239,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 1.5
+    },
+    "J2": {
+      "segment_id": "J2",
+      "segment_label": "Half Turn to Full Turn (Out)",
+      "peak_areal_density": 0.02222222222222224,
+      "peak_crowd_density": 0.03333333333333336,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 1.5
+    },
+    "J3": {
+      "segment_id": "J3",
+      "segment_label": "Full Turn to Half Turn (Return)",
+      "peak_areal_density": 0.022764227642276348,
+      "peak_crowd_density": 0.03414634146341452,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 1.5
+    },
+    "J4": {
+      "segment_id": "J4",
+      "segment_label": "Half Turn to Bridge/Mill",
+      "peak_areal_density": 0.12072072072072072,
+      "peak_crowd_density": 0.1810810810810811,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 1.5
+    },
+    "J5": {
+      "segment_id": "J5",
+      "segment_label": "Half Turn to Bridge/Mill (Slow Half)",
+      "peak_areal_density": 0.1355721393034826,
+      "peak_crowd_density": 0.2033582089552239,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 1.5
+    },
+    "K1": {
+      "segment_id": "K1",
+      "segment_label": "Bridge/Mill to Kaine Street",
+      "peak_areal_density": 0.06619047619047592,
+      "peak_crowd_density": 0.19857142857142776,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "K2": {
+      "segment_id": "K2",
+      "segment_label": "Kaine to Gilbert",
+      "peak_areal_density": 0.06555555555555541,
+      "peak_crowd_density": 0.1966666666666662,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "K3": {
+      "segment_id": "K3",
+      "segment_label": "Gilbert ot Canada St",
+      "peak_areal_density": 0.06256410256410269,
+      "peak_crowd_density": 0.18769230769230807,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "K4": {
+      "segment_id": "K4",
+      "segment_label": "Canada St to Station/Barker",
+      "peak_areal_density": 0.05288888888888889,
+      "peak_crowd_density": 0.15866666666666668,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "L1": {
+      "segment_id": "L1",
+      "segment_label": "Trail/Aberdeen to/from Station Rd",
+      "peak_areal_density": 0.2274747474747472,
+      "peak_crowd_density": 0.3412121212121208,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 1.5
+    },
+    "L2": {
+      "segment_id": "L2",
+      "segment_label": "Station Rd to Trail/Aberdeen (Full Only)",
+      "peak_areal_density": 0.010144927536231866,
+      "peak_crowd_density": 0.015217391304347799,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 1.5
+    },
+    "M1": {
+      "segment_id": "M1",
+      "segment_label": "Trail/Aberdeen to Finish (Full to Loop)",
+      "peak_areal_density": 0.18266666666666667,
+      "peak_crowd_density": 0.548,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "M2": {
+      "segment_id": "M2",
+      "segment_label": "Trail/Aberdeen to Finish",
+      "peak_areal_density": 0.012,
+      "peak_crowd_density": 0.036,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 3.0
+    },
+    "N1": {
+      "segment_id": "N1",
+      "segment_label": "Start to Queen/Westmorland",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 5.0
+    },
+    "N2": {
+      "segment_id": "N2",
+      "segment_label": "Queen/Westmorland to PSAB/WSB",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 5.0
+    },
+    "N3": {
+      "segment_id": "N3",
+      "segment_label": "PSAB/WSB to 104th Bridge",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 5.0
+    },
+    "N4": {
+      "segment_id": "N4",
+      "segment_label": "104th to Queen/York",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 5.0
+    },
+    "N5": {
+      "segment_id": "N5",
+      "segment_label": "Queen/York to Queen at PSAB",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 5.0
+    },
+    "N6": {
+      "segment_id": "N6",
+      "segment_label": "Queen at PSAB to PSAB/WSB",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 5.0
+    },
+    "N7": {
+      "segment_id": "N7",
+      "segment_label": "PSAB/WSB to 104th Bridge",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 5.0
+    },
+    "N8": {
+      "segment_id": "N8",
+      "segment_label": "104th to Queen/York",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 5.0
+    },
+    "N9": {
+      "segment_id": "N9",
+      "segment_label": "Queen/York to Finish",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 5.0
+    },
+    "O1": {
+      "segment_id": "O1",
+      "segment_label": "Start to Queen/Westmorland",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 5.0
+    },
+    "O2": {
+      "segment_id": "O2",
+      "segment_label": "Queen/Westmorland to PSAB/WSB",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 5.0
+    },
+    "O3": {
+      "segment_id": "O3",
+      "segment_label": "PSAB/WSB to 104th Bridge",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 5.0
+    },
+    "O4": {
+      "segment_id": "O4",
+      "segment_label": "104th to Queen/York",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 5.0
+    },
+    "O5": {
+      "segment_id": "O5",
+      "segment_label": "Queen/York to Queen at PSAB",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 5.0
+    },
+    "O6": {
+      "segment_id": "O6",
+      "segment_label": "Queen at PSAB to PSAB/WSB",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 5.0
+    },
+    "O7": {
+      "segment_id": "O7",
+      "segment_label": "PSAB/WSB to 104th Bridge",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 5.0
+    },
+    "O8": {
+      "segment_id": "O8",
+      "segment_label": "104th to Queen/York",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 5.0
+    },
+    "O9": {
+      "segment_id": "O9",
+      "segment_label": "Queen/York to Finish",
+      "peak_areal_density": 0.0,
+      "peak_crowd_density": 0.0,
+      "zone": "green",
+      "flow_type": "default",
+      "width_m": 5.0
+    }
+  },
+  "metadata": {
+    "total_segments": 54,
+    "analysis_type": "density",
+    "start_times": {
+      "full": 420.0,
+      "10k": 440.0,
+      "half": 460.0
+    }
+  }
+}
