@@ -107,6 +107,13 @@ Actions:
 
 ---
 
+## Tooling/Interface Updates
+- [ ] Review and update `e2e.py` to align with updated config loading logic (no fallbacks).
+- [ ] Validate that all `make` commands still function as expected with new SSOT design.
+- [ ] Update `/postman` test collections (if applicable) to reflect expected payloads, especially where alternate config files are used.
+
+---
+
 ## Expected Outcomes
 - All runtime modules consume configuration from `analysis.json` via centralized loader.
 - No hardcoded `data/*.csv` or `{event}.gpx` paths in runtime code.
