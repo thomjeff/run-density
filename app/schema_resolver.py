@@ -18,12 +18,16 @@ logger = logging.getLogger(__name__)
 # Issue #648: Schema mappings now loaded from segments.csv (SSOT)
 # Removed hardcoded EXPLICIT dictionary - all mappings come from CSV
 
-@functools.lru_cache(maxsize=1)
+# Issue #616: Remove @lru_cache to support per-run segment files
+# Cache is now keyed on file path to support multiple segment files (e.g., segments.csv, segments_616.csv)
+_schema_map_cache: Dict[str, Dict[str, str]] = {}
+
 def _load_schema_map(csv_path: str = "data/segments.csv") -> Dict[str, str]:
     """
     Load segment-to-schema mapping from segments.csv (SSOT).
     
     Issue #648: This replaces the hardcoded EXPLICIT dictionary with CSV-based SSOT.
+    Issue #616: Removed @lru_cache and replaced with per-path cache to support user-specified segment files.
     
     Args:
         csv_path: Path to segments.csv file (default: "data/segments.csv")
@@ -35,6 +39,10 @@ def _load_schema_map(csv_path: str = "data/segments.csv") -> Dict[str, str]:
         FileNotFoundError: If segments.csv not found
         ValueError: If required columns (seg_id, schema) are missing
     """
+    # Issue #616: Use path-based cache instead of @lru_cache to support multiple segment files
+    if csv_path in _schema_map_cache:
+        return _schema_map_cache[csv_path]
+    
     try:
         from app.io.loader import load_segments
         
@@ -68,26 +76,32 @@ def _load_schema_map(csv_path: str = "data/segments.csv") -> Dict[str, str]:
                 schema_map[seg_id] = schema
         
         logger.info(f"Loaded {len(schema_map)} segment-to-schema mappings from {csv_file}")
+        
+        # Issue #616: Cache by path to support multiple segment files
+        _schema_map_cache[csv_path] = schema_map
         return schema_map
         
     except Exception as e:
         logger.error(f"Failed to load schema map from {csv_path}: {e}")
         raise
 
-def resolve_schema(segment_id: str, segment_type: Optional[str] = None) -> str:
+def resolve_schema(segment_id: str, segment_type: Optional[str] = None, segments_csv_path: Optional[str] = None) -> str:
     """
     Resolve segment ID to rulebook schema key from segments.csv (SSOT).
     
     Issue #648: Schema mappings now loaded from segments.csv instead of hardcoded EXPLICIT dict.
+    Issue #616: Accepts optional segments_csv_path parameter to support user-specified segment files.
     
     Resolution order:
-    1. segments.csv schema column (SSOT)
+    1. segments.csv schema column (SSOT) - from user-specified path or default
     2. Type-based mapping (if segment_type provided, as fallback only)
     3. Default to on_course_open
     
     Args:
         segment_id: Segment identifier (e.g., "A1", "B1", "D1a", "N1")
         segment_type: Optional segment type from segments.csv (used as fallback only)
+        segments_csv_path: Optional path to segments CSV file. If None, uses default "data/segments.csv".
+                          Issue #616: Allows per-run segment files (e.g., "data/segments_616.csv")
         
     Returns:
         Schema key: "start_corral", "on_course_narrow", or "on_course_open"
@@ -97,8 +111,11 @@ def resolve_schema(segment_id: str, segment_type: Optional[str] = None) -> str:
         FileNotFoundError: If segments.csv not found
         ValueError: If segments.csv is invalid
     """
-    # 1) Load from segments.csv (SSOT)
-    schema_map = _load_schema_map()
+    # Issue #616: Use user-specified path if provided, otherwise default
+    csv_path = segments_csv_path if segments_csv_path else "data/segments.csv"
+    
+    # 1) Load from segments.csv (SSOT) - use specified path or default
+    schema_map = _load_schema_map(csv_path)
     if segment_id in schema_map:
         return schema_map[segment_id]
     
@@ -115,7 +132,7 @@ def resolve_schema(segment_id: str, segment_type: Optional[str] = None) -> str:
         # Narrow/constrained segments
         if t in {"funnel", "merge", "bridge", "chute", "finish", "narrow"}:
             logger.warning(
-                f"Segment {segment_id} not found in segments.csv, using type-based fallback: "
+                f"Segment {segment_id} not found in {csv_path}, using type-based fallback: "
                 f"segment_type='{segment_type}' → on_course_narrow"
             )
             return "on_course_narrow"
@@ -123,28 +140,34 @@ def resolve_schema(segment_id: str, segment_type: Optional[str] = None) -> str:
         # Start corrals
         if t in {"start", "corral"}:
             logger.warning(
-                f"Segment {segment_id} not found in segments.csv, using type-based fallback: "
+                f"Segment {segment_id} not found in {csv_path}, using type-based fallback: "
                 f"segment_type='{segment_type}' → start_corral"
             )
             return "start_corral"
     
     # 3) Default fallback (should not happen in production if CSV is complete)
     logger.warning(
-        f"Segment {segment_id} not found in segments.csv and no segment_type provided, "
+        f"Segment {segment_id} not found in {csv_path} and no segment_type provided, "
         f"defaulting to on_course_open"
     )
     return "on_course_open"
 
-def get_schema_stats() -> Dict[str, int]:
+def get_schema_stats(segments_csv_path: Optional[str] = None) -> Dict[str, int]:
     """
     Get statistics on schema mappings from segments.csv (SSOT).
     
     Issue #648: Now loads from CSV instead of hardcoded EXPLICIT dict.
+    Issue #616: Accepts optional segments_csv_path parameter to support user-specified segment files.
+    
+    Args:
+        segments_csv_path: Optional path to segments CSV file. If None, uses default "data/segments.csv".
+                          Issue #616: Allows per-run segment files (e.g., "data/segments_616.csv")
     
     Returns:
         Dict with counts per schema type (e.g., {"start_corral": 1, "on_course_narrow": 13, ...})
     """
-    schema_map = _load_schema_map()
+    csv_path = segments_csv_path if segments_csv_path else "data/segments.csv"
+    schema_map = _load_schema_map(csv_path)
     
     stats = {}
     for schema in schema_map.values():

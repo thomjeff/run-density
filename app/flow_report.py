@@ -437,6 +437,7 @@ def generate_runner_experience_analysis(segment: Dict[str, Any]) -> List[str]:
 def generate_basic_info_table(segment: Dict[str, Any]) -> List[str]:
     """Generate basic segment information table."""
     import pandas as pd
+    logger = logging.getLogger(__name__)
     
     content = []
     
@@ -453,25 +454,17 @@ def generate_basic_info_table(segment: Dict[str, Any]) -> List[str]:
     total_a = segment.get("total_a", 0)
     total_b = segment.get("total_b", 0)
     
-    # Get width from segments_new.csv - fix NA values
+    # Get width from segments.csv - fix NA values (Issue #616: This function is deprecated, but kept for backward compatibility)
+    # In v2 pipeline, width should come from segments_df passed to generate_segment_info_table
     seg_id = segment.get("seg_id", "")
-    try:
-        segments_df = pd.read_csv('data/segments.csv')
-        seg_row = segments_df[segments_df['seg_id'] == seg_id]
-        if not seg_row.empty:
-            width_val = seg_row['width_m'].iloc[0]
-            # Handle NaN/NA values
-            if pd.isna(width_val) or width_val == '':
-                from app.utils.constants import DEFAULT_CONFLICT_LENGTH_METERS
-                width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
-            else:
-                width_m = float(width_val)
-        else:
-            from app.utils.constants import DEFAULT_CONFLICT_LENGTH_METERS
-            width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
-    except Exception:
-        from app.utils.constants import DEFAULT_CONFLICT_LENGTH_METERS
-        width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
+    from app.utils.constants import DEFAULT_CONFLICT_LENGTH_METERS
+    width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
+    # Note: This function should be refactored to accept segments_df as a parameter
+    # For now, use default width to avoid hardcoded fallback
+    logger.debug(
+        f"generate_basic_info_table: Using default width for segment {seg_id}. "
+        "This function should be refactored to accept segments_df parameter."
+    )
     
     # Get event names
     event_a = segment.get("event_a", "A")
@@ -732,7 +725,7 @@ def generate_simple_temporal_flow_report(
     )
 
 
-def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_times: Dict[str, float] = None, min_overlap_duration: float = 5.0, conflict_length_m: float = 100.0, environment: str = "local", run_id: str = None, day: str = None) -> None:
+def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_times: Dict[str, float] = None, min_overlap_duration: float = 5.0, conflict_length_m: float = 100.0, environment: str = "local", run_id: str = None, day: str = None, segments_csv_path: Optional[str] = None) -> None:
     """
     Export temporal flow analysis results to CSV with zone-level granularity.
     
@@ -757,8 +750,24 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
     # Use date-based organization and standardized naming
     full_path, relative_path = get_report_paths("Flow", "csv", output_path)
     
-    # Load segments for width values
-    segments_df = pd.read_csv('data/segments.csv')
+    # Load segments for width values (Issue #616: Use segments_csv_path from analysis.json)
+    if segments_csv_path is None:
+        error_msg = (
+            "segments_csv_path is required for export_temporal_flow_csv in v2 pipeline. "
+            "This should come from analysis.json segments_file. "
+            "Cannot fall back to default CSV as it may not match the analysis configuration."
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+    
+    try:
+        from app.io.loader import load_segments
+        segments_df = load_segments(segments_csv_path)
+        logger.info(f"Loaded {len(segments_df)} segments from {segments_csv_path} for flow report")
+    except Exception as e:
+        error_msg = f"Failed to load segments from {segments_csv_path} for flow report: {e}"
+        logger.error(error_msg)
+        raise FileNotFoundError(error_msg) from e
     
     # Get segments from results
     segments = results.get("segments", [])

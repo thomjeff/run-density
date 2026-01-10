@@ -89,13 +89,30 @@ def generate_reports_per_day(
         }
         Note: Issue #600 - Flow.md generation deprecated (only Flow.csv used)
     """
-    # Issue #553 Phase 6.2: Default file paths if not provided
+    # Issue #616: File paths should be provided from analysis.json in v2 pipeline
+    # These defaults should not be hit in production, but kept for backward compatibility
     if segments_file_path is None:
-        segments_file_path = "data/segments.csv"
+        logger.error(
+            "segments_file_path is None in generate_reports_per_day. "
+            "This should not happen in v2 pipeline - segments_file_path should be provided from analysis.json. "
+            "Failing to prevent hardcoded fallback to default segments.csv."
+        )
+        raise ValueError(
+            "segments_file_path is required in v2 pipeline. "
+            "It should be provided from analysis.json segments_file."
+        )
     if flow_file_path is None:
-        flow_file_path = "data/flow.csv"
-    if locations_file_path is None:
-        locations_file_path = "data/locations.csv"
+        logger.error(
+            "flow_file_path is None in generate_reports_per_day. "
+            "This should not happen in v2 pipeline - flow_file_path should be provided from analysis.json. "
+            "Failing to prevent hardcoded fallback to default flow.csv."
+        )
+        raise ValueError(
+            "flow_file_path is required in v2 pipeline. "
+            "It should be provided from analysis.json flow_file."
+        )
+    # locations_file_path can be None if locations_file is not provided (optional)
+    # But if it's provided, it should come from analysis.json
     
     report_paths_by_day: Dict[Day, Dict[str, str]] = {}
     
@@ -137,7 +154,7 @@ def generate_reports_per_day(
                     reports_path=reports_path,
                     segments_df=day_segments_df,
                     data_dir=data_dir,
-                    segments_file_path=segments_file_path  # Issue #553 Phase 6.2
+                    segments_file_path=segments_file_path  # Issue #553 Phase 6.2, Issue #616
                 )
                 if density_path:
                     day_report_paths["density"] = str(density_path)
@@ -194,7 +211,8 @@ def generate_reports_per_day(
                     locations_results_json_path=locations_results_json_path,  # Issue #600: Pass JSON path (required)
                     all_runners_df=all_runners_df,
                     reports_path=reports_path,
-                    segments_df=day_segments_df
+                    segments_df=day_segments_df,
+                    segments_file_path=segments_file_path  # Issue #616: Pass segments path for fallback safety
                 )
                 if locations_path:
                     day_report_paths["locations"] = str(locations_path)
@@ -271,9 +289,20 @@ def generate_density_report_v2(
         # Get day-filtered segments
         if segments_df is None:
             from app.io.loader import load_segments
-            # Issue #553 Phase 6.2: Use segments_file_path from analysis.json if provided
-            segments_path = segments_file_path if segments_file_path else "data/segments.csv"
-            all_segments_df = load_segments(segments_path)
+            # Issue #616: Use segments_file_path from analysis.json, fail if not provided
+            if segments_file_path is None:
+                error_msg = (
+                    "segments_df is None in generate_density_report_v2 and no segments_file_path provided. "
+                    "This should not happen in v2 pipeline - segments_df should be passed from pipeline. "
+                    "Cannot fall back to default CSV as it may not match the analysis configuration."
+                )
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+            logger.warning(
+                f"segments_df is None in generate_density_report_v2 - falling back to {segments_file_path}. "
+                "This should not happen in v2 pipeline - segments_df should be passed from pipeline."
+            )
+            all_segments_df = load_segments(segments_file_path)
             segments_df = filter_segments_by_events(all_segments_df, day_events)
         
         # Get list of day segment IDs
@@ -507,12 +536,27 @@ def generate_flow_report_v2(
         try:
             # Issue #627: Pass day prefix for filename (e.g., "sat", "sun")
             day_prefix = day.value[:3]  # "saturday" -> "sat", "sunday" -> "sun"
+            # Issue #616: Get segments_file_path from analysis.json using helper function
+            try:
+                runflow_root = get_runflow_root()
+                run_path = runflow_root / run_id
+                from app.core.v2.analysis_config import get_segments_file
+                segments_csv_path_for_flow = get_segments_file(run_path=run_path)
+            except Exception as e:
+                error_msg = (
+                    f"Could not get segments_csv_path from analysis.json for flow report generation: {e}. "
+                    "This should not happen in v2 pipeline - analysis.json should include segments_file."
+                )
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+            
             export_temporal_flow_csv(
                 results=v1_flow_results,
                 output_path=str(reports_path),
                 start_times=start_times,
                 run_id=run_id,
-                day=day_prefix
+                day=day_prefix,
+                segments_csv_path=segments_csv_path_for_flow  # Issue #616: Pass from analysis.json
             )
             
             # Find the generated Flow.csv (might have timestamp in name)
@@ -555,7 +599,8 @@ def generate_locations_report_v2(
     locations_results_json_path: Path,
     all_runners_df: Any,  # pd.DataFrame
     reports_path: Path,
-    segments_df: Optional[Any] = None  # pd.DataFrame - day-filtered segments
+    segments_df: Optional[Any] = None,  # pd.DataFrame - day-filtered segments
+    segments_file_path: Optional[str] = None  # Issue #616: Path to segments CSV from analysis.json (for fallback only)
 ) -> Optional[Path]:
     """
     Generate day-scoped locations report (Locations.csv).
@@ -612,10 +657,24 @@ def generate_locations_report_v2(
             logger.warning(f"No runners found for day {day.value}, skipping locations report")
             return None
         
-        # Get day-filtered segments if not provided
+        # Issue #616: Get day-filtered segments if not provided
+        # In v2 pipeline, segments_df should always be provided - this is a fallback only
         if segments_df is None:
             from app.io.loader import load_segments
-            all_segments_df = load_segments("data/segments.csv")
+            # Issue #616: Use segments_file_path from analysis.json if provided, otherwise fail
+            if segments_file_path is None:
+                error_msg = (
+                    "segments_df is None in generate_locations_report_v2 and no segments_file_path provided. "
+                    "This should not happen in v2 pipeline - segments_df should be passed from pipeline. "
+                    "Cannot fall back to default CSV as it may not match the analysis configuration."
+                )
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+            logger.warning(
+                f"segments_df is None in generate_locations_report_v2 - falling back to {segments_file_path}. "
+                "This should not happen in v2 pipeline - segments_df should be passed from pipeline."
+            )
+            all_segments_df = load_segments(segments_file_path)
             segments_df = filter_segments_by_events(all_segments_df, day_events)
         
         # Get day segment IDs

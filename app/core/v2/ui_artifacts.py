@@ -384,6 +384,24 @@ def _export_ui_artifacts_v2(
                 }
                 
                 segment_metrics = segment_metrics_filtered
+                
+                # Issue #616: Enrich segment_metrics with correct schema from segments_df
+                # bins.parquet may not have schema_key column, so we get schema from segments_df (SSOT)
+                if segments_df is not None and not segments_df.empty and 'schema' in segments_df.columns:
+                    schema_lookup = dict(zip(segments_df['seg_id'].astype(str), segments_df['schema']))
+                    enriched_count = 0
+                    for seg_id, metrics in segment_metrics.items():
+                        if str(seg_id) in schema_lookup:
+                            correct_schema = schema_lookup[str(seg_id)]
+                            # Only update if schema is different (avoid overwriting correct values)
+                            if metrics.get('schema') != correct_schema:
+                                metrics['schema'] = correct_schema
+                                enriched_count += 1
+                    if enriched_count > 0:
+                        logger.info(
+                            f"   ✅ Enriched {enriched_count} segments with correct schema from segments_df"
+                        )
+                
                 logger.info(
                     f"   ✅ segment_metrics.json: {len(segment_metrics)} segments "
                     f"(day-scoped to {day.value})"

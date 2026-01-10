@@ -125,10 +125,11 @@ def compute_flow_rate(runners_crossing: int, width_m: float, bin_seconds: int) -
 # Phase 3 cleanup: Removed map_los() - not imported or used anywhere
 
 
-def resolve_schema(segment_id: str, segment_type: str, rulebook: dict) -> str:
+def resolve_schema(segment_id: str, segment_type: str, rulebook: dict, segments_csv_path: Optional[str] = None) -> str:
     """
     Resolve which schema to use for a segment.
     
+    Issue #616: Accepts optional segments_csv_path to support user-specified segment files.
     Issue #648: Uses schema_resolver.resolve_schema() as SSOT (loads from segments.csv).
     Rulebook bindings are no longer used as they duplicate CSV logic.
     
@@ -136,6 +137,7 @@ def resolve_schema(segment_id: str, segment_type: str, rulebook: dict) -> str:
         segment_id: Segment identifier (e.g., "A1", "D1a")
         segment_type: Segment type (kept for backward compatibility, but CSV is SSOT)
         rulebook: Rulebook dict (kept for backward compatibility, but not used for schema resolution)
+        segments_csv_path: Optional path to segments CSV file (Issue #616: required if using custom file)
         
     Returns:
         Schema key: "start_corral", "on_course_narrow", or "on_course_open"
@@ -145,13 +147,15 @@ def resolve_schema(segment_id: str, segment_type: str, rulebook: dict) -> str:
     
     # Convert segment_type to optional for schema_resolver compatibility
     segment_type_opt = segment_type if segment_type else None
-    return resolve_schema_from_csv(segment_id, segment_type_opt)
+    # Issue #616: Pass segments_csv_path if provided (no default fallback)
+    return resolve_schema_from_csv(segment_id, segment_type_opt, segments_csv_path)
 
 
-def resolve_schema_with_flow_type(segment_id: str, flow_type: str, rulebook: dict) -> str:
+def resolve_schema_with_flow_type(segment_id: str, flow_type: str, rulebook: dict, segments_csv_path: Optional[str] = None) -> str:
     """
     Resolve schema using flow_type for segments that don't have segment_type.
     
+    Issue #616: Accepts optional segments_csv_path to support user-specified segment files.
     Issue #648: Uses schema_resolver.resolve_schema() as SSOT (loads from segments.csv).
     Flow_type mapping is no longer used as CSV is the source of truth.
     
@@ -159,6 +163,7 @@ def resolve_schema_with_flow_type(segment_id: str, flow_type: str, rulebook: dic
         segment_id: Segment identifier (e.g., "A1", "D1a")
         flow_type: Flow type (kept for backward compatibility, but CSV is SSOT)
         rulebook: Rulebook dict (kept for backward compatibility, but not used)
+        segments_csv_path: Optional path to segments CSV file (Issue #616: required if using custom file)
         
     Returns:
         Schema key: "start_corral", "on_course_narrow", or "on_course_open"
@@ -167,7 +172,8 @@ def resolve_schema_with_flow_type(segment_id: str, flow_type: str, rulebook: dic
     from app.schema_resolver import resolve_schema as resolve_schema_from_csv
     
     # CSV is SSOT - flow_type is ignored, schema comes from segments.csv
-    return resolve_schema_from_csv(segment_id, None)
+    # Issue #616: Pass segments_csv_path if provided (no default fallback)
+    return resolve_schema_from_csv(segment_id, None, segments_csv_path)
 
 
 def get_schema_config(schema_name: str, rulebook: dict) -> Schema:

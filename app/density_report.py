@@ -589,24 +589,33 @@ def _determine_schema_for_segment(segment_id, ctx, rulebook):
     """
     Determine which schema to use for a segment.
     
-    Issue #648: Uses schema_resolver.resolve_schema() as SSOT (loads from segments.csv).
+    Issue #616: Prefers schema from context (SSOT) instead of calling resolve_schema().
+    Issue #648: Falls back to schema_resolver.resolve_schema() only if schema not in context.
     Rulebook bindings are no longer used as they duplicate CSV logic.
     
     Args:
         segment_id: Segment identifier
-        ctx: Context dict (may contain segment_type)
+        ctx: Context dict (should contain schema_name from v2 pipeline)
         rulebook: Rulebook dict (kept for backward compatibility, but not used for schema resolution)
         
     Returns:
         Schema key: "start_corral", "on_course_narrow", or "on_course_open"
     """
-    from app.schema_resolver import resolve_schema as resolve_schema_from_csv
+    # Issue #616: Prefer schema from context (already resolved from CSV in v2 pipeline)
+    schema_name = ctx.get("schema_name")
+    if schema_name:
+        return schema_name
     
-    # Issue #648: Use schema_resolver as SSOT (loads from segments.csv)
-    # Use segment_type from context if available, otherwise None
+    # Fallback: If schema not in context, fail loudly (Issue #616: This should not happen in v2 pipeline)
     segment_type = ctx.get("segment_type", None)
     segment_type_opt = str(segment_type) if segment_type else None
-    return resolve_schema_from_csv(segment_id, segment_type_opt)
+    error_msg = (
+        f"Segment {segment_id} missing 'schema_name' in context in _determine_schema_for_segment. "
+        f"This should not happen in v2 pipeline - context should include schema_name from segments_df. "
+        "Cannot fall back to default CSV as it may not match the analysis configuration."
+    )
+    logger.error(error_msg)
+    raise ValueError(error_msg)
 
 
 def _map_segment_id_to_type(segment_id):
@@ -783,9 +792,13 @@ def _save_bin_artifacts_and_metadata(
     bins_status: str,
     strategy_step: int,
     output_dir: str,
-    start_time: float
+    start_time: float,
+    analysis_context: Optional[Any] = None
 ) -> Tuple[str, str, Dict[str, Any]]:
-    """Save bin artifacts and generate metadata."""
+    """Save bin artifacts and generate metadata.
+    
+    Issue #616: Accept analysis_context to get segments_csv_path for save_bin_artifacts
+    """
     bin_geojson = bin_data.get("geojson", {})
     md = bin_geojson.get("metadata", {})
     occ = md.get("occupied_bins")
@@ -797,13 +810,22 @@ def _save_bin_artifacts_and_metadata(
         if tot in (None, 0) or occ in (None, 0) or nz in (None, 0):
             logger.error("Pre-save check indicates empty occupancy; saving anyway for debugging.")
     
+    # Issue #616: Get segments_csv_path from analysis_context
+    segments_csv_path = None
+    if analysis_context and hasattr(analysis_context, 'segments_csv_path'):
+        segments_csv_path = analysis_context.segments_csv_path
+    
     geojson_start = time.monotonic()
     # Issue #455: Use runflow path if run_id provided, otherwise legacy date path
     # This function is called from _generate_bin_dataset_with_retry which doesn't have run_id yet
     # For now, keep legacy behavior - will be updated when full call chain supports run_id
     daily_folder_path, _ = get_date_folder_path(output_dir)
     os.makedirs(daily_folder_path, exist_ok=True)
-    geojson_path, parquet_path = save_bin_artifacts(bin_data.get("geojson", {}), daily_folder_path)
+    geojson_path, parquet_path = save_bin_artifacts(
+        bin_data.get("geojson", {}), 
+        daily_folder_path,
+        segments_csv_path=segments_csv_path
+    )
     serialization_time = int((time.monotonic() - geojson_start) * 1000)
     
     # Generate bin_summary.json artifact (Issue #329)
@@ -910,7 +932,7 @@ def _generate_bin_dataset_with_retry(
     # Save artifacts and generate metadata
     daily_folder_path, geojson_path, bin_metadata = _save_bin_artifacts_and_metadata(
         bin_data, bin_size_to_use, dt_seconds, bins_status,
-        strategy_step, output_dir, start_time
+        strategy_step, output_dir, start_time, analysis_context=analysis_context
     )
     
     # Process segments from bins
@@ -1471,11 +1493,19 @@ def generate_template_narratives(segment_id: str, segment_data: Dict[str, Any]) 
             density_value = 0.0
         
         # Create context for v2.0 rulebook
+        # Issue #616: Include schema_name in context from segment_data (should already have it from CSV)
+        schema_name = segment_data.get("schema") or segment_data.get("v2_context", {}).get("schema_name")
+        if not schema_name:
+            # Fallback: try to get from summary
+            summary = segment_data.get("summary", {})
+            schema_name = summary.get("schema_name", "on_course_open")
+        
         ctx = {
             "segment_id": segment_id,
             "segment_label": segment_data.get("seg_label", "Unknown"),
             "density_value": density_value,
             "flow_type": segment_data.get("flow_type", "default"),  # Extract from segment data
+            "schema_name": schema_name,  # Issue #616: Include schema from segment_data (SSOT from CSV)
             "event_type": "default"
         }
         
@@ -2007,7 +2037,8 @@ def _apply_flagging_to_bin_features(
     bin_features: list,
     segments: dict,
     time_windows: list,
-    logger
+    logger,
+    analysis_context: Optional[Any] = None  # Issue #616: Pass analysis_context for segments_csv_path
 ) -> None:
     """Apply unified flagging with utilization percentile to bin features."""
     import time
@@ -2019,27 +2050,51 @@ def _apply_flagging_to_bin_features(
         from app.schema_resolver import resolve_schema
         import pandas as pd
         
-        # Create segments_dict for schema resolution
+        # Issue #616: Create segments_dict for schema resolution
+        # Use schema from segments dict passed in (if available), otherwise load from hardcoded path (legacy fallback)
         segments_dict = {}
-        try:
-            from app.io.loader import load_segments
-            segments_df = load_segments("data/segments.csv")
-            for _, row in segments_df.iterrows():
-                segments_dict[row['seg_id']] = {
-                    'seg_label': row.get('seg_label', row['seg_id']),
-                    'width_m': row.get('width_m', 3.0),
-                    'flow_type': row.get('flow_type', 'none'),
-                    'segment_type': row.get('segment_type')  # For schema resolution (Issue #557)
-                }
-        except Exception as e:
-            logger.warning(f"Could not load segments CSV for flagging: {e}, using defaults")
-            # Create minimal segments_dict from available segments
-            for seg_id in segments.keys():
+        # First, try to extract schema from the segments dict passed to this function
+        # The segments dict should already have schema if it came from the v2 pipeline
+        for seg_id, seg_info in segments.items():
+            if hasattr(seg_info, 'schema') or (isinstance(seg_info, dict) and 'schema' in seg_info):
+                schema_val = seg_info.schema if hasattr(seg_info, 'schema') else seg_info.get('schema')
                 segments_dict[seg_id] = {
-                    'seg_label': seg_id,
-                    'width_m': 5.0,
-                    'flow_type': 'none'
+                    'seg_label': getattr(seg_info, 'seg_label', seg_id) if hasattr(seg_info, 'seg_label') else seg_info.get('seg_label', seg_id),
+                    'width_m': getattr(seg_info, 'width_m', 3.0) if hasattr(seg_info, 'width_m') else seg_info.get('width_m', 3.0),
+                    'flow_type': getattr(seg_info, 'flow_type', 'none') if hasattr(seg_info, 'flow_type') else seg_info.get('flow_type', 'none'),
+                    'schema': schema_val  # Issue #616: Use schema from segments dict (SSOT)
                 }
+        
+        # If segments_dict is still empty, fall back to loading from CSV (Issue #616: Use analysis_context.segments_csv_path)
+        if not segments_dict:
+            if not analysis_context or not hasattr(analysis_context, 'segments_csv_path') or not analysis_context.segments_csv_path:
+                error_msg = (
+                    "segments_dict is empty and analysis_context.segments_csv_path not available in _apply_flagging_to_bin_features. "
+                    "This should not happen in v2 pipeline - segments should have schema from segments_df. "
+                    "Cannot fall back to default CSV as it may not match the analysis configuration."
+                )
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+            
+            try:
+                from app.io.loader import load_segments
+                # Issue #616: Use segments_csv_path from analysis_context instead of hardcoded path
+                logger.warning(
+                    f"No schema found in segments dict, falling back to loading '{analysis_context.segments_csv_path}'. "
+                    "This should not happen in v2 pipeline - segments should have schema from segments_df."
+                )
+                segments_df = load_segments(analysis_context.segments_csv_path)
+                for _, row in segments_df.iterrows():
+                    segments_dict[row['seg_id']] = {
+                        'seg_label': row.get('seg_label', row['seg_id']),
+                        'width_m': row.get('width_m', 3.0),
+                        'flow_type': row.get('flow_type', 'none'),
+                        'schema': row.get('schema')  # Issue #616: Use schema column (SSOT)
+                    }
+            except Exception as e:
+                error_msg = f"Could not load segments CSV from {analysis_context.segments_csv_path} for flagging: {e}"
+                logger.error(error_msg)
+                raise FileNotFoundError(error_msg) from e
         
         # Convert features to DataFrame for vectorized processing
         flag_rows = []
@@ -2052,6 +2107,24 @@ def _apply_flagging_to_bin_features(
                 if bin_feature.t_start == t_start and bin_feature.t_end == t_end:
                     window_idx = w_idx
                     break
+            
+            # Issue #616: Use schema from segments_dict if available (SSOT), fallback to resolve_schema with segments_csv_path
+            # Get schema_key from segments_dict first, then fallback to resolve_schema if needed
+            schema_key = None
+            if props["segment_id"] in segments_dict and segments_dict[props["segment_id"]].get("schema"):
+                schema_key = segments_dict[props["segment_id"]].get("schema")
+            elif analysis_context and hasattr(analysis_context, 'segments_csv_path') and analysis_context.segments_csv_path:
+                # Fallback to resolve_schema with segments_csv_path from analysis_context
+                schema_key = resolve_schema(props["segment_id"], None, analysis_context.segments_csv_path)
+            else:
+                # Last resort: This should not happen in v2 pipeline - fail loudly
+                error_msg = (
+                    f"Segment {props['segment_id']} not found in segments_dict and no segments_csv_path available in _apply_flagging_to_bin_features. "
+                    "This should not happen in v2 pipeline - segments should have schema from segments_df or analysis_context should have segments_csv_path. "
+                    "Cannot fall back to default CSV as it may not match the analysis configuration."
+                )
+                logger.error(error_msg)
+                raise ValueError(error_msg)
             
             flag_rows.append({
                 "feature_idx": idx,
@@ -2068,7 +2141,7 @@ def _apply_flagging_to_bin_features(
                 # Add missing fields for flagging
                 "window_idx": window_idx,
                 "width_m": next((s.width_m for s in segments.values() if s.segment_id == props["segment_id"]), 5.0),
-                "schema_key": resolve_schema(props["segment_id"], None),  # segment_type not available in segments_dict, use None
+                "schema_key": schema_key,  # Issue #616: Use schema from segments_dict or resolve_schema with segments_csv_path
             })
         
         flags_df = pd.DataFrame(flag_rows)
@@ -2131,8 +2204,27 @@ def _add_geometries_to_bin_features(
         import pandas as pd
         import json
         
-        # Get segments_csv path from analysis_context
-        segments_csv_path = analysis_context.segments_csv_path if analysis_context else "data/segments.csv"
+        # Get segments_csv path from analysis_context (Issue #616: Fail if not provided)
+        if not analysis_context:
+            error_msg = (
+                "analysis_context is None in generate_bin_dataset. "
+                "This should not happen in v2 pipeline - analysis_context should be provided. "
+                "Cannot fall back to default CSV as it may not match the analysis configuration."
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        segments_csv_path = getattr(analysis_context, 'segments_csv_path', None)
+        if not segments_csv_path:
+            error_msg = (
+                "analysis_context.segments_csv_path is None in generate_bin_dataset. "
+                "This should not happen in v2 pipeline - segments_csv_path should be set from analysis.json. "
+                "Cannot fall back to default CSV as it may not match the analysis configuration."
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        logger.debug(f"Issue #616: Using segments_csv_path={segments_csv_path} from analysis_context")
         
         # Load segment metadata for geometry
         segments_df = load_segments(segments_csv_path)
@@ -2279,7 +2371,8 @@ def generate_bin_dataset(
             event_names_for_mapping = [e.lower() for e in event_durations.keys()]
         
         runners_by_segment_and_window = build_runner_window_mapping(
-            results, time_windows, start_times, event_names=event_names_for_mapping
+            results, time_windows, start_times, event_names=event_names_for_mapping,
+            analysis_context=analysis_context  # Issue #616: Pass analysis_context for segments_csv_path
         )
         
         # 4) Generate bin features using ChatGPT's vectorized accumulator with performance optimization
@@ -2299,7 +2392,7 @@ def generate_bin_dataset(
         geojson_features = to_geojson_features(bin_build.features)
         
         # Issue #254: Apply unified flagging - extracted to helper function to reduce complexity
-        _apply_flagging_to_bin_features(geojson_features, bin_build.features, segments, time_windows, logger)
+        _apply_flagging_to_bin_features(geojson_features, bin_build.features, segments, time_windows, logger, analysis_context)
         
         # Issue #249: Add geometry backfill - extracted to helper function to reduce complexity
         _add_geometries_to_bin_features(geojson_features, analysis_context, logger)
@@ -2973,7 +3066,8 @@ def build_runner_window_mapping(
     results: Dict[str, Any], 
     time_windows: list, 
     start_times: Dict[str, float],
-    event_names: Optional[List[str]] = None
+    event_names: Optional[List[str]] = None,
+    analysis_context: Optional[Any] = None  # Issue #616: Pass analysis_context for segments_csv_path
 ) -> Dict[str, Dict[int, Dict[str, Any]]]:
     """
     Build runner→segment/window mapping adapter for bins_accumulator.
@@ -3028,7 +3122,19 @@ def build_runner_window_mapping(
         # Combine all runners
         pace_data = pd.concat(all_runners, ignore_index=True)
         
-        segments_config = load_segments("data/segments.csv")  # Use loader to normalize elite/open columns
+        # Issue #616: This function should receive segments_csv_path as a parameter
+        # For now, fail if analysis_context is not available (v2 pipeline should provide it)
+        if not analysis_context or not hasattr(analysis_context, 'segments_csv_path') or not analysis_context.segments_csv_path:
+            error_msg = (
+                "segments_csv_path not available in _load_segments_and_pace_for_mapping. "
+                "This function should be refactored to accept segments_csv_path as a parameter. "
+                "Cannot fall back to default CSV as it may not match the analysis configuration."
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        segments_csv_path = analysis_context.segments_csv_path
+        segments_config = load_segments(segments_csv_path)  # Issue #616: Use segments_csv_path from analysis_context
     except Exception as e:
         logger.warning(f"Could not load data for runner mapping: {e}")
         return mapping

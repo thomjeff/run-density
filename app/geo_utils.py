@@ -233,12 +233,15 @@ def generate_segments_geojson(segments_data: Dict[str, SegmentBinData]) -> Dict[
         }
     }
 
-def generate_bins_geojson(segments_data: Dict[str, SegmentBinData]) -> Dict[str, Any]:
+def generate_bins_geojson(segments_data: Dict[str, SegmentBinData], segments_csv_path: Optional[str] = None) -> Dict[str, Any]:
     """
     Generate GeoJSON for individual bins using real segment coordinates from GPX data.
     
+    Issue #616: Accept segments_csv_path parameter instead of hardcoded "data/segments.csv"
+    
     Args:
         segments_data: Dictionary mapping segment_id to SegmentBinData
+        segments_csv_path: Optional path to segments CSV file. If None, raises ValueError.
     
     Returns:
         GeoJSON FeatureCollection with bin features
@@ -253,8 +256,15 @@ def generate_bins_geojson(segments_data: Dict[str, SegmentBinData]) -> Dict[str,
         # Load GPX courses
         courses = load_all_courses("data")
         
+        # Issue #616: Require segments_csv_path parameter - no hardcoded fallback
+        if not segments_csv_path:
+            raise ValueError(
+                "segments_csv_path is required for generate_bins_geojson. "
+                "This should not happen in v2 pipeline - pass segments_csv_path from analysis.json."
+            )
+        
         # Load segments data to get segment definitions
-        segments_df = load_segments("data/segments.csv")
+        segments_df = load_segments(segments_csv_path)
         segments_list = segments_df.to_dict('records')
         
         # Generate real coordinates for all segments

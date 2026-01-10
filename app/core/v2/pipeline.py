@@ -967,6 +967,7 @@ def create_full_analysis_pipeline(
                 start_times[event.name.lower()] = float(event.start_time)
             
             # Generate bins for this day (Issue #515: Use day-filtered segments)
+            # Issue #616: Pass segments_path_str from analysis.json to generate_bins_v2
             bins_dir = generate_bins_v2(
                 density_results=day_density,
                 start_times=start_times,
@@ -975,7 +976,8 @@ def create_full_analysis_pipeline(
                 run_id=run_id,
                 day=day,
                 events=day_events,
-                data_dir=data_dir
+                data_dir=data_dir,
+                segments_csv_path=segments_path_str  # Issue #616: Use segments_file from analysis.json
             )
             
             # Try to get feature count from bins if available
@@ -1535,9 +1537,18 @@ def create_full_analysis_pipeline(
             flow_file_path = analysis_config.get("data_files", {}).get("flow", flow_file_path)
             locations_file_path = analysis_config.get("data_files", {}).get("locations", locations_path_str) if locations_file else None
         else:
-            # Fallback to constructed paths if analysis.json not available
+            # Issue #616: This fallback should not happen in v2 pipeline - analysis.json should always exist
+            # If analysis.json is missing, these paths should already be set from earlier in the pipeline
+            # (segments_path_str from get_segments_file(), flow_file_path from get_flow_file())
+            logger.error(
+                "analysis_config is None when generating reports. "
+                "This should not happen in v2 pipeline - analysis.json should always be provided. "
+                "Using previously constructed paths as fallback, but this may be incorrect."
+            )
+            # Use paths already constructed from analysis.json lookups (should not hit this)
             segments_file_path = segments_path_str
-            flow_file_path = flow_file_path
+            # flow_file_path should already be set from line 847 (get_flow_file) or 849 (parameter default)
+            # Don't reassign it - keep whatever was set earlier
             locations_file_path = str(Path(data_dir) / locations_file) if locations_file else None
         
         # Generate reports

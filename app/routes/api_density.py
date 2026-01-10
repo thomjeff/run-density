@@ -352,7 +352,26 @@ async def get_density_segments(
         label_lookup = _build_label_lookup_from_geojson(segments_geojson or {})
         
         # Issue #652: Enrich with data from segments.csv (especially length_km)
-        label_lookup = _enrich_label_lookup_from_csv(label_lookup)
+        # Issue #616: Get segments_csv_path from analysis.json instead of hardcoded default
+        segments_csv_path_for_api = None
+        try:
+            from app.utils.run_id import get_runflow_root
+            from app.core.v2.analysis_config import get_segments_file
+            runflow_root = get_runflow_root()
+            run_path = runflow_root / run_id
+            segments_csv_path_for_api = get_segments_file(run_path=run_path)
+        except Exception as e:
+            logger.warning(f"Could not get segments_csv_path from analysis.json for density API: {e}")
+        
+        # Only enrich if we have a valid path (fail silently if not found to avoid breaking UI)
+        if segments_csv_path_for_api:
+            label_lookup = _enrich_label_lookup_from_csv(label_lookup, segments_csv_path_for_api)
+        else:
+            logger.warning(
+                "segments_csv_path not found in analysis.json for density API enrichment. "
+                "Skipping CSV enrichment to avoid hardcoded fallback. "
+                "UI may show missing length_km values."
+            )
         
         # Load flags from day-scoped path (Issue #580: Updated path to metrics/ subdirectory)
         flags_data = storage.read_json(f"{selected_day}/ui/metrics/flags.json")

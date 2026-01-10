@@ -452,14 +452,20 @@ def generate_flow_json(reports_dir: Path) -> Dict[str, Any]:
 
 
 
-def _load_segment_dimensions():
-    """Load segment dimensions from segments.csv."""
+def _load_segment_dimensions(segments_csv_path: str):
+    """Load segment dimensions from segments.csv.
+    
+    Issue #616: Accept segments_csv_path parameter instead of hardcoded "data/segments.csv"
+    
+    Args:
+        segments_csv_path: Path to segments CSV file from analysis.json
+    """
     import pandas as pd
     from pathlib import Path
     
-    dimensions_path = Path("data/segments.csv")
+    dimensions_path = Path(segments_csv_path)
     if not dimensions_path.exists():
-        print(f"Warning: {dimensions_path} not found")
+        print(f"ERROR: {dimensions_path} not found (from analysis.json: {segments_csv_path})")
         return {}
     
     df_dims = pd.read_csv(dimensions_path)
@@ -562,8 +568,10 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
     
     Now uses real GPX coordinates from generate_segment_coordinates().
     
+    Issue #616: Get segments_csv_path from analysis.json instead of hardcoded "data/segments.csv"
+    
     Args:
-        reports_dir: Path to reports/<run_id>/ directory
+        reports_dir: Path to reports/<run_id>/ directory (used to locate analysis.json)
     
     Returns:
         GeoJSON FeatureCollection with real course coordinates in Web Mercator (EPSG:3857)
@@ -571,6 +579,49 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
     from app.core.gpx.processor import load_all_courses, generate_segment_coordinates, create_geojson_from_segments
     from app.io.loader import load_segments
     from pyproj import Transformer
+    import json
+    from app.utils.run_id import get_runflow_root
+    
+    # Issue #616: Get segments_csv_path from analysis.json
+    # reports_dir is typically {runflow_root}/{run_id}/{day}/reports_temp
+    # analysis.json is at {runflow_root}/{run_id}/analysis.json
+    segments_csv_path = None
+    try:
+        runflow_root = get_runflow_root()
+        # Navigate from reports_dir back to run_id directory
+        # reports_dir: {runflow_root}/{run_id}/{day}/reports_temp
+        # Need: {runflow_root}/{run_id}/analysis.json
+        run_id_dir = reports_dir.parent.parent  # Go from reports_temp -> {day} -> {run_id}
+        if run_id_dir.name == "reports_temp":
+            # If reports_dir is actually reports_temp, go up one more level
+            run_id_dir = reports_dir.parent
+        analysis_json_path = run_id_dir / "analysis.json"
+        if not analysis_json_path.exists():
+            # Try alternative: reports_dir might be {runflow_root}/{run_id}/reports_temp
+            alt_run_id_dir = reports_dir.parent
+            if (alt_run_id_dir / "analysis.json").exists():
+                analysis_json_path = alt_run_id_dir / "analysis.json"
+        if analysis_json_path.exists():
+            with open(analysis_json_path, 'r') as af:
+                analysis_config = json.load(af)
+                data_files = analysis_config.get("data_files", {})
+                segments_csv_path = data_files.get("segments")
+                if not segments_csv_path:
+                    # Fallback to segments_file + data_dir
+                    segments_file = analysis_config.get("segments_file")
+                    data_dir = analysis_config.get("data_dir", "data")
+                    if segments_file:
+                        segments_csv_path = f"{data_dir}/{segments_file}"
+    except Exception as e:
+        print(f"Warning: Could not load segments_csv_path from analysis.json: {e}")
+    
+    if not segments_csv_path:
+        error_msg = (
+            "segments_csv_path not found in analysis.json for generate_segments_geojson. "
+            "This should not happen in v2 pipeline - analysis.json should include segments_file."
+        )
+        print(f"ERROR: {error_msg}")
+        return {"type": "FeatureCollection", "features": []}
     
     # Load GPX courses
     courses = load_all_courses("data")
@@ -580,10 +631,10 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
     
     # Load segments data to get segment definitions
     try:
-        segments_df = load_segments("data/segments.csv")
+        segments_df = load_segments(segments_csv_path)
         segments_list = segments_df.to_dict('records')
     except Exception as e:
-        print(f"Warning: Could not load segments.csv: {e}")
+        print(f"ERROR: Could not load segments.csv from {segments_csv_path}: {e}")
         return {"type": "FeatureCollection", "features": []}
     
     # Generate real coordinates for all segments from GPX (returns WGS84)
@@ -612,7 +663,7 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
             ]
     
     # Load dimensions for segment metadata enrichment
-    segment_dims = _load_segment_dimensions()
+    segment_dims = _load_segment_dimensions(segments_csv_path)
     schema_keys = _load_schema_keys(reports_dir)
     
     # Enrich features with metadata from segments.csv
