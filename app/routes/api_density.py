@@ -89,7 +89,7 @@ def load_density_metrics_from_bins(run_id: Optional[str] = None, day: Optional[s
                         end_dt = datetime.fromisoformat(t_end.replace('Z', '+00:00'))
                         time_str = f"{start_dt.strftime('%H:%M')}-{end_dt.strftime('%H:%M')}"
                     except (ValueError, TypeError) as e:
-                        logging.warning(f"Failed to parse time range '{t_start}-{t_end}': {e}. Using raw values.")
+                        logger.warning(f"Failed to parse time range '{t_start}-{t_end}': {e}. Using raw values.")
                         time_str = f"{t_start}-{t_end}"
                 
                 worst_bin = {

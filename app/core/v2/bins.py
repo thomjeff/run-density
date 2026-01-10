@@ -138,9 +138,43 @@ def generate_bins_v2(
         
         # Issue #616: build_runner_window_mapping uses per-event runner files; no temp data/runners.csv needed
         
+        # Issue #553 Phase 4.2 & 4.3: Load event configuration from analysis.json (SSOT)
+        # This must happen BEFORE creating BinGenerationContext to avoid overwriting the SSOT context
+        event_durations = {}
+        event_names = []
+        config_analysis_context = analysis_context  # Keep SSOT context separate
+        try:
+            if config_analysis_context is None:
+                runflow_root = get_runflow_root()
+                run_path = runflow_root / run_id
+                config_analysis_context = load_analysis_context(run_path)
+            analysis_config = config_analysis_context.analysis_config
+            
+            # Extract event names and durations from analysis.json
+            events_list = analysis_config.get("events", [])
+            for event in events_list:
+                event_name = event.get("name", "")
+                duration = event.get("event_duration_minutes")
+                if event_name:
+                    event_names.append(event_name.lower())
+                    if duration:
+                        # Support both original case and lowercase for lookup
+                        event_durations[event_name] = duration
+                        event_durations[event_name.lower()] = duration
+            
+            logger.debug(f"Loaded event names from analysis.json: {event_names}")
+            logger.debug(f"Loaded event durations from analysis.json: {event_durations}")
+        except Exception as e:
+            logger.error(f"Failed to load event configuration from analysis.json: {e}")
+            # Issue #553: Fail fast - event configuration is required
+            raise ValueError(
+                f"Cannot generate bins without event configuration from analysis.json: {e}"
+            )
+        
         # Issue #655: Create BinGenerationContext (legacy dataclass for bin generation parameters)
         # Note: This is different from ConfigAnalysisContext (SSOT config loader from app.config.loader)
-        analysis_context = BinGenerationContext(
+        # Use a different variable name to avoid overwriting the SSOT context
+        bin_gen_context = BinGenerationContext(
             course_id="fredericton_marathon",
             segments=segments_df,
             runners=runners_df,
@@ -214,37 +248,6 @@ def generate_bins_v2(
         else:
             logger.warning(f"density_results missing 'segments' dict, cannot filter by day")
         
-        # Issue #553 Phase 4.2 & 4.3: Load event configuration from analysis.json
-        event_durations = {}
-        event_names = []
-        try:
-            if analysis_context is None:
-                runflow_root = get_runflow_root()
-                run_path = runflow_root / run_id
-                analysis_context = load_analysis_context(run_path)
-            analysis_config = analysis_context.analysis_config
-            
-            # Extract event names and durations from analysis.json
-            events_list = analysis_config.get("events", [])
-            for event in events_list:
-                event_name = event.get("name", "")
-                duration = event.get("event_duration_minutes")
-                if event_name:
-                    event_names.append(event_name.lower())
-                    if duration:
-                        # Support both original case and lowercase for lookup
-                        event_durations[event_name] = duration
-                        event_durations[event_name.lower()] = duration
-            
-            logger.debug(f"Loaded event names from analysis.json: {event_names}")
-            logger.debug(f"Loaded event durations from analysis.json: {event_durations}")
-        except Exception as e:
-            logger.error(f"Failed to load event configuration from analysis.json: {e}")
-            # Issue #553: Fail fast - event configuration is required
-            raise ValueError(
-                f"Cannot generate bins without event configuration from analysis.json: {e}"
-            )
-        
         # Issue #553 Phase 4.3: Filter event_durations to match current day's events
         # start_times only contains events for the current day, so filter event_durations accordingly
         day_event_durations = {}
@@ -264,7 +267,7 @@ def generate_bins_v2(
         
         try:
             daily_folder_path, bin_metadata, bin_data = _generate_bin_dataset_with_retry(
-                filtered_density_results, start_times, temp_output_dir, analysis_context, 
+                filtered_density_results, start_times, temp_output_dir, bin_gen_context, 
                 day_event_durations, event_names
             )
             

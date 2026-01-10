@@ -210,6 +210,13 @@ def generate_reports_per_day(
             else:
                 logger.info(f"Issue #600: Using locations_results.json as SSOT: {locations_results_json_path}")
                 
+                # Filter gpx_paths to only include day events
+                day_gpx_paths = {
+                    event.name.lower(): gpx_paths[event.name.lower()]
+                    for event in day_events
+                    if event.name.lower() in gpx_paths
+                }
+                
                 locations_path = generate_locations_report_v2(
                     run_id=run_id,
                     day=day,
@@ -218,7 +225,8 @@ def generate_reports_per_day(
                     all_runners_df=all_runners_df,
                     reports_path=reports_path,
                     segments_df=day_segments_df,
-                    segments_file_path=segments_file_path  # Issue #616: Pass segments path for fallback safety
+                    segments_file_path=segments_file_path,  # Issue #616: Pass segments path for fallback safety
+                    gpx_paths=day_gpx_paths  # Issue #655: Pass gpx_paths for location report generation
                 )
                 if locations_path:
                     day_report_paths["locations"] = str(locations_path)
@@ -594,7 +602,8 @@ def generate_locations_report_v2(
     all_runners_df: Any,  # pd.DataFrame
     reports_path: Path,
     segments_df: Optional[Any] = None,  # pd.DataFrame - day-filtered segments
-    segments_file_path: Optional[str] = None  # Issue #616: Path to segments CSV from analysis.json (for fallback only)
+    segments_file_path: Optional[str] = None,  # Issue #616: Path to segments CSV from analysis.json (for fallback only)
+    gpx_paths: Optional[Dict[str, str]] = None  # Issue #655: GPX file paths from analysis.json data_files.gpx
 ) -> Optional[Path]:
     """
     Generate day-scoped locations report (Locations.csv).
@@ -753,6 +762,15 @@ def generate_locations_report_v2(
             # NOTE: Do NOT pass run_id to generate_location_report when using v2 structure
             # because it will use get_runflow_category_path which creates runflow/{run_id}/reports
             # instead of runflow/{run_id}/{day}/reports. We pass output_dir directly instead.
+            
+            # Issue #655: Validate gpx_paths is provided (required for location report)
+            if not gpx_paths:
+                logger.error(f"gpx_paths is required for location report generation but was not provided for day {day.value}")
+                raise ValueError(
+                    f"gpx_paths is required for location report generation. "
+                    "It should be provided from analysis.json data_files.gpx."
+                )
+            
             logger.info(f"Calling generate_location_report for day {day.value} with {len(day_locations_df)} locations, {len(day_runners_df)} runners")
             try:
                 result = generate_location_report(
@@ -763,7 +781,7 @@ def generate_locations_report_v2(
                     output_dir=str(reports_path),
                     run_id=run_id,  # Issue #598: Pass run_id for flag propagation (loads flags.json)
                     day=day.value,  # Issue #598: Pass day for day-scoped flags.json path
-                    gpx_paths=gpx_paths,
+                    gpx_paths=gpx_paths,  # Issue #655: GPX paths from analysis.json
                     locations_df=day_locations_df,
                     runners_df=day_runners_df,
                     segments_df=segments_df

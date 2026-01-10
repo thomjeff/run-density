@@ -817,9 +817,15 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
         has_convergence = segment.get("has_convergence", False)
         
         # Get width from segments.csv
+        # Issue #616: Handle sub-segments (e.g., N5a, A2a) by normalizing to base segment (N5, A2)
+        # Sub-segments are created dynamically during flow analysis but don't exist in segments.csv
+        base_seg_id = seg_id.rstrip('abcdefghijklmnopqrstuvwxyz')  # Strip trailing letters
         seg_row = segments_df[segments_df['seg_id'] == seg_id]
+        if seg_row.empty and base_seg_id != seg_id:
+            # Try base segment if sub-segment not found
+            seg_row = segments_df[segments_df['seg_id'] == base_seg_id]
         if seg_row.empty:
-            raise ValueError(f"Segment {seg_id} missing from segments.csv for flow report export.")
+            raise ValueError(f"Segment {seg_id} (and base segment {base_seg_id}) missing from segments.csv for flow report export.")
         width_val = seg_row['width_m'].iloc[0]
         if pd.isna(width_val) or width_val == '':
             raise ValueError(f"Segment {seg_id} missing width_m in segments.csv for flow report export.")
