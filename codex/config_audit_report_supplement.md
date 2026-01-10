@@ -8,17 +8,6 @@ These scripts/tools are not part of the active runtime but still hardcode `data/
 
 ### Notes
 - There are **no Jupyter notebooks** (`.ipynb`) in the repo, so notebook risks appear minimal.
-### High-risk legacy CLI utilities (hardcoded data paths)
-- `archive/smoke_testing.py` posts API payloads with `data/runners.csv` + `data/segments.csv` and other hardcoded defaults. (`archive/smoke_testing.py:88-118`)
-- `archive/integration_testing.py` executes multiple API calls with `data/runners.csv` + `data/segments.csv` across density/flow endpoints. (`archive/integration_testing.py:77-111`)
-- `archive/legacy-scripts/e2e-v1.py` hardcodes `data/runners.csv`/`data/segments.csv` payloads for density and flow checks. (`archive/legacy-scripts/e2e-v1.py:49-60`)
-- `archive/scripts/obsolete-validation-2025-11/generate_frontend_data.py` loads `data/segments.csv` directly for GeoJSON generation. (`archive/scripts/obsolete-validation-2025-11/generate_frontend_data.py:27-56`)
-- `archive/gpx_processor.py` hardcodes `10K.gpx`, `Half.gpx`, `Full.gpx` in a legacy course loader. (`archive/gpx_processor.py:353-377`)
-- `archive/generate_temporal_flow_report.py` documents example CLI usage with `data/segments.csv` and `data/your_pace_data.csv` (likely to be copy-pasted). (`archive/generate_temporal_flow_report.py:20-35`)
-
-### Notes
-- There are **no Jupyter notebooks** (`.ipynb`) in the repo, so notebook risks appear minimal.
-- Most hardcoded legacy scripts live in `archive/` and should be explicitly labeled or moved to a non-discoverable path if they must remain.
 
 ---
 
