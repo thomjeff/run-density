@@ -17,6 +17,7 @@ import hashlib
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Set
 import pandas as pd
+from app.config.loader import load_analysis_context, AnalysisConfigError
 
 # Configuration
 # Base URL can be set via BASE_URL environment variable or pytest --base-url
@@ -137,6 +138,42 @@ class TestV2E2EScenarios:
         from app.utils.run_id import get_runflow_root
         runflow_root = get_runflow_root()
         return runflow_root / run_id
+
+    def _require_analysis_context(self, run_id: str, payload: Dict[str, Any]) -> None:
+        """Load analysis.json via new loader and validate required config fields."""
+        run_dir = self._get_run_directory(run_id)
+        try:
+            analysis_context = load_analysis_context(run_dir)
+        except FileNotFoundError as exc:
+            raise AssertionError(f"analysis.json missing for run_id {run_id}") from exc
+        except AnalysisConfigError as exc:
+            raise AssertionError(f"analysis.json invalid for run_id {run_id}: {exc}") from exc
+
+        analysis_config = analysis_context.analysis_config
+        assert analysis_config.get("data_dir"), "analysis.json missing data_dir"
+        assert analysis_config.get("segments_file") == payload.get("segments_file"), \
+            "analysis.json segments_file does not match request payload"
+        assert analysis_config.get("flow_file") == payload.get("flow_file"), \
+            "analysis.json flow_file does not match request payload"
+        if payload.get("locations_file") is not None:
+            assert analysis_config.get("locations_file") == payload.get("locations_file"), \
+                "analysis.json locations_file does not match request payload"
+
+        data_files = analysis_config.get("data_files", {})
+        for required_key in ("segments", "flow"):
+            assert data_files.get(required_key), f"analysis.json missing data_files.{required_key}"
+        if payload.get("locations_file") is not None:
+            assert data_files.get("locations"), "analysis.json missing data_files.locations"
+
+        runners_map = data_files.get("runners", {})
+        gpx_map = data_files.get("gpx", {})
+        for event in payload.get("events", []):
+            name = event.get("name")
+            assert name, "Event name missing in request payload"
+            assert runners_map.get(name) or runners_map.get(name.lower()), \
+                f"analysis.json missing data_files.runners entry for event '{name}'"
+            assert gpx_map.get(name) or gpx_map.get(name.lower()), \
+                f"analysis.json missing data_files.gpx entry for event '{name}'"
     
     def _verify_outputs_exist(self, run_id: str, day: str, scenario: str = None) -> Dict[str, Path]:
         """Verify that expected output files exist for a day.
@@ -583,6 +620,7 @@ class TestV2E2EScenarios:
         response_data = self._make_analyze_request(base_url, payload, timeout=60)
         run_id = response_data["run_id"]
         days = response_data.get("days", ["sat"])
+        self._require_analysis_context(run_id, payload)
         
         # Wait for background analysis to complete (Issue #554)
         self._wait_for_analysis_completion(run_id, days, max_wait_seconds=600)
@@ -649,6 +687,7 @@ class TestV2E2EScenarios:
         response_data = self._make_analyze_request(base_url, payload, timeout=60)
         run_id = response_data["run_id"]
         days = response_data.get("days", ["sun"])
+        self._require_analysis_context(run_id, payload)
         
         # Wait for background analysis to complete (Issue #554)
         self._wait_for_analysis_completion(run_id, days, max_wait_seconds=600)
@@ -709,6 +748,7 @@ class TestV2E2EScenarios:
         response_data = self._make_analyze_request(base_url, payload, timeout=60)  # Short timeout for API response
         run_id = response_data["run_id"]
         days = response_data.get("days", ["sat", "sun"])
+        self._require_analysis_context(run_id, payload)
         
         # Wait for background analysis to complete (Issue #554)
         self._wait_for_analysis_completion(run_id, days, max_wait_seconds=900)  # 15 minutes max wait
@@ -769,6 +809,7 @@ class TestV2E2EScenarios:
         response_data = self._make_analyze_request(base_url, payload, timeout=60)
         run_id = response_data["run_id"]
         days = response_data.get("days", ["sat", "sun"])
+        self._require_analysis_context(run_id, payload)
         
         # Wait for background analysis to complete (Issue #554)
         self._wait_for_analysis_completion(run_id, days, max_wait_seconds=900)
@@ -819,6 +860,7 @@ class TestV2E2EScenarios:
         response_data = self._make_analyze_request(base_url, payload, timeout=60)
         run_id = response_data["run_id"]
         days = response_data.get("days", ["sat", "sun"])
+        self._require_analysis_context(run_id, payload)
         
         # Wait for background analysis to complete (Issue #554)
         self._wait_for_analysis_completion(run_id, days, max_wait_seconds=600)
@@ -889,6 +931,7 @@ class TestV2E2EScenarios:
         response_data = self._make_analyze_request(base_url, payload, timeout=60)
         run_id = response_data["run_id"]
         days = response_data.get("days", ["sun"])
+        self._require_analysis_context(run_id, payload)
         
         # Wait for background analysis to complete (Issue #554)
         self._wait_for_analysis_completion(run_id, days, max_wait_seconds=600)
@@ -963,5 +1006,4 @@ def wait_for_server(base_url):
                 )
         time.sleep(1)
     pytest.fail("Server not available after 30 attempts")
-
 
