@@ -3,6 +3,11 @@
 ## 1) Legacy CLI / Utility Inventory (Hardcoded Paths & Production Risk)
 These scripts/tools are not part of the active runtime but still hardcode `data/*.csv` or GPX filenames. If run against a live environment (or pointed at prod data), they could bypass SSOT configuration and cause confusing or stale outputs.
 
+### Legacy CLI utilities (non-runtime, informational only)
+- The scripts under `archive/` reference hardcoded data paths, but they are **not used at runtime** and are **not considered high-risk** per current guidance. They are listed here purely for completeness and should not be treated as remediation targets unless they are reactivated for production workflows.
+
+### Notes
+- There are **no Jupyter notebooks** (`.ipynb`) in the repo, so notebook risks appear minimal.
 ### High-risk legacy CLI utilities (hardcoded data paths)
 - `archive/smoke_testing.py` posts API payloads with `data/runners.csv` + `data/segments.csv` and other hardcoded defaults. (`archive/smoke_testing.py:88-118`)
 - `archive/integration_testing.py` executes multiple API calls with `data/runners.csv` + `data/segments.csv` across density/flow endpoints. (`archive/integration_testing.py:77-111`)
