@@ -86,3 +86,27 @@ A dedicated `ConfigLoader` could centralize CSV/GPX/rulebook loading and enforce
 - Replace path defaults in `app/api/map.py`, `app/location_report.py`, and `app/routes/api_density.py` with injected config loader or context.
 - Consolidate `segments_csv_path` logic in `app/core/v2/bins.py`, `app/core/artifacts/frontend.py`, and `app/new_density_report.py`.
 
+
+---
+
+## Final Research Questions Before Implementation Planning
+
+### 1) Legacy CLI Tools & Notebooks
+- **CLI/test scripts with legacy data paths:** Yes. Several archived utilities hardcode `data/runners.csv`/`data/segments.csv` and legacy GPX names, including `archive/smoke_testing.py`, `archive/integration_testing.py`, `archive/legacy-scripts/e2e-v1.py`, and `archive/scripts/obsolete-validation-2025-11/generate_frontend_data.py`. These remain upgrade candidates or should be clearly quarantined to avoid accidental production use. (`archive/smoke_testing.py:88-118`, `archive/integration_testing.py:77-111`, `archive/legacy-scripts/e2e-v1.py:49-60`, `archive/scripts/obsolete-validation-2025-11/generate_frontend_data.py:27-56`)
+- **Jupyter notebooks:** None found in the repo (`.ipynb` absent). This reduces notebook-related risk.
+
+### 2) Test Coverage for Config Failures & Silent Fallbacks
+- **Existing coverage:** Validation tests cover missing `segments.csv` and extension validation (fail-fast). (`tests/v2/test_validation.py:150-215`)
+- **Silent fallback coverage:** There is an explicit test that missing `flow.csv` returns an empty DataFrame, indicating fallback acceptance rather than failure. (`tests/v2/test_flow.py:115-135`)
+- **Gaps:** No tests explicitly exercise missing `segments_csv_path` in schema resolution or bin generation; no integration tests assert behavior when `analysis.json` points to alternate `segments_*` files across the full pipeline. (See gaps in Section 3 above.)
+
+### 3) Validation Strategy Recommendation
+- **Recommendation:** Yes—introduce a configuration validator that checks **required fields and types** early in the pipeline (schema, width_m, direction, event span columns, data_files paths) and **fails fast** on missing critical fields rather than defaulting. This validator should run before density/flow/bin generation, and should be fed from `analysis.json`/`data_files` to ensure SSOT. (See Sections 2, 4, and 5 above for concrete default/fallback hotspots.)
+
+### 4) SSOT Loader Recommendation
+- **Recommendation:** Yes—introduce a centralized **ConfigLoader/SegmentManager** responsible for:
+  - resolving `analysis.json` + `data_files` once,
+  - loading and caching CSV/GPX inputs,
+  - providing schema lookups and rulebook thresholds,
+  - and standardizing error handling.
+This would reduce redundant reloads and prevent hardcoded defaults in downstream modules. (See Sections 2 and 6 above for candidate integration points.)
