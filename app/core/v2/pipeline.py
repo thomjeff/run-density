@@ -1035,6 +1035,40 @@ def create_full_analysis_pipeline(
             else:
                 logger.warning(f"Bin generation skipped or failed for day {day.value}")
         
+        # Issue #655: Hard fail if no bins were generated - critical error that stops analysis
+        # Bins are required for Density.md reports and downstream analysis
+        # This is a non-negotiable requirement - analysis cannot proceed without bins
+        if not bins_by_day:
+            error_msg = (
+                "CRITICAL: No bins were generated for any day. "
+                "Bin generation is required for density analysis and report generation. "
+                "Analysis cannot proceed without bins.parquet files. "
+                "This is a hard failure - the analysis pipeline will now stop."
+            )
+            logger.error("=" * 80)
+            logger.error(error_msg)
+            logger.error("=" * 80)
+            raise RuntimeError(error_msg)
+        
+        # Verify bins.parquet files actually exist (not just directories created)
+        missing_bins = []
+        for day_value, bins_path_str in bins_by_day.items():
+            bins_parquet_path = Path(bins_path_str) / "bins.parquet"
+            if not bins_parquet_path.exists():
+                missing_bins.append(f"{day_value}: {bins_parquet_path}")
+        
+        if missing_bins:
+            error_msg = (
+                f"CRITICAL: bins.parquet files are missing for {len(missing_bins)} day(s):\n"
+                + "\n".join(f"  - {missing}" for missing in missing_bins) +
+                "\nBin generation returned directories but bins.parquet files were not created. "
+                "Analysis cannot proceed without bins.parquet files."
+            )
+            logger.error(error_msg)
+            raise FileNotFoundError(error_msg)
+        
+        logger.info(f"✅ Bin generation validated: {len(bins_by_day)} day(s) with bins.parquet files")
+        
         # Load locations DataFrame if locations_file is provided
         # Issue #553 Phase 7.1: Use file path from analysis.json if available
         locations_df = None
