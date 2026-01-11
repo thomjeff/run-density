@@ -4001,18 +4001,9 @@ def analyze_temporal_flow_segments(
             )
             segment_result["deep_dive_analysis"] = deep_dive
     
-    # Write sorted performance log if provided
-    if performance_log_path and segment_timings:
-        try:
-            # Sort by time_seconds (ascending: min to max)
-            segment_timings.sort(key=lambda x: x[1])
-            # Write header and sorted entries
-            with open(performance_log_path, 'w') as f:
-                f.write("seg_id,time_seconds\n")
-                for seg_id, elapsed_seconds in segment_timings:
-                    f.write(f"{seg_id},{elapsed_seconds:.3f}\n")
-        except Exception as e:
-            print(f"Warning: Could not write sorted performance log {performance_log_path}: {e}")
+    # Return segment timings (will be collected and written sorted at v2 level)
+    # Note: Don't write here - v2 flow collects across all days and writes once
+    results["_segment_timings"] = segment_timings if performance_log_path else []
     
     return results
 
