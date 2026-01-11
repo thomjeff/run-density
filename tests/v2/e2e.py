@@ -778,8 +778,8 @@ class TestV2E2EScenarios:
             description="Sunday only scenario test with audit",
             events=[
                 {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390},
-                {"name": "10k", "day": "sun", "start_time": 440, "event_duration_minutes": 120},
-                {"name": "half", "day": "sun", "start_time": 460, "event_duration_minutes": 180}
+                {"name": "10k", "day": "sun", "start_time": 460, "event_duration_minutes": 120},
+                {"name": "half", "day": "sun", "start_time": 440, "event_duration_minutes": 180}
             ],
             event_group={
                 "sun-all": "full, 10k, half"
@@ -834,8 +834,8 @@ class TestV2E2EScenarios:
                 {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45},
                 {"name": "open", "day": "sat", "start_time": 510, "event_duration_minutes": 75},
                 {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390},
-                {"name": "10k", "day": "sun", "start_time": 440, "event_duration_minutes": 120},
-                {"name": "half", "day": "sun", "start_time": 460, "event_duration_minutes": 180}
+                {"name": "10k", "day": "sun", "start_time": 460, "event_duration_minutes": 120},
+                {"name": "half", "day": "sun", "start_time": 440, "event_duration_minutes": 180}
             ],
             event_group={
                 "sat-elite": "elite",
@@ -892,8 +892,8 @@ class TestV2E2EScenarios:
                 {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45},
                 {"name": "open", "day": "sat", "start_time": 510, "event_duration_minutes": 75},
                 {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390},
-                {"name": "10k", "day": "sun", "start_time": 440, "event_duration_minutes": 120},
-                {"name": "half", "day": "sun", "start_time": 460, "event_duration_minutes": 180}
+                {"name": "10k", "day": "sun", "start_time": 460, "event_duration_minutes": 120},
+                {"name": "half", "day": "sun", "start_time": 440, "event_duration_minutes": 180}
             ],
             event_group={
                 "sat-elite": "elite",
@@ -1013,8 +1013,8 @@ class TestV2E2EScenarios:
             description="Sunday only scenario test with audit",
             events=[
                 {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390},
-                {"name": "10k", "day": "sun", "start_time": 440, "event_duration_minutes": 120},
-                {"name": "half", "day": "sun", "start_time": 460, "event_duration_minutes": 180}
+                {"name": "10k", "day": "sun", "start_time": 460, "event_duration_minutes": 120},
+                {"name": "half", "day": "sun", "start_time": 440, "event_duration_minutes": 180}
             ],
             enable_audit="y"
         )
