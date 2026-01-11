@@ -700,6 +700,9 @@ def generate_segments_geojson(reports_dir: Path, analysis_context: Optional[Any]
                 "analysis_context is required for generate_segments_geojson."
             ) from e
     
+    # Issue #673: Extract segments_csv_path from analysis_context for use later in function
+    segments_csv_path = str(analysis_context.segments_csv_path)
+    
     # Load GPX courses
     all_events = analysis_context.analysis_config.get("events", [])
     if not all_events:
