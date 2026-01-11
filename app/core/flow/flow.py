@@ -3771,6 +3771,7 @@ def analyze_temporal_flow_segments(
     start_times: Dict[str, float],
     min_overlap_duration: float = DEFAULT_MIN_OVERLAP_DURATION,
     conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
+    performance_log_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Analyze all segments for temporal flow patterns.
@@ -3949,6 +3950,17 @@ def analyze_temporal_flow_segments(
                 "convergence_zone_end": worst_zone.zone_end_km_a,
             })
             results["segments_with_convergence"] += 1
+        
+        # Calculate segment processing time and log to performance file if provided
+        segment_end_time = time.time()
+        segment_elapsed_seconds = segment_end_time - segment_start_time
+        
+        if performance_log_path:
+            try:
+                with open(performance_log_path, 'a') as f:
+                    f.write(f"{seg_id},{segment_elapsed_seconds:.3f}\n")
+            except Exception as e:
+                print(f"Warning: Could not write to performance log {performance_log_path}: {e}")
         
         results["segments"].append(segment_result)
     
