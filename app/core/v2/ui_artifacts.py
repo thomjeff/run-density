@@ -207,7 +207,8 @@ def generate_ui_artifacts_per_day(
                 all_runners_df=all_runners_df,
                 overtaking_segments=overtaking_segments,
                 co_presence_segments=co_presence_segments,
-                environment=environment
+                environment=environment,
+                analysis_context=analysis_context
             )
             
             if artifacts_dir:
@@ -237,7 +238,8 @@ def _export_ui_artifacts_v2(
     all_runners_df: pd.DataFrame,
     overtaking_segments: int,
     co_presence_segments: int,
-    environment: str
+    environment: str,
+    analysis_context: Optional[Any] = None
 ) -> Optional[Path]:
     """
     Internal wrapper for v1 artifact generation functions adapted for v2 structure.

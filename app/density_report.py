@@ -2332,8 +2332,10 @@ def _add_geometries_to_bin_features(
                 "10k": segment.get('10k', segment.get('10K', 'n')),
                 "half": segment.get('half', 'n'),
                 "full": segment.get('full', 'n'),
-                "10k_from_km": segment.get('10k_from_km') or segment.get('10K_from_km'),
-                "10k_to_km": segment.get('10k_to_km') or segment.get('10K_to_km'),
+                # Issue #655: Fix 10k_from_km/to_km extraction bug - handle 0 values correctly
+                # Use 'is not None' check instead of 'or' to properly handle 0.0 values
+                "10k_from_km": segment.get('10k_from_km') if segment.get('10k_from_km') is not None else segment.get('10K_from_km'),
+                "10k_to_km": segment.get('10k_to_km') if segment.get('10k_to_km') is not None else segment.get('10K_to_km'),
                 "half_from_km": segment.get('half_from_km'),
                 "half_to_km": segment.get('half_to_km'),
                 "full_from_km": segment.get('full_from_km'),
