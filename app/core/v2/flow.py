@@ -506,8 +506,8 @@ def analyze_temporal_flow_segments_v2(
             logger.warning(f"Could not create performance log file {performance_log_path}: {e}")
     
     # Analyze flow per day
-        for day, day_pairs in pairs_by_day.items():
-            logger.info(f"Analyzing flow for day {day.value} with {len(day_pairs)} event pairs")
+    for day, day_pairs in pairs_by_day.items():
+        logger.info(f"Analyzing flow for day {day.value} with {len(day_pairs)} event pairs")
         
         # Get timeline for this day
         timeline = timeline_by_day.get(day)
