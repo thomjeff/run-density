@@ -492,9 +492,22 @@ def analyze_temporal_flow_segments_v2(
     # Create timeline lookup
     timeline_by_day = {timeline.day: timeline for timeline in timelines}
     
+    # Create performance log file path if run_path is provided
+    performance_log_path = None
+    if run_path is not None:
+        audit_dir = run_path / "audit"
+        audit_dir.mkdir(parents=True, exist_ok=True)
+        performance_log_path = str(audit_dir / "performance.log")
+        # Initialize performance log file with header
+        try:
+            with open(performance_log_path, 'w') as f:
+                f.write("seg_id,time_seconds\n")
+        except Exception as e:
+            logger.warning(f"Could not create performance log file {performance_log_path}: {e}")
+    
     # Analyze flow per day
-    for day, day_pairs in pairs_by_day.items():
-        logger.info(f"Analyzing flow for day {day.value} with {len(day_pairs)} event pairs")
+        for day, day_pairs in pairs_by_day.items():
+            logger.info(f"Analyzing flow for day {day.value} with {len(day_pairs)} event pairs")
         
         # Get timeline for this day
         timeline = timeline_by_day.get(day)
@@ -589,7 +602,8 @@ def analyze_temporal_flow_segments_v2(
                 segments_csv=temp_segments_csv,
                 start_times=start_times,
                 min_overlap_duration=min_overlap_duration,
-                conflict_length_m=conflict_length_m
+                conflict_length_m=conflict_length_m,
+                performance_log_path=performance_log_path
             )
             
             # Add day and events metadata to results
