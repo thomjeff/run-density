@@ -19,7 +19,7 @@ import sys
 import os
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 import hashlib
 import subprocess
 
@@ -647,7 +647,7 @@ def _build_segment_feature_properties(seg_id, segment_dims, schema_keys):
     }
 
 
-def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
+def generate_segments_geojson(reports_dir: Path, analysis_context: Optional[Any] = None) -> Dict[str, Any]:
     """
     Generate segments.geojson from GPX course coordinates.
     
@@ -659,9 +659,11 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
     Now uses real GPX coordinates from generate_segment_coordinates().
     
     Issue #616: Get segments_csv_path from analysis.json instead of hardcoded "data/segments.csv"
+    Issue #673: Accept optional analysis_context to avoid redundant file I/O (performance optimization)
     
     Args:
-        reports_dir: Path to reports/<run_id>/ directory (used to locate analysis.json)
+        reports_dir: Path to reports/<run_id>/ directory (used to locate analysis.json if analysis_context not provided)
+        analysis_context: Optional AnalysisContext instance to reuse (avoids redundant file loading)
     
     Returns:
         GeoJSON FeatureCollection with real course coordinates in Web Mercator (EPSG:3857)
@@ -670,35 +672,33 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
     from pyproj import Transformer
     from app.utils.run_id import get_runflow_root
     
-    # Issue #616: Get segments_csv_path from analysis.json
-    # reports_dir is typically {runflow_root}/{run_id}/{day}/reports_temp
-    # analysis.json is at {runflow_root}/{run_id}/analysis.json
-    segments_csv_path = None
-    try:
-        from app.config.loader import load_analysis_context
-        runflow_root = get_runflow_root()
-        # Navigate from reports_dir back to run_id directory
-        # reports_dir: {runflow_root}/{run_id}/{day}/reports_temp
-        # Need: {runflow_root}/{run_id}/analysis.json
-        run_id_dir = reports_dir.parent.parent  # Go from reports_temp -> {day} -> {run_id}
-        if run_id_dir.name == "reports_temp":
-            # If reports_dir is actually reports_temp, go up one more level
-            run_id_dir = reports_dir.parent
-        if not (run_id_dir / "analysis.json").exists():
-            # Try alternative: reports_dir might be {runflow_root}/{run_id}/reports_temp
-            alt_run_id_dir = reports_dir.parent
-            if (alt_run_id_dir / "analysis.json").exists():
-                run_id_dir = alt_run_id_dir
-        analysis_context = load_analysis_context(run_id_dir)
-        segments_csv_path = str(analysis_context.segments_csv_path)
-    except Exception as e:
-        print(f"Warning: Could not load segments_csv_path from analysis.json: {e}")
-    
-    if not segments_csv_path:
-        raise ValueError(
-            "segments_csv_path not found in analysis.json for generate_segments_geojson. "
-            "This should not happen in v2 pipeline - analysis.json should include segments_file."
-        )
+    # Issue #673: Reuse analysis_context if provided to avoid redundant file I/O
+    # This eliminates redundant analysis.json and segments.csv loading for multi-day runs
+    if analysis_context is None:
+        # Issue #616: Get segments_csv_path from analysis.json (backward compatibility)
+        # reports_dir is typically {runflow_root}/{run_id}/{day}/reports_temp
+        # analysis.json is at {runflow_root}/{run_id}/analysis.json
+        try:
+            from app.config.loader import load_analysis_context
+            runflow_root = get_runflow_root()
+            # Navigate from reports_dir back to run_id directory
+            # reports_dir: {runflow_root}/{run_id}/{day}/reports_temp
+            # Need: {runflow_root}/{run_id}/analysis.json
+            run_id_dir = reports_dir.parent.parent  # Go from reports_temp -> {day} -> {run_id}
+            if run_id_dir.name == "reports_temp":
+                # If reports_dir is actually reports_temp, go up one more level
+                run_id_dir = reports_dir.parent
+            if not (run_id_dir / "analysis.json").exists():
+                # Try alternative: reports_dir might be {runflow_root}/{run_id}/reports_temp
+                alt_run_id_dir = reports_dir.parent
+                if (alt_run_id_dir / "analysis.json").exists():
+                    run_id_dir = alt_run_id_dir
+            analysis_context = load_analysis_context(run_id_dir)
+        except Exception as e:
+            raise ValueError(
+                f"Could not load analysis_context from analysis.json: {e}. "
+                "analysis_context is required for generate_segments_geojson."
+            ) from e
     
     # Load GPX courses
     all_events = analysis_context.analysis_config.get("events", [])

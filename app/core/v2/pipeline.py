@@ -1190,6 +1190,7 @@ def create_full_analysis_pipeline(
         for day, day_events in events_by_day.items():
             logger.info(f"[Phase 4.1] Processing day: {day.value}")
             try:
+                # Issue #673: Pass analysis_context to avoid redundant file I/O in generate_segments_geojson
                 artifacts_path = generate_ui_artifacts_per_day(
                     run_id=run_id,
                     day=day,
@@ -1199,7 +1200,8 @@ def create_full_analysis_pipeline(
                     segments_df=segments_df,
                     all_runners_df=all_runners_df,
                     data_dir=data_dir,
-                    environment="local"
+                    environment="local",
+                    analysis_context=analysis_context
                 )
                 if artifacts_path:
                     artifacts_by_day[day.value] = str(artifacts_path)

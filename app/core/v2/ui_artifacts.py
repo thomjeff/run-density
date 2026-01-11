@@ -93,7 +93,8 @@ def generate_ui_artifacts_per_day(
     segments_df: pd.DataFrame,
     all_runners_df: pd.DataFrame,
     data_dir: str,
-    environment: str = "local"
+    environment: str = "local",
+    analysis_context: Optional[Any] = None
 ) -> Optional[Path]:
     """
     Generate UI artifacts for a specific day with day-scoped data.
@@ -111,6 +112,7 @@ def generate_ui_artifacts_per_day(
         all_runners_df: Full runners DataFrame (all events)
         data_dir: Base directory for data files
         environment: Environment name ("local" or "cloud")
+        analysis_context: Optional AnalysisContext instance to reuse (Issue #673: performance optimization)
         
     Returns:
         Path to UI artifacts directory, or None if generation failed
@@ -509,8 +511,8 @@ def _export_ui_artifacts_v2(
                 logger.info(f"   ✅ Created temp_reports directory for segments.geojson generation: {temp_reports}")
             
             # Generate segments.geojson - this works independently of bins
-            # It loads segments.csv and GPX courses from analysis.json
-            segments_geojson = generate_segments_geojson(temp_reports)
+            # Issue #673: Pass analysis_context to avoid redundant file I/O (analysis.json, segments.csv loading)
+            segments_geojson = generate_segments_geojson(temp_reports, analysis_context=analysis_context)
 
             # CRITICAL FIX: Filter features to only include day segments
             if "features" in segments_geojson:
