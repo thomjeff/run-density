@@ -498,12 +498,7 @@ def analyze_temporal_flow_segments_v2(
         logs_dir = run_path / "logs"
         logs_dir.mkdir(parents=True, exist_ok=True)
         performance_log_path = str(logs_dir / "performance.log")
-        # Initialize performance log file with header
-        try:
-            with open(performance_log_path, 'w') as f:
-                f.write("seg_id,time_seconds\n")
-        except Exception as e:
-            logger.warning(f"Could not create performance log file {performance_log_path}: {e}")
+        # Note: File will be written at end of analyze_temporal_flow_segments() with sorted data
     
     # Analyze flow per day
     for day, day_pairs in pairs_by_day.items():
