@@ -504,9 +504,32 @@ def calculate_arrival_times_for_location(
             for seg_id, from_km, to_km in segment_ranges:
                 logger.debug(f"Location {location.get('loc_id')} ({event}): Processing segment {seg_id} [{from_km:.3f}, {to_km:.3f}]km")
                 
+                # Get segment_label from segments_df (required by generate_segment_coordinates)
+                seg_row = segments_df[segments_df['seg_id'] == seg_id]
+                if seg_row.empty:
+                    logger.warning(f"Location {location.get('loc_id')} ({event}): Segment {seg_id} not found in segments_df, skipping")
+                    continue
+                seg_label = seg_row.iloc[0].get('seg_label') or seg_row.iloc[0].get('segment_label')
+                if not seg_label:
+                    logger.warning(f"Location {location.get('loc_id')} ({event}): Segment {seg_id} missing seg_label/segment_label in segments_df, skipping")
+                    continue
+                
+                # Issue #655: Extract direction and width_m from segments_df (required by generate_segment_coordinates)
+                direction = seg_row.iloc[0].get('direction')
+                width_m = seg_row.iloc[0].get('width_m')
+                if not direction:
+                    logger.warning(f"Location {location.get('loc_id')} ({event}): Segment {seg_id} missing direction in segments_df, skipping")
+                    continue
+                if width_m is None or (isinstance(width_m, float) and pd.isna(width_m)):
+                    logger.warning(f"Location {location.get('loc_id')} ({event}): Segment {seg_id} missing width_m in segments_df, skipping")
+                    continue
+                
                 # Get segment centerline for this event
                 segments_for_gpx = [{
                     "seg_id": seg_id,
+                    "segment_label": seg_label,  # Issue #655: Add segment_label required by generate_segment_coordinates
+                    "direction": direction,  # Issue #655: Add direction required by generate_segment_coordinates validation
+                    "width_m": width_m,  # Issue #655: Add width_m required by generate_segment_coordinates validation
                     event_col_gpx: "y",
                     f"{event_col_gpx}_from_km": from_km,
                     f"{event_col_gpx}_to_km": to_km
@@ -640,13 +663,17 @@ def calculate_arrival_times_for_location(
 
 
 def generate_location_report(
-    locations_csv: str = "data/locations.csv",
-    runners_csv: str = "data/runners.csv",
-    segments_csv: str = "data/segments.csv",
+    locations_csv: str,
+    runners_csv: str,
+    segments_csv: str,
     start_times: Optional[Dict[str, float]] = None,
     output_dir: str = "reports",
     run_id: Optional[str] = None,
-    day: Optional[str] = None  # Issue #598: Day code for loading flags.json
+    day: Optional[str] = None,  # Issue #598: Day code for loading flags.json
+    gpx_paths: Optional[Dict[str, str]] = None,
+    locations_df: Optional[pd.DataFrame] = None,
+    runners_df: Optional[pd.DataFrame] = None,
+    segments_df: Optional[pd.DataFrame] = None
 ) -> Dict[str, Any]:
     """
     Generate locations report with arrival modeling and operational timing.
@@ -654,12 +681,13 @@ def generate_location_report(
     Issue #277: Main entry point for location report generation.
     
     Args:
-        locations_csv: Path to locations.csv
-        runners_csv: Path to runners.csv
-        segments_csv: Path to segments.csv
+        locations_csv: Path to locations.csv (required)
+        runners_csv: Path to runners.csv (required)
+        segments_csv: Path to segments.csv (required)
         start_times: Dictionary of event start times in minutes (default: from constants)
         output_dir: Output directory for report
         run_id: Optional run ID for runflow structure
+        gpx_paths: Mapping of event name to GPX file path (required)
         
     Returns:
         Dictionary with report results and file path
@@ -675,12 +703,16 @@ def generate_location_report(
     
     logger.info("Starting location report generation...")
     
-    # Load data
     try:
-        locations_df = load_locations(locations_csv)
-        runners_df = load_runners(runners_csv)
-        segments_df = load_segments(segments_csv)
-        courses = load_all_courses("data")
+        if locations_df is None:
+            locations_df = load_locations(locations_csv)
+        if runners_df is None:
+            runners_df = load_runners(runners_csv)
+        if segments_df is None:
+            segments_df = load_segments(segments_csv)
+        if not gpx_paths:
+            raise ValueError("gpx_paths is required for location report GPX loading.")
+        courses = load_all_courses(gpx_paths)
     except FileNotFoundError as e:
         logger.error(f"Required input file not found: {e}")
         return {"ok": False, "error": str(e), "error_type": "file_not_found"}
@@ -1160,4 +1192,3 @@ def generate_location_report(
         "locations_processed": len(report_df),
         "timestamp": datetime.now().isoformat()
     }
-

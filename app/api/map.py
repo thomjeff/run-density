@@ -28,7 +28,6 @@ from app.utils.constants import (
     # DEFAULT_PACE_CSV and DEFAULT_SEGMENTS_CSV removed (Issue #553 Phase 6.1)
     # File paths now come from API request via analysis.json
     MAP_CENTER_LAT, MAP_CENTER_LON,
-    DEFAULT_SEGMENT_WIDTH_M, DEFAULT_FLOW_TYPE, DEFAULT_ZONE
 )
 # DEFAULT_START_TIMES removed (Issue #512) - Start times must come from request
 # Phase 3 cleanup: Removed get_global_cache_manager import (only used by removed cache endpoints)
@@ -92,26 +91,44 @@ async def get_map_manifest():
         t_end = pd.to_datetime(first_window['t_end'])
         window_seconds = int((t_end - t_start).total_seconds())
         
-        # Load segments metadata
-        segments_file = Path("data/segments.parquet")
-        if not segments_file.exists():
-            # Fallback to CSV
-            segments_file = Path("data/segments.csv")
-            if segments_file.exists():
-                segments_df = pd.read_csv(segments_file)
-            else:
-                raise HTTPException(status_code=404, detail="Segments metadata not found")
+        from app.utils.run_id import get_latest_run_id
+        from app.utils.run_id import get_runflow_root
+        from app.config.loader import load_analysis_context
+
+        run_id = get_latest_run_id()
+        runflow_root = get_runflow_root()
+        run_path = runflow_root / run_id
+        analysis_context = load_analysis_context(run_path)
+        segments_path = Path(analysis_context.segments_csv_path)
+
+        if not segments_path.exists():
+            raise HTTPException(status_code=404, detail=f"Segments metadata not found at {segments_path}")
+
+        if segments_path.suffix == ".parquet":
+            segments_df = pd.read_parquet(segments_path)
         else:
-            segments_df = pd.read_parquet(segments_file)
+            segments_df = pd.read_csv(segments_path)
         
         # Build segment index
         segment_index = []
         for _, seg in segments_df.iterrows():
+            segment_id = seg.get("segment_id") or seg.get("seg_id")
+            if not segment_id:
+                raise HTTPException(status_code=500, detail="Segments metadata missing segment_id")
+            schema_key = seg.get("schema") or seg.get("schema_key")
+            if not schema_key:
+                raise HTTPException(status_code=500, detail=f"Segment {segment_id} missing schema")
+            width_m = seg.get("width_m")
+            if width_m is None:
+                raise HTTPException(status_code=500, detail=f"Segment {segment_id} missing width_m")
+            seg_label = seg.get("seg_label")
+            if not seg_label:
+                raise HTTPException(status_code=500, detail=f"Segment {segment_id} missing seg_label")
             segment_index.append({
-                "segment_id": seg['segment_id'],
-                "segment_label": seg.get('seg_label', seg['segment_id']),
-                "schema_key": seg.get('segment_type', 'on_course_open'),
-                "width_m": float(seg.get('width_m', 5.0))
+                "segment_id": segment_id,
+                "segment_label": seg_label,
+                "schema_key": schema_key,
+                "width_m": float(width_m)
             })
         
         # LOD thresholds (from ChatGPT's Issue #249 guidance)
@@ -183,12 +200,20 @@ async def get_map_segments():
         if not latest_date_dir:
             raise HTTPException(status_code=404, detail="No segment data available")
         
-        # Load segments metadata from CSV (needed for event-specific km ranges)
-        segments_file = Path("data/segments.csv")
-        if not segments_file.exists():
-            raise HTTPException(status_code=404, detail="Segments metadata not found")
-        
-        segments_df = pd.read_csv(segments_file)
+        from app.utils.run_id import get_latest_run_id
+        from app.utils.run_id import get_runflow_root
+        from app.config.loader import load_analysis_context
+
+        run_id = get_latest_run_id()
+        runflow_root = get_runflow_root()
+        run_path = runflow_root / run_id
+        analysis_context = load_analysis_context(run_path)
+        segments_path = Path(analysis_context.segments_csv_path)
+
+        if not segments_path.exists():
+            raise HTTPException(status_code=404, detail=f"Segments metadata not found at {segments_path}")
+
+        segments_df = analysis_context.get_segments_df()
         
         # Load GPX centerlines
         try:
@@ -198,19 +223,34 @@ async def get_map_segments():
             from gpx_processor import load_all_courses, generate_segment_coordinates
             from io.loader import load_segments
         
-        courses = load_all_courses("data")
+        events = analysis_context.analysis_config.get("events", [])
+        if not events:
+            raise HTTPException(status_code=500, detail="analysis.json missing events for GPX loading")
+        gpx_paths = {}
+        for event in events:
+            event_name = event.get("name")
+            if not event_name:
+                raise HTTPException(status_code=500, detail="analysis.json events missing name for GPX loading")
+            gpx_paths[event_name.lower()] = str(analysis_context.gpx_path(event_name))
+        courses = load_all_courses(gpx_paths)
         
         # Convert to format for GPX processor
         segments_list = []
         for _, seg in segments_df.iterrows():
+            seg_id = seg.get("seg_id")
+            seg_label = seg.get("seg_label")
+            if not seg_id:
+                raise HTTPException(status_code=500, detail="Segments metadata missing seg_id")
+            if not seg_label:
+                raise HTTPException(status_code=500, detail=f"Segment {seg_id} missing seg_label")
             segments_list.append({
-                "seg_id": seg['seg_id'],
-                "segment_label": seg.get('seg_label', seg['seg_id']),
-                "10K": seg.get('10K', 'n'),
+                "seg_id": seg_id,
+                "segment_label": seg_label,
+                "10k": seg.get('10k', seg.get('10K', 'n')),
                 "half": seg.get('half', 'n'),
                 "full": seg.get('full', 'n'),
-                "10K_from_km": seg.get('10K_from_km'),
-                "10K_to_km": seg.get('10K_to_km'),
+                "10k_from_km": seg.get('10k_from_km') or seg.get('10K_from_km'),
+                "10k_to_km": seg.get('10k_to_km') or seg.get('10K_to_km'),
                 "half_from_km": seg.get('half_from_km'),
                 "half_to_km": seg.get('half_to_km'),
                 "full_from_km": seg.get('full_from_km'),
@@ -238,13 +278,19 @@ async def get_map_segments():
             # Convert coords to GeoJSON LineString
             coordinates = [list(coord) for coord in seg_coords['line_coords']]
             
+            schema_key = seg_meta.get("schema") or seg_meta.get("schema_key")
+            if not schema_key:
+                raise HTTPException(status_code=500, detail=f"Segment {seg_id} missing schema")
+            width_m = seg_meta.get("width_m")
+            if width_m is None:
+                raise HTTPException(status_code=500, detail=f"Segment {seg_id} missing width_m")
             feature = {
                 "type": "Feature",
                 "properties": {
                     "segment_id": seg_id,
                     "segment_label": seg_coords['segment_label'],
-                    "schema_key": seg_meta.get('segment_type', 'on_course_open'),
-                    "width_m": float(seg_meta.get('width_m', 5.0)),
+                    "schema_key": schema_key,
+                    "width_m": float(width_m),
                     "from_km": seg_coords['from_km'],
                     "to_km": seg_coords['to_km'],
                     "length_km": seg_coords['to_km'] - seg_coords['from_km']
@@ -482,32 +528,15 @@ async def get_bins_data(
             
             import json
             start_times = json.loads(startTimes)
-            # Issue #553 Phase 6.1: File paths now come from API request via analysis.json
-            # Use default paths for legacy map endpoints
-            pace_csv = "data/runners.csv"
-            segments_csv = "data/segments.csv"
-            
-            # Run new bin analysis
-            all_bins = get_all_segment_bins(
-                pace_csv=pace_csv,
-                segments_csv=segments_csv,
-                start_times=start_times
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "forceRefresh is no longer supported without analysis.json paths. "
+                    "Provide a run-specific analysis.json and use the v2 pipeline."
+                )
             )
             
-            # Generate GeoJSON
-            geojson = generate_bins_geojson(all_bins)
-            
-            return JSONResponse(content={
-                "ok": True,
-                "source": "bin_analysis",
-                "timestamp": datetime.now().isoformat(),
-                "geojson": geojson,
-                "metadata": {
-                    "total_segments": len(all_bins),
-                    "analysis_type": "bins",
-                    "bin_size_km": DISTANCE_BIN_SIZE_KM
-                }
-            })
+            # Run new bin analysis (removed: forceRefresh requires analysis.json paths)
         else:
             # map_data_generator.py removed in Phase 2B - return empty data
             logger.info("No existing bin data found - returning empty data")
@@ -648,7 +677,13 @@ async def export_bins(
         
         if format.lower() == "geojson":
             # Generate GeoJSON export
-            geojson = generate_bins_geojson(all_bins)
+            from app.config.loader import load_analysis_context
+            from app.utils.run_id import get_latest_run_id, get_runflow_root
+            run_id = get_latest_run_id()
+            if not run_id:
+                raise HTTPException(status_code=404, detail="No run_id available for analysis.json lookup.")
+            analysis_context = load_analysis_context(get_runflow_root() / run_id)
+            geojson = generate_bins_geojson(all_bins, analysis_context=analysis_context)
             return JSONResponse(content=geojson)
         else:
             # Generate CSV export
@@ -701,9 +736,7 @@ async def get_map_config():
         return JSONResponse(content={
             "ok": True,
             "config": {
-                # Issue #553 Phase 6.1: File paths now come from API request via analysis.json
-                "paceCsv": "data/runners.csv",
-                "segmentsCsv": "data/segments.csv",
+                # Issue #616: File paths come from analysis.json (no hardcoded defaults)
                 "mapCenter": [MAP_CENTER_LAT, MAP_CENTER_LON],
                 "mapZoom": MAP_DEFAULT_ZOOM,
                 "tileUrl": MAP_TILE_URL,

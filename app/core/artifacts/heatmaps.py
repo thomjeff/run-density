@@ -608,11 +608,12 @@ def load_segments_metadata(reports_dir: Optional[Path] = None, run_id: Optional[
         Dictionary mapping seg_id to metadata
     """
     segments_path = None
+    analysis_context = None
     
     # Issue #616: Get segments_csv_path from analysis.json
     if reports_dir is not None:
         try:
-            import json
+            from app.config.loader import load_analysis_context
             from app.utils.run_id import get_runflow_root
             runflow_root = get_runflow_root()
             # Navigate from reports_dir back to run_id directory
@@ -621,56 +622,32 @@ def load_segments_metadata(reports_dir: Optional[Path] = None, run_id: Optional[
             run_id_dir = reports_dir.parent.parent  # Go from reports_* -> {day} -> {run_id}
             if run_id_dir.name in ["reports_temp", "reports_heatmaps"]:
                 run_id_dir = reports_dir.parent
-            analysis_json_path = run_id_dir / "analysis.json"
-            if not analysis_json_path.exists() and run_id:
-                # Try alternative: use run_id directly
-                analysis_json_path = runflow_root / run_id / "analysis.json"
-            if analysis_json_path.exists():
-                with open(analysis_json_path, 'r') as af:
-                    analysis_config = json.load(af)
-                    data_files = analysis_config.get("data_files", {})
-                    segments_csv_path = data_files.get("segments")
-                    if not segments_csv_path:
-                        segments_file = analysis_config.get("segments_file")
-                        data_dir = analysis_config.get("data_dir", "data")
-                        if segments_file:
-                            segments_csv_path = f"{data_dir}/{segments_file}"
-                    if segments_csv_path:
-                        segments_path = Path(segments_csv_path)
+            if not (run_id_dir / "analysis.json").exists() and run_id:
+                run_id_dir = runflow_root / run_id
+            analysis_context = load_analysis_context(run_id_dir)
+            segments_path = Path(analysis_context.segments_csv_path)
         except Exception as e:
             print(f"   ⚠️  Could not load segments_csv_path from analysis.json: {e}")
     elif run_id:
         try:
-            import json
+            from app.config.loader import load_analysis_context
             from app.utils.run_id import get_runflow_root
             runflow_root = get_runflow_root()
-            analysis_json_path = runflow_root / run_id / "analysis.json"
-            if analysis_json_path.exists():
-                with open(analysis_json_path, 'r') as af:
-                    analysis_config = json.load(af)
-                    data_files = analysis_config.get("data_files", {})
-                    segments_csv_path = data_files.get("segments")
-                    if not segments_csv_path:
-                        segments_file = analysis_config.get("segments_file")
-                        data_dir = analysis_config.get("data_dir", "data")
-                        if segments_file:
-                            segments_csv_path = f"{data_dir}/{segments_file}"
-                    if segments_csv_path:
-                        segments_path = Path(segments_csv_path)
+            analysis_context = load_analysis_context(runflow_root / run_id)
+            segments_path = Path(analysis_context.segments_csv_path)
         except Exception as e:
             print(f"   ⚠️  Could not load segments_csv_path from analysis.json: {e}")
     
-    # Fallback to hardcoded path only if analysis.json lookup failed (for backward compatibility)
     if not segments_path:
-        segments_path = Path("data/segments.csv")
-        if not segments_path.exists():
-            print(f"   ⚠️  segments.csv not found at {segments_path} and analysis.json lookup failed")
-            return {}
+        raise ValueError("segments_csv_path not found in analysis.json for heatmap metadata.")
     
     segments_meta = {}
     if segments_path.exists():
         try:
-            df = pd.read_csv(segments_path)
+            if analysis_context is not None:
+                df = analysis_context.get_segments_df()
+            else:
+                df = pd.read_csv(segments_path)
             for _, row in df.iterrows():
                 segments_meta[row.get('seg_id', '')] = {
                     'label': row.get('label', ''),

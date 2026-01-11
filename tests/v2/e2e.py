@@ -17,17 +17,68 @@ import hashlib
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Set
 import pandas as pd
+from app.config.loader import load_analysis_context, AnalysisConfigError
 
-# Configuration
+# ============================================================================
+# E2E Test Configuration - Issue #655: SSOT Configuration
+# ============================================================================
+# Centralized configuration for all test scenarios.
+# Modify these values to change data files used across all tests.
+# This aligns with SSOT principles where configuration is centralized.
+
 # Base URL can be set via BASE_URL environment variable or pytest --base-url
 # Defaults to http://localhost:8080 for local dev
 # Use http://app:8080 when running in docker-compose network
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8080")
 TIMEOUT = 600  # 10 minutes for full analysis
 
+# ============================================================================
+# Data file configuration (SSOT - Issue #655)
+# ============================================================================
+# Centralized configuration for all E2E test scenarios.
+# To change test data files, modify these values:
+#   - segments_file: Change to use different segments (e.g., "segments.csv" or "segments_616.csv")
+#   - flow_file: Change to use different flow data (e.g., "flow.csv" or "flow_616.csv")
+#   - locations_file: Change locations file, or set to None if not needed
+#   - data_dir: Data directory path (defaults to "data")
+#
+# All tests will automatically use these values via _build_base_payload().
+# This ensures SSOT - single place to configure test data files.
+E2E_CONFIG = {
+    "data_dir": "data",  # Data directory (relative to project root or absolute path)
+    "segments_file": "segments_616.csv",  # Segments CSV file
+    "flow_file": "flow_616.csv",  # Flow CSV file
+    "locations_file": "locations_616.csv",  # Locations CSV file (optional, can be None)
+}
+
+# Event runners and GPX file mappings
+# These define which runners_file and gpx_file to use for each event
+EVENT_FILES = {
+    "elite": {
+        "runners_file": "elite_runners.csv",
+        "gpx_file": "elite.gpx"
+    },
+    "open": {
+        "runners_file": "open_runners.csv",
+        "gpx_file": "open.gpx"
+    },
+    "full": {
+        "runners_file": "full_runners.csv",
+        "gpx_file": "full.gpx"
+    },
+    "half": {
+        "runners_file": "half_runners.csv",
+        "gpx_file": "half.gpx"
+    },
+    "10k": {
+        "runners_file": "10k_runners.csv",
+        "gpx_file": "10k.gpx"
+    },
+}
+
 # Expected segment ID patterns per day (for day isolation validation)
 EXPECTED_SEG_IDS = {
-    "sat": {"N1", "N2", "N3", "O1", "O2", "O3"},  # Saturday segments
+    "sat": {"N1", "N2", "N3", "N4", "N5", "N6", "N7", "N8", "N9", "O1", "O2", "O3","O4","O5","O6","O7","O8","O9"},  # Saturday segments
     "sun": {"A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "D1", "D2",
             "E1", "E2", "F1", "G1", "H1", "I1", "J1", "J2", "J3", "J4", "J5", "K1",
             "L1", "L2", "M1", "M2"}  # Sunday segments (includes sub-segments C1, C2, E1, E2 from Flow.csv)
@@ -36,6 +87,66 @@ EXPECTED_SEG_IDS = {
 
 class TestV2E2EScenarios:
     """E2E tests for v2 analysis scenarios."""
+    
+    @staticmethod
+    def _build_base_payload(
+        description: str,
+        events: List[Dict[str, Any]],
+        event_group: Optional[Dict[str, str]] = None,
+        enable_audit: str = "y"
+    ) -> Dict[str, Any]:
+        """
+        Build base payload using centralized E2E configuration (Issue #655: SSOT).
+        
+        Args:
+            description: Test scenario description
+            events: List of event dictionaries with name, day, start_time, event_duration_minutes
+            event_group: Optional event grouping dictionary
+            enable_audit: Audit enablement flag ("y" or "n")
+            
+        Returns:
+            Complete payload dictionary ready for API request
+            
+        Example:
+            events = [
+                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45},
+                {"name": "open", "day": "sat", "start_time": 510, "event_duration_minutes": 75}
+            ]
+            payload = _build_base_payload("Saturday test", events, {"sat-elite": "elite"})
+        """
+        # Issue #655: Use centralized E2E_CONFIG for SSOT file paths
+        payload = {
+            "description": description,
+            "segments_file": E2E_CONFIG["segments_file"],
+            "flow_file": E2E_CONFIG["flow_file"],
+            "locations_file": E2E_CONFIG.get("locations_file"),  # May be None
+            "enableAudit": enable_audit,
+        }
+        
+        # Add event_group if provided
+        if event_group:
+            payload["event_group"] = event_group
+        
+        # Build events list with runners_file and gpx_file from EVENT_FILES mapping
+        enriched_events = []
+        for event in events:
+            event_name = event.get("name", "").lower()
+            if event_name not in EVENT_FILES:
+                raise ValueError(
+                    f"Event '{event_name}' not found in EVENT_FILES mapping. "
+                    f"Available events: {list(EVENT_FILES.keys())}"
+                )
+            
+            event_files = EVENT_FILES[event_name]
+            enriched_event = {
+                **event,  # Include name, day, start_time, event_duration_minutes
+                "runners_file": event_files["runners_file"],
+                "gpx_file": event_files["gpx_file"]
+            }
+            enriched_events.append(enriched_event)
+        
+        payload["events"] = enriched_events
+        return payload
     
     def _make_analyze_request(self, base_url: str, payload: Dict[str, Any], timeout: int = None) -> Dict[str, Any]:
         """Make POST request to /runflow/v2/analyze and return response.
@@ -137,6 +248,42 @@ class TestV2E2EScenarios:
         from app.utils.run_id import get_runflow_root
         runflow_root = get_runflow_root()
         return runflow_root / run_id
+
+    def _require_analysis_context(self, run_id: str, payload: Dict[str, Any]) -> None:
+        """Load analysis.json via new loader and validate required config fields."""
+        run_dir = self._get_run_directory(run_id)
+        try:
+            analysis_context = load_analysis_context(run_dir)
+        except FileNotFoundError as exc:
+            raise AssertionError(f"analysis.json missing for run_id {run_id}") from exc
+        except AnalysisConfigError as exc:
+            raise AssertionError(f"analysis.json invalid for run_id {run_id}: {exc}") from exc
+
+        analysis_config = analysis_context.analysis_config
+        assert analysis_config.get("data_dir"), "analysis.json missing data_dir"
+        assert analysis_config.get("segments_file") == payload.get("segments_file"), \
+            "analysis.json segments_file does not match request payload"
+        assert analysis_config.get("flow_file") == payload.get("flow_file"), \
+            "analysis.json flow_file does not match request payload"
+        if payload.get("locations_file") is not None:
+            assert analysis_config.get("locations_file") == payload.get("locations_file"), \
+                "analysis.json locations_file does not match request payload"
+
+        data_files = analysis_config.get("data_files", {})
+        for required_key in ("segments", "flow"):
+            assert data_files.get(required_key), f"analysis.json missing data_files.{required_key}"
+        if payload.get("locations_file") is not None:
+            assert data_files.get("locations"), "analysis.json missing data_files.locations"
+
+        runners_map = data_files.get("runners", {})
+        gpx_map = data_files.get("gpx", {})
+        for event in payload.get("events", []):
+            name = event.get("name")
+            assert name, "Event name missing in request payload"
+            assert runners_map.get(name) or runners_map.get(name.lower()), \
+                f"analysis.json missing data_files.runners entry for event '{name}'"
+            assert gpx_map.get(name) or gpx_map.get(name.lower()), \
+                f"analysis.json missing data_files.gpx entry for event '{name}'"
     
     def _verify_outputs_exist(self, run_id: str, day: str, scenario: str = None) -> Dict[str, Path]:
         """Verify that expected output files exist for a day.
@@ -563,26 +710,24 @@ class TestV2E2EScenarios:
     
     def test_saturday_only_scenario(self, base_url, wait_for_server, enable_audit):
         """Test complete Saturday-only workflow (elite, open events) with configurable audit."""
-        payload = {
-            "description": "Saturday only scenario test",
-            "segments_file": "segments.csv",
-            "flow_file": "flow.csv",
-            "locations_file": "locations.csv",
-            "enableAudit": enable_audit,
-            "event_group": {
+        payload = self._build_base_payload(
+            description="Saturday only scenario test",
+            events=[
+                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45},
+                {"name": "open", "day": "sat", "start_time": 510, "event_duration_minutes": 75}
+            ],
+            event_group={
                 "sat-elite": "elite",
                 "sat-open": "open"
             },
-            "events": [
-                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
-                {"name": "open", "day": "sat", "start_time": 510, "event_duration_minutes": 75, "runners_file": "open_runners.csv", "gpx_file": "open.gpx"}
-            ]
-        }
+            enable_audit=enable_audit
+        )
         
         # Make API request (Issue #554: returns immediately, analysis runs in background)
         response_data = self._make_analyze_request(base_url, payload, timeout=60)
         run_id = response_data["run_id"]
         days = response_data.get("days", ["sat"])
+        self._require_analysis_context(run_id, payload)
         
         # Wait for background analysis to complete (Issue #554)
         self._wait_for_analysis_completion(run_id, days, max_wait_seconds=600)
@@ -629,26 +774,24 @@ class TestV2E2EScenarios:
     
     def test_sunday_only_scenario(self, base_url, wait_for_server):
         """Test complete Sunday-only workflow (full, half, 10k events) with audit enabled."""
-        payload = {
-            "description": "Sunday only scenario test with audit",
-            "segments_file": "segments.csv",
-            "flow_file": "flow.csv",
-            "locations_file": "locations.csv",
-            "enableAudit": "y",
-            "event_group": {
+        payload = self._build_base_payload(
+            description="Sunday only scenario test with audit",
+            events=[
+                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390},
+                {"name": "10k", "day": "sun", "start_time": 440, "event_duration_minutes": 120},
+                {"name": "half", "day": "sun", "start_time": 460, "event_duration_minutes": 180}
+            ],
+            event_group={
                 "sun-all": "full, 10k, half"
             },
-            "events": [
-                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"},
-                {"name": "10k", "day": "sun", "start_time": 440, "event_duration_minutes": 120, "runners_file": "10k_runners.csv", "gpx_file": "10k.gpx"},
-                {"name": "half", "day": "sun", "start_time": 460, "event_duration_minutes": 180, "runners_file": "half_runners.csv", "gpx_file": "half.gpx"}
-            ]
-        }
+            enable_audit="y"
+        )
         
         # Make API request (Issue #554: returns immediately, analysis runs in background)
         response_data = self._make_analyze_request(base_url, payload, timeout=60)
         run_id = response_data["run_id"]
         days = response_data.get("days", ["sun"])
+        self._require_analysis_context(run_id, payload)
         
         # Wait for background analysis to complete (Issue #554)
         self._wait_for_analysis_completion(run_id, days, max_wait_seconds=600)
@@ -685,30 +828,28 @@ class TestV2E2EScenarios:
     
     def test_sat_sun_scenario(self, base_url, wait_for_server, enable_audit):
         """Test sat+sun analysis in single run_id with configurable audit (simpler than mixed_day, focused on Issue #528)."""
-        payload = {
-            "description": "Sat+Sun analysis test",
-            "segments_file": "segments.csv",
-            "flow_file": "flow.csv",
-            "locations_file": "locations.csv",
-            "enableAudit": enable_audit,
-            "event_group": {
+        payload = self._build_base_payload(
+            description="Sat+Sun analysis test",
+            events=[
+                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45},
+                {"name": "open", "day": "sat", "start_time": 510, "event_duration_minutes": 75},
+                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390},
+                {"name": "10k", "day": "sun", "start_time": 440, "event_duration_minutes": 120},
+                {"name": "half", "day": "sun", "start_time": 460, "event_duration_minutes": 180}
+            ],
+            event_group={
                 "sat-elite": "elite",
                 "sat-open": "open",
                 "sun-all": "full, 10k, half"
             },
-            "events": [
-                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
-                {"name": "open", "day": "sat", "start_time": 510, "event_duration_minutes": 75, "runners_file": "open_runners.csv", "gpx_file": "open.gpx"},
-                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"},
-                {"name": "10k", "day": "sun", "start_time": 440, "event_duration_minutes": 120, "runners_file": "10k_runners.csv", "gpx_file": "10k.gpx"},
-                {"name": "half", "day": "sun", "start_time": 460, "event_duration_minutes": 180, "runners_file": "half_runners.csv", "gpx_file": "half.gpx"}
-            ]
-        }
+            enable_audit=enable_audit
+        )
         
         # Make API request (Issue #554: returns immediately, analysis runs in background)
         response_data = self._make_analyze_request(base_url, payload, timeout=60)  # Short timeout for API response
         run_id = response_data["run_id"]
         days = response_data.get("days", ["sat", "sun"])
+        self._require_analysis_context(run_id, payload)
         
         # Wait for background analysis to complete (Issue #554)
         self._wait_for_analysis_completion(run_id, days, max_wait_seconds=900)  # 15 minutes max wait
@@ -745,30 +886,28 @@ class TestV2E2EScenarios:
     
     def test_mixed_day_scenario(self, base_url, wait_for_server):
         """Test mixed-day scenario (Saturday + Sunday) with isolation validation and audit enabled."""
-        payload = {
-            "description": "Mixed day scenario test with audit",
-            "segments_file": "segments.csv",
-            "flow_file": "flow.csv",
-            "locations_file": "locations.csv",
-            "enableAudit": "y",
-            "event_group": {
+        payload = self._build_base_payload(
+            description="Mixed day scenario test with audit",
+            events=[
+                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45},
+                {"name": "open", "day": "sat", "start_time": 510, "event_duration_minutes": 75},
+                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390},
+                {"name": "10k", "day": "sun", "start_time": 440, "event_duration_minutes": 120},
+                {"name": "half", "day": "sun", "start_time": 460, "event_duration_minutes": 180}
+            ],
+            event_group={
                 "sat-elite": "elite",
                 "sat-open": "open",
                 "sun-all": "full, 10k, half"
             },
-            "events": [
-                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
-                {"name": "open", "day": "sat", "start_time": 510, "event_duration_minutes": 75, "runners_file": "open_runners.csv", "gpx_file": "open.gpx"},
-                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"},
-                {"name": "10k", "day": "sun", "start_time": 440, "event_duration_minutes": 120, "runners_file": "10k_runners.csv", "gpx_file": "10k.gpx"},
-                {"name": "half", "day": "sun", "start_time": 460, "event_duration_minutes": 180, "runners_file": "half_runners.csv", "gpx_file": "half.gpx"}
-            ]
-        }
+            enable_audit="y"
+        )
         
         # Make API request (Issue #554: returns immediately, analysis runs in background)
         response_data = self._make_analyze_request(base_url, payload, timeout=60)
         run_id = response_data["run_id"]
         days = response_data.get("days", ["sat", "sun"])
+        self._require_analysis_context(run_id, payload)
         
         # Wait for background analysis to complete (Issue #554)
         self._wait_for_analysis_completion(run_id, days, max_wait_seconds=900)
@@ -803,22 +942,20 @@ class TestV2E2EScenarios:
     def test_cross_day_isolation(self, base_url, wait_for_server):
         """Verify no cross-day contamination in bins, flow, density, locations with audit enabled."""
         # Use mixed-day scenario
-        payload = {
-            "description": "Cross-day isolation test with audit",
-            "segments_file": "segments.csv",
-            "flow_file": "flow.csv",
-            "locations_file": "locations.csv",
-            "enableAudit": "y",
-            "events": [
-                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45, "runners_file": "elite_runners.csv", "gpx_file": "elite.gpx"},
-                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"}
-            ]
-        }
+        payload = self._build_base_payload(
+            description="Cross-day isolation test with audit",
+            events=[
+                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45},
+                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390}
+            ],
+            enable_audit="y"
+        )
         
         # Make API request (Issue #554: returns immediately, analysis runs in background)
         response_data = self._make_analyze_request(base_url, payload, timeout=60)
         run_id = response_data["run_id"]
         days = response_data.get("days", ["sat", "sun"])
+        self._require_analysis_context(run_id, payload)
         
         # Wait for background analysis to complete (Issue #554)
         self._wait_for_analysis_completion(run_id, days, max_wait_seconds=600)
@@ -872,23 +1009,21 @@ class TestV2E2EScenarios:
     def test_same_day_interactions(self, base_url, wait_for_server):
         """Verify same-day events can share bins and generate flow with audit enabled."""
         # Test with Sunday events (full, 10k, half)
-        payload = {
-            "description": "Sunday only scenario test with audit",
-            "segments_file": "segments.csv",
-            "flow_file": "flow.csv",
-            "locations_file": "locations.csv",
-            "enableAudit": "y",
-            "events": [
-                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390, "runners_file": "full_runners.csv", "gpx_file": "full.gpx"},
-                {"name": "10k", "day": "sun", "start_time": 440, "event_duration_minutes": 120, "runners_file": "10k_runners.csv", "gpx_file": "10k.gpx"},
-                {"name": "half", "day": "sun", "start_time": 460, "event_duration_minutes": 180, "runners_file": "half_runners.csv", "gpx_file": "half.gpx"}
-            ]
-        }
+        payload = self._build_base_payload(
+            description="Sunday only scenario test with audit",
+            events=[
+                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390},
+                {"name": "10k", "day": "sun", "start_time": 440, "event_duration_minutes": 120},
+                {"name": "half", "day": "sun", "start_time": 460, "event_duration_minutes": 180}
+            ],
+            enable_audit="y"
+        )
         
         # Make API request (Issue #554: returns immediately, analysis runs in background)
         response_data = self._make_analyze_request(base_url, payload, timeout=60)
         run_id = response_data["run_id"]
         days = response_data.get("days", ["sun"])
+        self._require_analysis_context(run_id, payload)
         
         # Wait for background analysis to complete (Issue #554)
         self._wait_for_analysis_completion(run_id, days, max_wait_seconds=600)
@@ -963,5 +1098,4 @@ def wait_for_server(base_url):
                 )
         time.sleep(1)
     pytest.fail("Server not available after 30 attempts")
-
 

@@ -279,24 +279,35 @@ def generate_segment_coordinates(
     result = []
     
     for segment in segments:
-        seg_id = segment["seg_id"]
-        label = segment.get("segment_label", segment.get("label", seg_id))
+        seg_id = segment.get("seg_id")
+        if not seg_id:
+            raise ValueError("Segment missing required seg_id for GPX coordinate generation.")
+        label = segment.get("segment_label")
+        if not label:
+            raise ValueError(f"Segment {seg_id} missing required segment_label for GPX coordinate generation.")
         
         # Determine which event to use based on which events use this segment
         # Priority: elite, open, 10k, half, full (covering sat/sun events)
+        # Issue #655: Only check for events that exist in the courses dict to avoid
+        # failures when segments reference events not in the current analysis
         # Note: column names are lowercase in CSV
         gpx_event = None
+        available_events = set(courses.keys())  # Only check events we have GPX data for
         for event in ["elite", "open", "10k", "half", "full"]:
-            if segment.get(event, "").lower() == "y":
+            if event in available_events and segment.get(event, "").lower() == "y":
                 gpx_event = event
                 break
         
-        # Default to 10K if no event is specified
         if gpx_event is None:
-            gpx_event = "10k"
+            # Issue #655: Skip segments that don't match any available event instead of failing
+            # This can happen when segments.csv has events not in the current analysis
+            continue  # Skip this segment - it's not part of the current analysis events
         
         # Lookup course (courses dict uses lowercase keys)
         course = courses.get(gpx_event)
+        if course is None:
+            # This should not happen since we filtered above, but be defensive
+            continue  # Skip this segment
         
         # Get event-specific from_km and to_km fields
         from_km_key = f"{gpx_event}_from_km"
@@ -305,74 +316,77 @@ def generate_segment_coordinates(
         from_km = segment.get(from_km_key)
         to_km = segment.get(to_km_key)
         
-        # Skip if we don't have the required fields for this event or if they're NaN
-        if from_km is None or to_km is None or pd.isna(from_km) or pd.isna(to_km):
-            result.append({
-                "seg_id": seg_id,
-                "segment_label": label,
-                "from_km": None,
-                "to_km": None,
-                "line_coords": None,
-                "coord_issue": True,
-                "course": gpx_event,
-                "error": f"Missing or NaN {from_km_key} or {to_km_key} fields"
-            })
-            continue
-        
-        if course:
-            # Use route slicing instead of just endpoints
-            line_coords = slice_polyline_by_km(
-                course.course_points, 
-                course.cum_km, 
-                from_km, 
-                to_km
+        # Issue #655: Fail-fast if required fields are missing - no fallback behavior
+        # All segments must have valid from_km/to_km for their active events per segments_616.csv
+        if from_km is None or to_km is None:
+            raise ValueError(
+                f"Segment {seg_id} missing required {from_km_key} or {to_km_key} fields for event '{gpx_event}'. "
+                f"All segments must have valid from_km/to_km values for their active events in segments_616.csv. "
+                f"This is a data validation error - fail-fast."
             )
-            
-            if line_coords and len(line_coords) >= 2:
-                # Check for suspicious segments (endpoints within 25m and too few vertices)
-                coord_issue = False
-                if len(line_coords) <= 2 and metres_between(line_coords[0], line_coords[-1]) < 25.0:
-                    coord_issue = True
-                    print(f"⚠️ [map] warning: {seg_id} endpoints are nearly identical; using route slice.")
-                
-                result.append({
-                    "seg_id": seg_id,
-                    "segment_label": label,
-                    "from_km": from_km,
-                    "to_km": to_km,
-                    "line_coords": line_coords,
-                    "coord_issue": coord_issue,
-                    "course": gpx_event
-                })
-            else:
-                # Fallback coordinates if slicing fails
-                result.append({
-                    "seg_id": seg_id,
-                    "segment_label": label,
-                    "from_km": from_km,
-                    "to_km": to_km,
-                    "line_coords": None,
-                    "coord_issue": True,
-                    "course": gpx_event,
-                    "error": "Route slicing failed"
-                })
-        else:
-            # Fallback if course not found
-            result.append({
-                "seg_id": seg_id,
-                "segment_label": label,
-                "from_km": from_km,
-                "to_km": to_km,
-                "line_coords": None,
-                "coord_issue": True,
-                "course": None,
-                "error": "Course not found"
-            })
+        if pd.isna(from_km) or pd.isna(to_km):
+            raise ValueError(
+                f"Segment {seg_id} has NaN values for {from_km_key} or {to_km_key} for event '{gpx_event}'. "
+                f"All segments must have valid numeric from_km/to_km values for their active events in segments_616.csv. "
+                f"This is a data validation error - fail-fast."
+            )
+        
+        # Use route slicing instead of just endpoints
+        line_coords = slice_polyline_by_km(
+            course.course_points,
+            course.cum_km,
+            from_km,
+            to_km
+        )
+        
+        # Issue #655: Fail-fast if route slicing fails - no fallback behavior
+        # All segments with valid from_km/to_km must have valid geometry
+        if not line_coords or len(line_coords) < 2:
+            raise ValueError(
+                f"Route slicing failed for segment {seg_id} in GPX course '{gpx_event}'. "
+                f"Segment has valid from_km={from_km}, to_km={to_km} but could not generate line coordinates. "
+                f"This indicates a GPX course data issue - fail-fast."
+            )
+        
+        # Check for suspicious segments (endpoints within 25m and too few vertices)
+        coord_issue = False
+        if len(line_coords) <= 2 and metres_between(line_coords[0], line_coords[-1]) < 25.0:
+            coord_issue = True
+            print(f"⚠️ [map] warning: {seg_id} endpoints are nearly identical; using route slice.")
+        
+        # Issue #655: Validate direction and width_m are present before adding to result
+        # These are required fields from segments_616.csv and should never be missing
+        direction = segment.get("direction")
+        width_m = segment.get("width_m")
+        if direction is None or direction == "":
+            raise ValueError(
+                f"Segment {seg_id} missing required 'direction' field for event '{gpx_event}'. "
+                f"All segments must have a 'direction' field (e.g., 'uni', 'bi', 'forward', 'backward') in segments_616.csv. "
+                f"This is a data validation error - fail-fast."
+            )
+        if width_m is None or (isinstance(width_m, float) and pd.isna(width_m)):
+            raise ValueError(
+                f"Segment {seg_id} missing required 'width_m' field for event '{gpx_event}'. "
+                f"All segments must have a valid 'width_m' value in segments_616.csv. "
+                f"This is a data validation error - fail-fast."
+            )
+        
+        result.append({
+            "seg_id": seg_id,
+            "segment_label": label,
+            "from_km": from_km,
+            "to_km": to_km,
+            "line_coords": line_coords,
+            "coord_issue": coord_issue,
+            "course": gpx_event,
+            "direction": direction,
+            "width_m": width_m,
+        })
     
     return result
 
 
-def load_all_courses(gpx_dir: str = "data") -> Dict[str, GPXCourse]:
+def load_all_courses(gpx_files: Dict[str, str]) -> Dict[str, GPXCourse]:
     """
     Load all GPX courses from the data directory
     
@@ -382,20 +396,21 @@ def load_all_courses(gpx_dir: str = "data") -> Dict[str, GPXCourse]:
     import os
     from pathlib import Path
     
-    # Standardize on lowercase {event}.gpx filenames
-    # Supported events: full, half, 10k, elite, open
+    if not gpx_files:
+        raise ValueError("gpx_files is required to load GPX courses.")
     courses: Dict[str, GPXCourse] = {}
-    for event in ["full", "half", "10k", "elite", "open"]:
-        filepath = Path(gpx_dir) / f"{event}.gpx"
-        if filepath.exists():
-            try:
-                course = parse_gpx_file(str(filepath))
-                courses[event] = course
-                print(f"✅ Loaded {event} course: {course.total_distance_km:.2f} km")
-            except Exception as e:
-                print(f"❌ Failed to load {event} course: {e}")
-        else:
-            print(f"⚠️  GPX file not found: {filepath}")
+    for event, filepath_str in gpx_files.items():
+        filepath = Path(filepath_str)
+        if filepath.suffix.lower() != ".gpx":
+            raise ValueError(f"GPX file for event '{event}' must have .gpx extension: {filepath}")
+        if not filepath.exists():
+            raise FileNotFoundError(f"GPX file not found for event '{event}': {filepath}")
+        try:
+            course = parse_gpx_file(str(filepath))
+            courses[event.lower()] = course
+            print(f"✅ Loaded {event} course: {course.total_distance_km:.2f} km")
+        except Exception as e:
+            raise ValueError(f"Failed to load {event} course from {filepath}: {e}") from e
     
     return courses
 
@@ -407,6 +422,19 @@ def create_geojson_from_segments(segments_with_coords: List[Dict]) -> Dict:
     features = []
     
     for seg in segments_with_coords:
+        direction = seg.get("direction")
+        width_m = seg.get("width_m")
+        # Issue #655: Validate direction is present - if missing, this indicates a bug in segment processing
+        # Direction should be included in segments_list when building from segments_df
+        if direction in (None, ""):
+            seg_id = seg.get('seg_id', 'unknown')
+            raise ValueError(
+                f"Segment {seg_id} missing direction for GeoJSON export. "
+                f"This indicates direction was not included in segments_list when building from segments.csv. "
+                f"Check that segments.csv has 'direction' column and it's being extracted correctly."
+            )
+        if width_m is None or (isinstance(width_m, float) and pd.isna(width_m)):
+            raise ValueError(f"Segment {seg.get('seg_id')} missing width_m for GeoJSON export.")
         if seg.get("line_coords") and len(seg["line_coords"]) >= 2:
             features.append({
                 "type": "Feature",
@@ -417,8 +445,8 @@ def create_geojson_from_segments(segments_with_coords: List[Dict]) -> Dict:
                     "to_km": seg["to_km"],
                     "course": seg["course"],
                     "coord_issue": seg.get("coord_issue", False),
-                "direction": "uni",  # Default, can be updated from overlaps.csv
-                "width_m": 10.0     # Default, can be updated from overlaps.csv
+                    "direction": direction,
+                    "width_m": float(width_m),
                 },
                 "geometry": {
                     "type": "LineString",
@@ -440,7 +468,15 @@ if __name__ == "__main__":
     print("Testing GPX processing...")
     
     try:
-        courses = load_all_courses()
+        if len(sys.argv) < 2:
+            raise SystemExit("Usage: python -m app.core.gpx.processor event=path [event=path ...]")
+        gpx_paths = {}
+        for arg in sys.argv[1:]:
+            if "=" not in arg:
+                raise SystemExit("Each GPX argument must be in the form event=path")
+            event, path = arg.split("=", 1)
+            gpx_paths[event.strip().lower()] = path.strip()
+        courses = load_all_courses(gpx_paths)
         print(f"\nLoaded {len(courses)} courses")
         
         for event, course in courses.items():
@@ -457,4 +493,3 @@ if __name__ == "__main__":
                     
     except Exception as e:
         print(f"Error: {e}")
-

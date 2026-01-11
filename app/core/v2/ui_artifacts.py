@@ -92,7 +92,7 @@ def generate_ui_artifacts_per_day(
     flow_results: Dict[str, Any],
     segments_df: pd.DataFrame,
     all_runners_df: pd.DataFrame,
-    data_dir: str = "data",
+    data_dir: str,
     environment: str = "local"
 ) -> Optional[Path]:
     """
@@ -495,65 +495,114 @@ def _export_ui_artifacts_v2(
         logger.info(f"   ✅ flow.json: {len(flow.get('summaries', []))} segments, {len(flow.get('rows', []))} rows (in geospatial/)")
         
         # 5. Generate segments.geojson (day-scoped)
+        # Issue #655: segments.geojson generation does NOT require bins - it only needs segments.csv and GPX files
+        # generate_segments_geojson loads segments.csv from analysis.json and GPX courses for the day's events
         logger.info("5️⃣  Generating segments.geojson...")
+        segments_geojson = None
         try:
-            if aggregated_bins is not None and not aggregated_bins.empty and temp_reports:
-                segments_geojson = generate_segments_geojson(temp_reports)
+            # Create temp_reports directory for generate_segments_geojson if it doesn't exist
+            # generate_segments_geojson needs a reports_dir path to locate analysis.json
+            # It doesn't actually need bins.parquet - it only needs segments.csv and GPX files
+            if not temp_reports:
+                temp_reports = ui_path.parent / "reports_temp"
+                temp_reports.mkdir(parents=True, exist_ok=True)
+                logger.info(f"   ✅ Created temp_reports directory for segments.geojson generation: {temp_reports}")
+            
+            # Generate segments.geojson - this works independently of bins
+            # It loads segments.csv and GPX courses from analysis.json
+            segments_geojson = generate_segments_geojson(temp_reports)
 
-                # CRITICAL FIX: Filter features to only include day segments
-                if "features" in segments_geojson:
-                    original_count = len(segments_geojson["features"])
+            # CRITICAL FIX: Filter features to only include day segments
+            if "features" in segments_geojson:
+                original_count = len(segments_geojson["features"])
 
-                    def _feature_segment_id(feature: Dict[str, Any]) -> str:
-                        props = feature.get("properties", {})
-                        return str(
-                            props.get("segment_id")
-                            or props.get("seg_id")
-                            or props.get("id")
-                            or ""
-                        )
-
-                    segments_geojson["features"] = [
-                        feature
-                        for feature in segments_geojson["features"]
-                        if _feature_segment_id(feature) in day_segment_ids
-                    ]
-                    logger.info(
-                        f"   ✅ Filtered segments.geojson: {original_count} -> "
-                        f"{len(segments_geojson['features'])} features for day {day.value}"
+                def _feature_segment_id(feature: Dict[str, Any]) -> str:
+                    props = feature.get("properties", {})
+                    return str(
+                        props.get("segment_id")
+                        or props.get("seg_id")
+                        or props.get("id")
+                        or ""
                     )
-                    
-                    # Issue #548 Bug 1 & 2: Add events property from segments_df to each feature
-                    # Extract events from segments.csv (lowercase: full, half, 10k, elite, open)
-                    if segments_df is not None and not segments_df.empty:
-                        for feature in segments_geojson["features"]:
-                            seg_id = _feature_segment_id(feature)
-                            if seg_id:
-                                seg_row = segments_df[segments_df['seg_id'] == seg_id]
-                                if not seg_row.empty:
-                                    events = []
-                                    # Issue #548 Bug 1: Use lowercase column names to match CSV format
-                                    if seg_row.iloc[0].get('full') == 'y':
-                                        events.append('full')
-                                    if seg_row.iloc[0].get('half') == 'y':
-                                        events.append('half')
-                                    if seg_row.iloc[0].get('10k') == 'y' or seg_row.iloc[0].get('10K') == 'y':
-                                        events.append('10k')
-                                    if seg_row.iloc[0].get('elite') == 'y':
-                                        events.append('elite')
-                                    if seg_row.iloc[0].get('open') == 'y':
-                                        events.append('open')
-                                    
-                                    # Add events to feature properties
-                                    props = feature.get("properties", {})
-                                    props["events"] = events
-                                    feature["properties"] = props
-                        logger.info(f"   ✅ Added events property to segments.geojson features from segments_df")
+
+                segments_geojson["features"] = [
+                    feature
+                    for feature in segments_geojson["features"]
+                    if _feature_segment_id(feature) in day_segment_ids
+                ]
+                logger.info(
+                    f"   ✅ Filtered segments.geojson: {original_count} -> "
+                    f"{len(segments_geojson['features'])} features for day {day.value}"
+                )
+                
+                # Issue #655: HARD FAIL if segments.geojson has 0 features after filtering
+                # This indicates a critical failure - segments.geojson is required for UI
+                if len(segments_geojson["features"]) == 0:
+                    error_msg = (
+                        f"CRITICAL: segments.geojson generation produced 0 features for day {day.value}. "
+                        f"Expected {len(day_segment_ids)} segments but got 0 after filtering. "
+                        f"Original count before filtering: {original_count}. "
+                        f"This is a hard failure - segments.geojson is required for the UI to function. "
+                        f"The analysis pipeline will now stop."
+                    )
+                    logger.error("=" * 80)
+                    logger.error(error_msg)
+                    logger.error("=" * 80)
+                    raise RuntimeError(error_msg)
+                
+                # Issue #548 Bug 1 & 2: Add events property from segments_df to each feature
+                # Extract events from segments.csv (lowercase: full, half, 10k, elite, open)
+                if segments_df is not None and not segments_df.empty:
+                    for feature in segments_geojson["features"]:
+                        seg_id = _feature_segment_id(feature)
+                        if seg_id:
+                            seg_row = segments_df[segments_df['seg_id'] == seg_id]
+                            if not seg_row.empty:
+                                events = []
+                                # Issue #548 Bug 1: Use lowercase column names to match CSV format
+                                if seg_row.iloc[0].get('full') == 'y':
+                                    events.append('full')
+                                if seg_row.iloc[0].get('half') == 'y':
+                                    events.append('half')
+                                if seg_row.iloc[0].get('10k') == 'y' or seg_row.iloc[0].get('10K') == 'y':
+                                    events.append('10k')
+                                if seg_row.iloc[0].get('elite') == 'y':
+                                    events.append('elite')
+                                if seg_row.iloc[0].get('open') == 'y':
+                                    events.append('open')
+                                
+                                # Add events to feature properties
+                                props = feature.get("properties", {})
+                                props["events"] = events
+                                feature["properties"] = props
+                    logger.info(f"   ✅ Added events property to segments.geojson features from segments_df")
             else:
-                segments_geojson = {"type": "FeatureCollection", "features": []}
+                # segments_geojson exists but has no "features" key - this is an error
+                error_msg = (
+                    f"CRITICAL: segments.geojson generation returned invalid GeoJSON structure for day {day.value}. "
+                    f"Expected 'features' key but got: {list(segments_geojson.keys()) if isinstance(segments_geojson, dict) else type(segments_geojson)}. "
+                    f"This is a hard failure - segments.geojson is required for the UI."
+                )
+                logger.error("=" * 80)
+                logger.error(error_msg)
+                logger.error("=" * 80)
+                raise RuntimeError(error_msg)
+        except RuntimeError:
+            # Re-raise RuntimeError (hard failures) - don't catch these
+            raise
         except Exception as e:
-            logger.warning(f"   ⚠️  Could not generate segments.geojson: {e}")
-            segments_geojson = {"type": "FeatureCollection", "features": []}
+            # For other exceptions, log the full traceback and raise as RuntimeError to stop the pipeline
+            import traceback
+            error_msg = (
+                f"CRITICAL: Failed to generate segments.geojson for day {day.value}: {e}\n"
+                f"Traceback: {traceback.format_exc()}\n"
+                f"This is a hard failure - segments.geojson is required for the UI to function. "
+                f"The analysis pipeline will now stop."
+            )
+            logger.error("=" * 80)
+            logger.error(error_msg)
+            logger.error("=" * 80)
+            raise RuntimeError(error_msg) from e
         
         # Issue #574: Write to geospatial/ subdirectory
         (geospatial_dir / "segments.geojson").write_text(json.dumps(segments_geojson, indent=2))

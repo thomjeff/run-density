@@ -29,6 +29,7 @@ import os
 import time
 import json
 import functools
+import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 from pathlib import Path
@@ -85,55 +86,41 @@ def load_parquet_sources(reports_dir: Path, bins_dir: Optional[Path] = None) -> 
     # Load segments.parquet from reports_dir (v2 saves day-filtered segments there)
     # NOTE: Do NOT fall back to data/segments.parquet as it's a legacy file and won't produce valid reports
     segments_parquet_path = reports_dir / "segments.parquet"
-    segments_csv_path = Path("data/segments.csv")
     
     if segments_parquet_path.exists():
         # v2 saves day-filtered segments.parquet in reports directory
         sources['segments'] = pd.read_parquet(segments_parquet_path)
         print(f"📊 Loaded {len(sources['segments'])} segments from {segments_parquet_path}")
-    elif segments_csv_path.exists():
-        # Fallback to CSV only (for v1 compatibility or if parquet generation failed)
-        sources['segments'] = pd.read_csv(segments_csv_path)
-        # Rename seg_id to segment_id for consistency
-        if 'seg_id' in sources['segments'].columns:
-            sources['segments'] = sources['segments'].rename(columns={'seg_id': 'segment_id'})
-        print(f"📊 Loaded {len(sources['segments'])} segments from {segments_csv_path}")
-        print(f"⚠️  Warning: Using segments.csv instead of day-filtered segments.parquet - report may not be day-scoped correctly")
     else:
         raise FileNotFoundError(
-            f"segments.parquet not found at {segments_parquet_path} and segments.csv not found at {segments_csv_path}. "
-            f"v2 pipeline should generate segments.parquet in reports directory."
+            f"segments.parquet not found at {segments_parquet_path}. "
+            f"v2 pipeline must generate segments.parquet in reports directory."
         )
     
     return sources
 
 
-@functools.lru_cache(maxsize=1)
 def load_density_rulebook() -> Dict[str, Any]:
-    """Load density rulebook configuration (cached to prevent repeated loads)."""
-    rulebook_path = Path("config/density_rulebook.yml")
-    if not rulebook_path.exists():
-        # Fallback to data directory
-        rulebook_path = Path("data/density_rulebook.yml")
+    """
+    Load density rulebook configuration using SSOT loader.
     
-    if not rulebook_path.exists():
-        print(f"⚠️ density_rulebook.yml not found, using defaults")
-        return {
-            'los': {
-                'A': 0.0, 'B': 0.36, 'C': 0.54, 'D': 0.72, 'E': 1.08, 'F': 1.63
-            },
-            'flow_ref': {
-                'warn': 0.0,  # Will be set based on data
-                'critical': 0.0  # Will be set based on data
-            }
-        }
+    Issue #655: Uses app.common.config.load_rulebook() as SSOT.
+    Removes hardcoded fallbacks to data/ directory and silent defaults.
+    Fails fast if rulebook not found.
     
-    import yaml
-    with open(rulebook_path, 'r') as f:
-        config = yaml.safe_load(f)
+    Returns:
+        dict: Parsed rulebook from config/density_rulebook.yml
+        
+    Raises:
+        FileNotFoundError: If density_rulebook.yml not found at config/
+    """
+    from app.common.config import load_rulebook
     
-    print(f"📊 Loaded density rulebook from {rulebook_path}")
-    return config
+    # Issue #655: Use SSOT loader which fails fast if rulebook missing
+    rulebook = load_rulebook()
+    logger = logging.getLogger(__name__)
+    logger.info("📊 Loaded density rulebook using SSOT loader (app.common.config.load_rulebook)")
+    return rulebook
 
 
 def create_flagging_config(rulebook: Dict[str, Any], bins_df: pd.DataFrame) -> NewFlaggingConfig:

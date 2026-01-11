@@ -1,0 +1,260 @@
+{
+  "peak_density": 0.755,
+  "peak_rate": 10.19,
+  "segments_with_flags": 31,
+  "flagged_bins": 1946,
+  "overtaking_segments": 39,
+  "co_presence_segments": 40,
+  "A1": {
+    "schema": "on_course_open",
+    "worst_los": "D",
+    "peak_density": 0.755,
+    "peak_rate": 10.19,
+    "active_window": "07:42\u201307:44"
+  },
+  "A2": {
+    "schema": "on_course_open",
+    "worst_los": "B",
+    "peak_density": 0.469,
+    "peak_rate": 6.61,
+    "active_window": "07:46\u201307:48"
+  },
+  "A3": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.291,
+    "peak_rate": 4.45,
+    "active_window": "07:50\u201307:52"
+  },
+  "B1": {
+    "schema": "on_course_narrow",
+    "worst_los": "D",
+    "peak_density": 0.72,
+    "peak_rate": 3.05,
+    "active_window": "07:36\u201307:38"
+  },
+  "B2": {
+    "schema": "on_course_narrow",
+    "worst_los": "B",
+    "peak_density": 0.4833,
+    "peak_rate": 2.06,
+    "active_window": "07:46\u201307:48"
+  },
+  "B3": {
+    "schema": "on_course_narrow",
+    "worst_los": "B",
+    "peak_density": 0.4833,
+    "peak_rate": 2.06,
+    "active_window": "07:46\u201307:48"
+  },
+  "C1": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.2333,
+    "peak_rate": 1.05,
+    "active_window": "07:24\u201307:26"
+  },
+  "C2": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.21,
+    "peak_rate": 0.95,
+    "active_window": "07:28\u201307:30"
+  },
+  "C3": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.1733,
+    "peak_rate": 0.88,
+    "active_window": "07:36\u201307:38"
+  },
+  "D1": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.1333,
+    "peak_rate": 0.6,
+    "active_window": "07:54\u201307:56"
+  },
+  "D2": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.13,
+    "peak_rate": 0.58,
+    "active_window": "08:10\u201308:12"
+  },
+  "D3": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.1167,
+    "peak_rate": 0.52,
+    "active_window": "08:18\u201308:20"
+  },
+  "E1": {
+    "schema": "on_course_open",
+    "worst_los": "C",
+    "peak_density": 0.56,
+    "peak_rate": 4.98,
+    "active_window": "07:56\u201307:58"
+  },
+  "E2": {
+    "schema": "on_course_open",
+    "worst_los": "B",
+    "peak_density": 0.5167,
+    "peak_rate": 4.53,
+    "active_window": "08:00\u201308:02"
+  },
+  "E3": {
+    "schema": "on_course_open",
+    "worst_los": "B",
+    "peak_density": 0.4667,
+    "peak_rate": 4.16,
+    "active_window": "08:02\u201308:04"
+  },
+  "E4": {
+    "schema": "on_course_open",
+    "worst_los": "B",
+    "peak_density": 0.425,
+    "peak_rate": 3.69,
+    "active_window": "08:06\u201308:08"
+  },
+  "G1": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.0417,
+    "peak_rate": 0.37,
+    "active_window": "09:00\u201309:02"
+  },
+  "H1": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.3267,
+    "peak_rate": 1.38,
+    "active_window": "08:08\u201308:10"
+  },
+  "I1": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.2667,
+    "peak_rate": 2.35,
+    "active_window": "08:10\u201308:12"
+  },
+  "I2": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.235,
+    "peak_rate": 2.07,
+    "active_window": "08:14\u201308:16"
+  },
+  "I3": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.1983,
+    "peak_rate": 1.75,
+    "active_window": "08:22\u201308:24"
+  },
+  "I4": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.1817,
+    "peak_rate": 1.62,
+    "active_window": "08:26\u201308:28"
+  },
+  "I5": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.15,
+    "peak_rate": 1.34,
+    "active_window": "08:38\u201308:40"
+  },
+  "J1": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.2667,
+    "peak_rate": 1.19,
+    "active_window": "08:42\u201308:44"
+  },
+  "J2": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.05,
+    "peak_rate": 0.25,
+    "active_window": "09:38\u201309:40"
+  },
+  "J3": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.04,
+    "peak_rate": 0.21,
+    "active_window": "09:38\u201309:40"
+  },
+  "J4": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.2233,
+    "peak_rate": 0.97,
+    "active_window": "08:58\u201309:00"
+  },
+  "J5": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.2667,
+    "peak_rate": 1.19,
+    "active_window": "08:42\u201308:44"
+  },
+  "K1": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.1017,
+    "peak_rate": 0.91,
+    "active_window": "09:12\u201309:14"
+  },
+  "K2": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.0967,
+    "peak_rate": 0.87,
+    "active_window": "09:14\u201309:16"
+  },
+  "K3": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.0983,
+    "peak_rate": 0.89,
+    "active_window": "09:18\u201309:20"
+  },
+  "K4": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.0933,
+    "peak_rate": 0.84,
+    "active_window": "09:20\u201309:22"
+  },
+  "L1": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.3267,
+    "peak_rate": 1.38,
+    "active_window": "08:08\u201308:10"
+  },
+  "L2": {
+    "schema": "on_course_narrow",
+    "worst_los": "A",
+    "peak_density": 0.0,
+    "peak_rate": 0.0,
+    "active_window": "07:00\u201307:02"
+  },
+  "M1": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.1417,
+    "peak_rate": 1.19,
+    "active_window": "08:18\u201308:20"
+  },
+  "M2": {
+    "schema": "on_course_open",
+    "worst_los": "A",
+    "peak_density": 0.0,
+    "peak_rate": 0.0,
+    "active_window": "07:00\u201307:02"
+  }
+}

@@ -122,49 +122,63 @@ def calculate_peak_density_los(peak_density: float) -> str:
     Calculate LOS for peak density using rulebook thresholds.
     
     Issue #569: Replicates logic from app/routes/api_dashboard.py
+    Issue #655: Removed hardcoded fallback thresholds - fails fast if rulebook invalid.
     
     Args:
         peak_density: Peak density value (persons/m²)
         
     Returns:
         LOS grade (A-F)
+        
+    Raises:
+        FileNotFoundError: If density_rulebook.yml not found
+        KeyError: If required thresholds missing from rulebook
+        ValueError: If thresholds invalid
     """
-    try:
-        from app.common.config import load_rulebook
-        rulebook = load_rulebook()
-        thresholds = rulebook.get("globals", {}).get("los_thresholds", {})
-        
-        # Get density thresholds (assuming they're in order A->F)
-        density_thresholds = thresholds.get("density", [])
-        
-        if not density_thresholds:
-            # Fallback to hardcoded thresholds if YAML missing
-            density_thresholds = [0.2, 0.4, 0.6, 0.8, 1.0]
-        
-        # Find appropriate LOS grade
-        los_grades = ["A", "B", "C", "D", "E", "F"]
-        
-        for i, threshold in enumerate(density_thresholds):
-            if peak_density < threshold:
-                return los_grades[i]
-        
-        # If above all thresholds, return F
-        return "F"
-    except Exception as e:
-        logger.warning(f"Error calculating LOS from rulebook: {e}, using fallback")
-        # Fallback logic
-        if peak_density < 0.36:
-            return "A"
-        elif peak_density < 0.54:
-            return "B"
-        elif peak_density < 0.72:
-            return "C"
-        elif peak_density < 1.08:
-            return "D"
-        elif peak_density < 1.63:
-            return "E"
-        else:
-            return "F"
+    from app.common.config import load_rulebook
+    
+    # Issue #655: Fail fast if rulebook missing or invalid (no fallback)
+    rulebook = load_rulebook()
+    thresholds = rulebook.get("globals", {}).get("los_thresholds", {})
+    
+    if not thresholds:
+        raise ValueError(
+            "Rulebook missing 'globals.los_thresholds'. "
+            "Cannot calculate LOS without valid rulebook configuration."
+        )
+    
+    # Extract density thresholds from rulebook structure (A-F with min/max)
+    # Rulebook format: { "A": { "min": 0.0, "max": 0.36, ... }, "B": { ... }, ... }
+    los_grades = ["A", "B", "C", "D", "E", "F"]
+    density_thresholds = []
+    
+    for grade in los_grades:
+        if grade not in thresholds:
+            raise ValueError(
+                f"Rulebook missing 'globals.los_thresholds.{grade}'. "
+                "Cannot calculate LOS without complete threshold configuration."
+            )
+        grade_config = thresholds[grade]
+        if not isinstance(grade_config, dict) or "max" not in grade_config:
+            raise ValueError(
+                f"Invalid threshold configuration for '{grade}': expected dict with 'max' key, "
+                f"got {type(grade_config)}"
+            )
+        density_thresholds.append(float(grade_config["max"]))
+    
+    if len(density_thresholds) < 5:
+        raise ValueError(
+            f"Invalid density thresholds in rulebook: expected at least 5 values, "
+            f"got {len(density_thresholds)}"
+        )
+    
+    # Find appropriate LOS grade (thresholds are max values, inclusive upper bound)
+    for i, threshold in enumerate(density_thresholds):
+        if peak_density <= threshold:
+            return los_grades[i]
+    
+    # If above all thresholds, return F
+    return "F"
 
 
 def create_stubbed_pipeline(
@@ -668,10 +682,10 @@ def update_pointer_files(run_id: str, metadata: Dict[str, Any]) -> None:
 
 def create_full_analysis_pipeline(
     events: List[Event],
-    segments_file: str = "segments.csv",
-    locations_file: str = "locations.csv",
-    flow_file: str = "flow.csv",
-    data_dir: str = "data",
+    segments_file: str,
+    locations_file: Optional[str],
+    flow_file: str,
+    data_dir: str,
     run_id: Optional[str] = None,
     request_payload: Optional[Dict[str, Any]] = None,
     response_payload: Optional[Dict[str, Any]] = None,
@@ -690,10 +704,10 @@ def create_full_analysis_pipeline(
     
     Args:
         events: List of Event objects from validated payload
-        segments_file: Name of segments CSV file (default: "segments.csv")
-        locations_file: Name of locations CSV file (default: "locations.csv")
-        flow_file: Name of flow CSV file (default: "flow.csv")
-        data_dir: Base directory for data files (default: "data")
+        segments_file: Path to segments CSV file (from analysis.json)
+        locations_file: Optional path to locations CSV file
+        flow_file: Path to flow CSV file (from analysis.json)
+        data_dir: Base directory for data files (from analysis.json)
         run_id: Optional run ID (generates new one if not provided)
         
     Returns:
@@ -719,21 +733,23 @@ def create_full_analysis_pipeline(
     # Issue #553 Phase 7.1: Load analysis.json at pipeline start (single source of truth)
     # If analysis.json exists, use it; otherwise, use provided parameters (backward compatibility)
     analysis_config = None
+    analysis_context = None
     analysis_json_path = run_path / "analysis.json"
     if analysis_json_path.exists():
-        from app.core.v2.analysis_config import load_analysis_json
-        analysis_config = load_analysis_json(run_path)
-        logger.info(f"Loaded analysis.json from {analysis_json_path}")
+        from app.config.loader import load_analysis_context
+        analysis_context = load_analysis_context(run_path)
+        analysis_config = analysis_context.analysis_config
+        logger.info(f"Loaded analysis.json from {analysis_context.analysis_json_path}")
         
         # Override parameters with values from analysis.json (single source of truth)
-        data_dir = analysis_config.get("data_dir", data_dir)
-        segments_file = analysis_config.get("segments_file", segments_file)
-        locations_file = analysis_config.get("locations_file", locations_file)
-        flow_file = analysis_config.get("flow_file", flow_file)
+        data_dir = str(analysis_context.data_dir)
+        segments_file = str(analysis_context.segments_csv_path)
+        locations_file = str(analysis_context.locations_csv_path) if analysis_context.locations_csv_path else None
+        flow_file = str(analysis_context.flow_csv_path)
     else:
-        logger.warning(
+        raise FileNotFoundError(
             f"analysis.json not found at {analysis_json_path}. "
-            f"Using provided parameters. This may indicate analysis.json was not generated."
+            "analysis.json is required to resolve data file paths; default filenames are not supported."
         )
     
     # Issue #527: Set up run-level file logging
@@ -761,10 +777,11 @@ def create_full_analysis_pipeline(
         # Validation already done above (analysis.json loading, file existence checks)
         event_count = len(events)
         days_count = len(events_by_day)
+        config_for_counts = analysis_config or {}
         data_files_count = sum([
-            1 if analysis_config.get("segments_file") else 0,
-            1 if analysis_config.get("flow_file") else 0,
-            1 if analysis_config.get("locations_file") else 0,
+            1 if config_for_counts.get("segments_file") else 0,
+            1 if config_for_counts.get("flow_file") else 0,
+            1 if config_for_counts.get("locations_file") else 0,
         ])
         # Timeline Generation (part of Phase 1)
         timelines = generate_day_timelines(events)
@@ -784,18 +801,22 @@ def create_full_analysis_pipeline(
             phase_description="Data Loading"
         )
         
+        runner_paths = {
+            event.name.lower(): str(analysis_context.runners_csv_path(event.name))
+            for event in events
+        }
+        gpx_paths = {
+            event.name.lower(): str(analysis_context.gpx_path(event.name))
+            for event in events
+        }
+
         # Load segments DataFrame
-        # Issue #553 Phase 7.1: Use file path from analysis.json if available
-        if analysis_config:
-            from app.core.v2.analysis_config import get_segments_file
-            segments_path_str = get_segments_file(analysis_config=analysis_config)
-        else:
-            segments_path_str = str(Path(data_dir) / segments_file)
-        segments_df = load_segments(segments_path_str)
+        segments_path_str = str(analysis_context.segments_csv_path)
+        segments_df = analysis_context.get_segments_df()
         logger.info(f"Loaded {len(segments_df)} segments from {segments_path_str}")
         
         # Load all runners for events (Phase 4)
-        all_runners_df = load_all_runners_for_events(events, data_dir)
+        all_runners_df = load_all_runners_for_events(events, runner_paths)
         runner_count = len(all_runners_df)
         segment_count = len(segments_df)
         locations_count = 0  # Will be updated if locations are loaded
@@ -843,10 +864,9 @@ def create_full_analysis_pipeline(
         logger.info("[Phase 3.1] Processing flow analysis...")
         # Issue #553 Phase 7.1: Use file path from analysis.json if available
         if analysis_config:
-            from app.core.v2.analysis_config import get_flow_file
-            flow_file_path = get_flow_file(analysis_config=analysis_config)
+            flow_file_path = str(analysis_context.flow_csv_path)
         else:
-            flow_file_path = flow_file
+            raise ValueError("analysis_config is required to resolve flow_file for v2 pipeline.")
         flow_results = analyze_temporal_flow_segments_v2(
             events=events,
             timelines=timelines,
@@ -949,7 +969,7 @@ def create_full_analysis_pipeline(
             # Use combine_runners_for_events() for proper per-event file loading
             from app.core.v2.density import combine_runners_for_events
             event_names = [e.name.lower() for e in day_events]
-            day_runners_df = combine_runners_for_events(event_names, day.value, data_dir)
+            day_runners_df = combine_runners_for_events(event_names, day.value, runner_paths)
             
             if day_runners_df.empty:
                 logger.warning(f"No runners found for day {day.value} events {event_names}, using fallback")
@@ -977,7 +997,8 @@ def create_full_analysis_pipeline(
                 day=day,
                 events=day_events,
                 data_dir=data_dir,
-                segments_csv_path=segments_path_str  # Issue #616: Use segments_file from analysis.json
+                segments_csv_path=segments_path_str,  # Issue #616: Use segments_file from analysis.json
+                analysis_context=analysis_context
             )
             
             # Try to get feature count from bins if available
@@ -1014,13 +1035,48 @@ def create_full_analysis_pipeline(
             else:
                 logger.warning(f"Bin generation skipped or failed for day {day.value}")
         
+        # Issue #655: Hard fail if no bins were generated - critical error that stops analysis
+        # Bins are required for Density.md reports and downstream analysis
+        # This is a non-negotiable requirement - analysis cannot proceed without bins
+        if not bins_by_day:
+            error_msg = (
+                "CRITICAL: No bins were generated for any day. "
+                "Bin generation is required for density analysis and report generation. "
+                "Analysis cannot proceed without bins.parquet files. "
+                "This is a hard failure - the analysis pipeline will now stop."
+            )
+            logger.error("=" * 80)
+            logger.error(error_msg)
+            logger.error("=" * 80)
+            raise RuntimeError(error_msg)
+        
+        # Verify bins.parquet files actually exist (not just directories created)
+        missing_bins = []
+        for day_value, bins_path_str in bins_by_day.items():
+            bins_parquet_path = Path(bins_path_str) / "bins.parquet"
+            if not bins_parquet_path.exists():
+                missing_bins.append(f"{day_value}: {bins_parquet_path}")
+        
+        if missing_bins:
+            error_msg = (
+                f"CRITICAL: bins.parquet files are missing for {len(missing_bins)} day(s):\n"
+                + "\n".join(f"  - {missing}" for missing in missing_bins) +
+                "\nBin generation returned directories but bins.parquet files were not created. "
+                "Analysis cannot proceed without bins.parquet files."
+            )
+            logger.error(error_msg)
+            raise FileNotFoundError(error_msg)
+        
+        logger.info(f"✅ Bin generation validated: {len(bins_by_day)} day(s) with bins.parquet files")
+        
         # Load locations DataFrame if locations_file is provided
         # Issue #553 Phase 7.1: Use file path from analysis.json if available
         locations_df = None
         if locations_file:
             if analysis_config:
-                from app.core.v2.analysis_config import get_locations_file
-                locations_path_str = get_locations_file(analysis_config=analysis_config)
+                if analysis_context.locations_csv_path is None:
+                    raise ValueError("analysis_config is missing locations file configuration.")
+                locations_path_str = str(analysis_context.locations_csv_path)
             else:
                 locations_path_str = str(Path(data_dir) / locations_file)
             
@@ -1338,7 +1394,11 @@ def create_full_analysis_pipeline(
                     start_times_for_map[event.name.lower()] = float(event.start_time)
                 
                 # Generate map dataset from density results
-                map_data = generate_map_dataset(day_density, start_times_for_map)
+                map_data = generate_map_dataset(
+                    day_density,
+                    start_times_for_map,
+                    segments_csv_path=segments_path_str
+                )
                 
                 # Save to day-scoped maps directory
                 map_data_path = maps_dir / "map_data.json"
@@ -1401,7 +1461,7 @@ def create_full_analysis_pipeline(
             try:
                 from app.core.v2.density import combine_runners_for_events
                 event_names = [e.name.lower() for e in day_events]
-                day_runners_df = combine_runners_for_events(event_names, day_code, data_dir)
+                day_runners_df = combine_runners_for_events(event_names, day_code, runner_paths)
                 if not day_runners_df.empty:
                     # event column should be lowercase
                     participants_by_event = (
@@ -1533,9 +1593,9 @@ def create_full_analysis_pipeline(
         # Use day-partitioned bins directories
         # Issue #553 Phase 7.1: Use file paths from analysis.json (already loaded at pipeline start)
         if analysis_config:
-            segments_file_path = analysis_config.get("data_files", {}).get("segments", segments_path_str)
-            flow_file_path = analysis_config.get("data_files", {}).get("flow", flow_file_path)
-            locations_file_path = analysis_config.get("data_files", {}).get("locations", locations_path_str) if locations_file else None
+            segments_file_path = segments_path_str
+            flow_file_path = flow_file_path
+            locations_file_path = locations_path_str if locations_file else None
         else:
             # Issue #616: This fallback should not happen in v2 pipeline - analysis.json should always exist
             # If analysis.json is missing, these paths should already be set from earlier in the pipeline
@@ -1566,7 +1626,8 @@ def create_full_analysis_pipeline(
                 data_dir=data_dir,
                 segments_file_path=segments_file_path,
                 flow_file_path=flow_file_path,
-                locations_file_path=locations_file_path
+                locations_file_path=locations_file_path,
+                gpx_paths=gpx_paths
             )
             
             # Count reports generated
@@ -1703,8 +1764,8 @@ def create_full_analysis_pipeline(
 # Alias for backward compatibility
 def create_density_pipeline(
     events: List[Event],
-    segments_file: str = "segments.csv",
-    data_dir: str = "data",
+    segments_file: str,
+    data_dir: str,
     run_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
@@ -1712,10 +1773,7 @@ def create_density_pipeline(
     
     This function now runs both density and flow analysis.
     """
-    return create_full_analysis_pipeline(
-        events=events,
-        segments_file=segments_file,
-        data_dir=data_dir,
-        run_id=run_id
+    raise ValueError(
+        "create_density_pipeline requires full analysis configuration. "
+        "Use create_full_analysis_pipeline with analysis.json-derived paths."
     )
-

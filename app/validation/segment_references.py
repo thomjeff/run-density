@@ -19,16 +19,16 @@ logger = logging.getLogger(__name__)
 
 
 def validate_segment_references(
-    locations_file: str = "data/locations.csv",
-    segments_file: str = "data/segments.csv",
-    data_dir: str = "data"
+    locations_file: str,
+    segments_file: str,
+    data_dir: str
 ) -> Dict[str, Any]:
     """
     Validate that all segments referenced in locations.csv exist and have valid ranges.
     
     Args:
-        locations_file: Path to locations CSV file
-        segments_file: Path to segments CSV file
+        locations_file: Path to locations CSV file (required)
+        segments_file: Path to segments CSV file (required)
         data_dir: Data directory path
         
     Returns:
@@ -41,8 +41,8 @@ def validate_segment_references(
     logger.info("Starting segment reference validation...")
     
     try:
-        locations_df = load_locations(locations_file, data_dir)
-        segments_df = load_segments(segments_file, data_dir)
+        locations_df = load_locations(locations_file)
+        segments_df = load_segments(segments_file)
     except Exception as e:
         logger.error(f"Failed to load data files: {e}")
         return {
@@ -172,4 +172,3 @@ def validate_segment_references(
         logger.info(f"All {total_references} segment references validated successfully")
     
     return result
-

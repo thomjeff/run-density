@@ -243,7 +243,11 @@ def generate_segment_metrics_json(reports_dir: Path) -> Dict[str, Dict[str, Any]
             worst_los = str(worst_bin_row['los_class'])
 
         # Get schema_key from the first bin in the group (all bins in a segment should have the same schema_key)
-        schema_key = group['schema_key'].iloc[0] if 'schema_key' in group.columns else 'on_course_open'
+        if 'schema_key' not in group.columns:
+            raise ValueError("bins.parquet missing schema_key column for segment metrics.")
+        schema_key = group['schema_key'].iloc[0]
+        if not schema_key:
+            raise ValueError(f"Segment {seg_id} missing schema_key in bins.parquet.")
         
         metrics[seg_id] = {
             "schema": schema_key,  # Issue #285: Add operational schema tag
@@ -476,23 +480,47 @@ def _load_schema_keys(reports_dir):
     """Load schema keys from bins.parquet."""
     import pandas as pd
     from pathlib import Path
+    from app.utils.run_id import get_runflow_root
     
     schema_keys = {}
-    bins_parquet_path = reports_dir / "bins.parquet"
+    # Issue #655: Check multiple possible paths for bins.parquet
+    # 1. v2 temp_reports structure: reports_dir/bins/bins.parquet
+    # 2. v1 structure: reports_dir/bins.parquet  
+    # 3. v2 actual bins location: {run_path}/{day}/bins/bins.parquet (if reports_dir is temp_reports)
+    bins_parquet_path = None
     
-    if bins_parquet_path.exists():
+    # Try temp_reports/bins/bins.parquet first (v2 structure)
+    if (reports_dir / "bins" / "bins.parquet").exists():
+        bins_parquet_path = reports_dir / "bins" / "bins.parquet"
+    # Try reports_dir/bins.parquet (v1 structure)
+    elif (reports_dir / "bins.parquet").exists():
+        bins_parquet_path = reports_dir / "bins.parquet"
+    # If reports_dir is reports_temp, try the actual bins location
+    elif reports_dir.name == "reports_temp" and reports_dir.parent.parent.exists():
+        # reports_dir = {run_path}/{day}/reports_temp, so go to {run_path}/{day}/bins/bins.parquet
+        actual_bins_path = reports_dir.parent / "bins" / "bins.parquet"
+        if actual_bins_path.exists():
+            bins_parquet_path = actual_bins_path
+    
+    if bins_parquet_path and bins_parquet_path.exists():
         try:
             bins_df = pd.read_parquet(bins_parquet_path)
+            # Issue #655: Handle both 'segment_id' and 'seg_id' column names
+            seg_id_col = 'segment_id' if 'segment_id' in bins_df.columns else 'seg_id'
+            if seg_id_col not in bins_df.columns:
+                print(f"   ⚠️  Neither 'segment_id' nor 'seg_id' column found in bins.parquet")
+                return schema_keys
+            
             if 'schema_key' in bins_df.columns:
-                for seg_id, group in bins_df.groupby('segment_id'):
+                for seg_id, group in bins_df.groupby(seg_id_col):
                     schema_keys[seg_id] = group['schema_key'].iloc[0]
-                print(f"   ✅ Loaded schema keys for {len(schema_keys)} segments from bins.parquet")
+                print(f"   ✅ Loaded schema keys for {len(schema_keys)} segments from {bins_parquet_path}")
             else:
                 print(f"   ⚠️  schema_key column not found in bins.parquet")
         except Exception as e:
             print(f"   ⚠️  Could not load schema keys from bins.parquet: {e}")
     else:
-        print(f"   ⚠️  bins.parquet not found at {bins_parquet_path}")
+        print(f"   ⚠️  bins.parquet not found. Checked: {reports_dir / 'bins' / 'bins.parquet'}, {reports_dir / 'bins.parquet'}, and actual bins location")
     
     return schema_keys
 
@@ -500,6 +528,37 @@ def _load_schema_keys(reports_dir):
 def _create_segment_feature(seg_id, segment_dims, schema_keys):
     """Create a GeoJSON feature for a segment."""
     dims = segment_dims.get(seg_id, {})
+    seg_label = dims.get("seg_label") or dims.get("name")
+    if not seg_label:
+        raise ValueError(f"Segment {seg_id} missing label in segments metadata.")
+    width_val = dims.get("width_m")
+    if width_val is None or (isinstance(width_val, float) and pd.isna(width_val)):
+        raise ValueError(f"Segment {seg_id} missing width_m in segments metadata.")
+    direction = dims.get("direction")
+    if not direction:
+        raise ValueError(f"Segment {seg_id} missing direction in segments metadata.")
+    schema_key = schema_keys.get(seg_id)
+    if not schema_key:
+        raise ValueError(f"Segment {seg_id} missing schema_key in bins metadata.")
+    
+    # Issue #655: Calculate length_km from event-specific fields
+    length_km = None
+    for col in ["elite_length", "open_length", "10k_length", "half_length", "full_length"]:
+        if col in dims and dims[col] is not None and pd.notna(dims[col]) and dims[col] > 0:
+            length_km = float(dims[col])
+            break
+    
+    # Fallback: Calculate from event-specific from_km/to_km
+    if length_km is None or length_km == 0.0:
+        for event in ["elite", "open", "10k", "half", "full"]:
+            event_from = dims.get(f"{event}_from_km")
+            event_to = dims.get(f"{event}_to_km")
+            if event_from is not None and event_to is not None and pd.notna(event_from) and pd.notna(event_to):
+                length_km = float(event_to) - float(event_from)
+                break
+    
+    if length_km is None or length_km == 0.0:
+        length_km = 0.0
     
     return {
         "type": "Feature",
@@ -509,12 +568,12 @@ def _create_segment_feature(seg_id, segment_dims, schema_keys):
         },
         "properties": {
             "seg_id": seg_id,
-            "label": dims.get("seg_label", dims.get("name", seg_id)),
-            "length_km": float(dims.get("full_length", dims.get("half_length", dims.get("10K_length", 0.0)))),
-            "width_m": float(dims.get("width_m", 0.0)),
-            "direction": dims.get("direction", "uni"),
+            "label": seg_label,
+            "length_km": length_km,
+            "width_m": float(width_val),
+            "direction": direction,
             "events": [event for event in ["Full", "Half", "10K"] if dims.get(event.lower() if event != "10K" else "10K", "") == "y"],
-            "schema": schema_keys.get(seg_id, "on_course_open"),
+            "schema": schema_key,
             "description": dims.get("description", "No description available")
         }
     }
@@ -543,16 +602,47 @@ def _load_segment_schema_keys(reports_dir):
 def _build_segment_feature_properties(seg_id, segment_dims, schema_keys):
     """Build GeoJSON feature properties for a segment."""
     dims = segment_dims.get(seg_id, {})
+    seg_label = dims.get("seg_label") or dims.get("name")
+    if not seg_label:
+        raise ValueError(f"Segment {seg_id} missing label in segments metadata.")
+    width_val = dims.get("width_m")
+    if width_val is None or (isinstance(width_val, float) and pd.isna(width_val)):
+        raise ValueError(f"Segment {seg_id} missing width_m in segments metadata.")
+    direction = dims.get("direction")
+    if not direction:
+        raise ValueError(f"Segment {seg_id} missing direction in segments metadata.")
+    schema_key = schema_keys.get(seg_id)
+    if not schema_key:
+        raise ValueError(f"Segment {seg_id} missing schema_key in bins metadata.")
+    
+    # Issue #655: Calculate length_km from event-specific fields
+    length_km = None
+    for col in ["elite_length", "open_length", "10k_length", "half_length", "full_length"]:
+        if col in dims and dims[col] is not None and pd.notna(dims[col]) and dims[col] > 0:
+            length_km = float(dims[col])
+            break
+    
+    # Fallback: Calculate from event-specific from_km/to_km
+    if length_km is None or length_km == 0.0:
+        for event in ["elite", "open", "10k", "half", "full"]:
+            event_from = dims.get(f"{event}_from_km")
+            event_to = dims.get(f"{event}_to_km")
+            if event_from is not None and event_to is not None and pd.notna(event_from) and pd.notna(event_to):
+                length_km = float(event_to) - float(event_from)
+                break
+    
+    if length_km is None or length_km == 0.0:
+        length_km = 0.0
     
     return {
         "seg_id": seg_id,
-        "label": dims.get("seg_label", dims.get("name", seg_id)),
-        "length_km": float(dims.get("full_length", dims.get("half_length", dims.get("10K_length", 0.0)))),
-        "width_m": float(dims.get("width_m", 0.0)),
-        "direction": dims.get("direction", "uni"),
+        "label": seg_label,
+        "length_km": length_km,
+        "width_m": float(width_val),
+        "direction": direction,
         "events": [event for event in ["Full", "Half", "10K"] 
                    if dims.get(event.lower() if event != "10K" else "10K", "") == "y"],
-        "schema": schema_keys.get(seg_id, "on_course_open"),
+        "schema": schema_key,
         "description": dims.get("description", "No description available")
     }
 
@@ -577,9 +667,7 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
         GeoJSON FeatureCollection with real course coordinates in Web Mercator (EPSG:3857)
     """
     from app.core.gpx.processor import load_all_courses, generate_segment_coordinates, create_geojson_from_segments
-    from app.io.loader import load_segments
     from pyproj import Transformer
-    import json
     from app.utils.run_id import get_runflow_root
     
     # Issue #616: Get segments_csv_path from analysis.json
@@ -587,6 +675,7 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
     # analysis.json is at {runflow_root}/{run_id}/analysis.json
     segments_csv_path = None
     try:
+        from app.config.loader import load_analysis_context
         runflow_root = get_runflow_root()
         # Navigate from reports_dir back to run_id directory
         # reports_dir: {runflow_root}/{run_id}/{day}/reports_temp
@@ -595,49 +684,130 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
         if run_id_dir.name == "reports_temp":
             # If reports_dir is actually reports_temp, go up one more level
             run_id_dir = reports_dir.parent
-        analysis_json_path = run_id_dir / "analysis.json"
-        if not analysis_json_path.exists():
+        if not (run_id_dir / "analysis.json").exists():
             # Try alternative: reports_dir might be {runflow_root}/{run_id}/reports_temp
             alt_run_id_dir = reports_dir.parent
             if (alt_run_id_dir / "analysis.json").exists():
-                analysis_json_path = alt_run_id_dir / "analysis.json"
-        if analysis_json_path.exists():
-            with open(analysis_json_path, 'r') as af:
-                analysis_config = json.load(af)
-                data_files = analysis_config.get("data_files", {})
-                segments_csv_path = data_files.get("segments")
-                if not segments_csv_path:
-                    # Fallback to segments_file + data_dir
-                    segments_file = analysis_config.get("segments_file")
-                    data_dir = analysis_config.get("data_dir", "data")
-                    if segments_file:
-                        segments_csv_path = f"{data_dir}/{segments_file}"
+                run_id_dir = alt_run_id_dir
+        analysis_context = load_analysis_context(run_id_dir)
+        segments_csv_path = str(analysis_context.segments_csv_path)
     except Exception as e:
         print(f"Warning: Could not load segments_csv_path from analysis.json: {e}")
     
     if not segments_csv_path:
-        error_msg = (
+        raise ValueError(
             "segments_csv_path not found in analysis.json for generate_segments_geojson. "
             "This should not happen in v2 pipeline - analysis.json should include segments_file."
         )
-        print(f"ERROR: {error_msg}")
-        return {"type": "FeatureCollection", "features": []}
     
     # Load GPX courses
-    courses = load_all_courses("data")
-    if not courses:
-        print("Warning: No GPX courses found, returning empty GeoJSON")
-        return {"type": "FeatureCollection", "features": []}
+    all_events = analysis_context.analysis_config.get("events", [])
+    if not all_events:
+        raise ValueError("analysis.json missing events for GPX loading in generate_segments_geojson.")
+    
+    # Issue #655: Filter events by day for multi-day runs
+    # Extract day from reports_dir path: {run_id}/{day}/reports_temp
+    # For sat+sun runs, we should only process events for the current day
+    current_day = None
+    try:
+        # reports_dir is {run_id}/{day}/reports_temp, so parent is {day} directory
+        day_dir = reports_dir.parent
+        if day_dir.name in ["sat", "sun", "fri", "mon"]:
+            current_day = day_dir.name.lower()
+    except Exception:
+        pass  # If we can't determine day, process all events (backward compatibility)
+    
+    # Filter events by day if we can determine the current day
+    if current_day:
+        events = [e for e in all_events if e.get("day", "").lower() == current_day]
+        if not events:
+            # If no events found for this day, fall back to all events (shouldn't happen, but be defensive)
+            events = all_events
+            print(f"   ⚠️  No events found for day {current_day}, using all events")
+        else:
+            print(f"   ✅ Filtered events for day {current_day}: {[e.get('name') for e in events]}")
+    else:
+        # Can't determine day from path, use all events (backward compatibility for v1)
+        events = all_events
+    
+    # Get list of available event names (lowercase for matching)
+    available_event_names = {event.get("name", "").lower() for event in events if event.get("name")}
+    
+    gpx_paths = {}
+    for event in events:
+        event_name = event.get("name")
+        if not event_name:
+            raise ValueError("analysis.json events missing name for GPX loading in generate_segments_geojson.")
+        gpx_paths[event_name.lower()] = str(analysis_context.gpx_path(event_name))
+    courses = load_all_courses(gpx_paths)
     
     # Load segments data to get segment definitions
     try:
-        segments_df = load_segments(segments_csv_path)
-        segments_list = segments_df.to_dict('records')
+        segments_df = analysis_context.get_segments_df()
+        segments_list = []
+        for _, seg in segments_df.iterrows():
+            seg_id = seg.get("seg_id")
+            seg_label = seg.get("seg_label")
+            if not seg_id:
+                raise ValueError("segments.csv missing seg_id for generate_segments_geojson.")
+            if not seg_label:
+                raise ValueError(f"Segment {seg_id} missing seg_label for generate_segments_geojson.")
+            
+            # Issue #655: Filter segments to only include those that belong to events in the analysis
+            # Check if segment belongs to any available event (elite, open, 10k, half, full)
+            segment_events = []
+            if seg.get("elite", "").lower() == "y" and "elite" in available_event_names:
+                segment_events.append("elite")
+            if seg.get("open", "").lower() == "y" and "open" in available_event_names:
+                segment_events.append("open")
+            if (seg.get("10k", "") or seg.get("10K", "")).lower() == "y" and "10k" in available_event_names:
+                segment_events.append("10k")
+            if seg.get("half", "").lower() == "y" and "half" in available_event_names:
+                segment_events.append("half")
+            if seg.get("full", "").lower() == "y" and "full" in available_event_names:
+                segment_events.append("full")
+            
+            # Skip segments that don't belong to any available event
+            if not segment_events:
+                continue  # Skip segments not in current analysis
+            
+            segments_list.append({
+                "seg_id": seg_id,
+                "segment_label": seg_label,
+                "elite": seg.get("elite", "n"),  # Issue #655: Add elite and open columns for Saturday events
+                "open": seg.get("open", "n"),
+                "10k": seg.get("10k") if seg.get("10k") is not None else seg.get("10K", "n"),
+                "half": seg.get("half", "n"),
+                "full": seg.get("full", "n"),
+                "elite_from_km": seg.get("elite_from_km"),  # Issue #655: Add elite and open from_km/to_km fields
+                "elite_to_km": seg.get("elite_to_km"),
+                "open_from_km": seg.get("open_from_km"),
+                "open_to_km": seg.get("open_to_km"),
+                "10k_from_km": seg.get("10k_from_km") if seg.get("10k_from_km") is not None else seg.get("10K_from_km"),
+                "10k_to_km": seg.get("10k_to_km") if seg.get("10k_to_km") is not None else seg.get("10K_to_km"),
+                "half_from_km": seg.get("half_from_km"),
+                "half_to_km": seg.get("half_to_km"),
+                "full_from_km": seg.get("full_from_km"),
+                "full_to_km": seg.get("full_to_km"),
+                "direction": seg.get("direction"),
+                "width_m": seg.get("width_m"),
+            })
+            # Issue #655: Validate that direction is present - if missing, this is a data issue
+            if not segments_list[-1].get("direction"):
+                raise ValueError(
+                    f"Segment {seg_id} missing direction in segments.csv. "
+                    f"All segments must have a 'direction' field (e.g., 'uni', 'bi', 'forward', 'backward')."
+                )
     except Exception as e:
         print(f"ERROR: Could not load segments.csv from {segments_csv_path}: {e}")
         return {"type": "FeatureCollection", "features": []}
     
+    if not segments_list:
+        print(f"WARNING: No segments found for available events {available_event_names} in generate_segments_geojson")
+        return {"type": "FeatureCollection", "features": []}
+    
     # Generate real coordinates for all segments from GPX (returns WGS84)
+    # Note: generate_segment_coordinates will now only process segments that have matching events
     segments_with_coords = generate_segment_coordinates(courses, segments_list)
     
     # Convert to GeoJSON (coordinates are in WGS84 [lon, lat])
@@ -673,14 +843,60 @@ def generate_segments_geojson(reports_dir: Path) -> Dict[str, Any]:
             dims = segment_dims[seg_id]
             props = feature["properties"]
             
+            seg_label = dims.get("seg_label") or dims.get("name")
+            if not seg_label:
+                raise ValueError(f"Segment {seg_id} missing label in segments metadata.")
+            width_val = dims.get("width_m")
+            if width_val is None or (isinstance(width_val, float) and pd.isna(width_val)):
+                raise ValueError(f"Segment {seg_id} missing width_m in segments metadata.")
+            direction = dims.get("direction")
+            if not direction:
+                raise ValueError(f"Segment {seg_id} missing direction in segments metadata.")
+            # Issue #655: Make schema_key optional - if not found in bins, try to get from segments_df or use default
+            schema_key = schema_keys.get(seg_id)
+            if not schema_key:
+                # Try to infer schema from segment dimensions or use a default
+                # This prevents failure if bins.parquet is not accessible but we still want to generate segments.geojson
+                schema_key = dims.get("schema_key") or "on_course_open"  # Default schema
+                print(f"   ⚠️  Segment {seg_id} missing schema_key in bins metadata, using default: {schema_key}")
             # Update properties with dimensions
-            props["label"] = dims.get("seg_label", dims.get("name", seg_id))
-            props["length_km"] = float(dims.get("full_length", dims.get("half_length", dims.get("10K_length", 0.0))))
-            props["width_m"] = float(dims.get("width_m", 0.0))
-            props["direction"] = dims.get("direction", "uni")
+            props["label"] = seg_label
+            
+            # Issue #655: Calculate length_km from event-specific fields or from_km/to_km
+            # Try event-specific length columns first (elite_length, open_length, etc.)
+            length_km = None
+            for col in ["elite_length", "open_length", "10k_length", "half_length", "full_length"]:
+                if col in dims and dims[col] is not None and pd.notna(dims[col]) and dims[col] > 0:
+                    length_km = float(dims[col])
+                    break
+            
+            # Fallback: Calculate from from_km/to_km if length column not found or is 0
+            if length_km is None or length_km == 0.0:
+                # Use from_km/to_km from the feature properties (already set by generate_segment_coordinates)
+                from_km = props.get("from_km")
+                to_km = props.get("to_km")
+                if from_km is not None and to_km is not None and pd.notna(from_km) and pd.notna(to_km):
+                    length_km = float(to_km) - float(from_km)
+                else:
+                    # Last resort: Try event-specific from_km/to_km from dims
+                    feature_events = props.get("events", [])
+                    if feature_events:
+                        event = feature_events[0].lower()  # Use first event
+                        event_from = dims.get(f"{event}_from_km")
+                        event_to = dims.get(f"{event}_to_km")
+                        if event_from is not None and event_to is not None and pd.notna(event_from) and pd.notna(event_to):
+                            length_km = float(event_to) - float(event_from)
+            
+            # Default to 0.0 if still no length found
+            if length_km is None or length_km == 0.0:
+                length_km = 0.0
+            
+            props["length_km"] = length_km
+            props["width_m"] = float(width_val)
+            props["direction"] = direction
             props["events"] = [event for event in ["Full", "Half", "10K"] 
                               if dims.get(event.lower() if event != "10K" else "10K", "") == "y"]
-            props["schema"] = schema_keys.get(seg_id, "on_course_open")
+            props["schema"] = schema_key
             props["description"] = dims.get("description", "No description available")
     
     return geojson

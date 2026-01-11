@@ -322,11 +322,19 @@ def generate_segment_section(
     content = []
     
     # Segment header
-    seg_id = segment.get("seg_id", "Unknown")
-    seg_label = segment.get("segment_label", "Unknown")
-    flow_type = segment.get("flow_type", "Unknown")
-    event_a = segment.get("event_a", "Unknown")
-    event_b = segment.get("event_b", "Unknown")
+    seg_id = segment.get("seg_id")
+    if not seg_id:
+        raise ValueError("Flow segment missing seg_id for report generation.")
+    seg_label = segment.get("segment_label")
+    if not seg_label:
+        raise ValueError(f"Segment {seg_id} missing segment_label for flow report generation.")
+    flow_type = segment.get("flow_type")
+    if not flow_type:
+        raise ValueError(f"Segment {seg_id} missing flow_type for flow report generation.")
+    event_a = segment.get("event_a")
+    event_b = segment.get("event_b")
+    if not event_a or not event_b:
+        raise ValueError(f"Segment {seg_id} missing event pair for flow report generation.")
     has_convergence = segment.get("has_convergence", False)
     
     content.append(f"## {seg_id}: {seg_label}")
@@ -454,17 +462,12 @@ def generate_basic_info_table(segment: Dict[str, Any]) -> List[str]:
     total_a = segment.get("total_a", 0)
     total_b = segment.get("total_b", 0)
     
-    # Get width from segments.csv - fix NA values (Issue #616: This function is deprecated, but kept for backward compatibility)
-    # In v2 pipeline, width should come from segments_df passed to generate_segment_info_table
-    seg_id = segment.get("seg_id", "")
-    from app.utils.constants import DEFAULT_CONFLICT_LENGTH_METERS
-    width_m = DEFAULT_CONFLICT_LENGTH_METERS  # Default width
-    # Note: This function should be refactored to accept segments_df as a parameter
-    # For now, use default width to avoid hardcoded fallback
-    logger.debug(
-        f"generate_basic_info_table: Using default width for segment {seg_id}. "
-        "This function should be refactored to accept segments_df parameter."
-    )
+    seg_id = segment.get("seg_id")
+    width_m = segment.get("width_m")
+    if not seg_id:
+        raise ValueError("Segment missing seg_id for basic info table.")
+    if width_m is None or (isinstance(width_m, float) and pd.isna(width_m)):
+        raise ValueError(f"Segment {seg_id} missing width_m for basic info table.")
     
     # Get event names
     event_a = segment.get("event_a", "A")
@@ -789,7 +792,9 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
     zone_rows = []
     
     for segment in segments:
-        seg_id = segment.get("seg_id", "")
+        seg_id = segment.get("seg_id")
+        if not seg_id:
+            raise ValueError("Flow segment missing seg_id for flow report export.")
         zones = segment.get("zones", [])
         
         if not zones:
@@ -797,26 +802,34 @@ def export_temporal_flow_csv(results: Dict[str, Any], output_path: str, start_ti
             continue
         
         # Get segment-level metadata (repeated for each zone)
-        segment_label = segment.get("segment_label", "")
-        event_a = segment.get("event_a", "")
-        event_b = segment.get("event_b", "")
+        segment_label = segment.get("segment_label")
+        if not segment_label:
+            raise ValueError(f"Segment {seg_id} missing segment_label for flow report export.")
+        event_a = segment.get("event_a")
+        event_b = segment.get("event_b")
+        if not event_a or not event_b:
+            raise ValueError(f"Segment {seg_id} missing event pair for flow report export.")
         total_a = segment.get("total_a", 0)
         total_b = segment.get("total_b", 0)
-        flow_type = segment.get("flow_type", "")
+        flow_type = segment.get("flow_type")
+        if not flow_type:
+            raise ValueError(f"Segment {seg_id} missing flow_type for flow report export.")
         has_convergence = segment.get("has_convergence", False)
         
         # Get width from segments.csv
+        # Issue #616: Handle sub-segments (e.g., N5a, A2a) by normalizing to base segment (N5, A2)
+        # Sub-segments are created dynamically during flow analysis but don't exist in segments.csv
+        base_seg_id = seg_id.rstrip('abcdefghijklmnopqrstuvwxyz')  # Strip trailing letters
         seg_row = segments_df[segments_df['seg_id'] == seg_id]
-        if not seg_row.empty:
-            width_val = seg_row['width_m'].iloc[0]
-            if pd.isna(width_val) or width_val == '':
-                from app.utils.constants import DEFAULT_CONFLICT_LENGTH_METERS
-                width_m = DEFAULT_CONFLICT_LENGTH_METERS
-            else:
-                width_m = float(width_val)
-        else:
-            from app.utils.constants import DEFAULT_CONFLICT_LENGTH_METERS
-            width_m = DEFAULT_CONFLICT_LENGTH_METERS
+        if seg_row.empty and base_seg_id != seg_id:
+            # Try base segment if sub-segment not found
+            seg_row = segments_df[segments_df['seg_id'] == base_seg_id]
+        if seg_row.empty:
+            raise ValueError(f"Segment {seg_id} (and base segment {base_seg_id}) missing from segments.csv for flow report export.")
+        width_val = seg_row['width_m'].iloc[0]
+        if pd.isna(width_val) or width_val == '':
+            raise ValueError(f"Segment {seg_id} missing width_m in segments.csv for flow report export.")
+        width_m = float(width_val)
         
         # Process each zone in this segment
         # Sort zones by zone_index to ensure consistent ordering
@@ -1443,13 +1456,19 @@ def generate_flow_audit_csv(
         for segment in segments:
             if "flow_audit_data" in segment:
                 audit_data = segment["flow_audit_data"]
-                audit_data["seg_id"] = segment.get("seg_id", "")
-                audit_data["segment_label"] = segment.get("segment_label", "")
+                seg_id = segment.get("seg_id")
+                seg_label = segment.get("segment_label")
+                if not seg_id:
+                    raise ValueError("Flow audit segment missing seg_id.")
+                if not seg_label:
+                    raise ValueError(f"Segment {seg_id} missing segment_label for flow audit.")
+                audit_data["seg_id"] = seg_id
+                audit_data["segment_label"] = seg_label
                 
                 # Write row with all 33 columns
                 writer.writerow([
-                    audit_data.get("seg_id", ""),
-                    audit_data.get("segment_label", ""),
+                    audit_data["seg_id"],
+                    audit_data["segment_label"],
                     audit_data.get("event_a", ""),
                     audit_data.get("event_b", ""),
                     audit_data.get("spatial_zone_exists", False),

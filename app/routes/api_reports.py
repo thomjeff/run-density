@@ -67,14 +67,20 @@ def _get_file_metadata(storage, file_path: str) -> tuple[Optional[float], Option
     return _get_file_metadata_from_local(str(full_path))
 
 
-def _add_core_data_files(reports: list) -> None:
-    """Add all .csv and .gpx files from local data/ directory to reports list (Issue #596)."""
-    from pathlib import Path
-    from app.utils.constants import DATA_DIR
+def _add_core_data_files(reports: list, run_id: str) -> None:
+    """Add all .csv and .gpx files from analysis.json data_dir to reports list (Issue #596)."""
+    from app.config.loader import load_analysis_context
+    from app.utils.run_id import get_runflow_root
     
-    data_dir = Path(DATA_DIR)
+    runflow_root = get_runflow_root()
+    run_path = runflow_root / run_id
+    analysis_context = load_analysis_context(run_path)
+    data_dir = analysis_context.data_dir
     if not data_dir.exists():
-        return
+        raise HTTPException(
+            status_code=404,
+            detail=f"data_dir not found at {data_dir}"
+        )
     
     # Find all .csv and .gpx files in the data directory
     csv_files = list(data_dir.glob("*.csv"))
@@ -98,7 +104,7 @@ def _add_core_data_files(reports: list) -> None:
             
             # Issue #596: Use relative path for data files (data/filename.csv)
             # This matches the download endpoint expectation
-            relative_path = f"{DATA_DIR}/{file_name}"
+            relative_path = f"{data_dir}/{file_name}"
             
             reports.append({
                 "name": file_name,
@@ -197,7 +203,7 @@ async def get_reports_list(
                 })
         
         # Add core data files
-        _add_core_data_files(reports)
+        _add_core_data_files(reports, run_id)
         
         response = JSONResponse(content={
             "reports": reports,
@@ -291,4 +297,3 @@ def download_report(path: str = Query(..., description="Report file path")):
         media_type="text/markdown",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
-

@@ -1,536 +1,587 @@
 {
-	"info": {
-		"_postman_id": "runflow-v2-api-collection",
-		"name": "Runflow v2 API",
-		"description": "Complete test collection for Runflow v2 API endpoints. Includes all E2E test scenarios and error cases.\n\n**Version:** v2.0.2+\n**Source:** Based on tests/v2/e2e.py\n**Last Updated:** 2025-01-26",
-		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-	},
-	"item": [
-		{
-			"name": "Health & Status",
-			"item": [
-				{
-					"name": "Health Check",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test(\"Status code is 200\", function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test(\"Response time is less than 500ms\", function () {",
-									"    pm.expect(pm.response.responseTime).to.be.below(500);",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/health",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"health"
-							]
-						},
-						"description": "Health check endpoint to verify server is running."
-					},
-					"response": []
-				},
-				{
-					"name": "Debug Ping",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test(\"Status code is 200\", function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test(\"Response is ping/pong\", function () {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData).to.eql({ping: \"pong\"});",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/debug",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"debug"
-							]
-						},
-						"description": "Debug ping endpoint for coverage testing."
-					},
-					"response": []
-				}
-			],
-			"description": "Health and status endpoints"
-		},
-		{
-			"name": "Analysis Endpoints",
-			"item": [
-				{
-					"name": "Saturday Only Scenario",
-					"event": [
-						{
-							"listen": "prerequest",
-							"script": {
-								"exec": [
-									"// Clear previous run_id",
-									"pm.environment.unset(\"run_id\");"
-								],
-								"type": "text/javascript"
-							}
-						},
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test(\"Status code is 200\", function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test(\"Response has run_id\", function () {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData).to.have.property(\"run_id\");",
-									"    pm.environment.set(\"run_id\", jsonData.run_id);",
-									"});",
-									"",
-									"pm.test(\"Response has status success\", function () {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData.status).to.eql(\"success\");",
-									"});",
-									"",
-									"pm.test(\"Response contains sat day\", function () {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData.days).to.include(\"sat\");",
-									"});",
-									"",
-									"pm.test(\"Response has output_paths for sat\", function () {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData.output_paths).to.have.property(\"sat\");",
-									"    pm.expect(jsonData.output_paths.sat).to.have.property(\"reports\");",
-									"    pm.expect(jsonData.output_paths.sat).to.have.property(\"bins\");",
-									"    pm.expect(jsonData.output_paths.sat).to.have.property(\"ui\");",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-					"body": {
-						"mode": "raw",
-						"raw": "{\n  \"description\": \"Saturday only scenario test with audit\",\n  \"segments_file\": \"segments.csv\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"enableAudit\": \"y\",\n  \"event_group\": {\n    \"sat-elite\": \"elite\",\n    \"sat-open\": \"open\"\n  },\n  \"events\": [\n    {\n      \"name\": \"elite\",\n      \"day\": \"sat\",\n      \"start_time\": 480,\n      \"event_duration_minutes\": 45,\n      \"runners_file\": \"elite_runners.csv\",\n      \"gpx_file\": \"elite.gpx\"\n    },\n    {\n      \"name\": \"open\",\n      \"day\": \"sat\",\n      \"start_time\": 510,\n      \"event_duration_minutes\": 75,\n      \"runners_file\": \"open_runners.csv\",\n      \"gpx_file\": \"open.gpx\"\n    }\n  ]\n}"
-					},
-						"url": {
-							"raw": "{{base_url}}/runflow/v2/analyze",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"runflow",
-								"v2",
-								"analyze"
-							]
-						},
-						"description": "Test Saturday-only workflow with elite and open events.\n\n**Expected:**\n- Status: 200\n- Response contains run_id\n- Response contains days: [\"sat\"]\n- Response contains output_paths for sat"
-					},
-					"response": []
-				},
-				{
-					"name": "Sunday Only Scenario",
-					"event": [
-						{
-							"listen": "prerequest",
-							"script": {
-								"exec": [
-									"pm.environment.unset(\"run_id\");"
-								],
-								"type": "text/javascript"
-							}
-						},
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test(\"Status code is 200\", function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test(\"Response has run_id\", function () {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData).to.have.property(\"run_id\");",
-									"    pm.environment.set(\"run_id\", jsonData.run_id);",
-									"});",
-									"",
-									"pm.test(\"Response contains sun day\", function () {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData.days).to.include(\"sun\");",
-									"});",
-									"",
-									"pm.test(\"Response has output_paths for sun\", function () {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData.output_paths).to.have.property(\"sun\");",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-					"body": {
-						"mode": "raw",
-						"raw": "{\n  \"description\": \"Sunday only scenario test with audit\",\n  \"segments_file\": \"segments.csv\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"enableAudit\": \"y\",\n  \"event_group\": {\n    \"sun-all\": \"full, 10k, half\"\n  },\n  \"events\": [\n    {\n      \"name\": \"full\",\n      \"day\": \"sun\",\n      \"start_time\": 420,\n      \"event_duration_minutes\": 390,\n      \"runners_file\": \"full_runners.csv\",\n      \"gpx_file\": \"full.gpx\"\n    },\n    {\n      \"name\": \"10k\",\n      \"day\": \"sun\",\n      \"start_time\": 440,\n      \"event_duration_minutes\": 120,\n      \"runners_file\": \"10k_runners.csv\",\n      \"gpx_file\": \"10k.gpx\"\n    },\n    {\n      \"name\": \"half\",\n      \"day\": \"sun\",\n      \"start_time\": 460,\n      \"event_duration_minutes\": 180,\n      \"runners_file\": \"half_runners.csv\",\n      \"gpx_file\": \"half.gpx\"\n    }\n  ]\n}"
-					},
-						"url": {
-							"raw": "{{base_url}}/runflow/v2/analyze",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"runflow",
-								"v2",
-								"analyze"
-							]
-						},
-						"description": "Test Sunday-only workflow with full, 10k, and half events.\n\n**Expected:**\n- Status: 200\n- Response contains days: [\"sun\"]\n- All three events processed"
-					},
-					"response": []
-				},
-				{
-					"name": "Sat+Sun Combined Scenario",
-					"event": [
-						{
-							"listen": "prerequest",
-							"script": {
-								"exec": [
-									"pm.environment.unset(\"run_id\");"
-								],
-								"type": "text/javascript"
-							}
-						},
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test(\"Status code is 200\", function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test(\"Response has run_id\", function () {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData).to.have.property(\"run_id\");",
-									"    pm.environment.set(\"run_id\", jsonData.run_id);",
-									"});",
-									"",
-									"pm.test(\"Response contains both sat and sun days\", function () {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData.days).to.include(\"sat\");",
-									"    pm.expect(jsonData.days).to.include(\"sun\");",
-									"});",
-									"",
-									"pm.test(\"Response has output_paths for both days\", function () {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData.output_paths).to.have.property(\"sat\");",
-									"    pm.expect(jsonData.output_paths).to.have.property(\"sun\");",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-					"body": {
-						"mode": "raw",
-						"raw": "{\n  \"description\": \"Sat+Sun analysis test with audit\",\n  \"segments_file\": \"segments.csv\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"enableAudit\": \"y\",\n  \"event_group\": {\n    \"sat-elite\": \"elite\",\n    \"sat-open\": \"open\",\n    \"sun-all\": \"full, 10k, half\"\n  },\n  \"events\": [\n    {\n      \"name\": \"elite\",\n      \"day\": \"sat\",\n      \"start_time\": 480,\n      \"event_duration_minutes\": 45,\n      \"runners_file\": \"elite_runners.csv\",\n      \"gpx_file\": \"elite.gpx\"\n    },\n    {\n      \"name\": \"open\",\n      \"day\": \"sat\",\n      \"start_time\": 510,\n      \"event_duration_minutes\": 75,\n      \"runners_file\": \"open_runners.csv\",\n      \"gpx_file\": \"open.gpx\"\n    },\n    {\n      \"name\": \"full\",\n      \"day\": \"sun\",\n      \"start_time\": 420,\n      \"event_duration_minutes\": 390,\n      \"runners_file\": \"full_runners.csv\",\n      \"gpx_file\": \"full.gpx\"\n    },\n    {\n      \"name\": \"10k\",\n      \"day\": \"sun\",\n      \"start_time\": 440,\n      \"event_duration_minutes\": 120,\n      \"runners_file\": \"10k_runners.csv\",\n      \"gpx_file\": \"10k.gpx\"\n    },\n    {\n      \"name\": \"half\",\n      \"day\": \"sun\",\n      \"start_time\": 460,\n      \"event_duration_minutes\": 180,\n      \"runners_file\": \"half_runners.csv\",\n      \"gpx_file\": \"half.gpx\"\n    }\n  ]\n}"
-					},
-						"url": {
-							"raw": "{{base_url}}/runflow/v2/analyze",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"runflow",
-								"v2",
-								"analyze"
-							]
-						},
-						"description": "Test sat+sun analysis in single run_id with all events.\n\n**Expected:**\n- Status: 200\n- Response contains days: [\"sat\", \"sun\"]\n- Both day outputs present"
-					},
-					"response": []
-				}
-			],
-			"description": "Main analysis endpoint test scenarios"
-		},
-		{
-			"name": "Error Cases",
-			"item": [
-				{
-					"name": "Missing Required Field - segments_file",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test(\"Status code is 400\", function () {",
-									"    pm.response.to.have.status(400);",
-									"});",
-									"",
-									"pm.test(\"Response has error status\", function () {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData.status).to.eql(\"ERROR\");",
-									"});",
-									"",
-									"pm.test(\"Response contains error message\", function () {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData).to.have.property(\"error\");",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"description\": \"Missing segments_file test\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"events\": [\n    {\n      \"name\": \"full\",\n      \"day\": \"sun\",\n      \"start_time\": 420,\n      \"event_duration_minutes\": 390,\n      \"runners_file\": \"full_runners.csv\",\n      \"gpx_file\": \"full.gpx\"\n    }\n  ]\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/runflow/v2/analyze",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"runflow",
-								"v2",
-								"analyze"
-							]
-						},
-						"description": "Test error handling for missing required field.\n\n**Expected:**\n- Status: 400 Bad Request\n- Error message indicating missing field"
-					},
-					"response": []
-				},
-				{
-					"name": "Invalid Start Time - Below Minimum",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test(\"Status code is 422\", function () {",
-									"    pm.response.to.have.status(422);",
-									"});",
-									"",
-									"pm.test(\"Response has error status\", function () {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData.status).to.eql(\"ERROR\");",
-									"});",
-									"",
-									"pm.test(\"Error message mentions start_time\", function () {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData.error).to.include(\"start_time\");",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"description\": \"Invalid start_time test\",\n  \"segments_file\": \"segments.csv\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"events\": [\n    {\n      \"name\": \"full\",\n      \"day\": \"sun\",\n      \"start_time\": 200,\n      \"event_duration_minutes\": 390,\n      \"runners_file\": \"full_runners.csv\",\n      \"gpx_file\": \"full.gpx\"\n    }\n  ]\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/runflow/v2/analyze",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"runflow",
-								"v2",
-								"analyze"
-							]
-						},
-						"description": "Test validation error for start_time below minimum (300).\n\n**Expected:**\n- Status: 422 Unprocessable Entity\n- Error message indicating invalid start_time"
-					},
-					"response": []
-				},
-				{
-					"name": "Invalid Start Time - Above Maximum",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test(\"Status code is 422\", function () {",
-									"    pm.response.to.have.status(422);",
-									"});",
-									"",
-									"pm.test(\"Response has error status\", function () {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData.status).to.eql(\"ERROR\");",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"description\": \"Invalid start_time test - too high\",\n  \"segments_file\": \"segments.csv\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"events\": [\n    {\n      \"name\": \"full\",\n      \"day\": \"sun\",\n      \"start_time\": 1300,\n      \"event_duration_minutes\": 390,\n      \"runners_file\": \"full_runners.csv\",\n      \"gpx_file\": \"full.gpx\"\n    }\n  ]\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/runflow/v2/analyze",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"runflow",
-								"v2",
-								"analyze"
-							]
-						},
-						"description": "Test validation error for start_time above maximum (1200).\n\n**Expected:**\n- Status: 422 Unprocessable Entity"
-					},
-					"response": []
-				},
-				{
-					"name": "Empty Events Array",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test(\"Status code is 400 or 422\", function () {",
-									"    pm.expect([400, 422]).to.include(pm.response.code);",
-									"});",
-									"",
-									"pm.test(\"Response has error status\", function () {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData.status).to.eql(\"ERROR\");",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"description\": \"Empty events array test\",\n  \"segments_file\": \"segments.csv\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"events\": []\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/runflow/v2/analyze",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"runflow",
-								"v2",
-								"analyze"
-							]
-						},
-						"description": "Test validation error for empty events array.\n\n**Expected:**\n- Status: 400 or 422\n- Error message indicating events array is empty"
-					},
-					"response": []
-				}
-			],
-			"description": "Error handling and validation test cases"
-		}
-	],
-	"event": [
-		{
-			"listen": "prerequest",
-			"script": {
-				"type": "text/javascript",
-				"exec": [
-					""
-				]
-			}
-		},
-		{
-			"listen": "test",
-			"script": {
-				"type": "text/javascript",
-				"exec": [
-					""
-				]
-			}
-		}
-	],
-	"variable": [
-		{
-			"key": "base_url",
-			"value": "http://localhost:8080",
-			"type": "string"
-		}
-	]
+  "info": {
+    "_postman_id": "runflow-v2-api-collection",
+    "name": "Runflow v2 API",
+    "description": "Complete test collection for Runflow v2 API endpoints. Includes all E2E test scenarios and error cases.\n\n**Version:** v2.0.2+\n**Source:** Based on tests/v2/e2e.py\n**Last Updated:** 2025-01-26",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health & Status",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response time is less than 500ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(500);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Health check endpoint to verify server is running."
+          },
+          "response": []
+        },
+        {
+          "name": "Debug Ping",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is ping/pong\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.eql({ping: \"pong\"});",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/debug",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "debug"
+              ]
+            },
+            "description": "Debug ping endpoint for coverage testing."
+          },
+          "response": []
+        }
+      ],
+      "description": "Health and status endpoints"
+    },
+    {
+      "name": "Analysis Endpoints",
+      "item": [
+        {
+          "name": "Saturday Only Scenario",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Clear previous run_id",
+                  "pm.environment.unset(\"run_id\");"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has run_id\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"run_id\");",
+                  "    pm.environment.set(\"run_id\", jsonData.run_id);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has status success\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"success\");",
+                  "});",
+                  "",
+                  "pm.test(\"Response contains sat day\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.days).to.include(\"sat\");",
+                  "});",
+                  "",
+                  "pm.test(\"Response has output_paths for sat\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.output_paths).to.have.property(\"sat\");",
+                  "    pm.expect(jsonData.output_paths.sat).to.have.property(\"reports\");",
+                  "    pm.expect(jsonData.output_paths.sat).to.have.property(\"bins\");",
+                  "    pm.expect(jsonData.output_paths.sat).to.have.property(\"ui\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Saturday only scenario test with audit\",\n  \"segments_file\": \"segments.csv\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"enableAudit\": \"y\",\n  \"event_group\": {\n    \"sat-elite\": \"elite\",\n    \"sat-open\": \"open\"\n  },\n  \"events\": [\n    {\n      \"name\": \"elite\",\n      \"day\": \"sat\",\n      \"start_time\": 480,\n      \"event_duration_minutes\": 45,\n      \"runners_file\": \"elite_runners.csv\",\n      \"gpx_file\": \"elite.gpx\"\n    },\n    {\n      \"name\": \"open\",\n      \"day\": \"sat\",\n      \"start_time\": 510,\n      \"event_duration_minutes\": 75,\n      \"runners_file\": \"open_runners.csv\",\n      \"gpx_file\": \"open.gpx\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/runflow/v2/analyze",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "runflow",
+                "v2",
+                "analyze"
+              ]
+            },
+            "description": "Test Saturday-only workflow with elite and open events.\n\n**Expected:**\n- Status: 200\n- Response contains run_id\n- Response contains days: [\"sat\"]\n- Response contains output_paths for sat"
+          },
+          "response": []
+        },
+        {
+          "name": "Sunday Only Scenario",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.environment.unset(\"run_id\");"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has run_id\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"run_id\");",
+                  "    pm.environment.set(\"run_id\", jsonData.run_id);",
+                  "});",
+                  "",
+                  "pm.test(\"Response contains sun day\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.days).to.include(\"sun\");",
+                  "});",
+                  "",
+                  "pm.test(\"Response has output_paths for sun\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.output_paths).to.have.property(\"sun\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Sunday only scenario test with audit\",\n  \"segments_file\": \"segments.csv\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"enableAudit\": \"y\",\n  \"event_group\": {\n    \"sun-all\": \"full, 10k, half\"\n  },\n  \"events\": [\n    {\n      \"name\": \"full\",\n      \"day\": \"sun\",\n      \"start_time\": 420,\n      \"event_duration_minutes\": 390,\n      \"runners_file\": \"full_runners.csv\",\n      \"gpx_file\": \"full.gpx\"\n    },\n    {\n      \"name\": \"10k\",\n      \"day\": \"sun\",\n      \"start_time\": 440,\n      \"event_duration_minutes\": 120,\n      \"runners_file\": \"10k_runners.csv\",\n      \"gpx_file\": \"10k.gpx\"\n    },\n    {\n      \"name\": \"half\",\n      \"day\": \"sun\",\n      \"start_time\": 460,\n      \"event_duration_minutes\": 180,\n      \"runners_file\": \"half_runners.csv\",\n      \"gpx_file\": \"half.gpx\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/runflow/v2/analyze",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "runflow",
+                "v2",
+                "analyze"
+              ]
+            },
+            "description": "Test Sunday-only workflow with full, 10k, and half events.\n\n**Expected:**\n- Status: 200\n- Response contains days: [\"sun\"]\n- All three events processed"
+          },
+          "response": []
+        },
+        {
+          "name": "Sat+Sun Combined Scenario",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.environment.unset(\"run_id\");"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has run_id\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"run_id\");",
+                  "    pm.environment.set(\"run_id\", jsonData.run_id);",
+                  "});",
+                  "",
+                  "pm.test(\"Response contains both sat and sun days\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.days).to.include(\"sat\");",
+                  "    pm.expect(jsonData.days).to.include(\"sun\");",
+                  "});",
+                  "",
+                  "pm.test(\"Response has output_paths for both days\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.output_paths).to.have.property(\"sat\");",
+                  "    pm.expect(jsonData.output_paths).to.have.property(\"sun\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Sat+Sun analysis test with audit\",\n  \"segments_file\": \"segments.csv\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"enableAudit\": \"y\",\n  \"event_group\": {\n    \"sat-elite\": \"elite\",\n    \"sat-open\": \"open\",\n    \"sun-all\": \"full, 10k, half\"\n  },\n  \"events\": [\n    {\n      \"name\": \"elite\",\n      \"day\": \"sat\",\n      \"start_time\": 480,\n      \"event_duration_minutes\": 45,\n      \"runners_file\": \"elite_runners.csv\",\n      \"gpx_file\": \"elite.gpx\"\n    },\n    {\n      \"name\": \"open\",\n      \"day\": \"sat\",\n      \"start_time\": 510,\n      \"event_duration_minutes\": 75,\n      \"runners_file\": \"open_runners.csv\",\n      \"gpx_file\": \"open.gpx\"\n    },\n    {\n      \"name\": \"full\",\n      \"day\": \"sun\",\n      \"start_time\": 420,\n      \"event_duration_minutes\": 390,\n      \"runners_file\": \"full_runners.csv\",\n      \"gpx_file\": \"full.gpx\"\n    },\n    {\n      \"name\": \"10k\",\n      \"day\": \"sun\",\n      \"start_time\": 440,\n      \"event_duration_minutes\": 120,\n      \"runners_file\": \"10k_runners.csv\",\n      \"gpx_file\": \"10k.gpx\"\n    },\n    {\n      \"name\": \"half\",\n      \"day\": \"sun\",\n      \"start_time\": 460,\n      \"event_duration_minutes\": 180,\n      \"runners_file\": \"half_runners.csv\",\n      \"gpx_file\": \"half.gpx\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/runflow/v2/analyze",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "runflow",
+                "v2",
+                "analyze"
+              ]
+            },
+            "description": "Test sat+sun analysis in single run_id with all events.\n\n**Expected:**\n- Status: 200\n- Response contains days: [\"sat\", \"sun\"]\n- Both day outputs present"
+          },
+          "response": []
+        },
+        {
+          "name": "Sat+Sun Combined Scenario (Alternate Config - 616)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Sat+Sun analysis test with audit (alternate config)\",\n  \"segments_file\": \"segments_616.csv\",\n  \"flow_file\": \"flow_616.csv\",\n  \"locations_file\": \"locations_616.csv\",\n  \"enableAudit\": \"y\",\n  \"event_group\": {\n    \"sat-elite\": \"elite\",\n    \"sat-open\": \"open\",\n    \"sun-all\": \"full, 10k, half\"\n  },\n  \"events\": [\n    {\n      \"name\": \"elite\",\n      \"day\": \"sat\",\n      \"start_time\": 480,\n      \"event_duration_minutes\": 45,\n      \"runners_file\": \"elite_runners.csv\",\n      \"gpx_file\": \"elite.gpx\"\n    },\n    {\n      \"name\": \"open\",\n      \"day\": \"sat\",\n      \"start_time\": 510,\n      \"event_duration_minutes\": 75,\n      \"runners_file\": \"open_runners.csv\",\n      \"gpx_file\": \"open.gpx\"\n    },\n    {\n      \"name\": \"full\",\n      \"day\": \"sun\",\n      \"start_time\": 420,\n      \"event_duration_minutes\": 390,\n      \"runners_file\": \"full_runners.csv\",\n      \"gpx_file\": \"full.gpx\"\n    },\n    {\n      \"name\": \"10k\",\n      \"day\": \"sun\",\n      \"start_time\": 440,\n      \"event_duration_minutes\": 120,\n      \"runners_file\": \"10k_runners.csv\",\n      \"gpx_file\": \"10k.gpx\"\n    },\n    {\n      \"name\": \"half\",\n      \"day\": \"sun\",\n      \"start_time\": 460,\n      \"event_duration_minutes\": 180,\n      \"runners_file\": \"half_runners.csv\",\n      \"gpx_file\": \"half.gpx\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/runflow/v2/analyze",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "runflow",
+                "v2",
+                "analyze"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Fetch Analysis Config",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/analysis/{{run_id}}/config",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "analysis",
+                "{{run_id}}",
+                "config"
+              ]
+            }
+          }
+        }
+      ],
+      "description": "Main analysis endpoint test scenarios"
+    },
+    {
+      "name": "Error Cases",
+      "item": [
+        {
+          "name": "Missing Required Field - segments_file",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has error status\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"ERROR\");",
+                  "});",
+                  "",
+                  "pm.test(\"Response contains error message\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"error\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Missing segments_file test\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"events\": [\n    {\n      \"name\": \"full\",\n      \"day\": \"sun\",\n      \"start_time\": 420,\n      \"event_duration_minutes\": 390,\n      \"runners_file\": \"full_runners.csv\",\n      \"gpx_file\": \"full.gpx\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/runflow/v2/analyze",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "runflow",
+                "v2",
+                "analyze"
+              ]
+            },
+            "description": "Test error handling for missing required field.\n\n**Expected:**\n- Status: 400 Bad Request\n- Error message indicating missing field"
+          },
+          "response": []
+        },
+        {
+          "name": "Invalid Start Time - Below Minimum",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 422\", function () {",
+                  "    pm.response.to.have.status(422);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has error status\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"ERROR\");",
+                  "});",
+                  "",
+                  "pm.test(\"Error message mentions start_time\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.error).to.include(\"start_time\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Invalid start_time test\",\n  \"segments_file\": \"segments.csv\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"events\": [\n    {\n      \"name\": \"full\",\n      \"day\": \"sun\",\n      \"start_time\": 200,\n      \"event_duration_minutes\": 390,\n      \"runners_file\": \"full_runners.csv\",\n      \"gpx_file\": \"full.gpx\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/runflow/v2/analyze",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "runflow",
+                "v2",
+                "analyze"
+              ]
+            },
+            "description": "Test validation error for start_time below minimum (300).\n\n**Expected:**\n- Status: 422 Unprocessable Entity\n- Error message indicating invalid start_time"
+          },
+          "response": []
+        },
+        {
+          "name": "Invalid Start Time - Above Maximum",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 422\", function () {",
+                  "    pm.response.to.have.status(422);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has error status\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"ERROR\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Invalid start_time test - too high\",\n  \"segments_file\": \"segments.csv\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"events\": [\n    {\n      \"name\": \"full\",\n      \"day\": \"sun\",\n      \"start_time\": 1300,\n      \"event_duration_minutes\": 390,\n      \"runners_file\": \"full_runners.csv\",\n      \"gpx_file\": \"full.gpx\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/runflow/v2/analyze",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "runflow",
+                "v2",
+                "analyze"
+              ]
+            },
+            "description": "Test validation error for start_time above maximum (1200).\n\n**Expected:**\n- Status: 422 Unprocessable Entity"
+          },
+          "response": []
+        },
+        {
+          "name": "Empty Events Array",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 400 or 422\", function () {",
+                  "    pm.expect([400, 422]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has error status\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"ERROR\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Empty events array test\",\n  \"segments_file\": \"segments.csv\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"events\": []\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/runflow/v2/analyze",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "runflow",
+                "v2",
+                "analyze"
+              ]
+            },
+            "description": "Test validation error for empty events array.\n\n**Expected:**\n- Status: 400 or 422\n- Error message indicating events array is empty"
+          },
+          "response": []
+        }
+      ],
+      "description": "Error handling and validation test cases"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "run_id",
+      "value": "REPLACE_WITH_RUN_ID",
+      "type": "string"
+    }
+  ]
 }

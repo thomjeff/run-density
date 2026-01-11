@@ -1,7 +1,7 @@
 # AI Developer Guide - Runflow v2
 
 **Version:** v2.0.2+  
-**Last Updated:** 2025-12-26  
+**Last Updated:** 2025-01-10 
 **Audience:** AI Assistants (Cursor, ChatGPT, Codex, GitHub Copilot)  
 **Purpose:** Complete onboarding and critical rules for AI pair programming
 
@@ -19,10 +19,10 @@ This guide consolidates the essential information AI assistants need to work eff
 - ✅ You have access to the `runflow` repository
 - ✅ Token has required scopes: `repo`, `project`, `workflow`
 
-**If access is not confirmed, you must report this to the user before proceeding.**
+**Report to the user access is working. If access is not, you must report this to the user before proceeding.**
 
 ### Step 2: Verify Project Context
-- ✅ Cursor is working in the correct GitHub repo context — `runflow`
+- ✅ Cursor is working in the correct GitHub repo context — `run-density`
 - ✅ Project files are accessible and properly loaded
 
 ### Step 3: Review Codebase Structure
@@ -51,6 +51,9 @@ Before starting ANY work, you **MUST** reference these documents:
 - `@docs/dev-guides/developer-guide.md` – Developer guide (v2.0.2+)
 - `@docs/reference/quick-reference.md` – Authoritative variable names and field mappings
 - `@docs/dev-guides/docker-dev.md` – Development workflow and commands
+- `@docs/dev-guides/ssot-failfast-rules.md` - Non-negotiable guardrails on single-source-of-truth and fail fast.
+
+**After reviewing all documents, confirm understanding with the user.**
 
 ---
 
@@ -61,9 +64,9 @@ Before any code or tests are written, confirm the following:
 ```
 ✅ CONFIRMING CRITICAL RULES (v2.0.2+):
 1. NO HARDCODED VALUES – Use app/core/v2/analysis_config.py helpers (Issue #553)
-2. PERMANENT CODE ONLY – No temp scripts or isolated experiments
+2. PERMANENT CODE ONLY – No temp scripts or isolated experiments; no band-aids to _just make it work_
 3. START TIME CONSTANTS – Use get_start_time() from analysis.json (Issue #553)
-4. API TESTING ONLY – Always test using e2e.py defined tests; if not an option via POST /runflow/v2/analyze endpoint
+4. API TESTING ONLY – Always test using e2e.py defined tests or Postman Collection; if not an option via POST /runflow/v2/analyze endpoint
 5. MINIMAL CHANGES – Make small, testable commits
 6. NO ENDLESS LOOPS – Stop after 3 failed code implementation attempts and ask for human assistance
 7. STRICT TYPOS – Match variable names exactly to references
@@ -71,16 +74,16 @@ Before any code or tests are written, confirm the following:
 9. TODO PERMISSION – Ask before creating task lists or suggestions
 10. GITHUB CONTEXT – Read entire GitHub issue + all comments
 11. CLARITY FIRST – STOP and ask if any instruction is unclear
-12. FAIL-FAST ONLY – No fallback logic in code (Issue #553)
+12. FAIL-FAST ONLY – No fallback logic in code per `@docs/dev-guides/ssot-failfast-rules.md`
 ```
 
 ---
 
 ## 🚫 NON-NEGOTIABLE RULES
 
-### 1. NO HARDCODED VALUES (Issue #553)
+### 1. NO HARDCODED VALUES
 
-**Rule:** All analysis inputs must come from API request → `analysis.json` → helper functions.
+**Rule:** All analysis inputs must come from API request → `analysis.json` and the parameters in the request → helper functions.
 
 **What Changed:**
 - ❌ No hardcoded event names (e.g., `['full', 'half', '10k']`)

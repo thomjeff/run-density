@@ -53,10 +53,11 @@ def generate_reports_per_day(
     density_results: Dict[Day, Dict[str, Any]],  # Issue #600: Still used for now (will be removed when Density fully refactored)
     segments_df: Any,  # pd.DataFrame
     all_runners_df: Any,  # pd.DataFrame
-    data_dir: str = "data",  # Data directory for loading runner files
+    data_dir: str,  # Data directory for loading runner files
     segments_file_path: Optional[str] = None,  # Issue #553 Phase 6.2: Path to segments file
     flow_file_path: Optional[str] = None,  # Issue #553 Phase 6.2: Path to flow file
-    locations_file_path: Optional[str] = None  # Issue #553 Phase 6.2: Path to locations file
+    locations_file_path: Optional[str] = None,  # Issue #553 Phase 6.2: Path to locations file
+    gpx_paths: Optional[Dict[str, str]] = None
 ) -> Dict[Day, Dict[str, str]]:
     """
     Generate all reports per day in day-partitioned structure.
@@ -111,6 +112,11 @@ def generate_reports_per_day(
             "flow_file_path is required in v2 pipeline. "
             "It should be provided from analysis.json flow_file."
         )
+    if not gpx_paths:
+        raise ValueError(
+            "gpx_paths are required in v2 pipeline. "
+            "They should be provided from analysis.json data_files.gpx."
+        )
     # locations_file_path can be None if locations_file is not provided (optional)
     # But if it's provided, it should come from analysis.json
     
@@ -152,8 +158,8 @@ def generate_reports_per_day(
                     day_events=day_events,
                     density_results=density_results[day],
                     reports_path=reports_path,
-                    segments_df=day_segments_df,
                     data_dir=data_dir,
+                    segments_df=day_segments_df,
                     segments_file_path=segments_file_path  # Issue #553 Phase 6.2, Issue #616
                 )
                 if density_path:
@@ -204,6 +210,13 @@ def generate_reports_per_day(
             else:
                 logger.info(f"Issue #600: Using locations_results.json as SSOT: {locations_results_json_path}")
                 
+                # Filter gpx_paths to only include day events
+                day_gpx_paths = {
+                    event.name.lower(): gpx_paths[event.name.lower()]
+                    for event in day_events
+                    if event.name.lower() in gpx_paths
+                }
+                
                 locations_path = generate_locations_report_v2(
                     run_id=run_id,
                     day=day,
@@ -212,7 +225,8 @@ def generate_reports_per_day(
                     all_runners_df=all_runners_df,
                     reports_path=reports_path,
                     segments_df=day_segments_df,
-                    segments_file_path=segments_file_path  # Issue #616: Pass segments path for fallback safety
+                    segments_file_path=segments_file_path,  # Issue #616: Pass segments path for fallback safety
+                    gpx_paths=day_gpx_paths  # Issue #655: Pass gpx_paths for location report generation
                 )
                 if locations_path:
                     day_report_paths["locations"] = str(locations_path)
@@ -242,8 +256,8 @@ def generate_density_report_v2(
     day_events: List[Event],
     density_results: Dict[str, Any],
     reports_path: Path,
+    data_dir: str,  # Data directory for loading runner files
     segments_df: Optional[Any] = None,  # pd.DataFrame - day-filtered segments
-    data_dir: str = "data",  # Data directory for loading runner files
     segments_file_path: Optional[str] = None  # Issue #553 Phase 6.2: Path to segments file
 ) -> Optional[Path]:
     """
@@ -288,22 +302,10 @@ def generate_density_report_v2(
         
         # Get day-filtered segments
         if segments_df is None:
-            from app.io.loader import load_segments
-            # Issue #616: Use segments_file_path from analysis.json, fail if not provided
-            if segments_file_path is None:
-                error_msg = (
-                    "segments_df is None in generate_density_report_v2 and no segments_file_path provided. "
-                    "This should not happen in v2 pipeline - segments_df should be passed from pipeline. "
-                    "Cannot fall back to default CSV as it may not match the analysis configuration."
-                )
-                logger.error(error_msg)
-                raise ValueError(error_msg)
-            logger.warning(
-                f"segments_df is None in generate_density_report_v2 - falling back to {segments_file_path}. "
-                "This should not happen in v2 pipeline - segments_df should be passed from pipeline."
+            raise ValueError(
+                "segments_df is required in generate_density_report_v2. "
+                "Pass day-filtered segments from the pipeline; no CSV fallback is allowed."
             )
-            all_segments_df = load_segments(segments_file_path)
-            segments_df = filter_segments_by_events(all_segments_df, day_events)
         
         # Get list of day segment IDs
         day_segment_ids = set(segments_df['seg_id'].astype(str).unique())
@@ -600,7 +602,8 @@ def generate_locations_report_v2(
     all_runners_df: Any,  # pd.DataFrame
     reports_path: Path,
     segments_df: Optional[Any] = None,  # pd.DataFrame - day-filtered segments
-    segments_file_path: Optional[str] = None  # Issue #616: Path to segments CSV from analysis.json (for fallback only)
+    segments_file_path: Optional[str] = None,  # Issue #616: Path to segments CSV from analysis.json (for fallback only)
+    gpx_paths: Optional[Dict[str, str]] = None  # Issue #655: GPX file paths from analysis.json data_files.gpx
 ) -> Optional[Path]:
     """
     Generate day-scoped locations report (Locations.csv).
@@ -660,22 +663,10 @@ def generate_locations_report_v2(
         # Issue #616: Get day-filtered segments if not provided
         # In v2 pipeline, segments_df should always be provided - this is a fallback only
         if segments_df is None:
-            from app.io.loader import load_segments
-            # Issue #616: Use segments_file_path from analysis.json if provided, otherwise fail
-            if segments_file_path is None:
-                error_msg = (
-                    "segments_df is None in generate_locations_report_v2 and no segments_file_path provided. "
-                    "This should not happen in v2 pipeline - segments_df should be passed from pipeline. "
-                    "Cannot fall back to default CSV as it may not match the analysis configuration."
-                )
-                logger.error(error_msg)
-                raise ValueError(error_msg)
-            logger.warning(
-                f"segments_df is None in generate_locations_report_v2 - falling back to {segments_file_path}. "
-                "This should not happen in v2 pipeline - segments_df should be passed from pipeline."
+            raise ValueError(
+                "segments_df is required in generate_locations_report_v2. "
+                "Pass day-filtered segments from the pipeline; no CSV fallback is allowed."
             )
-            all_segments_df = load_segments(segments_file_path)
-            segments_df = filter_segments_by_events(all_segments_df, day_events)
         
         # Get day segment IDs
         day_segment_ids = set(segments_df['seg_id'].astype(str).unique())
@@ -771,6 +762,15 @@ def generate_locations_report_v2(
             # NOTE: Do NOT pass run_id to generate_location_report when using v2 structure
             # because it will use get_runflow_category_path which creates runflow/{run_id}/reports
             # instead of runflow/{run_id}/{day}/reports. We pass output_dir directly instead.
+            
+            # Issue #655: Validate gpx_paths is provided (required for location report)
+            if not gpx_paths:
+                logger.error(f"gpx_paths is required for location report generation but was not provided for day {day.value}")
+                raise ValueError(
+                    f"gpx_paths is required for location report generation. "
+                    "It should be provided from analysis.json data_files.gpx."
+                )
+            
             logger.info(f"Calling generate_location_report for day {day.value} with {len(day_locations_df)} locations, {len(day_runners_df)} runners")
             try:
                 result = generate_location_report(
@@ -780,7 +780,11 @@ def generate_locations_report_v2(
                     start_times=start_times,
                     output_dir=str(reports_path),
                     run_id=run_id,  # Issue #598: Pass run_id for flag propagation (loads flags.json)
-                    day=day.value  # Issue #598: Pass day for day-scoped flags.json path
+                    day=day.value,  # Issue #598: Pass day for day-scoped flags.json path
+                    gpx_paths=gpx_paths,  # Issue #655: GPX paths from analysis.json
+                    locations_df=day_locations_df,
+                    runners_df=day_runners_df,
+                    segments_df=segments_df
                 )
                 logger.info(f"generate_location_report returned for day {day.value}: ok={result.get('ok', False)}")
             except Exception as e:
@@ -842,4 +846,3 @@ def copy_bin_artifacts(
             logger.debug(f"Bin artifact {artifact} not found at {source_path}, skipping")
     
     logger.info(f"Copied bin artifacts from {bins_dir} to {target_bins_dir}")
-

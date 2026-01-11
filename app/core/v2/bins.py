@@ -7,13 +7,15 @@ Also provides segment filtering utilities used by density and flow analysis.
 
 import logging
 import os
+import shutil
+import tempfile
 import time
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List
 import pandas as pd
 
 from app.density_report import (
-    AnalysisContext,
+    BinGenerationContext,
     _generate_bin_dataset_with_retry,
     _save_bin_artifacts_and_metadata,
     _process_segments_from_bins
@@ -22,7 +24,7 @@ from app.save_bins import save_bin_artifacts
 from app.core.bin.summary import generate_bin_summary_artifact
 from app.utils.constants import BIN_SCHEMA_VERSION
 from app.core.v2.models import Day, Event
-from app.core.v2.analysis_config import load_analysis_json
+from app.config.loader import AnalysisContext as ConfigAnalysisContext, load_analysis_context
 from app.utils.run_id import get_runflow_root
 
 logger = logging.getLogger(__name__)
@@ -88,8 +90,9 @@ def generate_bins_v2(
     run_id: str,
     day: Day,
     events: List[Event],
-    data_dir: str = "data",
-    segments_csv_path: Optional[str] = None  # Issue #616: Use segments_file from analysis.json
+    data_dir: str,
+    segments_csv_path: Optional[str] = None,  # Issue #616: Use segments_file from analysis.json
+    analysis_context: Optional[ConfigAnalysisContext] = None
 ) -> Optional[Path]:
     """
     Generate bin artifacts for a specific day using v1 bin generation logic.
@@ -109,8 +112,8 @@ def generate_bins_v2(
         day: Day enum
         events: List of events for this day
         data_dir: Base directory for data files (used as fallback)
-        segments_csv_path: Optional path to segments CSV file. If None, defaults to data_dir/segments.csv.
-                          Issue #616: Should be provided from analysis.json segments_file.
+        segments_csv_path: Path to segments CSV file (from analysis.json).
+        analysis_context: Optional analysis context loaded from analysis.json to avoid reloading config.
         
     Returns:
         Path to bins directory if successful, None otherwise
@@ -129,60 +132,58 @@ def generate_bins_v2(
         bins_dir = get_day_output_path(run_id, day, "bins")
         bins_dir.mkdir(parents=True, exist_ok=True)
         
-        # Issue #616: Use segments_csv_path from analysis.json if provided, otherwise fallback to data_dir/segments.csv
         if segments_csv_path is None:
-            segments_csv_path = str(Path(data_dir) / "segments.csv")
-            logger.warning(
-                f"segments_csv_path not provided to generate_bins_v2, defaulting to {segments_csv_path}. "
-                f"This should come from analysis.json segments_file."
+            raise ValueError(
+                "segments_csv_path must be provided to generate_bins_v2 from analysis.json."
             )
-        else:
-            logger.info(f"Issue #616: Using segments_csv_path={segments_csv_path} from analysis.json")
+        logger.info(f"Issue #616: Using segments_csv_path={segments_csv_path} from analysis.json")
         
-        # CRITICAL FIX: build_runner_window_mapping() hardcodes reading from "data/runners.csv"
-        # We need to temporarily replace it with our day-filtered runners
-        # Issue #548 Bug 1: build_runner_window_mapping() now uses lowercase event names
-        import tempfile
-        import shutil
+        # Issue #616: build_runner_window_mapping uses per-event runner files; no temp data/runners.csv needed
         
-        # Create temp combined runners CSV (event names are already lowercase)
-        temp_runners_df = runners_df.copy()
-        # Ensure event column is lowercase (should already be, but double-check)
-        if 'event' in temp_runners_df.columns:
-            temp_runners_df['event'] = temp_runners_df['event'].str.lower()
-        
-        # Create temp file
-        temp_runners_csv = tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False)
-        temp_runners_df.to_csv(temp_runners_csv.name, index=False)
-        temp_runners_csv.close()
-        temp_runners_path = temp_runners_csv.name
-        
-        # Issue #548: Create temporary "data/runners.csv" from our day-filtered runners
-        # (build_runner_window_mapping hardcodes reading from this path)
-        original_runners_path = Path(data_dir) / "runners.csv"
-        runners_was_replaced = False
-        
+        # Issue #553 Phase 4.2 & 4.3: Load event configuration from analysis.json (SSOT)
+        # This must happen BEFORE creating BinGenerationContext to avoid overwriting the SSOT context
+        event_durations = {}
+        event_names = []
+        config_analysis_context = analysis_context  # Keep SSOT context separate
         try:
-            # Issue #548: runners.csv no longer exists, so we just create it from our temp file
-            # No need to back up since the file doesn't exist
-            # Copy our temp file to "data/runners.csv" (temporary file for build_runner_window_mapping)
-            shutil.copy2(temp_runners_path, original_runners_path)
-            runners_was_replaced = True
-            logger.debug(f"Created temporary data/runners.csv with day-filtered runners ({len(temp_runners_df)} runners)")
+            if config_analysis_context is None:
+                runflow_root = get_runflow_root()
+                run_path = runflow_root / run_id
+                config_analysis_context = load_analysis_context(run_path)
+            analysis_config = config_analysis_context.analysis_config
             
+            # Extract event names and durations from analysis.json
+            events_list = analysis_config.get("events", [])
+            for event in events_list:
+                event_name = event.get("name", "")
+                duration = event.get("event_duration_minutes")
+                if event_name:
+                    event_names.append(event_name.lower())
+                    if duration:
+                        # Support both original case and lowercase for lookup
+                        event_durations[event_name] = duration
+                        event_durations[event_name.lower()] = duration
+            
+            logger.debug(f"Loaded event names from analysis.json: {event_names}")
+            logger.debug(f"Loaded event durations from analysis.json: {event_durations}")
         except Exception as e:
-            logger.warning(f"Failed to temporarily replace data/runners.csv: {e}")
-            # Continue anyway - bin generation might still work
+            logger.error(f"Failed to load event configuration from analysis.json: {e}")
+            # Issue #553: Fail fast - event configuration is required
+            raise ValueError(
+                f"Cannot generate bins without event configuration from analysis.json: {e}"
+            )
         
-        # Create AnalysisContext
-        analysis_context = AnalysisContext(
+        # Issue #655: Create BinGenerationContext (legacy dataclass for bin generation parameters)
+        # Note: This is different from ConfigAnalysisContext (SSOT config loader from app.config.loader)
+        # Use a different variable name to avoid overwriting the SSOT context
+        bin_gen_context = BinGenerationContext(
             course_id="fredericton_marathon",
             segments=segments_df,
             runners=runners_df,
             params={"start_times": start_times},
             code_version="v2.0.0",
             schema_version=BIN_SCHEMA_VERSION,
-            pace_csv_path=str(original_runners_path),
+            pace_csv_path="",
             segments_csv_path=segments_csv_path
         )
         
@@ -249,35 +250,6 @@ def generate_bins_v2(
         else:
             logger.warning(f"density_results missing 'segments' dict, cannot filter by day")
         
-        # Issue #553 Phase 4.2 & 4.3: Load event configuration from analysis.json
-        event_durations = {}
-        event_names = []
-        try:
-            runflow_root = get_runflow_root()
-            run_path = runflow_root / run_id
-            analysis_config = load_analysis_json(run_path)
-            
-            # Extract event names and durations from analysis.json
-            events_list = analysis_config.get("events", [])
-            for event in events_list:
-                event_name = event.get("name", "")
-                duration = event.get("event_duration_minutes")
-                if event_name:
-                    event_names.append(event_name.lower())
-                    if duration:
-                        # Support both original case and lowercase for lookup
-                        event_durations[event_name] = duration
-                        event_durations[event_name.lower()] = duration
-            
-            logger.debug(f"Loaded event names from analysis.json: {event_names}")
-            logger.debug(f"Loaded event durations from analysis.json: {event_durations}")
-        except Exception as e:
-            logger.error(f"Failed to load event configuration from analysis.json: {e}")
-            # Issue #553: Fail fast - event configuration is required
-            raise ValueError(
-                f"Cannot generate bins without event configuration from analysis.json: {e}"
-            )
-        
         # Issue #553 Phase 4.3: Filter event_durations to match current day's events
         # start_times only contains events for the current day, so filter event_durations accordingly
         day_event_durations = {}
@@ -296,8 +268,11 @@ def generate_bins_v2(
         temp_output_dir = tempfile.mkdtemp()
         
         try:
+            # Issue #655: Pass SSOT ConfigAnalysisContext to _generate_bin_dataset_with_retry
+            # instead of BinGenerationContext, because build_runner_window_mapping expects
+            # the SSOT context with runners_csv_path() method
             daily_folder_path, bin_metadata, bin_data = _generate_bin_dataset_with_retry(
-                filtered_density_results, start_times, temp_output_dir, analysis_context, 
+                filtered_density_results, start_times, temp_output_dir, config_analysis_context, 
                 day_event_durations, event_names
             )
             
@@ -307,6 +282,7 @@ def generate_bins_v2(
             
             # Move bin artifacts from temp location to day-partitioned bins directory
             temp_bins_dir = Path(daily_folder_path)
+            bins_successfully_copied = False
             if temp_bins_dir.exists():
                 # Safety check: Filter bins.parquet by day segments before copying
                 # After Issue #519, this should be a no-op since density_results is filtered
@@ -327,6 +303,7 @@ def generate_bins_v2(
                         logger.warning(f"segments_df missing 'seg_id' or 'segment_id' column, cannot filter bins by day")
                         logger.warning(f"segments_df columns: {list(segments_df.columns)}")
                         shutil.copy2(bins_parquet_src, bins_dir / "bins.parquet")
+                        bins_successfully_copied = True
                     else:
                         day_segment_ids = set(segments_df[seg_id_col].astype(str).unique().tolist())
                         logger.debug(f"Day {day.value} segments_df has {len(segments_df)} segments with IDs: {sorted(day_segment_ids)}")
@@ -386,10 +363,12 @@ def generate_bins_v2(
                             bins_parquet_dst = bins_dir / "bins.parquet"
                             bins_df_filtered.to_parquet(bins_parquet_dst, compression="zstd", compression_level=3)
                             logger.debug(f"Saved filtered bins.parquet to {bins_parquet_dst}")
+                            bins_successfully_copied = True
                         else:
                             # Fallback: copy without filtering if segment column not found
                             logger.warning(f"bins.parquet missing 'segment_id' or 'seg_id' column, cannot filter by day")
                             shutil.copy2(bins_parquet_src, bins_dir / "bins.parquet")
+                            bins_successfully_copied = True
                 
                 # Copy other bin artifacts
                 bin_files = [
@@ -430,32 +409,38 @@ def generate_bins_v2(
             if occupied_bins == 0:
                 logger.warning(f"⚠️ No occupied bins found for day {day.value} - runner mapping may have failed")
             
+            # Issue #655: Verify bins.parquet was successfully created before returning
+            bins_parquet_final = bins_dir / "bins.parquet"
+            if not bins_parquet_final.exists():
+                error_msg = (
+                    f"CRITICAL: bins.parquet was not created at {bins_parquet_final} "
+                    f"despite bin generation completing. This indicates a file copy/save failure."
+                )
+                logger.error(error_msg)
+                raise FileNotFoundError(error_msg)
+            
+            logger.info(f"✅ Bin generation completed successfully for day {day.value}: {bins_parquet_final}")
             return bins_dir
             
         finally:
-            # Issue #548: Remove temporary "data/runners.csv" if we created it
-            if runners_was_replaced:
-                try:
-                    if original_runners_path.exists():
-                        # Remove our temp file (we created it, so just delete it)
-                        os.unlink(original_runners_path)
-                        logger.debug(f"Removed temporary data/runners.csv")
-                except Exception as e:
-                    logger.warning(f"Failed to remove temporary data/runners.csv: {e}")
-            
-            # Clean up temp files
+            # Clean up temp files (non-critical - don't fail if cleanup fails)
             try:
                 shutil.rmtree(temp_output_dir)
             except Exception as e:
                 logger.warning(f"Failed to clean up temp directory {temp_output_dir}: {e}")
-            
-            # Clean up temp runners CSV
-            try:
-                if os.path.exists(temp_runners_path):
-                    os.unlink(temp_runners_path)
-            except Exception as e:
-                logger.warning(f"Failed to clean up temp runners CSV {temp_runners_path}: {e}")
+                # Note: Cleanup failure is non-critical - bins are already saved, so we don't re-raise
         
     except Exception as e:
-        logger.error(f"Failed to generate bins for day {day.value}: {e}", exc_info=True)
-        return None
+        # Issue #655: Only return None if bins were not successfully created
+        # Check if bins.parquet exists despite the exception (e.g., copy succeeded but cleanup failed)
+        bins_parquet_check = bins_dir / "bins.parquet"
+        if bins_parquet_check.exists():
+            logger.warning(
+                f"Exception occurred during bin generation for day {day.value}: {e}, "
+                f"but bins.parquet exists at {bins_parquet_check}. "
+                f"Continuing with existing bins file."
+            )
+            return bins_dir
+        else:
+            logger.error(f"Failed to generate bins for day {day.value}: {e}", exc_info=True)
+            return None

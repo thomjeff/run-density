@@ -151,19 +151,17 @@ def build_segment_context_v2(segment_id: str, segment_data: dict, summary_dict: 
         # Fallback: If schema not in segment_data or is empty, try schema_resolver (should not happen if CSV is complete)
         # Issue #616: Must pass segments_csv_path to use correct file, not default to "data/segments.csv"
         if not segments_csv_path:
-            logger.error(
+            raise ValueError(
                 f"Segment {segment_id} missing 'schema' in density_cfg and no segments_csv_path provided. "
-                f"Cannot resolve schema. This should not happen if the segments CSV includes a schema column."
+                f"Cannot resolve schema without analysis.json path."
             )
-            schema_name = "on_course_open"  # Last resort default
-        else:
-            logger.warning(
-                f"Segment {segment_id} missing or empty 'schema' in density_cfg (value: {repr(schema_name)}), "
-                f"falling back to schema_resolver using {segments_csv_path}. "
-                f"This should not happen if the segments CSV includes a schema column."
-            )
-            # Issue #616: Pass the correct CSV path to schema_resolver (no default fallback)
-            schema_name = resolve_schema_from_csv(segment_id, None, segments_csv_path)
+        logger.warning(
+            f"Segment {segment_id} missing or empty 'schema' in density_cfg (value: {repr(schema_name)}), "
+            f"falling back to schema_resolver using {segments_csv_path}. "
+            f"This should not happen if the segments CSV includes a schema column."
+        )
+        # Issue #616: Pass the correct CSV path to schema_resolver (no default fallback)
+        schema_name = resolve_schema_from_csv(segment_id, None, segments_csv_path)
     else:
         # Schema found in segment_data - use it directly (Issue #616 fix)
         schema_name = str(schema_name).strip()
@@ -178,7 +176,11 @@ def build_segment_context_v2(segment_id: str, segment_data: dict, summary_dict: 
         # Calculate flow rate from peak concurrency
         # Use active_peak_concurrency which is the correct field name
         peak_concurrency = summary_dict.get("active_peak_concurrency", 0)
-        width_m = segment_data.get("width_m", 1.0)
+        width_m = segment_data.get("width_m")
+        if width_m is None or (isinstance(width_m, float) and pd.isna(width_m)) or width_m <= 0:
+            raise ValueError(
+                f"Segment {segment_id} missing valid width_m for flow rate computation."
+            )
         from app.utils.constants import DEFAULT_BIN_TIME_WINDOW_SECONDS
         bin_seconds = DEFAULT_BIN_TIME_WINDOW_SECONDS  # Use constant (Issue #512)
         flow_rate = compute_flow_rate(peak_concurrency, width_m, bin_seconds)
@@ -203,7 +205,7 @@ def build_segment_context_v2(segment_id: str, segment_data: dict, summary_dict: 
         "segment_id": segment_id,
         "seg_label": segment_data.get("seg_label", "Unknown"),
         "segment_type": segment_data.get("segment_type", None),  # Optional field (not used for schema resolution)
-        "flow_type": segment_data.get("flow_type", "default"),
+        "flow_type": segment_data.get("flow_type"),
         
         # Schema information
         "schema_name": schema_name,
@@ -281,24 +283,23 @@ def load_density_cfg(path: str) -> Dict[str, dict]:
         schema_raw = r.get("schema")
         if schema_raw is not None and pd.notna(schema_raw):
             schema = str(schema_raw).strip()
-            if schema:
-                # Validate schema value (must be valid rulebook schema)
-                valid_schemas = {'start_corral', 'on_course_narrow', 'on_course_open'}
-                if schema not in valid_schemas:
-                    logger.warning(
-                        f"Invalid schema value '{schema}' for segment {r['seg_id']} in segments CSV. "
-                        f"Must be one of: {valid_schemas}. Defaulting to 'on_course_open'."
-                    )
-                    schema = 'on_course_open'
-            else:
-                # Empty string after stripping
-                schema = None
+            if not schema:
+                raise ValueError(f"Segment {r['seg_id']} missing schema in segments CSV.")
+            # Validate schema value (must be valid rulebook schema)
+            valid_schemas = {'start_corral', 'on_course_narrow', 'on_course_open'}
+            if schema not in valid_schemas:
+                raise ValueError(
+                    f"Invalid schema value '{schema}' for segment {r['seg_id']} in segments CSV. "
+                    f"Must be one of: {valid_schemas}."
+                )
         else:
-            # No schema provided (None or NaN) - will fallback to schema_resolver if needed
-            schema = None
+            raise ValueError(f"Segment {r['seg_id']} missing schema in segments CSV.")
+        seg_label = r.get("seg_label")
+        if not seg_label:
+            raise ValueError(f"Segment {r['seg_id']} missing seg_label in segments CSV.")
         
         cfg[r["seg_id"]] = dict(
-            seg_label=str(r.get("seg_label", "")),
+            seg_label=str(seg_label),
             width_m=float(r["width_m"]),
             direction=str(r.get("direction", "uni")),
             schema=schema,  # Issue #616: Include schema from CSV (SSOT for this analysis run)

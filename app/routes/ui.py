@@ -475,7 +475,7 @@ async def get_analysis_config(request: Request, run_id: str):
     
     try:
         from app.utils.run_id import get_runflow_root
-        from app.core.v2.analysis_config import load_analysis_json
+        from app.config.loader import load_analysis_context
         
         runflow_root = get_runflow_root()
         run_path = runflow_root / run_id
@@ -486,8 +486,8 @@ async def get_analysis_config(request: Request, run_id: str):
                 detail=f"Run ID {run_id} not found"
             )
         
-        analysis_config = load_analysis_json(run_path)
-        return JSONResponse(content=analysis_config)
+        analysis_context = load_analysis_context(run_path)
+        return JSONResponse(content=analysis_context.analysis_config)
         
     except FileNotFoundError:
         raise HTTPException(
@@ -500,4 +500,3 @@ async def get_analysis_config(request: Request, run_id: str):
             status_code=500,
             detail=f"Failed to load analysis configuration: {str(e)}"
         )
-

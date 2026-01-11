@@ -184,17 +184,13 @@ def get_thresholds(schema_key: str, path: Optional[str] = None) -> SchemaThresho
     """
     Get thresholds for a specific schema.
     
-    If schema_key not found, returns conservative defaults with no rate flagging.
+    Raises if schema_key is missing to prevent silent fallback.
     """
     idx = _threshold_index(path)
     if schema_key not in idx:
-        logger.warning(f"Schema '{schema_key}' not found in rulebook, using defaults")
-        # Fallback: use a conservative default LOS; no rate flags
-        return SchemaThresholds(
-            schema_key=schema_key,
-            los=LosBands(A=0.5, B=0.9, C=1.6, D=2.3, E=3.0, F=99.0),
-            flow_ref=None,
-            label=None
+        raise ValueError(
+            f"Schema '{schema_key}' not found in rulebook. "
+            "All schema keys must be defined; no defaults are allowed."
         )
     return idx[schema_key]
 

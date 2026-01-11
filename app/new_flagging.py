@@ -65,7 +65,13 @@ def _load_and_apply_segment_metadata(
                 seg_lookup_cols.append('schema')
             
             seg_lookup = segments_df[seg_lookup_cols].set_index(segment_id_col)
-            result_df['width_m'] = result_df['segment_id'].map(seg_lookup['width_m']).fillna(3.0)
+            result_df['width_m'] = result_df['segment_id'].map(seg_lookup['width_m'])
+            if result_df['width_m'].isna().any():
+                missing_segments = result_df.loc[result_df['width_m'].isna(), 'segment_id'].unique().tolist()
+                raise ValueError(
+                    f"Missing width_m for segments: {missing_segments}. "
+                    "width_m is required for flagging and cannot default."
+                )
             result_df['seg_label'] = result_df['segment_id'].map(seg_lookup['seg_label']).fillna(result_df['segment_id'])
             
             # Issue #616: Use schema column directly from segments_df (SSOT) - NO fallback to resolve_schema()
@@ -76,41 +82,24 @@ def _load_and_apply_segment_metadata(
                         schema_val = seg_lookup.loc[segment_id, 'schema']
                         if pd.notna(schema_val) and str(schema_val).strip():
                             return str(schema_val).strip()
-                    # Segment not found or schema is empty - use default but log warning
-                    logger.warning(
-                        f"Segment {segment_id} not found in segments_df or schema is empty. "
-                        f"Defaulting to 'on_course_open'. This should not happen if segments_df includes all segments."
+                    raise ValueError(
+                        f"Segment {segment_id} not found in segments_df or schema is empty."
                     )
-                    return "on_course_open"
                 result_df['schema_key'] = result_df['segment_id'].apply(get_schema_from_df)
             else:
                 # Schema column missing from segments_df - this is an error condition in v2
-                logger.error(
+                raise ValueError(
                     "segments_df provided but missing 'schema' column. "
-                    "This should not happen - ensure segments CSV is loaded with schema column included."
+                    "Ensure segments CSV includes schema."
                 )
-                # Still default to on_course_open to avoid crashes, but this is wrong
-                result_df['schema_key'] = "on_course_open"
         else:
-            result_df['width_m'] = 3.0
-            result_df['seg_label'] = result_df['segment_id']
-            # Issue #616: segments_df provided but missing segment_id column - use default schema
-            logger.warning(
-                "segments_df provided but missing segment_id column. "
-                "Defaulting all segments to 'on_course_open'. This should not happen in v2."
+            raise ValueError(
+                "segments_df provided but missing segment_id column."
             )
-            result_df['schema_key'] = "on_course_open"
     else:
-        # Issue #616: segments_df is None - legacy code path, default to on_course_open
-        # In v2 pipeline, segments_df should always be provided
-        logger.warning(
-            "segments_df is None in apply_new_flagging. "
-            "Defaulting all segments to 'on_course_open'. "
-            "In v2 pipeline, segments_df should always be provided to avoid schema resolution issues."
+        raise ValueError(
+            "segments_df is required for apply_new_flagging in v2 pipeline."
         )
-        result_df['width_m'] = 3.0
-        result_df['seg_label'] = result_df['segment_id']
-        result_df['schema_key'] = "on_course_open"
     
     return result_df
 
@@ -181,8 +170,8 @@ def _evaluate_row_with_rulebook(row: pd.Series) -> pd.Series:
     result = rulebook.evaluate_flags(
         density_pm2=row['density'],
         rate_p_s=row.get('rate'),
-        width_m=row.get('width_m', 3.0),
-        schema_key=row.get('schema_key', 'on_course_open'),
+        width_m=row['width_m'],
+        schema_key=row.get('schema_key'),
         util_percentile=row.get('util_percentile')
     )
     return pd.Series({

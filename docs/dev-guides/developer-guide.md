@@ -247,10 +247,23 @@ def load_segments(segments_file: str, data_dir: str = "data") -> pd.DataFrame:
   "data_files": {
     "segments": "data/segments.csv",
     "flow": "data/flow.csv",
-    "locations": "data/locations.csv"
+    "locations": "data/locations.csv",
+    "runners": {
+      "elite": "data/elite_runners.csv"
+    },
+    "gpx": {
+      "elite": "data/elite.gpx"
+    }
   }
 }
 ```
+
+**Required fields (fail-fast):**
+- `data_dir`, `segments_file`, `flow_file`, `data_files`, `events` must be present in `analysis.json`.
+- `data_files` must include `segments`, `flow`, `locations`, plus `runners` and `gpx` entries for every event.
+- Each `events[*]` entry must include `name`, `day`, `start_time`, `event_duration_minutes`, `runners_file`, and `gpx_file`.
+
+Missing or invalid fields cause the analysis config loader (`app/config/loader.py`) to fail fast before the pipeline runs.
 
 ### Helper Functions
 
@@ -624,4 +637,3 @@ print(f"Exists: {Path(flow_file).exists()}")
 **Version:** v2.0.2+  
 **Last Updated:** 2025-12-25  
 **Issue:** #553
-

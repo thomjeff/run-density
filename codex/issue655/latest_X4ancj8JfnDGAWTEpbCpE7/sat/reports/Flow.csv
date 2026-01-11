@@ -1,0 +1,151 @@
+seg_id,segment_label,event_a,event_b,total_a,total_b,flow_type,zone_index,cp_km,cp_type,zone_source,zone_start_km_a,zone_end_km_a,zone_start_km_b,zone_end_km_b,width_m,overtaking_a,overtaking_b,pct_a,pct_b,copresence_a,copresence_b,unique_encounters,participants_involved,has_convergence
+N1,Start to Queen/Westmorland,elite,elite,39,39,overtake,0,0.0,true_pass,true_pass,0.0,0.05,0.0,0.05,5.0,19,19,48.7,48.7,39,39,1521,39,True
+N1,Start to Queen/Westmorland,elite,elite,39,39,overtake,1,0.11,true_pass,true_pass,0.06,0.16,0.06,0.16,5.0,19,19,48.7,48.7,39,39,1521,39,True
+N1,Start to Queen/Westmorland,elite,elite,39,39,overtake,2,0.21,true_pass,true_pass,0.16,0.26,0.16,0.26,5.0,19,19,48.7,48.7,39,39,1493,39,True
+N1,Start to Queen/Westmorland,elite,elite,39,39,overtake,3,0.31,true_pass,true_pass,0.26,0.36,0.26,0.36,5.0,19,19,48.7,48.7,39,39,1313,39,True
+N1,Start to Queen/Westmorland,elite,elite,39,39,overtake,4,0.41,true_pass,true_pass,0.36,0.46,0.36,0.46,5.0,19,19,48.7,48.7,39,39,1099,39,True
+N1,Start to Queen/Westmorland,elite,elite,39,39,overtake,5,0.51,true_pass,true_pass,0.46,0.56,0.46,0.56,5.0,19,19,48.7,48.7,39,39,961,39,True
+N2,Queen/Westmorland to PSAB/WSB,elite,elite,39,39,overtake,0,0.57,true_pass,true_pass,0.57,0.62,0.57,0.62,5.0,4,4,10.3,10.3,39,39,335,39,True
+N2,Queen/Westmorland to PSAB/WSB,elite,elite,39,39,overtake,1,0.67,true_pass,true_pass,0.62,0.72,0.62,0.72,5.0,4,4,10.3,10.3,39,39,759,39,True
+N2,Queen/Westmorland to PSAB/WSB,elite,elite,39,39,overtake,2,0.77,true_pass,true_pass,0.72,0.82,0.72,0.82,5.0,4,4,10.3,10.3,39,39,693,39,True
+N2,Queen/Westmorland to PSAB/WSB,elite,elite,39,39,overtake,3,0.87,true_pass,true_pass,0.82,0.92,0.82,0.92,5.0,4,4,10.3,10.3,39,39,631,39,True
+N2,Queen/Westmorland to PSAB/WSB,elite,elite,39,39,overtake,4,0.97,true_pass,true_pass,0.92,1.02,0.92,1.02,5.0,4,4,10.3,10.3,39,39,579,39,True
+N2,Queen/Westmorland to PSAB/WSB,elite,elite,39,39,overtake,5,1.08,true_pass,true_pass,1.03,1.13,1.03,1.13,5.0,4,4,10.3,10.3,39,39,533,39,True
+N2,Queen/Westmorland to PSAB/WSB,elite,elite,39,39,overtake,6,1.18,true_pass,true_pass,1.13,1.23,1.13,1.23,5.0,4,4,10.3,10.3,39,39,495,39,True
+N2,Queen/Westmorland to PSAB/WSB,elite,elite,39,39,overtake,7,1.28,true_pass,true_pass,1.23,1.33,1.23,1.33,5.0,4,4,10.3,10.3,39,39,463,39,True
+N2,Queen/Westmorland to PSAB/WSB,elite,elite,39,39,overtake,8,1.38,true_pass,true_pass,1.33,1.43,1.33,1.43,5.0,4,4,10.3,10.3,39,39,407,39,True
+N3,PSAB/WSB to 104th Bridge,elite,elite,39,39,overtake,0,1.45,true_pass,true_pass,1.45,1.5,1.45,1.5,5.0,3,3,7.7,7.7,39,39,171,39,True
+N3,PSAB/WSB to 104th Bridge,elite,elite,39,39,overtake,1,1.55,true_pass,true_pass,1.5,1.6,1.5,1.6,5.0,3,3,7.7,7.7,39,39,375,39,True
+N3,PSAB/WSB to 104th Bridge,elite,elite,39,39,overtake,2,1.65,true_pass,true_pass,1.6,1.7,1.6,1.7,5.0,3,3,7.7,7.7,39,39,365,39,True
+N3,PSAB/WSB to 104th Bridge,elite,elite,39,39,overtake,3,1.75,true_pass,true_pass,1.7,1.8,1.7,1.8,5.0,3,3,7.7,7.7,39,39,343,39,True
+N3,PSAB/WSB to 104th Bridge,elite,elite,39,39,overtake,4,1.85,true_pass,true_pass,1.8,1.88,1.8,1.88,5.0,3,3,7.7,7.7,39,39,275,39,True
+N4,104th to Queen/York,elite,elite,39,39,overtake,0,1.88,true_pass,true_pass,1.88,1.93,1.88,1.93,5.0,0,0,0.0,0.0,39,39,145,39,False
+N4,104th to Queen/York,elite,elite,39,39,overtake,1,1.98,true_pass,true_pass,1.93,2.03,1.93,2.03,5.0,0,0,0.0,0.0,39,39,327,39,False
+N4,104th to Queen/York,elite,elite,39,39,overtake,2,2.09,true_pass,true_pass,2.04,2.14,2.04,2.14,5.0,0,0,0.0,0.0,39,39,311,39,False
+N4,104th to Queen/York,elite,elite,39,39,overtake,3,2.2,true_pass,true_pass,2.15,2.25,2.15,2.25,5.0,0,0,0.0,0.0,39,39,303,39,False
+N4,104th to Queen/York,elite,elite,39,39,overtake,4,2.31,true_pass,true_pass,2.26,2.36,2.26,2.36,5.0,0,0,0.0,0.0,39,39,291,39,False
+N4,104th to Queen/York,elite,elite,39,39,overtake,5,2.42,true_pass,true_pass,2.37,2.47,2.37,2.47,5.0,0,0,0.0,0.0,39,39,277,39,False
+N4,104th to Queen/York,elite,elite,39,39,overtake,6,2.53,true_pass,true_pass,2.48,2.58,2.48,2.58,5.0,0,0,0.0,0.0,39,39,275,39,False
+N5,Queen/York to Queen at PSAB,elite,elite,39,39,overtake,0,2.58,true_pass,true_pass,2.58,2.63,2.58,2.63,5.0,0,0,0.0,0.0,39,39,113,39,False
+N5,Queen/York to Queen at PSAB,elite,elite,39,39,overtake,1,2.69,true_pass,true_pass,2.64,2.74,2.64,2.74,5.0,0,0,0.0,0.0,39,39,263,39,False
+N5,Queen/York to Queen at PSAB,elite,elite,39,39,overtake,2,2.8,true_pass,true_pass,2.75,2.85,2.75,2.85,5.0,0,0,0.0,0.0,39,39,249,39,False
+N5,Queen/York to Queen at PSAB,elite,elite,39,39,overtake,3,2.91,true_pass,true_pass,2.86,2.96,2.86,2.96,5.0,0,0,0.0,0.0,39,39,243,39,False
+N5,Queen/York to Queen at PSAB,elite,elite,39,39,overtake,4,3.02,true_pass,true_pass,2.97,3.07,2.97,3.07,5.0,0,0,0.0,0.0,39,39,243,39,False
+N5,Queen/York to Queen at PSAB,elite,elite,39,39,overtake,5,3.13,true_pass,true_pass,3.08,3.15,3.08,3.15,5.0,0,0,0.0,0.0,39,39,155,39,False
+N5a,Queen/York to Queen at PSAB,elite,elite,39,39,overtake,0,2.58,true_pass,true_pass,2.58,2.63,0.0,0.05,5.0,0,0,0.0,0.0,0,0,0,0,False
+N5a,Queen/York to Queen at PSAB,elite,elite,39,39,overtake,1,2.68,true_pass,true_pass,2.63,2.73,0.05,0.15,5.0,0,0,0.0,0.0,0,0,0,0,False
+N5a,Queen/York to Queen at PSAB,elite,elite,39,39,overtake,2,2.78,true_pass,true_pass,2.73,2.83,0.15,0.25,5.0,0,0,0.0,0.0,0,0,0,0,False
+N5a,Queen/York to Queen at PSAB,elite,elite,39,39,overtake,3,2.88,true_pass,true_pass,2.83,2.93,0.25,0.35,5.0,0,0,0.0,0.0,0,0,0,0,False
+N5a,Queen/York to Queen at PSAB,elite,elite,39,39,overtake,4,2.98,true_pass,true_pass,2.93,3.03,0.35,0.45,5.0,0,0,0.0,0.0,0,0,0,0,False
+N5a,Queen/York to Queen at PSAB,elite,elite,39,39,overtake,5,3.09,true_pass,true_pass,3.04,3.14,0.46,0.56,5.0,0,0,0.0,0.0,0,0,0,0,False
+N6,Queen at PSAB to PSAB/WSB,elite,elite,39,39,overtake,0,3.15,true_pass,true_pass,3.15,3.2,3.15,3.2,5.0,0,0,0.0,0.0,39,39,97,39,False
+N6,Queen at PSAB to PSAB/WSB,elite,elite,39,39,overtake,1,3.26,true_pass,true_pass,3.21,3.31,3.21,3.31,5.0,0,0,0.0,0.0,39,39,225,39,False
+N6,Queen at PSAB to PSAB/WSB,elite,elite,39,39,overtake,2,3.37,true_pass,true_pass,3.32,3.42,3.32,3.42,5.0,0,0,0.0,0.0,39,39,223,39,False
+N6,Queen at PSAB to PSAB/WSB,elite,elite,39,39,overtake,3,3.48,true_pass,true_pass,3.43,3.53,3.43,3.53,5.0,0,0,0.0,0.0,39,39,213,39,False
+N6,Queen at PSAB to PSAB/WSB,elite,elite,39,39,overtake,4,3.59,true_pass,true_pass,3.54,3.64,3.54,3.64,5.0,0,0,0.0,0.0,39,39,207,39,False
+N6a,Queen at PSAB to PSAB/WSB,elite,elite,39,39,overtake,0,3.15,true_pass,true_pass,3.15,3.2,0.57,0.65,5.0,0,0,0.0,0.0,0,0,0,0,False
+N6a,Queen at PSAB to PSAB/WSB,elite,elite,39,39,overtake,1,3.25,true_pass,true_pass,3.2,3.3,0.66,0.82,5.0,0,0,0.0,0.0,0,0,0,0,False
+N6a,Queen at PSAB to PSAB/WSB,elite,elite,39,39,overtake,2,3.35,true_pass,true_pass,3.3,3.4,0.83,0.99,5.0,0,0,0.0,0.0,0,0,0,0,False
+N6a,Queen at PSAB to PSAB/WSB,elite,elite,39,39,overtake,3,3.46,true_pass,true_pass,3.41,3.51,1.0,1.16,5.0,0,0,0.0,0.0,0,0,0,0,False
+N6a,Queen at PSAB to PSAB/WSB,elite,elite,39,39,overtake,4,3.56,true_pass,true_pass,3.51,3.61,1.16,1.33,5.0,0,0,0.0,0.0,0,0,0,0,False
+N6a,Queen at PSAB to PSAB/WSB,elite,elite,39,39,overtake,5,3.66,true_pass,true_pass,3.61,3.68,1.33,1.45,5.0,0,0,0.0,0.0,0,0,0,0,False
+N7,PSAB/WSB to 104th Bridge,elite,elite,39,39,overtake,0,3.68,true_pass,true_pass,3.68,3.73,3.68,3.73,5.0,0,0,0.0,0.0,39,39,91,39,False
+N7,PSAB/WSB to 104th Bridge,elite,elite,39,39,overtake,1,3.79,true_pass,true_pass,3.74,3.84,3.74,3.84,5.0,0,0,0.0,0.0,39,39,203,39,False
+N7,PSAB/WSB to 104th Bridge,elite,elite,39,39,overtake,2,3.9,true_pass,true_pass,3.85,3.95,3.85,3.95,5.0,0,0,0.0,0.0,39,39,187,39,False
+N7,PSAB/WSB to 104th Bridge,elite,elite,39,39,overtake,3,4.01,true_pass,true_pass,3.96,4.06,3.96,4.06,5.0,0,0,0.0,0.0,39,39,185,39,False
+N7a,PSAB/WSB to 104th Bridge,elite,elite,39,39,overtake,0,3.68,true_pass,true_pass,3.68,3.73,1.45,1.5,5.0,0,0,0.0,0.0,0,0,0,0,False
+N7a,PSAB/WSB to 104th Bridge,elite,elite,39,39,overtake,1,3.78,true_pass,true_pass,3.73,3.83,1.5,1.6,5.0,0,0,0.0,0.0,0,0,0,0,False
+N7a,PSAB/WSB to 104th Bridge,elite,elite,39,39,overtake,2,3.88,true_pass,true_pass,3.83,3.93,1.6,1.7,5.0,0,0,0.0,0.0,0,0,0,0,False
+N7a,PSAB/WSB to 104th Bridge,elite,elite,39,39,overtake,3,3.98,true_pass,true_pass,3.93,4.03,1.7,1.8,5.0,0,0,0.0,0.0,0,0,0,0,False
+N7a,PSAB/WSB to 104th Bridge,elite,elite,39,39,overtake,4,4.08,true_pass,true_pass,4.03,4.11,1.8,1.88,5.0,0,0,0.0,0.0,0,0,0,0,False
+N8,104th to Queen/York,elite,elite,39,39,overtake,0,4.11,true_pass,true_pass,4.11,4.16,4.11,4.16,5.0,0,0,0.0,0.0,39,39,89,39,False
+N8,104th to Queen/York,elite,elite,39,39,overtake,1,4.22,true_pass,true_pass,4.17,4.27,4.17,4.27,5.0,0,0,0.0,0.0,39,39,179,39,False
+N8,104th to Queen/York,elite,elite,39,39,overtake,2,4.33,true_pass,true_pass,4.28,4.38,4.28,4.38,5.0,0,0,0.0,0.0,39,39,179,39,False
+N8,104th to Queen/York,elite,elite,39,39,overtake,3,4.44,true_pass,true_pass,4.39,4.49,4.39,4.49,5.0,0,0,0.0,0.0,39,39,173,39,False
+N8,104th to Queen/York,elite,elite,39,39,overtake,4,4.55,true_pass,true_pass,4.5,4.6,4.5,4.6,5.0,0,0,0.0,0.0,39,39,169,39,False
+N8,104th to Queen/York,elite,elite,39,39,overtake,5,4.66,true_pass,true_pass,4.61,4.71,4.61,4.71,5.0,0,0,0.0,0.0,39,39,169,39,False
+N8,104th to Queen/York,elite,elite,39,39,overtake,6,4.77,true_pass,true_pass,4.72,4.81,4.72,4.81,5.0,0,0,0.0,0.0,39,39,141,39,False
+N8a,104th to Queen/York,elite,elite,39,39,overtake,0,4.11,true_pass,true_pass,4.11,4.16,1.88,1.93,5.0,0,0,0.0,0.0,0,0,0,0,False
+N8a,104th to Queen/York,elite,elite,39,39,overtake,1,4.21,true_pass,true_pass,4.16,4.26,1.93,2.03,5.0,0,0,0.0,0.0,0,0,0,0,False
+N8a,104th to Queen/York,elite,elite,39,39,overtake,2,4.31,true_pass,true_pass,4.26,4.36,2.03,2.13,5.0,0,0,0.0,0.0,0,0,0,0,False
+N8a,104th to Queen/York,elite,elite,39,39,overtake,3,4.42,true_pass,true_pass,4.37,4.46,2.13,2.24,5.0,0,0,0.0,0.0,0,0,0,0,False
+N8a,104th to Queen/York,elite,elite,39,39,overtake,4,4.52,true_pass,true_pass,4.47,4.57,2.24,2.34,5.0,0,0,0.0,0.0,0,0,0,0,False
+N8a,104th to Queen/York,elite,elite,39,39,overtake,5,4.62,true_pass,true_pass,4.57,4.67,2.34,2.44,5.0,0,0,0.0,0.0,0,0,0,0,False
+N8a,104th to Queen/York,elite,elite,39,39,overtake,6,4.72,true_pass,true_pass,4.67,4.77,2.44,2.54,5.0,0,0,0.0,0.0,0,0,0,0,False
+N9,Queen/York to Finish,elite,elite,39,39,overtake,0,4.81,true_pass,true_pass,4.81,4.86,4.81,4.86,5.0,0,0,0.0,0.0,39,39,81,39,False
+N9,Queen/York to Finish,elite,elite,39,39,overtake,1,4.92,true_pass,true_pass,4.87,4.97,4.87,4.97,5.0,0,0,0.0,0.0,39,39,163,39,False
+O1,Start to Queen/Westmorland,open,open,550,550,overtake,0,0.0,true_pass,true_pass,0.0,0.05,0.0,0.05,5.0,519,519,94.4,94.4,550,550,116482,550,True
+O1,Start to Queen/Westmorland,open,open,550,550,overtake,1,0.11,true_pass,true_pass,0.06,0.16,0.06,0.16,5.0,519,519,94.4,94.4,550,550,195570,550,True
+O1,Start to Queen/Westmorland,open,open,550,550,overtake,2,0.21,true_pass,true_pass,0.16,0.26,0.16,0.26,5.0,519,519,94.4,94.4,550,550,161018,550,True
+O1,Start to Queen/Westmorland,open,open,550,550,overtake,3,0.31,true_pass,true_pass,0.26,0.36,0.26,0.36,5.0,519,519,94.4,94.4,550,550,134464,550,True
+O1,Start to Queen/Westmorland,open,open,550,550,overtake,4,0.41,true_pass,true_pass,0.36,0.46,0.36,0.46,5.0,519,519,94.4,94.4,550,550,113848,550,True
+O1,Start to Queen/Westmorland,open,open,550,550,overtake,5,0.51,true_pass,true_pass,0.46,0.56,0.46,0.56,5.0,515,515,93.6,93.6,550,550,98822,550,True
+O2,Queen/Westmorland to PSAB/WSB,open,open,550,550,overtake,0,0.57,true_pass,true_pass,0.57,0.62,0.57,0.62,5.0,444,444,80.7,80.7,550,550,39468,550,True
+O2,Queen/Westmorland to PSAB/WSB,open,open,550,550,overtake,1,0.67,true_pass,true_pass,0.62,0.72,0.62,0.72,5.0,444,444,80.7,80.7,550,550,81340,550,True
+O2,Queen/Westmorland to PSAB/WSB,open,open,550,550,overtake,2,0.77,true_pass,true_pass,0.72,0.82,0.72,0.82,5.0,444,444,80.7,80.7,550,550,73374,550,True
+O2,Queen/Westmorland to PSAB/WSB,open,open,550,550,overtake,3,0.87,true_pass,true_pass,0.82,0.92,0.82,0.92,5.0,444,444,80.7,80.7,550,550,66738,550,True
+O2,Queen/Westmorland to PSAB/WSB,open,open,550,550,overtake,4,0.97,true_pass,true_pass,0.92,1.02,0.92,1.02,5.0,444,444,80.7,80.7,550,550,61066,550,True
+O2,Queen/Westmorland to PSAB/WSB,open,open,550,550,overtake,5,1.08,true_pass,true_pass,1.03,1.13,1.03,1.13,5.0,444,444,80.7,80.7,550,550,55904,550,True
+O2,Queen/Westmorland to PSAB/WSB,open,open,550,550,overtake,6,1.18,true_pass,true_pass,1.13,1.23,1.13,1.23,5.0,444,444,80.7,80.7,550,550,52084,550,True
+O2,Queen/Westmorland to PSAB/WSB,open,open,550,550,overtake,7,1.28,true_pass,true_pass,1.23,1.33,1.23,1.33,5.0,444,444,80.7,80.7,550,550,48450,550,True
+O2,Queen/Westmorland to PSAB/WSB,open,open,550,550,overtake,8,1.38,true_pass,true_pass,1.33,1.43,1.33,1.43,5.0,444,444,80.7,80.7,550,550,45278,550,True
+O3,PSAB/WSB to 104th Bridge,open,open,550,550,overtake,0,1.45,true_pass,true_pass,1.45,1.5,1.45,1.5,5.0,289,289,52.5,52.5,518,518,18498,518,True
+O3,PSAB/WSB to 104th Bridge,open,open,550,550,overtake,1,1.55,true_pass,true_pass,1.5,1.6,1.5,1.6,5.0,289,289,52.5,52.5,518,518,40086,518,True
+O3,PSAB/WSB to 104th Bridge,open,open,550,550,overtake,2,1.65,true_pass,true_pass,1.6,1.7,1.6,1.7,5.0,289,289,52.5,52.5,518,518,37972,518,True
+O3,PSAB/WSB to 104th Bridge,open,open,550,550,overtake,3,1.75,true_pass,true_pass,1.7,1.8,1.7,1.8,5.0,289,289,52.5,52.5,518,518,36046,518,True
+O3,PSAB/WSB to 104th Bridge,open,open,550,550,overtake,4,1.85,true_pass,true_pass,1.8,1.88,1.8,1.88,5.0,289,289,52.5,52.5,518,518,26874,518,True
+O4,104th to Queen/York,open,open,550,550,overtake,0,1.88,true_pass,true_pass,1.88,1.93,1.88,1.93,5.0,285,285,51.8,51.8,550,550,25923,550,True
+O4,104th to Queen/York,open,open,550,550,overtake,1,1.98,true_pass,true_pass,1.93,2.03,1.93,2.03,5.0,285,285,51.8,51.8,550,550,56007,550,True
+O4,104th to Queen/York,open,open,550,550,overtake,2,2.09,true_pass,true_pass,2.04,2.14,2.04,2.14,5.0,285,285,51.8,51.8,550,550,53581,550,True
+O4,104th to Queen/York,open,open,550,550,overtake,3,2.2,true_pass,true_pass,2.15,2.25,2.15,2.25,5.0,285,285,51.8,51.8,550,550,51169,550,True
+O4,104th to Queen/York,open,open,550,550,overtake,4,2.31,true_pass,true_pass,2.26,2.36,2.26,2.36,5.0,285,285,51.8,51.8,550,550,49007,550,True
+O4,104th to Queen/York,open,open,550,550,overtake,5,2.42,true_pass,true_pass,2.37,2.47,2.37,2.47,5.0,285,285,51.8,51.8,550,550,46977,550,True
+O4,104th to Queen/York,open,open,550,550,overtake,6,2.53,true_pass,true_pass,2.48,2.58,2.48,2.58,5.0,285,285,51.8,51.8,550,550,45187,550,True
+O5,Queen/York to Queen at PSAB,open,open,550,550,overtake,0,2.58,true_pass,true_pass,2.58,2.63,2.58,2.63,5.0,228,228,41.5,41.5,536,536,16327,536,True
+O5,Queen/York to Queen at PSAB,open,open,550,550,overtake,1,2.69,true_pass,true_pass,2.64,2.74,2.64,2.74,5.0,228,228,41.5,41.5,536,536,35315,536,True
+O5,Queen/York to Queen at PSAB,open,open,550,550,overtake,2,2.8,true_pass,true_pass,2.75,2.85,2.75,2.85,5.0,228,228,41.5,41.5,536,536,34173,536,True
+O5,Queen/York to Queen at PSAB,open,open,550,550,overtake,3,2.91,true_pass,true_pass,2.86,2.96,2.86,2.96,5.0,228,228,41.5,41.5,536,536,33099,536,True
+O5,Queen/York to Queen at PSAB,open,open,550,550,overtake,4,3.02,true_pass,true_pass,2.97,3.07,2.97,3.07,5.0,228,228,41.5,41.5,536,536,32003,536,True
+O5,Queen/York to Queen at PSAB,open,open,550,550,overtake,5,3.13,true_pass,true_pass,3.08,3.15,3.08,3.15,5.0,228,228,41.5,41.5,536,536,20839,536,True
+O5a,Queen/York to Queen at PSAB,open,open,550,550,overtake,0,2.58,true_pass,true_pass,2.58,2.63,0.0,0.05,5.0,0,0,0.0,0.0,0,0,0,0,False
+O5a,Queen/York to Queen at PSAB,open,open,550,550,overtake,1,2.68,true_pass,true_pass,2.63,2.73,0.05,0.15,5.0,0,0,0.0,0.0,0,0,0,0,False
+O5a,Queen/York to Queen at PSAB,open,open,550,550,overtake,2,2.78,true_pass,true_pass,2.73,2.83,0.15,0.25,5.0,0,0,0.0,0.0,0,0,0,0,False
+O5a,Queen/York to Queen at PSAB,open,open,550,550,overtake,3,2.88,true_pass,true_pass,2.83,2.93,0.25,0.35,5.0,0,0,0.0,0.0,0,0,0,0,False
+O5a,Queen/York to Queen at PSAB,open,open,550,550,overtake,4,2.98,true_pass,true_pass,2.93,3.03,0.35,0.45,5.0,0,0,0.0,0.0,0,0,0,0,False
+O5a,Queen/York to Queen at PSAB,open,open,550,550,overtake,5,3.09,true_pass,true_pass,3.04,3.14,0.46,0.56,5.0,0,0,0.0,0.0,0,0,0,0,False
+O6,Queen at PSAB to PSAB/WSB,open,open,550,550,overtake,0,3.15,true_pass,true_pass,3.15,3.2,3.15,3.2,5.0,192,192,34.9,34.9,550,550,12238,550,True
+O6,Queen at PSAB to PSAB/WSB,open,open,550,550,overtake,1,3.26,true_pass,true_pass,3.21,3.31,3.21,3.31,5.0,192,192,34.9,34.9,550,550,26606,550,True
+O6,Queen at PSAB to PSAB/WSB,open,open,550,550,overtake,2,3.37,true_pass,true_pass,3.32,3.42,3.32,3.42,5.0,192,192,34.9,34.9,550,550,25792,550,True
+O6,Queen at PSAB to PSAB/WSB,open,open,550,550,overtake,3,3.48,true_pass,true_pass,3.43,3.53,3.43,3.53,5.0,192,192,34.9,34.9,550,550,24998,550,True
+O6,Queen at PSAB to PSAB/WSB,open,open,550,550,overtake,4,3.59,true_pass,true_pass,3.54,3.64,3.54,3.64,5.0,192,192,34.9,34.9,550,550,24370,550,True
+O6a,Queen at PSAB to PSAB/WSB,open,open,550,550,overtake,0,3.15,true_pass,true_pass,3.15,3.2,0.57,0.65,5.0,0,0,0.0,0.0,0,0,0,0,True
+O6a,Queen at PSAB to PSAB/WSB,open,open,550,550,overtake,1,3.25,true_pass,true_pass,3.2,3.3,0.66,0.82,5.0,0,0,0.0,0.0,0,0,0,0,True
+O6a,Queen at PSAB to PSAB/WSB,open,open,550,550,overtake,2,3.35,true_pass,true_pass,3.3,3.4,0.83,0.99,5.0,0,0,0.0,0.0,0,0,25,0,True
+O6a,Queen at PSAB to PSAB/WSB,open,open,550,550,overtake,3,3.46,true_pass,true_pass,3.41,3.51,1.0,1.16,5.0,0,0,0.0,0.0,0,0,191,0,True
+O6a,Queen at PSAB to PSAB/WSB,open,open,550,550,overtake,4,3.56,true_pass,true_pass,3.51,3.61,1.16,1.33,5.0,0,0,0.0,0.0,0,0,606,0,True
+O6a,Queen at PSAB to PSAB/WSB,open,open,550,550,overtake,5,3.66,true_pass,true_pass,3.61,3.68,1.33,1.45,5.0,0,0,0.0,0.0,0,0,746,0,True
+O7,PSAB/WSB to 104th Bridge,open,open,550,550,overtake,0,3.68,true_pass,true_pass,3.68,3.73,3.68,3.73,5.0,123,123,22.4,22.4,550,550,9708,550,True
+O7,PSAB/WSB to 104th Bridge,open,open,550,550,overtake,1,3.79,true_pass,true_pass,3.74,3.84,3.74,3.84,5.0,123,123,22.4,22.4,550,550,20954,550,True
+O7,PSAB/WSB to 104th Bridge,open,open,550,550,overtake,2,3.9,true_pass,true_pass,3.85,3.95,3.85,3.95,5.0,123,123,22.4,22.4,550,550,20472,550,True
+O7,PSAB/WSB to 104th Bridge,open,open,550,550,overtake,3,4.01,true_pass,true_pass,3.96,4.06,3.96,4.06,5.0,123,123,22.4,22.4,550,550,19964,550,True
+O7a,PSAB/WSB to 104th Bridge,open,open,550,550,overtake,0,3.68,true_pass,true_pass,3.68,3.73,1.45,1.5,5.0,49,0,8.9,0.0,34,45,371,142,True
+O7a,PSAB/WSB to 104th Bridge,open,open,550,550,overtake,1,3.78,true_pass,true_pass,3.73,3.83,1.5,1.6,5.0,51,0,9.3,0.0,58,107,1092,181,True
+O7a,PSAB/WSB to 104th Bridge,open,open,550,550,overtake,2,3.88,true_pass,true_pass,3.83,3.93,1.6,1.7,5.0,1,0,0.2,0.0,58,102,1333,160,True
+O7a,PSAB/WSB to 104th Bridge,open,open,550,550,overtake,3,3.98,true_pass,true_pass,3.93,4.03,1.7,1.8,5.0,0,0,0.0,0.0,0,0,1548,0,True
+O7a,PSAB/WSB to 104th Bridge,open,open,550,550,overtake,4,4.08,true_pass,true_pass,4.03,4.11,1.8,1.88,5.0,0,0,0.0,0.0,0,0,1291,0,True
+O8,104th to Queen/York,open,open,550,550,overtake,0,4.11,true_pass,true_pass,4.11,4.16,4.11,4.16,5.0,174,174,31.6,31.6,550,550,11215,550,True
+O8,104th to Queen/York,open,open,550,550,overtake,1,4.22,true_pass,true_pass,4.17,4.27,4.17,4.27,5.0,174,174,31.6,31.6,550,550,24419,550,True
+O8,104th to Queen/York,open,open,550,550,overtake,2,4.33,true_pass,true_pass,4.28,4.38,4.28,4.38,5.0,174,174,31.6,31.6,550,550,23857,550,True
+O8,104th to Queen/York,open,open,550,550,overtake,3,4.44,true_pass,true_pass,4.39,4.49,4.39,4.49,5.0,174,174,31.6,31.6,550,550,23339,550,True
+O8,104th to Queen/York,open,open,550,550,overtake,4,4.55,true_pass,true_pass,4.5,4.6,4.5,4.6,5.0,174,174,31.6,31.6,550,550,22909,550,True
+O8,104th to Queen/York,open,open,550,550,overtake,5,4.66,true_pass,true_pass,4.61,4.71,4.61,4.71,5.0,174,174,31.6,31.6,550,550,22475,550,True
+O8,104th to Queen/York,open,open,550,550,overtake,6,4.77,true_pass,true_pass,4.72,4.81,4.72,4.81,5.0,174,174,31.6,31.6,550,550,19821,550,True
+O8a,104th to Queen/York,open,open,550,550,overtake,0,4.11,true_pass,true_pass,4.11,4.16,1.88,1.93,5.0,98,0,17.8,0.0,69,111,800,290,True
+O8a,104th to Queen/York,open,open,550,550,overtake,1,4.21,true_pass,true_pass,4.16,4.26,1.93,2.03,5.0,107,0,19.5,0.0,123,225,2059,396,True
+O8a,104th to Queen/York,open,open,550,550,overtake,2,4.31,true_pass,true_pass,4.26,4.36,2.03,2.13,5.0,104,0,18.9,0.0,125,260,2391,405,True
+O8a,104th to Queen/York,open,open,550,550,overtake,3,4.42,true_pass,true_pass,4.37,4.46,2.13,2.24,5.0,0,0,0.0,0.0,125,247,2568,372,True
+O8a,104th to Queen/York,open,open,550,550,overtake,4,4.52,true_pass,true_pass,4.47,4.57,2.24,2.34,5.0,0,0,0.0,0.0,50,55,2594,105,True
+O8a,104th to Queen/York,open,open,550,550,overtake,5,4.62,true_pass,true_pass,4.57,4.67,2.34,2.44,5.0,0,0,0.0,0.0,0,0,2570,0,True
+O8a,104th to Queen/York,open,open,550,550,overtake,6,4.72,true_pass,true_pass,4.67,4.77,2.44,2.54,5.0,0,0,0.0,0.0,0,0,2693,0,True
+O9,Queen/York to Finish,open,open,550,550,overtake,0,4.81,true_pass,true_pass,4.81,4.86,4.81,4.86,5.0,25,25,4.5,4.5,550,550,8163,550,True
+O9,Queen/York to Finish,open,open,550,550,overtake,1,4.92,true_pass,true_pass,4.87,4.97,4.87,4.97,5.0,25,25,4.5,4.5,550,550,17369,550,True
