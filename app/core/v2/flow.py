@@ -602,6 +602,12 @@ def analyze_temporal_flow_segments_v2(
                 performance_log_path=performance_log_path
             )
             
+            # Collect segment timings from this day (will be written sorted at end)
+            if performance_log_path and "_segment_timings" in flow_results:
+                all_segment_timings.extend(flow_results["_segment_timings"])
+                # Remove internal field from results
+                del flow_results["_segment_timings"]
+            
             # Add day and events metadata to results
             flow_results["day"] = day.value
             flow_results["events"] = [e.name for e in day_events_unique]
