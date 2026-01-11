@@ -3816,6 +3816,9 @@ def analyze_temporal_flow_segments(
         "segments": []
     }
     
+    # Collect segment timings for sorting before writing to performance log
+    segment_timings = []
+    
     for _, segment in all_segments.iterrows():
         seg_id = segment["seg_id"]
         event_a = segment["eventa"]
@@ -3951,16 +3954,12 @@ def analyze_temporal_flow_segments(
             })
             results["segments_with_convergence"] += 1
         
-        # Calculate segment processing time and log to performance file if provided
+        # Calculate segment processing time and collect for sorting
         segment_end_time = time.time()
         segment_elapsed_seconds = segment_end_time - segment_start_time
         
         if performance_log_path:
-            try:
-                with open(performance_log_path, 'a') as f:
-                    f.write(f"{seg_id},{segment_elapsed_seconds:.3f}\n")
-            except Exception as e:
-                print(f"Warning: Could not write to performance log {performance_log_path}: {e}")
+            segment_timings.append((seg_id, segment_elapsed_seconds))
         
         results["segments"].append(segment_result)
     

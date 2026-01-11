@@ -495,9 +495,9 @@ def analyze_temporal_flow_segments_v2(
     # Create performance log file path if run_path is provided
     performance_log_path = None
     if run_path is not None:
-        audit_dir = run_path / "audit"
-        audit_dir.mkdir(parents=True, exist_ok=True)
-        performance_log_path = str(audit_dir / "performance.log")
+        logs_dir = run_path / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        performance_log_path = str(logs_dir / "performance.log")
         # Initialize performance log file with header
         try:
             with open(performance_log_path, 'w') as f:
