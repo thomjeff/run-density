@@ -238,29 +238,9 @@ async def generate_scenario(
                     # Validate format (will raise ValueError if invalid)
                     validate_cutoff_time_format(cutoff_str)
         
-        # All validations passed - now create directory
-        reports_path = get_runflow_root()
-        baseline_dir = create_baseline_directory(reports_path)
-        run_id = baseline_dir.name
-        
-        # Save baseline.json (first time)
-        baseline_json_path = save_baseline_metrics(
-            baseline_dir=baseline_dir,
-            run_id=run_id,
-            data_dir=str(data_dir),
-            reports_path=str(reports_path),
-            selected_files=selected_files,
-            baseline_metrics=baseline_metrics
-        )
-        
-        # Load the saved baseline.json
-        with open(baseline_json_path, "r") as f:
-            baseline_json = json.load(f)
-        
-        data_dir = Path(data_dir)
-        
-        # Process each event
-        generated_files = []
+        # Generate all files in memory first and validate all cutoffs BEFORE creating directory
+        data_dir_path = Path(data_dir)
+        generated_dataframes = {}  # Store generated DataFrames in memory
         new_baseline_metrics = {}
         used_runner_ids = set()  # Track across all events for uniqueness
         
@@ -285,7 +265,7 @@ async def generate_scenario(
             
             # Load baseline runner file
             runners_file = event_metrics["runners_file"]
-            runners_path = data_dir / runners_file
+            runners_path = data_dir_path / runners_file
             if not runners_path.exists():
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -294,7 +274,7 @@ async def generate_scenario(
             
             baseline_df = load_pace_csv(str(runners_path))
             
-            # Generate new runner file
+            # Generate new runner file in memory (this validates cutoff time)
             new_df = generate_runner_file(
                 baseline_df=baseline_df,
                 control_vars=control_vars,
@@ -305,15 +285,11 @@ async def generate_scenario(
                 used_runner_ids=used_runner_ids
             )
             
-            # Save generated file (without suffix - suffix applied later via /apply-suffix endpoint)
-            output_file = baseline_dir / runners_file
-            new_df.to_csv(output_file, index=False)
-            
-            generated_files.append({
-                "event": event_name,
-                "path": str(output_file),
-                "filename": runners_file
-            })
+            # Store generated DataFrame (not saved yet)
+            generated_dataframes[event_name] = {
+                "df": new_df,
+                "runners_file": runners_file
+            }
             
             # Calculate new baseline metrics from generated file
             new_metrics = calculate_baseline_metrics(new_df)
@@ -328,6 +304,37 @@ async def generate_scenario(
                 "new_p95": new_metrics["base_p95"],
                 "new_p100": new_metrics["base_p100"]
             }
+        
+        # All validations passed (including cutoff time validation) - now create directory
+        reports_path = get_runflow_root()
+        baseline_dir = create_baseline_directory(reports_path)
+        run_id = baseline_dir.name
+        
+        # Save baseline.json (first time)
+        baseline_json_path = save_baseline_metrics(
+            baseline_dir=baseline_dir,
+            run_id=run_id,
+            data_dir=str(data_dir),
+            reports_path=str(reports_path),
+            selected_files=selected_files,
+            baseline_metrics=baseline_metrics
+        )
+        
+        # Load the saved baseline.json
+        with open(baseline_json_path, "r") as f:
+            baseline_json = json.load(f)
+        
+        # Now save all generated files to disk
+        generated_files = []
+        for event_name, file_data in generated_dataframes.items():
+            output_file = baseline_dir / file_data["runners_file"]
+            file_data["df"].to_csv(output_file, index=False)
+            
+            generated_files.append({
+                "event": event_name,
+                "path": str(output_file),
+                "filename": file_data["runners_file"]
+            })
         
         # Update baseline.json with control variables and new metrics
         baseline_json["control_variables"] = control_variables
