@@ -218,10 +218,27 @@ async def generate_scenario(
                 detail="control_variables is required and must not be empty"
             )
         
-        # Validate control variables
+        # Validate control variables (before creating directory)
         validate_control_variables(control_variables)
         
-        # Get reports path and create baseline directory (first time)
+        # Validate that all events in control_variables exist in baseline_metrics
+        for event_name in control_variables.keys():
+            if event_name not in baseline_metrics:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Event '{event_name}' not found in baseline metrics"
+                )
+        
+        # Validate cutoff time formats (before creating directory)
+        data_dir_path = Path(data_dir)
+        for event_name, control_vars in control_variables.items():
+            cutoff_str = control_vars.get("cutoff_mins")
+            if cutoff_str:
+                if isinstance(cutoff_str, str):
+                    # Validate format (will raise ValueError if invalid)
+                    validate_cutoff_time_format(cutoff_str)
+        
+        # All validations passed - now create directory
         reports_path = get_runflow_root()
         baseline_dir = create_baseline_directory(reports_path)
         run_id = baseline_dir.name
@@ -248,13 +265,7 @@ async def generate_scenario(
         used_runner_ids = set()  # Track across all events for uniqueness
         
         for event_name, control_vars in control_variables.items():
-            if event_name not in baseline_metrics:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Event '{event_name}' not found in baseline metrics"
-                )
-            
-            # Get baseline metrics for this event
+            # Get baseline metrics for this event (already validated above)
             event_metrics = baseline_metrics[event_name]
             base_participants = event_metrics["base_participants"]
             distance = event_metrics["distance"]
