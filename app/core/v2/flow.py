@@ -492,6 +492,15 @@ def analyze_temporal_flow_segments_v2(
     # Create timeline lookup
     timeline_by_day = {timeline.day: timeline for timeline in timelines}
     
+    # Create performance log file path if run_path is provided
+    performance_log_path = None
+    all_segment_timings = []
+    if run_path is not None:
+        logs_dir = run_path / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        performance_log_path = str(logs_dir / "performance.log")
+        # Note: Collect timings across all days, write sorted at end
+    
     # Analyze flow per day
     for day, day_pairs in pairs_by_day.items():
         logger.info(f"Analyzing flow for day {day.value} with {len(day_pairs)} event pairs")
@@ -589,8 +598,15 @@ def analyze_temporal_flow_segments_v2(
                 segments_csv=temp_segments_csv,
                 start_times=start_times,
                 min_overlap_duration=min_overlap_duration,
-                conflict_length_m=conflict_length_m
+                conflict_length_m=conflict_length_m,
+                performance_log_path=performance_log_path
             )
+            
+            # Collect segment timings from this day (will be written sorted at end)
+            if performance_log_path and "_segment_timings" in flow_results:
+                all_segment_timings.extend(flow_results["_segment_timings"])
+                # Remove internal field from results
+                del flow_results["_segment_timings"]
             
             # Add day and events metadata to results
             flow_results["day"] = day.value
@@ -736,5 +752,19 @@ def analyze_temporal_flow_segments_v2(
                 os.unlink(temp_pace_csv)
             if temp_segments_csv and os.path.exists(temp_segments_csv):
                 os.unlink(temp_segments_csv)
+    
+    # Write sorted performance log with all segment timings from all days
+    if performance_log_path and all_segment_timings:
+        try:
+            # Sort by time_seconds (ascending: min to max)
+            all_segment_timings.sort(key=lambda x: x[1])
+            # Write header and sorted entries
+            with open(performance_log_path, 'w') as f:
+                f.write("seg_id,time_seconds\n")
+                for seg_id, elapsed_seconds in all_segment_timings:
+                    f.write(f"{seg_id},{elapsed_seconds:.3f}\n")
+            logger.info(f"Wrote performance log with {len(all_segment_timings)} segments to {performance_log_path}")
+        except Exception as e:
+            logger.warning(f"Could not write sorted performance log {performance_log_path}: {e}")
     
     return results_by_day

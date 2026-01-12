@@ -3771,6 +3771,7 @@ def analyze_temporal_flow_segments(
     start_times: Dict[str, float],
     min_overlap_duration: float = DEFAULT_MIN_OVERLAP_DURATION,
     conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
+    performance_log_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Analyze all segments for temporal flow patterns.
@@ -3814,6 +3815,9 @@ def analyze_temporal_flow_segments(
         "segments_with_convergence": 0,
         "segments": []
     }
+    
+    # Collect segment timings for sorting before writing to performance log
+    segment_timings = []
     
     for _, segment in all_segments.iterrows():
         seg_id = segment["seg_id"]
@@ -3950,6 +3954,13 @@ def analyze_temporal_flow_segments(
             })
             results["segments_with_convergence"] += 1
         
+        # Calculate segment processing time and collect for sorting
+        segment_end_time = time.time()
+        segment_elapsed_seconds = segment_end_time - segment_start_time
+        
+        if performance_log_path:
+            segment_timings.append((seg_id, segment_elapsed_seconds))
+        
         results["segments"].append(segment_result)
     
     # Generate Deep Dive analysis for segments with flow_type != 'none' after all segments are processed
@@ -3989,6 +4000,10 @@ def analyze_temporal_flow_segments(
                 segment_result
             )
             segment_result["deep_dive_analysis"] = deep_dive
+    
+    # Return segment timings (will be collected and written sorted at v2 level)
+    # Note: Don't write here - v2 flow collects across all days and writes once
+    results["_segment_timings"] = segment_timings if performance_log_path else []
     
     return results
 
