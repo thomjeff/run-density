@@ -446,9 +446,16 @@ async def get_data_files(
         data_path = Path(data_dir).resolve()
         
         if not data_path.exists():
+            # Issue #680: Provide helpful error message for Docker volume mount issues
+            error_msg = f"Data directory not found: {data_dir}"
+            if data_path != Path(data_dir):
+                error_msg += f" (resolved to: {data_path})"
+            # Check if running in Docker and suggest volume mount
+            if os.path.exists("/.dockerenv") or os.path.exists("/app/.dockerenv"):
+                error_msg += ". Note: If running in Docker, ensure the directory is mounted as a volume in docker-compose.yml"
             raise HTTPException(
                 status_code=404,
-                detail=f"Data directory not found: {data_dir} (resolved to: {data_path})"
+                detail=error_msg
             )
         
         if not data_path.is_dir():
