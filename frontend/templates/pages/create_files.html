@@ -136,11 +136,13 @@
 (function() {
     // Baseline state (Issue #676)
     let baselineState = {
-        runId: null,
+        runId: null,  // Created in Step 3 (Calculate New Baseline)
         baselineMetrics: null,
         selectedFiles: [],
+        dataDir: null,
         controlVariables: null,
-        newBaselineMetrics: null
+        newBaselineMetrics: null,
+        reportsPath: null
     };
 
     // Load runner files for baseline selection
@@ -221,10 +223,10 @@
                 throw new Error(data.detail || 'Failed to calculate baseline');
             }
             
-            // Store baseline state
-            baselineState.runId = data.run_id;
+            // Store baseline state (no runId yet - created in Step 3)
             baselineState.baselineMetrics = data.baseline_metrics;
             baselineState.selectedFiles = selectedFiles;
+            baselineState.dataDir = data.data_dir || 'data';  // Store data_dir
             baselineState.reportsPath = data.reports_path || 'runflow';  // Store reports_path
             
             // Render baseline metrics table
@@ -497,7 +499,7 @@
     
     // Calculate new baseline
     async function calculateNewBaseline() {
-        if (!baselineState.runId || !baselineState.baselineMetrics) {
+        if (!baselineState.baselineMetrics || !baselineState.selectedFiles) {
             showBaselineError('Please calculate baseline first');
             return;
         }
@@ -562,7 +564,9 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    baseline_run_id: baselineState.runId,
+                    baseline_metrics: baselineState.baselineMetrics,
+                    selected_files: baselineState.selectedFiles,
+                    data_dir: baselineState.dataDir,
                     control_variables: controlVariables
                 })
             });
@@ -573,7 +577,8 @@
                 throw new Error(data.detail || 'Failed to generate new baseline');
             }
             
-            // Store new baseline metrics
+            // Store runId (created in Step 3) and new baseline metrics
+            baselineState.runId = data.run_id;
             baselineState.controlVariables = controlVariables;
             baselineState.newBaselineMetrics = data.updated_baseline_json.new_baseline_metrics;
             
@@ -699,6 +704,7 @@
             runId: null,
             baselineMetrics: null,
             selectedFiles: [],
+            dataDir: null,
             controlVariables: null,
             newBaselineMetrics: null,
             reportsPath: null

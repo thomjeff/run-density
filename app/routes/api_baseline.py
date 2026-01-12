@@ -41,7 +41,7 @@ async def calculate_baseline(
     """
     Calculate baseline metrics from selected runner CSV files.
     
-    Phase 1 of two-phase API: Calculate baseline metrics (idempotent).
+    Phase 1 of two-phase API: Calculate baseline metrics (idempotent, no directory creation).
     
     Request Body:
         {
@@ -51,7 +51,6 @@ async def calculate_baseline(
     
     Response:
         {
-            "run_id": "4sawTqXz9CExYcQgJTNQCr",
             "data_dir": "/app/data",
             "reports_path": "/app/runflow",
             "selected_files": [...],
@@ -65,6 +64,8 @@ async def calculate_baseline(
                 }
             }
         }
+    
+    Note: Directory and run_id are created in Phase 2 (/api/baseline/generate).
     
     Issue: #676 - Baseline calculation endpoint
     """
@@ -88,12 +89,8 @@ async def calculate_baseline(
                 detail=f"Data directory does not exist: {data_dir}"
             )
         
-        # Get reports path (runflow root)
+        # Get reports path (runflow root) - for response only, not creating directory yet
         reports_path = get_runflow_root()
-        
-        # Create baseline directory
-        baseline_dir = create_baseline_directory(reports_path)
-        run_id = baseline_dir.name
         
         # Calculate baseline metrics for each selected file
         baseline_metrics = {}
@@ -120,26 +117,15 @@ async def calculate_baseline(
             metrics["runners_file"] = file_name
             baseline_metrics[event_name] = metrics
         
-        # Save baseline metrics
-        baseline_json_path = save_baseline_metrics(
-            baseline_dir=baseline_dir,
-            run_id=run_id,
-            data_dir=str(data_dir),
-            reports_path=str(reports_path),
-            selected_files=selected_files,
-            baseline_metrics=baseline_metrics
-        )
-        
-        # Build response
+        # Build response (no directory creation, no run_id)
         response = {
-            "run_id": run_id,
             "data_dir": str(data_dir),
             "reports_path": str(reports_path),
             "selected_files": selected_files,
             "baseline_metrics": baseline_metrics
         }
         
-        logger.info(f"Calculated baseline metrics for {len(selected_files)} files: run_id={run_id}")
+        logger.info(f"Calculated baseline metrics for {len(selected_files)} files (no directory created yet)")
         return JSONResponse(content=response, status_code=status.HTTP_200_OK)
     
     except HTTPException:
@@ -159,11 +145,19 @@ async def generate_scenario(
     """
     Generate new runner files with scenario-based modifications.
     
-    Phase 2 of two-phase API: Apply control variables and generate files.
+    Phase 2 of two-phase API: Create directory, save baseline.json, apply control variables and generate files.
     
     Request Body:
         {
-            "baseline_run_id": "4sawTqXz9CExYcQgJTNQCr",
+            "baseline_metrics": {
+                "elite": {
+                    "runners_file": "elite_runners.csv",
+                    "base_participants": 39,
+                    ...
+                }
+            },
+            "selected_files": ["elite_runners.csv", ...],
+            "data_dir": "/app/data",
             "control_variables": {
                 "elite": {
                     "chg_participants": 0.1026,
@@ -181,6 +175,7 @@ async def generate_scenario(
     
     Response:
         {
+            "run_id": "4sawTqXz9CExYcQgJTNQCr",
             "generated_files": [
                 {
                     "event": "elite",
@@ -193,15 +188,30 @@ async def generate_scenario(
     Issue: #676 - Scenario generation endpoint
     """
     try:
+        import json
+        
         # Get parameters
-        baseline_run_id = request.get("baseline_run_id")
-        if not baseline_run_id:
+        baseline_metrics = request.get("baseline_metrics", {})
+        selected_files = request.get("selected_files", [])
+        data_dir = request.get("data_dir")
+        control_variables = request.get("control_variables", {})
+        
+        # Validate required parameters
+        if not baseline_metrics:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="baseline_run_id is required"
+                detail="baseline_metrics is required"
             )
         
-        control_variables = request.get("control_variables", {})
+        if not selected_files:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="selected_files is required"
+            )
+        
+        if not data_dir:
+            data_dir = get_data_directory()
+        
         if not control_variables:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -211,31 +221,26 @@ async def generate_scenario(
         # Validate control variables
         validate_control_variables(control_variables)
         
-        # Get baseline directory
+        # Get reports path and create baseline directory (first time)
         reports_path = get_runflow_root()
-        baseline_dir = reports_path / "baseline" / baseline_run_id
+        baseline_dir = create_baseline_directory(reports_path)
+        run_id = baseline_dir.name
         
-        if not baseline_dir.exists():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Baseline run_id not found: {baseline_run_id}"
-            )
+        # Save baseline.json (first time)
+        baseline_json_path = save_baseline_metrics(
+            baseline_dir=baseline_dir,
+            run_id=run_id,
+            data_dir=str(data_dir),
+            reports_path=str(reports_path),
+            selected_files=selected_files,
+            baseline_metrics=baseline_metrics
+        )
         
-        # Load baseline.json
-        baseline_json_path = baseline_dir / "baseline.json"
-        if not baseline_json_path.exists():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"baseline.json not found for run_id: {baseline_run_id}"
-            )
-        
-        import json
+        # Load the saved baseline.json
         with open(baseline_json_path, "r") as f:
             baseline_json = json.load(f)
         
-        baseline_metrics = baseline_json.get("baseline_metrics", {})
-        data_dir = Path(baseline_json.get("data_dir", get_data_directory()))
-        selected_files = baseline_json.get("selected_files", [])
+        data_dir = Path(data_dir)
         
         # Process each event
         generated_files = []
@@ -326,12 +331,13 @@ async def generate_scenario(
         
         # Build response
         response = {
+            "run_id": run_id,
             "generated_files": generated_files,
             "updated_baseline_json": baseline_json
         }
         
         logger.info(
-            f"Generated {len(generated_files)} runner files for baseline run_id={baseline_run_id}"
+            f"Generated {len(generated_files)} runner files for baseline run_id={run_id}"
         )
         return JSONResponse(content=response, status_code=status.HTTP_200_OK)
     
