@@ -72,8 +72,9 @@ def _add_core_data_files(reports: list, run_id: str) -> None:
     from app.config.loader import load_analysis_context
     from app.utils.run_id import get_runflow_root
     
-    runflow_root = get_runflow_root()
-    run_path = runflow_root / run_id
+    # Issue #682: Use centralized get_run_directory() for correct path
+    from app.utils.run_id import get_run_directory
+    run_path = get_run_directory(run_id)
     analysis_context = load_analysis_context(run_path)
     data_dir = analysis_context.data_dir
     if not data_dir.exists():
@@ -189,8 +190,9 @@ async def get_reports_list(
                 mtime = stat.st_mtime
                 size = stat.st_size
                 
-                # Path for download: runflow/<run_id>/<day>/reports/<filename>
-                file_path = f"runflow/{run_id}/{day_code}/reports/{filename}"
+                # Path for download: runflow/analysis/<run_id>/<day>/reports/<filename>
+                # Issue #682: Updated to use runflow/analysis/{run_id} structure
+                file_path = f"runflow/analysis/{run_id}/{day_code}/reports/{filename}"
                 
                 reports.append({
                     "name": filename,
@@ -244,16 +246,17 @@ def download_report(path: str = Query(..., description="Report file path")):
             raise HTTPException(status_code=404, detail="File not found")
 
     # Case B: Read report files from runflow structure (v2 day-partitioned)
-    # Path format: runflow/<run_id>/<day>/reports/<filename>
+    # Path format: runflow/analysis/<run_id>/<day>/reports/<filename>
+    # Issue #682: Updated to use runflow/analysis/{run_id} structure
     elif path.startswith("runflow/"):
         try:
             parts = path.split("/")
-            if len(parts) >= 5 and parts[0] == "runflow":
-                report_run_id = parts[1]
-                day_code = parts[2]
-                relative_path = "/".join(parts[3:])  # e.g., "reports/Density.md"
+            if len(parts) >= 6 and parts[0] == "runflow" and parts[1] == "analysis":
+                report_run_id = parts[2]
+                day_code = parts[3]
+                relative_path = "/".join(parts[4:])  # e.g., "reports/Density.md"
                 
-                # Create storage with root pointing to runflow/<run_id>/<day>/
+                # Create storage with root pointing to runflow/analysis/<run_id>/<day>/
                 from app.utils.run_id import get_run_directory
                 from app.storage import Storage
                 
@@ -271,7 +274,7 @@ def download_report(path: str = Query(..., description="Report file path")):
                 logger.info(f"[Download] Loaded runflow file: {path}")
             else:
                 logger.error(f"[Download] Invalid path format: {path}")
-                raise HTTPException(status_code=400, detail="Invalid path format. Expected: runflow/<run_id>/<day>/reports/<filename>")
+                raise HTTPException(status_code=400, detail="Invalid path format. Expected: runflow/analysis/<run_id>/<day>/reports/<filename>")
         except HTTPException:
             raise
         except Exception as e:

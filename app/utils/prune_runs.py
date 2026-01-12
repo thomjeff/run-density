@@ -26,11 +26,13 @@ def load_index() -> Tuple[List[Dict[str, Any]], Path]:
     """
     Load index.json and return entries plus file path.
     
+    Issue #682: Updated to read from runflow/analysis/index.json
+    
     Returns:
         Tuple of (entries list, index.json path)
     """
     runflow_root = get_runflow_root()
-    index_path = runflow_root / "index.json"
+    index_path = runflow_root / "analysis" / "index.json"
     
     if not index_path.exists():
         raise FileNotFoundError(f"index.json not found at {index_path}")
@@ -51,11 +53,13 @@ def load_latest() -> Tuple[str, Path]:
     """
     Load latest.json and return run_id plus file path.
     
+    Issue #682: Updated to read from runflow/analysis/latest.json
+    
     Returns:
         Tuple of (run_id, latest.json path)
     """
     runflow_root = get_runflow_root()
-    latest_path = runflow_root / "latest.json"
+    latest_path = runflow_root / "analysis" / "latest.json"
     
     if not latest_path.exists():
         raise FileNotFoundError(f"latest.json not found at {latest_path}")
@@ -115,10 +119,12 @@ def delete_run_folders(run_ids: List[str], dry_run: bool = False) -> List[str]:
     """
     Delete run folder directories.
     
+    Issue #682: Updated to delete from runflow/analysis/{run_id}
+    
     Args:
         run_ids: List of run_ids to delete
         dry_run: If True, only log what would be deleted
-        
+    
     Returns:
         List of run_ids that were successfully deleted (or would be in dry-run)
     """
@@ -126,7 +132,8 @@ def delete_run_folders(run_ids: List[str], dry_run: bool = False) -> List[str]:
     deleted = []
     
     for run_id in run_ids:
-        run_path = runflow_root / run_id
+        # Issue #682: Delete from analysis subdirectory
+        run_path = runflow_root / "analysis" / run_id
         
         if not run_path.exists():
             logger.warning(f"Run folder does not exist: {run_path} (skipping)")

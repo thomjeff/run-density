@@ -155,11 +155,13 @@ For Docker Compose network:
 ```json
 {
   "base_url": "http://app:8080",
-  "data_dir": "/app/data"
+  "data_dir": "/app/runflow/config/sample"
 }
 ```
 
 **Usage:** When running tests inside Docker network (e.g., `docker exec`)
+
+**Note:** The `data_dir` parameter (Issue #680) allows you to specify a custom data directory. The default `/app/runflow/config/sample` can be changed by replacing "sample" with your desired sub-directory name. All analyze requests include `data_dir` in the request body, which will use this environment variable value.
 
 ### Cloud Environment (`Cloud.postman_environment.json`)
 
@@ -184,6 +186,7 @@ For production/Cloud Run:
 POST {{base_url}}/runflow/v2/analyze
 {
   "description": "Saturday only scenario test with audit",
+  "data_dir": "{{data_dir}}",
   "segments_file": "segments.csv",
   "flow_file": "flow.csv",
   "locations_file": "locations.csv",
@@ -208,6 +211,8 @@ POST {{base_url}}/runflow/v2/analyze
   ]
 }
 ```
+
+**Note:** The `data_dir` field (Issue #680) is included in all analyze requests. It uses the `{{data_dir}}` environment variable, which defaults to `/app/runflow/config/sample` for Docker environment. Users can replace "sample" with any sub-directory name in the environment variable to use different configuration files.
 
 **Note:** All analyze requests include `enableAudit: "y"` to generate audit Parquet files for detailed flow analysis (Issue #607).
 
@@ -259,7 +264,7 @@ Collections use Postman variables for flexibility:
 |----------|-------------|---------|
 | `base_url` | API base URL | `http://localhost:8080` |
 | `run_id` | Latest run ID (auto-extracted) | `hCjWfQNKMePnRkrN4GX9Rj` |
-| `data_dir` | Data directory path | `/data` |
+| `data_dir` | Data directory path (Issue #680) | `/app/runflow/config/sample` (Docker) or `/data` (Local/Cloud) |
 
 **Auto-extracted Variables:**
 - `run_id` - Extracted from analyze response

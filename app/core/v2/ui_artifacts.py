@@ -2,9 +2,10 @@
 Runflow v2 UI Artifacts Module
 
 Generates UI-facing artifacts (JSON files, heatmaps, captions) for the dashboard.
-Artifacts are stored per-day in runflow/{run_id}/{day}/ui/ but contain full run scope data.
+Artifacts are stored per-day in runflow/analysis/{run_id}/{day}/ui/ but contain full run scope data.
 
 Phase 7: UI & API Surface Updates (Issue #501)
+Issue #682: Updated to use runflow/analysis/{run_id} structure
 """
 
 from typing import Dict, List, Any, Optional
@@ -34,8 +35,10 @@ def get_ui_artifacts_path(run_id: str, day: Day) -> Path:
         >>> str(path)
         'runflow/abc123/sun/ui'
     """
-    runflow_root = get_runflow_root()
-    ui_path = runflow_root / run_id / day.value / "ui"
+    # Issue #682: Use centralized get_run_directory() for correct path
+    from app.utils.run_id import get_run_directory
+    run_dir = get_run_directory(run_id)
+    ui_path = run_dir / day.value / "ui"
     return ui_path
 
 
@@ -118,8 +121,10 @@ def generate_ui_artifacts_per_day(
         Path to UI artifacts directory, or None if generation failed
         
     Note:
-        Artifacts are stored in runflow/{run_id}/{day}/ui/ and contain
+        Artifacts are stored in runflow/analysis/{run_id}/{day}/ui/ and contain
         ONLY segments for that specific day (day-scoped).
+        
+        Issue #682: Updated to use runflow/analysis/{run_id} structure
     """
     try:
         logger.info(f"Generating UI artifacts for day {day.value} (day-scoped)")
@@ -669,13 +674,14 @@ def _export_ui_artifacts_v2(
                 runflow_root = get_runflow_root()
                 
                 # Heatmaps can be in multiple locations:
-                # 1. runflow/{run_id}/heatmaps/ (run level - most common)
-                # 2. runflow/{run_id}/ui/heatmaps/ (ui subdirectory)
+                # 1. runflow/analysis/{run_id}/heatmaps/ (run level - most common)
+                # 2. runflow/analysis/{run_id}/ui/heatmaps/ (ui subdirectory)
                 # 3. artifacts/{run_id}/ui/heatmaps/ (legacy)
+                # Issue #682: Updated to use runflow/analysis/{run_id} structure
                 heatmaps_source = None
                 for possible_path in [
-                    runflow_root / run_id / "heatmaps",  # Run level (most common)
-                    runflow_root / run_id / "ui" / "heatmaps",  # UI subdirectory
+                    runflow_root / "analysis" / run_id / "heatmaps",  # Run level (most common)
+                    runflow_root / "analysis" / run_id / "ui" / "heatmaps",  # UI subdirectory
                     Path("/app/artifacts") / run_id / "ui" / "heatmaps"  # Legacy
                 ]:
                     if possible_path.exists():
@@ -683,11 +689,12 @@ def _export_ui_artifacts_v2(
                         break
                 
                 # Captions can be in:
-                # 1. runflow/{run_id}/ui/captions.json (most common)
+                # 1. runflow/analysis/{run_id}/ui/captions.json (most common)
                 # 2. artifacts/{run_id}/ui/captions.json (legacy)
+                # Issue #682: Updated to use runflow/analysis/{run_id} structure
                 captions_source = None
                 for possible_path in [
-                    runflow_root / run_id / "ui" / "captions.json",  # UI subdirectory
+                    runflow_root / "analysis" / run_id / "ui" / "captions.json",  # UI subdirectory
                     Path("/app/artifacts") / run_id / "ui" / "captions.json"  # Legacy
                 ]:
                     if possible_path.exists():
@@ -733,7 +740,10 @@ def _export_ui_artifacts_v2(
                     logger.warning(f"   ⚠️  Captions not found at expected locations")
                 
                 # Clean up empty /ui folder at run level (Issue #501: Remove empty ui folder)
-                run_level_ui = runflow_root / run_id / "ui"
+                # Issue #682: Use centralized get_run_directory() for correct path
+                from app.utils.run_id import get_run_directory
+                run_dir = get_run_directory(run_id)
+                run_level_ui = run_dir / "ui"
                 if run_level_ui.exists() and run_level_ui.is_dir():
                     try:
                         # Check if folder is empty
@@ -777,8 +787,9 @@ def _aggregate_bins_from_all_days(run_id: str) -> Optional[pd.DataFrame]:
     Returns:
         Aggregated DataFrame with bins from all days, or None if no bins found
     """
-    runflow_root = get_runflow_root()
-    run_path = runflow_root / run_id
+    # Issue #682: Use centralized get_run_directory() for correct path
+    from app.utils.run_id import get_run_directory
+    run_path = get_run_directory(run_id)
     
     if not run_path.exists():
         logger.warning(f"Run directory not found: {run_path}")

@@ -202,8 +202,9 @@ def create_stubbed_pipeline(
     if not run_id:
         run_id = generate_run_id()
     
-    runflow_root = get_runflow_root()
-    run_path = runflow_root / run_id
+    # Issue #682: Use centralized get_run_directory() for correct path
+    from app.utils.run_id import get_run_directory
+    run_path = get_run_directory(run_id)
     run_path.mkdir(parents=True, exist_ok=True)
     
     # Group events by day
@@ -249,13 +250,14 @@ def create_stubbed_pipeline(
             json.dump(metadata, f, indent=2, ensure_ascii=False)
         
         # Store output paths (relative to runflow root for API response)
+        # Issue #682: Updated to use runflow/analysis/{run_id} structure
         output_paths[day_code] = {
             "day": day_code,
-            "reports": f"runflow/{run_id}/{day_code}/reports",
-            "bins": f"runflow/{run_id}/{day_code}/bins",
-            "maps": f"runflow/{run_id}/{day_code}/maps",
-            "ui": f"runflow/{run_id}/{day_code}/ui",
-            "metadata": f"runflow/{run_id}/{day_code}/metadata.json"
+            "reports": f"runflow/analysis/{run_id}/{day_code}/reports",
+            "bins": f"runflow/analysis/{run_id}/{day_code}/bins",
+            "maps": f"runflow/analysis/{run_id}/{day_code}/maps",
+            "ui": f"runflow/analysis/{run_id}/{day_code}/ui",
+            "metadata": f"runflow/analysis/{run_id}/{day_code}/metadata.json"
         }
     
     # Create combined metadata for index.json (includes all days)
@@ -640,7 +642,8 @@ def create_combined_metadata(
         "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "status": agg_status,
         "days": days,
-        "day_paths": {day: f"runflow/{run_id}/{day}" for day in days},
+        # Issue #682: Updated to use runflow/analysis/{run_id} structure
+        "day_paths": {day: f"runflow/analysis/{run_id}/{day}" for day in days},
         "runtime_env": detect_runtime_environment(),
         "storage_target": detect_storage_target(),
         "app_version": get_app_version(),
@@ -724,8 +727,9 @@ def create_full_analysis_pipeline(
         event_names = [e.name for e in events]
         logger.info(f"Using provided run_id: {run_id} for {len(events)} events ({', '.join(event_names)}) across {days_count} day(s)")
     
-    runflow_root = get_runflow_root()
-    run_path = runflow_root / run_id
+    # Issue #682: Use centralized get_run_directory() for correct path
+    from app.utils.run_id import get_run_directory
+    run_path = get_run_directory(run_id)
     # Issue #553: Run directory may already exist if analysis.json was generated
     run_path.mkdir(parents=True, exist_ok=True)
     logger.debug(f"Using run directory: {run_path}")
@@ -761,7 +765,8 @@ def create_full_analysis_pipeline(
     perf_monitor.total_memory_mb = get_memory_usage_mb()
     
     try:
-        run_log_handler = RunLogHandler(run_id, runflow_root)
+        # Issue #682: RunLogHandler accepts optional runflow_root (defaults to get_runflow_root())
+        run_log_handler = RunLogHandler(run_id, None)
         run_log_handler.__enter__()
         
         # Group events by day
@@ -1524,13 +1529,14 @@ def create_full_analysis_pipeline(
             day_metadata_map[day_code] = metadata
             
             # Store output paths
+            # Issue #682: Updated to use runflow/analysis/{run_id} structure
             output_paths[day_code] = {
                 "day": day_code,
-                "reports": f"runflow/{run_id}/{day_code}/reports",
-                "bins": f"runflow/{run_id}/{day_code}/bins",
-                "maps": f"runflow/{run_id}/{day_code}/maps",
-                "ui": f"runflow/{run_id}/{day_code}/ui",
-                "metadata": f"runflow/{run_id}/{day_code}/metadata.json"
+                "reports": f"runflow/analysis/{run_id}/{day_code}/reports",
+                "bins": f"runflow/analysis/{run_id}/{day_code}/bins",
+                "maps": f"runflow/analysis/{run_id}/{day_code}/maps",
+                "ui": f"runflow/analysis/{run_id}/{day_code}/ui",
+                "metadata": f"runflow/analysis/{run_id}/{day_code}/metadata.json"
             }
         
         # Phase 5: Report Generation (Issue #574, #581: Enhanced logging)

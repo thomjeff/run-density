@@ -305,7 +305,7 @@ def read_run_metadata(run_path: Path) -> Optional[Dict[str, Any]]:
 
 def update_latest_pointer(run_id: str) -> None:
     """
-    Update runflow/latest.json to point to the most recent run (Issue #456 Task 1).
+    Update runflow/analysis/latest.json to point to the most recent run (Issue #456 Task 1).
     
     This file serves as a lightweight pointer to the latest run, used by future
     GET /api/runs/latest endpoint (Phase 5+).
@@ -319,6 +319,8 @@ def update_latest_pointer(run_id: str) -> None:
     Example:
         update_latest_pointer("G4FAdzseZT3G2gFizftHXX")
         # Writes: { "run_id": "G4FAdzseZT3G2gFizftHXX" }
+    
+    Issue #682: Moved from runflow/latest.json to runflow/analysis/latest.json
     """
     # Issue #466 Step 4 Cleanup: Removed GCS imports (local-only)
     from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER
@@ -333,8 +335,10 @@ def update_latest_pointer(run_id: str) -> None:
         runflow_root = Path(RUNFLOW_ROOT_CONTAINER)
     else:
         runflow_root = Path(RUNFLOW_ROOT_LOCAL)
-    runflow_root.mkdir(parents=True, exist_ok=True)
-    latest_path = runflow_root / "latest.json"
+    # Issue #682: Create analysis subdirectory
+    analysis_dir = runflow_root / "analysis"
+    analysis_dir.mkdir(parents=True, exist_ok=True)
+    latest_path = analysis_dir / "latest.json"
     
     # Write to temp file first
     with tempfile.NamedTemporaryFile(mode='w', dir=runflow_root, delete=False, suffix='.tmp') as f:
@@ -348,7 +352,7 @@ def update_latest_pointer(run_id: str) -> None:
 
 def append_to_run_index(metadata: Dict[str, Any]) -> None:
     """
-    Append run metadata to runflow/index.json (Issue #456 Task 2).
+    Append run metadata to runflow/analysis/index.json (Issue #456 Task 2).
     
     Maintains an append-only log of all runs with their metadata summaries.
     Used by future GET /api/runs endpoint (Phase 5+).
@@ -356,6 +360,7 @@ def append_to_run_index(metadata: Dict[str, Any]) -> None:
     Deduplicates by run_id - if run already exists, skips append.
     
     Issue #566: Loads event_summary from analysis.json and includes it in index entry.
+    Issue #682: Moved from runflow/index.json to runflow/analysis/index.json
     
     Args:
         metadata: Metadata dictionary from create_run_metadata()
@@ -378,7 +383,8 @@ def append_to_run_index(metadata: Dict[str, Any]) -> None:
     else:
         runflow_root = Path(RUNFLOW_ROOT_LOCAL)
     
-    analysis_json_path = runflow_root / run_id / "analysis.json"
+    # Issue #682: Update analysis.json path to use new structure
+    analysis_json_path = runflow_root / "analysis" / run_id / "analysis.json"
     if analysis_json_path.exists():
         try:
             with open(analysis_json_path, 'r', encoding='utf-8') as f:
@@ -411,8 +417,10 @@ def append_to_run_index(metadata: Dict[str, Any]) -> None:
     if event_summary is not None:
         index_entry["event_summary"] = event_summary
     
-    runflow_root.mkdir(parents=True, exist_ok=True)
-    index_path = runflow_root / "index.json"
+    # Issue #682: Create analysis subdirectory and use new index.json path
+    analysis_dir = runflow_root / "analysis"
+    analysis_dir.mkdir(parents=True, exist_ok=True)
+    index_path = analysis_dir / "index.json"
     
     # Read existing index
     if index_path.exists():
@@ -465,7 +473,7 @@ def get_latest_run_id() -> str:
 
 def get_run_index() -> List[Dict[str, Any]]:
     """
-    Get the list of all runs from runflow/index.json (Issue #460).
+    Get the list of all runs from runflow/analysis/index.json (Issue #460).
     
     Used by "Multi-run" API endpoints that show recent run summaries.
     
@@ -477,6 +485,8 @@ def get_run_index() -> List[Dict[str, Any]]:
         runs = get_run_index()
         recent_runs = runs[:10]  # Last 10 runs
         return [{"run_id": r["run_id"], "created_at": r["created_at"], ...} for r in recent_runs]
+    
+    Issue #682: Moved from runflow/index.json to runflow/analysis/index.json
     """
     # Issue #466 Step 4 Cleanup: Local-only, dead GCS branch removed
     from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER
@@ -491,7 +501,8 @@ def get_run_index() -> List[Dict[str, Any]]:
         else:
             runflow_root = Path(RUNFLOW_ROOT_LOCAL)
         
-        index_path = runflow_root / "index.json"
+        # Issue #682: Update to use analysis subdirectory
+        index_path = runflow_root / "analysis" / "index.json"
         if not index_path.exists():
             logger.warning(f"index.json not found at {index_path}, returning empty list")
             return []

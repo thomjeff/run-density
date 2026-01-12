@@ -1,8 +1,10 @@
 """
 Run-level logging utility for Issue #527
 
-Provides file-based logging to runflow/{run_id}/logs/app.log
+Provides file-based logging to runflow/analysis/{run_id}/logs/app.log
 for each analysis run, enabling QA/ops to review logs without Docker access.
+
+Issue #682: Updated to use runflow/analysis/{run_id} structure
 """
 
 import logging
@@ -18,8 +20,10 @@ class RunLogHandler:
     """
     Context manager for run-level file logging.
     
-    Creates and manages a file handler that writes to runflow/{run_id}/logs/app.log
+    Creates and manages a file handler that writes to runflow/analysis/{run_id}/logs/app.log
     during the execution of a single run.
+    
+    Issue #682: Updated to use runflow/analysis/{run_id} structure
     """
     
     def __init__(self, run_id: str, runflow_root: Optional[Path] = None):
@@ -35,7 +39,8 @@ class RunLogHandler:
             from app.utils.run_id import get_runflow_root
             runflow_root = get_runflow_root()
         self.runflow_root = runflow_root
-        self.log_dir = runflow_root / run_id / "logs"
+        # Issue #682: Update log directory path to use analysis subdirectory
+        self.log_dir = runflow_root / "analysis" / run_id / "logs"
         self.log_file = self.log_dir / "app.log"
         self.file_handler: Optional[logging.FileHandler] = None
         self.root_logger = logging.getLogger()

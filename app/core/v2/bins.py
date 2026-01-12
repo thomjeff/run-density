@@ -101,7 +101,7 @@ def generate_bins_v2(
     1. Create AnalysisContext with v2 data
     2. Temporarily provide combined runners CSV for build_runner_window_mapping()
     3. Call v1 bin generation functions
-    4. Save artifacts to day-partitioned structure: runflow/{run_id}/{day}/bins/
+    4. Save artifacts to day-partitioned structure: runflow/analysis/{run_id}/{day}/bins/
     
     Args:
         density_results: Density analysis results from analyze_density_segments_v2()
@@ -147,8 +147,9 @@ def generate_bins_v2(
         config_analysis_context = analysis_context  # Keep SSOT context separate
         try:
             if config_analysis_context is None:
-                runflow_root = get_runflow_root()
-                run_path = runflow_root / run_id
+                # Issue #682: Use centralized get_run_directory() for correct path
+                from app.utils.run_id import get_run_directory
+                run_path = get_run_directory(run_id)
                 config_analysis_context = load_analysis_context(run_path)
             analysis_config = config_analysis_context.analysis_config
             

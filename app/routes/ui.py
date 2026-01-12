@@ -225,13 +225,14 @@ async def density(request: Request):
             "D": "#FF9800", "E": "#FF5722", "F": "#F44336"
         }
     
-    # Issue #460 Phase 5: Get current run_id from runflow/latest.json
+    # Issue #460 Phase 5: Get current run_id from runflow/analysis/latest.json
+    # Issue #682: Updated to use runflow/analysis/latest.json
     run_id = None
     try:
         from app.utils.metadata import get_latest_run_id
         run_id = get_latest_run_id()
     except (FileNotFoundError, ValueError) as e:
-        logger.warning(f"Could not load run_id from runflow/latest.json: {e}")
+        logger.warning(f"Could not load run_id from runflow/analysis/latest.json: {e}")
     except Exception as e:
         logger.error(f"Error getting latest run_id: {e}")
     
@@ -534,8 +535,9 @@ async def get_analysis_config(request: Request, run_id: str):
         from app.utils.run_id import get_runflow_root
         from app.config.loader import load_analysis_context
         
-        runflow_root = get_runflow_root()
-        run_path = runflow_root / run_id
+        # Issue #682: Use centralized get_run_directory() for correct path
+        from app.utils.run_id import get_run_directory
+        run_path = get_run_directory(run_id)
         
         if not run_path.exists():
             raise HTTPException(

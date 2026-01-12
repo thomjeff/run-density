@@ -40,7 +40,8 @@ def load_density_metrics_from_bins(run_id: Optional[str] = None, day: Optional[s
         Dict with segment_id -> {utilization, worst_bin, bin_detail}
     """
     try:
-        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
+        # Issue #460 Phase 5: Get latest run_id from runflow/analysis/latest.json
+        # Issue #682: Updated to use runflow/analysis/latest.json
         from app.utils.run_id import get_latest_run_id, resolve_selected_day
         from app.storage import create_runflow_storage
         
@@ -308,8 +309,9 @@ def _get_segments_csv_path_for_run(run_id: str) -> str:
     from app.utils.run_id import get_runflow_root
     from app.config.loader import load_analysis_context
 
-    runflow_root = get_runflow_root()
-    run_path = runflow_root / run_id
+    # Issue #682: Use centralized get_run_directory() for correct path
+    from app.utils.run_id import get_run_directory
+    run_path = get_run_directory(run_id)
     return str(load_analysis_context(run_path).segments_csv_path)
 
 
@@ -331,7 +333,8 @@ async def get_density_segments(
         - utilization, flagged, worst_bin, watch, mitigation
     """
     try:
-        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
+        # Issue #460 Phase 5: Get latest run_id from runflow/analysis/latest.json
+        # Issue #682: Updated to use runflow/analysis/latest.json
         from app.utils.run_id import get_latest_run_id, resolve_selected_day
         from app.storage import create_runflow_storage
         
@@ -603,10 +606,11 @@ async def get_density_segment_detail(
         if captions and seg_id in captions:
             caption_data = captions[seg_id]
             # Build heatmap URL for day-scoped runflow structure (Issue #580: Updated path to visualizations/)
-            # Files are at: runflow/<run_id>/<day>/ui/visualizations/<seg_id>.png
+            # Issue #682: Updated to use runflow/analysis/{run_id} structure
+            # Files are at: runflow/analysis/<run_id>/<day>/ui/visualizations/<seg_id>.png
             # Mounted as: /heatmaps -> /app/runflow
-            # URL path: /heatmaps/<run_id>/<day>/ui/visualizations/<seg_id>.png
-            heatmap_url = f"/heatmaps/{run_id}/{selected_day}/ui/visualizations/{seg_id}.png"
+            # URL path: /heatmaps/analysis/<run_id>/<day>/ui/visualizations/<seg_id>.png
+            heatmap_url = f"/heatmaps/analysis/{run_id}/{selected_day}/ui/visualizations/{seg_id}.png"
             caption = caption_data.get("summary", "")
         
         # Issue #596: Load density metrics (utilization, worst_bin) from bins.parquet

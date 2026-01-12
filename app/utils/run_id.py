@@ -159,10 +159,11 @@ def get_runflow_root() -> Path:
 
 def get_latest_run_id() -> str:
     """
-    Get the most recent run_id from runflow/latest.json.
+    Get the most recent run_id from runflow/analysis/latest.json.
     
     Issue #466 Step 1: Centralized, local-only implementation.
     Removed all GCS/cloud fallback logic from Phase 1 declouding.
+    Issue #682: Moved from runflow/latest.json to runflow/analysis/latest.json.
     
     Returns:
         run_id string (UUID format, e.g., "abc123xyz")
@@ -177,7 +178,7 @@ def get_latest_run_id() -> str:
         'NucS5yBhmcYHpjcyXviFFU'
     """
     runflow_root = get_runflow_root()
-    latest_path = runflow_root / "latest.json"
+    latest_path = runflow_root / "analysis" / "latest.json"
     
     if not latest_path.exists():
         raise FileNotFoundError(
@@ -203,20 +204,21 @@ def get_run_directory(run_id: str) -> Path:
     Get the full directory path for a specific run.
     
     Issue #466 Step 1: Centralized path resolution.
+    Issue #682: Moved from runflow/{run_id} to runflow/analysis/{run_id}.
     
     Args:
         run_id: The run identifier
     
     Returns:
-        Full path to run directory (e.g., /app/runflow/abc123xyz/)
+        Full path to run directory (e.g., /app/runflow/analysis/abc123xyz/)
     
     Examples:
         >>> path = get_run_directory("abc123xyz")
         >>> print(path)
-        Path('/app/runflow/abc123xyz')
+        Path('/app/runflow/analysis/abc123xyz')
     """
     runflow_root = get_runflow_root()
-    return runflow_root / run_id
+    return runflow_root / "analysis" / run_id
 
 
 # ===== Day resolution helpers (v2) =====

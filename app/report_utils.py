@@ -168,12 +168,13 @@ def get_run_folder_path(run_id: str) -> str:
     
     Example:
         >>> get_run_folder_path("p0ZoB1FwH6")
-        '/runflow/p0ZoB1FwH6'
+        '/runflow/analysis/p0ZoB1FwH6'
     
     Issue #455: Creates parent directory for all run outputs
+    Issue #682: Moved from runflow/{run_id} to runflow/analysis/{run_id}
     """
     runflow_root = get_runflow_root()
-    full_path = os.path.join(runflow_root, run_id)
+    full_path = os.path.join(runflow_root, "analysis", run_id)
     
     # Ensure the run folder exists
     os.makedirs(full_path, exist_ok=True)
@@ -194,9 +195,10 @@ def get_runflow_category_path(run_id: str, category: str) -> str:
     
     Example:
         >>> get_runflow_category_path("p0ZoB1FwH6", "reports")
-        '/runflow/p0ZoB1FwH6/reports'
+        '/runflow/analysis/p0ZoB1FwH6/reports'
     
     Issue #455: Creates category subdirectories as needed
+    Issue #682: Updated to use runflow/analysis/{run_id} structure
     """
     run_path = get_run_folder_path(run_id)
     category_path = os.path.join(run_path, category)
@@ -221,9 +223,10 @@ def get_runflow_file_path(run_id: str, category: str, filename: str) -> str:
     
     Examples:
         >>> get_runflow_file_path("p0ZoB1FwH6", "reports", "Density.md")
-        '/runflow/p0ZoB1FwH6/reports/Density.md'
+        '/runflow/analysis/p0ZoB1FwH6/reports/Density.md'
     
     Issue #455: Generic filenames without timestamps
+    Issue #682: Updated to use runflow/analysis/{run_id} structure
     """
     category_path = get_runflow_category_path(run_id, category)
     full_path = os.path.join(category_path, filename)

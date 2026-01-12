@@ -145,7 +145,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"description\": \"Saturday only scenario test with audit\",\n  \"segments_file\": \"segments.csv\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"enableAudit\": \"y\",\n  \"event_group\": {\n    \"sat-elite\": \"elite\",\n    \"sat-open\": \"open\"\n  },\n  \"events\": [\n    {\n      \"name\": \"elite\",\n      \"day\": \"sat\",\n      \"start_time\": 480,\n      \"event_duration_minutes\": 45,\n      \"runners_file\": \"elite_runners.csv\",\n      \"gpx_file\": \"elite.gpx\"\n    },\n    {\n      \"name\": \"open\",\n      \"day\": \"sat\",\n      \"start_time\": 510,\n      \"event_duration_minutes\": 75,\n      \"runners_file\": \"open_runners.csv\",\n      \"gpx_file\": \"open.gpx\"\n    }\n  ]\n}"
+              "raw": "{\\n  \"description\": \"Saturday only scenario test with audit\",\\n  \"data_dir\": \"{{data_dir}}\",\\n  \"segments_file\": \"segments.csv\",\\n  \"flow_file\": \"flow.csv\",\\n  \"locations_file\": \"locations.csv\",\\n  \"enableAudit\": \"y\",\\n  \"event_group\": {\\n    \"sat-elite\": \"elite\",\\n    \"sat-open\": \"open\"\\n  },\\n  \"events\": [\\n    {\\n      \"name\": \"elite\",\\n      \"day\": \"sat\",\\n      \"start_time\": 480,\\n      \"event_duration_minutes\": 45,\\n      \"runners_file\": \"elite_runners.csv\",\\n      \"gpx_file\": \"elite.gpx\"\\n    },\\n    {\\n      \"name\": \"open\",\\n      \"day\": \"sat\",\\n      \"start_time\": 510,\\n      \"event_duration_minutes\": 75,\\n      \"runners_file\": \"open_runners.csv\",\\n      \"gpx_file\": \"open.gpx\"\\n    }\\n  ]\\n}"
             },
             "url": {
               "raw": "{{base_url}}/runflow/v2/analyze",
@@ -212,7 +212,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"description\": \"Sunday only scenario test with audit\",\n  \"segments_file\": \"segments.csv\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"enableAudit\": \"y\",\n  \"event_group\": {\n    \"sun-all\": \"full, 10k, half\"\n  },\n  \"events\": [\n    {\n      \"name\": \"full\",\n      \"day\": \"sun\",\n      \"start_time\": 420,\n      \"event_duration_minutes\": 390,\n      \"runners_file\": \"full_runners.csv\",\n      \"gpx_file\": \"full.gpx\"\n    },\n    {\n      \"name\": \"10k\",\n      \"day\": \"sun\",\n      \"start_time\": 440,\n      \"event_duration_minutes\": 120,\n      \"runners_file\": \"10k_runners.csv\",\n      \"gpx_file\": \"10k.gpx\"\n    },\n    {\n      \"name\": \"half\",\n      \"day\": \"sun\",\n      \"start_time\": 460,\n      \"event_duration_minutes\": 180,\n      \"runners_file\": \"half_runners.csv\",\n      \"gpx_file\": \"half.gpx\"\n    }\n  ]\n}"
+              "raw": "{\\n  \"description\": \"Sunday only scenario test with audit\",\\n  \"data_dir\": \"{{data_dir}}\",\\n  \"segments_file\": \"segments.csv\",\\n  \"flow_file\": \"flow.csv\",\\n  \"locations_file\": \"locations.csv\",\\n  \"enableAudit\": \"y\",\\n  \"event_group\": {\\n    \"sun-all\": \"full, 10k, half\"\\n  },\\n  \"events\": [\\n    {\\n      \"name\": \"full\",\\n      \"day\": \"sun\",\\n      \"start_time\": 420,\\n      \"event_duration_minutes\": 390,\\n      \"runners_file\": \"full_runners.csv\",\\n      \"gpx_file\": \"full.gpx\"\\n    },\\n    {\\n      \"name\": \"10k\",\\n      \"day\": \"sun\",\\n      \"start_time\": 440,\\n      \"event_duration_minutes\": 120,\\n      \"runners_file\": \"10k_runners.csv\",\\n      \"gpx_file\": \"10k.gpx\"\\n    },\\n    {\\n      \"name\": \"half\",\\n      \"day\": \"sun\",\\n      \"start_time\": 460,\\n      \"event_duration_minutes\": 180,\\n      \"runners_file\": \"half_runners.csv\",\\n      \"gpx_file\": \"half.gpx\"\\n    }\\n  ]\\n}"
             },
             "url": {
               "raw": "{{base_url}}/runflow/v2/analyze",
@@ -281,7 +281,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"description\": \"Sat+Sun analysis test with audit\",\n  \"segments_file\": \"segments.csv\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"enableAudit\": \"y\",\n  \"event_group\": {\n    \"sat-elite\": \"elite\",\n    \"sat-open\": \"open\",\n    \"sun-all\": \"full, 10k, half\"\n  },\n  \"events\": [\n    {\n      \"name\": \"elite\",\n      \"day\": \"sat\",\n      \"start_time\": 480,\n      \"event_duration_minutes\": 45,\n      \"runners_file\": \"elite_runners.csv\",\n      \"gpx_file\": \"elite.gpx\"\n    },\n    {\n      \"name\": \"open\",\n      \"day\": \"sat\",\n      \"start_time\": 510,\n      \"event_duration_minutes\": 75,\n      \"runners_file\": \"open_runners.csv\",\n      \"gpx_file\": \"open.gpx\"\n    },\n    {\n      \"name\": \"full\",\n      \"day\": \"sun\",\n      \"start_time\": 420,\n      \"event_duration_minutes\": 390,\n      \"runners_file\": \"full_runners.csv\",\n      \"gpx_file\": \"full.gpx\"\n    },\n    {\n      \"name\": \"10k\",\n      \"day\": \"sun\",\n      \"start_time\": 440,\n      \"event_duration_minutes\": 120,\n      \"runners_file\": \"10k_runners.csv\",\n      \"gpx_file\": \"10k.gpx\"\n    },\n    {\n      \"name\": \"half\",\n      \"day\": \"sun\",\n      \"start_time\": 460,\n      \"event_duration_minutes\": 180,\n      \"runners_file\": \"half_runners.csv\",\n      \"gpx_file\": \"half.gpx\"\n    }\n  ]\n}"
+              "raw": "{\\n  \"description\": \"Sat+Sun analysis test with audit\",\\n  \"data_dir\": \"{{data_dir}}\",\\n  \"segments_file\": \"segments.csv\",\\n  \"flow_file\": \"flow.csv\",\\n  \"locations_file\": \"locations.csv\",\\n  \"enableAudit\": \"y\",\\n  \"event_group\": {\\n    \"sat-elite\": \"elite\",\\n    \"sat-open\": \"open\",\\n    \"sun-all\": \"full, 10k, half\"\\n  },\\n  \"events\": [\\n    {\\n      \"name\": \"elite\",\\n      \"day\": \"sat\",\\n      \"start_time\": 480,\\n      \"event_duration_minutes\": 45,\\n      \"runners_file\": \"elite_runners.csv\",\\n      \"gpx_file\": \"elite.gpx\"\\n    },\\n    {\\n      \"name\": \"open\",\\n      \"day\": \"sat\",\\n      \"start_time\": 510,\\n      \"event_duration_minutes\": 75,\\n      \"runners_file\": \"open_runners.csv\",\\n      \"gpx_file\": \"open.gpx\"\\n    },\\n    {\\n      \"name\": \"full\",\\n      \"day\": \"sun\",\\n      \"start_time\": 420,\\n      \"event_duration_minutes\": 390,\\n      \"runners_file\": \"full_runners.csv\",\\n      \"gpx_file\": \"full.gpx\"\\n    },\\n    {\\n      \"name\": \"10k\",\\n      \"day\": \"sun\",\\n      \"start_time\": 440,\\n      \"event_duration_minutes\": 120,\\n      \"runners_file\": \"10k_runners.csv\",\\n      \"gpx_file\": \"10k.gpx\"\\n    },\\n    {\\n      \"name\": \"half\",\\n      \"day\": \"sun\",\\n      \"start_time\": 460,\\n      \"event_duration_minutes\": 180,\\n      \"runners_file\": \"half_runners.csv\",\\n      \"gpx_file\": \"half.gpx\"\\n    }\\n  ]\\n}"
             },
             "url": {
               "raw": "{{base_url}}/runflow/v2/analyze",
@@ -310,7 +310,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"description\": \"Sat+Sun analysis test with audit (alternate config)\",\n  \"segments_file\": \"segments_616.csv\",\n  \"flow_file\": \"flow_616.csv\",\n  \"locations_file\": \"locations_616.csv\",\n  \"enableAudit\": \"y\",\n  \"event_group\": {\n    \"sat-elite\": \"elite\",\n    \"sat-open\": \"open\",\n    \"sun-all\": \"full, 10k, half\"\n  },\n  \"events\": [\n    {\n      \"name\": \"elite\",\n      \"day\": \"sat\",\n      \"start_time\": 480,\n      \"event_duration_minutes\": 45,\n      \"runners_file\": \"elite_runners.csv\",\n      \"gpx_file\": \"elite.gpx\"\n    },\n    {\n      \"name\": \"open\",\n      \"day\": \"sat\",\n      \"start_time\": 510,\n      \"event_duration_minutes\": 75,\n      \"runners_file\": \"open_runners.csv\",\n      \"gpx_file\": \"open.gpx\"\n    },\n    {\n      \"name\": \"full\",\n      \"day\": \"sun\",\n      \"start_time\": 420,\n      \"event_duration_minutes\": 390,\n      \"runners_file\": \"full_runners.csv\",\n      \"gpx_file\": \"full.gpx\"\n    },\n    {\n      \"name\": \"10k\",\n      \"day\": \"sun\",\n      \"start_time\": 440,\n      \"event_duration_minutes\": 120,\n      \"runners_file\": \"10k_runners.csv\",\n      \"gpx_file\": \"10k.gpx\"\n    },\n    {\n      \"name\": \"half\",\n      \"day\": \"sun\",\n      \"start_time\": 460,\n      \"event_duration_minutes\": 180,\n      \"runners_file\": \"half_runners.csv\",\n      \"gpx_file\": \"half.gpx\"\n    }\n  ]\n}"
+              "raw": "{\\n  \"description\": \"Sat+Sun analysis test with audit (alternate config)\",\\n  \"data_dir\": \"{{data_dir}}\",\\n  \"segments_file\": \"segments_616.csv\",\\n  \"flow_file\": \"flow_616.csv\",\\n  \"locations_file\": \"locations_616.csv\",\\n  \"enableAudit\": \"y\",\\n  \"event_group\": {\\n    \"sat-elite\": \"elite\",\\n    \"sat-open\": \"open\",\\n    \"sun-all\": \"full, 10k, half\"\\n  },\\n  \"events\": [\\n    {\\n      \"name\": \"elite\",\\n      \"day\": \"sat\",\\n      \"start_time\": 480,\\n      \"event_duration_minutes\": 45,\\n      \"runners_file\": \"elite_runners.csv\",\\n      \"gpx_file\": \"elite.gpx\"\\n    },\\n    {\\n      \"name\": \"open\",\\n      \"day\": \"sat\",\\n      \"start_time\": 510,\\n      \"event_duration_minutes\": 75,\\n      \"runners_file\": \"open_runners.csv\",\\n      \"gpx_file\": \"open.gpx\"\\n    },\\n    {\\n      \"name\": \"full\",\\n      \"day\": \"sun\",\\n      \"start_time\": 420,\\n      \"event_duration_minutes\": 390,\\n      \"runners_file\": \"full_runners.csv\",\\n      \"gpx_file\": \"full.gpx\"\\n    },\\n    {\\n      \"name\": \"10k\",\\n      \"day\": \"sun\",\\n      \"start_time\": 440,\\n      \"event_duration_minutes\": 120,\\n      \"runners_file\": \"10k_runners.csv\",\\n      \"gpx_file\": \"10k.gpx\"\\n    },\\n    {\\n      \"name\": \"half\",\\n      \"day\": \"sun\",\\n      \"start_time\": 460,\\n      \"event_duration_minutes\": 180,\\n      \"runners_file\": \"half_runners.csv\",\\n      \"gpx_file\": \"half.gpx\"\\n    }\\n  ]\\n}"
             },
             "url": {
               "raw": "{{base_url}}/runflow/v2/analyze",
@@ -385,7 +385,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"description\": \"Missing segments_file test\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"events\": [\n    {\n      \"name\": \"full\",\n      \"day\": \"sun\",\n      \"start_time\": 420,\n      \"event_duration_minutes\": 390,\n      \"runners_file\": \"full_runners.csv\",\n      \"gpx_file\": \"full.gpx\"\n    }\n  ]\n}"
+              "raw": "{\\n  \"description\": \"Missing segments_file test\",\\n  \"data_dir\": \"{{data_dir}}\",\\n  \"flow_file\": \"flow.csv\",\\n  \"locations_file\": \"locations.csv\",\\n  \"events\": [\\n    {\\n      \"name\": \"full\",\\n      \"day\": \"sun\",\\n      \"start_time\": 420,\\n      \"event_duration_minutes\": 390,\\n      \"runners_file\": \"full_runners.csv\",\\n      \"gpx_file\": \"full.gpx\"\\n    }\\n  ]\\n}"
             },
             "url": {
               "raw": "{{base_url}}/runflow/v2/analyze",
@@ -437,7 +437,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"description\": \"Invalid start_time test\",\n  \"segments_file\": \"segments.csv\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"events\": [\n    {\n      \"name\": \"full\",\n      \"day\": \"sun\",\n      \"start_time\": 200,\n      \"event_duration_minutes\": 390,\n      \"runners_file\": \"full_runners.csv\",\n      \"gpx_file\": \"full.gpx\"\n    }\n  ]\n}"
+              "raw": "{\\n  \"description\": \"Invalid start_time test\",\\n  \"data_dir\": \"{{data_dir}}\",\\n  \"segments_file\": \"segments.csv\",\\n  \"flow_file\": \"flow.csv\",\\n  \"locations_file\": \"locations.csv\",\\n  \"events\": [\\n    {\\n      \"name\": \"full\",\\n      \"day\": \"sun\",\\n      \"start_time\": 200,\\n      \"event_duration_minutes\": 390,\\n      \"runners_file\": \"full_runners.csv\",\\n      \"gpx_file\": \"full.gpx\"\\n    }\\n  ]\\n}"
             },
             "url": {
               "raw": "{{base_url}}/runflow/v2/analyze",
@@ -484,7 +484,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"description\": \"Invalid start_time test - too high\",\n  \"segments_file\": \"segments.csv\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"events\": [\n    {\n      \"name\": \"full\",\n      \"day\": \"sun\",\n      \"start_time\": 1300,\n      \"event_duration_minutes\": 390,\n      \"runners_file\": \"full_runners.csv\",\n      \"gpx_file\": \"full.gpx\"\n    }\n  ]\n}"
+              "raw": "{\\n  \"description\": \"Invalid start_time test - too high\",\\n  \"data_dir\": \"{{data_dir}}\",\\n  \"segments_file\": \"segments.csv\",\\n  \"flow_file\": \"flow.csv\",\\n  \"locations_file\": \"locations.csv\",\\n  \"events\": [\\n    {\\n      \"name\": \"full\",\\n      \"day\": \"sun\",\\n      \"start_time\": 1300,\\n      \"event_duration_minutes\": 390,\\n      \"runners_file\": \"full_runners.csv\",\\n      \"gpx_file\": \"full.gpx\"\\n    }\\n  ]\\n}"
             },
             "url": {
               "raw": "{{base_url}}/runflow/v2/analyze",
@@ -531,7 +531,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"description\": \"Empty events array test\",\n  \"segments_file\": \"segments.csv\",\n  \"flow_file\": \"flow.csv\",\n  \"locations_file\": \"locations.csv\",\n  \"events\": []\n}"
+              "raw": "{\\n  \"description\": \"Empty events array test\",\\n  \"data_dir\": \"{{data_dir}}\",\\n  \"segments_file\": \"segments.csv\",\\n  \"flow_file\": \"flow.csv\",\\n  \"locations_file\": \"locations.csv\",\\n  \"events\": []\\n}"
             },
             "url": {
               "raw": "{{base_url}}/runflow/v2/analyze",
