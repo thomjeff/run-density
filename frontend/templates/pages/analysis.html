@@ -57,11 +57,13 @@
     <div id="baseline-step3" style="display: none; margin-bottom: 1.5rem;">
         <h4 style="margin-bottom: 1rem; color: #2c3e50;">Control Variables</h4>
         <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
-            Enter percentage changes for participants and pace percentiles. Negative values are permitted.
+            Enter percentage changes as decimals (e.g., 0.40 for +40%, 0.005 for +0.5%, -0.005 for -0.5%). 
+            Range: -0.50 to +2.00 (-50% to +200%). Negative values make paces faster (lower).
         </p>
         <div id="baseline-control-variables-table" style="overflow-x: auto;">
             <!-- Table will be populated by JavaScript -->
         </div>
+        <div class="field-error" id="baseline-control-variables-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.5rem;"></div>
         <div style="margin-top: 1rem; display: flex; gap: 1rem;">
             <button 
                 type="button" 
@@ -1136,24 +1138,26 @@
         html += '</tr></thead><tbody>';
         
         // Participants change
-        html += '<tr><td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">Participants %</td>';
+        html += '<tr><td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">Participants<br><small style="font-weight: normal; color: #666;">(decimal: 0.40 = +40%)</small></td>';
         events.forEach(event => {
             html += `<td style="padding: 0.5rem; border: 1px solid #ddd;">
-                <input type="number" id="chg_participants_${event}" step="0.01" value="0" 
+                <input type="number" id="chg_participants_${event}" step="0.001" value="0" min="-0.5" max="2.0"
+                       placeholder="0.40" 
                        style="width: 100%; padding: 0.25rem; border: 1px solid #ddd; border-radius: 4px;">
             </td>`;
         });
         html += '</tr>';
         
         // Percentile changes
-        const percentileLabels = ['P00 %', 'P05 %', 'P25 %', 'P50 %', 'P75 %', 'P95 %', 'P100 %'];
+        const percentileLabels = ['P00 (Lead)', 'P05', 'P25', 'P50 (Median)', 'P75', 'P95', 'P100 (Last)'];
         const percentileKeys = ['chg_p00', 'chg_p05', 'chg_p25', 'chg_p50', 'chg_p75', 'chg_p95', 'chg_p100'];
         
         percentileLabels.forEach((label, idx) => {
-            html += `<tr><td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">${label}</td>`;
+            html += `<tr><td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">${label}<br><small style="font-weight: normal; color: #666;">(decimal: 0.005 = +0.5%)</small></td>`;
             events.forEach(event => {
                 html += `<td style="padding: 0.5rem; border: 1px solid #ddd;">
-                    <input type="number" id="${percentileKeys[idx]}_${event}" step="0.01" value="0" 
+                    <input type="number" id="${percentileKeys[idx]}_${event}" step="0.001" value="0" min="-0.5" max="2.0"
+                           placeholder="0.005" 
                            style="width: 100%; padding: 0.25rem; border: 1px solid #ddd; border-radius: 4px;">
                 </td>`;
             });
@@ -1207,7 +1211,11 @@
         const btn = document.getElementById('baseline-calculate-new-btn');
         btn.disabled = true;
         btn.textContent = 'Calculating...';
-        clearBaselineErrors();
+        // Clear only control variables errors (not file selection errors)
+        const controlErrorEl = document.getElementById('baseline-control-variables-error');
+        if (controlErrorEl) {
+            controlErrorEl.style.display = 'none';
+        }
         
         try {
             const response = await fetch('/api/baseline/generate', {
@@ -1236,7 +1244,7 @@
             document.getElementById('baseline-step4').style.display = 'block';
             
         } catch (error) {
-            showBaselineError(error.message);
+            showBaselineControlError(error.message);
         } finally {
             btn.disabled = false;
             btn.textContent = 'Calculate New Baseline';
@@ -1332,12 +1340,23 @@
         clearBaselineErrors();
     }
     
-    // Show baseline error
+    // Show baseline error (for file selection)
     function showBaselineError(message) {
         const errorEl = document.getElementById('baseline-file-selection-error');
         if (errorEl) {
             errorEl.textContent = message;
             errorEl.style.display = 'block';
+        }
+    }
+    
+    // Show baseline control variables error (for Calculate New Baseline)
+    function showBaselineControlError(message) {
+        const errorEl = document.getElementById('baseline-control-variables-error');
+        if (errorEl) {
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+            // Scroll to error
+            errorEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
     }
     
@@ -1354,9 +1373,13 @@
     
     // Clear baseline errors
     function clearBaselineErrors() {
-        const errorEl = document.getElementById('baseline-file-selection-error');
-        if (errorEl) {
-            errorEl.style.display = 'none';
+        const fileErrorEl = document.getElementById('baseline-file-selection-error');
+        if (fileErrorEl) {
+            fileErrorEl.style.display = 'none';
+        }
+        const controlErrorEl = document.getElementById('baseline-control-variables-error');
+        if (controlErrorEl) {
+            controlErrorEl.style.display = 'none';
         }
     }
 
