@@ -342,6 +342,247 @@ async def generate_scenario(
         )
 
 
+@router.post("/api/baseline/create-files")
+async def create_baseline_files(
+    request: Dict[str, Any]
+) -> JSONResponse:
+    """
+    Create baseline directory, generate files, and apply file name suffix.
+    
+    This endpoint creates the directory, generates all files, and applies the suffix
+    in one atomic operation. All validations must pass before any directory creation.
+    
+    Request Body:
+        {
+            "baseline_metrics": {...},
+            "selected_files": [...],
+            "data_dir": "/app/data",
+            "control_variables": {...},
+            "file_suffix": "_issue676"  # Optional, text to append before .csv
+        }
+    
+    Response:
+        {
+            "run_id": "4sawTqXz9CExYcQgJTNQCr",
+            "generated_files": [
+                {
+                    "event": "elite",
+                    "filename": "elite_runners_issue676.csv",
+                    "path": "/app/runflow/baseline/.../elite_runners_issue676.csv"
+                }
+            ]
+        }
+    
+    Issue: #676 - Create files with suffix endpoint
+    """
+    try:
+        import json
+        
+        # Get parameters
+        baseline_metrics = request.get("baseline_metrics", {})
+        selected_files = request.get("selected_files", [])
+        data_dir = request.get("data_dir")
+        control_variables = request.get("control_variables", {})
+        file_suffix = request.get("file_suffix")  # Optional
+        
+        # Validate required parameters
+        if not baseline_metrics:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="baseline_metrics is required"
+            )
+        
+        if not selected_files:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="selected_files is required"
+            )
+        
+        if not data_dir:
+            data_dir = get_data_directory()
+        
+        if not control_variables:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="control_variables is required and must not be empty"
+            )
+        
+        # Validate control variables (before creating directory)
+        validate_control_variables(control_variables)
+        
+        # Validate that all events in control_variables exist in baseline_metrics
+        for event_name in control_variables.keys():
+            if event_name not in baseline_metrics:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Event '{event_name}' not found in baseline metrics"
+                )
+        
+        # Validate cutoff time formats (before creating directory)
+        data_dir_path = Path(data_dir)
+        for event_name, control_vars in control_variables.items():
+            cutoff_str = control_vars.get("cutoff_mins")
+            if cutoff_str:
+                if isinstance(cutoff_str, str):
+                    # Validate format (will raise ValueError if invalid)
+                    validate_cutoff_time_format(cutoff_str)
+        
+        # Validate file suffix format if provided
+        if file_suffix and not all(c.isalnum() or c in ['_', '-'] for c in file_suffix):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="file_suffix can only contain letters, numbers, underscores, and hyphens"
+            )
+        
+        # Generate all files in memory first and validate all cutoffs BEFORE creating directory
+        generated_dataframes = {}  # Store generated DataFrames in memory
+        new_baseline_metrics = {}
+        used_runner_ids = set()  # Track across all events for uniqueness
+        
+        for event_name, control_vars in control_variables.items():
+            # Get baseline metrics for this event (already validated above)
+            event_metrics = baseline_metrics[event_name]
+            base_participants = event_metrics["base_participants"]
+            distance = event_metrics["distance"]
+            
+            # Calculate new participant count
+            chg_participants = control_vars["chg_participants"]
+            new_participants = int(base_participants * (1 + chg_participants))
+            
+            # Parse cut-off time if provided
+            cutoff_mins = None
+            cutoff_str = control_vars.get("cutoff_mins")
+            if cutoff_str:
+                if isinstance(cutoff_str, str):
+                    cutoff_mins = validate_cutoff_time_format(cutoff_str)
+                elif isinstance(cutoff_str, (int, float)):
+                    cutoff_mins = float(cutoff_str)
+            
+            # Load baseline runner file
+            runners_file = event_metrics["runners_file"]
+            runners_path = data_dir_path / runners_file
+            if not runners_path.exists():
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Baseline runner file not found: {runners_path}"
+                )
+            
+            baseline_df = load_pace_csv(str(runners_path))
+            
+            # Generate new runner file in memory (this validates cutoff time)
+            new_df = generate_runner_file(
+                baseline_df=baseline_df,
+                control_vars=control_vars,
+                new_participants=new_participants,
+                event_name=event_name,
+                distance=distance,
+                cutoff_mins=cutoff_mins,
+                used_runner_ids=used_runner_ids
+            )
+            
+            # Store generated DataFrame (not saved yet)
+            generated_dataframes[event_name] = {
+                "df": new_df,
+                "runners_file": runners_file
+            }
+            
+            # Calculate new baseline metrics from generated file
+            new_metrics = calculate_baseline_metrics(new_df)
+            new_metrics["runners_file"] = runners_file
+            new_baseline_metrics[event_name] = {
+                "new_participants": new_participants,
+                "new_p00": new_metrics["base_p00"],
+                "new_p05": new_metrics["base_p05"],
+                "new_p25": new_metrics["base_p25"],
+                "new_p50": new_metrics["base_p50"],
+                "new_p75": new_metrics["base_p75"],
+                "new_p95": new_metrics["base_p95"],
+                "new_p100": new_metrics["base_p100"]
+            }
+        
+        # All validations passed (including cutoff time validation) - now create directory
+        reports_path = get_runflow_root()
+        baseline_dir = create_baseline_directory(reports_path)
+        run_id = baseline_dir.name
+        
+        # Save baseline.json (first time)
+        baseline_json_path = save_baseline_metrics(
+            baseline_dir=baseline_dir,
+            run_id=run_id,
+            data_dir=str(data_dir),
+            reports_path=str(reports_path),
+            selected_files=selected_files,
+            baseline_metrics=baseline_metrics
+        )
+        
+        # Load the saved baseline.json
+        with open(baseline_json_path, "r") as f:
+            baseline_json = json.load(f)
+        
+        # Save all generated files to disk with suffix applied
+        generated_files = []
+        for event_name, file_data in generated_dataframes.items():
+            # Apply file name suffix if provided
+            runners_file = file_data["runners_file"]
+            if file_suffix:
+                # Insert suffix before .csv extension
+                if runners_file.endswith(".csv"):
+                    base_name = runners_file[:-4]  # Remove .csv
+                    output_filename = f"{base_name}{file_suffix}.csv"
+                else:
+                    output_filename = f"{runners_file}{file_suffix}"
+            else:
+                output_filename = runners_file
+            
+            output_file = baseline_dir / output_filename
+            file_data["df"].to_csv(output_file, index=False)
+            
+            generated_files.append({
+                "event": event_name,
+                "path": str(output_file),
+                "filename": output_filename
+            })
+        
+        # Update baseline.json with control variables, new metrics, and file suffix
+        baseline_json["control_variables"] = control_variables
+        baseline_json["new_baseline_metrics"] = new_baseline_metrics
+        if file_suffix:
+            baseline_json["file_suffix"] = file_suffix
+        
+        # Save updated baseline.json
+        with open(baseline_json_path, "w") as f:
+            json.dump(baseline_json, f, indent=2)
+        
+        # Update generated_files list
+        save_generated_files(baseline_dir, generated_files)
+        
+        # Build response
+        response = {
+            "run_id": run_id,
+            "generated_files": generated_files
+        }
+        
+        logger.info(
+            f"Created {len(generated_files)} runner files for baseline run_id={run_id} with suffix={file_suffix or 'none'}"
+        )
+        return JSONResponse(content=response, status_code=status.HTTP_200_OK)
+    
+    except HTTPException:
+        raise
+    except ValueError as e:
+        # Cut-off validation or other ValueError
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error creating baseline files: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create files: {str(e)}"
+        )
+
+
 @router.get("/api/baseline/files")
 async def list_generated_files(
     run_id: str
