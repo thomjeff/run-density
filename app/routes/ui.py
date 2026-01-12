@@ -357,6 +357,26 @@ async def analysis_page(request: Request):
     )
 
 
+@router.get("/create-files", response_class=HTMLResponse)
+async def create_files_page(request: Request):
+    """
+    Create new runner data files page for baseline utility.
+    
+    Issue #676: New page for creating scenario-based runner files.
+    
+    Returns:
+        HTML: Baseline utility form
+    """
+    auth_redirect = require_auth(request)
+    if auth_redirect:
+        return auth_redirect
+    meta = get_stub_meta()
+    return templates.TemplateResponse(
+        "pages/create_files.html",
+        {"request": request, "meta": meta}
+    )
+
+
 @router.get("/health-check", response_class=HTMLResponse)
 async def health_page(request: Request):
     """
