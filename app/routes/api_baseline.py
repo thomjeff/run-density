@@ -1,0 +1,399 @@
+"""
+API Routes for Baseline Runner File Generation
+
+Provides endpoints for calculating baseline metrics and generating scenario-based runner files.
+
+Issue: #676 - Utility to create new runner files
+"""
+
+from fastapi import APIRouter, HTTPException, status
+from fastapi.responses import JSONResponse
+from typing import Dict, Any, List, Optional
+from pathlib import Path
+import pandas as pd
+import logging
+
+from app.core.baseline import (
+    calculate_baseline_metrics,
+    generate_runner_file,
+    create_baseline_directory,
+    save_baseline_metrics,
+    save_generated_files,
+    validate_runner_file,
+    validate_control_variables,
+)
+from app.core.baseline.validation import validate_cutoff_time_format
+from app.core.v2.analysis_config import get_data_directory
+from app.utils.run_id import get_runflow_root
+from app.utils.shared import load_pace_csv
+
+# Create router
+router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+@router.post("/api/baseline/calculate")
+async def calculate_baseline(
+    request: Dict[str, Any]
+) -> JSONResponse:
+    """
+    Calculate baseline metrics from selected runner CSV files.
+    
+    Phase 1 of two-phase API: Calculate baseline metrics (idempotent).
+    
+    Request Body:
+        {
+            "selected_files": ["elite_runners.csv", "open_runners.csv"],
+            "data_dir": "/app/data"  # Optional, defaults to get_data_directory()
+        }
+    
+    Response:
+        {
+            "run_id": "4sawTqXz9CExYcQgJTNQCr",
+            "data_dir": "/app/data",
+            "reports_path": "/app/runflow",
+            "selected_files": [...],
+            "baseline_metrics": {
+                "elite": {
+                    "runners_file": "elite_runners.csv",
+                    "base_participants": 39,
+                    "base_p00": 2.90,
+                    "base_p05": 2.918,
+                    ...
+                }
+            }
+        }
+    
+    Issue: #676 - Baseline calculation endpoint
+    """
+    try:
+        # Get parameters
+        selected_files = request.get("selected_files", [])
+        if not selected_files:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="selected_files is required and must not be empty"
+            )
+        
+        data_dir = request.get("data_dir")
+        if data_dir is None:
+            data_dir = get_data_directory()
+        
+        data_path = Path(data_dir)
+        if not data_path.exists():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Data directory does not exist: {data_dir}"
+            )
+        
+        # Get reports path (runflow root)
+        reports_path = get_runflow_root()
+        
+        # Create baseline directory
+        baseline_dir = create_baseline_directory(reports_path)
+        run_id = baseline_dir.name
+        
+        # Calculate baseline metrics for each selected file
+        baseline_metrics = {}
+        
+        for file_name in selected_files:
+            # Extract event name from file name (e.g., "elite_runners.csv" -> "elite")
+            if not file_name.endswith("_runners.csv"):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid runner file name: {file_name}. Must end with '_runners.csv'"
+                )
+            
+            event_name = file_name.replace("_runners.csv", "")
+            
+            # Load and validate runner file
+            file_path = data_path / file_name
+            validate_runner_file(file_path)
+            
+            # Load runners DataFrame
+            runners_df = load_pace_csv(str(file_path))
+            
+            # Calculate baseline metrics
+            metrics = calculate_baseline_metrics(runners_df)
+            metrics["runners_file"] = file_name
+            baseline_metrics[event_name] = metrics
+        
+        # Save baseline metrics
+        baseline_json_path = save_baseline_metrics(
+            baseline_dir=baseline_dir,
+            run_id=run_id,
+            data_dir=str(data_dir),
+            reports_path=str(reports_path),
+            selected_files=selected_files,
+            baseline_metrics=baseline_metrics
+        )
+        
+        # Build response
+        response = {
+            "run_id": run_id,
+            "data_dir": str(data_dir),
+            "reports_path": str(reports_path),
+            "selected_files": selected_files,
+            "baseline_metrics": baseline_metrics
+        }
+        
+        logger.info(f"Calculated baseline metrics for {len(selected_files)} files: run_id={run_id}")
+        return JSONResponse(content=response, status_code=status.HTTP_200_OK)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error calculating baseline: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to calculate baseline: {str(e)}"
+        )
+
+
+@router.post("/api/baseline/generate")
+async def generate_scenario(
+    request: Dict[str, Any]
+) -> JSONResponse:
+    """
+    Generate new runner files with scenario-based modifications.
+    
+    Phase 2 of two-phase API: Apply control variables and generate files.
+    
+    Request Body:
+        {
+            "baseline_run_id": "4sawTqXz9CExYcQgJTNQCr",
+            "control_variables": {
+                "elite": {
+                    "chg_participants": 0.1026,
+                    "chg_p00": 0.0,
+                    "chg_p05": 0.0,
+                    "chg_p25": 0.0,
+                    "chg_p50": 0.0,
+                    "chg_p75": 0.0,
+                    "chg_p95": 0.0,
+                    "chg_p100": 0.0,
+                    "cutoff_mins": null  # Optional, or "06:00" format
+                }
+            }
+        }
+    
+    Response:
+        {
+            "generated_files": [
+                {
+                    "event": "elite",
+                    "path": "/app/runflow/baseline/.../elite_runners.csv"
+                }
+            ],
+            "updated_baseline_json": {...}
+        }
+    
+    Issue: #676 - Scenario generation endpoint
+    """
+    try:
+        # Get parameters
+        baseline_run_id = request.get("baseline_run_id")
+        if not baseline_run_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="baseline_run_id is required"
+            )
+        
+        control_variables = request.get("control_variables", {})
+        if not control_variables:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="control_variables is required and must not be empty"
+            )
+        
+        # Validate control variables
+        validate_control_variables(control_variables)
+        
+        # Get baseline directory
+        reports_path = get_runflow_root()
+        baseline_dir = reports_path / "baseline" / baseline_run_id
+        
+        if not baseline_dir.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Baseline run_id not found: {baseline_run_id}"
+            )
+        
+        # Load baseline.json
+        baseline_json_path = baseline_dir / "baseline.json"
+        if not baseline_json_path.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"baseline.json not found for run_id: {baseline_run_id}"
+            )
+        
+        import json
+        with open(baseline_json_path, "r") as f:
+            baseline_json = json.load(f)
+        
+        baseline_metrics = baseline_json.get("baseline_metrics", {})
+        data_dir = Path(baseline_json.get("data_dir", get_data_directory()))
+        selected_files = baseline_json.get("selected_files", [])
+        
+        # Process each event
+        generated_files = []
+        new_baseline_metrics = {}
+        used_runner_ids = set()  # Track across all events for uniqueness
+        
+        for event_name, control_vars in control_variables.items():
+            if event_name not in baseline_metrics:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Event '{event_name}' not found in baseline metrics"
+                )
+            
+            # Get baseline metrics for this event
+            event_metrics = baseline_metrics[event_name]
+            base_participants = event_metrics["base_participants"]
+            distance = event_metrics["distance"]
+            
+            # Calculate new participant count
+            chg_participants = control_vars["chg_participants"]
+            new_participants = int(base_participants * (1 + chg_participants))
+            
+            # Parse cut-off time if provided
+            cutoff_mins = None
+            cutoff_str = control_vars.get("cutoff_mins")
+            if cutoff_str:
+                if isinstance(cutoff_str, str):
+                    cutoff_mins = validate_cutoff_time_format(cutoff_str)
+                elif isinstance(cutoff_str, (int, float)):
+                    cutoff_mins = float(cutoff_str)
+            
+            # Load baseline runner file
+            runners_file = event_metrics["runners_file"]
+            runners_path = data_dir / runners_file
+            if not runners_path.exists():
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Baseline runner file not found: {runners_path}"
+                )
+            
+            baseline_df = load_pace_csv(str(runners_path))
+            
+            # Generate new runner file
+            new_df = generate_runner_file(
+                baseline_df=baseline_df,
+                control_vars=control_vars,
+                new_participants=new_participants,
+                event_name=event_name,
+                distance=distance,
+                cutoff_mins=cutoff_mins,
+                used_runner_ids=used_runner_ids
+            )
+            
+            # Save generated file
+            output_file = baseline_dir / runners_file
+            new_df.to_csv(output_file, index=False)
+            
+            generated_files.append({
+                "event": event_name,
+                "path": str(output_file)
+            })
+            
+            # Calculate new baseline metrics from generated file
+            new_metrics = calculate_baseline_metrics(new_df)
+            new_metrics["runners_file"] = runners_file
+            new_baseline_metrics[event_name] = {
+                "new_participants": new_participants,
+                "new_p00": new_metrics["base_p00"],
+                "new_p05": new_metrics["base_p05"],
+                "new_p25": new_metrics["base_p25"],
+                "new_p50": new_metrics["base_p50"],
+                "new_p75": new_metrics["base_p75"],
+                "new_p95": new_metrics["base_p95"],
+                "new_p100": new_metrics["base_p100"]
+            }
+        
+        # Update baseline.json with control variables and new metrics
+        baseline_json["control_variables"] = control_variables
+        baseline_json["new_baseline_metrics"] = new_baseline_metrics
+        
+        # Save updated baseline.json
+        with open(baseline_json_path, "w") as f:
+            json.dump(baseline_json, f, indent=2)
+        
+        # Update generated_files list
+        save_generated_files(baseline_dir, generated_files)
+        
+        # Build response
+        response = {
+            "generated_files": generated_files,
+            "updated_baseline_json": baseline_json
+        }
+        
+        logger.info(
+            f"Generated {len(generated_files)} runner files for baseline run_id={baseline_run_id}"
+        )
+        return JSONResponse(content=response, status_code=status.HTTP_200_OK)
+    
+    except HTTPException:
+        raise
+    except ValueError as e:
+        # Cut-off validation or other ValueError
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error generating scenario: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate scenario: {str(e)}"
+        )
+
+
+@router.get("/api/baseline/files")
+async def list_generated_files(
+    run_id: str
+) -> JSONResponse:
+    """
+    List generated runner CSV files for a baseline run.
+    
+    Args:
+        run_id: Baseline run ID
+    
+    Returns:
+        List of generated file information
+    
+    Issue: #676 - File listing endpoint
+    """
+    try:
+        reports_path = get_runflow_root()
+        baseline_dir = reports_path / "baseline" / run_id
+        
+        if not baseline_dir.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Baseline run_id not found: {run_id}"
+            )
+        
+        # Load baseline.json
+        baseline_json_path = baseline_dir / "baseline.json"
+        if not baseline_json_path.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"baseline.json not found for run_id: {run_id}"
+            )
+        
+        import json
+        with open(baseline_json_path, "r") as f:
+            baseline_json = json.load(f)
+        
+        generated_files = baseline_json.get("generated_files", [])
+        
+        return JSONResponse(content={"files": generated_files}, status_code=status.HTTP_200_OK)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing files: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list files: {str(e)}"
+        )

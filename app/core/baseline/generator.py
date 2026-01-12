@@ -315,7 +315,7 @@ def generate_runner_file(
     base_participants = len(baseline_df)
     num_new_runners = max(0, new_participants - base_participants)
     
-    # Allocate participants to segments
+    # Allocate target participants to segments
     segment_percentages = {
         "fastest_5": 0.05,
         "next_20": 0.20,
@@ -323,16 +323,44 @@ def generate_runner_file(
         "bottom_20": 0.20,
         "slowest_5": 0.05
     }
-    segment_counts = allocate_participants(new_participants, segment_percentages)
+    target_segment_counts = allocate_participants(new_participants, segment_percentages)
     
-    # Sample new runners for each segment
+    # Allocate existing (adjusted) runners to segments based on their pace
+    # Map segment names to percentile ranges
+    segment_ranges = {
+        "fastest_5": (0.0, 0.05),
+        "next_20": (0.05, 0.25),
+        "mid_50": (0.25, 0.75),
+        "bottom_20": (0.75, 0.95),
+        "slowest_5": (0.95, 1.0)
+    }
+    
+    # Calculate percentile rank for each existing runner
+    n_existing = len(adjusted_df)
+    if n_existing > 1:
+        existing_percentile_ranks = np.arange(n_existing) / (n_existing - 1)
+    else:
+        existing_percentile_ranks = np.array([0.5])
+    
+    # Assign existing runners to segments
+    existing_by_segment = {seg: [] for seg in segment_ranges.keys()}
+    for idx, pct_rank in enumerate(existing_percentile_ranks):
+        for seg_name, (p_min, p_max) in segment_ranges.items():
+            if p_min <= pct_rank < p_max or (seg_name == "slowest_5" and pct_rank == 1.0):
+                existing_by_segment[seg_name].append(idx)
+                break
+    
+    # Calculate how many new runners needed per segment
     baseline_start_offsets = baseline_df["start_offset"].values
     new_runners_list = []
     
-    for segment_name, count in segment_counts.items():
-        if count > 0:
+    for segment_name, target_count in target_segment_counts.items():
+        existing_count = len(existing_by_segment[segment_name])
+        needed = max(0, target_count - existing_count)
+        
+        if needed > 0:
             segment_runners = sample_new_runners(
-                n_runners=count,
+                n_runners=needed,
                 segment_name=segment_name,
                 new_quantiles=new_quantiles,
                 baseline_start_offsets=baseline_start_offsets,
