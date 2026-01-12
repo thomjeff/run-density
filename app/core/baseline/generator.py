@@ -247,12 +247,32 @@ def validate_cutoff_time(
     finish_time = max_pace * distance
     if finish_time > cutoff_mins:
         max_allowed_pace = cutoff_mins / distance
+        
+        # Calculate minimum required cut-off time (round up to next minute)
+        min_cutoff_mins = finish_time
+        min_cutoff_hours = int(min_cutoff_mins // 60)
+        min_cutoff_remaining_mins = int(min_cutoff_mins % 60)
+        # Round up to next minute if there are fractional minutes
+        if min_cutoff_mins % 60 > min_cutoff_remaining_mins:
+            min_cutoff_remaining_mins += 1
+            if min_cutoff_remaining_mins >= 60:
+                min_cutoff_hours += 1
+                min_cutoff_remaining_mins = 0
+        
+        min_cutoff_str = f"{min_cutoff_hours:02d}:{min_cutoff_remaining_mins:02d}"
+        
+        # Format current cut-off in hh:mm
+        current_cutoff_hours = int(cutoff_mins // 60)
+        current_cutoff_mins = int(cutoff_mins % 60)
+        current_cutoff_str = f"{current_cutoff_hours:02d}:{current_cutoff_mins:02d}"
+        
         raise ValueError(
             f"Event '{event_name}' cut-off time violation:\n"
             f"  Max pace: {max_pace:.2f} min/km\n"
             f"  Distance: {distance:.2f} km\n"
             f"  Computed finish time: {finish_time:.1f} minutes\n"
-            f"  Cut-off: {cutoff_mins:.1f} minutes\n"
+            f"  Cut-off entered: {current_cutoff_str} ({cutoff_mins:.1f} minutes)\n"
+            f"  Minimum required cut-off: {min_cutoff_str} ({min_cutoff_mins:.1f} minutes)\n"
             f"  Max allowed pace: {max_allowed_pace:.2f} min/km"
         )
 
