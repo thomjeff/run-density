@@ -902,12 +902,6 @@
             payload.data_dir = dataDir;
         }
 
-        // Issue #680: Include data_dir if provided
-        const dataDir = document.getElementById('data_dir').value.trim();
-        if (dataDir) {
-            payload.data_dir = dataDir;
-        }
-
         // Issue #635: Add enableAudit to payload (always include, default "n")
         payload.enableAudit = enableAudit || "n";
 
