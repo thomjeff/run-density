@@ -2,11 +2,12 @@
 Runflow v2 Reports Module
 
 Generates day-partitioned reports (Density.md, Flow.csv, Locations.csv)
-organized in runflow/{run_id}/{day}/reports/ structure.
+organized in runflow/analysis/{run_id}/{day}/reports/ structure.
 
 Phase 6: Reports & Artifacts (Issue #500)
 
 Issue #600: Flow.md generation deprecated (only Flow.csv is used)
+Issue #682: Updated to use runflow/analysis/{run_id} structure
 """
 
 from typing import Dict, List, Any, Optional
@@ -82,11 +83,13 @@ def generate_reports_per_day(
         Dictionary mapping Day to report file paths:
         {
             Day.SUN: {
-                "density": "runflow/{run_id}/sun/reports/Density.md",
-                "flow_csv": "runflow/{run_id}/sun/reports/Flow.csv",
-                "locations": "runflow/{run_id}/sun/reports/Locations.csv",
+                "density": "runflow/analysis/{run_id}/sun/reports/Density.md",
+                "flow_csv": "runflow/analysis/{run_id}/sun/reports/Flow.csv",
+                "locations": "runflow/analysis/{run_id}/sun/reports/Locations.csv",
             },
             ...
+        
+        Issue #682: Updated to use runflow/analysis/{run_id} structure
         }
         Note: Issue #600 - Flow.md generation deprecated (only Flow.csv used)
     """
@@ -760,8 +763,10 @@ def generate_locations_report_v2(
             # Generate location report using v1 function
             # location_report.py expects CSV file paths
             # NOTE: Do NOT pass run_id to generate_location_report when using v2 structure
-            # because it will use get_runflow_category_path which creates runflow/{run_id}/reports
-            # instead of runflow/{run_id}/{day}/reports. We pass output_dir directly instead.
+            # because it will use get_runflow_category_path which creates runflow/analysis/{run_id}/reports
+            # instead of runflow/analysis/{run_id}/{day}/reports. We pass output_dir directly instead.
+            
+            # Issue #682: Updated to use runflow/analysis/{run_id} structure
             
             # Issue #655: Validate gpx_paths is provided (required for location report)
             if not gpx_paths:

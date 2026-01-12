@@ -52,12 +52,13 @@ def load_validation_config() -> Dict[str, Any]:
 
 
 def get_latest_run_id() -> str:
-    """Get the latest run_id from runflow/latest.json"""
-    latest_path = Path("runflow/latest.json")
+    """Get the latest run_id from runflow/analysis/latest.json"""
+    # Issue #682: Updated to use runflow/analysis/latest.json
+    latest_path = Path("runflow/analysis/latest.json")
     
     if not latest_path.exists():
         logger.error(f"❌ latest.json Missing — File: {latest_path}")
-        raise FileNotFoundError("runflow/latest.json not found")
+        raise FileNotFoundError("runflow/analysis/latest.json not found")
     
     try:
         latest = json.loads(latest_path.read_text())
@@ -98,7 +99,8 @@ def validate_latest_pointer() -> Dict[str, Any]:
         }
     
     # Verify matches index.json (most recent entry)
-    index_path = Path("runflow/index.json")
+    # Issue #682: Updated to use runflow/analysis/index.json
+    index_path = Path("runflow/analysis/index.json")
     if index_path.exists():
         try:
             index = json.loads(index_path.read_text())
@@ -126,14 +128,16 @@ def validate_latest_pointer() -> Dict[str, Any]:
 
 def validate_file_presence(run_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Verify all expected files exist in runflow/{run_id}/.
+    Verify all expected files exist in runflow/analysis/{run_id}/.
     
     Uses config/reporting.yml for expected file lists.
     Returns dict with status, missing files list.
+    
+    Issue #682: Updated to use runflow/analysis/{run_id} structure
     """
     logger.info(f"🔍 Validating file presence — Run: {run_id}")
     
-    run_dir = Path(f"runflow/{run_id}")
+    run_dir = Path(f"runflow/analysis/{run_id}")
     missing = []
     found_counts = {'reports': 0, 'bins': 0, 'maps': 0, 'heatmaps': 0, 'ui': 0}
     
@@ -214,7 +218,9 @@ def validate_file_presence(run_id: str, config: Dict[str, Any]) -> Dict[str, Any
 
 def validate_api_consistency(run_id: str, base_url: str = 'http://localhost:8080') -> Dict[str, Any]:
     """
-    Verify all APIs serve from correct runflow/{run_id}/ directories.
+    Verify all APIs serve from correct runflow/analysis/{run_id}/ directories.
+    
+    Issue #682: Updated to use runflow/analysis/{run_id} structure
     
     Checks:
     1. APIs return correct run_id
@@ -298,10 +304,11 @@ def validate_api_consistency(run_id: str, base_url: str = 'http://localhost:8080
             logger.error(f"❌ API Check Failed — API: {api['name']} — Error: {e} — Run: {run_id}")
     
     # Verify key files are accessible
+    # Issue #682: Updated to use runflow/analysis/{run_id} structure
     files_to_check = [
-        f'runflow/{run_id}/ui/segment_metrics.json',
-        f'runflow/{run_id}/ui/flags.json',
-        f'runflow/{run_id}/reports/Density.md',
+        f'runflow/analysis/{run_id}/ui/segment_metrics.json',
+        f'runflow/analysis/{run_id}/ui/flags.json',
+        f'runflow/analysis/{run_id}/reports/Density.md',
     ]
     
     for file_path in files_to_check:
@@ -439,7 +446,8 @@ def validate_schemas(run_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
     """
     logger.info(f"🔍 Validating schemas — Run: {run_id}")
     
-    run_dir = Path(f"runflow/{run_id}")
+    # Issue #682: Updated to use runflow/analysis/{run_id} structure
+    run_dir = Path(f"runflow/analysis/{run_id}")
     schemas = config.get('schemas', {})
     errors = []
     files_checked = 0
@@ -537,7 +545,8 @@ def inject_verification_status(run_id: str, validation_results: Dict[str, Any]) 
         run_id: Run ID
         validation_results: Results from validate_run()
     """
-    metadata_path = Path(f'runflow/{run_id}/metadata.json')
+    # Issue #682: Updated to use runflow/analysis/{run_id} structure
+    metadata_path = Path(f'runflow/analysis/{run_id}/metadata.json')
     
     if not metadata_path.exists():
         logger.warning(f"⚠️ metadata.json not found, skipping injection — Run: {run_id}")
@@ -583,7 +592,8 @@ def update_index_status(run_id: str, status: str) -> None:
         run_id: Run ID
         status: PASS | PARTIAL | FAIL
     """
-    index_path = Path('runflow/index.json')
+    # Issue #682: Updated to use runflow/analysis/index.json
+    index_path = Path('runflow/analysis/index.json')
     
     if not index_path.exists():
         logger.warning(f"⚠️ index.json not found, skipping status update — Run: {run_id}")
@@ -725,7 +735,7 @@ def validate_all_runs(config: Optional[Dict] = None, update_metadata: bool = Tru
     
     if not index_path.exists():
         logger.error(f"❌ index.json Missing — File: {index_path}")
-        raise FileNotFoundError("runflow/index.json not found")
+        raise FileNotFoundError("runflow/analysis/index.json not found")
     
     try:
         index = json.loads(index_path.read_text())

@@ -162,7 +162,7 @@ async def get_segments_geojson(
         # Read segments.geojson from runflow UI artifacts (Issue #580: Updated path to geospatial/ subdirectory)
         segments_geojson = storage.read_json(f"{selected_day}/ui/geospatial/segments.geojson")
         if segments_geojson is None:
-            logger.warning(f"segments.geojson not found in runflow/{run_id}/{selected_day}/ui/geospatial/")
+            logger.warning(f"segments.geojson not found in runflow/analysis/{run_id}/{selected_day}/ui/geospatial/")
             return JSONResponse(
                 content={
                     "selected_day": selected_day,
@@ -182,7 +182,7 @@ async def get_segments_geojson(
         # Read segment_metrics.json from runflow UI artifacts (Issue #580: Updated path to metrics/ subdirectory)
         segment_metrics = storage.read_json(f"{selected_day}/ui/metrics/segment_metrics.json")
         if segment_metrics is None:
-            logger.warning(f"segment_metrics.json not found in runflow/{run_id}/{selected_day}/ui/")
+            logger.warning(f"segment_metrics.json not found in runflow/analysis/{run_id}/{selected_day}/ui/")
             segment_metrics = {}
         
         # Load flags to mark flagged segments (Issue #580: Updated path to metrics/ subdirectory)

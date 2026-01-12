@@ -265,11 +265,11 @@ async def analyze_v2(request: V2AnalyzeRequest, background_tasks: BackgroundTask
             # Create stub paths that will be populated during analysis
             output_paths_dict[day_code] = V2OutputPaths(
                 day=day_code,
-                reports=f"runflow/{run_id}/{day_code}/reports",
-                bins=f"runflow/{run_id}/{day_code}/bins",
-                maps=f"runflow/{run_id}/{day_code}/maps",
-                ui=f"runflow/{run_id}/{day_code}/ui",
-                metadata=f"runflow/{run_id}/{day_code}/metadata.json"
+                reports=f"runflow/analysis/{run_id}/{day_code}/reports",
+                bins=f"runflow/analysis/{run_id}/{day_code}/bins",
+                maps=f"runflow/analysis/{run_id}/{day_code}/maps",
+                ui=f"runflow/analysis/{run_id}/{day_code}/ui",
+                metadata=f"runflow/analysis/{run_id}/{day_code}/metadata.json"
             )
         
         # Issue #554: Add background task to run analysis asynchronously

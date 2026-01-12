@@ -1346,7 +1346,8 @@ async def get_segments():
 
         run_id = get_latest_run_id()
         runflow_root = get_runflow_root()
-        run_path = runflow_root / run_id
+        # Issue #682: Updated to use runflow/analysis/{run_id} structure
+        run_path = runflow_root / "analysis" / run_id
         analysis_context = load_analysis_context(run_path)
         segments_csv_path = str(analysis_context.segments_csv_path)
 

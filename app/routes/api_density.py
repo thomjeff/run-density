@@ -40,7 +40,8 @@ def load_density_metrics_from_bins(run_id: Optional[str] = None, day: Optional[s
         Dict with segment_id -> {utilization, worst_bin, bin_detail}
     """
     try:
-        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
+        # Issue #460 Phase 5: Get latest run_id from runflow/analysis/latest.json
+        # Issue #682: Updated to use runflow/analysis/latest.json
         from app.utils.run_id import get_latest_run_id, resolve_selected_day
         from app.storage import create_runflow_storage
         
@@ -331,7 +332,8 @@ async def get_density_segments(
         - utilization, flagged, worst_bin, watch, mitigation
     """
     try:
-        # Issue #460 Phase 5: Get latest run_id from runflow/latest.json
+        # Issue #460 Phase 5: Get latest run_id from runflow/analysis/latest.json
+        # Issue #682: Updated to use runflow/analysis/latest.json
         from app.utils.run_id import get_latest_run_id, resolve_selected_day
         from app.storage import create_runflow_storage
         

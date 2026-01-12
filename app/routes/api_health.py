@@ -52,7 +52,7 @@ async def get_health_data():
         if health_data is None:
             raise HTTPException(status_code=404, detail="health.json not found in runflow storage")
         
-        logger.info(f"Loaded health data from runflow/{run_id}/{selected_day}/ui/metadata/health.json")
+        logger.info(f"Loaded health data from runflow/analysis/{run_id}/{selected_day}/ui/metadata/health.json")
         return JSONResponse(content=health_data)
         
     except HTTPException:

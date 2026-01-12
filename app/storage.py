@@ -116,16 +116,17 @@ class Storage:
         run_id = os.getenv("RUN_ID")
         if not run_id:
             try:
-                # Issue #470: Read from runflow/latest.json (single source of truth)
-                latest_path = Path("runflow/latest.json")
+                # Issue #470: Read from runflow/analysis/latest.json (single source of truth)
+                # Issue #682: Moved from runflow/latest.json to runflow/analysis/latest.json
+                latest_path = Path("runflow/analysis/latest.json")
                 if latest_path.exists():
                     latest_data = json.loads(latest_path.read_text())
                     run_id = latest_data.get("run_id")
                 else:
-                    logging.warning("runflow/latest.json not found for run_id")
+                    logging.warning("runflow/analysis/latest.json not found for run_id")
                     run_id = None
             except Exception as e:
-                    logging.warning(f"Could not load runflow/latest.json for run_id: {e}")
+                    logging.warning(f"Could not load runflow/analysis/latest.json for run_id: {e}")
                     run_id = None
         
         # Issue #361: Do not fall back to hardcoded date - return None if run_id unavailable
@@ -134,7 +135,8 @@ class Storage:
             return None
         # Issue #470: Heatmaps stored in runflow structure
         # Issue #580: Updated path to visualizations/ subdirectory (heatmaps are directly in visualizations/, not in a heatmaps/ subdirectory)
-        return f"/runflow/{run_id}/ui/visualizations/{segment_id}.png"
+        # Issue #682: Updated to use runflow/analysis/{run_id} structure
+        return f"/runflow/analysis/{run_id}/ui/visualizations/{segment_id}.png"
     
     # ===== Write Methods (Issue #455 - Phase 3) =====
     

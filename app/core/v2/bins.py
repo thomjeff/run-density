@@ -101,7 +101,7 @@ def generate_bins_v2(
     1. Create AnalysisContext with v2 data
     2. Temporarily provide combined runners CSV for build_runner_window_mapping()
     3. Call v1 bin generation functions
-    4. Save artifacts to day-partitioned structure: runflow/{run_id}/{day}/bins/
+    4. Save artifacts to day-partitioned structure: runflow/analysis/{run_id}/{day}/bins/
     
     Args:
         density_results: Density analysis results from analyze_density_segments_v2()

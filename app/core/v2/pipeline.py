@@ -249,13 +249,14 @@ def create_stubbed_pipeline(
             json.dump(metadata, f, indent=2, ensure_ascii=False)
         
         # Store output paths (relative to runflow root for API response)
+        # Issue #682: Updated to use runflow/analysis/{run_id} structure
         output_paths[day_code] = {
             "day": day_code,
-            "reports": f"runflow/{run_id}/{day_code}/reports",
-            "bins": f"runflow/{run_id}/{day_code}/bins",
-            "maps": f"runflow/{run_id}/{day_code}/maps",
-            "ui": f"runflow/{run_id}/{day_code}/ui",
-            "metadata": f"runflow/{run_id}/{day_code}/metadata.json"
+            "reports": f"runflow/analysis/{run_id}/{day_code}/reports",
+            "bins": f"runflow/analysis/{run_id}/{day_code}/bins",
+            "maps": f"runflow/analysis/{run_id}/{day_code}/maps",
+            "ui": f"runflow/analysis/{run_id}/{day_code}/ui",
+            "metadata": f"runflow/analysis/{run_id}/{day_code}/metadata.json"
         }
     
     # Create combined metadata for index.json (includes all days)
@@ -640,7 +641,8 @@ def create_combined_metadata(
         "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "status": agg_status,
         "days": days,
-        "day_paths": {day: f"runflow/{run_id}/{day}" for day in days},
+        # Issue #682: Updated to use runflow/analysis/{run_id} structure
+        "day_paths": {day: f"runflow/analysis/{run_id}/{day}" for day in days},
         "runtime_env": detect_runtime_environment(),
         "storage_target": detect_storage_target(),
         "app_version": get_app_version(),
@@ -1524,13 +1526,14 @@ def create_full_analysis_pipeline(
             day_metadata_map[day_code] = metadata
             
             # Store output paths
+            # Issue #682: Updated to use runflow/analysis/{run_id} structure
             output_paths[day_code] = {
                 "day": day_code,
-                "reports": f"runflow/{run_id}/{day_code}/reports",
-                "bins": f"runflow/{run_id}/{day_code}/bins",
-                "maps": f"runflow/{run_id}/{day_code}/maps",
-                "ui": f"runflow/{run_id}/{day_code}/ui",
-                "metadata": f"runflow/{run_id}/{day_code}/metadata.json"
+                "reports": f"runflow/analysis/{run_id}/{day_code}/reports",
+                "bins": f"runflow/analysis/{run_id}/{day_code}/bins",
+                "maps": f"runflow/analysis/{run_id}/{day_code}/maps",
+                "ui": f"runflow/analysis/{run_id}/{day_code}/ui",
+                "metadata": f"runflow/analysis/{run_id}/{day_code}/metadata.json"
             }
         
         # Phase 5: Report Generation (Issue #574, #581: Enhanced logging)
