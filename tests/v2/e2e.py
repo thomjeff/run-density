@@ -33,22 +33,22 @@ BASE_URL = os.getenv("BASE_URL", "http://localhost:8080")
 TIMEOUT = 600  # 10 minutes for full analysis
 
 # ============================================================================
-# Data file configuration (SSOT - Issue #655)
+# Data file configuration (SSOT - Issue #655, Issue #680)
 # ============================================================================
 # Centralized configuration for all E2E test scenarios.
 # To change test data files, modify these values:
 #   - segments_file: Change to use different segments (e.g., "segments.csv" or "segments_616.csv")
 #   - flow_file: Change to use different flow data (e.g., "flow.csv" or "flow_616.csv")
 #   - locations_file: Change locations file, or set to None if not needed
-#   - data_dir: Data directory path (defaults to "data")
+#   - data_dir: Data directory path (Issue #680: defaults to "/app/runflow/config/e2e")
 #
 # All tests will automatically use these values via _build_base_payload().
 # This ensures SSOT - single place to configure test data files.
 E2E_CONFIG = {
-    "data_dir": "data",  # Data directory (relative to project root or absolute path)
-    "segments_file": "segments_616.csv",  # Segments CSV file
-    "flow_file": "flow_616.csv",  # Flow CSV file
-    "locations_file": "locations_616.csv",  # Locations CSV file (optional, can be None)
+    "data_dir": "/app/runflow/config/e2e",  # Data directory (Issue #680: absolute path in container)
+    "segments_file": "segments.csv",  # Segments CSV file
+    "flow_file": "flow.csv",  # Flow CSV file
+    "locations_file": "locations.csv",  # Locations CSV file (optional, can be None)
 }
 
 # Event runners and GPX file mappings
@@ -1132,9 +1132,8 @@ class TestV2E2EScenarios:
         
         # Verify data_dir is stored in analysis.json
         run_id = data["run_id"]
-        from app.utils.run_id import get_runflow_root
-        runflow_root = get_runflow_root()
-        run_dir = runflow_root / run_id
+        # Issue #682: Use centralized get_run_directory() for correct path
+        run_dir = self._get_run_directory(run_id)
         analysis_json_path = run_dir / "analysis.json"
         assert analysis_json_path.exists(), "analysis.json not found"
         
