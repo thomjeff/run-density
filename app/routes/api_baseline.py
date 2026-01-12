@@ -289,32 +289,19 @@ async def generate_scenario(
                 used_runner_ids=used_runner_ids
             )
             
-            # Apply file name suffix if provided
-            file_suffix = request.get("file_suffix")
-            if file_suffix:
-                # Insert suffix before .csv extension
-                # e.g., "elite_runners.csv" + "_issue676" -> "elite_runners_issue676.csv"
-                if runners_file.endswith(".csv"):
-                    base_name = runners_file[:-4]  # Remove .csv
-                    output_filename = f"{base_name}{file_suffix}.csv"
-                else:
-                    output_filename = f"{runners_file}{file_suffix}"
-            else:
-                output_filename = runners_file
-            
-            # Save generated file
-            output_file = baseline_dir / output_filename
+            # Save generated file (without suffix - suffix applied later via /apply-suffix endpoint)
+            output_file = baseline_dir / runners_file
             new_df.to_csv(output_file, index=False)
             
             generated_files.append({
                 "event": event_name,
                 "path": str(output_file),
-                "filename": output_filename
+                "filename": runners_file
             })
             
             # Calculate new baseline metrics from generated file
             new_metrics = calculate_baseline_metrics(new_df)
-            new_metrics["runners_file"] = output_filename  # Use new filename
+            new_metrics["runners_file"] = runners_file
             new_baseline_metrics[event_name] = {
                 "new_participants": new_participants,
                 "new_p00": new_metrics["base_p00"],
