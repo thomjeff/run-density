@@ -13,12 +13,6 @@
     <p id="error-message" style="color: #c0392b; margin: 0;"></p>
 </div>
 
-<!-- Success Banner -->
-<div id="success-banner" class="card" style="display: none; background: #efe; border-left: 4px solid #2ecc71; margin-bottom: 1.5rem;">
-    <h3 style="color: #2ecc71; margin-bottom: 0.5rem;">Success</h3>
-    <p id="success-message" style="color: #27ae60; margin: 0;"></p>
-</div>
-
 <!-- Create New Data Files Section (Issue #676) -->
 <div class="card" style="margin-bottom: 2rem;">
     <h3 style="margin-bottom: 1rem;">Create New Data Files</h3>
@@ -92,6 +86,15 @@
             >
                 Create New Files
             </button>
+        </div>
+        
+        <!-- Success Message (shown after files are created) -->
+        <div id="baseline-success-message" style="display: none; margin-top: 1.5rem; padding: 1rem; background: #efe; border-left: 4px solid #2ecc71; border-radius: 4px;">
+            <p style="color: #27ae60; margin: 0 0 0.5rem 0; font-weight: 600;">New File(s) created</p>
+            <p id="baseline-file-path" style="color: #2c3e50; margin: 0 0 0.75rem 0; font-family: monospace; font-size: 0.9rem;"></p>
+            <a id="baseline-download-link" href="#" style="display: inline-block; padding: 0.5rem 1rem; background: #3498db; color: white; text-decoration: none; border-radius: 4px; font-weight: 600;">
+                Download All Files
+            </a>
         </div>
     </div>
 </div>
@@ -203,6 +206,7 @@
             baselineState.runId = data.run_id;
             baselineState.baselineMetrics = data.baseline_metrics;
             baselineState.selectedFiles = selectedFiles;
+            baselineState.reportsPath = data.reports_path || 'runflow';  // Store reports_path
             
             // Render baseline metrics table
             renderBaselineMetricsTable(data.baseline_metrics);
@@ -631,18 +635,42 @@
         }
         
         // Files are already created by calculateNewBaseline endpoint
-        // Just show success message
-        showBaselineSuccess(`Files created successfully! Baseline run ID: ${baselineState.runId}`);
+        // Get reports_path from stored state or fetch from API
+        let reportsPath = baselineState.reportsPath;
         
-        // Optionally, show file list
-        try {
-            const filesResponse = await fetch(`/api/baseline/files?run_id=${baselineState.runId}`);
-            if (filesResponse.ok) {
-                const filesData = await filesResponse.json();
-                console.log('Generated files:', filesData.files);
+        if (!reportsPath) {
+            try {
+                const filesResponse = await fetch(`/api/baseline/files?run_id=${baselineState.runId}`);
+                if (filesResponse.ok) {
+                    const filesData = await filesResponse.json();
+                    reportsPath = filesData.reports_path || 'runflow';
+                    baselineState.reportsPath = reportsPath;  // Store for future use
+                } else {
+                    reportsPath = 'runflow';  // Fallback
+                }
+            } catch (error) {
+                console.error('Error fetching file list:', error);
+                reportsPath = 'runflow';  // Fallback
             }
-        } catch (error) {
-            console.error('Error fetching file list:', error);
+        }
+        
+        // Show success message with path and download link
+        const filePath = `${reportsPath}/baseline/${baselineState.runId}`;
+        const pathElement = document.getElementById('baseline-file-path');
+        const downloadLink = document.getElementById('baseline-download-link');
+        const successMessage = document.getElementById('baseline-success-message');
+        
+        if (pathElement) {
+            pathElement.textContent = filePath;
+        }
+        
+        if (downloadLink) {
+            downloadLink.href = `/api/baseline/download?run_id=${baselineState.runId}`;
+        }
+        
+        if (successMessage) {
+            successMessage.style.display = 'block';
+            successMessage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
     }
     
@@ -653,13 +681,20 @@
             baselineMetrics: null,
             selectedFiles: [],
             controlVariables: null,
-            newBaselineMetrics: null
+            newBaselineMetrics: null,
+            reportsPath: null
         };
         
         // Reset UI
         document.getElementById('baseline-step2').style.display = 'none';
         document.getElementById('baseline-step3').style.display = 'none';
         document.getElementById('baseline-step4').style.display = 'none';
+        
+        // Hide success message
+        const successMessage = document.getElementById('baseline-success-message');
+        if (successMessage) {
+            successMessage.style.display = 'none';
+        }
         
         // Uncheck all checkboxes
         document.querySelectorAll('#baseline-file-selection input[type="checkbox"]').forEach(cb => {
@@ -690,15 +725,10 @@
         }
     }
     
-    // Show baseline success
+    // Show baseline success (deprecated - now using inline success message)
     function showBaselineSuccess(message) {
-        const successBanner = document.getElementById('success-banner');
-        const successMessage = document.getElementById('success-message');
-        if (successBanner && successMessage) {
-            successMessage.textContent = message;
-            successBanner.style.display = 'block';
-            successBanner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
+        // This function is kept for backward compatibility but is no longer used
+        // Success messages are now shown inline below the Create New Files button
     }
     
     // Clear baseline errors

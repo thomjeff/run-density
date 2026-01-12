@@ -6,12 +6,14 @@ Provides endpoints for calculating baseline metrics and generating scenario-base
 Issue: #676 - Utility to create new runner files
 """
 
-from fastapi import APIRouter, HTTPException, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, HTTPException, status, Query
+from fastapi.responses import JSONResponse, Response
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 import pandas as pd
 import logging
+import zipfile
+import io
 
 from app.core.baseline import (
     calculate_baseline_metrics,
@@ -359,7 +361,7 @@ async def list_generated_files(
         run_id: Baseline run ID
     
     Returns:
-        List of generated file information
+        List of generated file information with reports_path
     
     Issue: #676 - File listing endpoint
     """
@@ -387,7 +389,13 @@ async def list_generated_files(
         
         generated_files = baseline_json.get("generated_files", [])
         
-        return JSONResponse(content={"files": generated_files}, status_code=status.HTTP_200_OK)
+        return JSONResponse(
+            content={
+                "files": generated_files,
+                "reports_path": str(reports_path)
+            },
+            status_code=status.HTTP_200_OK
+        )
     
     except HTTPException:
         raise
@@ -396,4 +404,61 @@ async def list_generated_files(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list files: {str(e)}"
+        )
+
+
+@router.get("/api/baseline/download")
+async def download_baseline_files(
+    run_id: str = Query(..., description="Baseline run ID")
+) -> Response:
+    """
+    Download all files from a baseline run directory as a ZIP archive.
+    
+    Args:
+        run_id: Baseline run ID
+    
+    Returns:
+        ZIP file containing all files from the baseline run directory
+    
+    Issue: #676 - File download endpoint
+    """
+    try:
+        reports_path = get_runflow_root()
+        baseline_dir = reports_path / "baseline" / run_id
+        
+        if not baseline_dir.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Baseline run_id not found: {run_id}"
+            )
+        
+        # Create ZIP file in memory
+        zip_buffer = io.BytesIO()
+        
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            # Add all files in the baseline directory
+            for file_path in baseline_dir.rglob('*'):
+                if file_path.is_file():
+                    # Get relative path from baseline_dir for archive structure
+                    arcname = file_path.relative_to(baseline_dir)
+                    zip_file.write(file_path, arcname)
+        
+        zip_buffer.seek(0)
+        
+        # Return ZIP file as response
+        return Response(
+            content=zip_buffer.getvalue(),
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f"attachment; filename=baseline_{run_id}.zip"
+            }
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error downloading baseline files: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to download files: {str(e)}"
         )
