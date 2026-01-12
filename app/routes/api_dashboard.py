@@ -470,7 +470,9 @@ async def get_run_summary(run_id: str):
         # Load analysis.json for description and days
         from app.config.loader import load_analysis_context
         try:
-            analysis_context = load_analysis_context(runflow_root / run_id)
+            # Issue #682: Use centralized get_run_directory() for correct path
+            from app.utils.run_id import get_run_directory
+            analysis_context = load_analysis_context(get_run_directory(run_id))
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
         analysis_data = analysis_context.analysis_config

@@ -623,7 +623,9 @@ def load_segments_metadata(reports_dir: Optional[Path] = None, run_id: Optional[
             if run_id_dir.name in ["reports_temp", "reports_heatmaps"]:
                 run_id_dir = reports_dir.parent
             if not (run_id_dir / "analysis.json").exists() and run_id:
-                run_id_dir = runflow_root / run_id
+                # Issue #682: Use centralized get_run_directory() for correct path
+                from app.utils.run_id import get_run_directory
+                run_id_dir = get_run_directory(run_id)
             analysis_context = load_analysis_context(run_id_dir)
             segments_path = Path(analysis_context.segments_csv_path)
         except Exception as e:
@@ -631,9 +633,9 @@ def load_segments_metadata(reports_dir: Optional[Path] = None, run_id: Optional[
     elif run_id:
         try:
             from app.config.loader import load_analysis_context
-            from app.utils.run_id import get_runflow_root
-            runflow_root = get_runflow_root()
-            analysis_context = load_analysis_context(runflow_root / run_id)
+            # Issue #682: Use centralized get_run_directory() for correct path
+            from app.utils.run_id import get_run_directory
+            analysis_context = load_analysis_context(get_run_directory(run_id))
             segments_path = Path(analysis_context.segments_csv_path)
         except Exception as e:
             print(f"   ⚠️  Could not load segments_csv_path from analysis.json: {e}")
