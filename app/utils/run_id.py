@@ -6,6 +6,7 @@ Provides local-only filesystem operations for runflow structure.
 
 Epic: #444 - Refactor Report Run ID System
 Issue: #466 - Phase 2: Architecture Refinement (Step 1 - Centralize Run ID Logic)
+Issue: #676 - Extended with generic ID generation for runner IDs
 """
 
 import shortuuid
@@ -15,6 +16,10 @@ from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+# Base62 alphabet: 0-9, a-z, A-Z (62 characters)
+# Used for runner IDs and other short identifiers
+BASE62_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
 def generate_run_id(length: Optional[int] = None) -> str:
@@ -256,4 +261,128 @@ def resolve_selected_day(run_id: str, requested_day: Optional[str] = None) -> tu
         selected_day = available_days[0]
     
     return selected_day, available_days
+
+
+# ===== Generic ID Generation (Issue #676) =====
+
+def generate_short_id(
+    length: int,
+    alphabet: Optional[str] = None
+) -> str:
+    """
+    Generate a short, unique identifier with configurable length and alphabet.
+    
+    Generic function for generating IDs of any length and alphabet.
+    Used for runner IDs, baseline run IDs, and other short identifiers.
+    
+    Note: This function does NOT enforce the 10-char minimum that applies
+    to run_id. Use generate_run_id() for analysis run IDs.
+    
+    Args:
+        length: Length of the generated ID (required, no minimum)
+        alphabet: Optional custom alphabet string. If None, uses shortuuid default (Base57).
+                  For Base62 (0-9, a-z, A-Z), pass BASE62_ALPHABET.
+    
+    Returns:
+        Short ID string
+    
+    Examples:
+        >>> runner_id = generate_short_id(length=7, alphabet=BASE62_ALPHABET)
+        >>> len(runner_id)
+        7
+        >>> run_id = generate_run_id()  # Use this for analysis run_id (22 chars default)
+        >>> len(run_id) >= 22
+        True
+        
+    Issue: #676 - Generic ID generator
+    """
+    if length < 1:
+        raise ValueError("Length must be at least 1")
+    
+    if alphabet:
+        uuid_gen = shortuuid.ShortUUID(alphabet=alphabet)
+        return uuid_gen.random(length=length)
+    else:
+        # Use default shortuuid (Base57)
+        return shortuuid.ShortUUID().random(length=length)
+
+
+def generate_runner_id(used_ids: Optional[set[str]] = None) -> str:
+    """
+    Generate a unique 7-character runner ID using Base62 alphabet.
+    
+    This function explicitly uses length=7, which is shorter than the
+    minimum required for run_id (10 chars). Runner IDs are used in CSV
+    files and don't need the same collision resistance as run_id.
+    
+    Args:
+        used_ids: Optional set of already-used IDs to avoid collisions.
+                  If provided and collision occurs, regenerates until unique.
+    
+    Returns:
+        7-character Base62 string (e.g., "a3B9xY2")
+    
+    Examples:
+        >>> runner_id = generate_runner_id()
+        >>> len(runner_id)
+        7
+        >>> runner_id2 = generate_runner_id(used_ids={runner_id})
+        >>> runner_id2 != runner_id
+        True
+        
+    Issue: #676 - Runner ID generation (7 chars, Base62)
+    Note: This bypasses the 10-char minimum for run_id since runner IDs
+          are used in a different context (CSV files, not directory names).
+    """
+    max_attempts = 100
+    attempt = 0
+    
+    while attempt < max_attempts:
+        # Use generic function with explicit length=7 and Base62
+        runner_id = generate_short_id(length=7, alphabet=BASE62_ALPHABET)
+        
+        if used_ids is None or runner_id not in used_ids:
+            return runner_id
+        
+        attempt += 1
+    
+    raise RuntimeError(
+        f"Failed to generate unique runner_id after {max_attempts} attempts. "
+        f"Consider increasing ID length or checking for ID generation issues."
+    )
+
+
+def generate_unique_runner_ids(
+    n: int,
+    used_ids: Optional[set[str]] = None
+) -> list[str]:
+    """
+    Generate n unique runner IDs with collision detection.
+    
+    Args:
+        n: Number of runner IDs to generate
+        used_ids: Optional set of already-used IDs
+    
+    Returns:
+        List of unique 7-character Base62 runner IDs
+    
+    Examples:
+        >>> ids = generate_unique_runner_ids(10)
+        >>> len(ids)
+        10
+        >>> len(set(ids)) == 10  # All unique
+        True
+        
+    Issue: #676 - Batch runner ID generation for multiple events
+    """
+    if used_ids is None:
+        used_ids = set()
+    
+    generated_ids = []
+    for _ in range(n):
+        runner_id = generate_runner_id(used_ids=used_ids)
+        generated_ids.append(runner_id)
+        used_ids.add(runner_id)
+    
+    return generated_ids
 
