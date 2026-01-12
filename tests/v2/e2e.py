@@ -255,9 +255,9 @@ class TestV2E2EScenarios:
     
     def _get_run_directory(self, run_id: str) -> Path:
         """Get run directory path."""
-        from app.utils.run_id import get_runflow_root
-        runflow_root = get_runflow_root()
-        return runflow_root / run_id
+        # Issue #682: Use centralized get_run_directory() for correct path
+        from app.utils.run_id import get_run_directory
+        return get_run_directory(run_id)
 
     def _require_analysis_context(self, run_id: str, payload: Dict[str, Any]) -> None:
         """Load analysis.json via new loader and validate required config fields."""
