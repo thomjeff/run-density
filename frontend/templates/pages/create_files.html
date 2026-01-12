@@ -577,13 +577,12 @@
                 throw new Error(data.detail || 'Failed to generate new baseline');
             }
             
-            // Store runId (created in Step 3) and new baseline metrics
-            baselineState.runId = data.run_id;
+            // Store control variables and new baseline metrics (no runId yet - created in Step 4)
             baselineState.controlVariables = controlVariables;
-            baselineState.newBaselineMetrics = data.updated_baseline_json.new_baseline_metrics;
+            baselineState.newBaselineMetrics = data.new_baseline_metrics;
             
             // Render new baseline metrics table
-            renderNewBaselineMetricsTable(data.updated_baseline_json.new_baseline_metrics);
+            renderNewBaselineMetricsTable(data.new_baseline_metrics);
             
             // Show step 4
             document.getElementById('baseline-step4').style.display = 'block';
@@ -653,48 +652,73 @@
     
     // Create new files
     async function createNewFiles() {
-        if (!baselineState.runId) {
+        if (!baselineState.baselineMetrics || !baselineState.controlVariables || !baselineState.newBaselineMetrics) {
             showBaselineError('Please calculate baseline and new baseline first');
             return;
         }
         
-        // Files are already created by calculateNewBaseline endpoint
-        // Get reports_path from stored state or fetch from API
-        let reportsPath = baselineState.reportsPath;
+        // Get file name suffix (optional)
+        const suffixInput = document.getElementById('baseline-file-suffix');
+        const fileSuffix = suffixInput ? suffixInput.value.trim() : '';
         
-        if (!reportsPath) {
-            try {
-                const filesResponse = await fetch(`/api/baseline/files?run_id=${baselineState.runId}`);
-                if (filesResponse.ok) {
-                    const filesData = await filesResponse.json();
-                    reportsPath = filesData.reports_path || 'runflow';
-                    baselineState.reportsPath = reportsPath;  // Store for future use
-                } else {
-                    reportsPath = 'runflow';  // Fallback
-                }
-            } catch (error) {
-                console.error('Error fetching file list:', error);
-                reportsPath = 'runflow';  // Fallback
+        // Validate suffix format (alphanumeric, underscore, hyphen only)
+        if (fileSuffix && !/^[a-zA-Z0-9_-]+$/.test(fileSuffix)) {
+            showBaselineError('File name suffix can only contain letters, numbers, underscores, and hyphens');
+            return;
+        }
+        
+        const btn = document.getElementById('baseline-create-files-btn');
+        btn.disabled = true;
+        btn.textContent = 'Creating Files...';
+        
+        try {
+            const response = await fetch('/api/baseline/create-files', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    baseline_metrics: baselineState.baselineMetrics,
+                    selected_files: baselineState.selectedFiles,
+                    data_dir: baselineState.dataDir,
+                    control_variables: baselineState.controlVariables,
+                    file_suffix: fileSuffix || null
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.detail || 'Failed to create files');
             }
-        }
-        
-        // Show success message with path and download link
-        const filePath = `${reportsPath}/baseline/${baselineState.runId}`;
-        const pathElement = document.getElementById('baseline-file-path');
-        const downloadLink = document.getElementById('baseline-download-link');
-        const successMessage = document.getElementById('baseline-success-message');
-        
-        if (pathElement) {
-            pathElement.textContent = filePath;
-        }
-        
-        if (downloadLink) {
-            downloadLink.href = `/api/baseline/download?run_id=${baselineState.runId}`;
-        }
-        
-        if (successMessage) {
-            successMessage.style.display = 'block';
-            successMessage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            
+            // Store runId (created in Step 4)
+            baselineState.runId = data.run_id;
+            
+            // Get reports_path from stored state
+            const reportsPath = baselineState.reportsPath || 'runflow';
+            
+            // Show success message with path and download link
+            const filePath = `${reportsPath}/baseline/${baselineState.runId}`;
+            const pathElement = document.getElementById('baseline-file-path');
+            const downloadLink = document.getElementById('baseline-download-link');
+            const successMessage = document.getElementById('baseline-success-message');
+            
+            if (pathElement) {
+                pathElement.textContent = filePath;
+            }
+            
+            if (downloadLink) {
+                downloadLink.href = `/api/baseline/download?run_id=${baselineState.runId}`;
+            }
+            
+            if (successMessage) {
+                successMessage.style.display = 'block';
+                successMessage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        } catch (error) {
+            showBaselineError(error.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Create New Files';
         }
     }
     

@@ -305,57 +305,23 @@ async def generate_scenario(
                 "new_p100": new_metrics["base_p100"]
             }
         
-        # All validations passed (including cutoff time validation) - now create directory
-        reports_path = get_runflow_root()
-        baseline_dir = create_baseline_directory(reports_path)
-        run_id = baseline_dir.name
+        # All validations passed (including cutoff time validation)
+        # Return new baseline metrics only (no directory creation, no file saving)
+        # Directory and files will be created when user clicks "Create New Files"
         
-        # Save baseline.json (first time)
-        baseline_json_path = save_baseline_metrics(
-            baseline_dir=baseline_dir,
-            run_id=run_id,
-            data_dir=str(data_dir),
-            reports_path=str(reports_path),
-            selected_files=selected_files,
-            baseline_metrics=baseline_metrics
-        )
+        # Store generated dataframes in response for later use (will be passed to create-files endpoint)
+        # Note: We can't actually store DataFrames in JSON, so we'll regenerate them in create-files
         
-        # Load the saved baseline.json
-        with open(baseline_json_path, "r") as f:
-            baseline_json = json.load(f)
-        
-        # Now save all generated files to disk
-        generated_files = []
-        for event_name, file_data in generated_dataframes.items():
-            output_file = baseline_dir / file_data["runners_file"]
-            file_data["df"].to_csv(output_file, index=False)
-            
-            generated_files.append({
-                "event": event_name,
-                "path": str(output_file),
-                "filename": file_data["runners_file"]
-            })
-        
-        # Update baseline.json with control variables and new metrics
-        baseline_json["control_variables"] = control_variables
-        baseline_json["new_baseline_metrics"] = new_baseline_metrics
-        
-        # Save updated baseline.json
-        with open(baseline_json_path, "w") as f:
-            json.dump(baseline_json, f, indent=2)
-        
-        # Update generated_files list
-        save_generated_files(baseline_dir, generated_files)
-        
-        # Build response
         response = {
-            "run_id": run_id,
-            "generated_files": generated_files,
-            "updated_baseline_json": baseline_json
+            "new_baseline_metrics": new_baseline_metrics,
+            "generated_dataframes_info": {
+                event_name: {"runners_file": file_data["runners_file"]}
+                for event_name, file_data in generated_dataframes.items()
+            }
         }
         
         logger.info(
-            f"Generated {len(generated_files)} runner files for baseline run_id={run_id}"
+            f"Calculated new baseline metrics for {len(control_variables)} events (no directory created)"
         )
         return JSONResponse(content=response, status_code=status.HTTP_200_OK)
     
