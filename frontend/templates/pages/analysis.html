@@ -19,6 +19,85 @@
     <p id="success-message" style="color: #27ae60; margin: 0;"></p>
 </div>
 
+<!-- Create New Data Files Section (Issue #676) -->
+<div class="card" style="margin-bottom: 2rem;">
+    <h3 style="margin-bottom: 1rem;">Create New Data Files</h3>
+    <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
+        Generate new runner CSV files with scenario-based modifications (participant counts and pace adjustments).
+    </p>
+    
+    <!-- Step 1: File Selection -->
+    <div id="baseline-step1" style="margin-bottom: 1.5rem;">
+        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
+            Select Runner Files <span style="color: #e74c3c;">*</span>
+        </label>
+        <div id="baseline-file-selection" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem; margin-bottom: 1rem;">
+            <!-- Checkboxes will be populated by JavaScript -->
+        </div>
+        <button 
+            type="button" 
+            id="baseline-calculate-btn"
+            style="padding: 0.75rem 2rem; background: #3498db; color: white; border: none; border-radius: 4px; font-size: 1rem; font-weight: 600; cursor: pointer;"
+            disabled
+        >
+            Calculate Baseline
+        </button>
+        <div class="field-error" id="baseline-file-selection-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.5rem;"></div>
+    </div>
+    
+    <!-- Step 2: Baseline Metrics Table (hidden until calculated) -->
+    <div id="baseline-step2" style="display: none; margin-bottom: 1.5rem;">
+        <h4 style="margin-bottom: 1rem; color: #2c3e50;">Baseline Metrics</h4>
+        <div id="baseline-metrics-table" style="overflow-x: auto;">
+            <!-- Table will be populated by JavaScript -->
+        </div>
+    </div>
+    
+    <!-- Step 3: Control Variables Input (hidden until baseline calculated) -->
+    <div id="baseline-step3" style="display: none; margin-bottom: 1.5rem;">
+        <h4 style="margin-bottom: 1rem; color: #2c3e50;">Control Variables</h4>
+        <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
+            Enter percentage changes for participants and pace percentiles. Negative values are permitted.
+        </p>
+        <div id="baseline-control-variables-table" style="overflow-x: auto;">
+            <!-- Table will be populated by JavaScript -->
+        </div>
+        <div style="margin-top: 1rem; display: flex; gap: 1rem;">
+            <button 
+                type="button" 
+                id="baseline-calculate-new-btn"
+                style="padding: 0.75rem 2rem; background: #2ecc71; color: white; border: none; border-radius: 4px; font-size: 1rem; font-weight: 600; cursor: pointer;"
+            >
+                Calculate New Baseline
+            </button>
+            <button 
+                type="button" 
+                id="baseline-clear-btn"
+                style="padding: 0.75rem 2rem; background: #95a5a6; color: white; border: none; border-radius: 4px; font-size: 1rem; font-weight: 600; cursor: pointer;"
+            >
+                Clear
+            </button>
+        </div>
+    </div>
+    
+    <!-- Step 4: New Baseline Metrics Table (hidden until new baseline calculated) -->
+    <div id="baseline-step4" style="display: none; margin-bottom: 1.5rem;">
+        <h4 style="margin-bottom: 1rem; color: #2c3e50;">New Baseline Metrics</h4>
+        <div id="baseline-new-metrics-table" style="overflow-x: auto;">
+            <!-- Table will be populated by JavaScript -->
+        </div>
+        <div style="margin-top: 1rem;">
+            <button 
+                type="button" 
+                id="baseline-create-files-btn"
+                style="padding: 0.75rem 2rem; background: #e74c3c; color: white; border: none; border-radius: 4px; font-size: 1rem; font-weight: 600; cursor: pointer;"
+            >
+                Create New Files
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Analysis Form -->
 <div class="card">
     <h3 style="margin-bottom: 1rem;">Analysis Inputs</h3>
@@ -327,6 +406,24 @@
     // File lists cache
     let csvFiles = [];
     let gpxFiles = [];
+    
+    // Baseline state (Issue #676)
+    let baselineState = {
+        runId: null,
+        baselineMetrics: null,
+        selectedFiles: [],
+        controlVariables: null,
+        newBaselineMetrics: null
+    };
+    
+    // Baseline state (Issue #676)
+    let baselineState = {
+        runId: null,
+        baselineMetrics: null,
+        selectedFiles: [],
+        controlVariables: null,
+        newBaselineMetrics: null
+    };
 
     // Load files from API
     async function loadDataFiles() {
@@ -884,8 +981,412 @@
         }
     });
 
+    // ===== Baseline Utility Functions (Issue #676) =====
+    
+    // Load runner files for baseline selection
+    async function loadRunnerFilesForBaseline() {
+        try {
+            const response = await fetch('/api/data/files?extension=csv');
+            if (response.ok) {
+                const data = await response.json();
+                const runnerFiles = (data.files || []).filter(f => f.endsWith('_runners.csv'));
+                renderBaselineFileSelection(runnerFiles);
+            }
+        } catch (error) {
+            console.error('Error loading runner files:', error);
+        }
+    }
+    
+    // Render file selection checkboxes
+    function renderBaselineFileSelection(files) {
+        const container = document.getElementById('baseline-file-selection');
+        if (!container) return;
+        container.innerHTML = '';
+        
+        files.forEach(file => {
+            const label = document.createElement('label');
+            label.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; cursor: pointer;';
+            
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.value = file;
+            checkbox.addEventListener('change', updateBaselineCalculateButton);
+            
+            const span = document.createElement('span');
+            span.textContent = file;
+            
+            label.appendChild(checkbox);
+            label.appendChild(span);
+            container.appendChild(label);
+        });
+    }
+    
+    // Update Calculate Baseline button state
+    function updateBaselineCalculateButton() {
+        const checkboxes = document.querySelectorAll('#baseline-file-selection input[type="checkbox"]');
+        const checked = Array.from(checkboxes).filter(cb => cb.checked);
+        const btn = document.getElementById('baseline-calculate-btn');
+        if (btn) {
+            btn.disabled = checked.length === 0;
+        }
+    }
+    
+    // Calculate baseline metrics
+    async function calculateBaseline() {
+        const checkboxes = document.querySelectorAll('#baseline-file-selection input[type="checkbox"]');
+        const selectedFiles = Array.from(checkboxes)
+            .filter(cb => cb.checked)
+            .map(cb => cb.value);
+        
+        if (selectedFiles.length === 0) {
+            showBaselineError('Please select at least one runner file');
+            return;
+        }
+        
+        const btn = document.getElementById('baseline-calculate-btn');
+        btn.disabled = true;
+        btn.textContent = 'Calculating...';
+        clearBaselineErrors();
+        
+        try {
+            const response = await fetch('/api/baseline/calculate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ selected_files: selectedFiles })
+            });
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.detail || 'Failed to calculate baseline');
+            }
+            
+            // Store baseline state
+            baselineState.runId = data.run_id;
+            baselineState.baselineMetrics = data.baseline_metrics;
+            baselineState.selectedFiles = selectedFiles;
+            
+            // Render baseline metrics table
+            renderBaselineMetricsTable(data.baseline_metrics);
+            
+            // Show step 2 and 3
+            document.getElementById('baseline-step2').style.display = 'block';
+            document.getElementById('baseline-step3').style.display = 'block';
+            
+            // Render control variables table
+            renderControlVariablesTable(data.baseline_metrics);
+            
+        } catch (error) {
+            showBaselineError(error.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Calculate Baseline';
+        }
+    }
+    
+    // Render baseline metrics table
+    function renderBaselineMetricsTable(metrics) {
+        const container = document.getElementById('baseline-metrics-table');
+        if (!container) return;
+        const events = Object.keys(metrics);
+        
+        if (events.length === 0) {
+            container.innerHTML = '<p>No baseline metrics available</p>';
+            return;
+        }
+        
+        let html = '<table style="width: 100%; border-collapse: collapse; margin-bottom: 1rem;"><thead><tr>';
+        html += '<th style="padding: 0.5rem; border: 1px solid #ddd; background: #f8f9fa; text-align: left;">Metric</th>';
+        events.forEach(event => {
+            html += `<th style="padding: 0.5rem; border: 1px solid #ddd; background: #f8f9fa; text-align: center;">${event}</th>`;
+        });
+        html += '</tr></thead><tbody>';
+        
+        // Participants
+        html += '<tr><td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">Participants</td>';
+        events.forEach(event => {
+            html += `<td style="padding: 0.5rem; border: 1px solid #ddd; text-align: center;">${metrics[event].base_participants}</td>`;
+        });
+        html += '</tr>';
+        
+        // Percentiles
+        const percentiles = ['P00 (Lead)', 'P05', 'P25', 'P50 (Median)', 'P75', 'P95', 'P100 (Last)'];
+        const percentileKeys = ['base_p00', 'base_p05', 'base_p25', 'base_p50', 'base_p75', 'base_p95', 'base_p100'];
+        
+        percentiles.forEach((label, idx) => {
+            html += `<tr><td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">${label}</td>`;
+            events.forEach(event => {
+                const value = metrics[event][percentileKeys[idx]];
+                html += `<td style="padding: 0.5rem; border: 1px solid #ddd; text-align: center;">${value.toFixed(2)}</td>`;
+            });
+            html += '</tr>';
+        });
+        
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    }
+    
+    // Render control variables input table
+    function renderControlVariablesTable(metrics) {
+        const container = document.getElementById('baseline-control-variables-table');
+        if (!container) return;
+        const events = Object.keys(metrics);
+        
+        if (events.length === 0) {
+            container.innerHTML = '<p>No events available</p>';
+            return;
+        }
+        
+        let html = '<table style="width: 100%; border-collapse: collapse; margin-bottom: 1rem;"><thead><tr>';
+        html += '<th style="padding: 0.5rem; border: 1px solid #ddd; background: #f8f9fa; text-align: left;">Variable</th>';
+        events.forEach(event => {
+            html += `<th style="padding: 0.5rem; border: 1px solid #ddd; background: #f8f9fa; text-align: center;">${event}</th>`;
+        });
+        html += '</tr></thead><tbody>';
+        
+        // Participants change
+        html += '<tr><td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">Participants %</td>';
+        events.forEach(event => {
+            html += `<td style="padding: 0.5rem; border: 1px solid #ddd;">
+                <input type="number" id="chg_participants_${event}" step="0.01" value="0" 
+                       style="width: 100%; padding: 0.25rem; border: 1px solid #ddd; border-radius: 4px;">
+            </td>`;
+        });
+        html += '</tr>';
+        
+        // Percentile changes
+        const percentileLabels = ['P00 %', 'P05 %', 'P25 %', 'P50 %', 'P75 %', 'P95 %', 'P100 %'];
+        const percentileKeys = ['chg_p00', 'chg_p05', 'chg_p25', 'chg_p50', 'chg_p75', 'chg_p95', 'chg_p100'];
+        
+        percentileLabels.forEach((label, idx) => {
+            html += `<tr><td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">${label}</td>`;
+            events.forEach(event => {
+                html += `<td style="padding: 0.5rem; border: 1px solid #ddd;">
+                    <input type="number" id="${percentileKeys[idx]}_${event}" step="0.01" value="0" 
+                           style="width: 100%; padding: 0.25rem; border: 1px solid #ddd; border-radius: 4px;">
+                </td>`;
+            });
+            html += '</tr>';
+        });
+        
+        // Cut-off time (optional)
+        html += '<tr><td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">Cut-off (hh:mm)</td>';
+        events.forEach(event => {
+            html += `<td style="padding: 0.5rem; border: 1px solid #ddd;">
+                <input type="text" id="cutoff_${event}" placeholder="06:00" pattern="^([0-1][0-9]|2[0-3]):[0-5][0-9]$"
+                       style="width: 100%; padding: 0.25rem; border: 1px solid #ddd; border-radius: 4px;">
+            </td>`;
+        });
+        html += '</tr>';
+        
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    }
+    
+    // Calculate new baseline
+    async function calculateNewBaseline() {
+        if (!baselineState.runId || !baselineState.baselineMetrics) {
+            showBaselineError('Please calculate baseline first');
+            return;
+        }
+        
+        const events = Object.keys(baselineState.baselineMetrics);
+        const controlVariables = {};
+        
+        // Collect control variables from inputs
+        events.forEach(event => {
+            controlVariables[event] = {
+                chg_participants: parseFloat(document.getElementById(`chg_participants_${event}`).value) || 0,
+                chg_p00: parseFloat(document.getElementById(`chg_p00_${event}`).value) || 0,
+                chg_p05: parseFloat(document.getElementById(`chg_p05_${event}`).value) || 0,
+                chg_p25: parseFloat(document.getElementById(`chg_p25_${event}`).value) || 0,
+                chg_p50: parseFloat(document.getElementById(`chg_p50_${event}`).value) || 0,
+                chg_p75: parseFloat(document.getElementById(`chg_p75_${event}`).value) || 0,
+                chg_p95: parseFloat(document.getElementById(`chg_p95_${event}`).value) || 0,
+                chg_p100: parseFloat(document.getElementById(`chg_p100_${event}`).value) || 0
+            };
+            
+            // Optional cut-off time
+            const cutoffInput = document.getElementById(`cutoff_${event}`);
+            if (cutoffInput && cutoffInput.value.trim()) {
+                controlVariables[event].cutoff_mins = cutoffInput.value.trim();
+            }
+        });
+        
+        const btn = document.getElementById('baseline-calculate-new-btn');
+        btn.disabled = true;
+        btn.textContent = 'Calculating...';
+        clearBaselineErrors();
+        
+        try {
+            const response = await fetch('/api/baseline/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    baseline_run_id: baselineState.runId,
+                    control_variables: controlVariables
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.detail || 'Failed to generate new baseline');
+            }
+            
+            // Store new baseline metrics
+            baselineState.controlVariables = controlVariables;
+            baselineState.newBaselineMetrics = data.updated_baseline_json.new_baseline_metrics;
+            
+            // Render new baseline metrics table
+            renderNewBaselineMetricsTable(data.updated_baseline_json.new_baseline_metrics);
+            
+            // Show step 4
+            document.getElementById('baseline-step4').style.display = 'block';
+            
+        } catch (error) {
+            showBaselineError(error.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Calculate New Baseline';
+        }
+    }
+    
+    // Render new baseline metrics table
+    function renderNewBaselineMetricsTable(newMetrics) {
+        const container = document.getElementById('baseline-new-metrics-table');
+        if (!container) return;
+        const events = Object.keys(newMetrics);
+        
+        if (events.length === 0) {
+            container.innerHTML = '<p>No new baseline metrics available</p>';
+            return;
+        }
+        
+        let html = '<table style="width: 100%; border-collapse: collapse; margin-bottom: 1rem;"><thead><tr>';
+        html += '<th style="padding: 0.5rem; border: 1px solid #ddd; background: #f8f9fa; text-align: left;">Metric</th>';
+        events.forEach(event => {
+            html += `<th style="padding: 0.5rem; border: 1px solid #ddd; background: #f8f9fa; text-align: center;">${event}</th>`;
+        });
+        html += '</tr></thead><tbody>';
+        
+        // Participants
+        html += '<tr><td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">Participants (new)</td>';
+        events.forEach(event => {
+            html += `<td style="padding: 0.5rem; border: 1px solid #ddd; text-align: center;">${newMetrics[event].new_participants}</td>`;
+        });
+        html += '</tr>';
+        
+        // Percentiles
+        const percentiles = ['P00 (Lead)', 'P05', 'P25', 'P50 (Median)', 'P75', 'P95', 'P100 (Last)'];
+        const percentileKeys = ['new_p00', 'new_p05', 'new_p25', 'new_p50', 'new_p75', 'new_p95', 'new_p100'];
+        
+        percentiles.forEach((label, idx) => {
+            html += `<tr><td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">${label}</td>`;
+            events.forEach(event => {
+                const value = newMetrics[event][percentileKeys[idx]];
+                html += `<td style="padding: 0.5rem; border: 1px solid #ddd; text-align: center;">${value.toFixed(2)}</td>`;
+            });
+            html += '</tr>';
+        });
+        
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    }
+    
+    // Create new files
+    async function createNewFiles() {
+        if (!baselineState.runId) {
+            showBaselineError('Please calculate baseline and new baseline first');
+            return;
+        }
+        
+        // Files are already created by calculateNewBaseline endpoint
+        // Just show success message
+        showBaselineSuccess(`Files created successfully! Baseline run ID: ${baselineState.runId}`);
+        
+        // Optionally, show file list
+        try {
+            const filesResponse = await fetch(`/api/baseline/files?run_id=${baselineState.runId}`);
+            if (filesResponse.ok) {
+                const filesData = await filesResponse.json();
+                console.log('Generated files:', filesData.files);
+            }
+        } catch (error) {
+            console.error('Error fetching file list:', error);
+        }
+    }
+    
+    // Clear baseline state
+    function clearBaseline() {
+        baselineState = {
+            runId: null,
+            baselineMetrics: null,
+            selectedFiles: [],
+            controlVariables: null,
+            newBaselineMetrics: null
+        };
+        
+        // Reset UI
+        document.getElementById('baseline-step2').style.display = 'none';
+        document.getElementById('baseline-step3').style.display = 'none';
+        document.getElementById('baseline-step4').style.display = 'none';
+        
+        // Uncheck all checkboxes
+        document.querySelectorAll('#baseline-file-selection input[type="checkbox"]').forEach(cb => {
+            cb.checked = false;
+        });
+        
+        updateBaselineCalculateButton();
+        clearBaselineErrors();
+    }
+    
+    // Show baseline error
+    function showBaselineError(message) {
+        const errorEl = document.getElementById('baseline-file-selection-error');
+        if (errorEl) {
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+        }
+    }
+    
+    // Show baseline success
+    function showBaselineSuccess(message) {
+        const successBanner = document.getElementById('success-banner');
+        const successMessage = document.getElementById('success-message');
+        if (successBanner && successMessage) {
+            successMessage.textContent = message;
+            successBanner.style.display = 'block';
+            successBanner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+    
+    // Clear baseline errors
+    function clearBaselineErrors() {
+        const errorEl = document.getElementById('baseline-file-selection-error');
+        if (errorEl) {
+            errorEl.style.display = 'none';
+        }
+    }
+
     // Initialize form on page load
     initForm();
+    
+    // Attach event listeners for baseline (Issue #676)
+    document.addEventListener('DOMContentLoaded', function() {
+        const calcBtn = document.getElementById('baseline-calculate-btn');
+        const calcNewBtn = document.getElementById('baseline-calculate-new-btn');
+        const createBtn = document.getElementById('baseline-create-files-btn');
+        const clearBtn = document.getElementById('baseline-clear-btn');
+        
+        if (calcBtn) calcBtn.addEventListener('click', calculateBaseline);
+        if (calcNewBtn) calcNewBtn.addEventListener('click', calculateNewBaseline);
+        if (createBtn) createBtn.addEventListener('click', createNewFiles);
+        if (clearBtn) clearBtn.addEventListener('click', clearBaseline);
+        
+        // Load runner files for baseline
+        loadRunnerFilesForBaseline();
+    });
 })();
 </script>
 {% endblock %}
