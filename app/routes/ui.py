@@ -442,18 +442,19 @@ async def get_data_files(
         if not data_dir:
             data_dir = get_data_directory()
         
-        data_path = Path(data_dir)
+        # Resolve the path (handles both absolute and relative paths)
+        data_path = Path(data_dir).resolve()
         
         if not data_path.exists():
             raise HTTPException(
                 status_code=404,
-                detail=f"Data directory not found: {data_dir}"
+                detail=f"Data directory not found: {data_dir} (resolved to: {data_path})"
             )
         
         if not data_path.is_dir():
             raise HTTPException(
                 status_code=400,
-                detail=f"Data directory path is not a directory: {data_dir}"
+                detail=f"Data directory path is not a directory: {data_dir} (resolved to: {data_path})"
             )
         
         # List all files in data directory

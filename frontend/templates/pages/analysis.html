@@ -398,9 +398,21 @@
                 const errorMsg = errorData.detail || errorData.error || 'Failed to load CSV files from data directory';
                 showFieldError('data_dir', errorMsg);
                 console.error('Failed to load CSV files:', errorMsg);
+                
+                // Issue #680: Clear dropdowns when custom directory fails (don't show default files)
+                if (dataDir && dataDir.trim()) {
+                    // Clear all file dropdowns since custom directory failed
+                    csvFiles = [];
+                    gpxFiles = [];
+                    populateDropdown('segments_file', []);
+                    populateDropdown('flow_file', []);
+                    populateDropdown('locations_file', []);
+                    updateEventFileDropdowns();
+                    return; // Don't try to load GPX files if CSV failed for custom directory
+                }
             }
             
-            // Load GPX files
+            // Load GPX files (only if CSV succeeded or no custom directory specified)
             const gpxResponse = await fetch(`/api/data/files?${gpxParams.toString()}`);
             if (gpxResponse.ok) {
                 const gpxData = await gpxResponse.json();
@@ -411,7 +423,11 @@
             } else {
                 const errorData = await gpxResponse.json().catch(() => ({ detail: 'Failed to load GPX files' }));
                 console.warn('Failed to load GPX files:', errorData.detail || errorData.error);
-                // Don't show error for GPX if CSV succeeded - just log warning
+                // If custom directory was specified and GPX failed, clear GPX files
+                if (dataDir && dataDir.trim()) {
+                    gpxFiles = [];
+                    updateEventFileDropdowns();
+                }
             }
         } catch (error) {
             console.error('Error loading data files:', error);
@@ -513,7 +529,12 @@
     // Initialize with one empty event row
     async function initForm() {
         // Load files first (Issue #680: will use default data_dir if not specified)
-        await loadDataFiles();
+        // Only load default files if no custom data_dir is already entered
+        const dataDirInput = document.getElementById('data_dir');
+        const hasCustomDataDir = dataDirInput && dataDirInput.value.trim();
+        if (!hasCustomDataDir) {
+            await loadDataFiles();
+        }
         addEventRow();
         updateSubmitButton();
         
