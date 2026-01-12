@@ -41,6 +41,32 @@
             <div class="field-error" id="description-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.25rem;"></div>
         </div>
 
+        <!-- Data Directory -->
+        <div style="margin-bottom: 1.5rem;">
+            <label for="data_dir" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
+                Data Directory <span style="color: #95a5a6; font-weight: normal;">(optional)</span>
+            </label>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <input 
+                    type="text" 
+                    id="data_dir" 
+                    name="data_dir" 
+                    placeholder="e.g., /app/runflow/Issue680 (leave empty for default data/)"
+                    style="flex: 1; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"
+                >
+                <button 
+                    type="button" 
+                    id="load-files-btn" 
+                    style="padding: 0.75rem 1.5rem; background: #3498db; color: white; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; white-space: nowrap;"
+                    title="Load files from the specified data directory"
+                >
+                    Load Files
+                </button>
+            </div>
+            <small style="color: #7f8c8d; font-size: 0.875rem;">Enter the name of the directory prefixed with /app/runflow/ containing your CSV and GPX files. For example, /app/runflow/helloworld. If empty, the system will use the default 'data' directory or DATA_ROOT environment variable. Click "Load Files" to refresh the file dropdowns.</small>
+            <div class="field-error" id="data_dir-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.25rem;"></div>
+        </div>
+
         <!-- File Inputs (on same row) -->
         <div class="file-inputs-row" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 1.5rem;">
             <!-- Segments File -->
@@ -56,7 +82,7 @@
                 >
                     <option value="">Select segments file...</option>
                 </select>
-                <small style="color: #7f8c8d; font-size: 0.875rem;">Select the segments CSV file from the data folder.</small>
+                <small style="color: #7f8c8d; font-size: 0.875rem;">Select the segments CSV file from the selected data directory.</small>
                 <div class="field-error" id="segments_file-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.25rem;"></div>
             </div>
 
@@ -73,7 +99,7 @@
                 >
                     <option value="">Select flow file...</option>
                 </select>
-                <small style="color: #7f8c8d; font-size: 0.875rem;">Select the flow CSV file from the data folder.</small>
+                <small style="color: #7f8c8d; font-size: 0.875rem;">Select the flow CSV file from the selected data directory.</small>
                 <div class="field-error" id="flow_file-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.25rem;"></div>
             </div>
 
@@ -90,7 +116,7 @@
                 >
                     <option value="">Select locations file...</option>
                 </select>
-                <small style="color: #7f8c8d; font-size: 0.875rem;">Select the locations CSV file from the data folder.</small>
+                <small style="color: #7f8c8d; font-size: 0.875rem;">Select the locations CSV file from the selected data directory.</small>
                 <div class="field-error" id="locations_file-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.25rem;"></div>
             </div>
         </div>
@@ -149,7 +175,7 @@
     <h3 style="margin-bottom: 1rem;">How to Use</h3>
     <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
         Submit an analysis request to generate density, flow, and location reports for one or more events.
-        All required files must exist in the <code>/data</code> directory.
+        All required files must exist in the data directory. You can specify a custom data directory using the "Data Directory" field above, or leave it empty to use the default <code>data/</code> directory or <code>DATA_ROOT</code> environment variable.
     </p>
     <details style="margin-top: 1rem;">
         <summary style="cursor: pointer; color: #3498db; font-weight: 600;">View Example Request</summary>
@@ -328,11 +354,31 @@
     let csvFiles = [];
     let gpxFiles = [];
 
-    // Load files from API
-    async function loadDataFiles() {
+    // Load files from API (Issue #680: support data_dir parameter)
+    async function loadDataFiles(dataDir = null) {
+        // Clear previous errors
+        clearFieldError('data_dir');
+        
+        // If dataDir not provided, get from input field
+        if (dataDir === null) {
+            const dataDirInput = document.getElementById('data_dir');
+            if (dataDirInput) {
+                dataDir = dataDirInput.value.trim() || null;
+            }
+        }
+        
         try {
+            // Build query parameters
+            const csvParams = new URLSearchParams({ extension: 'csv' });
+            const gpxParams = new URLSearchParams({ extension: 'gpx' });
+            
+            if (dataDir && dataDir.trim()) {
+                csvParams.append('data_dir', dataDir.trim());
+                gpxParams.append('data_dir', dataDir.trim());
+            }
+            
             // Load CSV files
-            const csvResponse = await fetch('/api/data/files?extension=csv');
+            const csvResponse = await fetch(`/api/data/files?${csvParams.toString()}`);
             if (csvResponse.ok) {
                 const csvData = await csvResponse.json();
                 csvFiles = csvData.files || [];
@@ -341,17 +387,90 @@
                 populateDropdown('segments_file', csvFiles);
                 populateDropdown('flow_file', csvFiles);
                 populateDropdown('locations_file', csvFiles);
+                
+                // Also update runners and GPX dropdowns for existing event rows
+                updateEventFileDropdowns();
+                
+                // Clear any previous errors on success
+                clearFieldError('data_dir');
+            } else {
+                const errorData = await csvResponse.json().catch(() => ({ detail: 'Failed to load CSV files' }));
+                const errorMsg = errorData.detail || errorData.error || 'Failed to load CSV files from data directory';
+                showFieldError('data_dir', errorMsg);
+                console.error('Failed to load CSV files:', errorMsg);
+                
+                // Issue #680: Clear dropdowns when custom directory fails (don't show default files)
+                if (dataDir && dataDir.trim()) {
+                    // Clear all file dropdowns since custom directory failed
+                    csvFiles = [];
+                    gpxFiles = [];
+                    populateDropdown('segments_file', []);
+                    populateDropdown('flow_file', []);
+                    populateDropdown('locations_file', []);
+                    updateEventFileDropdowns();
+                    return; // Don't try to load GPX files if CSV failed for custom directory
+                }
             }
             
-            // Load GPX files
-            const gpxResponse = await fetch('/api/data/files?extension=gpx');
+            // Load GPX files (only if CSV succeeded or no custom directory specified)
+            const gpxResponse = await fetch(`/api/data/files?${gpxParams.toString()}`);
             if (gpxResponse.ok) {
                 const gpxData = await gpxResponse.json();
                 gpxFiles = gpxData.files || [];
+                
+                // Update GPX dropdowns for existing event rows
+                updateEventFileDropdowns();
+            } else {
+                const errorData = await gpxResponse.json().catch(() => ({ detail: 'Failed to load GPX files' }));
+                console.warn('Failed to load GPX files:', errorData.detail || errorData.error);
+                // If custom directory was specified and GPX failed, clear GPX files
+                if (dataDir && dataDir.trim()) {
+                    gpxFiles = [];
+                    updateEventFileDropdowns();
+                }
             }
         } catch (error) {
             console.error('Error loading data files:', error);
+            showFieldError('data_dir', `Error loading files: ${error.message}`);
         }
+    }
+    
+    // Update file dropdowns for all existing event rows (Issue #680)
+    function updateEventFileDropdowns() {
+        const eventRows = document.querySelectorAll('.event-row');
+        eventRows.forEach(row => {
+            const rowId = row.id.replace('event-row-', '');
+            const runnersSelect = document.getElementById(`event-runners-file-${rowId}`);
+            const gpxSelect = document.getElementById(`event-gpx-file-${rowId}`);
+            
+            if (runnersSelect) {
+                // Clear existing options except placeholder
+                while (runnersSelect.options.length > 1) {
+                    runnersSelect.remove(1);
+                }
+                // Add CSV files
+                csvFiles.forEach(file => {
+                    const option = document.createElement('option');
+                    option.value = file;
+                    option.textContent = file;
+                    runnersSelect.appendChild(option);
+                });
+            }
+            
+            if (gpxSelect) {
+                // Clear existing options except placeholder
+                while (gpxSelect.options.length > 1) {
+                    gpxSelect.remove(1);
+                }
+                // Add GPX files
+                gpxFiles.forEach(file => {
+                    const option = document.createElement('option');
+                    option.value = file;
+                    option.textContent = file;
+                    gpxSelect.appendChild(option);
+                });
+            }
+        });
     }
 
     // Populate a dropdown with file options
@@ -409,10 +528,43 @@
 
     // Initialize with one empty event row
     async function initForm() {
-        // Load files first
-        await loadDataFiles();
+        // Load files first (Issue #680: will use default data_dir if not specified)
+        // Only load default files if no custom data_dir is already entered
+        const dataDirInput = document.getElementById('data_dir');
+        const hasCustomDataDir = dataDirInput && dataDirInput.value.trim();
+        if (!hasCustomDataDir) {
+            await loadDataFiles();
+        }
         addEventRow();
         updateSubmitButton();
+        
+        // Issue #680: Add event listener for "Load Files" button
+        const loadFilesBtn = document.getElementById('load-files-btn');
+        if (loadFilesBtn) {
+            loadFilesBtn.addEventListener('click', async function() {
+                this.disabled = true;
+                this.textContent = 'Loading...';
+                try {
+                    await loadDataFiles();
+                } finally {
+                    this.disabled = false;
+                    this.textContent = 'Load Files';
+                }
+            });
+        }
+        
+        // Issue #680: Also reload files when Enter is pressed in data_dir field
+        if (dataDirInput) {
+            dataDirInput.addEventListener('keypress', async function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const loadBtn = document.getElementById('load-files-btn');
+                    if (loadBtn) {
+                        loadBtn.click();
+                    }
+                }
+            });
+        }
     }
 
     // Add event row
@@ -616,6 +768,15 @@
         });
         document.getElementById('error-banner').style.display = 'none';
     }
+    
+    // Clear error for a specific field (Issue #680)
+    function clearFieldError(fieldId) {
+        const errorEl = document.getElementById(`${fieldId}-error`);
+        if (errorEl) {
+            errorEl.style.display = 'none';
+            errorEl.textContent = '';
+        }
+    }
 
     // Show field error
     function showFieldError(fieldId, message) {
@@ -753,6 +914,12 @@
 
         if (description) {
             payload.description = description;
+        }
+        
+        // Issue #680: Include data_dir if provided
+        const dataDir = document.getElementById('data_dir').value.trim();
+        if (dataDir) {
+            payload.data_dir = dataDir;
         }
 
         // Issue #635: Add enableAudit to payload (always include, default "n")

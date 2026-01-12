@@ -85,6 +85,11 @@ EXPECTED_SEG_IDS = {
 }
 
 
+# Issue #680: Test data directory for custom data_dir tests
+# This allows testing with a custom data directory path
+TEST_DATA_DIR = None  # Can be set to test custom data_dir functionality
+
+
 class TestV2E2EScenarios:
     """E2E tests for v2 analysis scenarios."""
     
@@ -115,6 +120,7 @@ class TestV2E2EScenarios:
             payload = _build_base_payload("Saturday test", events, {"sat-elite": "elite"})
         """
         # Issue #655: Use centralized E2E_CONFIG for SSOT file paths
+        # Issue #680: Include data_dir from E2E_CONFIG if specified
         payload = {
             "description": description,
             "segments_file": E2E_CONFIG["segments_file"],
@@ -122,6 +128,10 @@ class TestV2E2EScenarios:
             "locations_file": E2E_CONFIG.get("locations_file"),  # May be None
             "enableAudit": enable_audit,
         }
+        
+        # Issue #680: Add data_dir if specified in E2E_CONFIG (optional)
+        if E2E_CONFIG.get("data_dir"):
+            payload["data_dir"] = E2E_CONFIG["data_dir"]
         
         # Add event_group if provided
         if event_group:
@@ -1070,6 +1080,95 @@ class TestV2E2EScenarios:
                 pairs_found += 1
         
         assert pairs_found >= 2, f"Expected flow pairs between same-day events, found {pairs_found}"
+
+    def test_data_dir_without_custom_path(self, base_url, wait_for_server):
+        """Test that analysis works without data_dir (should use default).
+        
+        Issue #680: Verify backward compatibility when data_dir is not provided.
+        """
+        payload = self._build_base_payload(
+            description="Test without custom data_dir (backward compatibility)",
+            events=[
+                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45}
+            ],
+            enable_audit="n"
+        )
+        
+        # Explicitly remove data_dir to test default behavior
+        if "data_dir" in payload:
+            del payload["data_dir"]
+        
+        response = requests.post(f"{base_url}/runflow/v2/analyze", json=payload, timeout=TIMEOUT)
+        assert response.status_code == 200, f"Request failed: {response.text}"
+        data = response.json()
+        assert "run_id" in data, "Response missing run_id"
+        assert data["status"] == "success", f"Analysis failed: {data}"
+
+    def test_data_dir_with_custom_path(self, base_url, wait_for_server):
+        """Test that analysis works with custom data_dir path.
+        
+        Issue #680: Verify custom data_dir is accepted and used.
+        """
+        # Use the same data directory as default (data/) to test the feature
+        # In real scenarios, this could be any accessible directory
+        custom_data_dir = "data"  # Using default for test, but feature allows any path
+        
+        payload = self._build_base_payload(
+            description="Test with custom data_dir",
+            events=[
+                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45}
+            ],
+            enable_audit="n"
+        )
+        
+        # Override with custom data_dir
+        payload["data_dir"] = custom_data_dir
+        
+        response = requests.post(f"{base_url}/runflow/v2/analyze", json=payload, timeout=TIMEOUT)
+        assert response.status_code == 200, f"Request failed: {response.text}"
+        data = response.json()
+        assert "run_id" in data, "Response missing run_id"
+        assert data["status"] == "success", f"Analysis failed: {data}"
+        
+        # Verify data_dir is stored in analysis.json
+        run_id = data["run_id"]
+        from app.utils.run_id import get_runflow_root
+        runflow_root = get_runflow_root()
+        run_dir = runflow_root / run_id
+        analysis_json_path = run_dir / "analysis.json"
+        assert analysis_json_path.exists(), "analysis.json not found"
+        
+        with open(analysis_json_path, 'r') as f:
+            analysis_json = json.load(f)
+        
+        assert analysis_json.get("data_dir") == custom_data_dir, \
+            f"data_dir in analysis.json ({analysis_json.get('data_dir')}) does not match request ({custom_data_dir})"
+
+    def test_data_dir_invalid_path(self, base_url, wait_for_server):
+        """Test that invalid data_dir path fails with clear error.
+        
+        Issue #680: Verify fail-fast behavior for invalid data_dir paths.
+        """
+        payload = self._build_base_payload(
+            description="Test with invalid data_dir",
+            events=[
+                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45}
+            ],
+            enable_audit="n"
+        )
+        
+        # Use a non-existent directory
+        payload["data_dir"] = "/nonexistent/directory/path/that/does/not/exist"
+        
+        response = requests.post(f"{base_url}/runflow/v2/analyze", json=payload, timeout=30)
+        assert response.status_code == 404, \
+            f"Expected 404 for invalid data_dir, got {response.status_code}: {response.text}"
+        
+        data = response.json()
+        assert data["status"] == "ERROR", "Response should have ERROR status"
+        assert "data directory not found" in data.get("error", "").lower() or \
+               "not found" in data.get("error", "").lower(), \
+            f"Error message should mention directory not found: {data.get('error')}"
 
 
 # pytest_addoption and base_url fixture moved to conftest.py

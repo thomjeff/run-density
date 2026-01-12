@@ -9,6 +9,7 @@ Architecture: Option 3 - Hybrid Approach
 """
 
 import logging
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, Request, Form, HTTPException, Query
@@ -413,15 +414,22 @@ async def check_session(request: Request):
 
 
 @router.get("/api/data/files")
-async def get_data_files(request: Request, extension: Optional[str] = Query(None)):
+async def get_data_files(
+    request: Request, 
+    extension: Optional[str] = Query(None),
+    data_dir: Optional[str] = Query(None)
+):
     """
     List files in the data directory, optionally filtered by extension.
     
     Issue #554: API endpoint to populate file dropdowns in Analysis UI.
+    Issue #680: Extended to accept optional data_dir query parameter.
     
     Args:
         extension: Optional file extension filter (e.g., "csv", "gpx")
                   If not provided, returns all files
+        data_dir: Optional data directory path
+               If not provided, uses DATA_ROOT env var or defaults to "data"
     
     Returns:
         JSON: List of file names matching the extension filter
@@ -431,13 +439,42 @@ async def get_data_files(request: Request, extension: Optional[str] = Query(None
     try:
         from app.core.v2.analysis_config import get_data_directory
         
-        data_dir = get_data_directory()
-        data_path = Path(data_dir)
+        # Use provided data_dir or fall back to get_data_directory() (Issue #680)
+        if not data_dir:
+            data_dir = get_data_directory()
+        
+        # Issue #680: Map host paths to container paths when running in Docker
+        # docker-compose.yml mounts /Users/jthompson/Documents/runflow:/app/runflow
+        # So we need to convert host paths to container paths
+        is_docker = os.path.exists("/.dockerenv") or os.path.exists("/app/.dockerenv")
+        if is_docker and data_dir:
+            # Map known host paths to container paths
+            if data_dir.startswith("/Users/jthompson/Documents/runflow"):
+                # Replace host path with container path
+                container_path = data_dir.replace("/Users/jthompson/Documents/runflow", "/app/runflow", 1)
+                data_dir = container_path
+                logger.info(f"Mapped host path to container path: {data_dir}")
+        
+        # Resolve the path (handles both absolute and relative paths)
+        data_path = Path(data_dir).resolve()
         
         if not data_path.exists():
+            # Issue #680: Provide helpful error message for Docker volume mount issues
+            error_msg = f"Data directory not found: {data_dir}"
+            if data_path != Path(data_dir):
+                error_msg += f" (resolved to: {data_path})"
+            # Check if running in Docker and suggest volume mount
+            if os.path.exists("/.dockerenv") or os.path.exists("/app/.dockerenv"):
+                error_msg += ". Note: If running in Docker, ensure the directory is mounted as a volume in docker-compose.yml"
             raise HTTPException(
                 status_code=404,
-                detail=f"Data directory not found: {data_dir}"
+                detail=error_msg
+            )
+        
+        if not data_path.is_dir():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Data directory path is not a directory: {data_dir} (resolved to: {data_path})"
             )
         
         # List all files in data directory
