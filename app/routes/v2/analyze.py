@@ -258,7 +258,6 @@ async def analyze_v2(request: V2AnalyzeRequest, background_tasks: BackgroundTask
         
         # Issue #554: Create stub output paths structure for immediate response
         # The actual paths will be created during background analysis
-        from pathlib import Path
         runflow_root = get_runflow_root()
         run_path = runflow_root / run_id
         
