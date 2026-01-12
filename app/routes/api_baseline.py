@@ -143,9 +143,9 @@ async def generate_scenario(
     request: Dict[str, Any]
 ) -> JSONResponse:
     """
-    Generate new runner files with scenario-based modifications.
+    Calculate new baseline metrics with scenario-based modifications.
     
-    Phase 2 of two-phase API: Create directory, save baseline.json, apply control variables and generate files.
+    Phase 2 of two-phase API: Apply control variables and calculate metrics (no directory creation).
     
     Request Body:
         {
@@ -175,17 +175,18 @@ async def generate_scenario(
     
     Response:
         {
-            "run_id": "4sawTqXz9CExYcQgJTNQCr",
-            "generated_files": [
-                {
-                    "event": "elite",
-                    "path": "/app/runflow/baseline/.../elite_runners.csv"
+            "new_baseline_metrics": {
+                "elite": {
+                    "new_participants": 44,
+                    "new_p00": 2.90,
+                    ...
                 }
-            ],
-            "updated_baseline_json": {...}
+            }
         }
     
-    Issue: #676 - Scenario generation endpoint
+    Note: Directory and files are created in Phase 3 (/api/baseline/create-files).
+    
+    Issue: #676 - New baseline metrics calculation endpoint
     """
     try:
         import json
