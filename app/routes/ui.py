@@ -413,15 +413,22 @@ async def check_session(request: Request):
 
 
 @router.get("/api/data/files")
-async def get_data_files(request: Request, extension: Optional[str] = Query(None)):
+async def get_data_files(
+    request: Request, 
+    extension: Optional[str] = Query(None),
+    data_dir: Optional[str] = Query(None)
+):
     """
     List files in the data directory, optionally filtered by extension.
     
     Issue #554: API endpoint to populate file dropdowns in Analysis UI.
+    Issue #680: Extended to accept optional data_dir query parameter.
     
     Args:
         extension: Optional file extension filter (e.g., "csv", "gpx")
                   If not provided, returns all files
+        data_dir: Optional data directory path
+               If not provided, uses DATA_ROOT env var or defaults to "data"
     
     Returns:
         JSON: List of file names matching the extension filter
@@ -431,13 +438,22 @@ async def get_data_files(request: Request, extension: Optional[str] = Query(None
     try:
         from app.core.v2.analysis_config import get_data_directory
         
-        data_dir = get_data_directory()
+        # Use provided data_dir or fall back to get_data_directory() (Issue #680)
+        if not data_dir:
+            data_dir = get_data_directory()
+        
         data_path = Path(data_dir)
         
         if not data_path.exists():
             raise HTTPException(
                 status_code=404,
                 detail=f"Data directory not found: {data_dir}"
+            )
+        
+        if not data_path.is_dir():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Data directory path is not a directory: {data_dir}"
             )
         
         # List all files in data directory

@@ -10,6 +10,7 @@ Phase 2: API Route (Issue #496)
 from fastapi import APIRouter, HTTPException, status, BackgroundTasks
 from fastapi.responses import JSONResponse
 from typing import Dict, Any
+from pathlib import Path
 import logging
 
 from app.api.models.v2 import (
@@ -144,8 +145,33 @@ async def analyze_v2(request: V2AnalyzeRequest, background_tasks: BackgroundTask
         # Convert Pydantic model to dict for validation
         payload_dict = request.model_dump()
         
-        # Get data directory for validation (Issue #655: SSOT)
-        data_dir = get_data_directory()
+        # Get data directory from request or fall back to environment/default (Issue #680)
+        data_dir = payload_dict.get("data_dir")
+        if not data_dir:
+            data_dir = get_data_directory()
+        
+        # Validate data_dir exists and is accessible (Issue #680: fail-fast validation)
+        data_path = Path(data_dir)
+        if not data_path.exists():
+            error_response = V2ErrorResponse(
+                status="ERROR",
+                code=404,
+                error=f"Data directory not found: {data_dir}"
+            )
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content=error_response.model_dump()
+            )
+        if not data_path.is_dir():
+            error_response = V2ErrorResponse(
+                status="ERROR",
+                code=400,
+                error=f"Data directory path is not a directory: {data_dir}"
+            )
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content=error_response.model_dump()
+            )
         
         # Validate payload using Phase 1 validation layer
         # This checks all rules from Issue #553
@@ -171,11 +197,13 @@ async def analyze_v2(request: V2AnalyzeRequest, background_tasks: BackgroundTask
         
         # Phase 2: Generate analysis.json (single source of truth)
         # This must happen before any analysis execution
+        # Issue #680: Pass data_dir from request to generate_analysis_json
         try:
             analysis_config = generate_analysis_json(
                 request_payload=payload_dict,
                 run_id=run_id,
-                run_path=run_path
+                run_path=run_path,
+                data_dir=data_dir
             )
             logger.info(f"Generated analysis.json for run_id: {run_id}")
         except Exception as e:

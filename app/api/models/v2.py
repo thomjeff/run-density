@@ -51,9 +51,11 @@ class V2AnalyzeRequest(BaseModel):
     
     Issue #553: Extended to include description field and removed defaults (fail-fast).
     Issue #573: Extended to include event_group field for Runner Experience Score (RES) calculation.
+    Issue #680: Extended to include data_dir field for flexible data directory configuration.
     
     Attributes:
         description: Optional description for the analysis (max 254 characters)
+        data_dir: Optional data directory path (defaults to DATA_ROOT env var or 'data')
         segments_file: Name of segments CSV file (required, no default)
         locations_file: Name of locations CSV file (required, no default)
         flow_file: Name of flow CSV file (required, no default)
@@ -65,6 +67,7 @@ class V2AnalyzeRequest(BaseModel):
             When 'y', generates detailed CSV shard files with runner pair overtake information
     """
     description: Optional[str] = Field(None, max_length=254, description="Optional description for the analysis (max 254 characters)")
+    data_dir: Optional[str] = Field(None, description="Data directory path (defaults to DATA_ROOT env var or 'data')")
     segments_file: str = Field(..., description="Name of segments CSV file")
     locations_file: str = Field(..., description="Name of locations CSV file")
     flow_file: str = Field(..., description="Name of flow CSV file")
@@ -76,6 +79,7 @@ class V2AnalyzeRequest(BaseModel):
         "json_schema_extra": {
             "example": {
                 "description": "Scenario to test 10k on Saturday",
+                "data_dir": "/app/data",
                 "segments_file": "segments.csv",
                 "locations_file": "locations.csv",
                 "flow_file": "flow.csv",
