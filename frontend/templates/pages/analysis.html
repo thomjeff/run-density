@@ -57,8 +57,10 @@
     <div id="baseline-step3" style="display: none; margin-bottom: 1.5rem;">
         <h4 style="margin-bottom: 1rem; color: #2c3e50;">Control Variables</h4>
         <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
-            Enter percentage changes as decimals (e.g., 0.40 for +40%, 0.005 for +0.5%, -0.005 for -0.5%). 
-            Range: -0.50 to +2.00 (-50% to +200%). Negative values make paces faster (lower).
+            Enter percentage changes (e.g., 40 for +40%, 0.5 for +0.5%, -0.5 for -0.5%). 
+            You can optionally include a "%" sign (e.g., "40%" or "0.5%"). 
+            Range: -50% to +200% for participants, -50% to +200% for pace percentiles. 
+            Negative values make paces faster (lower).
         </p>
         <div id="baseline-control-variables-table" style="overflow-x: auto;">
             <!-- Table will be populated by JavaScript -->
@@ -1138,27 +1140,29 @@
         html += '</tr></thead><tbody>';
         
         // Participants change
-        html += '<tr><td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">Participants<br><small style="font-weight: normal; color: #666;">(decimal: 0.40 = +40%)</small></td>';
+        html += '<tr><td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">Participants %<br><small style="font-weight: normal; color: #666;">(e.g., 40 for +40%)</small></td>';
         events.forEach(event => {
             html += `<td style="padding: 0.5rem; border: 1px solid #ddd;">
-                <input type="number" id="chg_participants_${event}" step="0.001" value="0" min="-0.5" max="2.0"
-                       placeholder="0.40" 
+                <input type="text" id="chg_participants_${event}" value="0" 
+                       placeholder="40" 
                        style="width: 100%; padding: 0.25rem; border: 1px solid #ddd; border-radius: 4px;">
+                <small style="color: #666; font-size: 0.75rem;">Range: -50% to +200%</small>
             </td>`;
         });
         html += '</tr>';
         
         // Percentile changes
-        const percentileLabels = ['P00 (Lead)', 'P05', 'P25', 'P50 (Median)', 'P75', 'P95', 'P100 (Last)'];
+        const percentileLabels = ['P00 (Lead) %', 'P05 %', 'P25 %', 'P50 (Median) %', 'P75 %', 'P95 %', 'P100 (Last) %'];
         const percentileKeys = ['chg_p00', 'chg_p05', 'chg_p25', 'chg_p50', 'chg_p75', 'chg_p95', 'chg_p100'];
         
         percentileLabels.forEach((label, idx) => {
-            html += `<tr><td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">${label}<br><small style="font-weight: normal; color: #666;">(decimal: 0.005 = +0.5%)</small></td>`;
+            html += `<tr><td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">${label}<br><small style="font-weight: normal; color: #666;">(e.g., 0.5 for +0.5%)</small></td>`;
             events.forEach(event => {
                 html += `<td style="padding: 0.5rem; border: 1px solid #ddd;">
-                    <input type="number" id="${percentileKeys[idx]}_${event}" step="0.001" value="0" min="-0.5" max="2.0"
-                           placeholder="0.005" 
+                    <input type="text" id="${percentileKeys[idx]}_${event}" value="0" 
+                           placeholder="0.5" 
                            style="width: 100%; padding: 0.25rem; border: 1px solid #ddd; border-radius: 4px;">
+                    <small style="color: #666; font-size: 0.75rem;">Range: -50% to +200%</small>
                 </td>`;
             });
             html += '</tr>';
@@ -1178,6 +1182,37 @@
         container.innerHTML = html;
     }
     
+    // Parse and convert percentage input to decimal
+    // Accepts: "40", "40%", "0.5", "0.5%", "-0.5", "-0.5%"
+    // Returns: decimal fraction (40 → 0.40, 0.5 → 0.005)
+    function parsePercentToDecimal(inputValue) {
+        if (!inputValue || inputValue.trim() === '') {
+            return 0;
+        }
+        
+        // Trim whitespace and remove optional trailing "%"
+        let cleaned = inputValue.trim().replace(/%$/, '');
+        
+        // Parse as float
+        const percentValue = parseFloat(cleaned);
+        
+        if (isNaN(percentValue)) {
+            throw new Error(`Invalid percentage value: "${inputValue}"`);
+        }
+        
+        // Convert percent to decimal: 40 → 0.40, 0.5 → 0.005
+        return percentValue / 100;
+    }
+    
+    // Validate percentage input in percent units (-50 to +200)
+    function validatePercentRange(percentValue, fieldName) {
+        if (percentValue < -50 || percentValue > 200) {
+            throw new Error(
+                `${fieldName} must be between -50% and +200% (entered: ${percentValue}%)`
+            );
+        }
+    }
+    
     // Calculate new baseline
     async function calculateNewBaseline() {
         if (!baselineState.runId || !baselineState.baselineMetrics) {
@@ -1188,25 +1223,48 @@
         const events = Object.keys(baselineState.baselineMetrics);
         const controlVariables = {};
         
-        // Collect control variables from inputs
-        events.forEach(event => {
-            controlVariables[event] = {
-                chg_participants: parseFloat(document.getElementById(`chg_participants_${event}`).value) || 0,
-                chg_p00: parseFloat(document.getElementById(`chg_p00_${event}`).value) || 0,
-                chg_p05: parseFloat(document.getElementById(`chg_p05_${event}`).value) || 0,
-                chg_p25: parseFloat(document.getElementById(`chg_p25_${event}`).value) || 0,
-                chg_p50: parseFloat(document.getElementById(`chg_p50_${event}`).value) || 0,
-                chg_p75: parseFloat(document.getElementById(`chg_p75_${event}`).value) || 0,
-                chg_p95: parseFloat(document.getElementById(`chg_p95_${event}`).value) || 0,
-                chg_p100: parseFloat(document.getElementById(`chg_p100_${event}`).value) || 0
-            };
-            
-            // Optional cut-off time
-            const cutoffInput = document.getElementById(`cutoff_${event}`);
-            if (cutoffInput && cutoffInput.value.trim()) {
-                controlVariables[event].cutoff_mins = cutoffInput.value.trim();
-            }
-        });
+        try {
+            // Collect control variables from inputs and convert percent to decimal
+            events.forEach(event => {
+                // Parse participants %
+                const participantsInput = document.getElementById(`chg_participants_${event}`).value;
+                const participantsPercent = parseFloat(participantsInput.trim().replace(/%$/, '')) || 0;
+                validatePercentRange(participantsPercent, `Participants % for '${event}'`);
+                const chg_participants = parsePercentToDecimal(participantsInput);
+                
+                // Parse percentile changes
+                const percentileKeys = ['chg_p00', 'chg_p05', 'chg_p25', 'chg_p50', 'chg_p75', 'chg_p95', 'chg_p100'];
+                const percentileLabels = ['P00 %', 'P05 %', 'P25 %', 'P50 %', 'P75 %', 'P95 %', 'P100 %'];
+                const percentileValues = {};
+                
+                percentileKeys.forEach((key, idx) => {
+                    const input = document.getElementById(`${key}_${event}`).value;
+                    const percentValue = parseFloat(input.trim().replace(/%$/, '')) || 0;
+                    validatePercentRange(percentValue, `${percentileLabels[idx]} for '${event}'`);
+                    percentileValues[key] = parsePercentToDecimal(input);
+                });
+                
+                controlVariables[event] = {
+                    chg_participants: chg_participants,
+                    chg_p00: percentileValues.chg_p00,
+                    chg_p05: percentileValues.chg_p05,
+                    chg_p25: percentileValues.chg_p25,
+                    chg_p50: percentileValues.chg_p50,
+                    chg_p75: percentileValues.chg_p75,
+                    chg_p95: percentileValues.chg_p95,
+                    chg_p100: percentileValues.chg_p100
+                };
+                
+                // Optional cut-off time
+                const cutoffInput = document.getElementById(`cutoff_${event}`);
+                if (cutoffInput && cutoffInput.value.trim()) {
+                    controlVariables[event].cutoff_mins = cutoffInput.value.trim();
+                }
+            });
+        } catch (validationError) {
+            showBaselineControlError(validationError.message);
+            return;
+        }
         
         const btn = document.getElementById('baseline-calculate-new-btn');
         btn.disabled = true;
@@ -1244,7 +1302,22 @@
             document.getElementById('baseline-step4').style.display = 'block';
             
         } catch (error) {
-            showBaselineControlError(error.message);
+            // Handle API errors - convert backend decimal error messages to percent if needed
+            let errorMessage = error.message;
+            
+            // Convert backend validation errors from decimal to percent format
+            // e.g., "chg_participants for 'elite' out of range (-50% to +200%)" is already good
+            // but if it says "out of range (-0.50 to +2.00)", convert it
+            errorMessage = errorMessage.replace(
+                /out of range \((-?\d+\.?\d*) to (\+?\d+\.?\d*)\)/g,
+                (match, min, max) => {
+                    const minPercent = (parseFloat(min) * 100).toFixed(0);
+                    const maxPercent = (parseFloat(max) * 100).toFixed(0);
+                    return `out of range (${minPercent}% to ${maxPercent}%)`;
+                }
+            );
+            
+            showBaselineControlError(errorMessage);
         } finally {
             btn.disabled = false;
             btn.textContent = 'Calculate New Baseline';
