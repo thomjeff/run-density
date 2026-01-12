@@ -1,5 +1,74 @@
 # Changelog
 
+## [v2.0.6] - 2026-01-12
+
+### Summary
+- **Issue #680 Complete**: Add data_dir as request parameter for flexible data directory configuration
+- **Issue #682 Complete**: Reorganize /runflow directory structure with analysis subdirectory
+- **Issue #676 Complete**: Baseline utility to create new runner files with percentile-first pace controls
+- **Issue #673 Complete**: Performance optimization by passing AnalysisContext from pipeline
+- **Issue #655 Complete**: Audit config integrity - enforce config integrity across all runtime paths
+- **Directory reorganization**: Analysis outputs now stored in `/runflow/analysis/{run_id}/` structure
+
+### New Features
+
+#### Data Directory Parameter (Issue #680)
+- **Request parameter**: Added optional `data_dir` parameter to `/runflow/v2/analyze` endpoint
+- **UI support**: Data directory input field in Analysis UI with path mapping for Docker
+- **Environment variable**: Supports `DATA_ROOT` environment variable as fallback
+- **Path mapping**: Automatic conversion between host paths and container paths in Docker
+- **E2E tests**: Added test cases for custom and invalid data_dir paths
+- **Postman collections**: Updated all Postman collections to include `data_dir` parameter (default: `/app/runflow/config/sample`)
+
+#### Baseline Utility (Issue #676)
+- **Two-phase API**: Separate baseline calculation and scenario generation endpoints
+- **Percentile-first pace controls**: P00-P100 percentile adjustments with piecewise-linear interpolation
+- **Runner ID migration**: Short string IDs (7-character Base62) instead of numeric IDs
+- **Cut-off validation**: Per-event cut-off duration validation before file generation
+- **File name suffix**: Optional suffix for generated file names
+- **UI**: New "Create Files" page with baseline metrics table and scenario controls
+
+#### Directory Reorganization (Issue #682)
+- **Analysis subdirectory**: Analysis outputs moved from `/runflow/{run_id}` to `/runflow/analysis/{run_id}`
+- **Pointer files**: `latest.json` and `index.json` moved to `/runflow/analysis/`
+- **Path updates**: All 30+ files updated to use centralized `get_run_directory()` function
+- **Heatmap URLs**: Updated to include `/analysis/` path prefix
+- **E2E tests**: Updated to use new directory structure
+- **Backward compatibility**: None (hard break, existing runs remain at old location)
+
+### Improvements
+
+#### Performance Optimization (Issue #673)
+- **AnalysisContext passing**: Reduced redundant file I/O by passing `AnalysisContext` from pipeline
+- **Performance logging**: Added per-segment timing to `performance.log` in `{run_id}/logs/`
+- **Memory efficiency**: Eliminated duplicate CSV reads by reusing cached dataframes
+
+#### Config Integrity (Issue #655)
+- **SSOT enforcement**: Centralized config loader with `analysis.json` as single source of truth
+- **Fail-fast validation**: Early validation of required configuration with clear error messages
+- **No silent fallbacks**: Removed all silent fallbacks and hardcoded values
+- **Validation coverage**: All runtime paths now validate configuration before proceeding
+
+### Bug Fixes
+- **Heatmap URLs** (Issue #682): Fixed heatmap image URLs to include `/analysis/` path prefix
+- **Directory creation** (Issue #682): Fixed duplicate directory creation by centralizing path management
+- **Path resolution** (Issue #682): Fixed undefined `runflow_root` variable in pipeline
+- **E2E test paths** (Issue #682): Updated E2E tests to use `get_run_directory()` function
+
+### Technical Details
+- **Path management**: Centralized in `app/utils/run_id.py` with `get_run_directory()` function
+- **AnalysisContext**: Extended to support `data_dir` parameter from requests
+- **Baseline generation**: New modules in `app/core/baseline/` for metrics calculation and file generation
+- **Postman updates**: All 11 analyze requests updated with `data_dir` parameter support
+
+### Migration Notes
+- **Directory structure**: Analysis outputs now in `/runflow/analysis/{run_id}/` (no migration, existing runs remain at old location)
+- **Data directory**: Use `data_dir` request parameter or `DATA_ROOT` environment variable for custom data directories
+- **Baseline files**: New baseline files stored in `/runflow/baseline/{run_id}/`
+- **Postman**: Update environment variable `data_dir` to `/app/runflow/config/sample` (or custom directory)
+
+---
+
 ## [v2.0.5] - 2026-01-09
 
 ### Summary

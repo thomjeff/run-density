@@ -13,7 +13,7 @@ It provides comprehensive reporting capabilities with both Markdown and CSV outp
 - **Day selector UI**: Global day selector across all pages (Dashboard, Segments, Density, Flow, Locations, Reports)
 - **E2E test suite**: Comprehensive regression testing with golden file comparisons
 
-**Current Version: v2.0.5** - Location flag propagation, schema resolver SSOT, LOS classification cleanup, and UI enhancements
+**Current Version: v2.0.6** - Data directory parameter, directory reorganization, baseline utility, performance optimization, and config integrity
 
 ## Key Features
 - **Density Analysis**: Spatial concentration analysis with areal and crowd density calculations
