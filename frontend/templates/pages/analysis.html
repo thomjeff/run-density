@@ -56,12 +56,6 @@
     <!-- Step 3: Control Variables Input (hidden until baseline calculated) -->
     <div id="baseline-step3" style="display: none; margin-bottom: 1.5rem;">
         <h4 style="margin-bottom: 1rem; color: #2c3e50;">Control Variables</h4>
-        <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
-            Enter percentage changes (e.g., 40 for +40%, 0.5 for +0.5%, -0.5 for -0.5%). 
-            You can optionally include a "%" sign (e.g., "40%" or "0.5%"). 
-            Range: -50% to +200% for participants, -50% to +200% for pace percentiles. 
-            Negative values make paces faster (lower).
-        </p>
         <div id="baseline-control-variables-table" style="overflow-x: auto;">
             <!-- Table will be populated by JavaScript -->
         </div>
@@ -1184,9 +1178,9 @@
         html += '<p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">Definitions for key metrics and validation rules in the control variables table.</p>';
         html += '<table style="width: 100%; border-collapse: collapse; margin-bottom: 1rem;">';
         html += '<thead><tr>';
-        html += '<th style="padding: 0.5rem; border: 1px solid #ddd; background: #f8f9fa; text-align: left; width: 25%;">Variable</th>';
-        html += '<th style="padding: 0.5rem; border: 1px solid #ddd; background: #f8f9fa; text-align: left; width: 50%;">Definition</th>';
-        html += '<th style="padding: 0.5rem; border: 1px solid #ddd; background: #f8f9fa; text-align: left; width: 25%;">Allowed Range</th>';
+        html += '<th style="padding: 0.5rem; border: 1px solid #ddd; background: #f8f9fa; text-align: left; width: 20%;">Variable</th>';
+        html += '<th style="padding: 0.5rem; border: 1px solid #ddd; background: #f8f9fa; text-align: left; width: 35%;">Definition</th>';
+        html += '<th style="padding: 0.5rem; border: 1px solid #ddd; background: #f8f9fa; text-align: left; width: 45%;">Allowed Range</th>';
         html += '</tr></thead><tbody>';
         
         // Participants %
