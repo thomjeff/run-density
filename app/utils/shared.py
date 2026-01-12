@@ -11,8 +11,14 @@ from app.utils.constants import SECONDS_PER_MINUTE
 
 
 def load_pace_csv(url_or_path: str) -> pd.DataFrame:
-    """Load and validate pace CSV with proper column handling."""
-    df = pd.read_csv(url_or_path)
+    """
+    Load and validate pace CSV with proper column handling.
+    
+    Issue: #676 - runner_id is loaded as string dtype to support both
+    numeric (legacy) and string (new baseline utility) IDs.
+    """
+    # Load with explicit string dtype for runner_id (Issue #676)
+    df = pd.read_csv(url_or_path, dtype={"runner_id": "string"})
     df.columns = [c.lower() for c in df.columns]
     
     # Ensure required columns exist
@@ -26,7 +32,8 @@ def load_pace_csv(url_or_path: str) -> pd.DataFrame:
     
     # Convert to proper types
     df["event"] = df["event"].astype(str)
-    df["runner_id"] = df["runner_id"].astype(str)
+    # runner_id already loaded as string dtype (Issue #676)
+    df["runner_id"] = df["runner_id"].astype(str)  # Ensure string type
     df["pace"] = df["pace"].astype(float)      # minutes per km
     df["distance"] = df["distance"].astype(float)
     df["start_offset"] = df["start_offset"].fillna(0).astype(int)
