@@ -554,7 +554,6 @@
         }
         
         // Issue #680: Also reload files when Enter is pressed in data_dir field
-        const dataDirInput = document.getElementById('data_dir');
         if (dataDirInput) {
             dataDirInput.addEventListener('keypress', async function(e) {
                 if (e.key === 'Enter') {
