@@ -1184,16 +1184,18 @@
         html += '<p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">Definitions for key metrics and validation rules in the control variables table.</p>';
         html += '<table style="width: 100%; border-collapse: collapse; margin-bottom: 1rem;">';
         html += '<thead><tr>';
-        html += '<th style="padding: 0.5rem; border: 1px solid #ddd; background: #f8f9fa; text-align: left; width: 30%;">Variable</th>';
-        html += '<th style="padding: 0.5rem; border: 1px solid #ddd; background: #f8f9fa; text-align: left;">Definition</th>';
+        html += '<th style="padding: 0.5rem; border: 1px solid #ddd; background: #f8f9fa; text-align: left; width: 25%;">Variable</th>';
+        html += '<th style="padding: 0.5rem; border: 1px solid #ddd; background: #f8f9fa; text-align: left; width: 50%;">Definition</th>';
+        html += '<th style="padding: 0.5rem; border: 1px solid #ddd; background: #f8f9fa; text-align: left; width: 25%;">Allowed Range</th>';
         html += '</tr></thead><tbody>';
         
         // Participants %
         html += '<tr>';
         html += '<td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">Participants %</td>';
         html += '<td style="padding: 0.5rem; border: 1px solid #ddd;">';
-        html += 'The percentage change in the number of participants from the baseline. ';
-        html += 'Enter values as percentages (e.g., 40 for +40%, -20 for -20%). ';
+        html += 'The percentage change in the number of participants from the baseline. Enter values as percentages (e.g., 40 for +40%, -20 for -20%).';
+        html += '</td>';
+        html += '<td style="padding: 0.5rem; border: 1px solid #ddd;">';
         html += 'The allowed range is -50% to +200%, meaning any event can have a 50% reduction in participants from baseline, and a 200% increase.';
         html += '</td>';
         html += '</tr>';
@@ -1202,9 +1204,10 @@
         html += '<tr>';
         html += '<td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">P00 (Lead) %</td>';
         html += '<td style="padding: 0.5rem; border: 1px solid #ddd;">';
-        html += 'The percentage change in pace for the fastest runner (lead runner). ';
-        html += 'A negative percentage means faster (lower pace), and a positive number means slower (higher pace). ';
-        html += 'The allowed range is -50% to +200%.';
+        html += 'The percentage change in pace for the fastest runner (lead runner).';
+        html += '</td>';
+        html += '<td style="padding: 0.5rem; border: 1px solid #ddd;">';
+        html += 'A negative percentage means faster (lower pace), and a positive number means slower (higher pace). The allowed range is -50% to +200%.';
         html += '</td>';
         html += '</tr>';
         
@@ -1212,9 +1215,10 @@
         html += '<tr>';
         html += '<td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">P05 %</td>';
         html += '<td style="padding: 0.5rem; border: 1px solid #ddd;">';
-        html += 'The percentage change in pace at the front 5% point. ';
-        html += 'A negative percentage means faster (lower pace), and a positive number means slower (higher pace). ';
-        html += 'The allowed range is -50% to +200%.';
+        html += 'The percentage change in pace at the front 5% point.';
+        html += '</td>';
+        html += '<td style="padding: 0.5rem; border: 1px solid #ddd;">';
+        html += 'A negative percentage means faster (lower pace), and a positive number means slower (higher pace). The allowed range is -50% to +200%.';
         html += '</td>';
         html += '</tr>';
         
@@ -1222,9 +1226,10 @@
         html += '<tr>';
         html += '<td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">P25 %</td>';
         html += '<td style="padding: 0.5rem; border: 1px solid #ddd;">';
-        html += 'The percentage change in pace at the 25% point (1 in 4 runners are faster). ';
-        html += 'A negative percentage means faster (lower pace), and a positive number means slower (higher pace). ';
-        html += 'The allowed range is -50% to +200%.';
+        html += 'The percentage change in pace at the 25% point (1 in 4 runners are faster).';
+        html += '</td>';
+        html += '<td style="padding: 0.5rem; border: 1px solid #ddd;">';
+        html += 'A negative percentage means faster (lower pace), and a positive number means slower (higher pace). The allowed range is -50% to +200%.';
         html += '</td>';
         html += '</tr>';
         
@@ -1232,9 +1237,10 @@
         html += '<tr>';
         html += '<td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">P50 (Median) %</td>';
         html += '<td style="padding: 0.5rem; border: 1px solid #ddd;">';
-        html += 'The percentage change in pace for the middle runner (half faster, half slower). ';
-        html += 'A negative percentage means faster (lower pace), and a positive number means slower (higher pace). ';
-        html += 'The allowed range is -50% to +200%.';
+        html += 'The percentage change in pace for the middle runner (half faster, half slower).';
+        html += '</td>';
+        html += '<td style="padding: 0.5rem; border: 1px solid #ddd;">';
+        html += 'A negative percentage means faster (lower pace), and a positive number means slower (higher pace). The allowed range is -50% to +200%.';
         html += '</td>';
         html += '</tr>';
         
@@ -1242,9 +1248,10 @@
         html += '<tr>';
         html += '<td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">P75 %</td>';
         html += '<td style="padding: 0.5rem; border: 1px solid #ddd;">';
-        html += 'The percentage change in pace at the 75% point (3 in 4 runners are faster). ';
-        html += 'A negative percentage means faster (lower pace), and a positive number means slower (higher pace). ';
-        html += 'The allowed range is -50% to +200%.';
+        html += 'The percentage change in pace at the 75% point (3 in 4 runners are faster).';
+        html += '</td>';
+        html += '<td style="padding: 0.5rem; border: 1px solid #ddd;">';
+        html += 'A negative percentage means faster (lower pace), and a positive number means slower (higher pace). The allowed range is -50% to +200%.';
         html += '</td>';
         html += '</tr>';
         
@@ -1252,9 +1259,10 @@
         html += '<tr>';
         html += '<td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">P95 %</td>';
         html += '<td style="padding: 0.5rem; border: 1px solid #ddd;">';
-        html += 'The percentage change in pace near the back (95% of runners are faster). ';
-        html += 'A negative percentage means faster (lower pace), and a positive number means slower (higher pace). ';
-        html += 'The allowed range is -50% to +200%.';
+        html += 'The percentage change in pace near the back (95% of runners are faster).';
+        html += '</td>';
+        html += '<td style="padding: 0.5rem; border: 1px solid #ddd;">';
+        html += 'A negative percentage means faster (lower pace), and a positive number means slower (higher pace). The allowed range is -50% to +200%.';
         html += '</td>';
         html += '</tr>';
         
@@ -1262,9 +1270,10 @@
         html += '<tr>';
         html += '<td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">P100 (Last) %</td>';
         html += '<td style="padding: 0.5rem; border: 1px solid #ddd;">';
-        html += 'The percentage change in pace for the slowest runner (last runner). ';
-        html += 'A negative percentage means faster (lower pace), and a positive number means slower (higher pace). ';
-        html += 'The allowed range is -50% to +200%.';
+        html += 'The percentage change in pace for the slowest runner (last runner).';
+        html += '</td>';
+        html += '<td style="padding: 0.5rem; border: 1px solid #ddd;">';
+        html += 'A negative percentage means faster (lower pace), and a positive number means slower (higher pace). The allowed range is -50% to +200%.';
         html += '</td>';
         html += '</tr>';
         
@@ -1272,9 +1281,10 @@
         html += '<tr>';
         html += '<td style="padding: 0.5rem; border: 1px solid #ddd; font-weight: 600;">Cut-off (hh:mm)</td>';
         html += '<td style="padding: 0.5rem; border: 1px solid #ddd;">';
-        html += 'Optional per-event cut-off duration in hours:minutes format (e.g., "06:00" for 6 hours). ';
-        html += 'The system validates that the slowest runner\'s finish time does not exceed this cut-off before generating files. ';
-        html += 'If validation fails, file generation is blocked with a clear error message.';
+        html += 'Optional per-event cut-off duration in hours:minutes format (e.g., "06:00" for 6 hours). The system validates that the slowest runner\'s finish time does not exceed this cut-off before generating files. If validation fails, file generation is blocked with a clear error message.';
+        html += '</td>';
+        html += '<td style="padding: 0.5rem; border: 1px solid #ddd;">';
+        html += 'Optional';
         html += '</td>';
         html += '</tr>';
         
