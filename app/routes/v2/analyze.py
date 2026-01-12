@@ -69,7 +69,6 @@ def run_analysis_background(
         )
         
         # Update metadata.json files with response payload
-        from pathlib import Path
         import json
         
         runflow_root = get_runflow_root()
