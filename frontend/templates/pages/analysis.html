@@ -46,7 +46,7 @@
             <label for="data_dir" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
                 Data Directory <span style="color: #95a5a6; font-weight: normal;">(optional)</span>
             </label>
-            <div style="display: flex; gap: 0.5rem;">
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
                 <input 
                     type="text" 
                     id="data_dir" 
@@ -56,14 +56,14 @@
                 >
                 <button 
                     type="button" 
-                    id="browse-data-dir" 
+                    id="load-files-btn" 
                     style="padding: 0.75rem 1.5rem; background: #3498db; color: white; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; white-space: nowrap;"
-                    onclick="alert('Note: Browser folder selection is limited. Please enter the full path manually (e.g., /Users/jthompson/Documents or ./data)')"
+                    title="Load files from the specified data directory"
                 >
-                    Browse
+                    Load Files
                 </button>
             </div>
-            <small style="color: #7f8c8d; font-size: 0.875rem;">Enter the path to the directory containing your CSV and GPX files. If empty, uses the default 'data' directory or DATA_ROOT environment variable.</small>
+            <small style="color: #7f8c8d; font-size: 0.875rem;">Enter the path to the directory containing your CSV and GPX files. If empty, uses the default 'data' directory or DATA_ROOT environment variable. Click "Load Files" to refresh the file dropdowns.</small>
             <div class="field-error" id="data_dir-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.25rem;"></div>
         </div>
 
@@ -356,6 +356,17 @@
 
     // Load files from API (Issue #680: support data_dir parameter)
     async function loadDataFiles(dataDir = null) {
+        // Clear previous errors
+        clearFieldError('data_dir');
+        
+        // If dataDir not provided, get from input field
+        if (dataDir === null) {
+            const dataDirInput = document.getElementById('data_dir');
+            if (dataDirInput) {
+                dataDir = dataDirInput.value.trim() || null;
+            }
+        }
+        
         try {
             // Build query parameters
             const csvParams = new URLSearchParams({ extension: 'csv' });
@@ -376,9 +387,17 @@
                 populateDropdown('segments_file', csvFiles);
                 populateDropdown('flow_file', csvFiles);
                 populateDropdown('locations_file', csvFiles);
+                
+                // Also update runners and GPX dropdowns for existing event rows
+                updateEventFileDropdowns();
+                
+                // Clear any previous errors on success
+                clearFieldError('data_dir');
             } else {
                 const errorData = await csvResponse.json().catch(() => ({ detail: 'Failed to load CSV files' }));
-                showFieldError('data_dir', errorData.detail || 'Failed to load CSV files from data directory');
+                const errorMsg = errorData.detail || errorData.error || 'Failed to load CSV files from data directory';
+                showFieldError('data_dir', errorMsg);
+                console.error('Failed to load CSV files:', errorMsg);
             }
             
             // Load GPX files
@@ -386,14 +405,56 @@
             if (gpxResponse.ok) {
                 const gpxData = await gpxResponse.json();
                 gpxFiles = gpxData.files || [];
+                
+                // Update GPX dropdowns for existing event rows
+                updateEventFileDropdowns();
             } else {
                 const errorData = await gpxResponse.json().catch(() => ({ detail: 'Failed to load GPX files' }));
-                console.warn('Failed to load GPX files:', errorData.detail);
+                console.warn('Failed to load GPX files:', errorData.detail || errorData.error);
+                // Don't show error for GPX if CSV succeeded - just log warning
             }
         } catch (error) {
             console.error('Error loading data files:', error);
             showFieldError('data_dir', `Error loading files: ${error.message}`);
         }
+    }
+    
+    // Update file dropdowns for all existing event rows (Issue #680)
+    function updateEventFileDropdowns() {
+        const eventRows = document.querySelectorAll('.event-row');
+        eventRows.forEach(row => {
+            const rowId = row.id.replace('event-row-', '');
+            const runnersSelect = document.getElementById(`event-runners-file-${rowId}`);
+            const gpxSelect = document.getElementById(`event-gpx-file-${rowId}`);
+            
+            if (runnersSelect) {
+                // Clear existing options except placeholder
+                while (runnersSelect.options.length > 1) {
+                    runnersSelect.remove(1);
+                }
+                // Add CSV files
+                csvFiles.forEach(file => {
+                    const option = document.createElement('option');
+                    option.value = file;
+                    option.textContent = file;
+                    runnersSelect.appendChild(option);
+                });
+            }
+            
+            if (gpxSelect) {
+                // Clear existing options except placeholder
+                while (gpxSelect.options.length > 1) {
+                    gpxSelect.remove(1);
+                }
+                // Add GPX files
+                gpxFiles.forEach(file => {
+                    const option = document.createElement('option');
+                    option.value = file;
+                    option.textContent = file;
+                    gpxSelect.appendChild(option);
+                });
+            }
+        });
     }
 
     // Populate a dropdown with file options
@@ -456,22 +517,32 @@
         addEventRow();
         updateSubmitButton();
         
-        // Issue #680: Add event listener to reload files when data_dir changes
+        // Issue #680: Add event listener for "Load Files" button
+        const loadFilesBtn = document.getElementById('load-files-btn');
+        if (loadFilesBtn) {
+            loadFilesBtn.addEventListener('click', async function() {
+                this.disabled = true;
+                this.textContent = 'Loading...';
+                try {
+                    await loadDataFiles();
+                } finally {
+                    this.disabled = false;
+                    this.textContent = 'Load Files';
+                }
+            });
+        }
+        
+        // Issue #680: Also reload files when Enter is pressed in data_dir field
         const dataDirInput = document.getElementById('data_dir');
         if (dataDirInput) {
-            // Debounce the reload to avoid excessive API calls
-            let reloadTimeout;
-            dataDirInput.addEventListener('input', function() {
-                clearTimeout(reloadTimeout);
-                reloadTimeout = setTimeout(async () => {
-                    const dataDir = this.value.trim();
-                    clearFieldError('data_dir');
-                    if (dataDir) {
-                        await loadDataFiles(dataDir);
-                    } else {
-                        await loadDataFiles(); // Use default
+            dataDirInput.addEventListener('keypress', async function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const loadBtn = document.getElementById('load-files-btn');
+                    if (loadBtn) {
+                        loadBtn.click();
                     }
-                }, 500); // Wait 500ms after user stops typing
+                }
             });
         }
     }
