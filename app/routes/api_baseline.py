@@ -7,7 +7,7 @@ Issue: #676 - Utility to create new runner files
 """
 
 from fastapi import APIRouter, HTTPException, status, Query
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, StreamingResponse
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 import pandas as pd
@@ -408,9 +408,9 @@ async def list_generated_files(
 
 
 @router.get("/api/baseline/download")
-async def download_baseline_files(
+def download_baseline_files(
     run_id: str = Query(..., description="Baseline run ID")
-) -> Response:
+) -> StreamingResponse:
     """
     Download all files from a baseline run directory as a ZIP archive.
     
@@ -426,7 +426,10 @@ async def download_baseline_files(
         reports_path = get_runflow_root()
         baseline_dir = reports_path / "baseline" / run_id
         
+        logger.info(f"[Download] Requested baseline run_id: {run_id}, path: {baseline_dir}")
+        
         if not baseline_dir.exists():
+            logger.warning(f"[Download] Baseline directory not found: {baseline_dir}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Baseline run_id not found: {run_id}"
@@ -437,17 +440,21 @@ async def download_baseline_files(
         
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
             # Add all files in the baseline directory
+            files_added = 0
             for file_path in baseline_dir.rglob('*'):
                 if file_path.is_file():
                     # Get relative path from baseline_dir for archive structure
                     arcname = file_path.relative_to(baseline_dir)
                     zip_file.write(file_path, arcname)
+                    files_added += 1
+        
+        logger.info(f"[Download] Added {files_added} files to ZIP for run_id: {run_id}")
         
         zip_buffer.seek(0)
         
-        # Return ZIP file as response
-        return Response(
-            content=zip_buffer.getvalue(),
+        # Return ZIP file as StreamingResponse (same pattern as Reports download)
+        return StreamingResponse(
+            io.BytesIO(zip_buffer.getvalue()),
             media_type="application/zip",
             headers={
                 "Content-Disposition": f"attachment; filename=baseline_{run_id}.zip"
