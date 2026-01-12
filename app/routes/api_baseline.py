@@ -289,18 +289,32 @@ async def generate_scenario(
                 used_runner_ids=used_runner_ids
             )
             
+            # Apply file name suffix if provided
+            file_suffix = request.get("file_suffix")
+            if file_suffix:
+                # Insert suffix before .csv extension
+                # e.g., "elite_runners.csv" + "_issue676" -> "elite_runners_issue676.csv"
+                if runners_file.endswith(".csv"):
+                    base_name = runners_file[:-4]  # Remove .csv
+                    output_filename = f"{base_name}{file_suffix}.csv"
+                else:
+                    output_filename = f"{runners_file}{file_suffix}"
+            else:
+                output_filename = runners_file
+            
             # Save generated file
-            output_file = baseline_dir / runners_file
+            output_file = baseline_dir / output_filename
             new_df.to_csv(output_file, index=False)
             
             generated_files.append({
                 "event": event_name,
-                "path": str(output_file)
+                "path": str(output_file),
+                "filename": output_filename
             })
             
             # Calculate new baseline metrics from generated file
             new_metrics = calculate_baseline_metrics(new_df)
-            new_metrics["runners_file"] = runners_file
+            new_metrics["runners_file"] = output_filename  # Use new filename
             new_baseline_metrics[event_name] = {
                 "new_participants": new_participants,
                 "new_p00": new_metrics["base_p00"],
@@ -404,6 +418,157 @@ async def list_generated_files(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list files: {str(e)}"
+        )
+
+
+@router.post("/api/baseline/apply-suffix")
+async def apply_file_suffix(
+    request: Dict[str, Any]
+) -> JSONResponse:
+    """
+    Apply file name suffix to generated baseline files.
+    
+    Renames existing generated files to include the suffix before .csv extension.
+    
+    Request Body:
+        {
+            "baseline_run_id": "4sawTqXz9CExYcQgJTNQCr",
+            "file_suffix": "_issue676"  # Optional, text to append before .csv
+        }
+    
+    Response:
+        {
+            "renamed_files": [
+                {
+                    "event": "elite",
+                    "old_filename": "elite_runners.csv",
+                    "new_filename": "elite_runners_issue676.csv",
+                    "path": "/app/runflow/baseline/.../elite_runners_issue676.csv"
+                }
+            ]
+        }
+    
+    Issue: #676 - File name suffix application
+    """
+    try:
+        baseline_run_id = request.get("baseline_run_id")
+        if not baseline_run_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="baseline_run_id is required"
+            )
+        
+        file_suffix = request.get("file_suffix")
+        if not file_suffix:
+            # No suffix provided, return existing files
+            file_suffix = None
+        
+        # Validate suffix format if provided
+        if file_suffix and not all(c.isalnum() or c in ['_', '-'] for c in file_suffix):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="file_suffix can only contain letters, numbers, underscores, and hyphens"
+            )
+        
+        # Get baseline directory
+        reports_path = get_runflow_root()
+        baseline_dir = reports_path / "baseline" / baseline_run_id
+        
+        if not baseline_dir.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Baseline run_id not found: {baseline_run_id}"
+            )
+        
+        # Load baseline.json
+        baseline_json_path = baseline_dir / "baseline.json"
+        if not baseline_json_path.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"baseline.json not found for run_id: {baseline_run_id}"
+            )
+        
+        import json
+        import shutil
+        
+        with open(baseline_json_path, "r") as f:
+            baseline_json = json.load(f)
+        
+        generated_files = baseline_json.get("generated_files", [])
+        
+        if not generated_files:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No generated files found. Please generate files first."
+            )
+        
+        renamed_files = []
+        
+        if file_suffix:
+            # Rename files with suffix
+            for file_info in generated_files:
+                old_filename = file_info.get("filename") or Path(file_info["path"]).name
+                old_path = baseline_dir / old_filename
+                
+                if not old_path.exists():
+                    logger.warning(f"File not found for renaming: {old_path}")
+                    continue
+                
+                # Insert suffix before .csv extension
+                if old_filename.endswith(".csv"):
+                    base_name = old_filename[:-4]  # Remove .csv
+                    new_filename = f"{base_name}{file_suffix}.csv"
+                else:
+                    new_filename = f"{old_filename}{file_suffix}"
+                
+                new_path = baseline_dir / new_filename
+                
+                # Rename file
+                shutil.move(str(old_path), str(new_path))
+                
+                renamed_files.append({
+                    "event": file_info.get("event", ""),
+                    "old_filename": old_filename,
+                    "new_filename": new_filename,
+                    "path": str(new_path)
+                })
+                
+                # Update file_info in generated_files list
+                file_info["filename"] = new_filename
+                file_info["path"] = str(new_path)
+            
+            # Update baseline.json with renamed files
+            baseline_json["generated_files"] = generated_files
+            baseline_json["file_suffix"] = file_suffix
+            
+            with open(baseline_json_path, "w") as f:
+                json.dump(baseline_json, f, indent=2)
+            
+            logger.info(f"Applied suffix '{file_suffix}' to {len(renamed_files)} files")
+        else:
+            # No suffix, return existing files as-is
+            renamed_files = [
+                {
+                    "event": f.get("event", ""),
+                    "old_filename": f.get("filename") or Path(f["path"]).name,
+                    "new_filename": f.get("filename") or Path(f["path"]).name,
+                    "path": f["path"]
+                }
+                for f in generated_files
+            ]
+        
+        return JSONResponse(
+            content={"renamed_files": renamed_files},
+            status_code=status.HTTP_200_OK
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error applying file suffix: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to apply file suffix: {str(e)}"
         )
 
 

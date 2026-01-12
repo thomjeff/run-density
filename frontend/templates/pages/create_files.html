@@ -78,6 +78,25 @@
         <div id="baseline-new-metrics-table" style="overflow-x: auto;">
             <!-- Table will be populated by JavaScript -->
         </div>
+        
+        <!-- File Name Suffix Input -->
+        <div style="margin-top: 1.5rem; margin-bottom: 1rem;">
+            <label for="baseline-file-suffix" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
+                File Name Suffix <span style="color: #95a5a6; font-weight: normal;">(optional)</span>
+            </label>
+            <input 
+                type="text" 
+                id="baseline-file-suffix" 
+                placeholder="_issue676"
+                maxlength="50"
+                pattern="^[a-zA-Z0-9_-]*$"
+                style="width: 100%; max-width: 400px; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; font-family: monospace;"
+            >
+            <small style="color: #7f8c8d; font-size: 0.875rem; display: block; margin-top: 0.25rem;">
+                Text to append to file names (e.g., "_issue676" → elite_runners_issue676.csv). Only letters, numbers, underscores, and hyphens allowed.
+            </small>
+        </div>
+        
         <div style="margin-top: 1rem;">
             <button 
                 type="button" 
@@ -694,6 +713,12 @@
         const successMessage = document.getElementById('baseline-success-message');
         if (successMessage) {
             successMessage.style.display = 'none';
+        }
+        
+        // Clear file suffix input
+        const suffixInput = document.getElementById('baseline-file-suffix');
+        if (suffixInput) {
+            suffixInput.value = '';
         }
         
         // Uncheck all checkboxes
