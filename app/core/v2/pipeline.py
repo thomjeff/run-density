@@ -765,7 +765,8 @@ def create_full_analysis_pipeline(
     perf_monitor.total_memory_mb = get_memory_usage_mb()
     
     try:
-        run_log_handler = RunLogHandler(run_id, runflow_root)
+        # Issue #682: RunLogHandler accepts optional runflow_root (defaults to get_runflow_root())
+        run_log_handler = RunLogHandler(run_id, None)
         run_log_handler.__enter__()
         
         # Group events by day
