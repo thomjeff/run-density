@@ -309,8 +309,9 @@ def _get_segments_csv_path_for_run(run_id: str) -> str:
     from app.utils.run_id import get_runflow_root
     from app.config.loader import load_analysis_context
 
-    runflow_root = get_runflow_root()
-    run_path = runflow_root / run_id
+    # Issue #682: Use centralized get_run_directory() for correct path
+    from app.utils.run_id import get_run_directory
+    run_path = get_run_directory(run_id)
     return str(load_analysis_context(run_path).segments_csv_path)
 
 

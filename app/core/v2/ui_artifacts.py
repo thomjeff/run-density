@@ -35,8 +35,10 @@ def get_ui_artifacts_path(run_id: str, day: Day) -> Path:
         >>> str(path)
         'runflow/abc123/sun/ui'
     """
-    runflow_root = get_runflow_root()
-    ui_path = runflow_root / run_id / day.value / "ui"
+    # Issue #682: Use centralized get_run_directory() for correct path
+    from app.utils.run_id import get_run_directory
+    run_dir = get_run_directory(run_id)
+    ui_path = run_dir / day.value / "ui"
     return ui_path
 
 
@@ -738,7 +740,10 @@ def _export_ui_artifacts_v2(
                     logger.warning(f"   ⚠️  Captions not found at expected locations")
                 
                 # Clean up empty /ui folder at run level (Issue #501: Remove empty ui folder)
-                run_level_ui = runflow_root / run_id / "ui"
+                # Issue #682: Use centralized get_run_directory() for correct path
+                from app.utils.run_id import get_run_directory
+                run_dir = get_run_directory(run_id)
+                run_level_ui = run_dir / "ui"
                 if run_level_ui.exists() and run_level_ui.is_dir():
                     try:
                         # Check if folder is empty
@@ -782,8 +787,9 @@ def _aggregate_bins_from_all_days(run_id: str) -> Optional[pd.DataFrame]:
     Returns:
         Aggregated DataFrame with bins from all days, or None if no bins found
     """
-    runflow_root = get_runflow_root()
-    run_path = runflow_root / run_id
+    # Issue #682: Use centralized get_run_directory() for correct path
+    from app.utils.run_id import get_run_directory
+    run_path = get_run_directory(run_id)
     
     if not run_path.exists():
         logger.warning(f"Run directory not found: {run_path}")

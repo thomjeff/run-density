@@ -202,8 +202,9 @@ def create_stubbed_pipeline(
     if not run_id:
         run_id = generate_run_id()
     
-    runflow_root = get_runflow_root()
-    run_path = runflow_root / run_id
+    # Issue #682: Use centralized get_run_directory() for correct path
+    from app.utils.run_id import get_run_directory
+    run_path = get_run_directory(run_id)
     run_path.mkdir(parents=True, exist_ok=True)
     
     # Group events by day
@@ -726,8 +727,9 @@ def create_full_analysis_pipeline(
         event_names = [e.name for e in events]
         logger.info(f"Using provided run_id: {run_id} for {len(events)} events ({', '.join(event_names)}) across {days_count} day(s)")
     
-    runflow_root = get_runflow_root()
-    run_path = runflow_root / run_id
+    # Issue #682: Use centralized get_run_directory() for correct path
+    from app.utils.run_id import get_run_directory
+    run_path = get_run_directory(run_id)
     # Issue #553: Run directory may already exist if analysis.json was generated
     run_path.mkdir(parents=True, exist_ok=True)
     logger.debug(f"Using run directory: {run_path}")

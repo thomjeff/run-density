@@ -72,8 +72,9 @@ def _add_core_data_files(reports: list, run_id: str) -> None:
     from app.config.loader import load_analysis_context
     from app.utils.run_id import get_runflow_root
     
-    runflow_root = get_runflow_root()
-    run_path = runflow_root / run_id
+    # Issue #682: Use centralized get_run_directory() for correct path
+    from app.utils.run_id import get_run_directory
+    run_path = get_run_directory(run_id)
     analysis_context = load_analysis_context(run_path)
     data_dir = analysis_context.data_dir
     if not data_dir.exists():

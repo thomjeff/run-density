@@ -353,13 +353,18 @@ async def get_runs_list():
             description = None
             try:
                 from app.config.loader import load_analysis_context
-                analysis_context = load_analysis_context(runflow_root / run_id)
+                # Issue #682: Use centralized get_run_directory() for correct path
+                from app.utils.run_id import get_run_directory
+                analysis_context = load_analysis_context(get_run_directory(run_id))
                 description = analysis_context.analysis_config.get("description")
             except Exception as e:
                 logger.warning(f"Could not load analysis.json for {run_id}: {e}")
             
             # Load root metadata.json for total_elapsed_minutes (Issue #638 follow-up)
-            metadata_path = runflow_root / run_id / "metadata.json"
+            # Issue #682: Use centralized get_run_directory() for correct path
+            from app.utils.run_id import get_run_directory
+            run_dir = get_run_directory(run_id)
+            metadata_path = run_dir / "metadata.json"
             total_elapsed_minutes = None
             if metadata_path.exists():
                 try:

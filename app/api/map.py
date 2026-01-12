@@ -96,8 +96,9 @@ async def get_map_manifest():
         from app.config.loader import load_analysis_context
 
         run_id = get_latest_run_id()
-        runflow_root = get_runflow_root()
-        run_path = runflow_root / run_id
+        # Issue #682: Use centralized get_run_directory() for correct path
+        from app.utils.run_id import get_run_directory
+        run_path = get_run_directory(run_id)
         analysis_context = load_analysis_context(run_path)
         segments_path = Path(analysis_context.segments_csv_path)
 
@@ -205,8 +206,9 @@ async def get_map_segments():
         from app.config.loader import load_analysis_context
 
         run_id = get_latest_run_id()
-        runflow_root = get_runflow_root()
-        run_path = runflow_root / run_id
+        # Issue #682: Use centralized get_run_directory() for correct path
+        from app.utils.run_id import get_run_directory
+        run_path = get_run_directory(run_id)
         analysis_context = load_analysis_context(run_path)
         segments_path = Path(analysis_context.segments_csv_path)
 

@@ -42,8 +42,10 @@ def get_day_output_path(
         >>> str(path)
         'runflow/abc123/sun/reports'
     """
-    runflow_root = get_runflow_root()
-    day_path = runflow_root / run_id / day.value / category
+    # Issue #682: Use centralized get_run_directory() for correct path
+    from app.utils.run_id import get_run_directory
+    run_dir = get_run_directory(run_id)
+    day_path = run_dir / day.value / category
     return day_path
 
 
@@ -174,9 +176,10 @@ def generate_reports_per_day(
         # Generate Flow.csv (Issue #600: Flow.md deprecated, only CSV used)
         # Issue #600: Load from flow_results.json (SSOT - mandatory)
         try:
-            from app.utils.run_id import get_runflow_root
-            runflow_root = get_runflow_root()
-            computation_dir = runflow_root / run_id / day.value / "computation"
+            # Issue #682: Use centralized get_run_directory() for correct path
+            from app.utils.run_id import get_run_directory
+            run_dir = get_run_directory(run_id)
+            computation_dir = run_dir / day.value / "computation"
             flow_results_json_path = computation_dir / "flow_results.json"
             
             if not flow_results_json_path.exists():
@@ -202,9 +205,10 @@ def generate_reports_per_day(
         
         # Generate Locations.csv (Issue #600: Load from locations_results.json - SSOT mandatory if file exists)
         try:
-            from app.utils.run_id import get_runflow_root
-            runflow_root = get_runflow_root()
-            computation_dir = runflow_root / run_id / day.value / "computation"
+            # Issue #682: Use centralized get_run_directory() for correct path
+            from app.utils.run_id import get_run_directory
+            run_dir = get_run_directory(run_id)
+            computation_dir = run_dir / day.value / "computation"
             locations_results_json_path = computation_dir / "locations_results.json"
             
             if not locations_results_json_path.exists():
@@ -289,8 +293,10 @@ def generate_density_report_v2(
         from app.utils.metadata import get_app_version
         
         # Get bins directory for this day
-        runflow_root = get_runflow_root()
-        bins_dir = runflow_root / run_id / day.value / "bins"
+        # Issue #682: Use centralized get_run_directory() for correct path
+        from app.utils.run_id import get_run_directory
+        run_dir = get_run_directory(run_id)
+        bins_dir = run_dir / day.value / "bins"
         
         # Issue #519/542: Read bins directly from bins directory (no copy)
         source_bins_parquet = bins_dir / "bins.parquet"
@@ -386,9 +392,10 @@ def generate_density_report_v2(
             # Issue #573: Load event_groups from metadata.json for RES display
             event_groups_res = None
             try:
-                from app.utils.run_id import get_runflow_root
-                runflow_root = get_runflow_root()
-                metadata_path = runflow_root / run_id / day.value / "metadata.json"
+                # Issue #682: Use centralized get_run_directory() for correct path
+                from app.utils.run_id import get_run_directory
+                run_dir = get_run_directory(run_id)
+                metadata_path = run_dir / day.value / "metadata.json"
                 if metadata_path.exists():
                     import json
                     metadata = json.loads(metadata_path.read_text())
@@ -399,7 +406,10 @@ def generate_density_report_v2(
                 logger.debug(f"Could not load event_groups from metadata.json for day {day.value}: {e}")
             
             # Issue #600: Get segment_metrics.json path for SSOT (mandatory)
-            ui_metrics_dir = runflow_root / run_id / day.value / "ui" / "metrics"
+            # Issue #682: Use centralized get_run_directory() for correct path
+            from app.utils.run_id import get_run_directory
+            run_dir = get_run_directory(run_id)
+            ui_metrics_dir = run_dir / day.value / "ui" / "metrics"
             segment_metrics_json_path = ui_metrics_dir / "segment_metrics.json"
             
             if not segment_metrics_json_path.exists():
@@ -543,8 +553,9 @@ def generate_flow_report_v2(
             day_prefix = day.value[:3]  # "saturday" -> "sat", "sunday" -> "sun"
             # Issue #616: Get segments_file_path from analysis.json using helper function
             try:
-                runflow_root = get_runflow_root()
-                run_path = runflow_root / run_id
+                # Issue #682: Use centralized get_run_directory() for correct path
+                from app.utils.run_id import get_run_directory
+                run_path = get_run_directory(run_id)
                 from app.core.v2.analysis_config import get_segments_file
                 segments_csv_path_for_flow = get_segments_file(run_path=run_path)
             except Exception as e:

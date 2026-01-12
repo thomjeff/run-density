@@ -71,8 +71,9 @@ def run_analysis_background(
         # Update metadata.json files with response payload
         import json
         
-        runflow_root = get_runflow_root()
-        run_path = runflow_root / run_id
+        # Issue #682: Use centralized get_run_directory() for correct path
+        from app.utils.run_id import get_run_directory
+        run_path = get_run_directory(run_id)
         
         response_payload = {
             "status": "success",
@@ -203,8 +204,9 @@ async def analyze_v2(request: V2AnalyzeRequest, background_tasks: BackgroundTask
         
         # Generate run_id and create run directory
         run_id = generate_run_id()
-        runflow_root = get_runflow_root()
-        run_path = runflow_root / run_id
+        # Issue #682: Use centralized get_run_directory() for correct path
+        from app.utils.run_id import get_run_directory
+        run_path = get_run_directory(run_id)
         run_path.mkdir(parents=True, exist_ok=True)
         
         # Phase 2: Generate analysis.json (single source of truth)
@@ -257,8 +259,9 @@ async def analyze_v2(request: V2AnalyzeRequest, background_tasks: BackgroundTask
         
         # Issue #554: Create stub output paths structure for immediate response
         # The actual paths will be created during background analysis
-        runflow_root = get_runflow_root()
-        run_path = runflow_root / run_id
+        # Issue #682: Use centralized get_run_directory() for correct path
+        from app.utils.run_id import get_run_directory
+        run_path = get_run_directory(run_id)
         
         output_paths_dict = {}
         for day_code in event_days:
