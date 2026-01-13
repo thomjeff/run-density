@@ -10,6 +10,7 @@ Usage:
     update_version_in_code(next_version)
 """
 
+import os
 import re
 import subprocess
 import sys
@@ -54,6 +55,34 @@ def get_latest_git_tag() -> Optional[str]:
         return tags[0] if tags and tags[0] else None
     except subprocess.CalledProcessError:
         return None
+
+
+def get_version() -> str:
+    """
+    Get application version with fallback logic.
+    
+    Priority order:
+    1. Latest git tag (preferred)
+    2. APP_VERSION environment variable
+    3. Default fallback ("v2.0.0")
+    
+    Returns:
+        Version string (e.g., "v2.0.6")
+    
+    Issue #550: Make version dynamic from GitHub tag/release
+    """
+    # Try git tag first (preferred)
+    git_tag = get_latest_git_tag()
+    if git_tag:
+        return git_tag
+    
+    # Fall back to environment variable
+    env_version = os.getenv("APP_VERSION")
+    if env_version:
+        return env_version
+    
+    # Default fallback
+    return "v2.0.0"
 
 
 def parse_version(version: str) -> Tuple[int, int, int]:

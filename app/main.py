@@ -37,6 +37,7 @@ from app.routes.api_locations import router as api_locations_router
 from app.routes.api_baseline import router as api_baseline_router
 from app.routes.v2.analyze import router as v2_analyze_router
 from app.utils.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
+from app.version import get_version
 
 # Pydantic models for request bodies
 class AnalysisRequest(BaseModel):
@@ -108,8 +109,9 @@ class FlowAuditRequest(BaseModel):
     conflictLengthM: float = DEFAULT_CONFLICT_LENGTH_METERS
     outputDir: str = "reports"
 
-app = FastAPI(title="run-density", version="v2.0.6")
-APP_VERSION = os.getenv("APP_VERSION", app.version)
+# Issue #550: Dynamic version from git tag with fallback
+APP_VERSION = get_version()
+app = FastAPI(title="run-density", version=APP_VERSION)
 GIT_SHA = os.getenv("GIT_SHA", "local")
 BUILD_AT = os.getenv("BUILD_AT", datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z")
 
