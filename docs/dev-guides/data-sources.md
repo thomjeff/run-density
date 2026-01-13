@@ -1150,14 +1150,29 @@ Contract tests ensure that API responses accurately reflect source artifacts. Th
 
 ### Proposed Test Structure
 
-**File:** `tests/test_contracts_*.py`
+**Directory:** `tests/contract/` (matches existing `tests/unit/` pattern)
 
-**Test Categories:**
-- `test_contracts_dashboard.py` - Dashboard KPI parity
-- `test_contracts_segments.py` - Segments GeoJSON enrichment
-- `test_contracts_density.py` - Density table parity
-- `test_contracts_flow.py` - Flow table parity
-- `test_contracts_health.py` - Health/presence tests
+**Test Files:**
+- `tests/contract/test_dashboard.py` - Dashboard KPI parity
+- `tests/contract/test_segments.py` - Segments GeoJSON enrichment
+- `tests/contract/test_density.py` - Density table parity
+- `tests/contract/test_flow.py` - Flow table parity
+- `tests/contract/test_health.py` - Health/presence tests
+
+**Directory Structure:**
+```
+tests/
+├── conftest.py
+├── e2e.py
+├── unit/          # Unit tests (existing)
+└── contract/      # Contract tests (new)
+    ├── __init__.py
+    ├── test_dashboard.py
+    ├── test_segments.py
+    ├── test_density.py
+    ├── test_flow.py
+    └── test_health.py
+```
 
 **Implementation Guidance:**
 1. Load artifacts from test run
@@ -1272,7 +1287,7 @@ GET /api/dashboard/summary?run_id=abc123&day=sat
 |--------------|-----------|-----------|--------|
 | Artifact JSON structure | Schema Tests | `test_schema_resolver.py` | ✅ Existing |
 | Artifact GeoJSON format | Schema Tests | `test_ssot_failfast.py` | ✅ Existing |
-| API response matches artifact | Contract Tests | `test_contracts_*.py` | ⏳ Issue #687 |
+| API response matches artifact | Contract Tests | `tests/contract/test_*.py` | ⏳ Issue #687 |
 | UI renders correctly | E2E Tests | `tests/e2e.py` | ✅ Existing |
 
 ### Common Artifact Fields
