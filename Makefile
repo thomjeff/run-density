@@ -35,9 +35,9 @@ help usage --help: ## Show this help message
 	@echo "Configuration:"
 	@echo "	PORT=$(PORT)  (Docker container port)"
 	@echo "	ENABLE_AUDIT: (Flag to control audit generation.)"
-	@echo "      To disable audit (faster runs, default): make e2e"
-	@echo "      To enable audit: make e2e ENABLE_AUDIT=y"
-	@echo "      Applies to: e2e, e2e-sat"
+	@echo "	To disable audit (faster runs, default): make e2e"
+	@echo "	To enable audit: make e2e ENABLE_AUDIT=y"
+	@echo "	Applies to: e2e, e2e-sat, e2e-sun"
 	@echo ""
 
 # ============================================================================
