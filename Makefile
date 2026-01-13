@@ -1,13 +1,12 @@
 # ============================================================================
 # Run-Density Makefile - Local-only Docker Development
-# Issue #466 Step 4: Simplified to 3 core commands (dev, e2e-local, test)
 # ============================================================================
 
 # -------- Configuration --------
 PORT ?= 8080
 
 # -------- Phony targets --------
-.PHONY: help usage --help dev e2e e2e-full e2e-sat e2e-sun e2e-coverage-lite stop build validate-output validate-all prune-runs
+.PHONY: help usage --help dev e2e e2e-sat e2e-sun e2e-coverage-lite stop build validate-output validate-all prune-runs
 
 # -------- Use same shell for multi-line targets --------
 .ONESHELL:
@@ -19,28 +18,26 @@ help usage --help: ## Show this help message
 	@echo ""
 	@echo "🐳 Run-Density - Local Docker Development"
 	@echo ""
-	@echo "Core Commands (Post-Phase 2 Architecture):"
+	@echo "Core Commands:"
 	@echo ""
 	@echo "  help                Show this help message"
-	@echo "  dev                 Start local development server (hot reload enabled)"
+	@echo "  dev                 Start Docker container (hot reload enabled)"
 	@echo "  stop                Stop Docker container"
 	@echo "  build               Build Docker image"
-	@echo "  e2e                 Run sat+sun E2E test (single run_id with both days)"
-	@echo "  e2e-full            Run full E2E test suite (all scenarios)"
-	@echo "  e2e-sat             Run Saturday-only E2E test (~2 min)"
-	@echo "  e2e-sun             Run Sunday-only E2E test (~2 min)"
-	@echo "  e2e-coverage-lite   Run E2E with coverage (DAY=sat|sun|both), save to runflow/<run_id>/coverage"
+	@echo "  e2e                 Run sat+sun test"
+	@echo "  e2e-sat             Run sat test"
+	@echo "  e2e-sun             Run sun test"
+	@echo "  e2e-coverage-lite   Runs e2e with code coverage metrics"
 	@echo "  validate-output     Validate output integrity for latest run"
 	@echo "  validate-all        Validate output for all runs in index.json"
 	@echo "  prune-runs          Prune old run_ids, keeping last N (KEEP=n, --dry-run for preview)"
 	@echo ""
 	@echo "Configuration:"
-	@echo "  PORT=$(PORT)  (Docker container port)"
-	@echo ""
-	@echo "Note: E2E tests support ENABLE_AUDIT flag to control audit generation."
-	@echo "      To disable audit (faster runs): make e2e ENABLE_AUDIT=n"
-	@echo "      To enable audit (default):     make e2e ENABLE_AUDIT=y"
-	@echo "      Applies to: e2e, e2e-sat"
+	@echo "	PORT=$(PORT)  (Docker container port)"
+	@echo "	ENABLE_AUDIT: (Flag to control audit generation.)"
+	@echo "	To disable audit (faster runs, default): make e2e"
+	@echo "	To enable audit: make e2e ENABLE_AUDIT=y"
+	@echo "	Applies to: e2e, e2e-sat, e2e-sun"
 	@echo ""
 
 # ============================================================================
@@ -60,8 +57,8 @@ build: ## Build Docker image
 	@echo "🔨 Building Docker image..."
 	@docker-compose build
 
-e2e: ENABLE_AUDIT ?= y
-e2e: ## Run sat+sun E2E test (single run_id with both days). Usage: make e2e ENABLE_AUDIT=n
+e2e: ENABLE_AUDIT ?= n
+e2e: ## Run sat+sun E2E test (single run_id with both days). Usage: make e2e ENABLE_AUDIT=y
 	@echo "🧪 Running sat+sun E2E test (enableAudit=$(ENABLE_AUDIT))..."
 	@echo "🛑 Stopping existing containers (if any)..."
 	@docker-compose down 2>/dev/null || true
@@ -76,33 +73,13 @@ e2e: ## Run sat+sun E2E test (single run_id with both days). Usage: make e2e ENA
 	@docker-compose up -d --build
 	@echo "⏳ Waiting for server to be ready (10s)..."
 	@sleep 10
-	@echo "▶️  Running pytest test_sat_sun_scenario..."
-	@docker exec run-density-dev python -m pytest tests/v2/e2e.py::TestV2E2EScenarios::test_sat_sun_scenario -v --base-url http://localhost:8080 --enable-audit $(ENABLE_AUDIT) || (echo "❌ E2E test failed" && echo "💡 Container still running for debugging. Use 'make stop' to stop it." && exit 1)
+	@echo "▶️  Running pytest test_sat_sun..."
+	@docker exec run-density-dev python -m pytest tests/e2e.py::TestV2E2EScenarios::test_sat_sun -v --base-url http://localhost:8080 --enable-audit $(ENABLE_AUDIT) || (echo "❌ E2E test failed" && echo "💡 Container still running for debugging. Use 'make stop' to stop it." && exit 1)
 	@echo "✅ E2E test completed"
 	@echo "💡 Container still running. Use 'make stop' to stop it."
 
-e2e-full: ## Run full E2E test suite (all scenarios)
-	@echo "🧪 Running v2 E2E tests..."
-	@echo "🛑 Stopping existing containers (if any)..."
-	@docker-compose down 2>/dev/null || true
-	@echo "🛑 Stopping any containers using port 8080..."
-	@for container in $$(docker ps --filter "publish=8080" --format "{{.Names}}" 2>/dev/null); do \
-		docker stop $$container 2>/dev/null || true; \
-	done
-	@for container in $$(docker ps -a --filter "name=run-density" --format "{{.Names}}" 2>/dev/null); do \
-		docker rm -f $$container 2>/dev/null || true; \
-	done
-	@echo "📦 Starting docker-compose services..."
-	@docker-compose up -d --build
-	@echo "⏳ Waiting for server to be ready (10s)..."
-	@sleep 10
-	@echo "▶️  Running pytest tests/v2/e2e.py..."
-	@docker exec run-density-dev python -m pytest tests/v2/e2e.py -v --base-url http://localhost:8080 || (echo "❌ E2E tests failed" && echo "💡 Container still running for debugging. Use 'make stop' to stop it." && exit 1)
-	@echo "✅ E2E tests completed"
-	@echo "💡 Container still running. Use 'make stop' to stop it."
-
-e2e-sat: ENABLE_AUDIT ?= y
-e2e-sat: ## Run Saturday-only E2E test. Usage: make e2e-sat ENABLE_AUDIT=n
+e2e-sat: ENABLE_AUDIT ?= n
+e2e-sat: ## Run Saturday-only E2E test. Usage: make e2e-sat ENABLE_AUDIT=y
 	@echo "🧪 Running Saturday-only E2E test (enableAudit=$(ENABLE_AUDIT))..."
 	@echo "🛑 Stopping existing containers (if any)..."
 	@docker-compose down 2>/dev/null || true
@@ -117,8 +94,8 @@ e2e-sat: ## Run Saturday-only E2E test. Usage: make e2e-sat ENABLE_AUDIT=n
 	@docker-compose up -d --build
 	@echo "⏳ Waiting for server to be ready (10s)..."
 	@sleep 10
-	@echo "▶️  Running pytest test_saturday_only_scenario..."
-	@docker exec run-density-dev python -m pytest tests/v2/e2e.py::TestV2E2EScenarios::test_saturday_only_scenario -v --base-url http://localhost:8080 --enable-audit $(ENABLE_AUDIT) || (echo "❌ E2E test failed" && echo "💡 Container still running for debugging. Use 'make stop' to stop it." && exit 1)
+	@echo "▶️  Running pytest test_sat..."
+	@docker exec run-density-dev python -m pytest tests/e2e.py::TestV2E2EScenarios::test_sat -v --base-url http://localhost:8080 --enable-audit $(ENABLE_AUDIT) || (echo "❌ E2E test failed" && echo "💡 Container still running for debugging. Use 'make stop' to stop it." && exit 1)
 	@echo "✅ E2E test completed"
 	@echo "💡 Container still running. Use 'make stop' to stop it."
 
@@ -137,8 +114,8 @@ e2e-sun: ## Run Sunday-only E2E test
 	@docker-compose up -d --build
 	@echo "⏳ Waiting for server to be ready (10s)..."
 	@sleep 10
-	@echo "▶️  Running pytest test_sunday_only_scenario..."
-	@docker exec run-density-dev python -m pytest tests/v2/e2e.py::TestV2E2EScenarios::test_sunday_only_scenario -v --base-url http://localhost:8080 || (echo "❌ E2E test failed" && echo "💡 Container still running for debugging. Use 'make stop' to stop it." && exit 1)
+	@echo "▶️  Running pytest test_sun..."
+	@docker exec run-density-dev python -m pytest tests/e2e.py::TestV2E2EScenarios::test_sun -v --base-url http://localhost:8080 || (echo "❌ E2E test failed" && echo "💡 Container still running for debugging. Use 'make stop' to stop it." && exit 1)
 	@echo "✅ E2E test completed"
 	@echo "💡 Container still running. Use 'make stop' to stop it."
 
@@ -182,11 +159,11 @@ e2e-coverage-lite: ## Run E2E with coverage (DAY=sat|sun|both) and save reports 
 	@echo "▶️  Selecting scenario based on DAY (sat|sun|both)..."
 	@scenario=$$( \
 		if [ "$${DAY}" = "sat" ]; then \
-			echo "tests/v2/e2e.py::TestV2E2EScenarios::test_saturday_only_scenario"; \
+			echo "tests/e2e.py::TestV2E2EScenarios::test_sat"; \
 		elif [ "$${DAY}" = "sun" ]; then \
-			echo "tests/v2/e2e.py::TestV2E2EScenarios::test_sunday_only_scenario"; \
+			echo "tests/e2e.py::TestV2E2EScenarios::test_sun"; \
 		else \
-			echo "tests/v2/e2e.py::TestV2E2EScenarios::test_sat_sun_scenario"; \
+			echo "tests/e2e.py::TestV2E2EScenarios::test_sat_sun"; \
 		fi \
 	); \
 	echo "▶️  Running pytest $$scenario under coverage..."; \

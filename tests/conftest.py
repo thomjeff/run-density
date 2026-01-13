@@ -19,8 +19,8 @@ def pytest_addoption(parser):
     parser.addoption(
         "--enable-audit",
         action="store",
-        default="y",
-        help="Enable audit generation (y/n, default: y)"
+        default="n",
+        help="Enable audit generation (y/n, default: n)"
     )
 
 
@@ -48,11 +48,11 @@ def enable_audit(request):
     
     Can be configured via:
     - --enable-audit pytest CLI argument (y/n)
-    - Defaults to "y" (enabled)
+    - Defaults to "n" (disabled)
     """
     audit_arg = request.config.getoption("--enable-audit")
     # Normalize to "y" or "n"
-    if audit_arg and audit_arg.lower() in ("n", "no", "false", "0"):
-        return "n"
-    return "y"
+    if audit_arg and audit_arg.lower() in ("y", "yes", "true", "1"):
+        return "y"
+    return "n"
 

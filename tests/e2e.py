@@ -32,6 +32,11 @@ from app.config.loader import load_analysis_context, AnalysisConfigError
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8080")
 TIMEOUT = 600  # 10 minutes for full analysis
 
+# Data directory configuration (matches Postman structure)
+# Base directory for data files (can be overridden via environment variable)
+DATA_DIR = os.getenv("DATA_DIR", "/app/runflow/config")
+DATA_SUBDIR = "e2e"  # Subdirectory containing test data files
+
 # ============================================================================
 # Data file configuration (SSOT - Issue #655, Issue #680)
 # ============================================================================
@@ -40,54 +45,82 @@ TIMEOUT = 600  # 10 minutes for full analysis
 #   - segments_file: Change to use different segments (e.g., "segments.csv" or "segments_616.csv")
 #   - flow_file: Change to use different flow data (e.g., "flow.csv" or "flow_616.csv")
 #   - locations_file: Change locations file, or set to None if not needed
-#   - data_dir: Data directory path (Issue #680: defaults to "/app/runflow/config/e2e")
 #
 # All tests will automatically use these values via _build_base_payload().
 # This ensures SSOT - single place to configure test data files.
 E2E_CONFIG = {
-    "data_dir": "/app/runflow/config/e2e",  # Data directory (Issue #680: absolute path in container)
+    "data_dir": f"{DATA_DIR}/{DATA_SUBDIR}",  # Full path: base_dir/subdir
     "segments_file": "segments.csv",  # Segments CSV file
     "flow_file": "flow.csv",  # Flow CSV file
     "locations_file": "locations.csv",  # Locations CSV file (optional, can be None)
 }
 
-# Event runners and GPX file mappings
-# These define which runners_file and gpx_file to use for each event
-EVENT_FILES = {
+# ============================================================================
+# Event Configuration (SSOT)
+# ============================================================================
+# Centralized event definitions with all metadata.
+# Modify these values to change event configurations across all tests.
+EVENT_CONFIG = {
     "elite": {
+        "day": "sat",
+        "start_time": 480,
+        "event_duration_minutes": 45,
         "runners_file": "elite_runners.csv",
         "gpx_file": "elite.gpx"
     },
     "open": {
+        "day": "sat",
+        "start_time": 510,
+        "event_duration_minutes": 75,
         "runners_file": "open_runners.csv",
         "gpx_file": "open.gpx"
     },
     "full": {
+        "day": "sun",
+        "start_time": 420,
+        "event_duration_minutes": 390,
         "runners_file": "full_runners.csv",
         "gpx_file": "full.gpx"
     },
-    "half": {
-        "runners_file": "half_runners.csv",
-        "gpx_file": "half.gpx"
-    },
     "10k": {
+        "day": "sun",
+        "start_time": 460,
+        "event_duration_minutes": 120,
         "runners_file": "10k_runners.csv",
         "gpx_file": "10k.gpx"
     },
+    "half": {
+        "day": "sun",
+        "start_time": 440,
+        "event_duration_minutes": 180,
+        "runners_file": "half_runners.csv",
+        "gpx_file": "half.gpx"
+    },
+}
+
+# Predefined event groups for common scenarios
+EVENT_GROUPS = {
+    "sat": {
+        "sat-elite": "elite",
+        "sat-open": "open"
+    },
+    "sun": {
+        "sun-all": "full, 10k, half"
+    },
+    "sat_sun": {
+        "sat-elite": "elite",
+        "sat-open": "open",
+        "sun-all": "full, 10k, half"
+    }
 }
 
 # Expected segment ID patterns per day (for day isolation validation)
 EXPECTED_SEG_IDS = {
-    "sat": {"N1", "N2", "N3", "N4", "N5", "N6", "N7", "N8", "N9", "O1", "O2", "O3","O4","O5","O6","O7","O8","O9"},  # Saturday segments
+    "sat": {"N1", "N2", "N3", "N4", "N5", "N6", "N7", "N8", "N9", "O1", "O2", "O3","O4","O5","O6","O7","O8","O9"},
     "sun": {"A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "D1", "D2",
             "E1", "E2", "F1", "G1", "H1", "I1", "J1", "J2", "J3", "J4", "J5", "K1",
-            "L1", "L2", "M1", "M2"}  # Sunday segments (includes sub-segments C1, C2, E1, E2 from Flow.csv)
+            "L1", "L2", "M1", "M2"}
 }
-
-
-# Issue #680: Test data directory for custom data_dir tests
-# This allows testing with a custom data directory path
-TEST_DATA_DIR = None  # Can be set to test custom data_dir functionality
 
 
 class TestV2E2EScenarios:
@@ -96,66 +129,60 @@ class TestV2E2EScenarios:
     @staticmethod
     def _build_base_payload(
         description: str,
-        events: List[Dict[str, Any]],
+        event_names: List[str],
         event_group: Optional[Dict[str, str]] = None,
-        enable_audit: str = "y"
+        enable_audit: str = "n"  # Default to "n", user can override with "y"
     ) -> Dict[str, Any]:
         """
         Build base payload using centralized E2E configuration (Issue #655: SSOT).
         
         Args:
             description: Test scenario description
-            events: List of event dictionaries with name, day, start_time, event_duration_minutes
-            event_group: Optional event grouping dictionary
-            enable_audit: Audit enablement flag ("y" or "n")
+            event_names: List of event names (e.g., ["elite", "open"])
+            event_group: Optional event grouping dictionary (or use EVENT_GROUPS)
+            enable_audit: Audit enablement flag ("n" default, "y" to enable)
             
         Returns:
             Complete payload dictionary ready for API request
             
         Example:
-            events = [
-                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45},
-                {"name": "open", "day": "sat", "start_time": 510, "event_duration_minutes": 75}
-            ]
-            payload = _build_base_payload("Saturday test", events, {"sat-elite": "elite"})
+            payload = _build_base_payload(
+                "Saturday test",
+                ["elite", "open"],
+                EVENT_GROUPS["sat"]
+            )
         """
-        # Issue #655: Use centralized E2E_CONFIG for SSOT file paths
-        # Issue #680: Include data_dir from E2E_CONFIG if specified
+        # Build events from names using centralized config
+        events = []
+        for name in event_names:
+            if name not in EVENT_CONFIG:
+                raise ValueError(
+                    f"Event '{name}' not found in EVENT_CONFIG. "
+                    f"Available events: {list(EVENT_CONFIG.keys())}"
+                )
+            config = EVENT_CONFIG[name]
+            events.append({
+                "name": name,
+                "day": config["day"],
+                "start_time": config["start_time"],
+                "event_duration_minutes": config["event_duration_minutes"],
+                "runners_file": config["runners_file"],
+                "gpx_file": config["gpx_file"]
+            })
+        
         payload = {
             "description": description,
+            "data_dir": E2E_CONFIG["data_dir"],
             "segments_file": E2E_CONFIG["segments_file"],
             "flow_file": E2E_CONFIG["flow_file"],
-            "locations_file": E2E_CONFIG.get("locations_file"),  # May be None
+            "locations_file": E2E_CONFIG.get("locations_file"),
             "enableAudit": enable_audit,
         }
         
-        # Issue #680: Add data_dir if specified in E2E_CONFIG (optional)
-        if E2E_CONFIG.get("data_dir"):
-            payload["data_dir"] = E2E_CONFIG["data_dir"]
-        
-        # Add event_group if provided
         if event_group:
             payload["event_group"] = event_group
         
-        # Build events list with runners_file and gpx_file from EVENT_FILES mapping
-        enriched_events = []
-        for event in events:
-            event_name = event.get("name", "").lower()
-            if event_name not in EVENT_FILES:
-                raise ValueError(
-                    f"Event '{event_name}' not found in EVENT_FILES mapping. "
-                    f"Available events: {list(EVENT_FILES.keys())}"
-                )
-            
-            event_files = EVENT_FILES[event_name]
-            enriched_event = {
-                **event,  # Include name, day, start_time, event_duration_minutes
-                "runners_file": event_files["runners_file"],
-                "gpx_file": event_files["gpx_file"]
-            }
-            enriched_events.append(enriched_event)
-        
-        payload["events"] = enriched_events
+        payload["events"] = events
         return payload
     
     def _make_analyze_request(self, base_url: str, payload: Dict[str, Any], timeout: int = None) -> Dict[str, Any]:
@@ -181,7 +208,7 @@ class TestV2E2EScenarios:
         
         return data
     
-    def _wait_for_analysis_completion(self, run_id: str, days: List[str], max_wait_seconds: int = 900) -> None:
+    def _wait_for_analysis_completion(self, run_id: str, days: List[str], max_wait_seconds: int = 600) -> None:
         """Wait for background analysis to complete by polling for metadata.json files.
         
         Issue #554: After API returns immediately, we need to wait for background analysis.
@@ -190,12 +217,13 @@ class TestV2E2EScenarios:
         Args:
             run_id: Run ID to wait for
             days: List of day codes (e.g., ["sat", "sun"])
-            max_wait_seconds: Maximum time to wait (default 15 minutes)
+            max_wait_seconds: Maximum time to wait (default 10 minutes = 600 seconds)
         """
         run_dir = self._get_run_directory(run_id)
         start_time = time.time()
         poll_interval = 2  # Check every 2 seconds
         last_log_time = start_time
+        expected_max_seconds = 600  # 10 minutes expected
         
         while time.time() - start_time < max_wait_seconds:
             # Check if all day metadata.json files exist (indicates completion)
@@ -207,11 +235,9 @@ class TestV2E2EScenarios:
                     break
                 
                 # Issue #620: Also verify critical report files exist to avoid race conditions
-                # Reports are written before metadata.json, so if metadata exists, reports should too
                 density_path = run_dir / day / "reports" / "Density.md"
                 flow_path = run_dir / day / "reports" / "Flow.csv"
                 if not density_path.exists() or not flow_path.exists():
-                    # Files not ready yet, keep waiting
                     all_complete = False
                     break
             
@@ -219,7 +245,12 @@ class TestV2E2EScenarios:
                 # Add small delay to ensure filesystem sync completes
                 time.sleep(0.5)
                 elapsed = time.time() - start_time
-                print(f"✅ Analysis completed in {elapsed:.1f}s")
+                
+                # Warn if analysis took longer than expected
+                if elapsed > expected_max_seconds:
+                    print(f"⚠️  Analysis completed in {elapsed:.1f}s (expected < {expected_max_seconds}s)")
+                else:
+                    print(f"✅ Analysis completed in {elapsed:.1f}s")
                 return
             
             # Log progress every 30 seconds
@@ -718,18 +749,12 @@ class TestV2E2EScenarios:
                     assert not unexpected_seg_ids, \
                         f"Unexpected seg_ids in {day} {filename}: {unexpected_seg_ids}"
     
-    def test_saturday_only_scenario(self, base_url, wait_for_server, enable_audit):
-        """Test complete Saturday-only workflow (elite, open events) with configurable audit."""
+    def test_sat(self, base_url, wait_for_server, enable_audit):
+        """Test complete Saturday workflow (elite, open events) with configurable audit."""
         payload = self._build_base_payload(
             description="Saturday only scenario test",
-            events=[
-                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45},
-                {"name": "open", "day": "sat", "start_time": 510, "event_duration_minutes": 75}
-            ],
-            event_group={
-                "sat-elite": "elite",
-                "sat-open": "open"
-            },
+            event_names=["elite", "open"],
+            event_group=EVENT_GROUPS["sat"],
             enable_audit=enable_audit
         )
         
@@ -774,7 +799,7 @@ class TestV2E2EScenarios:
         assert len(open_pairs) > 0, "No flow pairs found for open event"
         
         # Issue #612: Verify multi-zone columns in Flow.csv
-        self._verify_flow_csv_zone_level(flow_csv_path, "sat")
+        self._verify_flow_csv_multi_zone(flow_csv_path, "sat")
         
         # Issue #612: Verify flow_zones.parquet if it exists
         zones_path = self._verify_flow_zones_parquet(run_id, "sat")
@@ -782,19 +807,13 @@ class TestV2E2EScenarios:
             # Cross-validation: Check that zones align with Flow.csv
             self._verify_zones_cross_validation(flow_csv_path, zones_path, "sat")
     
-    def test_sunday_only_scenario(self, base_url, wait_for_server):
-        """Test complete Sunday-only workflow (full, half, 10k events) with audit enabled."""
+    def test_sun(self, base_url, wait_for_server):
+        """Test complete Sunday workflow (full, half, 10k events) with audit enabled."""
         payload = self._build_base_payload(
             description="Sunday only scenario test with audit",
-            events=[
-                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390},
-                {"name": "10k", "day": "sun", "start_time": 460, "event_duration_minutes": 120},
-                {"name": "half", "day": "sun", "start_time": 440, "event_duration_minutes": 180}
-            ],
-            event_group={
-                "sun-all": "full, 10k, half"
-            },
-            enable_audit="y"
+            event_names=["full", "10k", "half"],
+            event_group=EVENT_GROUPS["sun"],
+            enable_audit="y"  # Explicitly enable for this test
         )
         
         # Make API request (Issue #554: returns immediately, analysis runs in background)
@@ -828,7 +847,7 @@ class TestV2E2EScenarios:
             assert len(pairs) > 0, f"No flow pairs found between {event_a} and {event_b}"
         
         # Issue #612: Verify multi-zone columns in Flow.csv
-        self._verify_flow_csv_zone_level(flow_csv_path, "sun")
+        self._verify_flow_csv_multi_zone(flow_csv_path, "sun")
         
         # Issue #612: Verify flow_zones.parquet if it exists
         zones_path = self._verify_flow_zones_parquet(run_id, "sun")
@@ -836,33 +855,23 @@ class TestV2E2EScenarios:
             # Cross-validation: Check that zones align with Flow.csv
             self._verify_zones_cross_validation(flow_csv_path, zones_path, "sun")
     
-    def test_sat_sun_scenario(self, base_url, wait_for_server, enable_audit):
-        """Test sat+sun analysis in single run_id with configurable audit (simpler than mixed_day, focused on Issue #528)."""
+    def test_sat_sun(self, base_url, wait_for_server, enable_audit):
+        """Test sat+sun analysis in single run_id with configurable audit."""
         payload = self._build_base_payload(
             description="Sat+Sun analysis test",
-            events=[
-                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45},
-                {"name": "open", "day": "sat", "start_time": 510, "event_duration_minutes": 75},
-                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390},
-                {"name": "10k", "day": "sun", "start_time": 460, "event_duration_minutes": 120},
-                {"name": "half", "day": "sun", "start_time": 440, "event_duration_minutes": 180}
-            ],
-            event_group={
-                "sat-elite": "elite",
-                "sat-open": "open",
-                "sun-all": "full, 10k, half"
-            },
+            event_names=["elite", "open", "full", "10k", "half"],
+            event_group=EVENT_GROUPS["sat_sun"],
             enable_audit=enable_audit
         )
         
         # Make API request (Issue #554: returns immediately, analysis runs in background)
-        response_data = self._make_analyze_request(base_url, payload, timeout=60)  # Short timeout for API response
+        response_data = self._make_analyze_request(base_url, payload, timeout=60)
         run_id = response_data["run_id"]
         days = response_data.get("days", ["sat", "sun"])
         self._require_analysis_context(run_id, payload)
         
         # Wait for background analysis to complete (Issue #554)
-        self._wait_for_analysis_completion(run_id, days, max_wait_seconds=900)  # 15 minutes max wait
+        self._wait_for_analysis_completion(run_id, days, max_wait_seconds=600)
         
         # Verify outputs exist for both days
         sat_outputs = self._verify_outputs_exist(run_id, "sat", "sat_sun")
@@ -898,18 +907,8 @@ class TestV2E2EScenarios:
         """Test mixed-day scenario (Saturday + Sunday) with isolation validation and audit enabled."""
         payload = self._build_base_payload(
             description="Mixed day scenario test with audit",
-            events=[
-                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45},
-                {"name": "open", "day": "sat", "start_time": 510, "event_duration_minutes": 75},
-                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390},
-                {"name": "10k", "day": "sun", "start_time": 460, "event_duration_minutes": 120},
-                {"name": "half", "day": "sun", "start_time": 440, "event_duration_minutes": 180}
-            ],
-            event_group={
-                "sat-elite": "elite",
-                "sat-open": "open",
-                "sun-all": "full, 10k, half"
-            },
+            event_names=["elite", "open", "full", "10k", "half"],
+            event_group=EVENT_GROUPS["sat_sun"],
             enable_audit="y"
         )
         
@@ -920,7 +919,7 @@ class TestV2E2EScenarios:
         self._require_analysis_context(run_id, payload)
         
         # Wait for background analysis to complete (Issue #554)
-        self._wait_for_analysis_completion(run_id, days, max_wait_seconds=900)
+        self._wait_for_analysis_completion(run_id, days, max_wait_seconds=600)
         
         # Verify outputs exist for both days
         sat_outputs = self._verify_outputs_exist(run_id, "sat", "mixed_day")
@@ -954,10 +953,7 @@ class TestV2E2EScenarios:
         # Use mixed-day scenario
         payload = self._build_base_payload(
             description="Cross-day isolation test with audit",
-            events=[
-                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45},
-                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390}
-            ],
+            event_names=["elite", "full"],
             enable_audit="y"
         )
         
@@ -1021,11 +1017,7 @@ class TestV2E2EScenarios:
         # Test with Sunday events (full, 10k, half)
         payload = self._build_base_payload(
             description="Sunday only scenario test with audit",
-            events=[
-                {"name": "full", "day": "sun", "start_time": 420, "event_duration_minutes": 390},
-                {"name": "10k", "day": "sun", "start_time": 460, "event_duration_minutes": 120},
-                {"name": "half", "day": "sun", "start_time": 440, "event_duration_minutes": 180}
-            ],
+            event_names=["full", "10k", "half"],
             enable_audit="y"
         )
         
@@ -1088,9 +1080,7 @@ class TestV2E2EScenarios:
         """
         payload = self._build_base_payload(
             description="Test without custom data_dir (backward compatibility)",
-            events=[
-                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45}
-            ],
+            event_names=["elite"],
             enable_audit="n"
         )
         
@@ -1115,9 +1105,7 @@ class TestV2E2EScenarios:
         
         payload = self._build_base_payload(
             description="Test with custom data_dir",
-            events=[
-                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45}
-            ],
+            event_names=["elite"],
             enable_audit="n"
         )
         
@@ -1150,9 +1138,7 @@ class TestV2E2EScenarios:
         """
         payload = self._build_base_payload(
             description="Test with invalid data_dir",
-            events=[
-                {"name": "elite", "day": "sat", "start_time": 480, "event_duration_minutes": 45}
-            ],
+            event_names=["elite"],
             enable_audit="n"
         )
         
@@ -1191,9 +1177,8 @@ def wait_for_server(base_url):
                     f"   Instructions:\n"
                     f"   1. Start server: make dev (or docker-compose up)\n"
                     f"   2. Verify server is running: curl {base_url}/health\n"
-                    f"   3. If using docker-compose, use: BASE_URL=http://app:8080 pytest tests/v2/e2e.py\n"
+                    f"   3. If using docker-compose, use: BASE_URL=http://app:8080 pytest tests/e2e.py\n"
                     f"   4. Or use: make e2e-v2 (one-command runner)"
                 )
         time.sleep(1)
     pytest.fail("Server not available after 30 attempts")
-
