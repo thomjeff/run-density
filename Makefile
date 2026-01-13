@@ -1,6 +1,5 @@
 # ============================================================================
 # Run-Density Makefile - Local-only Docker Development
-# Issue #466 Step 4: Simplified to 3 core commands (dev, e2e-local, test)
 # ============================================================================
 
 # -------- Configuration --------
@@ -19,7 +18,7 @@ help usage --help: ## Show this help message
 	@echo ""
 	@echo "🐳 Run-Density - Local Docker Development"
 	@echo ""
-	@echo "Core Commands (Post-Phase 2 Architecture):"
+	@echo "Core Commands:"
 	@echo ""
 	@echo "  help                Show this help message"
 	@echo "  dev                 Start Docker container (hot reload enabled)"
@@ -37,8 +36,8 @@ help usage --help: ## Show this help message
 	@echo "	PORT=$(PORT)  (Docker container port)"
 	@echo "	ENABLE_AUDIT: (Flag to control audit generation.)"
 	@echo "      To disable audit (faster runs, default): make e2e"
-	@echo "      To enable audit: "make e2e ENABLE_AUDIT=y"
-	@echo "      Applies to: "e2e, e2e-sat"
+	@echo "      To enable audit: make e2e ENABLE_AUDIT=y"
+	@echo "      Applies to: e2e, e2e-sat"
 	@echo ""
 
 # ============================================================================
