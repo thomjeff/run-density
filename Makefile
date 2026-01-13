@@ -7,7 +7,7 @@
 PORT ?= 8080
 
 # -------- Phony targets --------
-.PHONY: help usage --help dev e2e e2e-full e2e-sat e2e-sun e2e-coverage-lite stop build validate-output validate-all prune-runs
+.PHONY: help usage --help dev e2e e2e-sat e2e-sun e2e-coverage-lite stop build validate-output validate-all prune-runs
 
 # -------- Use same shell for multi-line targets --------
 .ONESHELL:
@@ -26,7 +26,6 @@ help usage --help: ## Show this help message
 	@echo "  stop                Stop Docker container"
 	@echo "  build               Build Docker image"
 	@echo "  e2e                 Run sat+sun E2E test (single run_id with both days)"
-	@echo "  e2e-full            Run full E2E test suite (all scenarios)"
 	@echo "  e2e-sat             Run Saturday-only E2E test (~2 min)"
 	@echo "  e2e-sun             Run Sunday-only E2E test (~2 min)"
 	@echo "  e2e-coverage-lite   Run E2E with coverage (DAY=sat|sun|both), save to runflow/<run_id>/coverage"
@@ -79,26 +78,6 @@ e2e: ## Run sat+sun E2E test (single run_id with both days). Usage: make e2e ENA
 	@echo "▶️  Running pytest test_sat_sun..."
 	@docker exec run-density-dev python -m pytest tests/e2e.py::TestV2E2EScenarios::test_sat_sun -v --base-url http://localhost:8080 --enable-audit $(ENABLE_AUDIT) || (echo "❌ E2E test failed" && echo "💡 Container still running for debugging. Use 'make stop' to stop it." && exit 1)
 	@echo "✅ E2E test completed"
-	@echo "💡 Container still running. Use 'make stop' to stop it."
-
-e2e-full: ## Run full E2E test suite (all scenarios)
-	@echo "🧪 Running v2 E2E tests..."
-	@echo "🛑 Stopping existing containers (if any)..."
-	@docker-compose down 2>/dev/null || true
-	@echo "🛑 Stopping any containers using port 8080..."
-	@for container in $$(docker ps --filter "publish=8080" --format "{{.Names}}" 2>/dev/null); do \
-		docker stop $$container 2>/dev/null || true; \
-	done
-	@for container in $$(docker ps -a --filter "name=run-density" --format "{{.Names}}" 2>/dev/null); do \
-		docker rm -f $$container 2>/dev/null || true; \
-	done
-	@echo "📦 Starting docker-compose services..."
-	@docker-compose up -d --build
-	@echo "⏳ Waiting for server to be ready (10s)..."
-	@sleep 10
-	@echo "▶️  Running pytest tests/e2e.py..."
-	@docker exec run-density-dev python -m pytest tests/e2e.py -v --base-url http://localhost:8080 || (echo "❌ E2E tests failed" && echo "💡 Container still running for debugging. Use 'make stop' to stop it." && exit 1)
-	@echo "✅ E2E tests completed"
 	@echo "💡 Container still running. Use 'make stop' to stop it."
 
 e2e-sat: ENABLE_AUDIT ?= n
