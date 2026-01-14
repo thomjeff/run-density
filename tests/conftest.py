@@ -22,6 +22,18 @@ def pytest_addoption(parser):
         default="n",
         help="Enable audit generation (y/n, default: n)"
     )
+    parser.addoption(
+        "--run-id",
+        action="store",
+        default=None,
+        help="Run ID to use for contract tests (defaults to latest if not provided)"
+    )
+    parser.addoption(
+        "--day",
+        action="store",
+        default=None,
+        help="Day code (fri|sat|sun|mon) for contract tests (defaults to first available day)"
+    )
 
 
 @pytest.fixture(scope="class")
@@ -55,4 +67,24 @@ def enable_audit(request):
     if audit_arg and audit_arg.lower() in ("y", "yes", "true", "1"):
         return "y"
     return "n"
+
+
+@pytest.fixture(scope="class")
+def run_id(request):
+    """Run ID for contract tests.
+    
+    Can be configured via:
+    - --run-id pytest CLI argument
+    - Defaults to latest run_id if not provided
+    """
+    run_id_arg = request.config.getoption("--run-id")
+    if run_id_arg:
+        return run_id_arg
+    
+    # Fall back to latest run_id
+    try:
+        from app.utils.run_id import get_latest_run_id
+        return get_latest_run_id()
+    except (FileNotFoundError, ValueError):
+        return None
 
