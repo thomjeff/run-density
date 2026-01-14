@@ -42,7 +42,7 @@ def get_latest_git_tag() -> Optional[str]:
     Get the latest git tag.
 
     Returns:
-        Latest tag name or None if no tags exist
+        Latest tag name or None if no tags exist or git is not available
     """
     try:
         result = subprocess.run(
@@ -53,7 +53,7 @@ def get_latest_git_tag() -> Optional[str]:
         )
         tags = result.stdout.strip().split('\n')
         return tags[0] if tags and tags[0] else None
-    except subprocess.CalledProcessError:
+    except (subprocess.CalledProcessError, FileNotFoundError):
         return None
 
 
