@@ -212,6 +212,62 @@ def _extract_res_score(metadata: Dict[str, Any], day: str) -> Optional[float]:
     return None
 
 
+def _calculate_active_window_duration(active_window: str) -> Optional[float]:
+    """Calculate active window duration in minutes from string format 'HH:MM–HH:MM'."""
+    if not active_window or active_window == "N/A":
+        return None
+    
+    try:
+        # Format: "HH:MM–HH:MM" or "HH:MM:SS–HH:MM:SS"
+        if "–" in active_window:
+            parts = active_window.split("–")
+            if len(parts) == 2:
+                start_str = parts[0].strip()
+                end_str = parts[1].strip()
+                
+                # Parse time strings
+                def parse_time(time_str):
+                    time_parts = time_str.split(":")
+                    if len(time_parts) >= 2:
+                        hours = int(time_parts[0])
+                        minutes = int(time_parts[1])
+                        return hours * 60 + minutes
+                    return 0
+                
+                start_minutes = parse_time(start_str)
+                end_minutes = parse_time(end_str)
+                
+                # Handle day rollover
+                if end_minutes < start_minutes:
+                    end_minutes += 24 * 60
+                
+                duration_minutes = end_minutes - start_minutes
+                return max(0.0, duration_minutes)
+    except (ValueError, AttributeError):
+        pass
+    
+    return None
+
+
+def _calculate_severity_distribution(flags: List[Dict[str, Any]], seg_id: str) -> Dict[str, int]:
+    """Calculate severity distribution for a segment from flags."""
+    distribution = {"critical": 0, "watch": 0, "none": 0}
+    
+    for flag in flags:
+        if isinstance(flag, dict):
+            flag_seg_id = flag.get("seg_id") or flag.get("segment_id")
+            if flag_seg_id == seg_id:
+                severity = flag.get("worst_severity", "none")
+                if severity == "critical":
+                    distribution["critical"] += 1
+                elif severity == "watch":
+                    distribution["watch"] += 1
+                else:
+                    distribution["none"] += 1
+    
+    return distribution
+
+
 def _identify_critical_segments(
     day: str,
     segment_metrics: Dict[str, Any],
@@ -237,14 +293,14 @@ def _identify_critical_segments(
             if seg_id:
                 flags_by_seg_id[seg_id] = flag
     
-    # Build segment labels lookup
-    segment_labels = {}
+    # Build segment properties lookup
+    segment_props = {}
     if segments_geojson:
         for feature in segments_geojson.get("features", []):
             props = feature.get("properties", {})
             seg_id = props.get("seg_id", "")
             if seg_id:
-                segment_labels[seg_id] = props.get("label", seg_id)
+                segment_props[seg_id] = props
     
     critical = []
     for seg_id, metrics in segment_data.items():
@@ -254,16 +310,38 @@ def _identify_critical_segments(
         # Critical if LOS D/E/F or high density
         if los in ["D", "E", "F"] or density > 0.7:
             flag_data = flags_by_seg_id.get(seg_id, {})
+            props = segment_props.get(seg_id, {})
+            
+            # Calculate flagged bin percentage
+            flagged_bin_count = flag_data.get("flagged_bin_count", 0)
+            total_bins = flag_data.get("total_bins", 0)
+            flagged_bin_percentage = None
+            if total_bins > 0:
+                flagged_bin_percentage = (flagged_bin_count / total_bins) * 100.0
+            
+            # Calculate active window duration
+            active_window = metrics.get("active_window", "N/A")
+            active_window_duration = _calculate_active_window_duration(active_window)
+            
             critical.append({
                 "day": day,
                 "seg_id": seg_id,
-                "label": segment_labels.get(seg_id, seg_id),
+                "label": props.get("label", seg_id),
+                "length_km": props.get("length_km", 0.0),
+                "width_m": props.get("width_m", 0.0),
+                "direction": props.get("direction", ""),
+                "schema": props.get("schema", ""),
+                "utilization": metrics.get("utilization", 0.0),
                 "los": los,
                 "density": density,
                 "rate": metrics.get("peak_rate", 0.0),
-                "active_window": metrics.get("active_window", "N/A"),
-                "flagged_bins": flag_data.get("flagged_bin_count", 0),
+                "active_window": active_window,
+                "active_window_duration_minutes": active_window_duration,
+                "flagged_bins": flagged_bin_count,
+                "flagged_bin_percentage": flagged_bin_percentage,
+                "total_bins": total_bins if total_bins > 0 else None,
                 "severity": flag_data.get("worst_severity", "none"),
+                "severity_distribution": _calculate_severity_distribution(flags, seg_id),
                 "reason": "high_density" if density > 0.7 else "poor_los"
             })
     
@@ -315,15 +393,35 @@ def _identify_narrow_segments(
                 # Include if elevated density or poor LOS
                 if los in ["C", "D", "E", "F"] or density > 0.5:
                     flag_data = flags_by_seg_id.get(seg_id, {})
+                    
+                    # Calculate flagged bin percentage
+                    flagged_bin_count = flag_data.get("flagged_bin_count", 0)
+                    total_bins = flag_data.get("total_bins", 0)
+                    flagged_bin_percentage = None
+                    if total_bins > 0:
+                        flagged_bin_percentage = (flagged_bin_count / total_bins) * 100.0
+                    
+                    # Calculate active window duration
+                    active_window = metrics.get("active_window", "N/A")
+                    active_window_duration = _calculate_active_window_duration(active_window)
+                    
                     narrow.append({
                         "day": day,
                         "seg_id": seg_id,
                         "label": props.get("label", seg_id),
+                        "length_km": props.get("length_km", 0.0),
                         "width_m": width_m,
+                        "direction": props.get("direction", ""),
+                        "schema": props.get("schema", ""),
+                        "utilization": metrics.get("utilization", 0.0),
                         "los": los,
                         "density": density,
                         "rate": metrics.get("peak_rate", 0.0),
-                        "flagged_bins": flag_data.get("flagged_bin_count", 0)
+                        "active_window": active_window,
+                        "active_window_duration_minutes": active_window_duration,
+                        "flagged_bins": flagged_bin_count,
+                        "flagged_bin_percentage": flagged_bin_percentage,
+                        "total_bins": total_bins if total_bins > 0 else None
                     })
     
     # Sort by density descending
@@ -340,6 +438,7 @@ def _identify_flow_highlights(
     
     for key, seg in flow_segments.items():
         worst_zone = seg.get("worst_zone", {})
+        zones = seg.get("zones", [])
         if not worst_zone:
             continue
         
@@ -354,6 +453,34 @@ def _identify_flow_highlights(
         
         # Highlight if high overtaking (>100) or high co-presence (>400)
         if max_ovt > 100 or max_cop > 400:
+            # Calculate flow zone details
+            zone_count = len(zones) if isinstance(zones, list) else 0
+            
+            # Calculate total zone duration (if available)
+            total_zone_duration = None
+            if zones:
+                total_duration = 0.0
+                for zone in zones:
+                    if isinstance(zone, dict):
+                        # Try to get duration from zone (may not be directly available)
+                        # Could be calculated from zone_start_km and zone_end_km if needed
+                        pass
+                if total_duration > 0:
+                    total_zone_duration = total_duration
+            
+            # Extract convergence points
+            convergence_points = []
+            if zones:
+                for zone in zones:
+                    if isinstance(zone, dict):
+                        zone_start_km = zone.get("zone_start_km_a") or zone.get("zone_start_km")
+                        participants = zone.get("participants_involved", 0)
+                        if zone_start_km is not None and participants > 0:
+                            convergence_points.append({
+                                "km": zone_start_km,
+                                "participants_involved": participants
+                            })
+            
             highlights.append({
                 "day": day,
                 "segment_pair": key,
@@ -363,7 +490,10 @@ def _identify_flow_highlights(
                 "event_b": seg.get("event_b", ""),
                 "overtaking": max_ovt,
                 "copresence": max_cop,
-                "participants_involved": worst_zone.get("participants_involved", 0)
+                "participants_involved": worst_zone.get("participants_involved", 0),
+                "zone_count": zone_count,
+                "total_zone_duration_minutes": total_zone_duration,
+                "convergence_points": convergence_points[:5]  # Top 5 convergence points
             })
     
     # Sort by max interaction
