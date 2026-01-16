@@ -287,6 +287,28 @@ def generate_flags_json(reports_dir: Path, segment_metrics: Dict[str, Dict[str, 
         bins_df = pd.read_parquet(bins_path)
         print(f"   📊 Loaded {len(bins_df)} bins from bins.parquet")
         
+        # Issue #694: Calculate total_bins per segment for flagged bin percentage and duration metrics
+        # Normalize segment_id column name (could be 'segment_id' or 'seg_id')
+        segment_col = 'segment_id' if 'segment_id' in bins_df.columns else 'seg_id'
+        if segment_col not in bins_df.columns:
+            raise ValueError(f"bins.parquet missing segment column (expected 'segment_id' or 'seg_id')")
+        
+        # Calculate total_bins per segment
+        total_bins_per_segment = bins_df.groupby(segment_col).size().to_dict()
+        
+        # Prepare flagged bins for duration calculations
+        # Normalize flag_severity column (could be 'flag_severity' or 'severity')
+        flag_severity_col = 'flag_severity' if 'flag_severity' in bins_df.columns else 'severity'
+        flagged_bins_df = None
+        if flag_severity_col in bins_df.columns:
+            flagged_bins_df = bins_df[bins_df[flag_severity_col] != 'none'].copy()
+            # Ensure t_start and t_end are datetime if present
+            if len(flagged_bins_df) > 0 and 't_start' in flagged_bins_df.columns and 't_end' in flagged_bins_df.columns:
+                flagged_bins_df['t_start'] = pd.to_datetime(flagged_bins_df['t_start'], utc=True, errors='coerce')
+                flagged_bins_df['t_end'] = pd.to_datetime(flagged_bins_df['t_end'], utc=True, errors='coerce')
+        else:
+            flagged_bins_df = pd.DataFrame()
+        
         # Use SSOT to compute and summarize flags
         bin_flags = ssot_flagging.compute_bin_flags(bins_df)
         summary = ssot_flagging.summarize_flags(bin_flags)
@@ -295,20 +317,58 @@ def generate_flags_json(reports_dir: Path, segment_metrics: Dict[str, Dict[str, 
         
         # Convert SSOT per_segment to flags.json format
         # Includes both canonical names and legacy aliases for one-release compatibility
+        # Issue #694: Add total_bins, flagged_bin_percentage, and duration metrics
         flagged_segments = []
         for seg_data in summary['per_segment']:
+            seg_id = seg_data["segment_id"]
+            flagged_bins = seg_data["flagged_bins"]
+            
+            # Calculate total_bins for this segment
+            total_bins = total_bins_per_segment.get(seg_id, 0)
+            
+            # Calculate flagged_bin_percentage
+            flagged_bin_percentage = (flagged_bins / total_bins * 100.0) if total_bins > 0 else 0.0
+            
+            # Calculate duration metrics from flagged bins
+            flagged_duration_seconds = 0.0
+            flagged_span_duration_seconds = 0.0
+            if flagged_bins_df is not None and len(flagged_bins_df) > 0:
+                seg_flagged = flagged_bins_df[flagged_bins_df[segment_col] == seg_id]
+                if len(seg_flagged) > 0 and 't_start' in seg_flagged.columns and 't_end' in seg_flagged.columns:
+                    # Filter out invalid timestamps
+                    seg_flagged_valid = seg_flagged[
+                        seg_flagged['t_start'].notna() & seg_flagged['t_end'].notna()
+                    ]
+                    if len(seg_flagged_valid) > 0:
+                        # Calculate total duration (sum of all flagged bin durations)
+                        durations = (seg_flagged_valid['t_end'] - seg_flagged_valid['t_start']).dt.total_seconds()
+                        flagged_duration_seconds = float(durations.sum())
+                        
+                        # Calculate span duration (first to last flagged bin)
+                        first_start = seg_flagged_valid['t_start'].min()
+                        last_end = seg_flagged_valid['t_end'].max()
+                        if pd.notna(first_start) and pd.notna(last_end):
+                            flagged_span_duration_seconds = float((last_end - first_start).total_seconds())
+            
             flag_entry = {
                 # Canonical names (Issue #283)
-                "segment_id": seg_data["segment_id"],
-                "flagged_bins": seg_data["flagged_bins"],
+                "segment_id": seg_id,
+                "flagged_bins": flagged_bins,
+                "total_bins": total_bins,  # Issue #694: Add total bins per segment
+                "flagged_bin_percentage": round(flagged_bin_percentage, 2),  # Issue #694: Add percentage
                 "worst_severity": seg_data["worst_severity"],
                 "worst_los": seg_data["worst_los"],
                 "peak_density": round(seg_data["peak_density"], 3),
                 "peak_rate": round(seg_data["peak_rate"], 3),  # p/s - canonical
                 
+                # Issue #694: Add duration metrics for sustained congestion analysis
+                "flagged_duration_seconds": round(flagged_duration_seconds, 1),
+                "flagged_span_duration_seconds": round(flagged_span_duration_seconds, 1),
+                "flagged_duration_minutes": round(flagged_duration_seconds / 60.0, 1),  # Convenience conversion
+                
                 # Legacy aliases (DEPRECATED - remove in next release)
-                "seg_id": seg_data["segment_id"],
-                "flagged_bin_count": seg_data["flagged_bins"],
+                "seg_id": seg_id,
+                "flagged_bin_count": flagged_bins,
                 
                 # Additional fields
                 "type": "density",

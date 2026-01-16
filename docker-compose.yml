@@ -20,6 +20,8 @@ services:
       # Bind mount data and config directories
       - ./data:/app/data
       - ./config:/app/config
+      # Issue #694: Mount docs directory for AI analysis templates
+      - ./docs:/app/docs
       # Issue #470: Legacy artifacts/ and reports/ mounts removed - using runflow/ structure exclusively
       # Issue #465: GCS keys mount disabled during Phase 0 (local-only mode)
       # - ./keys:/tmp/keys:ro
