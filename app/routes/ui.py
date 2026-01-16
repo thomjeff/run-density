@@ -509,6 +509,126 @@ async def get_data_files(
         )
 
 
+@router.get("/api/config/directories")
+async def get_config_directories(request: Request):
+    """
+    List config directories under runflow/config that contain runner CSV files.
+    
+    Issue #693: Provide UI selector for baseline reuse from config directories.
+    
+    Returns:
+        JSON: List of directory names containing *_runners.csv files
+    """
+    require_auth(request)
+    
+    try:
+        from app.utils.run_id import get_runflow_root
+        
+        config_root = get_runflow_root() / "config"
+        if not config_root.exists():
+            return JSONResponse(content={"directories": []})
+        
+        if not config_root.is_dir():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Config path is not a directory: {config_root}"
+            )
+        
+        directories = []
+        for dir_path in config_root.iterdir():
+            if dir_path.is_dir():
+                has_runners = any(path.is_file() for path in dir_path.glob("*_runners.csv"))
+                if has_runners:
+                    directories.append(dir_path.name)
+        
+        directories.sort()
+        return JSONResponse(content={"directories": directories})
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing config directories: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to list config directories: {str(e)}"
+        )
+
+
+@router.get("/api/config/files")
+async def get_config_files(
+    request: Request,
+    config_dir: str = Query(...)
+):
+    """
+    List runner CSV files in a specific config directory.
+    
+    Issue #693: Populate Create Files runner list from selected config directory.
+    
+    Args:
+        config_dir: Config directory name under runflow/config
+    
+    Returns:
+        JSON: List of runner CSV files in the directory
+    """
+    require_auth(request)
+    
+    try:
+        from app.utils.run_id import get_runflow_root
+        
+        if not config_dir or config_dir.strip() == "":
+            raise HTTPException(
+                status_code=400,
+                detail="config_dir is required"
+            )
+        
+        normalized = config_dir.strip()
+        if Path(normalized).name != normalized or "/" in normalized or "\\" in normalized:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid config_dir: {config_dir}"
+            )
+        
+        config_root = get_runflow_root() / "config"
+        if not config_root.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Config root not found: {config_root}"
+            )
+        
+        if not config_root.is_dir():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Config path is not a directory: {config_root}"
+            )
+        
+        config_path = config_root / normalized
+        if not config_path.exists() or not config_path.is_dir():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Config directory not found: {normalized}"
+            )
+        
+        files = sorted(
+            [path.name for path in config_path.glob("*_runners.csv") if path.is_file()]
+        )
+        if not files:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No runner files found in config directory: {normalized}"
+            )
+        
+        return JSONResponse(content={"files": files, "config_dir": normalized})
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing config files for {config_dir}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to list config files: {str(e)}"
+        )
+
+
 @router.get("/api/analysis/{run_id}/config")
 async def get_analysis_config(request: Request, run_id: str):
     """

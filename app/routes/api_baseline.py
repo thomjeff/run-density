@@ -34,6 +34,67 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def resolve_baseline_data_dir(
+    data_dir: Optional[str],
+    config_dir: Optional[str]
+) -> Path:
+    """
+    Resolve baseline data directory from data_dir or config_dir.
+    
+    Issue #693: Allow baseline generation from runflow/config/{config_dir}.
+    """
+    if config_dir:
+        normalized = config_dir.strip()
+        if not normalized:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="config_dir must not be empty"
+            )
+        if Path(normalized).name != normalized or "/" in normalized or "\\" in normalized:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid config_dir: {config_dir}"
+            )
+        
+        config_root = get_runflow_root() / "config"
+        if not config_root.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Config root not found: {config_root}"
+            )
+        if not config_root.is_dir():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Config path is not a directory: {config_root}"
+            )
+        
+        config_path = config_root / normalized
+        if not config_path.exists() or not config_path.is_dir():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Config directory not found: {normalized}"
+            )
+        
+        return config_path
+    
+    if not data_dir:
+        data_dir = get_data_directory()
+    
+    data_path = Path(data_dir)
+    if not data_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Data directory does not exist: {data_dir}"
+        )
+    if not data_path.is_dir():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Data directory path is not a directory: {data_dir}"
+        )
+    
+    return data_path
+
+
 @router.post("/api/baseline/calculate")
 async def calculate_baseline(
     request: Dict[str, Any]
@@ -46,7 +107,8 @@ async def calculate_baseline(
     Request Body:
         {
             "selected_files": ["elite_runners.csv", "open_runners.csv"],
-            "data_dir": "/app/data"  # Optional, defaults to get_data_directory()
+            "data_dir": "/app/data",  # Optional, defaults to get_data_directory()
+            "config_dir": "inc25pct"  # Optional, overrides data_dir if provided
         }
     
     Response:
@@ -79,15 +141,9 @@ async def calculate_baseline(
             )
         
         data_dir = request.get("data_dir")
-        if data_dir is None:
-            data_dir = get_data_directory()
-        
-        data_path = Path(data_dir)
-        if not data_path.exists():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Data directory does not exist: {data_dir}"
-            )
+        config_dir = request.get("config_dir")
+        data_path = resolve_baseline_data_dir(data_dir, config_dir)
+        data_dir = str(data_path)
         
         # Get reports path (runflow root) - for response only, not creating directory yet
         reports_path = get_runflow_root()
@@ -122,7 +178,8 @@ async def calculate_baseline(
             "data_dir": str(data_dir),
             "reports_path": str(reports_path),
             "selected_files": selected_files,
-            "baseline_metrics": baseline_metrics
+            "baseline_metrics": baseline_metrics,
+            "config_dir": config_dir
         }
         
         logger.info(f"Calculated baseline metrics for {len(selected_files)} files (no directory created yet)")
@@ -158,6 +215,7 @@ async def generate_scenario(
             },
             "selected_files": ["elite_runners.csv", ...],
             "data_dir": "/app/data",
+            "config_dir": "inc25pct",
             "control_variables": {
                 "elite": {
                     "chg_participants": 0.1026,
@@ -195,6 +253,7 @@ async def generate_scenario(
         baseline_metrics = request.get("baseline_metrics", {})
         selected_files = request.get("selected_files", [])
         data_dir = request.get("data_dir")
+        config_dir = request.get("config_dir")
         control_variables = request.get("control_variables", {})
         
         # Validate required parameters
@@ -210,8 +269,8 @@ async def generate_scenario(
                 detail="selected_files is required"
             )
         
-        if not data_dir:
-            data_dir = get_data_directory()
+        data_path = resolve_baseline_data_dir(data_dir, config_dir)
+        data_dir = str(data_path)
         
         if not control_variables:
             raise HTTPException(
@@ -357,6 +416,7 @@ async def create_baseline_files(
             "baseline_metrics": {...},
             "selected_files": [...],
             "data_dir": "/app/data",
+            "config_dir": "inc25pct",
             "control_variables": {...},
             "file_suffix": "_issue676"  # Optional, text to append before .csv
         }
@@ -382,6 +442,7 @@ async def create_baseline_files(
         baseline_metrics = request.get("baseline_metrics", {})
         selected_files = request.get("selected_files", [])
         data_dir = request.get("data_dir")
+        config_dir = request.get("config_dir")
         control_variables = request.get("control_variables", {})
         file_suffix = request.get("file_suffix")  # Optional
         
@@ -398,8 +459,9 @@ async def create_baseline_files(
                 detail="selected_files is required"
             )
         
-        if not data_dir:
-            data_dir = get_data_directory()
+        data_path = resolve_baseline_data_dir(data_dir, config_dir)
+        data_dir = str(data_path)
+        data_dir_path = Path(data_dir)
         
         if not control_variables:
             raise HTTPException(
@@ -419,7 +481,6 @@ async def create_baseline_files(
                 )
         
         # Validate cutoff time formats (before creating directory)
-        data_dir_path = Path(data_dir)
         for event_name, control_vars in control_variables.items():
             cutoff_str = control_vars.get("cutoff_mins")
             if cutoff_str:
