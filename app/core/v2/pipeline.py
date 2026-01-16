@@ -83,12 +83,20 @@ def _convert_dataclasses_to_dicts(obj: Any) -> Any:
 PHASE_MAPPING = {
     "phase_1_pre_analysis": {"number": "Phase 1", "description": "Pre-Analysis & Validation"},
     "phase_2_data_loading": {"number": "Phase 2", "description": "Data Loading"},
-    "phase_3_1_computation": {"number": "Phase 3.1", "description": "Core Computation"},
-    "phase_3_2_persistence": {"number": "Phase 3.2", "description": "Computation Persistence"},
-    "phase_4_1_ui_artifacts": {"number": "Phase 4.1", "description": "UI Artifacts Generation"},
-    "phase_4_2_derived_metrics": {"number": "Phase 4.2", "description": "Derived Metrics Calculation"},
-    "phase_5_reports": {"number": "Phase 5", "description": "Report Generation"},
-    "phase_6_metadata": {"number": "Phase 6", "description": "Metadata & Cleanup"},
+    "phase_3_1_density_setup": {"number": "Phase 3.1", "description": "Density Setup"},
+    "phase_3_2_density_compute": {"number": "Phase 3.2", "description": "Density Per-Day Compute"},
+    "phase_4_1_flow_build_segments": {"number": "Phase 4.1", "description": "Flow Build Segments"},
+    "phase_4_2_flow_compute": {"number": "Phase 4.2", "description": "Flow Per-Day Compute"},
+    "phase_5_1_bin_generation": {"number": "Phase 5.1", "description": "Bin Generation"},
+    "phase_5_2_bin_validation": {"number": "Phase 5.2", "description": "Bin Validation"},
+    "phase_6_1_persist_density": {"number": "Phase 6.1", "description": "Persist Density Results"},
+    "phase_6_2_persist_flow": {"number": "Phase 6.2", "description": "Persist Flow Results"},
+    "phase_6_3_persist_locations": {"number": "Phase 6.3", "description": "Persist Locations Results"},
+    "phase_7_ui_artifacts": {"number": "Phase 7", "description": "UI Artifacts Generation"},
+    "phase_8_derived_metrics": {"number": "Phase 8", "description": "Derived Metrics Calculation"},
+    "phase_9_map_data": {"number": "Phase 9", "description": "Map Data Generation"},
+    "phase_10_reports": {"number": "Phase 10", "description": "Report Generation"},
+    "phase_11_metadata": {"number": "Phase 11", "description": "Metadata & Cleanup"},
 }
 
 
@@ -697,7 +705,7 @@ def create_full_analysis_pipeline(
     """
     Create day-partitioned directory structure and run full analysis (Phase 4 + 5).
     
-    This function integrates Phase 4 (density) and Phase 5 (flow) analysis:
+    This function integrates density and flow analysis with phase-based timing:
     1. Creates directory structure
     2. Generates day timelines
     3. Loads segments and runners
@@ -841,21 +849,15 @@ def create_full_analysis_pipeline(
             summary_stats={"segments": segment_count, "runners": runner_count, "events": len(events)}
         )
         
-        # Phase 3.1: Core Computation (Density, Flow, Locations) - Issue #581: Enhanced logging
-        computation_metrics = perf_monitor.start_phase(
-            "phase_3_1_computation",
-            phase_number="Phase 3.1",
-            phase_description="Core Computation"
-        )
-        
-        # Density Analysis
-        logger.info("[Phase 3.1] Processing density analysis...")
+        # Phase 3: Density Computation
+        logger.info("[Phase 3] Processing density analysis...")
         density_results = analyze_density_segments_v2(
             events=events,
             timelines=timelines,
             segments_df=segments_df,
             all_runners_df=all_runners_df,
-            density_csv_path=segments_path_str
+            density_csv_path=segments_path_str,
+            perf_monitor=perf_monitor
         )
         # Count segments processed per day
         total_segments_processed = sum(
@@ -863,10 +865,10 @@ def create_full_analysis_pipeline(
             for day_result in density_results.values()
         )
         density_days = len(density_results)
-        logger.info(f"[Phase 3.1] Density analysis complete: {density_days} days, {total_segments_processed} segments")
+        logger.info(f"[Phase 3] Density analysis complete: {density_days} days, {total_segments_processed} segments")
         
-        # Flow Analysis
-        logger.info("[Phase 3.1] Processing flow analysis...")
+        # Phase 4: Flow Computation
+        logger.info("[Phase 4] Processing flow analysis...")
         # Issue #553 Phase 7.1: Use file path from analysis.json if available
         if analysis_config:
             flow_file_path = str(analysis_context.flow_csv_path)
@@ -881,44 +883,29 @@ def create_full_analysis_pipeline(
             data_dir=data_dir,
             enable_audit=enable_audit,
             run_id=run_id,
-            run_path=run_path
+            run_path=run_path,
+            perf_monitor=perf_monitor
         )
         flow_days = len(flow_results)
-        logger.info(f"[Phase 3.1] Flow analysis complete: {flow_days} days")
+        logger.info(f"[Phase 4] Flow analysis complete: {flow_days} days")
         
-        computation_metrics.finish(
-            segment_count=total_segments_processed,
-            memory_mb=get_memory_usage_mb()
+        # Phase 6.1: Persist Density Results
+        density_persistence_metrics = perf_monitor.start_phase(
+            "phase_6_1_persist_density",
+            phase_number="Phase 6.1",
+            phase_description="Persist Density Results"
         )
-        
-        perf_monitor.complete_phase(
-            computation_metrics,
-            phase_number="Phase 3.1",
-            phase_description="Core Computation",
-            summary_stats={"density_days": density_days, "flow_days": flow_days, "segments": total_segments_processed}
-        )
-        
-        # Phase 3.2: Persist Computation Results (Issue #574, #581: Enhanced logging)
-        persistence_metrics = perf_monitor.start_phase(
-            "phase_3_2_persistence",
-            phase_number="Phase 3.2",
-            phase_description="Computation Persistence"
-        )
-        
-        # Create computation directory per day and persist results
-        persisted_files = []
+        density_files = []
         for day, day_events in events_by_day.items():
             day_code = day.value
-            logger.info(f"[Phase 3.2] Processing day: {day_code}")
+            logger.info(f"[Phase 6.1] Processing day: {day_code}")
             day_path = run_path / day_code
             computation_dir = day_path / "computation"
             computation_dir.mkdir(parents=True, exist_ok=True)
             
-            # Persist density_results.json
             day_density = density_results.get(day, {})
             if day_density:
                 density_json_path = computation_dir / "density_results.json"
-                # Convert Day enum keys to strings for JSON serialization
                 density_for_json = {
                     "day": day_code,
                     "events": day_density.get("events", []),
@@ -928,14 +915,33 @@ def create_full_analysis_pipeline(
                 with open(density_json_path, 'w', encoding='utf-8') as f:
                     json.dump(density_for_json, f, indent=2, default=str)
                 logger.info(f"  → Persisted density_results.json: {density_json_path}")
-                persisted_files.append(f"density_results.json ({day_code})")
+                density_files.append(f"density_results.json ({day_code})")
+        
+        density_persistence_metrics.finish(memory_mb=get_memory_usage_mb())
+        perf_monitor.complete_phase(
+            density_persistence_metrics,
+            phase_number="Phase 6.1",
+            phase_description="Persist Density Results",
+            summary_stats={"json_files": len(density_files)}
+        )
+        
+        # Phase 6.2: Persist Flow Results
+        flow_persistence_metrics = perf_monitor.start_phase(
+            "phase_6_2_persist_flow",
+            phase_number="Phase 6.2",
+            phase_description="Persist Flow Results"
+        )
+        flow_files = []
+        for day, day_events in events_by_day.items():
+            day_code = day.value
+            logger.info(f"[Phase 6.2] Processing day: {day_code}")
+            day_path = run_path / day_code
+            computation_dir = day_path / "computation"
+            computation_dir.mkdir(parents=True, exist_ok=True)
             
-            # Persist flow_results.json
             day_flow = flow_results.get(day, {})
             if day_flow:
                 flow_json_path = computation_dir / "flow_results.json"
-                # Convert Day enum keys to strings for JSON serialization
-                # Issue #612: Convert dataclasses (ConvergencePoint, ConflictZone) to dicts before JSON serialization
                 flow_for_json = {
                     "day": day_code,
                     "events": day_flow.get("events", []),
@@ -947,21 +953,25 @@ def create_full_analysis_pipeline(
                 with open(flow_json_path, 'w', encoding='utf-8') as f:
                     json.dump(flow_for_json, f, indent=2)
                 logger.info(f"  → Persisted flow_results.json: {flow_json_path}")
-                persisted_files.append(f"flow_results.json ({day_code})")
+                flow_files.append(f"flow_results.json ({day_code})")
         
-        persistence_metrics.finish(memory_mb=get_memory_usage_mb())
+        flow_persistence_metrics.finish(memory_mb=get_memory_usage_mb())
         perf_monitor.complete_phase(
-            persistence_metrics,
-            phase_number="Phase 3.2",
-            phase_description="Computation Persistence",
-            summary_stats={"json_files": len(persisted_files)}
+            flow_persistence_metrics,
+            phase_number="Phase 6.2",
+            phase_description="Persist Flow Results",
+            summary_stats={"json_files": len(flow_files)}
         )
         
-        # Bin Generation (per day) - part of Phase 3.1, no separate phase tracking
+        # Phase 5.1: Bin Generation (per day)
         bins_by_day = {}
         for day, day_events in events_by_day.items():
-            logger.info(f"[Phase 3.1] Processing bin generation for day: {day.value}")
-            bin_metrics = perf_monitor.start_phase(f"bin_generation_{day.value}")
+            logger.info(f"[Phase 5.1] Processing bin generation for day: {day.value}")
+            bin_metrics = perf_monitor.start_phase(
+                f"phase_5_1_bin_generation_{day.value}",
+                phase_number="Phase 5.1",
+                phase_description="Bin Generation"
+            )
             
             # Get density results for this day
             day_density = density_results.get(day.value, {})
@@ -1040,6 +1050,13 @@ def create_full_analysis_pipeline(
             else:
                 logger.warning(f"Bin generation skipped or failed for day {day.value}")
         
+        # Phase 5.2: Bin Validation
+        bin_validation_metrics = perf_monitor.start_phase(
+            "phase_5_2_bin_validation",
+            phase_number="Phase 5.2",
+            phase_description="Bin Validation"
+        )
+        
         # Issue #655: Hard fail if no bins were generated - critical error that stops analysis
         # Bins are required for Density.md reports and downstream analysis
         # This is a non-negotiable requirement - analysis cannot proceed without bins
@@ -1074,6 +1091,14 @@ def create_full_analysis_pipeline(
         
         logger.info(f"✅ Bin generation validated: {len(bins_by_day)} day(s) with bins.parquet files")
         
+        bin_validation_metrics.finish(memory_mb=get_memory_usage_mb())
+        perf_monitor.complete_phase(
+            bin_validation_metrics,
+            phase_number="Phase 5.2",
+            phase_description="Bin Validation",
+            summary_stats={"days": len(bins_by_day), "missing_bins": len(missing_bins)}
+        )
+        
         # Load locations DataFrame if locations_file is provided
         # Issue #553 Phase 7.1: Use file path from analysis.json if available
         locations_df = None
@@ -1093,17 +1118,23 @@ def create_full_analysis_pipeline(
             else:
                 logger.warning(f"Locations file not found at {locations_path_str}, skipping locations report")
         
-        # Persist locations_results.json if locations_df exists (Issue #574, #581: Enhanced logging)
+        # Phase 6.3: Persist Locations Results
         # Issue #591: Compute resources_available per day
         if locations_df is not None:
             import pandas as pd
             from app.core.v2.bins import filter_segments_by_events
             
+            locations_persistence_metrics = perf_monitor.start_phase(
+                "phase_6_3_persist_locations",
+                phase_number="Phase 6.3",
+                phase_description="Persist Locations Results"
+            )
+            
             locations_count = len(locations_df)
-            logger.info(f"[Phase 3.2] Processing locations persistence...")
+            logger.info(f"[Phase 6.3] Processing locations persistence...")
             for day, day_events in events_by_day.items():
                 day_code = day.value
-                logger.info(f"[Phase 3.2] Processing day: {day_code}")
+                logger.info(f"[Phase 6.3] Processing day: {day_code}")
                 day_path = run_path / day_code
                 computation_dir = day_path / "computation"
                 computation_dir.mkdir(parents=True, exist_ok=True)
@@ -1181,19 +1212,26 @@ def create_full_analysis_pipeline(
                 with open(locations_json_path, 'w', encoding='utf-8') as f:
                     json.dump(locations_for_json, f, indent=2, default=str)
                 logger.info(f"  → Persisted locations_results.json: {locations_json_path}")
-                persisted_files.append(f"locations_results.json ({day_code})")
+            
+            locations_persistence_metrics.finish(memory_mb=get_memory_usage_mb())
+            perf_monitor.complete_phase(
+                locations_persistence_metrics,
+                phase_number="Phase 6.3",
+                phase_description="Persist Locations Results",
+                summary_stats={"locations": locations_count, "days": len(events_by_day)}
+            )
         
-        # Phase 4.1: UI Artifacts Generation (Issue #574, #581: Enhanced logging)
+        # Phase 7: UI Artifacts Generation
         artifacts_metrics = perf_monitor.start_phase(
-            "phase_4_1_ui_artifacts",
-            phase_number="Phase 4.1",
+            "phase_7_ui_artifacts",
+            phase_number="Phase 7",
             phase_description="UI Artifacts Generation"
         )
         from app.core.v2.ui_artifacts import generate_ui_artifacts_per_day
         artifacts_by_day = {}
         artifacts_count = 0
         for day, day_events in events_by_day.items():
-            logger.info(f"[Phase 4.1] Processing day: {day.value}")
+            logger.info(f"[Phase 7] Processing day: {day.value}")
             try:
                 # Issue #673: Pass analysis_context to avoid redundant file I/O in generate_segments_geojson
                 artifacts_path = generate_ui_artifacts_per_day(
@@ -1226,7 +1264,7 @@ def create_full_analysis_pipeline(
                 else:
                     logger.warning(f"  → UI artifact generation returned None for day {day.value}")
             except Exception as e:
-                logger.error(f"[Phase 4.1] ❌ ERROR: UI artifacts generation failed for day {day.value}")
+                logger.error(f"[Phase 7] ❌ ERROR: UI artifacts generation failed for day {day.value}")
                 logger.error(f"  → Phase: UI Artifacts Generation")
                 logger.error(f"  → Day: {day.value}")
                 logger.error(f"  → Action: Generating UI artifacts with new subdirectory structure")
@@ -1235,16 +1273,16 @@ def create_full_analysis_pipeline(
         artifacts_metrics.finish(memory_mb=get_memory_usage_mb())
         perf_monitor.complete_phase(
             artifacts_metrics,
-            phase_number="Phase 4.1",
+            phase_number="Phase 7",
             phase_description="UI Artifacts Generation",
             summary_stats={"artifacts": artifacts_count, "days": len(artifacts_by_day), "subdirectories": 4}
         )
         
-        # Phase 4.2: Calculate Derived Metrics (RES, operational status) - Issue #574, #581: Enhanced logging
+        # Phase 8: Calculate Derived Metrics (RES, operational status)
         # This happens AFTER UI artifacts (which generates segment_metrics.json) but BEFORE reports
         derived_metrics_phase = perf_monitor.start_phase(
-            "phase_4_2_derived_metrics",
-            phase_number="Phase 4.2",
+            "phase_8_derived_metrics",
+            phase_number="Phase 8",
             phase_description="Derived Metrics Calculation"
         )
         
@@ -1272,7 +1310,7 @@ def create_full_analysis_pipeline(
             day_path = run_path / day_code
             ui_path = day_path / "ui"
             
-            # Load segment_metrics.json (generated in Phase 4.1, Issue #574: now in metrics/ subdirectory)
+            # Load segment_metrics.json (generated in Phase 7, Issue #574: now in metrics/ subdirectory)
             segment_metrics_path = ui_path / "metrics" / "segment_metrics.json"
             if not segment_metrics_path.exists():
                 logger.warning(f"segment_metrics.json not found for {day_code}, skipping derived metrics")
@@ -1374,12 +1412,17 @@ def create_full_analysis_pipeline(
         res_groups_count = sum(len(day_metrics.get("event_groups", {}) or {}) for day_metrics in derived_metrics_by_day.values())
         perf_monitor.complete_phase(
             derived_metrics_phase,
-            phase_number="Phase 4.2",
+            phase_number="Phase 8",
             phase_description="Derived Metrics Calculation",
             summary_stats={"RES_groups": res_groups_count, "operational_status": len(derived_metrics_by_day), "days": len(derived_metrics_by_day)}
         )
         
-        # Generate map_data.json per day (for density page map visualization)
+        # Phase 9: Map Data Generation (map_data.json per day)
+        map_data_metrics = perf_monitor.start_phase(
+            "phase_9_map_data",
+            phase_number="Phase 9",
+            phase_description="Map Data Generation"
+        )
         from app.core.v2.reports import get_day_output_path
         from app.density_report import generate_map_dataset
         maps_by_day = {}
@@ -1415,7 +1458,15 @@ def create_full_analysis_pipeline(
                 maps_by_day[day.value] = str(maps_dir)
                 logger.info(f"Generated map_data.json for day {day.value}: {map_data_path}")
             except Exception as e:
-                logger.warning(f"[Phase 4.1] Could not generate map_data.json for day {day.value}: {e}", exc_info=True)
+                logger.warning(f"[Phase 9] Could not generate map_data.json for day {day.value}: {e}", exc_info=True)
+        
+        map_data_metrics.finish(memory_mb=get_memory_usage_mb())
+        perf_monitor.complete_phase(
+            map_data_metrics,
+            phase_number="Phase 9",
+            phase_description="Map Data Generation",
+            summary_stats={"days": len(maps_by_day)}
+        )
         
         # Create day-partitioned structure
         output_paths = {}
@@ -1490,7 +1541,7 @@ def create_full_analysis_pipeline(
             metadata["density"] = density_summary[day_code]
             metadata["flow"] = flow_summary_by_day[day_code]
             
-            # Issue #574: Use pre-calculated derived metrics from Phase 4.2
+            # Issue #574: Use pre-calculated derived metrics from Phase 8
             derived_metrics = derived_metrics_by_day.get(day_code)
             if derived_metrics:
                 metadata["operational_status"] = derived_metrics.get("operational_status", "Unknown")
@@ -1539,12 +1590,12 @@ def create_full_analysis_pipeline(
                 "metadata": f"runflow/analysis/{run_id}/{day_code}/metadata.json"
             }
         
-        # Phase 5: Report Generation (Issue #574, #581: Enhanced logging)
+        # Phase 10: Report Generation
         # Reports are generated AFTER all metrics are calculated and persisted
         # Reports load from JSON artifacts (pure templating, no inline calculations)
         report_metrics = perf_monitor.start_phase(
-            "phase_5_reports",
-            phase_number="Phase 5",
+            "phase_10_reports",
+            phase_number="Phase 10",
             phase_description="Report Generation"
         )
         
@@ -1621,7 +1672,7 @@ def create_full_analysis_pipeline(
         
         # Generate reports
         # Issue #574: Reports now load from JSON artifacts where available, with fallback to in-memory
-        # Note: Reports have access to RES data in metadata.json (calculated in Phase 4.2)
+        # Note: Reports have access to RES data in metadata.json (calculated in Phase 8)
         # TODO: Full refactor to load from JSON only (remove in-memory fallback in future)
         try:
             reports_by_day = generate_reports_per_day(
@@ -1652,7 +1703,7 @@ def create_full_analysis_pipeline(
             report_metrics.finish(memory_mb=get_memory_usage_mb())
             perf_monitor.complete_phase(
                 report_metrics,
-                phase_number="Phase 5",
+                phase_number="Phase 10",
                 phase_description="Report Generation",
                 summary_stats={"reports": total_reports, "Density.md": report_counts["Density.md"], 
                               "Flow.csv": report_counts["Flow.csv"], "Locations.csv": report_counts["Locations.csv"]}
@@ -1660,7 +1711,7 @@ def create_full_analysis_pipeline(
             
             # Update metadata verification after reports are generated
             # Bug fix: Metadata was created before reports, causing false FAIL status
-            logger.info("[Phase 5] Updating metadata verification after report generation")
+            logger.info("[Phase 10] Updating metadata verification after report generation")
             for day_code, day_metadata in day_metadata_map.items():
                 day_path = run_path / day_code
                 updated_metadata = _update_metadata_verification(day_path, day_metadata)
@@ -1670,9 +1721,9 @@ def create_full_analysis_pipeline(
                 metadata_path = day_path / "metadata.json"
                 with open(metadata_path, 'w', encoding='utf-8') as f:
                     json.dump(updated_metadata, f, indent=2, ensure_ascii=False)
-                logger.info(f"[Phase 5] Updated metadata.json for {day_code}: status={updated_metadata['status']}")
+                logger.info(f"[Phase 10] Updated metadata.json for {day_code}: status={updated_metadata['status']}")
         except Exception as e:
-            logger.error(f"[Phase 5] ❌ ERROR: Report generation failed: {e}", exc_info=True)
+            logger.error(f"[Phase 10] ❌ ERROR: Report generation failed: {e}", exc_info=True)
             logger.error(f"  → Phase: Report Generation")
             logger.error(f"  → Action: Generating reports from persisted data")
             report_metrics.finish(memory_mb=get_memory_usage_mb())
@@ -1680,10 +1731,10 @@ def create_full_analysis_pipeline(
             reports_by_day = {}
             raise  # Re-raise to fail the pipeline
         
-        # Phase 6: Metadata & Cleanup (Issue #574, #581: Enhanced logging)
+        # Phase 11: Metadata & Cleanup
         metadata_metrics = perf_monitor.start_phase(
-            "phase_6_metadata",
-            phase_number="Phase 6",
+            "phase_11_metadata",
+            phase_number="Phase 11",
             phase_description="Metadata & Cleanup"
         )
         
@@ -1698,13 +1749,6 @@ def create_full_analysis_pipeline(
         combined_metadata["density"] = density_summary
         combined_metadata["flow"] = flow_summary_by_day
         
-        # Phase 6: Metadata & Cleanup (Issue #574, #581: Enhanced logging)
-        metadata_metrics = perf_monitor.start_phase(
-            "phase_6_metadata",
-            phase_number="Phase 6",
-            phase_description="Metadata & Cleanup"
-        )
-        
         # Issue #503: Add performance metrics to metadata
         perf_monitor.total_memory_mb = get_memory_usage_mb()
         combined_metadata["performance"] = perf_monitor.get_summary()
@@ -1713,9 +1757,9 @@ def create_full_analysis_pipeline(
         run_metadata_path = run_path / "metadata.json"
         with open(run_metadata_path, 'w', encoding='utf-8') as f:
             json.dump(combined_metadata, f, indent=2, ensure_ascii=False)
-        logger.info(f"[Phase 6] Created metadata.json: {run_metadata_path}")
+        logger.info(f"[Phase 11] Created metadata.json: {run_metadata_path}")
         
-        # Issue #527: Add log file path to metadata (part of Phase 6)
+        # Issue #527: Add log file path to metadata (part of Phase 11)
         if run_log_handler:
             log_path = run_log_handler.get_log_path()
             if log_path:
@@ -1729,18 +1773,24 @@ def create_full_analysis_pipeline(
         
         # Update pointer files (latest.json, index.json)
         update_pointer_files(run_id, combined_metadata)
-        logger.info(f"[Phase 6] Updated pointer files (latest.json, index.json)")
+        logger.info(f"[Phase 11] Updated pointer files (latest.json, index.json)")
         
         metadata_metrics.finish(memory_mb=get_memory_usage_mb())
         perf_monitor.complete_phase(
             metadata_metrics,
-            phase_number="Phase 6",
+            phase_number="Phase 11",
             phase_description="Metadata & Cleanup",
             summary_stats={"metadata_files": len(days_processed), "pointers": 2}
         )
         
         # Issue #503: Log performance summary with phase mapping
-        perf_monitor.log_summary(phase_mapping=PHASE_MAPPING)
+        phase_mapping = dict(PHASE_MAPPING)
+        for day in events_by_day.keys():
+            phase_mapping[f"phase_5_1_bin_generation_{day.value}"] = {
+                "number": "Phase 5.1",
+                "description": f"Bin Generation ({day.value})"
+            }
+        perf_monitor.log_summary(phase_mapping=phase_mapping)
         
         # Check overall guardrails
         total_elapsed = perf_monitor.get_total_elapsed()

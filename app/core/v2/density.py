@@ -15,7 +15,7 @@ Core Principles:
 - Reuse v1 analyze_density_segments() function without modification
 """
 
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, TYPE_CHECKING
 from datetime import datetime, timedelta
 from pathlib import Path
 import pandas as pd
@@ -28,6 +28,9 @@ from app.core.density.compute import analyze_density_segments, DensityConfig
 from app.io.loader import load_runners_by_event, load_runners
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from app.core.v2.performance import PerformanceMonitor
 
 
 def get_event_distance_range_v2(
@@ -259,7 +262,8 @@ def analyze_density_segments_v2(
     segments_df: pd.DataFrame,
     all_runners_df: pd.DataFrame,
     density_csv_path: str,
-    config: Optional[DensityConfig] = None
+    config: Optional[DensityConfig] = None,
+    perf_monitor: Optional["PerformanceMonitor"] = None
 ) -> Dict[Day, Dict[str, Any]]:
     """
     Analyze density for all segments using v2 Event objects and day-scoped data.
@@ -293,6 +297,13 @@ def analyze_density_segments_v2(
         }
     """
     results_by_day: Dict[Day, Dict[str, Any]] = {}
+    setup_metrics = None
+    if perf_monitor:
+        setup_metrics = perf_monitor.start_phase(
+            "phase_3_1_density_setup",
+            phase_number="Phase 3.1",
+            phase_description="Density Setup"
+        )
     
     # Group events by day
     from app.core.v2.loader import group_events_by_day
@@ -307,9 +318,31 @@ def analyze_density_segments_v2(
     
     if filtered_segments_df.empty:
         logger.warning("No segments found for requested events")
+        if setup_metrics and perf_monitor:
+            perf_monitor.complete_phase(
+                setup_metrics,
+                phase_number="Phase 3.1",
+                phase_description="Density Setup",
+                summary_stats={"segments": 0, "events": len(events), "days": len(events_by_day)}
+            )
         return results_by_day
     
     logger.info(f"Filtered segments: {len(segments_df)} -> {len(filtered_segments_df)} for {len(events)} events")
+    if setup_metrics and perf_monitor:
+        perf_monitor.complete_phase(
+            setup_metrics,
+            phase_number="Phase 3.1",
+            phase_description="Density Setup",
+            summary_stats={"segments": len(filtered_segments_df), "events": len(events), "days": len(events_by_day)}
+        )
+    
+    compute_metrics = None
+    if perf_monitor:
+        compute_metrics = perf_monitor.start_phase(
+            "phase_3_2_density_compute",
+            phase_number="Phase 3.2",
+            phase_description="Density Per-Day Compute"
+        )
     
     # Analyze density per day
     for day, day_events in events_by_day.items():
@@ -394,5 +427,13 @@ def analyze_density_segments_v2(
                 "day": day.value,
                 "events": [e.name for e in day_events]
             }
+    
+    if compute_metrics and perf_monitor:
+        perf_monitor.complete_phase(
+            compute_metrics,
+            phase_number="Phase 3.2",
+            phase_description="Density Per-Day Compute",
+            summary_stats={"days": len(events_by_day), "segments": len(filtered_segments_df)}
+        )
     
     return results_by_day

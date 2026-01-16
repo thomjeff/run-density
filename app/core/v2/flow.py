@@ -20,7 +20,7 @@ Core Principles:
 - Reuse v1 analyze_temporal_flow_segments() function without modification
 """
 
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, TYPE_CHECKING
 from pathlib import Path
 import pandas as pd
 import logging
@@ -37,6 +37,9 @@ from app.utils.shared import load_pace_csv
 from app.utils.constants import DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from app.core.v2.performance import PerformanceMonitor
 
 
 def get_shared_segments(
@@ -366,7 +369,8 @@ def analyze_temporal_flow_segments_v2(
     conflict_length_m: float = DEFAULT_CONFLICT_LENGTH_METERS,
     enable_audit: str = 'n',
     run_id: Optional[str] = None,
-    run_path: Optional[Path] = None
+    run_path: Optional[Path] = None,
+    perf_monitor: Optional["PerformanceMonitor"] = None
 ) -> Dict[Day, Dict[str, Any]]:
     """
     Analyze temporal flow for all segments using v2 Event objects and day-scoped data.
@@ -504,6 +508,8 @@ def analyze_temporal_flow_segments_v2(
     # Analyze flow per day
     for day, day_pairs in pairs_by_day.items():
         logger.info(f"Analyzing flow for day {day.value} with {len(day_pairs)} event pairs")
+        build_metrics = None
+        compute_metrics = None
         
         # Get timeline for this day
         timeline = timeline_by_day.get(day)
@@ -535,6 +541,13 @@ def analyze_temporal_flow_segments_v2(
             start_times[event.name.lower()] = float(event.start_time)
         
         logger.info(f"Day {day.value}: Analyzing {len(day_pairs)} pairs with {len(day_runners_df)} runners")
+        
+        if perf_monitor:
+            build_metrics = perf_monitor.start_phase(
+                "phase_4_1_flow_build_segments",
+                phase_number="Phase 4.1",
+                phase_description="Flow Build Segments"
+            )
         
         # Collect all flow-format segments for all pairs on this day
         all_flow_segments = []
@@ -591,6 +604,21 @@ def analyze_temporal_flow_segments_v2(
             temp_fd, temp_segments_csv = tempfile.mkstemp(suffix='.csv', prefix='segments_')
             os.close(temp_fd)
             combined_flow_segments.to_csv(temp_segments_csv, index=False)
+            
+            if build_metrics and perf_monitor:
+                perf_monitor.complete_phase(
+                    build_metrics,
+                    phase_number="Phase 4.1",
+                    phase_description="Flow Build Segments",
+                    summary_stats={"day": day.value, "pairs": len(day_pairs), "segments": len(combined_flow_segments)}
+                )
+            
+            if perf_monitor:
+                compute_metrics = perf_monitor.start_phase(
+                    "phase_4_2_flow_compute",
+                    phase_number="Phase 4.2",
+                    phase_description="Flow Per-Day Compute"
+                )
             
             # Call v1 analyze_temporal_flow_segments() function
             flow_results = analyze_temporal_flow_segments(
@@ -736,6 +764,14 @@ def analyze_temporal_flow_segments_v2(
                 f"Day {day.value}: Flow analysis complete. "
                 f"Processed {len(flow_results.get('segments', []))} segments"
             )
+            
+            if compute_metrics and perf_monitor:
+                perf_monitor.complete_phase(
+                    compute_metrics,
+                    phase_number="Phase 4.2",
+                    phase_description="Flow Per-Day Compute",
+                    summary_stats={"day": day.value, "segments": len(flow_results.get("segments", []))}
+                )
             
         except Exception as e:
             logger.error(f"Day {day.value}: Flow analysis failed: {str(e)}", exc_info=True)
