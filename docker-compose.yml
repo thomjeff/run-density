@@ -46,14 +46,17 @@ services:
     stdin_open: true
     tty: true
     # Issue #503: Memory and CPU limits for performance optimization
-    # Increase memory limit to allow better performance during analysis
-    # Default: 4GB (can be increased if needed for larger datasets)
+    # NOTE: deploy.* is ignored by docker-compose (non-swarm).
+    # Use mem_limit/cpus to enforce local limits with `make dev`.
+    mem_limit: 6g
+    mem_reservation: 4g
+    cpus: "3.0"
     deploy:
       resources:
         limits:
+          memory: 6G
+          cpus: '3.0'
+        reservations:
           memory: 4G
           cpus: '2.0'
-        reservations:
-          memory: 2G
-          cpus: '1.0'
 
