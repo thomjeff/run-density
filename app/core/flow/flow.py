@@ -20,6 +20,8 @@ from __future__ import annotations
 import time
 import logging
 import json
+import os
+import concurrent.futures
 from typing import Dict, Optional, Any, List, Tuple, TYPE_CHECKING
 from dataclasses import dataclass
 import pandas as pd
@@ -42,6 +44,179 @@ from app.utils.constants import (
     DEFAULT_TIME_BIN_SECONDS, CONFLICT_LENGTH_LONG_SEGMENT_M
 )
 from app.utils.shared import load_pace_csv, arrival_time_sec, load_segments_csv
+
+
+logger = logging.getLogger(__name__)
+
+
+def _get_flow_max_workers() -> int:
+    """Resolve max workers for flow parallelism."""
+    default_workers = 4
+    raw_value = os.getenv("RUNFLOW_FLOW_MAX_WORKERS", str(default_workers)).strip()
+    try:
+        max_workers = int(raw_value)
+    except ValueError:
+        logger.warning(
+            f"Invalid RUNFLOW_FLOW_MAX_WORKERS value '{raw_value}', using default {default_workers}"
+        )
+        max_workers = default_workers
+    
+    if max_workers < 1:
+        logger.warning(
+            f"RUNFLOW_FLOW_MAX_WORKERS must be >= 1 (got {max_workers}); using 1"
+        )
+        max_workers = 1
+    
+    cpu_count = os.cpu_count() or max_workers
+    if max_workers > cpu_count:
+        logger.info(
+            f"RUNFLOW_FLOW_MAX_WORKERS={max_workers} exceeds CPU count ({cpu_count}); "
+            f"using {cpu_count}"
+        )
+        max_workers = cpu_count
+    
+    return max_workers
+
+
+def _compute_flow_segment_task(
+    index: int,
+    segment: pd.Series,
+    pace_df: pd.DataFrame,
+    start_times: Dict[str, float],
+    min_overlap_duration: float,
+    conflict_length_m: float
+) -> Tuple[int, Optional[Dict[str, Any]], Optional[float], bool]:
+    """Compute flow metrics for a single segment/event pair."""
+    segment_start_time = time.time()
+    segment_data = segment.to_dict()
+    seg_id = segment_data["seg_id"]
+    event_a = segment_data["eventa"]
+    event_b = segment_data["eventb"]
+    from_km_a = segment_data["from_km_a"]
+    to_km_a = segment_data["to_km_a"]
+    from_km_b = segment_data["from_km_b"]
+    to_km_b = segment_data["to_km_b"]
+    
+    # Skip segments where either event doesn't exist (NaN values)
+    if pd.isna(from_km_a) or pd.isna(to_km_a) or pd.isna(from_km_b) or pd.isna(to_km_b):
+        logger.warning(f"Skipping {seg_id} {event_a} vs {event_b} - missing event data")
+        return index, None, None, False
+    
+    # Filter runners for this segment
+    df_a = pace_df[pace_df["event"] == event_a].copy()
+    df_b = pace_df[pace_df["event"] == event_b].copy()
+    
+    # Issue #612: Calculate convergence points (multi-CP) - for all segments
+    convergence_points = calculate_convergence_points(
+        df_a, df_b, event_a, event_b, start_times,
+        from_km_a, to_km_a, from_km_b, to_km_b
+    )
+    
+    # Calculate entry/exit times for this segment
+    first_entry_a, last_exit_a, first_entry_b, last_exit_b, overlap_window_duration = calculate_entry_exit_times(
+        df_a, df_b, event_a, event_b, start_times,
+        from_km_a, to_km_a, from_km_b, to_km_b
+    )
+    
+    # Get appropriate terminology for this flow type
+    flow_type = segment_data.get("flow_type", "")
+    terminology = get_flow_terminology(flow_type)
+    
+    # Issue #612: Multi-zone processing
+    # Calculate dynamic conflict length
+    segment_length_km = to_km_a - from_km_a
+    dynamic_conflict_length_m = _calculate_dynamic_conflict_length(
+        segment_length_km, from_km_a, to_km_a
+    )
+    
+    # Parse overlap duration
+    overlap_duration_minutes = _parse_overlap_duration_minutes(overlap_window_duration)
+    
+    # Build zones from convergence points
+    zones = build_conflict_zones(
+        convergence_points, from_km_a, to_km_a, from_km_b, to_km_b,
+        dynamic_conflict_length_m
+    )
+    
+    # Issue #613: Build segment cache once per segment (shared across all zones)
+    cache = build_segment_flow_cache(
+        df_a, df_b, event_a, event_b, start_times,
+        from_km_a, to_km_a, from_km_b, to_km_b
+    )
+    
+    # Calculate metrics for all zones
+    for zone in zones:
+        zone_metrics = calculate_zone_metrics(
+            zone, df_a, df_b, event_a, event_b, start_times,
+            from_km_a, to_km_a, from_km_b, to_km_b,
+            min_overlap_duration, dynamic_conflict_length_m, overlap_duration_minutes,
+            cache=cache
+        )
+        zone.metrics = zone_metrics
+    
+    # Select worst zone
+    worst_zone = select_worst_zone(zones) if zones else None
+    
+    # For backward compatibility, use worst zone's CP (or first CP, or None)
+    cp_km = worst_zone.cp.km if worst_zone else (convergence_points[0].km if convergence_points else None)
+    
+    segment_result = {
+        "seg_id": seg_id,
+        "segment_label": segment_data.get("segment_label", ""),
+        "flow_type": flow_type,
+        "terminology": terminology,
+        "event_a": event_a,
+        "event_b": event_b,
+        "from_km_a": from_km_a,
+        "to_km_a": to_km_a,
+        "from_km_b": from_km_b,
+        "to_km_b": to_km_b,
+        "convergence_point": cp_km,
+        "has_convergence": cp_km is not None,
+        "total_a": len(df_a),
+        "total_b": len(df_b),
+        "overtaking_a": 0,
+        "overtaking_b": 0,
+        "sample_a": [],
+        "sample_b": [],
+        "first_entry_a": first_entry_a,
+        "last_exit_a": last_exit_a,
+        "first_entry_b": first_entry_b,
+        "last_exit_b": last_exit_b,
+        "overlap_window_duration": overlap_window_duration,
+        "prior_segment_id": segment_data.get("prior_segment_id", "") if pd.notna(segment_data.get("prior_segment_id", "")) else "",
+        # Issue #612: Multi-zone fields
+        "convergence_points": convergence_points,
+        "zones": zones,
+        "worst_zone_index": worst_zone.zone_index if worst_zone else None,
+        "worst_zone": worst_zone,
+    }
+    
+    has_convergence = cp_km is not None and worst_zone is not None
+    if has_convergence:
+        segment_result = _process_segment_with_convergence(
+            seg_id, df_a, df_b, event_a, event_b, start_times,
+            cp_km, from_km_a, to_km_a, from_km_b, to_km_b,
+            min_overlap_duration, overlap_window_duration,
+            segment_start_time, segment_result
+        )
+        worst_metrics = worst_zone.metrics
+        segment_result.update({
+            "overtaking_a": worst_metrics.get("overtaking_a", 0),
+            "overtaking_b": worst_metrics.get("overtaking_b", 0),
+            "copresence_a": worst_metrics.get("copresence_a", 0),
+            "copresence_b": worst_metrics.get("copresence_b", 0),
+            "sample_a": worst_metrics.get("sample_a", [])[:10],
+            "sample_b": worst_metrics.get("sample_b", [])[:10],
+            "unique_encounters": worst_metrics.get("unique_encounters", 0),
+            "participants_involved": worst_metrics.get("participants_involved", 0),
+            "convergence_zone_start": worst_zone.zone_start_km_a,
+            "convergence_zone_end": worst_zone.zone_end_km_a,
+        })
+    
+    segment_end_time = time.time()
+    segment_elapsed_seconds = segment_end_time - segment_start_time
+    return index, segment_result, segment_elapsed_seconds, has_convergence
 
 
 # Issue #612: Multi-CP data structures
@@ -3818,148 +3993,62 @@ def analyze_temporal_flow_segments(
     
     # Collect segment timings for sorting before writing to performance log
     segment_timings = []
+    max_workers = _get_flow_max_workers()
+    use_parallel = max_workers > 1 and len(all_segments) > 1
+    segment_results: List[Tuple[int, Optional[Dict[str, Any]], Optional[float], bool]] = []
     
-    for _, segment in all_segments.iterrows():
-        seg_id = segment["seg_id"]
-        event_a = segment["eventa"]
-        event_b = segment["eventb"]
-        from_km_a = segment["from_km_a"]
-        to_km_a = segment["to_km_a"]
-        from_km_b = segment["from_km_b"]
-        to_km_b = segment["to_km_b"]
-        
-        # Start timing for this segment
-        segment_start_time = time.time()
-        
-        # Skip segments where either event doesn't exist (NaN values)
-        if pd.isna(from_km_a) or pd.isna(to_km_a) or pd.isna(from_km_b) or pd.isna(to_km_b):
-            print(f"⚠️  Skipping {seg_id} {event_a} vs {event_b} - missing event data")
+    if use_parallel:
+        logger.info(
+            f"Using ThreadPoolExecutor with {max_workers} workers "
+            f"for {len(all_segments)} flow segments"
+        )
+        futures = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            for index, (_, segment) in enumerate(all_segments.iterrows()):
+                futures.append(
+                    executor.submit(
+                        _compute_flow_segment_task,
+                        index,
+                        segment,
+                        pace_df,
+                        start_times,
+                        min_overlap_duration,
+                        conflict_length_m
+                    )
+                )
+            
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    segment_results.append(future.result())
+                except Exception as e:
+                    logger.error("Error in flow segment task", exc_info=True)
+                    for pending in futures:
+                        pending.cancel()
+                    raise
+    else:
+        for index, (_, segment) in enumerate(all_segments.iterrows()):
+            segment_results.append(
+                _compute_flow_segment_task(
+                    index,
+                    segment,
+                    pace_df,
+                    start_times,
+                    min_overlap_duration,
+                    conflict_length_m
+                )
+            )
+    
+    for _, segment_result, segment_elapsed_seconds, has_convergence in sorted(
+        segment_results, key=lambda result: result[0]
+    ):
+        if not segment_result:
             continue
         
-        # Filter runners for this segment
-        df_a = pace_df[pace_df["event"] == event_a].copy()
-        df_b = pace_df[pace_df["event"] == event_b].copy()
+        if performance_log_path and segment_elapsed_seconds is not None:
+            segment_timings.append((segment_result["seg_id"], segment_elapsed_seconds))
         
-        # Issue #612: Calculate convergence points (multi-CP) - for all segments
-        # NOTE: Segments may not show convergence if there are no temporal overlaps 
-        # due to timing differences (e.g., A1, B1)
-        convergence_points = calculate_convergence_points(
-            df_a, df_b, event_a, event_b, start_times,
-            from_km_a, to_km_a, from_km_b, to_km_b
-        )
-        
-        # Calculate entry/exit times for this segment
-        first_entry_a, last_exit_a, first_entry_b, last_exit_b, overlap_window_duration = calculate_entry_exit_times(
-            df_a, df_b, event_a, event_b, start_times,
-            from_km_a, to_km_a, from_km_b, to_km_b
-        )
-        
-        # Get appropriate terminology for this flow type
-        flow_type = segment.get("flow_type", "")
-        terminology = get_flow_terminology(flow_type)
-        
-        # Issue #612: Multi-zone processing
-        # Calculate dynamic conflict length
-        segment_length_km = to_km_a - from_km_a
-        dynamic_conflict_length_m = _calculate_dynamic_conflict_length(
-            segment_length_km, from_km_a, to_km_a
-        )
-        
-        # Parse overlap duration
-        overlap_duration_minutes = _parse_overlap_duration_minutes(overlap_window_duration)
-        
-        # Build zones from convergence points
-        zones = build_conflict_zones(
-            convergence_points, from_km_a, to_km_a, from_km_b, to_km_b,
-            dynamic_conflict_length_m
-        )
-        
-        # Issue #613: Build segment cache once per segment (shared across all zones)
-        cache = build_segment_flow_cache(
-            df_a, df_b, event_a, event_b, start_times,
-            from_km_a, to_km_a, from_km_b, to_km_b
-        )
-        
-        # Calculate metrics for all zones
-        for zone in zones:
-            # Issue #613: Use cache if available (vectorized path), otherwise fallback to original
-            zone_metrics = calculate_zone_metrics(
-                zone, df_a, df_b, event_a, event_b, start_times,
-                from_km_a, to_km_a, from_km_b, to_km_b,
-                min_overlap_duration, dynamic_conflict_length_m, overlap_duration_minutes,
-                cache=cache  # Pass cache for optimized path
-            )
-            zone.metrics = zone_metrics
-        
-        # Select worst zone
-        worst_zone = select_worst_zone(zones) if zones else None
-        
-        # For backward compatibility, use worst zone's CP (or first CP, or None)
-        cp_km = worst_zone.cp.km if worst_zone else (convergence_points[0].km if convergence_points else None)
-        
-        segment_result = {
-            "seg_id": seg_id,
-            "segment_label": segment.get("segment_label", ""),
-            "flow_type": flow_type,
-            "terminology": terminology,  # Add terminology dictionary
-            "event_a": event_a,
-            "event_b": event_b,
-            "from_km_a": from_km_a,
-            "to_km_a": to_km_a,
-            "from_km_b": from_km_b,
-            "to_km_b": to_km_b,
-            "convergence_point": cp_km,  # Worst zone CP for backward compatibility
-            "has_convergence": cp_km is not None,
-            "total_a": len(df_a),
-            "total_b": len(df_b),
-            "overtaking_a": 0,
-            "overtaking_b": 0,
-            "sample_a": [],
-            "sample_b": [],
-            "first_entry_a": first_entry_a,
-            "last_exit_a": last_exit_a,
-            "first_entry_b": first_entry_b,
-            "last_exit_b": last_exit_b,
-            "overlap_window_duration": overlap_window_duration,
-            "prior_segment_id": segment.get("prior_segment_id", "") if pd.notna(segment.get("prior_segment_id", "")) else "",
-            # Issue #612: Multi-zone fields
-            "convergence_points": convergence_points,  # List of ConvergencePoint objects
-            "zones": zones,  # List of ConflictZone objects
-            "worst_zone_index": worst_zone.zone_index if worst_zone else None,
-            "worst_zone": worst_zone,  # Worst ConflictZone object
-            # Issue #549: overtake_flag removed - not used in any logic or calculations
-        }
-        
-        if cp_km is not None and worst_zone is not None:
-            # Process segment with worst zone CP - handles policy, validation, loads
-            segment_result = _process_segment_with_convergence(
-                seg_id, df_a, df_b, event_a, event_b, start_times,
-                cp_km, from_km_a, to_km_a, from_km_b, to_km_b,
-                min_overlap_duration, overlap_window_duration,
-                segment_start_time, segment_result
-            )
-            # Override metrics with worst zone metrics (preserve policy, validation, loads from above)
-            worst_metrics = worst_zone.metrics
-            segment_result.update({
-                "overtaking_a": worst_metrics.get("overtaking_a", 0),
-                "overtaking_b": worst_metrics.get("overtaking_b", 0),
-                "copresence_a": worst_metrics.get("copresence_a", 0),
-                "copresence_b": worst_metrics.get("copresence_b", 0),
-                "sample_a": worst_metrics.get("sample_a", [])[:10],
-                "sample_b": worst_metrics.get("sample_b", [])[:10],
-                "unique_encounters": worst_metrics.get("unique_encounters", 0),
-                "participants_involved": worst_metrics.get("participants_involved", 0),
-                "convergence_zone_start": worst_zone.zone_start_km_a,
-                "convergence_zone_end": worst_zone.zone_end_km_a,
-            })
+        if has_convergence:
             results["segments_with_convergence"] += 1
-        
-        # Calculate segment processing time and collect for sorting
-        segment_end_time = time.time()
-        segment_elapsed_seconds = segment_end_time - segment_start_time
-        
-        if performance_log_path:
-            segment_timings.append((seg_id, segment_elapsed_seconds))
         
         results["segments"].append(segment_result)
     
