@@ -20,6 +20,22 @@
         Generate new runner CSV files with scenario-based modifications (participant counts and pace adjustments).
     </p>
     
+    <!-- Step 0: Config Directory Selection (Issue #693) -->
+    <div id="baseline-config-selection" style="margin-bottom: 1.5rem;">
+        <label for="baseline-config-dir" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
+            Select Config Directory <span style="color: #95a5a6; font-weight: normal;">(optional)</span>
+        </label>
+        <select
+            id="baseline-config-dir"
+            style="width: 100%; max-width: 400px; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"
+        >
+            <option value="">Use /data directory (default)</option>
+        </select>
+        <small style="color: #7f8c8d; font-size: 0.875rem; display: block; margin-top: 0.25rem;">
+            Only directories containing <code>*_runners.csv</code> files are listed.
+        </small>
+    </div>
+    
     <!-- Step 1: File Selection -->
     <div id="baseline-step1" style="margin-bottom: 1.5rem;">
         <label style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
@@ -140,23 +156,73 @@
         baselineMetrics: null,
         selectedFiles: [],
         dataDir: null,
+        configDir: null,
         controlVariables: null,
         newBaselineMetrics: null,
         reportsPath: null
     };
 
-    // Load runner files for baseline selection
-    async function loadRunnerFilesForBaseline() {
+    function getSelectedConfigDir() {
+        const select = document.getElementById('baseline-config-dir');
+        if (!select) return null;
+        const value = select.value;
+        return value ? value : null;
+    }
+
+    // Load available config directories (Issue #693)
+    async function loadConfigDirectories() {
         try {
-            const response = await fetch('/api/data/files?extension=csv');
+            const response = await fetch('/api/config/directories');
             if (response.ok) {
                 const data = await response.json();
-                const runnerFiles = (data.files || []).filter(f => f.endsWith('_runners.csv'));
+                const select = document.getElementById('baseline-config-dir');
+                if (select) {
+                    const directories = data.directories || [];
+                    select.innerHTML = '<option value="">Use /data directory (default)</option>';
+                    directories.forEach(dir => {
+                        const option = document.createElement('option');
+                        option.value = dir;
+                        option.textContent = dir;
+                        select.appendChild(option);
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Error loading config directories:', error);
+        }
+    }
+
+    // Load runner files for baseline selection
+    async function loadRunnerFilesForBaseline(configDir = null) {
+        try {
+            const activeConfigDir = configDir !== null ? configDir : getSelectedConfigDir();
+            let response;
+            if (activeConfigDir) {
+                const url = `/api/config/files?config_dir=${encodeURIComponent(activeConfigDir)}`;
+                response = await fetch(url);
+            } else {
+                response = await fetch('/api/data/files?extension=csv');
+            }
+            
+            if (response.ok) {
+                const data = await response.json();
+                const files = data.files || [];
+                const runnerFiles = activeConfigDir
+                    ? files
+                    : files.filter(f => f.endsWith('_runners.csv'));
+                
                 renderBaselineFileSelection(runnerFiles);
+                updateBaselineCalculateButton();
+                clearBaselineErrors();
             }
         } catch (error) {
             console.error('Error loading runner files:', error);
         }
+    }
+
+    function handleConfigDirChange() {
+        resetBaselineState();
+        loadRunnerFilesForBaseline();
     }
     
     // Render file selection checkboxes
@@ -211,10 +277,16 @@
         clearBaselineErrors();
         
         try {
+            const configDir = getSelectedConfigDir();
+            const payload = { selected_files: selectedFiles };
+            if (configDir) {
+                payload.config_dir = configDir;
+            }
+            
             const response = await fetch('/api/baseline/calculate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ selected_files: selectedFiles })
+                body: JSON.stringify(payload)
             });
             
             const data = await response.json();
@@ -227,6 +299,7 @@
             baselineState.baselineMetrics = data.baseline_metrics;
             baselineState.selectedFiles = selectedFiles;
             baselineState.dataDir = data.data_dir || 'data';  // Store data_dir
+            baselineState.configDir = configDir;
             baselineState.reportsPath = data.reports_path || 'runflow';  // Store reports_path
             
             // Render baseline metrics table
@@ -567,6 +640,7 @@
                     baseline_metrics: baselineState.baselineMetrics,
                     selected_files: baselineState.selectedFiles,
                     data_dir: baselineState.dataDir,
+                    config_dir: baselineState.configDir,
                     control_variables: controlVariables
                 })
             });
@@ -679,6 +753,7 @@
                     baseline_metrics: baselineState.baselineMetrics,
                     selected_files: baselineState.selectedFiles,
                     data_dir: baselineState.dataDir,
+                    config_dir: baselineState.configDir,
                     control_variables: baselineState.controlVariables,
                     file_suffix: fileSuffix || null
                 })
@@ -722,13 +797,13 @@
         }
     }
     
-    // Clear baseline state
-    function clearBaseline() {
+    function resetBaselineState() {
         baselineState = {
             runId: null,
             baselineMetrics: null,
             selectedFiles: [],
             dataDir: null,
+            configDir: getSelectedConfigDir(),
             controlVariables: null,
             newBaselineMetrics: null,
             reportsPath: null
@@ -758,6 +833,11 @@
         
         updateBaselineCalculateButton();
         clearBaselineErrors();
+    }
+
+    // Clear baseline state
+    function clearBaseline() {
+        resetBaselineState();
     }
     
     // Show baseline error (for file selection)
@@ -804,13 +884,16 @@
         const calcNewBtn = document.getElementById('baseline-calculate-new-btn');
         const createBtn = document.getElementById('baseline-create-files-btn');
         const clearBtn = document.getElementById('baseline-clear-btn');
+        const configSelect = document.getElementById('baseline-config-dir');
         
         if (calcBtn) calcBtn.addEventListener('click', calculateBaseline);
         if (calcNewBtn) calcNewBtn.addEventListener('click', calculateNewBaseline);
         if (createBtn) createBtn.addEventListener('click', createNewFiles);
         if (clearBtn) clearBtn.addEventListener('click', clearBaseline);
+        if (configSelect) configSelect.addEventListener('change', handleConfigDirChange);
         
-        // Load runner files for baseline
+        // Load config directories and runner files for baseline
+        loadConfigDirectories();
         loadRunnerFilesForBaseline();
         
         // Render reference table on page load
