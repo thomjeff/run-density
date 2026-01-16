@@ -601,7 +601,7 @@ def generate_analysis_prompt(run_id: str, context_data: Dict[str, Any]) -> str:
         FileNotFoundError: If template file doesn't exist
     """
     # Load template
-    template_path = Path(__file__).parent.parent.parent / "docs" / "templates" / "ai-analysis-prompt.md"
+    template_path = Path(__file__).parent.parent.parent / "docs" / "ai-analysis" / "ai-analysis-prompt.md"
     if not template_path.exists():
         raise FileNotFoundError(f"Template not found at {template_path}")
     
