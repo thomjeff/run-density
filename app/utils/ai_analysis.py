@@ -113,12 +113,46 @@ def extract_analysis_metrics(run_id: str) -> Dict[str, Any]:
         # Extract runner experience scores
         res_score = _extract_res_score(metadata, day)
         
+        # Load flags.json (needed for day-level metrics and critical segments)
+        flags_path = f"{day}/ui/metrics/flags.json"
+        flags = []
+        if storage.exists(flags_path):
+            flags = storage.read_json(flags_path)
+            if not isinstance(flags, list):
+                flags = []
+        
+        # Issue #694: Extract additional density metrics from flags.json for day-level summary
+        # Calculate flagged_bin_percentage and flag_severity_distribution from flags
+        total_bins_day = 0
+        flagged_bins_day = 0
+        flag_severity_distribution = {"critical": 0, "watch": 0, "none": 0}
+        
+        for flag in flags:
+            if isinstance(flag, dict):
+                # Sum total_bins and flagged_bins from all segments
+                seg_total_bins = flag.get("total_bins", 0) or 0
+                seg_flagged_bins = flag.get("flagged_bins") or flag.get("flagged_bin_count", 0) or 0
+                total_bins_day += seg_total_bins
+                flagged_bins_day += seg_flagged_bins
+                
+                # Count severity distribution
+                severity = flag.get("worst_severity", "none")
+                if severity in flag_severity_distribution:
+                    flag_severity_distribution[severity] += 1
+                else:
+                    flag_severity_distribution["none"] += 1
+        
+        # Calculate flagged_bin_percentage at day level
+        flagged_bin_percentage_day = (flagged_bins_day / total_bins_day * 100.0) if total_bins_day > 0 else None
+        
         # Extract density summary
         density_summary = {
             "peak_density": segment_metrics.get("peak_density", 0.0),
             "peak_rate": segment_metrics.get("peak_rate", 0.0),
             "flagged_segments": segment_metrics.get("segments_with_flags", 0),
             "flagged_bins": segment_metrics.get("flagged_bins", 0),
+            "flagged_bin_percentage": round(flagged_bin_percentage_day, 2) if flagged_bin_percentage_day is not None else None,  # Issue #694: Add day-level percentage
+            "flag_severity_distribution": flag_severity_distribution,  # Issue #694: Add severity distribution
             "los_distribution": los_distribution,
             "runner_experience_score": res_score
         }
@@ -129,14 +163,7 @@ def extract_analysis_metrics(run_id: str) -> Dict[str, Any]:
             "copresence_segments": segment_metrics.get("co_presence_segments", 0)
         }
         
-        # Extract critical segments
-        flags_path = f"{day}/ui/metrics/flags.json"
-        flags = []
-        if storage.exists(flags_path):
-            flags = storage.read_json(flags_path)
-            if not isinstance(flags, list):
-                flags = []
-        
+        # Extract critical segments (flags already loaded above for day-level metrics)
         segments_geojson = None
         segments_geojson_path = f"{day}/ui/geospatial/segments.geojson"
         if storage.exists(segments_geojson_path):
@@ -312,14 +339,24 @@ def _identify_critical_segments(
             flag_data = flags_by_seg_id.get(seg_id, {})
             props = segment_props.get(seg_id, {})
             
-            # Calculate flagged bin percentage
-            flagged_bin_count = flag_data.get("flagged_bin_count", 0)
+            # Issue #694: Extract metrics from flags.json (now calculated in generate_flags_json)
+            # Support both canonical ("flagged_bins") and legacy ("flagged_bin_count") field names
+            flagged_bins = flag_data.get("flagged_bins") or flag_data.get("flagged_bin_count", 0)
             total_bins = flag_data.get("total_bins", 0)
-            flagged_bin_percentage = None
-            if total_bins > 0:
-                flagged_bin_percentage = (flagged_bin_count / total_bins) * 100.0
+            flagged_bin_percentage = flag_data.get("flagged_bin_percentage")  # Extract directly from JSON
+            # If not present in JSON (backward compatibility), calculate from available data
+            if flagged_bin_percentage is None and total_bins > 0:
+                flagged_bin_percentage = (flagged_bins / total_bins) * 100.0
             
-            # Calculate active window duration
+            # Issue #694: Extract duration metrics from flags.json
+            flagged_duration_seconds = flag_data.get("flagged_duration_seconds", 0.0)
+            flagged_duration_minutes = flag_data.get("flagged_duration_minutes")
+            # If not present, calculate from seconds for backward compatibility
+            if flagged_duration_minutes is None and flagged_duration_seconds > 0:
+                flagged_duration_minutes = flagged_duration_seconds / 60.0
+            flagged_span_duration_seconds = flag_data.get("flagged_span_duration_seconds", 0.0)
+            
+            # Calculate active window duration (separate from flagged duration)
             active_window = metrics.get("active_window", "N/A")
             active_window_duration = _calculate_active_window_duration(active_window)
             
@@ -337,9 +374,12 @@ def _identify_critical_segments(
                 "rate": metrics.get("peak_rate", 0.0),
                 "active_window": active_window,
                 "active_window_duration_minutes": active_window_duration,
-                "flagged_bins": flagged_bin_count,
-                "flagged_bin_percentage": flagged_bin_percentage,
+                "flagged_bins": flagged_bins,
+                "flagged_bin_percentage": round(flagged_bin_percentage, 2) if flagged_bin_percentage is not None else None,
                 "total_bins": total_bins if total_bins > 0 else None,
+                "flagged_duration_seconds": round(flagged_duration_seconds, 1) if flagged_duration_seconds > 0 else None,
+                "flagged_duration_minutes": round(flagged_duration_minutes, 1) if flagged_duration_minutes else None,
+                "flagged_span_duration_seconds": round(flagged_span_duration_seconds, 1) if flagged_span_duration_seconds > 0 else None,
                 "severity": flag_data.get("worst_severity", "none"),
                 "severity_distribution": _calculate_severity_distribution(flags, seg_id),
                 "reason": "high_density" if density > 0.7 else "poor_los"
@@ -394,12 +434,22 @@ def _identify_narrow_segments(
                 if los in ["C", "D", "E", "F"] or density > 0.5:
                     flag_data = flags_by_seg_id.get(seg_id, {})
                     
-                    # Calculate flagged bin percentage
-                    flagged_bin_count = flag_data.get("flagged_bin_count", 0)
+                    # Issue #694: Extract metrics from flags.json (now calculated in generate_flags_json)
+                    # Support both canonical ("flagged_bins") and legacy ("flagged_bin_count") field names
+                    flagged_bins = flag_data.get("flagged_bins") or flag_data.get("flagged_bin_count", 0)
                     total_bins = flag_data.get("total_bins", 0)
-                    flagged_bin_percentage = None
-                    if total_bins > 0:
-                        flagged_bin_percentage = (flagged_bin_count / total_bins) * 100.0
+                    flagged_bin_percentage = flag_data.get("flagged_bin_percentage")  # Extract directly from JSON
+                    # If not present in JSON (backward compatibility), calculate from available data
+                    if flagged_bin_percentage is None and total_bins > 0:
+                        flagged_bin_percentage = (flagged_bins / total_bins) * 100.0
+                    
+                    # Issue #694: Extract duration metrics from flags.json
+                    flagged_duration_seconds = flag_data.get("flagged_duration_seconds", 0.0)
+                    flagged_duration_minutes = flag_data.get("flagged_duration_minutes")
+                    # If not present, calculate from seconds for backward compatibility
+                    if flagged_duration_minutes is None and flagged_duration_seconds > 0:
+                        flagged_duration_minutes = flagged_duration_seconds / 60.0
+                    flagged_span_duration_seconds = flag_data.get("flagged_span_duration_seconds", 0.0)
                     
                     # Calculate active window duration
                     active_window = metrics.get("active_window", "N/A")
@@ -419,9 +469,12 @@ def _identify_narrow_segments(
                         "rate": metrics.get("peak_rate", 0.0),
                         "active_window": active_window,
                         "active_window_duration_minutes": active_window_duration,
-                        "flagged_bins": flagged_bin_count,
-                        "flagged_bin_percentage": flagged_bin_percentage,
-                        "total_bins": total_bins if total_bins > 0 else None
+                        "flagged_bins": flagged_bins,
+                        "flagged_bin_percentage": round(flagged_bin_percentage, 2) if flagged_bin_percentage is not None else None,
+                        "total_bins": total_bins if total_bins > 0 else None,
+                        "flagged_duration_seconds": round(flagged_duration_seconds, 1) if flagged_duration_seconds > 0 else None,
+                        "flagged_duration_minutes": round(flagged_duration_minutes, 1) if flagged_duration_minutes else None,
+                        "flagged_span_duration_seconds": round(flagged_span_duration_seconds, 1) if flagged_span_duration_seconds > 0 else None
                     })
     
     # Sort by density descending

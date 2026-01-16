@@ -69,25 +69,34 @@ Summarize:
 - Overall LOS distribution
 - Flow interaction counts
 - Runner Experience Scores (RES)
+- **Flagged Bin Percentage** (day-level and segment-level): Critical metric revealing sustained congestion exposure beyond peak windows. High percentages (>10%) indicate material operational risk requiring continuous attention.
+- **Flag Severity Distribution** (critical, watch, none): Operational load indicator showing segments requiring immediate action vs enhanced monitoring.
+- **Flagged Duration Metrics** (seconds/minutes): Compare `flagged_duration_minutes` vs `active_window_duration_minutes` to identify sustained exposure. Segments with flagged duration >> active window duration (e.g., 74 minutes flagged vs 2 minutes active) indicate prolonged elevated conditions requiring extended operational response.
 
 ### Detailed Findings
 For each day:
 - **Strengths:** What's working well
-- **Areas of Concern:** Specific segments with issues
+- **Areas of Concern:** Specific segments with issues, including:
+  - **Flagged Bin Metrics:** Include `flagged_bin_percentage` (e.g., "38.89% of 720 total bins") and `total_bins` for context
+  - **Duration Analysis:** Compare `flagged_duration_minutes` vs `active_window_duration_minutes`. Segments with flagged duration >> active window (e.g., 560 minutes flagged vs 2 minutes active) indicate **extreme sustained exposure** requiring continuous operational attention
+  - **Severity Assessment:** Use `flag_severity_distribution` to prioritize segments (critical segments require immediate action)
 - **Root Causes:** Why issues are occurring
-- **Impact:** Operational implications
+- **Impact:** Operational implications, emphasizing **sustained congestion exposure** beyond peak windows when flagged duration significantly exceeds active window duration
 
 ### Structural Constraint Analysis
 Identify physical and operational constraints that limit capacity:
 - **Narrow segments** (width < 3.0m) that restrict runner flow
 - **Course geometry** (turns, bridges, trail sections) that create bottlenecks
 - **Multi-event convergence points** where events share limited space
-- **Duration-based risk** (segments with sustained high-density conditions lasting more than 5 minutes)
+- **Duration-based risk (CRITICAL):** Segments with **sustained high-density conditions** revealed by:
+  - **High flagged bin percentage** (>15% indicates significant sustained exposure)
+  - **Flagged duration >> active window duration** (e.g., 560 minutes flagged vs 2 minutes active = extreme sustained exposure requiring continuous operational attention)
+  - These segments operate at elevated conditions **throughout race day**, not just during peak windows
 
 For each constraint, explain in practical terms:
 - Why it limits capacity (physical space, course design, event overlap)
 - Whether operational adjustments alone can address it, or if course modifications are needed
-- How duration of elevated conditions affects runner experience and safety
+- **How sustained exposure** (flagged bin percentage and flagged duration) affects runner experience and safety throughout race day, requiring continuous operational response beyond peak windows
 
 ### Critical Recommendations
 Prioritize recommendations with specific, actionable steps:
@@ -109,30 +118,30 @@ For each recommendation, specify:
 Focus on specific, executable actions rather than general suggestions.
 
 ### Risk Assessment
-Categorize risks considering both peak conditions and duration:
+Categorize risks considering both peak conditions and **sustained exposure**:
 - **Low Risk:** Acceptable conditions, minimal monitoring needed
-- **Medium Risk:** Requires operational attention but manageable, or risk that accumulates with prolonged exposure
-- **High Risk:** Critical conditions requiring immediate mitigation, or sustained high-density conditions lasting more than 5 minutes
+- **Medium Risk:** Requires operational attention but manageable, or risk that accumulates with **prolonged exposure** (e.g., flagged duration 60-200 minutes, flagged bin percentage 10-20%)
+- **High Risk:** Critical conditions requiring immediate mitigation, or **extreme sustained exposure** (e.g., flagged duration >200 minutes, flagged bin percentage >20%, or flagged duration >> active window duration indicating continuous elevated conditions)
 
 For each risk, specify:
 - Peak condition (LOS, density)
-- Duration of elevated conditions (if available)
-- Why duration matters (safety, runner experience, operational response)
+- **Sustained exposure metrics:** `flagged_duration_minutes` (vs `active_window_duration_minutes`), `flagged_bin_percentage`, `total_bins`
+- **Why sustained exposure matters:** Segments with flagged duration >> active window (e.g., 560 minutes flagged vs 2 minutes active) require **continuous operational attention throughout race day**, not just during peak windows. High flagged bin percentages (>15%) indicate material operational complexity requiring extended resource deployment.
 
 ### Operational Readiness Assessment
 Provide readiness level with explicit criteria:
 
 - ✅ **OPERATIONAL** - Ready for race day with no changes
-  - Criteria: No LOS D+ segments, RES > 4.5, minimal flagged bins, no structural constraints requiring attention
+  - Criteria: No LOS D+ segments, RES > 4.5, minimal flagged bins (<5% flagged bin percentage), low flagged durations (<30 minutes), no structural constraints requiring attention
 
 - ✅ **OPERATIONAL WITH MONITORING** - Ready with enhanced monitoring
-  - Criteria: LOS D segments are manageable with monitoring, required mitigations are planned and executable before race day
+  - Criteria: LOS D segments are manageable with monitoring, flagged bin percentage <10%, flagged durations <100 minutes, required mitigations are planned and executable before race day
   - Must specify: What monitoring is required and what mitigations are planned
 
 - ⚠️ **CONDITIONAL** - Requires specific mitigations before race day
-  - Criteria: LOS D+ segments require operational changes, mitigations are required but not yet implemented or confirmed
-  - Must specify: What mitigations are required, confirmation status, and implementation timeline
-  - Use this status if mitigations are necessary but not yet confirmed as executable
+  - Criteria: LOS D+ segments require operational changes, **sustained congestion exposure** (flagged bin percentage >10% and/or flagged durations >100 minutes), mitigations are required but not yet implemented or confirmed
+  - Must specify: What mitigations are required (including **extended duration marshal deployments** for segments with flagged duration >> active window duration), confirmation status, and implementation timeline
+  - Use this status if mitigations are necessary but not yet confirmed as executable, especially for segments with **extreme sustained exposure** (e.g., flagged duration >200 minutes, flagged bin percentage >20%)
 
 - 🔴 **NOT READY** - Requires significant changes before race day
   - Criteria: LOS E/F conditions exist, structural capacity exceeded, major course redesign needed
