@@ -6,7 +6,7 @@
 PORT ?= 8080
 
 # -------- Phony targets --------
-.PHONY: help usage --help dev e2e e2e-sat e2e-sun e2e-coverage-lite stop build validate-output validate-all prune-runs
+.PHONY: help usage --help dev e2e e2e-sat e2e-sun e2e-coverage-lite stop build validate-output validate-all prune-runs ai-prompt
 
 # -------- Use same shell for multi-line targets --------
 .ONESHELL:
@@ -31,6 +31,7 @@ help usage --help: ## Show this help message
 	@echo "  validate-output     Validate output integrity for latest run"
 	@echo "  validate-all        Validate output for all runs in index.json"
 	@echo "  prune-runs          Prune old run_ids, keeping last N (KEEP=n, --dry-run for preview)"
+	@echo "  ai-prompt           Generate AI prompt for a run_id (RUN_ID=...)"
 	@echo ""
 	@echo "Configuration:"
 	@echo "	PORT=$(PORT)  (Docker container port)"
@@ -186,6 +187,14 @@ validate-output: ## Validate output integrity for latest run
 validate-all: ## Validate all runs in index.json
 	@echo "🔍 Validating all runs..."
 	@docker exec run-density-dev python -m app.tests.validate_output --all
+
+ai-prompt: ## Generate AI prompt for a run_id (manual mode)
+	@if [ -z "$(RUN_ID)" ]; then \
+		echo "❌ Error: RUN_ID parameter required (e.g., make ai-prompt RUN_ID=4VwzQWum7DpFCj7r6aZi4s)"; \
+		exit 1; \
+	fi
+	@echo "🧠 Generating AI prompt for run_id=$(RUN_ID)..."
+	@docker exec run-density-dev python -m app.utils.ai_analysis prompt --run-id $(RUN_ID) || (echo "❌ Container not running. Start with 'make dev' first." && exit 1)
 
 prune-runs: ## Prune old run_ids, keeping last N (KEEP=n required, --dry-run for preview)
 	@if [ -z "$(KEEP)" ]; then \
