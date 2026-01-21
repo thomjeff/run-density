@@ -27,13 +27,13 @@ E2c,Hughes to Neil,half,full,3.33,3.99,16.98,17.64,merge,E1c,"On Trail (3.0m, tw
 E3a,Neil to Gibson,10k,half,7.09,7.63,3.99,4.53,merge,E2a,"On Trail (3.0m, two lanes); Overtake expected (fast 10k / slow half). Keep right critical."
 E3b,Neil to Gibson,10k,full,7.09,7.63,17.64,18.18,merge,E2b,"On Trail (3.0m, two lanes); Overtake expected (slow 10K / fast full). Keep right critical."
 E3c,Neil to Gibson,half,full,3.99,4.53,17.64,18.18,merge,E2c,"On Trail (3.0m, two lanes); Overtake expected (slow half / fast full returning from Full turn at Blake). Keep right critical."
-E4a,Gibson to Station Rd.,10k,half,7.63,8.10,4.53,5.00,merge,E3a,"On Trail (3.0m, two lanes); Overtake expected (fast 10k / slow half). Keep right critical."
-E4b,Gibson to Station Rd.,10k,full,7.63,8.10,18.18,18.65,merge,E3b,"On Trail (3.0m, two lanes); Overtake expected (slow 10K / fast full). Keep right critical."
-E4c,Gibson to Station Rd.,half,full,4.53,5.00,18.18,18.65,merge,E3c,"On Trail (3.0m, two lanes); Overtake expected (slow half / fast full returning from Full turn at Blake). Keep right critical."
+E4a,Gibson to Station Rd.,10k,half,7.63,8.1,4.53,5,merge,E3a,"On Trail (3.0m, two lanes); Overtake expected (fast 10k / slow half). Keep right critical."
+E4b,Gibson to Station Rd.,10k,full,7.63,8.1,18.18,18.65,merge,E3b,"On Trail (3.0m, two lanes); Overtake expected (slow 10K / fast full). Keep right critical."
+E4c,Gibson to Station Rd.,half,full,4.53,5,18.18,18.65,merge,E3c,"On Trail (3.0m, two lanes); Overtake expected (slow half / fast full returning from Full turn at Blake). Keep right critical."
 G1,Full Loop QS to Trail/Aberdeen (Full Only),full,full,20.55,21.65,20.55,21.65,none,,"Full Only on Aberdeen, St John, McLeod, Lincoln Trail (Queen Sq. Loop)"
 H1a,Trail/Aberdeen to Station Rd (Full outbound to Station vs 10K finish),full,10k,21.65,23.26,8.1,10,counterflow,,Trail at Aberdeen (by water pump station) to Station Rd. where Full runners go right to Gibson Trail. 10K heading southbound to Finish. Shared segment with Half.
 H1b,Trail/Aberdeen to Station Rd. (Full outbound to Station vs Half finish),full,half,21.65,23.26,19.35,20.85,counterflow,,Trail at Aberdeen (by water pump station) to Station Rd. where Full and Half runners go right to Gibson Trail. Shared segment with 10K.
-I1,Station Rd to Greenwood Dr (Watters),half,full,5.00,5.71,23.26,23.97,counterflow,,"On Trail (3.0m, two lanes) Full/Half runners from Station/Rd. on to the Gibson Trail to Marysville. "
+I1,Station Rd to Greenwood Dr (Watters),half,full,5,5.71,23.26,23.97,counterflow,,"On Trail (3.0m, two lanes) Full/Half runners from Station/Rd. on to the Gibson Trail to Marysville. "
 I2,Greenwood Dr (Watters) to Greenwood (2nd Crossing),half,full,5.71,6.91,23.97,25.17,counterflow,,"On Trail (3.0m, two lanes) Full/Half runners from Station/Rd. on to the Gibson Trail to Marysville. "
 I3,Greenwood (2nd Crossing) to Water Stop,half,full,6.91,7.92,25.17,26.18,counterflow,,"On Trail (3.0m, two lanes) Full/Half runners from Station/Rd. on to the Gibson Trail to Marysville. "
 I4,Gibson Trail Water Stop to McGloin,half,full,7.92,10.29,26.18,28.55,counterflow,,"On Trail (3.0m, two lanes) Full/Half runners from Station/Rd. on to the Gibson Trail to Marysville. "
@@ -55,24 +55,24 @@ M2a,Trail/Aberdeen to Finish,10k,half,9.75,10,20.85,21.1,none,,Aberdeen Street t
 M2b,Trail/Aberdeen to Finish (Full QS Loop),10k,full,9.75,10,20.3,20.55,none,M2a,Aberdeen Street to Finish
 M2c,Trail/Aberdeen to Finish (Full QS Loop),half,full,20.85,21.1,20.3,20.55,none,M2a,Aberdeen Street to Finish
 M2d,Trail/Aberdeen to Finish,full,full,41.95,42.2,41.95,42.2,none,M2a,Aberdeen Street to Finish
-N1,Start to Queen/Westmorland,elite,elite,0,0.57,0,0.57,overtake,,Start to Queen/Westmorland
-N2,Queen/Westmorland to PSAB/WSB,elite,elite,0.57,1.45,0.57,1.45,overtake,N1,Queen/Westmorland to PSAB/WSB
-N3,PSAB/WSB to 104th Bridge,elite,elite,1.45,1.88,1.45,1.88,overtake,N2,PSAB/WSB to 104th Bridge
-N4,104th to Queen/York,elite,elite,1.88,2.58,1.88,2.58,overtake,N3,104th to Queen/York
-N5,Queen/York to Queen at PSAB,elite,elite,2.58,3.15,2.58,3.15,overtake,N4,Queen/York to Queen at PSAB
-N6,Queen at PSAB to PSAB/WSB,elite,elite,3.15,3.68,3.15,3.68,overtake,N5,Queen at PSAB to PSAB/WSB
-N7,PSAB/WSB to 104th Bridge,elite,elite,3.68,4.11,3.68,4.11,overtake,N6,PSAB/WSB to 104th Bridge
-N8,104th to Queen/York,elite,elite,4.11,4.81,4.11,4.81,overtake,N7,104th to Queen/York
-N9,Queen/York to Finish,elite,elite,4.81,5,4.81,5,overtake,N8,Queen/York to Finish
-O1,Start to Queen/Westmorland,open,open,0,0.57,0,0.57,overtake,,Start to Queen/Westmorland
-O2,Queen/Westmorland to PSAB/WSB,open,open,0.57,1.45,0.57,1.45,overtake,O1,Queen/Westmorland to PSAB/WSB
-O3,PSAB/WSB to 104th Bridge,open,open,1.45,1.88,1.45,1.88,overtake,O2,PSAB/WSB to 104th Bridge
-O4,104th to Queen/York,open,open,1.88,2.58,1.88,2.58,overtake,O3,104th to Queen/York
-O5,Queen/York to Queen at PSAB,open,open,2.58,3.15,2.58,3.15,overtake,O4,Queen/York to Queen at PSAB
-O6,Queen at PSAB to PSAB/WSB,open,open,3.15,3.68,3.15,3.68,overtake,O5,Queen at PSAB to PSAB/WSB
-O7,PSAB/WSB to 104th Bridge,open,open,3.68,4.11,3.68,4.11,overtake,O6,PSAB/WSB to 104th Bridge
-O8,104th to Queen/York,open,open,4.11,4.81,4.11,4.81,overtake,O7,104th to Queen/York
-O9,Queen/York to Finish,open,open,4.81,5,4.81,5,overtake,O8,Queen/York to Finish
+N1,Start to Queen/Westmorland,elite,elite,0,0.57,0,0.57,none,,Start to Queen/Westmorland
+N2,Queen/Westmorland to PSAB/WSB,elite,elite,0.57,1.45,0.57,1.45,none,N1,Queen/Westmorland to PSAB/WSB
+N3,PSAB/WSB to 104th Bridge,elite,elite,1.45,1.88,1.45,1.88,none,N2,PSAB/WSB to 104th Bridge
+N4,104th to Queen/York,elite,elite,1.88,2.58,1.88,2.58,none,N3,104th to Queen/York
+N5,Queen/York to Queen at PSAB,elite,elite,2.58,3.15,2.58,3.15,none,N4,Queen/York to Queen at PSAB
+N6,Queen at PSAB to PSAB/WSB,elite,elite,3.15,3.68,3.15,3.68,none,N5,Queen at PSAB to PSAB/WSB
+N7,PSAB/WSB to 104th Bridge,elite,elite,3.68,4.11,3.68,4.11,none,N6,PSAB/WSB to 104th Bridge
+N8,104th to Queen/York,elite,elite,4.11,4.81,4.11,4.81,none,N7,104th to Queen/York
+N9,Queen/York to Finish,elite,elite,4.81,5,4.81,5,none,N8,Queen/York to Finish
+O1,Start to Queen/Westmorland,open,open,0,0.57,0,0.57,none,,Start to Queen/Westmorland
+O2,Queen/Westmorland to PSAB/WSB,open,open,0.57,1.45,0.57,1.45,none,O1,Queen/Westmorland to PSAB/WSB
+O3,PSAB/WSB to 104th Bridge,open,open,1.45,1.88,1.45,1.88,none,O2,PSAB/WSB to 104th Bridge
+O4,104th to Queen/York,open,open,1.88,2.58,1.88,2.58,none,O3,104th to Queen/York
+O5,Queen/York to Queen at PSAB,open,open,2.58,3.15,2.58,3.15,none,O4,Queen/York to Queen at PSAB
+O6,Queen at PSAB to PSAB/WSB,open,open,3.15,3.68,3.15,3.68,none,O5,Queen at PSAB to PSAB/WSB
+O7,PSAB/WSB to 104th Bridge,open,open,3.68,4.11,3.68,4.11,none,O6,PSAB/WSB to 104th Bridge
+O8,104th to Queen/York,open,open,4.11,4.81,4.11,4.81,none,O7,104th to Queen/York
+O9,Queen/York to Finish,open,open,4.81,5,4.81,5,none,O8,Queen/York to Finish
 N5a,Queen/York to Queen at PSAB,elite,elite,2.58,3.15,0,0.57,overtake,N4,Queen/York to Queen at PSAB (Lap 2 overtake Lap 1)
 N6a,Queen at PSAB to PSAB/WSB,elite,elite,3.15,3.68,0.57,1.45,overtake,N5,Queen at PSAB to PSAB/WSB (Lap 2 overtake Lap 1)
 N7a,PSAB/WSB to 104th Bridge,elite,elite,3.68,4.11,1.45,1.88,overtake,N6,PSAB/WSB to 104th Bridge (Lap 2 overtake Lap 1)
