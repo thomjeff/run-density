@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 import requests
 from PIL import Image, ImageDraw, ImageFont
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
@@ -41,8 +41,8 @@ _TILE_SIZE = 256
 
 # Output sizing
 _MAP_SIZE = (640, 360)  # px (width, height)
-_PAGE_SIZE = A4
-_MARGIN = 0.75 * inch
+_PAGE_SIZE = letter
+_MARGIN = 0.5 * inch
 _SECTION_GAP = 10
 
 # Map radius guideline (not strict)
@@ -318,7 +318,7 @@ def _render_onepager_pdf(
         maps_url,
         font_bold,
         font_body,
-        12,
+        14,
         _MARGIN,
         y - 4,
         page_w - 2 * _MARGIN,
@@ -327,6 +327,7 @@ def _render_onepager_pdf(
     map_width = (page_w - 2 * _MARGIN) * 0.85
     map_height = map_width * (_MAP_SIZE[1] / _MAP_SIZE[0])
     if map_path.exists():
+        y = _ensure_space(c, y, map_height)
         c.drawImage(
             ImageReader(str(map_path)),
             _MARGIN,
@@ -335,13 +336,22 @@ def _render_onepager_pdf(
             height=map_height,
             preserveAspectRatio=True,
         )
-    y = y - map_height - _SECTION_GAP
+    y = y - map_height - _SECTION_GAP - 8
 
     loc_start = _format_time(report_row.get("loc_start"))
     loc_end = _format_time(report_row.get("loc_end"))
     duration = report_row.get("duration")
     duration_text = f"{duration} min" if duration not in [None, "", "NA"] else "NA"
-    y = _draw_text_block(c, "⏰ LOCATION TIMES", font_bold, 14, _MARGIN, y, page_w - 2 * _MARGIN)
+    y = _draw_text_block(c, "LOCATION TIMES:", font_bold, 14, _MARGIN, y, page_w - 2 * _MARGIN)
+    y = _draw_text_block(
+        c,
+        "Time on location across all shifts.",
+        font_body,
+        12,
+        _MARGIN + 16,
+        y - 2,
+        page_w - 2 * _MARGIN,
+    )
     y = _draw_text_block(
         c,
         f"{loc_start} - {loc_end} (Duration: {duration_text})",
@@ -352,7 +362,17 @@ def _render_onepager_pdf(
         page_w - 2 * _MARGIN,
     )
 
-    y = _draw_text_block(c, "⏱️ RUNNER TIMINGS", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
+    y = _draw_text_block(c, "RUNNER TIMINGS:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
+    y = _draw_text_block(
+        c,
+        "The predicted timing for the first and last runner to arrive at and depart from this location. "
+        "The peak times are when to expect the highest number of runners.",
+        font_body,
+        12,
+        _MARGIN + 16,
+        y - 2,
+        page_w - 2 * _MARGIN,
+    )
     timings_lines = [
         f"First: {_format_time(report_row.get('first_runner'))}",
         f"Peak Start: {_format_time(report_row.get('peak_start'))}",
@@ -362,7 +382,16 @@ def _render_onepager_pdf(
     for line in timings_lines:
         y = _draw_text_block(c, f"- {line}", font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
 
-    y = _draw_text_block(c, "🏃 EVENTS", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
+    y = _draw_text_block(c, "EVENTS:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
+    y = _draw_text_block(
+        c,
+        "Runners from the following events will be at this location during the times above:",
+        font_body,
+        12,
+        _MARGIN + 16,
+        y - 2,
+        page_w - 2 * _MARGIN,
+    )
     events = _extract_events(location)
     if events:
         for event_name in events:
@@ -375,16 +404,16 @@ def _render_onepager_pdf(
         proxy_note = "This location is near the course, but not directly on one or more events' course."
         y = _draw_text_block(c, proxy_note, font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
 
-    y = _draw_text_block(c, "📄 NOTES", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
+    y = _draw_text_block(c, "NOTES:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
     y = _draw_text_block(c, _format_bullets(location.get("notes", "") or "NA"), font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
 
-    y = _draw_text_block(c, "📦 EQUIPMENT", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
+    y = _draw_text_block(c, "EQUIPMENT PROVIDED:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
     y = _draw_text_block(c, _format_bullets(location.get("equipment", "") or "NA"), font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
 
-    y = _draw_text_block(c, "📞 CONTACT", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
+    y = _draw_text_block(c, "CONTACT:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
     y = _draw_text_block(c, _format_bullets(location.get("contact", "") or "NA"), font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
 
-    y = _draw_text_block(c, "⛈️ WEATHER", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
+    y = _draw_text_block(c, "WEATHER:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
     y = _draw_text_block(
         c,
         "- Dress for the weather conditions for the duration of your shift.",
@@ -394,7 +423,7 @@ def _render_onepager_pdf(
         y - 2,
         page_w - 2 * _MARGIN,
     )
-    y = _draw_text_block(c, "👟 FOOTWEAR", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
+    y = _draw_text_block(c, "FOOTWEAR", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
     _draw_text_block(
         c,
         "- Wear comfortable shoes as you will be standing for most of your shift.\n"
@@ -508,6 +537,7 @@ def _draw_gps_with_link(
     y: float,
     max_width: float
 ) -> float:
+    y = _ensure_space(c, y, font_size + 2)
     label_text = "GPS: "
     c.setFont(label_font, font_size)
     c.drawString(x, y, label_text)
@@ -535,6 +565,13 @@ def _draw_gps_with_link(
     return y - _SECTION_GAP
 
 
+def _ensure_space(c: canvas.Canvas, y: float, needed_height: float) -> float:
+    if y - needed_height < _MARGIN:
+        c.showPage()
+        return _PAGE_SIZE[1] - _MARGIN
+    return y
+
+
 def _format_bullets(text: str) -> str:
     lines = [line.strip() for line in str(text).splitlines() if line.strip()]
     if not lines:
@@ -554,6 +591,8 @@ def _draw_text_block(
     c.setFont(font_name, font_size)
     for line in text.splitlines() if "\n" in text else [text]:
         for wrapped_line in _wrap_line(line, font_name, font_size, max_width):
+            y = _ensure_space(c, y, font_size + 2)
+            c.setFont(font_name, font_size)
             c.drawString(x, y, wrapped_line)
             y -= (font_size + 2)
     return y
