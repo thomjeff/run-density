@@ -48,15 +48,15 @@ services:
     # Issue #503: Memory and CPU limits for performance optimization
     # NOTE: deploy.* is ignored by docker-compose (non-swarm).
     # Use mem_limit/cpus to enforce local limits with `make dev`.
-    mem_limit: 6g
-    mem_reservation: 4g
+    mem_limit: 10g
+    mem_reservation: 8g
     cpus: "3.0"
     deploy:
       resources:
         limits:
-          memory: 6G
+          memory: 10G
           cpus: '3.0'
         reservations:
-          memory: 4G
+          memory: 8G
           cpus: '2.0'
 

@@ -15,6 +15,7 @@ Version: 1.6.0
 import pandas as pd
 import numpy as np
 import math
+import os
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Any, Protocol
 import logging
@@ -1844,6 +1845,22 @@ def analyze_density_segments(pace_data: pd.DataFrame,
     }
     
     for seg_id, d in density_cfg.items():
+        # Track memory per segment to diagnose spikes during density runs
+        try:
+            from app.core.v2.performance import get_memory_usage_mb
+            mem_mb = get_memory_usage_mb()
+            if not mem_mb:
+                try:
+                    with open("/proc/self/statm", "r", encoding="utf-8") as statm:
+                        rss_pages = int(statm.read().split()[1])
+                    mem_mb = (rss_pages * os.sysconf("SC_PAGE_SIZE")) / (1024 * 1024)
+                except Exception:
+                    mem_mb = 0.0
+            if mem_mb:
+                logger.info(f"Segment {seg_id}: memory_mb={mem_mb:.2f}")
+        except Exception:
+            pass
+
         # Calculate physical segment dimensions from all events
         # Issue #251 FIX: Use longest single event's range, not min/max across all events
         event_ranges = []

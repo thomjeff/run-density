@@ -16,7 +16,6 @@ import logging
 
 from app.core.v2.models import Day, Event
 from app.core.v2.timeline import DayTimeline
-from app.one_pager import generate_location_onepagers
 from app.utils.run_id import get_runflow_root
 
 logger = logging.getLogger(__name__)
@@ -242,6 +241,8 @@ def generate_reports_per_day(
 
                     # Issue #702: Generate one-pager PDFs for locations flagged onepage='y'
                     try:
+                        # Lazy import to avoid loading ReportLab/PIL during density phases
+                        from app.one_pager import generate_location_onepagers
                         maps_dir = get_day_output_path(run_id, day, "maps")
                         maps_dir.mkdir(parents=True, exist_ok=True)
                         onepagers_dir = reports_path / "onepagers"
