@@ -42,6 +42,7 @@ geopandas>=0.14.0
 # Issue #280: Density Heatmaps & Captions from bin_summary.json
 matplotlib>=3.8.0
 pillow>=10.0.0
+reportlab>=4.0.0
 
 # Testing (Issue #535: E2E tests)
 pytest>=7.4.0

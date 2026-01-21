@@ -16,6 +16,7 @@ import logging
 
 from app.core.v2.models import Day, Event
 from app.core.v2.timeline import DayTimeline
+from app.one_pager import generate_location_onepagers
 from app.utils.run_id import get_runflow_root
 
 logger = logging.getLogger(__name__)
@@ -238,6 +239,28 @@ def generate_reports_per_day(
                 if locations_path:
                     day_report_paths["locations"] = str(locations_path)
                     logger.info(f"Successfully generated locations report for day {day.value}")
+
+                    # Issue #702: Generate one-pager PDFs for locations flagged onepage='y'
+                    try:
+                        maps_dir = get_day_output_path(run_id, day, "maps")
+                        maps_dir.mkdir(parents=True, exist_ok=True)
+                        onepagers_dir = reports_path / "onepagers"
+                        onepagers_dir.mkdir(parents=True, exist_ok=True)
+                        generated = generate_location_onepagers(
+                            run_id=run_id,
+                            day=day.value,
+                            locations_results_json_path=locations_results_json_path,
+                            locations_report_csv_path=locations_path,
+                            maps_dir=maps_dir,
+                            output_dir=onepagers_dir
+                        )
+                        logger.info(
+                            f"Issue #702: Generated {generated} one-pagers for day {day.value}"
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Issue #702: One-pager generation failed for day {day.value}: {e}"
+                        )
                 else:
                     logger.warning(f"Locations report generation returned None for day {day.value}")
         except FileNotFoundError:

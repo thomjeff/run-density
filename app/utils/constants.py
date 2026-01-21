@@ -142,6 +142,11 @@ MAP_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
 MAP_TILE_ATTRIBUTION = "&copy; OpenStreetMap contributors"
 MAP_MAX_ZOOM = 20
 
+# Issue #702: One-pager map snapshot configuration (match Leaflet Carto Light)
+LOCATION_MAP_RADIUS_M = 400
+LOCATION_MAP_TILE_URL = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
+LOCATION_MAP_TILE_SUBDOMAINS = ["a", "b", "c", "d"]
+
 # Default segment properties
 DEFAULT_SEGMENT_WIDTH_M = 5.0
 DEFAULT_FLOW_TYPE = "none"
