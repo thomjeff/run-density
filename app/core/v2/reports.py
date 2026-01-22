@@ -245,15 +245,15 @@ def generate_reports_per_day(
                         from app.one_pager import generate_location_onepagers
                         maps_dir = get_day_output_path(run_id, day, "maps")
                         maps_dir.mkdir(parents=True, exist_ok=True)
-                        onepagers_dir = reports_path / "onepagers"
-                        onepagers_dir.mkdir(parents=True, exist_ok=True)
+                        loc_sheets_dir = reports_path / "loc_sheets"
+                        loc_sheets_dir.mkdir(parents=True, exist_ok=True)
                         generated = generate_location_onepagers(
                             run_id=run_id,
                             day=day.value,
                             locations_results_json_path=locations_results_json_path,
                             locations_report_csv_path=locations_path,
                             maps_dir=maps_dir,
-                            output_dir=onepagers_dir
+                            output_dir=loc_sheets_dir
                         )
                         logger.info(
                             f"Issue #702: Generated {generated} one-pagers for day {day.value}"
