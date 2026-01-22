@@ -308,6 +308,12 @@ def _render_onepager_pdf(
     loc_type = location.get("loc_type", "")
     y = _draw_label_value(c, "TYPE", loc_type, font_bold, font_body, 14, 12, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
 
+    resources = _extract_resources(location)
+    if resources:
+        y = _draw_text_block(c, "RESOURCES:", font_bold, 14, _MARGIN, y - 2, page_w - 2 * _MARGIN)
+        for resource in resources:
+            y = _draw_text_block(c, f"- {resource}", font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
+
     lat = location.get("lat", "")
     lon = location.get("lon", "")
     gps_line = f"{lat}, {lon}"
@@ -362,47 +368,48 @@ def _render_onepager_pdf(
         page_w - 2 * _MARGIN,
     )
 
-    y = _draw_text_block(c, "RUNNER TIMINGS:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
-    y = _draw_text_block(
-        c,
-        "The predicted timing for the first and last runner to arrive at and depart from this location. "
-        "The peak times are when to expect the highest number of runners.",
-        font_body,
-        12,
-        _MARGIN + 16,
-        y - 2,
-        page_w - 2 * _MARGIN,
-    )
-    timings_lines = [
-        f"First: {_format_time(report_row.get('first_runner'))}",
-        f"Peak Start: {_format_time(report_row.get('peak_start'))}",
-        f"Peak End: {_format_time(report_row.get('peak_end'))}",
-        f"Last: {_format_time(report_row.get('last_runner'))}",
-    ]
-    for line in timings_lines:
-        y = _draw_text_block(c, f"- {line}", font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
+    is_proxy = _is_proxy_location(location)
+    if not is_proxy:
+        y = _draw_text_block(c, "RUNNER TIMINGS:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
+        y = _draw_text_block(
+            c,
+            "The predicted timing for the first and last runner to arrive at and depart from this location. "
+            "The peak times are when to expect the highest number of runners.",
+            font_body,
+            12,
+            _MARGIN + 16,
+            y - 2,
+            page_w - 2 * _MARGIN,
+        )
+        timings_lines = [
+            f"First: {_format_time(report_row.get('first_runner'))}",
+            f"Peak Start: {_format_time(report_row.get('peak_start'))}",
+            f"Peak End: {_format_time(report_row.get('peak_end'))}",
+            f"Last: {_format_time(report_row.get('last_runner'))}",
+        ]
+        for line in timings_lines:
+            y = _draw_text_block(c, f"- {line}", font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
 
     y = _draw_text_block(c, "EVENTS:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
-    y = _draw_text_block(
-        c,
-        "Runners from the following events will be at this location during the times above:",
-        font_body,
-        12,
-        _MARGIN + 16,
-        y - 2,
-        page_w - 2 * _MARGIN,
-    )
-    events = _extract_events(location)
-    if events:
-        for event_name in events:
-            y = _draw_text_block(c, f"- {event_name}", font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
-    else:
-        y = _draw_text_block(c, "- NA", font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
-
-    proxy_loc_id = location.get("proxy_loc_id")
-    if proxy_loc_id not in [None, "", "nan"] and not pd.isna(proxy_loc_id):
+    if is_proxy:
         proxy_note = "This location is near the course, but not directly on one or more events' course."
         y = _draw_text_block(c, proxy_note, font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
+    else:
+        y = _draw_text_block(
+            c,
+            "Runners from the following events will be at this location during the times above:",
+            font_body,
+            12,
+            _MARGIN + 16,
+            y - 2,
+            page_w - 2 * _MARGIN,
+        )
+        events = _extract_events(location)
+        if events:
+            for event_name in events:
+                y = _draw_text_block(c, f"- {event_name}", font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
+        else:
+            y = _draw_text_block(c, "- NA", font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
 
     y = _draw_text_block(c, "NOTES:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
     y = _draw_text_block(c, _format_bullets(location.get("notes", "") or "NA"), font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
@@ -446,6 +453,26 @@ def _extract_events(location: Dict[str, Any]) -> List[str]:
         if value == "y":
             events.append(name)
     return events
+
+
+def _is_proxy_location(location: Dict[str, Any]) -> bool:
+    proxy_loc_id = location.get("proxy_loc_id")
+    return proxy_loc_id not in [None, "", "nan"] and not pd.isna(proxy_loc_id)
+
+
+def _extract_resources(location: Dict[str, Any]) -> List[str]:
+    resources = []
+    for code in ["awp", "caf", "fdsa", "fpf", "ofc", "sja", "vol", "yssr"]:
+        count = location.get(f"{code}_count")
+        if count is None or (isinstance(count, float) and pd.isna(count)):
+            continue
+        try:
+            count_value = int(count)
+        except (TypeError, ValueError):
+            continue
+        if count_value > 0:
+            resources.append(f"{code}: {count_value}")
+    return resources
 
 
 def _build_google_maps_url(lat: Any, lon: Any) -> str:
