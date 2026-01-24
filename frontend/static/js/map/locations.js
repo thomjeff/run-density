@@ -9,9 +9,9 @@
 // Location type colors (from requirements)
 const locationTypeColors = {
     'traffic': '#808080',  // Gray
-    'course': '#2196F3',   // Blue
+    'course': '#4CAF50',   // Green
     'aid': '#F44336',      // Red
-    'water': '#4CAF50',    // Green
+    'water': '#2196F3',    // Blue
     'marshal': '#FF9800'   // Orange
 };
 
@@ -103,6 +103,9 @@ function formatTimeToHHMM(timeStr) {
 function createLocationTooltip(properties) {
     const props = properties || {};
     const locType = props.loc_type || 'unknown';
+    const locLabel = props.loc_label || 'Unknown';
+    const locId = props.loc_id != null ? String(props.loc_id) : null;
+    const heading = locId ? `${locId}-${locLabel}` : locLabel;
     const locStart = props.loc_start && props.loc_start !== 'NA' ? props.loc_start : null;
     const locEnd = props.loc_end && props.loc_end !== 'NA' ? props.loc_end : null;
     const locStartFormatted = formatTimeToHHMM(locStart);
@@ -119,16 +122,16 @@ function createLocationTooltip(properties) {
     
     let tooltip = `
         <div style="font-family: Arial, sans-serif; font-size: 14px;">
-            <strong>${props.loc_label || 'Unknown'}</strong><br>
-            <span style="color: ${getLocationMarkerColor(locType)}; font-weight: bold;">${locType}</span>
+            <strong>${heading}</strong><br>
+            <strong>Type:</strong> <span style="color: ${getLocationMarkerColor(locType)}; font-weight: bold;">${locType}</span>
     `;
     
     if (locStartFormatted && locEndFormatted) {
-        tooltip += `<br>${locStartFormatted} → ${locEndFormatted}`;
+        tooltip += `<br><strong>Operational Window:</strong> ${locStartFormatted} → ${locEndFormatted}`;
     }
     
     if (duration != null) {
-        tooltip += `<br>Duration: ${duration} min`;
+        tooltip += `<br><strong>Duration:</strong> ${duration} min`;
     }
     
     // Issue #592: Add resource counts to tooltip
@@ -143,13 +146,13 @@ function createLocationTooltip(properties) {
         }
     });
     if (resourceCounts.length > 0) {
-        tooltip += `<br>Resources: ${resourceCounts.join(', ')}`;
+        tooltip += `<br><strong>Resources:</strong> ${resourceCounts.join(', ')}`;
     }
     
     // Issue #598: Add flag to tooltip
     const locationFlag = props.flag;
     if (locationFlag === true || locationFlag === "true" || locationFlag === "Y") {
-        tooltip += `<br><span style="color: #F44336; font-weight: bold;">Flag: Y</span>`;
+        tooltip += `<br><strong>Flag:</strong> <span style="color: #F44336; font-weight: bold;">Y</span>`;
     }
     
     if (timingSourceTooltip) {
@@ -168,6 +171,9 @@ function createLocationTooltip(properties) {
 function createLocationPopup(properties) {
     const props = properties || {};
     const locType = props.loc_type || 'unknown';
+    const locLabel = props.loc_label || 'Unknown';
+    const locId = props.loc_id != null ? String(props.loc_id) : null;
+    const heading = locId ? `${locId}-${locLabel}` : locLabel;
     const locStart = props.loc_start && props.loc_start !== 'NA' ? props.loc_start : null;
     const locEnd = props.loc_end && props.loc_end !== 'NA' ? props.loc_end : null;
     const locStartFormatted = formatTimeToHHMM(locStart);
@@ -177,6 +183,7 @@ function createLocationPopup(properties) {
     const peakEnd = props.peak_end && props.peak_end !== 'NA' ? props.peak_end : null;
     const peakStartFormatted = formatTimeToHHMM(peakStart);
     const peakEndFormatted = formatTimeToHHMM(peakEnd);
+    const notes = props.notes && props.notes !== 'NA' ? props.notes : null;
     
     // Format timing source (Issue #479)
     let timingSourceDisplay = "Modeled";
@@ -195,19 +202,15 @@ function createLocationPopup(properties) {
     }
     
     let popup = `
-        <div style="font-family: Arial, sans-serif; font-size: 14px; min-width: 200px;">
-            <h3 style="margin: 0 0 0.5rem 0; font-size: 16px; color: #2c3e50;">${props.loc_label || 'Unknown'}</h3>
+        <div style="font-family: Arial, sans-serif; font-size: 14px; width: 260px;">
+            <h3 style="margin: 0 0 0.5rem 0; font-size: 16px; color: #2c3e50;">${heading}</h3>
             <div style="margin-bottom: 0.5rem;">
                 <strong>Type:</strong> <span style="color: ${getLocationMarkerColor(locType)}; font-weight: bold;">${locType}</span>
             </div>
     `;
     
-    if (props.loc_id != null) {
-        popup += `<div style="margin-bottom: 0.5rem;"><strong>ID:</strong> ${props.loc_id}</div>`;
-    }
-    
     if (locStartFormatted && locEndFormatted) {
-        popup += `<div style="margin-bottom: 0.5rem;"><strong>Operational Window:</strong><br>${locStartFormatted} → ${locEndFormatted}</div>`;
+        popup += `<div style="margin-bottom: 0.5rem;"><strong>Operational Window:</strong> ${locStartFormatted} → ${locEndFormatted}</div>`;
     }
     
     if (duration != null) {
@@ -215,7 +218,7 @@ function createLocationPopup(properties) {
     }
     
     if (peakStartFormatted && peakEndFormatted) {
-        popup += `<div style="margin-bottom: 0.5rem;"><strong>Peak Window:</strong><br>${peakStartFormatted} → ${peakEndFormatted}</div>`;
+        popup += `<div style="margin-bottom: 0.5rem;"><strong>Peak Window:</strong> ${peakStartFormatted} → ${peakEndFormatted}</div>`;
     }
     
     if (props.zone) {
@@ -245,9 +248,10 @@ function createLocationPopup(properties) {
         const flagWorstLos = props.flag_worst_los || 'N/A';
         popup += `<div style="margin-bottom: 0.5rem;"><strong>Flag:</strong> <span style="color: #F44336; font-weight: bold;">Y</span> (Segment: ${flaggedSegId}, Severity: ${flagSeverity}, LOS: ${flagWorstLos})</div>`;
     }
-    
-    // Add timing source (Issue #479)
-    popup += `<div style="margin-bottom: 0.5rem; font-size: 12px; color: #666;"><strong>Source:</strong> ${timingSourceDisplay}</div>`;
+
+    if (notes) {
+        popup += `<div style="margin-bottom: 0.5rem; word-break: break-word;"><strong>Notes:</strong> ${notes}</div>`;
+    }
     
     popup += '</div>';
     return popup;

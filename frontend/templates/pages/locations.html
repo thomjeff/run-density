@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
     #locations-map {
-        height: 500px;
+        height: 600px;
         border-radius: 4px;
         overflow: hidden;
         position: relative;
@@ -215,7 +215,7 @@
 
 <!-- External JavaScript modules -->
 <script src="/static/js/map/base_map.js"></script>
-<script src="/static/js/map/locations.js?v=2025-12-14T0100Z"></script>
+<script src="/static/js/map/locations.js?v=2026-01-24T1134Z"></script>
 
 <!-- Table interaction script -->
 <script>
@@ -854,9 +854,9 @@
     function getLocationMarkerColor(locType) {
         const locationTypeColors = {
             'traffic': '#808080',  // Gray
-            'course': '#2196F3',   // Blue
+            'course': '#4CAF50',   // Green
             'aid': '#F44336',      // Red
-            'water': '#4CAF50',    // Green
+            'water': '#2196F3',    // Blue
             'marshal': '#FF9800'   // Orange
         };
         return locationTypeColors[locType?.toLowerCase()] || '#999999';
