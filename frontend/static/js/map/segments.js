@@ -468,7 +468,7 @@ function updateFilterUI(segmentId) {
 
 /**
  * Attempt to show heatmap preview for a segment
- * Looks for runflow/{run_id}/{day}/ui/heatmaps/{seg_id}.png
+ * Looks for runflow/analysis/{run_id}/{day}/ui/visualizations/{seg_id}.png
  */
 async function showHeatmapPreview(segmentId) {
     const overlay = document.getElementById('heatmap-overlay');
@@ -500,11 +500,21 @@ async function showHeatmapPreview(segmentId) {
     const bases = [
         // Preferred mount: FastAPI mounts RUNFLOW_ROOT at /heatmaps
         // Issue #580: Updated path to visualizations/ subdirectory
+        // Issue #682: Updated to use runflow/analysis/{run_id} structure
+        `/heatmaps/analysis/${runId}/${day}/ui/visualizations/`,
+        `/heatmaps/analysis/${runId}/${day}/ui/heatmaps/`,
+        `/heatmaps/analysis/${runId}/heatmaps/`,
+        `/heatmaps/analysis/${runId}/ui/heatmaps/`,
+        // Legacy (pre-#682) runflow root without /analysis
         `/heatmaps/${runId}/${day}/ui/visualizations/`,
         `/heatmaps/${runId}/${day}/ui/heatmaps/`,
         `/heatmaps/${runId}/heatmaps/`,
         `/heatmaps/${runId}/ui/heatmaps/`,
         // Legacy direct paths
+        `/runflow/analysis/${runId}/${day}/ui/visualizations/`,
+        `/runflow/analysis/${runId}/${day}/ui/heatmaps/`,
+        `/runflow/analysis/${runId}/heatmaps/`,
+        `/runflow/analysis/${runId}/ui/heatmaps/`,
         `/runflow/${runId}/${day}/ui/visualizations/`,
         `/runflow/${runId}/${day}/ui/heatmaps/`,
         `/runflow/${runId}/heatmaps/`,
