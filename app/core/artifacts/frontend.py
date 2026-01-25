@@ -784,9 +784,10 @@ def generate_segments_geojson(reports_dir: Path, analysis_context: Optional[Any]
     if current_day:
         events = [e for e in all_events if e.get("day", "").lower() == current_day]
         if not events:
-            # If no events found for this day, fall back to all events (shouldn't happen, but be defensive)
-            events = all_events
-            print(f"   ⚠️  No events found for day {current_day}, using all events")
+            raise ValueError(
+                f"No events found for day {current_day} in analysis.json. "
+                "This is a data validation error - fail-fast."
+            )
         else:
             print(f"   ✅ Filtered events for day {current_day}: {[e.get('name') for e in events]}")
     else:
@@ -862,12 +863,16 @@ def generate_segments_geojson(reports_dir: Path, analysis_context: Optional[Any]
                     f"All segments must have a 'direction' field (e.g., 'uni', 'bi', 'forward', 'backward')."
                 )
     except Exception as e:
-        print(f"ERROR: Could not load segments.csv from {segments_csv_path}: {e}")
-        return {"type": "FeatureCollection", "features": []}
+        raise ValueError(
+            f"Could not load segments.csv from {segments_csv_path}: {e}. "
+            "This is a data validation error - fail-fast."
+        ) from e
     
     if not segments_list:
-        print(f"WARNING: No segments found for available events {available_event_names} in generate_segments_geojson")
-        return {"type": "FeatureCollection", "features": []}
+        raise ValueError(
+            f"No segments found for available events {sorted(available_event_names)} in generate_segments_geojson. "
+            "This is a data validation error - fail-fast."
+        )
     
     # Generate real coordinates for all segments from GPX (returns WGS84)
     # Note: generate_segment_coordinates will now only process segments that have matching events
@@ -916,12 +921,12 @@ def generate_segments_geojson(reports_dir: Path, analysis_context: Optional[Any]
             if not direction:
                 raise ValueError(f"Segment {seg_id} missing direction in segments metadata.")
             # Issue #655: Make schema_key optional - if not found in bins, try to get from segments_df or use default
-            schema_key = schema_keys.get(seg_id)
+            schema_key = schema_keys.get(seg_id) or dims.get("schema_key")
             if not schema_key:
-                # Try to infer schema from segment dimensions or use a default
-                # This prevents failure if bins.parquet is not accessible but we still want to generate segments.geojson
-                schema_key = dims.get("schema_key") or "on_course_open"  # Default schema
-                print(f"   ⚠️  Segment {seg_id} missing schema_key in bins metadata, using default: {schema_key}")
+                raise ValueError(
+                    f"Segment {seg_id} missing schema_key in bins metadata and segments.csv. "
+                    "This is a data validation error - fail-fast."
+                )
             # Update properties with dimensions
             props["label"] = seg_label
             

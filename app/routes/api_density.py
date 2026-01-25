@@ -477,7 +477,12 @@ def _check_segment_flagged(storage_service, seg_id: str) -> bool:
     return is_flagged
 
 
-def _load_heatmap_and_caption(storage_service, seg_id: str):
+def _load_heatmap_and_caption(
+    storage_service,
+    seg_id: str,
+    day: Optional[str] = None,
+    run_id: Optional[str] = None
+):
     """Load heatmap URL and caption for segment."""
     heatmap_url = None
     caption = None
@@ -486,7 +491,7 @@ def _load_heatmap_and_caption(storage_service, seg_id: str):
         # Use StorageService for heatmap URL generation
         storage = get_storage_service()
         logger.info(f"Storage mode: {storage.mode}, bucket: {storage.bucket}")
-        heatmap_url = storage.get_heatmap_signed_url(seg_id)
+        heatmap_url = storage.get_heatmap_signed_url(seg_id, day=day, run_id=run_id)
         logger.info(f"Heatmap URL for {seg_id}: {heatmap_url}")
     except Exception as e:
         logger.warning(f"Could not get heatmap URL for {seg_id}: {e}")
@@ -605,12 +610,12 @@ async def get_density_segment_detail(
         caption = ""
         if captions and seg_id in captions:
             caption_data = captions[seg_id]
-            # Build heatmap URL for day-scoped runflow structure (Issue #580: Updated path to visualizations/)
-            # Issue #682: Updated to use runflow/analysis/{run_id} structure
-            # Files are at: runflow/analysis/<run_id>/<day>/ui/visualizations/<seg_id>.png
-            # Mounted as: /heatmaps -> /app/runflow
-            # URL path: /heatmaps/analysis/<run_id>/<day>/ui/visualizations/<seg_id>.png
-            heatmap_url = f"/heatmaps/analysis/{run_id}/{selected_day}/ui/visualizations/{seg_id}.png"
+            # Build heatmap URL for day-scoped runflow structure
+            heatmap_url = storage.get_heatmap_signed_url(
+                seg_id,
+                day=selected_day,
+                run_id=run_id
+            )
             caption = caption_data.get("summary", "")
         
         # Issue #596: Load density metrics (utilization, worst_bin) from bins.parquet

@@ -162,14 +162,23 @@ Configuration is managed via `dev.env` file in the project root.
 **Core Variables:**
 
 ```bash
-# Bin Dataset Generation
+# Bin Dataset Generation (required for bins + segment metrics)
 ENABLE_BIN_DATASET=true
 
-# Output Directory
+# Segment rollups from bins (used by density_report)
+SEGMENTS_FROM_BINS=true
+
+# Analysis data directory (explicit config path for analysis.json)
+DATA_ROOT=/app/data
+
+# Output Directory (reports root)
 OUTPUT_DIR=reports
 
-# GCS Upload (disabled for local-only mode)
+# Legacy flag for cloud uploads; keep false for local-only mode
 GCS_UPLOAD=false
+
+# Flow parallelism tuning
+RUNFLOW_FLOW_MAX_WORKERS=8
 ```
 
 ### Overriding Environment Variables

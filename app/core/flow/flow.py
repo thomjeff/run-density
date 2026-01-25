@@ -1925,18 +1925,10 @@ def _build_overlap_row(
     directional_gain: float,
     pass_raw: bool,
     pass_strict: bool,
-    reason: str,
-    conflict_zone_a_start: Optional[float] = None,
-    conflict_zone_a_end: Optional[float] = None,
-    conflict_zone_b_start: Optional[float] = None,
-    conflict_zone_b_end: Optional[float] = None,
-    in_conflict_zone: Optional[bool] = None
+    reason: str
 ) -> Dict[str, Any]:
     """
     Build overlap row dictionary for audit output.
-    
-    Issue #607 Enhancement: Added conflict zone boundaries and in_conflict_zone flag
-    to support querying audit data to match Flow.csv results.
     """
     row = {
         "run_id": run_id,
@@ -1975,14 +1967,6 @@ def _build_overlap_row(
         "pass_flag_strict": pass_strict,
         "reason_code": reason
     }
-    
-    # Issue #607: Add conflict zone boundaries and flag
-    if conflict_zone_a_start is not None:
-        row["conflict_zone_a_start_km"] = conflict_zone_a_start
-        row["conflict_zone_a_end_km"] = conflict_zone_a_end
-        row["conflict_zone_b_start_km"] = conflict_zone_b_start
-        row["conflict_zone_b_end_km"] = conflict_zone_b_end
-        row["in_conflict_zone"] = in_conflict_zone
     
     return row
 
@@ -2065,18 +2049,12 @@ def _process_two_pointer_sweep(
     strict_min_dwell: int,
     strict_margin: int,
     topk: List[Tuple[float, Dict[str, Any]]],
-    topk_size: int = 2000,
-    conflict_zone_a_start: Optional[float] = None,
-    conflict_zone_a_end: Optional[float] = None,
-    conflict_zone_b_start: Optional[float] = None,
-    conflict_zone_b_end: Optional[float] = None,
-    min_overlap_duration: float = 0.0
+    topk_size: int = 2000
 ) -> Tuple[int, int, int, int]:
     """
     Process two-pointer sweep algorithm for temporal interval join.
-    
+
     Issue #607: Refactored to collect rows in a list instead of writing via _ShardWriter.
-    Issue #607 Enhancement: Added conflict zone boundaries and in_conflict_zone flag calculation.
     """
     j = 0
     total_pairs = 0
@@ -2109,59 +2087,12 @@ def _process_two_pointer_sweep(
                 if pass_raw: raw_pass += 1
                 if pass_strict: strict_pass += 1
                 
-                # Issue #607: Calculate if overlap is within conflict zone
-                # The main analysis calculates entry/exit times based on conflict zone boundaries.
-                # To match Flow.csv, we need to recalculate entry/exit times for conflict zone
-                # and check if the temporal overlap would still occur.
-                in_conflict_zone = None
-                if (conflict_zone_a_start is not None and conflict_zone_a_end is not None and
-                    conflict_zone_b_start is not None and conflict_zone_b_end is not None):
-                    # Calculate pace from full segment entry/exit times and distances
-                    # pace = (exit_time - entry_time) / (exit_km - entry_km) in sec/km
-                    segment_length_a = a["exit_km"] - a["entry_km"]
-                    segment_length_b = b["exit_km"] - b["entry_km"]
-                    
-                    if segment_length_a > 0 and segment_length_b > 0:
-                        pace_a_sec_per_km = (a["exit_time"] - a["entry_time"]) / segment_length_a
-                        pace_b_sec_per_km = (b["exit_time"] - b["entry_time"]) / segment_length_b
-                        
-                        # Calculate entry time at conflict zone start (relative to segment entry)
-                        # entry_time_at_conflict_start = entry_time + pace * (conflict_start - entry_km)
-                        conflict_zone_entry_time_a = a["entry_time"] + pace_a_sec_per_km * (conflict_zone_a_start - a["entry_km"])
-                        conflict_zone_exit_time_a = a["entry_time"] + pace_a_sec_per_km * (conflict_zone_a_end - a["entry_km"])
-                        conflict_zone_entry_time_b = b["entry_time"] + pace_b_sec_per_km * (conflict_zone_b_start - b["entry_km"])
-                        conflict_zone_exit_time_b = b["entry_time"] + pace_b_sec_per_km * (conflict_zone_b_end - b["entry_km"])
-                        
-                        # Check if temporal overlap occurs within conflict zone boundaries
-                        # Overlap occurs if: max(entry_a, entry_b) < min(exit_a, exit_b)
-                        overlap_start = max(conflict_zone_entry_time_a, conflict_zone_entry_time_b)
-                        overlap_end = min(conflict_zone_exit_time_a, conflict_zone_exit_time_b)
-                        conflict_zone_overlap_duration = overlap_end - overlap_start
-                        
-                        # Also check if both runners actually pass through their conflict zones
-                        # (entry_km <= conflict_end AND exit_km >= conflict_start)
-                        a_passes_through_zone = (a["entry_km"] <= conflict_zone_a_end and a["exit_km"] >= conflict_zone_a_start)
-                        b_passes_through_zone = (b["entry_km"] <= conflict_zone_b_end and b["exit_km"] >= conflict_zone_b_start)
-                        
-                        # Overlap is in conflict zone if:
-                        # 1. Both runners pass through their conflict zones
-                        # 2. There is a temporal overlap when using conflict zone entry/exit times
-                        # 3. Overlap duration meets minimum threshold (binned method uses >= min_overlap_duration)
-                        in_conflict_zone = (a_passes_through_zone and b_passes_through_zone and 
-                                          conflict_zone_overlap_duration >= min_overlap_duration)
-                    else:
-                        # Invalid segment lengths, default to False
-                        in_conflict_zone = False
-                
                 row = _build_overlap_row(
                     run_id, executed_at_utc, seg_id, segment_label, flow_type,
                     event_a_name, event_b_name, convergence_zone_start, convergence_zone_end,
                     zone_width_m, binning_applied, binning_mode, a, b,
                     os_, oe_, dwell, entry_delta, exit_delta, rel_entry, rel_exit,
-                    order_flip, directional_gain, pass_raw, pass_strict, reason,
-                    conflict_zone_a_start, conflict_zone_a_end,
-                    conflict_zone_b_start, conflict_zone_b_end,
-                    in_conflict_zone
+                    order_flip, directional_gain, pass_raw, pass_strict, reason
                 )
                 rows_collector.append(row)
                 
@@ -2258,25 +2189,19 @@ def emit_runner_audit(
     binning_applied: bool = False,
     binning_mode: str = "none",
     strict_min_dwell: int = 5,
-    strict_margin: int = 2,
-    from_km_a: Optional[float] = None,
-    to_km_a: Optional[float] = None,
-    from_km_b: Optional[float] = None,
-    to_km_b: Optional[float] = None
+    strict_margin: int = 2
 ) -> Tuple[pd.DataFrame, Dict[str, int]]:
     """
     Generate runner-level audit data and return as DataFrame.
     
     Issue #607: Refactored to return DataFrame instead of writing CSV files.
-    Issue #607 Enhancement: Added conflict zone boundaries and in_conflict_zone flag.
     
-    Inputs: 
+    Inputs:
         - event_a_data: DataFrame with columns: runner_id, entry_time, exit_time, entry_km, exit_km
         - event_b_data: DataFrame with columns: runner_id, entry_time, exit_time, entry_km, exit_km
-        - from_km_a, to_km_a, from_km_b, to_km_b: Full segment ranges (for conflict zone calculation)
     
     Outputs:
-        - DataFrame with all audit rows (including conflict zone columns)
+        - DataFrame with all audit rows
         - Dictionary with summary statistics
     
     Strategy: interval join using two-pointer sweep algorithm.
@@ -2293,44 +2218,23 @@ def emit_runner_audit(
     A.sort(key=lambda x: x["entry_time"])
     B.sort(key=lambda x: x["entry_time"])
     
-    # Issue #607: Calculate conflict zone boundaries if segment ranges are provided
-    conflict_zone_a_start = None
-    conflict_zone_a_end = None
-    conflict_zone_b_start = None
-    conflict_zone_b_end = None
-    
-    if from_km_a is not None and to_km_a is not None and from_km_b is not None and to_km_b is not None:
-        # Calculate conflict zone boundaries (same logic as main analysis)
-        center_a = (from_km_a + to_km_a) / 2.0
-        center_b = (from_km_b + to_km_b) / 2.0
-        conflict_half_km = (zone_width_m / 1000.0) / 2.0
-        
-        conflict_zone_a_start = max(from_km_a, center_a - conflict_half_km)
-        conflict_zone_a_end = min(to_km_a, center_a + conflict_half_km)
-        conflict_zone_b_start = max(from_km_b, center_b - conflict_half_km)
-        conflict_zone_b_end = min(to_km_b, center_b + conflict_half_km)
-    
     # Collect rows instead of writing to files
     rows_collector = []
     topk = []  # Keep topk for potential future use, but don't write CSV
     
     # Process two-pointer sweep algorithm
-    # Issue #607: Pass min_overlap_duration to match main analysis logic
-    from app.utils.constants import DEFAULT_MIN_OVERLAP_DURATION
     total_pairs, overlapped_pairs, raw_pass, strict_pass = _process_two_pointer_sweep(
         A, B, rows_collector, run_id, executed_at_utc, seg_id, segment_label, flow_type,
         event_a_name, event_b_name, convergence_zone_start, convergence_zone_end,
         zone_width_m, binning_applied, binning_mode, strict_min_dwell, strict_margin,
-        topk, 2000,  # topk_size, not used for CSV anymore
-        conflict_zone_a_start, conflict_zone_a_end, conflict_zone_b_start, conflict_zone_b_end,
-        DEFAULT_MIN_OVERLAP_DURATION  # Issue #607: Use same min_overlap_duration as main analysis
+        topk, 2000  # topk_size, not used for CSV anymore
     )
     
     # Convert collected rows to DataFrame
     if rows_collector:
         audit_df = pd.DataFrame(rows_collector)
     else:
-        # Create empty DataFrame with correct schema (including conflict zone columns)
+        # Create empty DataFrame with correct schema
         base_columns = [
             "run_id","executed_at_utc","seg_id","segment_label","flow_type",
             "event_a","event_b","pair_key",
@@ -2343,13 +2247,6 @@ def emit_runner_audit(
             "order_flip_bool","directional_gain_sec",
             "pass_flag_raw","pass_flag_strict","reason_code"
         ]
-        # Issue #607: Add conflict zone columns if calculated
-        if conflict_zone_a_start is not None:
-            base_columns.extend([
-                "conflict_zone_a_start_km", "conflict_zone_a_end_km",
-                "conflict_zone_b_start_km", "conflict_zone_b_end_km",
-                "in_conflict_zone"
-            ])
         audit_df = pd.DataFrame(columns=base_columns)
     
     stats = {
@@ -4738,11 +4635,7 @@ def _generate_runner_audit_for_segment(
             binning_applied=True,
             binning_mode="time",
             strict_min_dwell=5,
-            strict_margin=2,
-            from_km_a=from_km_a,  # Issue #607: Pass segment ranges for conflict zone calculation
-            to_km_a=to_km_a,
-            from_km_b=from_km_b,
-            to_km_b=to_km_b
+            strict_margin=2
         )
         
         print(f"  📊 Runner audit generated:")

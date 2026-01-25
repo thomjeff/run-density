@@ -507,22 +507,30 @@ def calculate_arrival_times_for_location(
                 # Get segment_label from segments_df (required by generate_segment_coordinates)
                 seg_row = segments_df[segments_df['seg_id'] == seg_id]
                 if seg_row.empty:
-                    logger.warning(f"Location {location.get('loc_id')} ({event}): Segment {seg_id} not found in segments_df, skipping")
-                    continue
+                    raise ValueError(
+                        f"Location {location.get('loc_id')} ({event}): Segment {seg_id} not found in segments_df. "
+                        "This is a data validation error - fail-fast."
+                    )
                 seg_label = seg_row.iloc[0].get('seg_label') or seg_row.iloc[0].get('segment_label')
                 if not seg_label:
-                    logger.warning(f"Location {location.get('loc_id')} ({event}): Segment {seg_id} missing seg_label/segment_label in segments_df, skipping")
-                    continue
+                    raise ValueError(
+                        f"Location {location.get('loc_id')} ({event}): Segment {seg_id} missing seg_label/segment_label in segments_df. "
+                        "This is a data validation error - fail-fast."
+                    )
                 
                 # Issue #655: Extract direction and width_m from segments_df (required by generate_segment_coordinates)
                 direction = seg_row.iloc[0].get('direction')
                 width_m = seg_row.iloc[0].get('width_m')
                 if not direction:
-                    logger.warning(f"Location {location.get('loc_id')} ({event}): Segment {seg_id} missing direction in segments_df, skipping")
-                    continue
+                    raise ValueError(
+                        f"Location {location.get('loc_id')} ({event}): Segment {seg_id} missing direction in segments_df. "
+                        "This is a data validation error - fail-fast."
+                    )
                 if width_m is None or (isinstance(width_m, float) and pd.isna(width_m)):
-                    logger.warning(f"Location {location.get('loc_id')} ({event}): Segment {seg_id} missing width_m in segments_df, skipping")
-                    continue
+                    raise ValueError(
+                        f"Location {location.get('loc_id')} ({event}): Segment {seg_id} missing width_m in segments_df. "
+                        "This is a data validation error - fail-fast."
+                    )
                 
                 # Get segment centerline for this event
                 segments_for_gpx = [{
@@ -566,7 +574,7 @@ def calculate_arrival_times_for_location(
                             )
                         else:
                             logger.debug(
-                                f"Location {location.get('loc_id')} ({event}): Segment {seg_id} centerline distance {absolute_distance_km:.3f}km outside range [{from_km:.3f}, {to_km:.3f}], trying fallback"
+                                f"Location {location.get('loc_id')} ({event}): Segment {seg_id} centerline distance {absolute_distance_km:.3f}km outside range [{from_km:.3f}, {to_km:.3f}]"
                             )
                 
                 # Fallback: use full course projection if centerline projection failed or unavailable

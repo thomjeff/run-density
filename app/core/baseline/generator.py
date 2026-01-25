@@ -8,6 +8,7 @@ Issue: #676 - Utility to create new runner files
 """
 
 from typing import Dict, Any, Optional, Callable, Set
+import hashlib
 import pandas as pd
 import numpy as np
 import logging
@@ -303,6 +304,19 @@ def generate_runner_file(
     
     Issue: #676 - Runner file generation
     """
+    # Downsample if target participants are below baseline (random, unweighted)
+    base_participants = len(baseline_df)
+    if new_participants < base_participants:
+        original_participants = base_participants
+        seed_source = f"{event_name}:{original_participants}:{new_participants}"
+        seed = int(hashlib.sha256(seed_source.encode("utf-8")).hexdigest()[:8], 16)
+        baseline_df = baseline_df.sample(n=new_participants, random_state=seed).reset_index(drop=True)
+        base_participants = len(baseline_df)
+        logger.info(
+            f"Downsampled {event_name} baseline from {original_participants} to {new_participants} "
+            f"(seed={seed})"
+        )
+
     # Calculate baseline quantiles for multiplier curve
     baseline_quantiles = {
         "p00": baseline_df["pace"].min(),
@@ -332,7 +346,6 @@ def generate_runner_file(
     }
     
     # Calculate number of new runners to add
-    base_participants = len(baseline_df)
     num_new_runners = max(0, new_participants - base_participants)
     
     # Allocate target participants to segments
