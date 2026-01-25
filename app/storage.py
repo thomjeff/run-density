@@ -111,9 +111,16 @@ class Storage:
 # - size() - Only 33.3% coverage (definition only), code uses stat.st_size directly
 # - list_paths() - Only 10.0% coverage (definition only), never called
 
-    def get_heatmap_signed_url(self, segment_id: str, expiry_seconds=3600):
+    def get_heatmap_signed_url(
+        self,
+        segment_id: str,
+        day: Optional[str] = None,
+        run_id: Optional[str] = None,
+        expiry_seconds=3600
+    ):
         """Generate local URL for heatmap."""
-        run_id = os.getenv("RUN_ID")
+        if not run_id:
+            run_id = os.getenv("RUN_ID")
         if not run_id:
             try:
                 # Issue #470: Read from runflow/analysis/latest.json (single source of truth)
@@ -133,10 +140,14 @@ class Storage:
         if not run_id:
             logging.warning("No run_id available - cannot generate heatmap URL. Artifacts missing for current run.")
             return None
+        if not day:
+            logging.warning("No day provided - cannot generate day-scoped heatmap URL.")
+            return None
         # Issue #470: Heatmaps stored in runflow structure
         # Issue #580: Updated path to visualizations/ subdirectory (heatmaps are directly in visualizations/, not in a heatmaps/ subdirectory)
-        # Issue #682: Updated to use runflow/analysis/{run_id} structure
-        return f"/runflow/analysis/{run_id}/ui/visualizations/{segment_id}.png"
+        # Issue #682: Updated to use runflow/analysis/{run_id}/{day} structure
+        # Mounted as: /heatmaps -> /app/runflow
+        return f"/heatmaps/analysis/{run_id}/{day}/ui/visualizations/{segment_id}.png"
     
     # ===== Write Methods (Issue #455 - Phase 3) =====
     

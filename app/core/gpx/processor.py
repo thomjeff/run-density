@@ -299,15 +299,19 @@ def generate_segment_coordinates(
                 break
         
         if gpx_event is None:
-            # Issue #655: Skip segments that don't match any available event instead of failing
-            # This can happen when segments.csv has events not in the current analysis
-            continue  # Skip this segment - it's not part of the current analysis events
+            raise ValueError(
+                f"Segment {seg_id} does not match any available event with GPX data. "
+                f"Available events: {sorted(available_events)}. "
+                f"This is a data validation error - fail-fast."
+            )
         
         # Lookup course (courses dict uses lowercase keys)
         course = courses.get(gpx_event)
         if course is None:
-            # This should not happen since we filtered above, but be defensive
-            continue  # Skip this segment
+            raise ValueError(
+                f"Segment {seg_id} references event '{gpx_event}' but no GPX course was loaded. "
+                f"This is a data validation error - fail-fast."
+            )
         
         # Get event-specific from_km and to_km fields
         from_km_key = f"{gpx_event}_from_km"

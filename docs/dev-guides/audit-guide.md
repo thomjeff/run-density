@@ -82,19 +82,6 @@ Audit files are generated in the analysis output directory:
 | `pass_flag_strict` | bool | True if strict pass criteria met: order_flip AND dwell >= 5s AND directional_gain >= 2s |
 | `reason_code` | string | Reason code for pass detection (e.g., 'raw_pass', 'strict_pass', 'no_pass') |
 
-### Conflict Zone Data (Issue #607)
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `convergence_zone_start` | float | Normalized convergence zone start (0.0-1.0) |
-| `convergence_zone_end` | float | Normalized convergence zone end (0.0-1.0) |
-| `zone_width_m` | float | Conflict zone width in meters |
-| `conflict_zone_a_start_km` | float | Conflict zone start for event A (km) |
-| `conflict_zone_a_end_km` | float | Conflict zone end for event A (km) |
-| `conflict_zone_b_start_km` | float | Conflict zone start for event B (km) |
-| `conflict_zone_b_end_km` | float | Conflict zone end for event B (km) |
-| `in_conflict_zone` | bool | **Approximate** flag indicating if overlap is within conflict zone (see Known Limitations) |
-
 ### Metadata
 
 | Column | Type | Description |
@@ -165,54 +152,9 @@ WHERE seg_id = 'L1b'
 
 ---
 
-## 2. Conflict Zone Filtering (Issue #607)
+## 2. Detailed Overtaking Analysis
 
-### Query 2.1: Filtered View (Conflict Zone Only)
-
-**Use Case**: Get a filtered subset of overlaps that occurred within the conflict zone. **Note**: This is an approximation and may not exactly match Flow.csv counts.
-
-```sql
-SELECT
-    COUNT(DISTINCT runner_id_b) AS overtaking_b_unique,
-    COUNT(DISTINCT runner_id_a) AS overtaken_a_unique
-FROM read_parquet('audit_sun.parquet')
-WHERE seg_id = 'L1b'
-  AND entry_delta_sec < 0       -- B entered after A
-  AND exit_delta_sec > 0        -- B exited before A
-  AND in_conflict_zone = True   -- Filtered to conflict zone overlaps (approximate)
-  AND event_a = '10k'
-  AND event_b = 'full';
-```
-
-**Known Limitation**: The `in_conflict_zone` flag provides a best-effort approximation. For exact validation, use Flow.csv as the authoritative source.
-
-**Example Discrepancy**:
-- Flow.csv (L1b): `overtaking_b = 206` (authoritative)
-- Audit (filtered): `~297` (approximate, ~44% higher)
-
----
-
-### Query 2.2: Inspect Conflict Zone Boundaries
-
-**Use Case**: View the conflict zone boundaries for a segment.
-
-```sql
-SELECT DISTINCT
-    seg_id,
-    conflict_zone_a_start_km,
-    conflict_zone_a_end_km,
-    conflict_zone_b_start_km,
-    conflict_zone_b_end_km,
-    zone_width_m
-FROM read_parquet('audit_sun.parquet')
-WHERE seg_id = 'L1b';
-```
-
----
-
-## 3. Detailed Overtaking Analysis
-
-### Query 3.1: Overtaker Summary (Who Overtook How Many)
+### Query 2.1: Overtaker Summary (Who Overtook How Many)
 
 **Use Case**: For each overtaker, count how many unique runners they overtook and get statistics.
 
@@ -236,7 +178,7 @@ ORDER BY unique_runners_overtaken DESC;
 
 ---
 
-### Query 3.2: Detailed Overtaking List
+### Query 2.2: Detailed Overtaking List
 
 **Use Case**: Get a detailed list of all overtake events with timing information.
 
@@ -262,7 +204,7 @@ ORDER BY runner_id_b, runner_id_a;
 
 ---
 
-### Query 3.3: Grouped Overtaking (Count per Pair)
+### Query 2.3: Grouped Overtaking (Count per Pair)
 
 **Use Case**: Count how many times each overtaker/overtaken pair occurred.
 
@@ -284,9 +226,9 @@ ORDER BY runner_id_b, runner_id_a;
 
 ---
 
-## 4. Bidirectional Overtaking Analysis
+## 3. Bidirectional Overtaking Analysis
 
-### Query 4.1: Combined View (All Overtaking Directions)
+### Query 3.1: Combined View (All Overtaking Directions)
 
 **Use Case**: View all overtake events with direction indicator (A overtakes B or B overtakes A).
 
@@ -323,9 +265,9 @@ ORDER BY
 
 ---
 
-## 5. Pass Detection Analysis
+## 4. Pass Detection Analysis
 
-### Query 5.1: Raw vs. Strict Pass Detection
+### Query 4.1: Raw vs. Strict Pass Detection
 
 **Use Case**: Compare RAW pass detection (simple order flip) vs. STRICT pass detection (order flip + min dwell + directional gain).
 
