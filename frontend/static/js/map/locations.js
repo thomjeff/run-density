@@ -261,15 +261,19 @@ function createLocationPopup(properties) {
  * Load locations data from API
  * @returns {Promise<Object|null>} GeoJSON data or null if unavailable
  */
+function getRunDayParams() {
+    const params = new URLSearchParams(window.location.search);
+    const dayParam = params.get('day');
+    const runParam = params.get('run_id');
+    const day = (dayParam || (window.runflowDay && window.runflowDay.selected) || '').toLowerCase().trim();
+    const run_id = (runParam || (window.runflowDay && window.runflowDay.run_id) || '').trim();
+    return { day, run_id, dayParam, runParam };
+}
+
 async function loadLocations() {
     try {
         // Get run_id and day from URL or global state
-        const params = new URLSearchParams(window.location.search);
-        const dayParam = params.get('day');
-        const runParam = params.get('run_id');
-        
-        const day = (dayParam || (window.runflowDay && window.runflowDay.selected) || '').toLowerCase().trim();
-        const run_id = (runParam || (window.runflowDay && window.runflowDay.run_id) || '').trim();
+        const { day, run_id, dayParam, runParam } = getRunDayParams();
         
         if (!day || !run_id) {
             console.error('❌ Refusing to fetch locations without day+run_id', {
@@ -312,6 +316,68 @@ async function loadLocations() {
         console.error('❌ Failed to load locations:', error.message);
         return null;
     }
+}
+
+async function loadSegmentsGeojson() {
+    try {
+        const { day, run_id, dayParam, runParam } = getRunDayParams();
+        if (!day || !run_id) {
+            console.error('❌ Refusing to fetch segments without day+run_id', {
+                href: window.location.href,
+                dayParam, runParam,
+                runflowDay: window.runflowDay
+            });
+            return null;
+        }
+        
+        const apiUrl = `/api/segments/geojson?run_id=${encodeURIComponent(run_id)}&day=${encodeURIComponent(day)}`;
+        console.log('Loading segments overlay via API...', { apiUrl, day, run_id });
+        
+        const response = await fetch(apiUrl, { cache: 'no-store' });
+        if (!response.ok) {
+            throw new Error(`Failed to load segments overlay: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        if (!data || !data.features) {
+            console.warn('⚠️ Segments overlay returned empty payload');
+            return null;
+        }
+        
+        return data;
+    } catch (error) {
+        console.warn('⚠️ Failed to load segments overlay:', error.message);
+        return null;
+    }
+}
+
+async function addSegmentsOverlay(map) {
+    const geojson = await loadSegmentsGeojson();
+    if (!geojson || !geojson.features || geojson.features.length === 0) {
+        return;
+    }
+    
+    const paneName = 'locations-course-overlay';
+    if (!map.getPane(paneName)) {
+        map.createPane(paneName);
+        const pane = map.getPane(paneName);
+        pane.style.zIndex = 350;
+        pane.style.pointerEvents = 'none';
+    }
+    
+    const overlayLayer = L.geoJSON(geojson, {
+        pane: paneName,
+        style: {
+            color: '#2f9e44',
+            weight: 2,
+            opacity: 0.45,
+            dashArray: '4 6'
+        }
+    });
+    
+    overlayLayer.addTo(map);
+    window.locationsCourseOverlay = overlayLayer;
+    console.log(`✅ Rendered course overlay with ${geojson.features.length} segments`);
 }
 
 /**
@@ -752,6 +818,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         // Make map globally available for table interactions
         window.map = map;
+        
+        // Render course overlay beneath markers
+        await addSegmentsOverlay(map);
         
         // Render locations
         await renderLocations(map);
