@@ -16,6 +16,9 @@ CLOUD_BUILD_CONTEXT ?= .cloud-build
 CLOUD_ENV_FILE ?= cloud.env
 CLOUD_BUILD_PLATFORM ?= linux/amd64
 CLOUD_PASSWORD ?= $(shell awk -F= '/^DASHBOARD_PASSWORD=/{print $$2; exit}' $(CLOUD_ENV_FILE) 2>/dev/null)
+CLOUD_MAX_INSTANCES ?= 1
+CLOUD_CPU ?= 1
+CLOUD_MEMORY ?= 2Gi
 
 RESOLVED_RUN_ID ?= $(if $(RUN_ID),$(RUN_ID),$(shell python3 -c "import json, pathlib; p=pathlib.Path('$(RUNFLOW_ROOT)/analysis/latest.json'); print(json.loads(p.read_text()).get('run_id','') if p.exists() else '')"))
 CLOUD_IMAGE ?= $(CLOUD_REGION)-docker.pkg.dev/$(CLOUD_PROJECT_ID)/$(CLOUD_AR_REPO)/$(CLOUD_IMAGE_NAME):$(RESOLVED_RUN_ID)
@@ -78,6 +81,9 @@ help usage --help: ## Show this help message
 	@echo "	CLOUD_BUILD_PLATFORM=$(CLOUD_BUILD_PLATFORM)"
 	@echo "	CLOUD_ENV_FILE=$(CLOUD_ENV_FILE)"
 	@echo "	CLOUD_PASSWORD=$(if $(CLOUD_PASSWORD),***,)"
+	@echo "	CLOUD_MAX_INSTANCES=$(CLOUD_MAX_INSTANCES)"
+	@echo "	CLOUD_CPU=$(CLOUD_CPU)"
+	@echo "	CLOUD_MEMORY=$(CLOUD_MEMORY)"
 	@echo ""
 
 # ============================================================================
@@ -317,6 +323,9 @@ cloud-deploy: ## Deploy skinny cloud UI to Cloud Run (uses cloud.env)
 		--region $(CLOUD_REGION) \
 		--project $(CLOUD_PROJECT_ID) \
 		--platform managed \
+		--max-instances $(CLOUD_MAX_INSTANCES) \
+		--cpu $(CLOUD_CPU) \
+		--memory $(CLOUD_MEMORY) \
 		--allow-unauthenticated \
 		--set-env-vars CLOUD_MODE=true,CLOUD_RUN_ID=$(RESOLVED_RUN_ID),DASHBOARD_PASSWORD=$(CLOUD_PASSWORD)
 
