@@ -1,0 +1,22 @@
+FROM python:3.11-slim
+
+ARG RUN_ID
+
+WORKDIR /app
+
+COPY requirements-cloud.txt /app/requirements-cloud.txt
+RUN pip install --no-cache-dir -r /app/requirements-cloud.txt
+
+COPY app /app/app
+COPY frontend /app/frontend
+
+RUN mkdir -p /app/runflow/analysis
+COPY runflow/analysis/${RUN_ID} /app/runflow/analysis/${RUN_ID}
+RUN echo "{\"run_id\":\"${RUN_ID}\"}" > /app/runflow/analysis/latest.json
+
+ENV PYTHONPATH=/app
+ENV CLOUD_MODE=true
+ENV CLOUD_RUN_ID=${RUN_ID}
+
+EXPOSE 8080
+CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "app.cloud_app:app", "-b", "0.0.0.0:8080"]

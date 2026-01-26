@@ -8,7 +8,7 @@ Epic: RF-FE-002 | Issue: #279 | Step: 5
 Architecture: Option 3 - Hybrid Approach
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from typing import Dict, Any, List, Optional
 import logging
@@ -16,6 +16,8 @@ import logging
 # Issue #466 Step 2: Storage consolidated to app.storage
 from app.utils.run_id import get_latest_run_id, resolve_selected_day
 from app.storage import create_runflow_storage
+from app.utils.env import env_bool
+from app.utils.auth import is_session_valid
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -137,6 +139,7 @@ def enrich_segment_features(segments_geojson: Dict[str, Any],
 
 @router.get("/api/segments/geojson")
 async def get_segments_geojson(
+    request: Request,
     run_id: Optional[str] = Query(None, description="Run ID (defaults to latest)"),
     day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)")
 ):
@@ -153,6 +156,8 @@ async def get_segments_geojson(
         - Logs warnings for missing data
     """
     try:
+        if env_bool("CLOUD_MODE") and not is_session_valid(request):
+            raise HTTPException(status_code=401, detail="Unauthorized")
         # Resolve run_id and day
         if not run_id:
             run_id = get_latest_run_id()
@@ -226,6 +231,7 @@ async def get_segments_geojson(
 
 @router.get("/api/segments/summary")
 async def get_segments_summary(
+    request: Request,
     run_id: Optional[str] = Query(None, description="Run ID (defaults to latest)"),
     day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)")
 ):
@@ -236,6 +242,8 @@ async def get_segments_summary(
         Summary statistics about segments and metrics
     """
     try:
+        if env_bool("CLOUD_MODE") and not is_session_valid(request):
+            raise HTTPException(status_code=401, detail="Unauthorized")
         # Resolve run_id and day
         if not run_id:
             run_id = get_latest_run_id()

@@ -270,10 +270,29 @@ function getRunDayParams() {
     return { day, run_id, dayParam, runParam };
 }
 
+async function waitForRunflowDay(maxWaitMs = 2000) {
+    const start = Date.now();
+    while (Date.now() - start < maxWaitMs) {
+        const { day, run_id } = getRunDayParams();
+        if (day && run_id) {
+            return { day, run_id };
+        }
+        await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    return null;
+}
+
 async function loadLocations() {
     try {
         // Get run_id and day from URL or global state
-        const { day, run_id, dayParam, runParam } = getRunDayParams();
+        let { day, run_id, dayParam, runParam } = getRunDayParams();
+        if (!day || !run_id) {
+            const ready = await waitForRunflowDay();
+            if (ready) {
+                day = ready.day;
+                run_id = ready.run_id;
+            }
+        }
         
         if (!day || !run_id) {
             console.error('❌ Refusing to fetch locations without day+run_id', {
@@ -320,7 +339,14 @@ async function loadLocations() {
 
 async function loadSegmentsGeojson() {
     try {
-        const { day, run_id, dayParam, runParam } = getRunDayParams();
+        let { day, run_id, dayParam, runParam } = getRunDayParams();
+        if (!day || !run_id) {
+            const ready = await waitForRunflowDay();
+            if (ready) {
+                day = ready.day;
+                run_id = ready.run_id;
+            }
+        }
         if (!day || !run_id) {
             console.error('❌ Refusing to fetch segments without day+run_id', {
                 href: window.location.href,
@@ -812,6 +838,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     try {
         console.log('🚀 Initializing locations map...');
+
+        // Wait briefly for day/run_id to be initialized by base template
+        await waitForRunflowDay();
         
         // Initialize base map
         const map = initMap('locations-map');

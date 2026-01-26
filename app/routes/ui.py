@@ -93,7 +93,7 @@ async def login(request: Request, password: str = Form(...)):
     """
     if validate_password(password):
         # Create session and redirect to dashboard
-        return create_session_response("/dashboard")
+        return create_session_response("/dashboard", request)
     else:
         # Invalid password - redirect back to login page with error
         # Note: In production, you might want to add a delay to prevent brute force
@@ -119,7 +119,7 @@ async def logout(request: Request):
     Returns:
         RedirectResponse: Redirects to password page
     """
-    return clear_session_response("/")
+    return clear_session_response("/", request)
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
