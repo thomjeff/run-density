@@ -9,7 +9,7 @@ from typing import Optional, Union
 from fastapi import Request, HTTPException
 from fastapi.responses import RedirectResponse
 
-from app.utils.env import env_str
+from app.utils.env import env_bool, env_str
 
 # Session configuration
 SESSION_COOKIE_NAME = "rf_auth"
@@ -86,7 +86,19 @@ def is_session_valid(request: Request) -> bool:
         return False
 
 
-def create_session_response(redirect_url: str = "/dashboard") -> RedirectResponse:
+def _is_secure_request(request: Optional[Request]) -> bool:
+    if not request:
+        return False
+    forwarded_proto = request.headers.get("x-forwarded-proto")
+    if forwarded_proto:
+        return forwarded_proto.lower() == "https"
+    return request.url.scheme.lower() == "https"
+
+
+def create_session_response(
+    redirect_url: str = "/dashboard",
+    request: Optional[Request] = None
+) -> RedirectResponse:
     """
     Create a redirect response with session cookies set.
     
@@ -99,6 +111,7 @@ def create_session_response(redirect_url: str = "/dashboard") -> RedirectRespons
     Issue #314: Set rf_auth and rf_auth_ts cookies
     """
     response = RedirectResponse(url=redirect_url, status_code=303)
+    secure_cookie = env_bool("COOKIE_SECURE") or _is_secure_request(request)
     
     # Set session cookie
     response.set_cookie(
@@ -106,6 +119,7 @@ def create_session_response(redirect_url: str = "/dashboard") -> RedirectRespons
         value=SESSION_VALUE,
         max_age=SESSION_DURATION_SECONDS,
         httponly=True,  # Prevent JavaScript access for security
+        secure=secure_cookie,
         samesite="lax"
     )
     
@@ -115,13 +129,17 @@ def create_session_response(redirect_url: str = "/dashboard") -> RedirectRespons
         value=str(time.time()),
         max_age=SESSION_DURATION_SECONDS,
         httponly=True,
+        secure=secure_cookie,
         samesite="lax"
     )
     
     return response
 
 
-def clear_session_response(redirect_url: str = "/") -> RedirectResponse:
+def clear_session_response(
+    redirect_url: str = "/",
+    request: Optional[Request] = None
+) -> RedirectResponse:
     """
     Create a redirect response that clears session cookies.
     
@@ -134,6 +152,7 @@ def clear_session_response(redirect_url: str = "/") -> RedirectResponse:
     Issue #314: Clear rf_auth and rf_auth_ts cookies
     """
     response = RedirectResponse(url=redirect_url, status_code=303)
+    secure_cookie = env_bool("COOKIE_SECURE") or _is_secure_request(request)
     
     # Clear session cookies by setting them to empty with max_age=0
     response.set_cookie(
@@ -141,6 +160,7 @@ def clear_session_response(redirect_url: str = "/") -> RedirectResponse:
         value="",
         max_age=0,
         httponly=True,
+        secure=secure_cookie,
         samesite="lax"
     )
     
@@ -149,6 +169,7 @@ def clear_session_response(redirect_url: str = "/") -> RedirectResponse:
         value="",
         max_age=0,
         httponly=True,
+        secure=secure_cookie,
         samesite="lax"
     )
     

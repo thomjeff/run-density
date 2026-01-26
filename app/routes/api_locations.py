@@ -7,7 +7,7 @@ Author: Cursor AI Assistant
 Epic: Issue #277
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, FileResponse
 from typing import Dict, Any, Optional
 import logging
@@ -17,6 +17,8 @@ from pathlib import Path
 from app.location_report import generate_location_report
 from app.utils.run_id import get_latest_run_id
 from app.storage import create_runflow_storage
+from app.utils.env import env_bool
+from app.utils.auth import is_session_valid
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -27,6 +29,7 @@ router = APIRouter()
 
 @router.get("/api/locations")
 async def get_locations_report(
+    request: Request,
     run_id: Optional[str] = Query(None, description="Run ID for runflow structure"),
     day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)"),
     generate: bool = Query(False, description="Generate new report if not exists")
@@ -45,6 +48,8 @@ async def get_locations_report(
         JSON response with location report data
     """
     try:
+        if env_bool("CLOUD_MODE") and not is_session_valid(request):
+            raise HTTPException(status_code=401, detail="Unauthorized")
         from app.utils.run_id import resolve_selected_day
         
         # Get run_id (use latest if not provided)
@@ -130,6 +135,7 @@ async def get_locations_report(
 
 @router.post("/api/locations/generate")
 async def generate_locations_report(
+    request: Request,
     run_id: Optional[str] = Query(None, description="Run ID for runflow structure")
 ) -> JSONResponse:
     """
@@ -144,6 +150,8 @@ async def generate_locations_report(
         JSON response with generation result
     """
     try:
+        if env_bool("CLOUD_MODE") and not is_session_valid(request):
+            raise HTTPException(status_code=401, detail="Unauthorized")
         # Get run_id (use latest if not provided)
         if not run_id:
             run_id = get_latest_run_id()
@@ -176,6 +184,7 @@ async def generate_locations_report(
 
 @router.get("/api/locations/csv")
 async def get_locations_csv(
+    request: Request,
     run_id: Optional[str] = Query(None, description="Run ID for runflow structure")
 ) -> FileResponse:
     """
@@ -190,6 +199,8 @@ async def get_locations_csv(
         CSV file response
     """
     try:
+        if env_bool("CLOUD_MODE") and not is_session_valid(request):
+            raise HTTPException(status_code=401, detail="Unauthorized")
         # Get run_id (use latest if not provided)
         if not run_id:
             run_id = get_latest_run_id()

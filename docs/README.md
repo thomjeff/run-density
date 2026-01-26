@@ -17,6 +17,7 @@ This documentation is organized by audience and topic for easy navigation.
 | Document | Purpose |
 |----------|---------|
 | [API User Guide](user-guide/api-user-guide.md) | **START HERE** - Complete API usage guide |
+| [Cloud Container Guide](user-guide/cloud-container.md) | Skinny cloud Locations UI (read-only) |
 
 **Quick Start:**
 1. Read [API User Guide](user-guide/api-user-guide.md) for complete API usage
@@ -75,6 +76,7 @@ docs/
 │
 ├── user-guide/                        # User Documentation
 │   └── api-user-guide.md              # Complete API usage guide
+│   └── cloud-container.md             # Cloud (skinny) Locations UI
 │
 ├── dev-guides/                        # Developer Documentation
 │   ├── ai-developer-guide.md          # AI assistant onboarding and rules
@@ -152,6 +154,19 @@ Covers:
 - Understanding results
 - Output structure
 - Error handling
+
+---
+
+#### [Cloud Container Guide](user-guide/cloud-container.md)
+**Audience:** External viewers, operations leads  
+**Purpose:** Skinny cloud Locations UI usage and deployment  
+**Updated:** 2026-01-26
+
+Covers:
+- Build/push/deploy workflow
+- Local smoke test
+- Stable Cloud Run URL usage
+- Password gate behavior
 
 ---
 

@@ -5,8 +5,25 @@
 # -------- Configuration --------
 PORT ?= 8080
 
+# Cloud (skinny UI) configuration
+CLOUD_PROJECT_ID ?= runflow-485519
+CLOUD_REGION ?= us-central1
+CLOUD_AR_REPO ?= runflow-cloud
+CLOUD_IMAGE_NAME ?= runflow-cloud
+CLOUD_SERVICE_PREFIX ?= runflow-cloud
+RUNFLOW_ROOT ?= /Users/jthompson/Documents/runflow
+CLOUD_BUILD_CONTEXT ?= .cloud-build
+CLOUD_ENV_FILE ?= cloud.env
+CLOUD_BUILD_PLATFORM ?= linux/amd64
+CLOUD_PASSWORD ?= $(shell awk -F= '/^DASHBOARD_PASSWORD=/{print $$2; exit}' $(CLOUD_ENV_FILE) 2>/dev/null)
+
+RESOLVED_RUN_ID ?= $(if $(RUN_ID),$(RUN_ID),$(shell python3 -c "import json, pathlib; p=pathlib.Path('$(RUNFLOW_ROOT)/analysis/latest.json'); print(json.loads(p.read_text()).get('run_id','') if p.exists() else '')"))
+CLOUD_IMAGE ?= $(CLOUD_REGION)-docker.pkg.dev/$(CLOUD_PROJECT_ID)/$(CLOUD_AR_REPO)/$(CLOUD_IMAGE_NAME):$(RESOLVED_RUN_ID)
+CLOUD_SERVICE ?= $(CLOUD_SERVICE_PREFIX)
+CLOUD_RUN_PATH ?= $(RUNFLOW_ROOT)/analysis/$(RUN_ID)
+
 # -------- Phony targets --------
-.PHONY: help usage --help dev e2e e2e-sat e2e-sun e2e-coverage-lite stop build validate-output validate-all prune-runs ai-prompt
+.PHONY: help usage --help dev e2e e2e-sat e2e-sun e2e-coverage-lite stop build validate-output validate-all prune-runs ai-prompt cloud-build cloud-run cloud-stop cloud-push cloud-deploy cloud-clean
 
 # -------- Use same shell for multi-line targets --------
 .ONESHELL:
@@ -39,6 +56,28 @@ help usage --help: ## Show this help message
 	@echo "	To disable audit (faster runs, default): make e2e"
 	@echo "	To enable audit: make e2e ENABLE_AUDIT=y"
 	@echo "	Applies to: e2e, e2e-sat, e2e-sun"
+	@echo ""
+	@echo "Cloud (skinny UI) Commands:"
+	@echo ""
+	@echo "  cloud-build        Build cloud UI image (RUN_ID=...)"
+	@echo "  cloud-run          Run cloud UI locally (HOST_PORT=8081)"
+	@echo "  cloud-stop         Stop local cloud UI container"
+	@echo "  cloud-push         Push cloud UI image"
+	@echo "  cloud-deploy       Deploy to Cloud Run"
+	@echo "  cloud-clean        Delete Cloud Run service"
+	@echo ""
+	@echo "Cloud Defaults:"
+	@echo "	CLOUD_PROJECT_ID=$(CLOUD_PROJECT_ID)"
+	@echo "	CLOUD_REGION=$(CLOUD_REGION)"
+	@echo "	CLOUD_AR_REPO=$(CLOUD_AR_REPO)"
+	@echo "	CLOUD_IMAGE_NAME=$(CLOUD_IMAGE_NAME)"
+	@echo "	CLOUD_SERVICE_PREFIX=$(CLOUD_SERVICE_PREFIX)"
+	@echo "	RUNFLOW_ROOT=$(RUNFLOW_ROOT)"
+	@echo "	RESOLVED_RUN_ID=$(RESOLVED_RUN_ID)"
+	@echo "	CLOUD_BUILD_CONTEXT=$(CLOUD_BUILD_CONTEXT)"
+	@echo "	CLOUD_BUILD_PLATFORM=$(CLOUD_BUILD_PLATFORM)"
+	@echo "	CLOUD_ENV_FILE=$(CLOUD_ENV_FILE)"
+	@echo "	CLOUD_PASSWORD=$(if $(CLOUD_PASSWORD),***,)"
 	@echo ""
 
 # ============================================================================
@@ -202,3 +241,90 @@ prune-runs: ## Prune old run_ids, keeping last N (KEEP=n required, --dry-run for
 		exit 1; \
 	fi
 	@docker-compose exec app python -m app.utils.prune_runs --keep $(KEEP) $(if $(DRY_RUN),--dry-run,) $(if $(CONFIRM),--confirm,)
+
+# ============================================================================
+# Cloud (Skinny UI) Commands
+# ============================================================================
+
+cloud-build: ## Build skinny cloud UI image (RUN_ID=...)
+	@if [ -z "$(RUN_ID)" ]; then \
+		echo "❌ Error: RUN_ID parameter required (e.g., make cloud-build RUN_ID=abc123)"; \
+		exit 1; \
+	fi
+	@if [ ! -d "$(CLOUD_RUN_PATH)" ]; then \
+		echo "❌ Error: $(CLOUD_RUN_PATH) not found"; \
+		exit 1; \
+	fi
+	@echo "🐳 Building cloud UI image for RUN_ID=$(RUN_ID)..."
+	@rm -rf "$(CLOUD_BUILD_CONTEXT)"
+	@mkdir -p "$(CLOUD_BUILD_CONTEXT)/runflow/analysis"
+	@cp -R app "$(CLOUD_BUILD_CONTEXT)/"
+	@cp -R frontend "$(CLOUD_BUILD_CONTEXT)/"
+	@cp Dockerfile.cloud requirements-cloud.txt "$(CLOUD_BUILD_CONTEXT)/"
+	@cp -R "$(CLOUD_RUN_PATH)" "$(CLOUD_BUILD_CONTEXT)/runflow/analysis/"
+	@docker buildx build --platform $(CLOUD_BUILD_PLATFORM) --load \
+		-f "$(CLOUD_BUILD_CONTEXT)/Dockerfile.cloud" \
+		--build-arg RUN_ID=$(RUN_ID) \
+		-t $(CLOUD_IMAGE) \
+		"$(CLOUD_BUILD_CONTEXT)"
+
+cloud-run: HOST_PORT ?= 8081
+cloud-run: ## Run cloud UI locally (uses cloud.env, HOST_PORT=8081)
+	@if [ -z "$(RESOLVED_RUN_ID)" ]; then \
+		echo "❌ Error: RUN_ID not set and latest.json missing (build first)"; \
+		exit 1; \
+	fi
+	@if [ -z "$(CLOUD_PASSWORD)" ]; then \
+		echo "❌ Error: DASHBOARD_PASSWORD missing in $(CLOUD_ENV_FILE)"; \
+		exit 1; \
+	fi
+	@echo "🚀 Running cloud UI locally on port $(HOST_PORT)..."
+	@docker run --rm -p $(HOST_PORT):8080 --env-file $(CLOUD_ENV_FILE) $(CLOUD_IMAGE)
+
+cloud-stop: ## Stop local cloud UI container
+	@if [ -z "$(RESOLVED_RUN_ID)" ]; then \
+		echo "❌ Error: RUN_ID not set and latest.json missing (build first)"; \
+		exit 1; \
+	fi
+	@echo "🛑 Stopping cloud UI container for RUN_ID=$(RESOLVED_RUN_ID)..."
+	@container_id=$$(docker ps --filter "ancestor=$(CLOUD_IMAGE)" --format "{{.ID}}"); \
+	if [ -n "$$container_id" ]; then \
+		docker stop $$container_id; \
+	else \
+		echo "ℹ️  No running container found for image $(CLOUD_IMAGE)"; \
+	fi
+
+cloud-push: ## Push skinny cloud UI image (RUN_ID=...)
+	@if [ -z "$(RESOLVED_RUN_ID)" ]; then \
+		echo "❌ Error: RUN_ID not set and latest.json missing (build first)"; \
+		exit 1; \
+	fi
+	@echo "📦 Pushing cloud UI image: $(CLOUD_IMAGE)"
+	@docker push $(CLOUD_IMAGE)
+
+cloud-deploy: ## Deploy skinny cloud UI to Cloud Run (uses cloud.env)
+	@if [ -z "$(RESOLVED_RUN_ID)" ]; then \
+		echo "❌ Error: RUN_ID not set and latest.json missing (build first)"; \
+		exit 1; \
+	fi
+	@if [ -z "$(CLOUD_PASSWORD)" ]; then \
+		echo "❌ Error: DASHBOARD_PASSWORD missing in $(CLOUD_ENV_FILE)"; \
+		exit 1; \
+	fi
+	@echo "🚀 Deploying Cloud Run service: $(CLOUD_SERVICE)"
+	@gcloud run deploy $(CLOUD_SERVICE) \
+		--image $(CLOUD_IMAGE) \
+		--region $(CLOUD_REGION) \
+		--project $(CLOUD_PROJECT_ID) \
+		--platform managed \
+		--allow-unauthenticated \
+		--set-env-vars CLOUD_MODE=true,CLOUD_RUN_ID=$(RESOLVED_RUN_ID),DASHBOARD_PASSWORD=$(CLOUD_PASSWORD)
+
+cloud-clean: ## Delete Cloud Run service
+	@if [ -z "$(RESOLVED_RUN_ID)" ]; then \
+		echo "❌ Error: RUN_ID not set and latest.json missing (build first)"; \
+		exit 1; \
+	fi
+	@echo "🧹 Deleting Cloud Run service: $(CLOUD_SERVICE)"
+	@gcloud run services delete $(CLOUD_SERVICE) --region $(CLOUD_REGION) --project $(CLOUD_PROJECT_ID) --quiet || \
+		echo "ℹ️  Service $(CLOUD_SERVICE) not found (already deleted)"

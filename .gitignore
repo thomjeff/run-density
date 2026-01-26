@@ -22,3 +22,7 @@ env/
 
 # Runflow UUID-based storage (Issue #455)
 runflow/
+
+# Cloud (skinny UI) local artifacts
+.cloud-build/
+cloud.env

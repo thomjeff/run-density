@@ -297,6 +297,9 @@
     
     <nav>
         <ul>
+            {% if cloud_mode %}
+            <li><a href="/locations" {% if request.url and request.url.path == "/locations" %}class="active"{% endif %}>Locations</a></li>
+            {% else %}
             <li><a href="/dashboard" {% if request.url and request.url.path == "/dashboard" %}class="active"{% endif %}>Dashboard</a></li>
             <li><a href="/segments" {% if request.url and request.url.path == "/segments" %}class="active"{% endif %}>Segments</a></li>
             <li><a href="/density" {% if request.url and request.url.path == "/density" %}class="active"{% endif %}>Density</a></li>
@@ -306,13 +309,16 @@
             <li><a href="/analysis" {% if request.url and request.url.path == "/analysis" %}class="active"{% endif %}>Analysis</a></li>
             <li><a href="/create-files" {% if request.url and request.url.path == "/create-files" %}class="active"{% endif %}>Create Files</a></li>
             <li><a href="/health-check" {% if request.url and request.url.path == "/health-check" %}class="active"{% endif %}>Health</a></li>
+            {% endif %}
             <li style="margin-left:auto; padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.5rem;">
                 <label for="day-selector" style="color:#ecf0f1; font-weight:600;">Day</label>
                 <select id="day-selector" style="padding: 0.35rem 0.5rem; border-radius: 4px; border: 1px solid #2c3e50; background: #fff; color: #2c3e50; min-width: 90px;">
                     <option value="">—</option>
                 </select>
             </li>
+            {% if not cloud_mode %}
             <li><a href="/logout" style="color: #e74c3c;">Logout</a></li>
+            {% endif %}
         </ul>
     </nav>
     
@@ -357,6 +363,10 @@
     <!-- Global run_id + Day Selector logic -->
     <script>
     (function() {
+        const CLOUD_MODE = {% if cloud_mode %}true{% else %}false{% endif %};
+        const CLOUD_RUN_ID = {{ cloud_run_id_json | default('null') | safe }};
+        const CLOUD_AVAILABLE_DAYS = {{ cloud_available_days_json | default('[]') | safe }};
+
         const DAY_ORDER = ["fri","sat","sun","mon"];
 
         function getParamOrStorage(key, storageKey) {
@@ -409,40 +419,51 @@
 
             let availableDays = [];
 
-            try {
-                // Issue #565: If run_id is in URL, pass it to API to get correct available_days for that run
-                // Otherwise, get latest run_id from API
-                let url = "/api/dashboard/summary";
-                const qp = [];
-                
-                if (hasUrlRun) {
-                    // URL has run_id - pass it to API to get available_days for that specific run
-                    qp.push(`run_id=${encodeURIComponent(urlRunRaw)}`);
-                    runId = urlRunRaw;
+            if (CLOUD_MODE) {
+                if (CLOUD_RUN_ID) {
+                    runId = CLOUD_RUN_ID;
                 }
-                // Only pass day if we have it
-                if (selectedDay) qp.push(`day=${encodeURIComponent(selectedDay)}`);
-                if (qp.length) url += `?${qp.join("&")}`;
-
-                const resp = await fetch(url, { cache: "no-store" });
-                const data = await resp.json();
-
-                // If no run_id in URL, use latest from API
-                if (!hasUrlRun) {
-                    const latestRunId = data?.run_id;
-                    if (latestRunId) {
-                        runId = latestRunId;
-                    }
-                }
-
-                // Fill missing day if not in URL
-                if (!hasUrlDay && !selectedDay && data?.selected_day) selectedDay = data.selected_day.toLowerCase();
-
-                availableDays = Array.isArray(data?.available_days)
-                    ? data.available_days.map(d => d.toLowerCase())
+                availableDays = Array.isArray(CLOUD_AVAILABLE_DAYS)
+                    ? CLOUD_AVAILABLE_DAYS.map(d => String(d).toLowerCase())
                     : [];
-            } catch (e) {
-                console.warn("Day selector: failed to load dashboard summary for day metadata", e);
+            }
+
+            if (!CLOUD_MODE) {
+                try {
+                    // Issue #565: If run_id is in URL, pass it to API to get correct available_days for that run
+                    // Otherwise, get latest run_id from API
+                    let url = "/api/dashboard/summary";
+                    const qp = [];
+                    
+                    if (hasUrlRun) {
+                        // URL has run_id - pass it to API to get available_days for that specific run
+                        qp.push(`run_id=${encodeURIComponent(urlRunRaw)}`);
+                        runId = urlRunRaw;
+                    }
+                    // Only pass day if we have it
+                    if (selectedDay) qp.push(`day=${encodeURIComponent(selectedDay)}`);
+                    if (qp.length) url += `?${qp.join("&")}`;
+
+                    const resp = await fetch(url, { cache: "no-store" });
+                    const data = await resp.json();
+
+                    // If no run_id in URL, use latest from API
+                    if (!hasUrlRun) {
+                        const latestRunId = data?.run_id;
+                        if (latestRunId) {
+                            runId = latestRunId;
+                        }
+                    }
+
+                    // Fill missing day if not in URL
+                    if (!hasUrlDay && !selectedDay && data?.selected_day) selectedDay = data.selected_day.toLowerCase();
+
+                    availableDays = Array.isArray(data?.available_days)
+                        ? data.available_days.map(d => d.toLowerCase())
+                        : [];
+                } catch (e) {
+                    console.warn("Day selector: failed to load dashboard summary for day metadata", e);
+                }
             }
 
             const DEFAULT_ORDER = ["fri","sat","sun","mon"];
@@ -493,6 +514,17 @@
                 const params = new URLSearchParams(window.location.search);
                 params.set("day", selectedDay);
                 if (runId) params.set("run_id", runId);
+                const newUrl = window.location.pathname + (params.toString() ? "?" + params.toString() : "");
+                if (newUrl !== window.location.pathname + window.location.search) {
+                    window.history.replaceState({}, "", newUrl);
+                }
+            }
+
+            if (CLOUD_MODE) {
+                // Force canonical run_id and day in URL for cloud mode
+                const params = new URLSearchParams(window.location.search);
+                if (runId) params.set("run_id", runId);
+                if (selectedDay) params.set("day", selectedDay);
                 const newUrl = window.location.pathname + (params.toString() ? "?" + params.toString() : "");
                 if (newUrl !== window.location.pathname + window.location.search) {
                     window.history.replaceState({}, "", newUrl);
