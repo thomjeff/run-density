@@ -281,6 +281,7 @@ def _export_ui_artifacts_v2(
         generate_health_json
     )
     from app.core.artifacts.heatmaps import export_heatmaps_and_captions
+    from app.core.artifacts.segment_maps import export_segment_map_pngs
     
     # Get UI artifacts path
     ui_path = get_ui_artifacts_path(run_id, day)
@@ -616,6 +617,18 @@ def _export_ui_artifacts_v2(
         # Issue #574: Write to geospatial/ subdirectory
         (geospatial_dir / "segments.geojson").write_text(json.dumps(segments_geojson, indent=2))
         logger.info(f"   ✅ segments.geojson: {len(segments_geojson.get('features', []))} features (in geospatial/)")
+
+        # 5.1. Generate segment map snapshots
+        logger.info("5️⃣.1️⃣  Generating segment map snapshots...")
+        segment_maps_dir = visualizations_dir / "segment_maps"
+        segment_map_count = export_segment_map_pngs(
+            segments_geojson=segments_geojson,
+            segment_metrics=segment_metrics,
+            output_dir=segment_maps_dir
+        )
+        logger.info(
+            f"   ✅ Segment maps: {segment_map_count} PNGs (in visualizations/segment_maps/)"
+        )
         
         # 5.5. Generate flow_segments.json (Issue #628)
         logger.info("5️⃣.5️⃣  Generating flow_segments.json...")
