@@ -28,6 +28,23 @@ router = APIRouter()
 # Issue #466 Step 2: Removed legacy storage singleton (not needed)
 
 
+def _format_time_value(value: Any) -> Optional[str]:
+    """Format ISO or HH:MM time values to HH:MM."""
+    if value is None or value == "":
+        return None
+    try:
+        from datetime import datetime
+        if isinstance(value, str) and "T" in value:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return dt.strftime("%H:%M")
+        if isinstance(value, str) and ":" in value:
+            time_part = value.split(" ")[-1]
+            return time_part[:5] if len(time_part) >= 5 else value
+    except Exception:
+        return str(value)
+    return str(value)
+
+
 def load_density_metrics_from_bins(run_id: Optional[str] = None, day: Optional[str] = None):
     """
     Load and compute density metrics from bins.parquet.
@@ -84,13 +101,11 @@ def load_density_metrics_from_bins(run_id: Optional[str] = None, day: Optional[s
                 t_end = worst_bin_row.get("t_end", "")
                 time_str = ""
                 if t_start and t_end:
-                    try:
-                        from datetime import datetime
-                        start_dt = datetime.fromisoformat(t_start.replace('Z', '+00:00'))
-                        end_dt = datetime.fromisoformat(t_end.replace('Z', '+00:00'))
-                        time_str = f"{start_dt.strftime('%H:%M')}-{end_dt.strftime('%H:%M')}"
-                    except (ValueError, TypeError) as e:
-                        logger.warning(f"Failed to parse time range '{t_start}-{t_end}': {e}. Using raw values.")
+                    start_time = _format_time_value(t_start)
+                    end_time = _format_time_value(t_end)
+                    if start_time and end_time:
+                        time_str = f"{start_time}-{end_time}"
+                    else:
                         time_str = f"{t_start}-{t_end}"
                 
                 worst_bin = {
@@ -116,11 +131,30 @@ def load_density_metrics_from_bins(run_id: Optional[str] = None, day: Optional[s
                     "mean": float(group["rate"].mean())
                 }
             }
+
+            # First/last runner window from all bins (not flagged-only)
+            presence_group = group
+            if "concurrent_runners" in group.columns:
+                presence_group = group[group["concurrent_runners"] > 0]
+            elif "density" in group.columns:
+                presence_group = group[group["density"] > 0]
+
+            first_runner = None
+            last_runner = None
+            if not presence_group.empty:
+                start_times = pd.to_datetime(presence_group["t_start"], errors="coerce", utc=True)
+                end_times = pd.to_datetime(presence_group["t_end"], errors="coerce", utc=True)
+                if not start_times.isna().all():
+                    first_runner = _format_time_value(start_times.min().isoformat())
+                if not end_times.isna().all():
+                    last_runner = _format_time_value(end_times.max().isoformat())
             
             segment_metrics[seg_id] = {
                 "utilization": float(utilization),
                 "worst_bin": worst_bin,
-                "bin_detail": bin_detail
+                "bin_detail": bin_detail,
+                "first_runner": first_runner,
+                "last_runner": last_runner
             }
         
         logger.info(f"Computed density metrics for {len(segment_metrics)} segments")
@@ -623,6 +657,24 @@ async def get_density_segment_detail(
         bin_metrics = density_metrics.get(seg_id, {})
         utilization = bin_metrics.get("utilization", 0.0)
         worst_bin = bin_metrics.get("worst_bin")
+        first_runner = bin_metrics.get("first_runner")
+        last_runner = bin_metrics.get("last_runner")
+
+        # Flagged bin coverage from bin_summary.json
+        flagged_bins = None
+        total_bins = None
+        flagged_bin_pct = None
+        try:
+            bin_summary = storage.read_json(f"{selected_day}/bins/bin_summary.json")
+            if bin_summary and isinstance(bin_summary, dict):
+                segment_summary = bin_summary.get("segments", {}).get(seg_id, {})
+                meta = segment_summary.get("meta", {})
+                flagged_bins = meta.get("flagged_bins")
+                total_bins = meta.get("total_bins")
+                if isinstance(flagged_bins, (int, float)) and isinstance(total_bins, (int, float)) and total_bins:
+                    flagged_bin_pct = round((flagged_bins / total_bins) * 100, 1)
+        except Exception as e:
+            logger.warning(f"Could not load bin_summary.json for {seg_id}: {e}")
         
         # Build detail response
         detail = _build_segment_detail_response(
@@ -633,6 +685,11 @@ async def get_density_segment_detail(
         # Issue #596: Add utilization and worst_bin to detail response
         detail["utilization"] = utilization
         detail["worst_bin"] = worst_bin
+        detail["first_runner"] = first_runner
+        detail["last_runner"] = last_runner
+        detail["flagged_bins"] = flagged_bins
+        detail["total_bins"] = total_bins
+        detail["flagged_bin_pct"] = flagged_bin_pct
         
         return JSONResponse(content=detail)
         
