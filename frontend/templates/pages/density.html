@@ -108,10 +108,16 @@
                     <strong>Active Window:</strong> <span id="detail-active">—</span>
                 </div>
                 <div>
+                    <strong>Runner Window:</strong> <span id="detail-runner-window">—</span>
+                </div>
+                <div>
                     <strong>Utilization:</strong> <span id="detail-utilization">—</span>
                 </div>
                 <div>
                     <strong>Worst Bin:</strong> <span id="detail-worst-bin">—</span>
+                </div>
+                <div>
+                    <strong>Flagged Bins:</strong> <span id="detail-flagged-coverage">—</span>
                 </div>
             </div>
         </div>
@@ -122,6 +128,9 @@
             <img id="heatmap-image" src="" alt="Density heatmap" style="max-width: 100%; border-radius: 4px;" />
             <div id="heatmap-placeholder" class="placeholder">No heatmap data available for this segment.</div>
         </div>
+        <p style="margin: -0.5rem 0 1.5rem; color: #666; font-size: 0.9rem;">
+            Heatmap and bin-level details show flagged bins only (not the full runner presence window).
+        </p>
 
         <!-- Caption beneath heatmap (Issue #334) -->
         <div id="caption-container" style="margin: 0.5rem 0 1.5rem 0; display: none;">
@@ -523,6 +532,11 @@
         const peakRate = detail.peak_rate || 0;
         document.getElementById('detail-peak-rate').textContent = peakRate.toFixed(2) + ' p/s';
         document.getElementById('detail-active').textContent = detail.active || 'N/A';
+
+        const firstRunner = detail.first_runner;
+        const lastRunner = detail.last_runner;
+        const runnerWindow = firstRunner && lastRunner ? `${firstRunner} – ${lastRunner}` : 'N/A';
+        document.getElementById('detail-runner-window').textContent = runnerWindow;
         
         // Issue #596: Add Utilization and Worst Bin to Key Metrics
         const utilization = detail.utilization !== null && detail.utilization !== undefined ? detail.utilization.toFixed(3) : '—';
@@ -532,6 +546,16 @@
         const worstBin = detail.worst_bin ? {...detail.worst_bin, segment_id: detail.seg_id} : null;
         const worstBinLabel = formatWorstBinLabel(worstBin);
         document.getElementById('detail-worst-bin').textContent = worstBinLabel;
+
+        const flaggedBins = detail.flagged_bins;
+        const totalBins = detail.total_bins;
+        const flaggedPct = detail.flagged_bin_pct;
+        let coverageLabel = 'N/A';
+        if (typeof flaggedBins === 'number' && typeof totalBins === 'number' && totalBins > 0) {
+            const pctLabel = typeof flaggedPct === 'number' ? ` (${flaggedPct.toFixed(1)}%)` : '';
+            coverageLabel = `${flaggedBins} / ${totalBins}${pctLabel}`;
+        }
+        document.getElementById('detail-flagged-coverage').textContent = coverageLabel;
         
         // Show heatmap or empty state
         const heatmapImg = document.getElementById('heatmap-image');
