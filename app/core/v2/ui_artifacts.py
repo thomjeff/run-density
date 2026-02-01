@@ -1337,20 +1337,25 @@ def _build_zone_caption_summary(
             f"forming a {overtaking_ratio} overtaking ratio."
         )
     elif overtaking_b > 0:
-        summary_parts.append(f"{overtaking_b} {event_b} runners overtook {overtaking_a} {event_a} runners.")
+        summary_parts.append(
+            f"{overtaking_b} {event_b} runners overtook at least 1 {event_a} runner, "
+            f"and no {event_a} runners overtook a {event_b} runner."
+        )
     elif overtaking_a > 0:
-        summary_parts.append(f"{overtaking_a} {event_a} runners overtook {overtaking_b} {event_b} runners.")
+        summary_parts.append(
+            f"{overtaking_a} {event_a} runners overtook at least 1 {event_b} runner, "
+            f"and no {event_b} runners overtook a {event_a} runner."
+        )
     
-    # Bidirectional overtaking (if applicable)
-    if overtaken_a > 0 or overtaken_b > 0:
-        if overtaken_a > 0 and overtaking_a > 0:
-            summary_parts.append(
-                f"Meanwhile, {overtaking_a} fast {event_a} runners overtook slower {event_b} runners."
-            )
-        elif overtaken_b > 0 and overtaking_b > 0:
-            summary_parts.append(
-                f"Meanwhile, {overtaking_b} fast {event_b} runners overtook slower {event_a} runners."
-            )
+    # Overtaken context (adds clarity on who was overtaken)
+    if overtaken_a > 0 and overtaking_b > 0:
+        summary_parts.append(
+            f"{overtaken_a} {event_a} runners were overtaken by at least 1 {event_b} runner."
+        )
+    if overtaken_b > 0 and overtaking_a > 0:
+        summary_parts.append(
+            f"{overtaken_b} {event_b} runners were overtaken by at least 1 {event_a} runner."
+        )
     
     # Overall characterization
     if participants_involved > 500:
