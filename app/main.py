@@ -29,6 +29,7 @@ from app.routes.api_dashboard import router as api_dashboard_router
 from app.routes.api_health import router as api_health_router
 from app.routes.api_density import router as api_density_router
 from app.routes.api_flow import router as api_flow_router
+from app.routes.api_bidirectional import router as api_bidirectional_router
 from app.routes.api_reports import router as api_reports_router
 from app.routes.api_bins import router as api_bins_router
 # Phase 3 cleanup: Removed api_heatmaps_router import (endpoint unused)
@@ -142,6 +143,7 @@ app.include_router(api_dashboard_router)
 app.include_router(api_health_router)
 app.include_router(api_density_router)
 app.include_router(api_flow_router)
+app.include_router(api_bidirectional_router)
 app.include_router(api_reports_router)
 app.include_router(api_bins_router)
 # Phase 3 cleanup: Removed api_heatmaps_router registration (endpoint unused, frontend uses static file serving)

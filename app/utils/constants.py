@@ -177,6 +177,10 @@ GCS_BUCKET_RUNFLOW = "runflow"  # New UUID-based structure
 RUNFLOW_ROOT_LOCAL = "/Users/jthompson/Documents/runflow"  # Must match docker-compose.yml volume mount
 RUNFLOW_ROOT_CONTAINER = "/app/runflow"
 
+# Reports subdirectories
+REPORTS_OVERLAPS_DIRNAME = "overlaps"
+REPORTS_OVERLAPS_SUMMARY_FILENAME = "overlaps_summary.json"
+
 # Data directory path (Issue #596)
 DATA_DIR = "data"
 

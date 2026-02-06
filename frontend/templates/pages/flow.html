@@ -9,6 +9,54 @@
     {% endif %}
 </div>
 
+<!-- Flow Overlaps -->
+<div class="card">
+    <h3 style="margin-bottom: 0.5rem;">Flow Overlaps</h3>
+    <p id="overlap-note" style="margin-bottom: 1rem; color: #7f8c8d; font-size: 0.875rem;">
+        Loading overlap summary...
+    </p>
+    <div class="scrollable-table-container overlap-table-container">
+        <table id="overlap-table" class="table-sticky-header">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>NAME</th>
+                    <th>EVENTS</th>
+                    <th>OVERLAP</th>
+                    <th>DURATION</th>
+                    <th>PEAK</th>
+                </tr>
+            </thead>
+            <tbody id="overlap-tbody">
+                <tr>
+                    <td colspan="6" class="placeholder">Loading overlap data...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <div id="overlap-detail" class="overlap-detail" style="display:none;">
+        <h4 style="margin: 1rem 0 0.5rem 0;">Bidirectional Overlap</h4>
+        <div id="overlap-detail-meta" style="margin-bottom: 0.75rem; color: #2c3e50;"></div>
+        <div id="overlap-chart" class="overlap-chart"></div>
+        <div class="scrollable-table-container overlap-detail-table-container" style="margin-top: 0.75rem;">
+            <table id="overlap-detail-table" class="table-sticky-header">
+                <thead>
+                    <tr>
+                        <th>MINUTE</th>
+                        <th id="overlap-col-a">A</th>
+                        <th id="overlap-col-b">B</th>
+                    </tr>
+                </thead>
+                <tbody id="overlap-detail-tbody">
+                    <tr>
+                        <td colspan="3" class="placeholder">Select a segment to view per-minute overlaps.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
 <!-- Flow Metrics Table -->
 <div class="card">
     <h3 style="margin-bottom: 1rem;">Segment Flow Metrics</h3>
@@ -86,11 +134,13 @@
 <script>
     let flowData = {};
     let currentSort = { column: null, direction: 'asc' }; // 'asc' or 'desc' (Issue #596: Fix - moved outside DOMContentLoaded)
+    let overlapSummary = null;
     
     // Load flow data on page load
     document.addEventListener('DOMContentLoaded', function() {
         initializeSorting();
         loadFlowData();
+        loadOverlapData();
     });
     
     function loadFlowData() {
@@ -394,6 +444,237 @@
         const tbody = document.getElementById('flow-tbody');
         tbody.innerHTML = '<tr><td colspan="9" class="placeholder">Error loading flow data</td></tr>';
     }
+
+    function loadOverlapData() {
+        const params = new URLSearchParams(window.location.search);
+        const dayParam = params.get('day');
+        const runParam = params.get('run_id');
+        const day = (dayParam || (window.runflowDay && window.runflowDay.selected) || '').toLowerCase().trim();
+        const run_id = (runParam || (window.runflowDay && window.runflowDay.run_id) || '').trim();
+
+        if (!day || !run_id) {
+            console.error('❌ Refusing to fetch overlap data without day+run_id', { day, run_id });
+            showOverlapError();
+            return;
+        }
+
+        const apiUrl = `/api/bidirectional/segments?run_id=${encodeURIComponent(run_id)}&day=${encodeURIComponent(day)}`;
+        fetch(apiUrl, { cache: 'no-store' })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                overlapSummary = data.overlaps || { analyzed_count: 0, overlap_count: 0, segments: [] };
+                renderOverlapTable(overlapSummary);
+            })
+            .catch(error => {
+                console.error('Error loading overlap data:', error);
+                showOverlapError();
+            });
+    }
+
+    function renderOverlapTable(overlaps) {
+        const tbody = document.getElementById('overlap-tbody');
+        const note = document.getElementById('overlap-note');
+        tbody.innerHTML = '';
+
+        const analyzed = overlaps.analyzed_count || 0;
+        const overlapCount = overlaps.overlap_count || 0;
+        note.textContent = `${analyzed} flow segments analyzed for overlaps, ${overlapCount} segments with non-zero overlaps`;
+
+        const segments = overlaps.segments || [];
+        if (segments.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="placeholder">No bidirectional overlaps detected</td></tr>';
+            return;
+        }
+
+        segments.forEach(segment => {
+            const row = document.createElement('tr');
+            row.className = 'overlap-row';
+            row.dataset.segId = segment.seg_id;
+            row.dataset.eventA = segment.event_a;
+            row.dataset.eventB = segment.event_b;
+            row.innerHTML = `
+                <td>${segment.seg_id || "—"}</td>
+                <td>${segment.seg_label || "—"}</td>
+                <td>${segment.event_a || "—"} / ${segment.event_b || "—"}</td>
+                <td>${segment.overlap_start || "—"}–${segment.overlap_end || "—"}</td>
+                <td>${segment.overlap_duration_minutes || 0} min</td>
+                <td>${segment.peak_concurrent_a || 0} / ${segment.peak_concurrent_b || 0}</td>
+            `;
+            row.addEventListener('click', function() {
+                loadOverlapDetail(segment);
+                highlightSelectedOverlapRow(row);
+            });
+            tbody.appendChild(row);
+        });
+    }
+
+    function highlightSelectedOverlapRow(row) {
+        document.querySelectorAll('.overlap-row').forEach(r => r.classList.remove('selected'));
+        row.classList.add('selected');
+    }
+
+    function loadOverlapDetail(segment) {
+        const params = new URLSearchParams(window.location.search);
+        const dayParam = params.get('day');
+        const runParam = params.get('run_id');
+        const day = (dayParam || (window.runflowDay && window.runflowDay.selected) || '').toLowerCase().trim();
+        const run_id = (runParam || (window.runflowDay && window.runflowDay.run_id) || '').trim();
+        if (!day || !run_id) {
+            showOverlapError();
+            return;
+        }
+
+        const apiUrl = `/api/bidirectional/segment/${encodeURIComponent(segment.seg_id)}?run_id=${encodeURIComponent(run_id)}&day=${encodeURIComponent(day)}&event_a=${encodeURIComponent(segment.event_a)}&event_b=${encodeURIComponent(segment.event_b)}`;
+        fetch(apiUrl, { cache: 'no-store' })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                renderOverlapDetail(data.segment, data.rows || []);
+            })
+            .catch(error => {
+                console.error('Error loading overlap detail:', error);
+                showOverlapError();
+            });
+    }
+
+    function renderOverlapDetail(segment, rows) {
+        const detail = document.getElementById('overlap-detail');
+        const meta = document.getElementById('overlap-detail-meta');
+        const chart = document.getElementById('overlap-chart');
+        const tbody = document.getElementById('overlap-detail-tbody');
+        const colA = document.getElementById('overlap-col-a');
+        const colB = document.getElementById('overlap-col-b');
+
+        detail.style.display = '';
+        meta.innerHTML = buildOverlapMeta(segment);
+        const eventKeyA = segment.event_a_label || segment.event_a;
+        const eventKeyB = segment.event_b_label || segment.event_b;
+        colA.textContent = `${eventKeyA} (count / entries / exits)`;
+        colB.textContent = `${eventKeyB} (count / entries / exits)`;
+
+        tbody.innerHTML = '';
+        if (!rows || rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" class="placeholder">No per-minute overlap data available</td></tr>';
+            chart.innerHTML = '';
+            return;
+        }
+
+        rows.forEach(row => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${row.minute_start}–${row.minute_end}</td>
+                <td class="numeric-pair">${row[`${eventKeyA}_count`]} / ${row[`${eventKeyA}_entries`]} / ${row[`${eventKeyA}_exits`]}</td>
+                <td class="numeric-pair">${row[`${eventKeyB}_count`]} / ${row[`${eventKeyB}_entries`]} / ${row[`${eventKeyB}_exits`]}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        chart.innerHTML = buildOverlapChart(rows, segment, eventKeyA, eventKeyB);
+    }
+
+    function buildOverlapMeta(segment) {
+        const segLabel = segment.seg_label ? ` — ${segment.seg_label}` : '';
+        const rangeA = `${segment.event_a} ${segment.from_km_a}–${segment.to_km_a} km`;
+        const rangeB = `${segment.event_b} ${segment.from_km_b}–${segment.to_km_b} km`;
+        const title = `Bidirectional Overlap — ${segment.seg_id}${segLabel} (${rangeA}, ${rangeB})`;
+        const timeRange = `${segment.overlap_start}–${segment.overlap_end}`;
+        return `<div class="overlap-title">${escapeHtml(title)}</div><div class="overlap-time">${escapeHtml(timeRange)}</div>`;
+    }
+
+    function buildOverlapChart(rows, segment, eventKeyA, eventKeyB) {
+        const width = 1050;
+        const height = 210;
+        const padding = 39;
+        const eventA = segment.event_a;
+        const eventB = segment.event_b;
+        const countsA = rows.map(r => r[`${eventKeyA}_count`] || 0);
+        const countsB = rows.map(r => r[`${eventKeyB}_count`] || 0);
+        const overlapCounts = countsA.map((val, idx) => Math.min(val, countsB[idx]));
+        const maxCount = Math.max(1, ...countsA, ...countsB);
+        const xStep = rows.length > 1 ? (width - padding * 2) / (rows.length - 1) : 0;
+        const axisY = height - padding;
+        const axisX = padding;
+        const labelY = height - 12;
+
+        const points = (counts, color) => {
+            const path = counts.map((val, idx) => {
+                const x = padding + idx * xStep;
+                const y = height - padding - (val / maxCount) * (height - padding * 2);
+                return `${idx === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+            }).join(' ');
+            return `<path d="${path}" fill="none" stroke="${color}" stroke-width="2" />`;
+        };
+
+        const area = (counts, color) => {
+            const top = counts.map((val, idx) => {
+                const x = padding + idx * xStep;
+                const y = height - padding - (val / maxCount) * (height - padding * 2);
+                return `${x.toFixed(1)},${y.toFixed(1)}`;
+            });
+            const bottom = counts.map((_, idx) => {
+                const x = padding + (counts.length - 1 - idx) * xStep;
+                return `${x.toFixed(1)},${axisY.toFixed(1)}`;
+            });
+            const path = `M${top.join(' L')} L${bottom.join(' L')} Z`;
+            return `<path d="${path}" fill="${color}" opacity="0.25" />`;
+        };
+
+        const startLabel = rows[0] ? rows[0].minute_start : '';
+        const totalSpan = rows.length - 1;
+        const midIndex = Math.floor(totalSpan / 2);
+        const q1Index = Math.floor(totalSpan / 4);
+        const q3Index = Math.floor((totalSpan * 3) / 4);
+        const midLabel = rows[midIndex] ? rows[midIndex].minute_start : '';
+        const q1Label = rows[q1Index] ? rows[q1Index].minute_start : '';
+        const q3Label = rows[q3Index] ? rows[q3Index].minute_start : '';
+        const endLabel = rows[rows.length - 1] ? rows[rows.length - 1].minute_end : '';
+        const xStart = padding;
+        const xQ1 = padding + q1Index * xStep;
+        const xMid = padding + midIndex * xStep;
+        const xQ3 = padding + q3Index * xStep;
+        const xEnd = padding + totalSpan * xStep;
+
+        return `
+            <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+                <rect x="0" y="0" width="${width}" height="${height}" fill="#fff" />
+                <line x1="${axisX}" y1="${axisY}" x2="${width - padding}" y2="${axisY}" stroke="#e0e0e0" />
+                <line x1="${axisX}" y1="${padding}" x2="${axisX}" y2="${axisY}" stroke="#e0e0e0" />
+                ${area(overlapCounts, '#9ec5fe')}
+                ${points(countsA, '#1f77b4')}
+                ${points(countsB, '#ff7f0e')}
+                <text x="${axisX}" y="${padding - 8}" font-size="10" fill="#555">Concurrent runners</text>
+                <text x="${axisX + 160}" y="${padding - 8}" font-size="10" fill="#1f77b4">${eventKeyA} concurrent</text>
+                <text x="${axisX + 320}" y="${padding - 8}" font-size="10" fill="#ff7f0e">${eventKeyB} concurrent</text>
+                <text x="${axisX + 500}" y="${padding - 8}" font-size="10" fill="#4c7bd9">Overlap</text>
+                <line x1="${xStart}" y1="${axisY}" x2="${xStart}" y2="${axisY + 4}" stroke="#9ca3af" />
+                <line x1="${xQ1}" y1="${axisY}" x2="${xQ1}" y2="${axisY + 4}" stroke="#9ca3af" />
+                <line x1="${xMid}" y1="${axisY}" x2="${xMid}" y2="${axisY + 4}" stroke="#9ca3af" />
+                <line x1="${xQ3}" y1="${axisY}" x2="${xQ3}" y2="${axisY + 4}" stroke="#9ca3af" />
+                <line x1="${xEnd}" y1="${axisY}" x2="${xEnd}" y2="${axisY + 4}" stroke="#9ca3af" />
+                <text x="${xStart - 8}" y="${labelY}" font-size="10" fill="#555">${startLabel}</text>
+                <text x="${xQ1 - 8}" y="${labelY}" font-size="10" fill="#555">${q1Label}</text>
+                <text x="${xMid - 8}" y="${labelY}" font-size="10" fill="#555">${midLabel}</text>
+                <text x="${xQ3 - 8}" y="${labelY}" font-size="10" fill="#555">${q3Label}</text>
+                <text x="${xEnd - 8}" y="${labelY}" font-size="10" fill="#555">${endLabel}</text>
+            </svg>
+        `;
+    }
+
+    function showOverlapError() {
+        const tbody = document.getElementById('overlap-tbody');
+        const note = document.getElementById('overlap-note');
+        tbody.innerHTML = '<tr><td colspan="6" class="placeholder">Error loading overlap data</td></tr>';
+        note.textContent = 'Bidirectional overlap data unavailable';
+    }
 </script>
 {% endblock %}
 
@@ -525,6 +806,58 @@
         color: #495057;
         padding: 0.75rem 1rem;
     }
+
+    #overlap-table th,
+    #overlap-table td,
+    #overlap-detail-table th,
+    #overlap-detail-table td {
+        padding: 0.75rem 1rem;
+        text-align: left;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    #overlap-table th,
+    #overlap-detail-table th {
+        background: #f8f9fa;
+        font-weight: 600;
+        color: #2c3e50;
+    }
+
+    .overlap-row:hover {
+        background: #f8f9fa;
+        cursor: pointer;
+    }
+
+    .overlap-row.selected {
+        background: #eef5ff;
+    }
+
+    .overlap-chart {
+        border: 1px solid #e0e0e0;
+        border-radius: 4px;
+        padding: 0.5rem;
+        background: #fff;
+    }
+
+    .overlap-title {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+
+    .overlap-time {
+        color: #6b7280;
+        font-size: 0.9rem;
+    }
+
+.overlap-table-container {
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.overlap-detail-table-container {
+    max-height: 200px;
+    overflow-y: auto;
+}
     
 </style>
 {% endblock %}
