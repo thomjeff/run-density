@@ -24,6 +24,7 @@ from app.core.v2.density import (
 )
 from app.core.v2.flow import analyze_temporal_flow_segments_v2
 from app.core.v2.reports import generate_reports_per_day
+from app.core.v2.overlaps import generate_bidirectional_overlap_reports
 from app.core.v2.bins import generate_bins_v2
 from app.core.v2.performance import PerformanceMonitor, get_memory_usage_mb
 from app.io.loader import load_segments
@@ -1708,6 +1709,23 @@ def create_full_analysis_pipeline(
                 summary_stats={"reports": total_reports, "Density.md": report_counts["Density.md"], 
                               "Flow.csv": report_counts["Flow.csv"], "Locations.csv": report_counts["Locations.csv"]}
             )
+
+            # Generate bidirectional overlap reports (Issue #720)
+            overlaps_by_day = {}
+            for day, day_events in events_by_day.items():
+                day_code = day.value
+                day_path = run_path / day_code
+                reports_path = day_path / "reports"
+                reports_path.mkdir(parents=True, exist_ok=True)
+                overlaps_by_day[day_code] = generate_bidirectional_overlap_reports(
+                    run_id=run_id,
+                    day=day,
+                    day_events=day_events,
+                    analysis_context=analysis_context,
+                    all_runners_df=all_runners_df,
+                    reports_dir=reports_path,
+                    segments_df=segments_df
+                )
             
             # Update metadata verification after reports are generated
             # Bug fix: Metadata was created before reports, causing false FAIL status
