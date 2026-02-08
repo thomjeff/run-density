@@ -223,7 +223,6 @@ def generate_markdown_report(
     content.append("- **Flow Interactions**: Count of runners from one event interacting with another (overtaking, merging, or counterflow)")
     content.append("- **Flow Type**: Type of flow pattern (overtake, merge, diverge, counterflow)")
     content.append("- **Convergence Zone**: Time window when convergence occurs")
-    content.append("- **Deep Dive Analysis**: Detailed analysis of convergence patterns")
     content.append("")
     
     # Event start times with runner counts
@@ -356,12 +355,6 @@ def generate_segment_section(
     # Runner Experience Analysis (Overtaking Loads)
     content.extend(generate_runner_experience_analysis(segment))
     content.append("")
-    
-    # Deep dive analysis if present
-    deep_dive = segment.get("deep_dive_analysis")
-    if deep_dive and isinstance(deep_dive, dict):
-        content.extend(generate_deep_dive_analysis(segment))
-        content.append("")
     
     return content
 
@@ -567,72 +560,6 @@ def generate_convergence_analysis(segment: Dict[str, Any]) -> List[str]:
     else:
         content.append("**Convergence Zone:** Not found")
     content.append("")
-    
-    return content
-
-
-def generate_deep_dive_analysis(segment: Dict[str, Any]) -> List[str]:
-    """Generate deep dive analysis section."""
-    content = []
-    
-    deep_dive = segment.get("deep_dive_analysis", {})
-    if not deep_dive:
-        return content
-    
-    content.append("### Deep Dive Analysis")
-    content.append("")
-    
-    # Time-based analysis
-    time_analysis = deep_dive.get("time_analysis", {})
-    if time_analysis:
-        content.append("**Time-Based Analysis**")
-        content.append("| Metric | Value |")
-        content.append("|--------|-------|")
-        
-        peak_convergence_time = time_analysis.get("peak_convergence_time")
-        convergence_duration = time_analysis.get("convergence_duration_minutes")
-        overlap_intensity = time_analysis.get("overlap_intensity")
-        
-        if peak_convergence_time:
-            content.append(f"| Peak Convergence Time | {peak_convergence_time} |")
-        if convergence_duration is not None:
-            content.append(f"| Convergence Duration | {convergence_duration:.1f} minutes |")
-        if overlap_intensity is not None:
-            content.append(f"| Overlap Intensity | {overlap_intensity:.3f} |")
-        content.append("")
-    
-    # Pace analysis
-    pace_analysis = deep_dive.get("pace_analysis", {})
-    if pace_analysis:
-        content.append("**Pace Analysis**")
-        content.append("| Metric | Event A | Event B |")
-        content.append("|--------|---------|---------|")
-        
-        avg_pace_a = pace_analysis.get("avg_pace_a")
-        avg_pace_b = pace_analysis.get("avg_pace_b")
-        pace_difference = pace_analysis.get("pace_difference")
-        
-        if avg_pace_a is not None:
-            content.append(f"| Average Pace | {avg_pace_a:.2f} min/km | {avg_pace_b:.2f} min/km |")
-        if pace_difference is not None:
-            content.append(f"| Pace Difference | {pace_difference:.2f} min/km | |")
-        content.append("")
-    
-    # Density analysis
-    density_analysis = deep_dive.get("density_analysis", {})
-    if density_analysis:
-        content.append("**Density Analysis**")
-        content.append("| Metric | Value |")
-        content.append("|--------|-------|")
-        
-        peak_density = density_analysis.get("peak_density")
-        avg_density = density_analysis.get("avg_density")
-        
-        if peak_density is not None:
-            content.append(f"| Peak Density | {peak_density:.3f} runners/m² |")
-        if avg_density is not None:
-            content.append(f"| Average Density | {avg_density:.3f} runners/m² |")
-        content.append("")
     
     return content
 

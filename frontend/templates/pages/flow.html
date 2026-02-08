@@ -71,7 +71,6 @@
                     <th>ID</th>
                     <th>NAME</th>
                     <th>EVENT</th>
-                    <th>FLOW TYPE</th>
                     <th>WORST ZONE</th>
                     <th class="sortable" data-sort="overtaking">OVERTAKING <span class="sort-indicator"></span></th>
                     <th>PCT</th>
@@ -80,7 +79,7 @@
             </thead>
             <tbody id="flow-tbody">
                 <tr>
-                    <td colspan="9" class="placeholder">Loading flow data...</td>
+                    <td colspan="8" class="placeholder">Loading flow data...</td>
                 </tr>
             </tbody>
         </table>
@@ -104,13 +103,6 @@
             <tr>
                 <td><strong>Event A / Event B</strong></td>
                 <td>The two event cohorts being compared (e.g., Full vs Half Marathon). Each pair shows interactions between participants from these events along a segment.</td>
-            </tr>
-            <tr>
-                <td><strong>Flow Type</strong></td>
-                <td>Indicates the interaction pattern between the two events:<br>
-                • <em>Overtake</em>: Participants in one event pass another.<br>
-                • <em>Parallel</em>: Both events move in the same direction concurrently.<br>
-                • <em>Counterflow</em>: Participants move in opposite directions on the same path.</td>
             </tr>
             <tr>
                 <td><strong>Overtaking A / Overtaking B</strong></td>
@@ -191,7 +183,7 @@
         const segments = Object.values(flow);
         
         if (!segments || segments.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" class="placeholder">No flow data available</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="placeholder">No flow data available</td></tr>';
             return;
         }
         
@@ -240,7 +232,6 @@
                 <td>${segment.seg_id || "—"}</td>
                 <td>${segment.segment_label || segment.name || "—"}</td>
                 <td class="event-pair">${eventA} / ${eventB}</td>
-                <td>${segment.flow_type || 'overtake'}</td>
                 <td>${worstZoneDisplay}</td>
                 <td class="numeric-pair">${overtakingADisplay} / ${overtakingBDisplay}</td>
                 <td class="numeric-pair">${pctADisplay} / ${pctBDisplay}</td>
@@ -442,7 +433,7 @@
     
     function showFlowError() {
         const tbody = document.getElementById('flow-tbody');
-        tbody.innerHTML = '<tr><td colspan="9" class="placeholder">Error loading flow data</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="placeholder">Error loading flow data</td></tr>';
     }
 
     function loadOverlapData() {
