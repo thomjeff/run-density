@@ -820,16 +820,15 @@ def _parse_report_header(lines: List[str]) -> Tuple[int, int]:
 def _parse_segment_metrics_from_line(
     line: str,
     current_segment: Optional[str],
-    peak_areal_density: float,
-    peak_flow_rate: float
-) -> Tuple[float, float]:
-    """Extract density and flow rate values from a line if present."""
+    peak_areal_density: float
+) -> float:
+    """Extract density values from a line if present."""
     if not current_segment or '|' not in line:
-        return peak_areal_density, peak_flow_rate
+        return peak_areal_density
     
     parts = [p.strip() for p in line.split('|')]
     if len(parts) < 3:
-        return peak_areal_density, peak_flow_rate
+        return peak_areal_density
     
     # Look for density values in metrics tables
     if '| Density |' in line:
@@ -839,15 +838,7 @@ def _parse_segment_metrics_from_line(
         except ValueError:
             pass
     
-    # Look for flow rate values
-    if '| Flow Rate |' in line:
-        try:
-            flow_rate = float(parts[2])
-            peak_flow_rate = max(peak_flow_rate, flow_rate)
-        except ValueError:
-            pass
-    
-    return peak_areal_density, peak_flow_rate
+    return peak_areal_density
 
 
 def _update_los_counts_and_critical(
@@ -917,7 +908,6 @@ def parse_latest_density_report():
         current_segment = None
         los_counts = {}
         peak_areal_density = 0.0
-        peak_flow_rate = 0.0
         critical_segments = 0
         
         for line in lines:
@@ -928,8 +918,8 @@ def parse_latest_density_report():
                 continue
             
             # Extract density and flow rate from metrics tables
-            peak_areal_density, peak_flow_rate = _parse_segment_metrics_from_line(
-                line, current_segment, peak_areal_density, peak_flow_rate
+            peak_areal_density = _parse_segment_metrics_from_line(
+                line, current_segment, peak_areal_density
             )
             
             # Update LOS counts and critical segment count
@@ -944,7 +934,6 @@ def parse_latest_density_report():
             "total_segments": total_segments,
             "processed_segments": processed_segments,
             "peak_areal_density": peak_areal_density,
-            "peak_flow_rate": peak_flow_rate,
             "critical_segments": critical_segments,
             "overall_los": overall_los
         }
@@ -975,7 +964,6 @@ async def get_summary_data():
                 },
                 "metrics": {
                     "peak_areal_density": round(report_data["peak_areal_density"], 2),
-                    "peak_flow_rate": round(report_data["peak_flow_rate"], 1),
                     "critical_segments": report_data["critical_segments"],
                     "overall_los": report_data["overall_los"]
                 }
@@ -992,7 +980,6 @@ async def get_summary_data():
                 },
                 "metrics": {
                     "peak_areal_density": 0.85,
-                    "peak_flow_rate": 12.4,
                     "critical_segments": 1,
                     "overall_los": "A"
                 }

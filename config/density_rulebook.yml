@@ -91,10 +91,8 @@ binding:
   # Prefer explicit segment_id if available; otherwise rely on segment_type
   - when: { segment_id: "A1" }
     use_schema: start_corral
-    flow_enabled: true
   - when: { segment_type: [funnel, merge, bridge, finish] }
     use_schema: on_course_narrow
-    flow_enabled: true
   - when: { segment_type: [road, trail, turn] }
     use_schema: on_course_open
 

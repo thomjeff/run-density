@@ -95,8 +95,8 @@ def evaluate_triggers(segment_id: str, metrics: dict, schema_name: str, schema: 
             if density_metric is not None and density_metric >= density_value:
                 fired_actions.extend(actions)
         
-        # Check flow trigger
-        if "flow_gte" in when and schema.flow_ref:
+        # Check flow trigger only when flow metric is provided
+        if "flow_gte" in when and schema.flow_ref and metrics.get("flow") is not None:
             flow_threshold = when["flow_gte"]
             if isinstance(flow_threshold, str):
                 # Named threshold (warn, critical)
@@ -109,17 +109,11 @@ def evaluate_triggers(segment_id: str, metrics: dict, schema_name: str, schema: 
             if flow_value is None:
                 flow_value = 0.0
             
-            flow_metric = metrics.get("flow", 0.0)
+            flow_metric = metrics.get("flow")
             if flow_metric is not None and flow_metric >= flow_value:
                 fired_actions.extend(actions)
     
     return fired_actions
-
-
-def compute_flow_rate(runners_crossing: int, width_m: float, bin_seconds: int) -> float:
-    """Compute flow rate in runners/min/m."""
-    minutes = max(bin_seconds / 60.0, 1e-9)
-    return runners_crossing / (width_m * minutes)  # runners/min/m
 
 
 # Phase 3 cleanup: Removed map_los() - not imported or used anywhere

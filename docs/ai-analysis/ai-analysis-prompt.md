@@ -30,7 +30,6 @@ You are an expert race operations assistant analyzing course metrics for the Fre
 
 - **Density:** {units.density} (runners per square meter)
 - **Rate:** {units.rate} (runners per minute per meter of width)
-- **Flow Rate:** {units.flow_rate} (runners per second)
 - **Time:** {units.time} (ISO 8601 UTC format)
 
 ---
