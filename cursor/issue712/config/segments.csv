@@ -1,0 +1,55 @@
+seg_id,seg_label,width_m,schema,direction,full,half,10k,elite,open,full_from_km,full_to_km,half_from_km,half_to_km,10k_from_km,10k_to_km,elite_from_km,elite_to_km,open_from_km,open_to_km,full_length,half_length,10k_length,elite_length,open_length,description
+A1,Start to Queen/Regent,5,on_course_open,uni,y,y,y,n,n,0,0.9,0,0.9,0,0.9,0,0,0,0,0.9,0.9,0.9,0,0,"Starting segment used by Full, Half, 10K runners."
+A2,Queen/Regent to WSB mid-point,5,on_course_open,uni,y,y,y,n,n,0.9,1.8,0.9,1.8,0.9,1.8,0,0,0,0,0.9,0.9,0.9,0,0,"Downtown road section used by Full, Half, 10K runners."
+A3,WSB mid-point to Friel,5,on_course_open,uni,y,y,y,n,n,1.8,2.7,1.8,2.7,1.8,2.7,0,0,0,0,0.9,0.9,0.9,0,0,"Crosses Union St. to Friel, part of Full, Half, 10K route."
+B1,Friel to 10K Turn (Out),1.5,on_course_narrow,bi,y,n,y,n,n,2.7,4.25,0,0,2.7,4.25,0,0,0,0,1.55,0,1.55,0,0,"Turnaround point for Full, 10K event(s)."
+B2,10K Turn to Friel (Back),1.5,on_course_narrow,bi,y,n,y,n,n,14.8,16.35,0,0,4.25,5.8,0,0,0,0,1.55,0,1.55,0,0,"Turnaround point for Full, 10K event(s)."
+B3,10K Turn to Friel (Slow/Fast 10k),1.5,on_course_narrow,bi,y,n,y,n,n,2.7,4.25,0,0,4.25,5.8,0,0,0,0,1.55,0,1.55,0,0,"Turnaround point for Full, 10K event(s)."
+C1,10K Turn to Royal Rd (Full Out),1.5,on_course_narrow,bi,y,n,n,n,n,4.25,5.08,0,0,0,0,0,0,0,0,0.83,0,0,0,0,10K Turn to Royal Rd (Full Out)
+C2,Royal Rd to Sunset Dr at Claremont (Full Out),1.5,on_course_narrow,bi,y,n,n,n,n,5.08,7.41,0,0,0,0,0,0,0,0,2.33,0,0,0,0,Royal Rd to Sunset Dr at Claremont (Full Out)
+C3,Sunset Dr at Claremont to Full Turn at Blake (Full Out),1.5,on_course_narrow,bi,y,n,n,n,n,7.41,9.52,0,0,0,0,0,0,0,0,2.11,0,0,0,0,Sunset Dr at Claremont to Full Turn at Blake (Full Out)
+D1,Full Turn at Blake to Sunset at Claremont (Full Back),1.5,on_course_narrow,bi,y,n,n,n,n,9.5,11.6,0,0,0,0,0,0,0,0,2.12,0,0,0,0,Full Turn at Blake to Sunset at Claremont (Full Back)
+D2,Sunset at Claremont to Royal (Full Back),1.5,on_course_narrow,bi,y,n,n,n,n,11.6,14,0,0,0,0,0,0,0,0,2.33,0,0,0,0,Sunset at Claremont to Royal (Full Back)
+D3,Royal to 10K Turn (Full Back),1.5,on_course_narrow,bi,y,n,n,n,n,14,14.8,0,0,0,0,0,0,0,0,0.83,0,0,0,0,Royal to 10K Turn (Full Back)
+E1,Friel to Hughes,3,on_course_open,uni,y,y,y,n,n,16.35,16.98,2.7,3.33,5.8,6.43,0,0,0,0,0.63,0.63,0.63,0,0,"Friel to Hughes (full, 10k, half)"
+E2,Hughes to Neil,3,on_course_open,uni,y,y,y,n,n,16.98,17.64,3.33,3.99,6.43,7.09,0,0,0,0,0.66,0.66,0.66,0,0,"Hughes to Neil (full, 10k, half)"
+E3,Neil to Gibson,3,on_course_open,uni,y,y,y,n,n,17.64,18.18,3.99,4.53,7.09,7.63,0,0,0,0,0.54,0.54,0.54,0,0,"Neil to Gibson (full, 10k, half)"
+E4,Gibson to Station Rd.,3,on_course_open,uni,y,y,y,n,n,18.18,18.65,4.53,5,7.63,8.1,0,0,0,0,0.47,0.47,0.47,0,0,"Gibson to Station Rd. (full, 10k, half)"
+G1,Full Loop around QS to Trail/Aberdeen,3,on_course_open,uni,y,n,n,n,n,20.55,21.65,0,0,0,0,0,0,0,0,1.1,0,0,0,0,Riverside trail section for Full runners.
+H1,Trail/Aberdeen to/from Station Rd,1.5,on_course_narrow,bi,y,y,y,n,n,21.65,23.26,19.2,20.85,8.1,9.75,0,0,0,0,1.61,1.65,1.65,0,0,"Riverside trail section for Full, Half, 10K runners."
+I1,Station Rd to Greenwood Dr (Watters),3,on_course_open,uni,y,y,n,n,n,23.26,23.97,5,5.71,0,0,0,0,0,0,0.71,0.71,0,0,0,"Segment out to Marysville along Gibson Trail used by Full, Half."
+I2,Greenwood Dr (Watters) to Greenwood (2nd Crossing),3,on_course_open,uni,y,y,n,n,n,23.97,25.17,5.71,6.91,0,0,0,0,0,0,1.2,1.2,0,0,0,"Segment out to Marysville along Gibson Trail used by Full, Half."
+I3,Greenwood (2nd Crossing) to Water Stop,3,on_course_open,uni,y,y,n,n,n,25.17,26.18,6.91,7.92,0,0,0,0,0,0,1.01,1.01,0,0,0,"Segment out to Marysville along Gibson Trail used by Full, Half."
+I4,Gibson Trail Water Stop to McGloin,3,on_course_open,uni,y,y,n,n,n,26.18,28.55,7.92,10.29,0,0,0,0,0,0,2.37,2.37,0,0,0,"Segment out to Marysville along Gibson Trail used by Full, Half."
+I5,McGloin to Bridge/Mill,3,on_course_open,uni,y,y,n,n,n,28.55,29.01,10.29,10.75,0,0,0,0,0,0,0.46,0.46,0,0,0,"Segment out to Marysville along Gibson Trail used by Full, Half."
+J1,Bridge/Mill to Half Turn (Outbound),1.5,on_course_narrow,bi,y,y,n,n,n,29.01,31.64,10.75,13.43,0,0,0,0,0,0,2.63,2.68,0,0,0,"Segment over bridge (bi-directional), used by Full, Half."
+J2,Half Turn to Full Turn (Out),1.5,on_course_narrow,uni,y,n,n,n,n,31.64,33.11,0,0,0,0,0,0,0,0,1.47,0,0,0,0,Turnaround point for Full event(s).
+J3,Full Turn to Half Turn (Return),1.5,on_course_narrow,uni,y,n,n,n,n,33.11,34.34,0,0,0,0,0,0,0,0,1.23,0,0,0,0,Turnaround point for Full event(s).
+J4,Half Turn to Bridge/Mill,1.5,on_course_narrow,uni,y,y,n,n,n,34.34,36.93,13.43,16.02,0,0,0,0,0,0,2.59,2.59,0,0,0,Half and full runners back to Marysville Bridge
+J5,Half Turn to Bridge/Mill (Slow Half),1.5,on_course_narrow,uni,y,y,n,n,n,34.34,36.93,10.75,13.43,0,0,0,0,0,0,2.59,2.68,0,0,0,Half (slow) and full runners back to Marysville Bridge
+K1,Bridge/Mill to Kaine Street,3,on_course_open,uni,y,y,n,n,n,37.12,37.82,16.02,16.72,0,0,0,0,0,0,0.7,0.7,0,0,0,Segment from Marysville Bridge via Devon lumber trail to Station/Barker
+K2,Kaine to Gilbert,3,on_course_open,uni,y,y,n,n,n,37.82,38.42,16.72,17.32,0,0,0,0,0,0,0.6,0.6,0,0,0,Segment from Marysville Bridge via Devon lumber trail to Station/Barker
+K3,Gilbert to Canada St,3,on_course_open,uni,y,y,n,n,n,38.42,39.07,17.32,17.97,0,0,0,0,0,0,0.65,0.65,0,0,0,Segment from Marysville Bridge via Devon lumber trail to Station/Barker
+K4,Canada St to Station/Barker,3,on_course_open,uni,y,y,n,n,n,39.07,40.57,17.97,19.47,0,0,0,0,0,0,1.5,1.5,0,0,0,Segment from Marysville Bridge via Devon lumber trail to Station/Barker
+L1,Trail/Aberdeen to/from Station Rd,1.5,on_course_narrow,bi,y,y,y,n,n,18.65,20.3,19.2,20.85,8.1,9.75,0,0,0,0,1.65,1.65,1.65,0,0,"Riverside trail section for Full, Half, 10K runners."
+L2,Station Rd to Trail/Aberdeen (Full Only),1.5,on_course_narrow,uni,y,n,n,n,n,40.57,41.95,0,0,0,0,0,0,0,0,1.38,0,0,0,0,Riverside trail section for Full runners.
+M1,Trail/Aberdeen to Finish (Full to Loop),3,on_course_open,uni,y,y,y,n,n,20.3,20.55,20.85,21.1,9.75,10,0,0,0,0,0.25,0.25,0.25,0,0,"Approach to finish line for Full, Half, 10K."
+M2,Trail/Aberdeen to Finish,3,on_course_open,uni,y,n,n,n,n,41.95,42.371,0,0,0,0,0,0,0,0,0.421,0,0,0,0,Approach to finish line for Full.
+N1,Start to Queen/Westmorland,5,on_course_open,uni,n,n,n,y,n,0,0,0,0,0,0,0,0.57,0,0,0,0,0,0.57,0,Start to Queen/Westmorland
+N2,Queen/Westmorland to PSAB/WSB,5,on_course_open,uni,n,n,n,y,n,0,0,0,0,0,0,0.57,1.45,0,0,0,0,0,0.88,0,Queen/Westmorland to PSAB/WSB
+N3,PSAB/WSB to 104th Bridge,5,on_course_open,uni,n,n,n,y,n,0,0,0,0,0,0,1.45,1.88,0,0,0,0,0,0.43,0,PSAB/WSB to 104th Bridge
+N4,104th to Queen/York,5,on_course_open,uni,n,n,n,y,n,0,0,0,0,0,0,1.88,2.58,0,0,0,0,0,0.7,0,104th to Queen/York
+N5,Queen/York to Queen at PSAB (Lap 2),5,on_course_open,uni,n,n,n,y,n,0,0,0,0,0,0,2.58,3.15,0,0,0,0,0,0.57,0,Queen/York to Queen at PSAB
+N6,Queen at PSAB to PSAB/WSB (Lap 2),5,on_course_open,uni,n,n,n,y,n,0,0,0,0,0,0,3.15,3.68,0,0,0,0,0,0.53,0,Queen at PSAB to PSAB/WSB
+N7,PSAB/WSB to 104th Bridge (Lap 2),5,on_course_open,uni,n,n,n,y,n,0,0,0,0,0,0,3.68,4.11,0,0,0,0,0,0.43,0,PSAB/WSB to 104th Bridge
+N8,104th to Queen/York (Lap 2),5,on_course_open,uni,n,n,n,y,n,0,0,0,0,0,0,4.11,4.81,0,0,0,0,0,0.7,0,104th to Queen/York
+N9,Queen/York to Finish,5,on_course_open,uni,n,n,n,y,n,0,0,0,0,0,0,4.81,5,0,0,0,0,0,0.19,0,Queen/York to Finish
+O1,Start to Queen/Westmorland,5,on_course_open,uni,n,n,n,n,y,0,0,0,0,0,0,0,0,0,0.57,0,0,0,0,0.57,Start to Queen/Westmorland
+O2,Queen/Westmorland to PSAB/WSB,5,on_course_open,uni,n,n,n,n,y,0,0,0,0,0,0,0,0,0.57,1.45,0,0,0,0,0.88,Queen/Westmorland to PSAB/WSB
+O3,PSAB/WSB to 104th Bridge,5,on_course_open,uni,n,n,n,n,y,0,0,0,0,0,0,0,0,1.45,1.88,0,0,0,0,0.43,PSAB/WSB to 104th Bridge
+O4,104th to Queen/York,5,on_course_open,uni,n,n,n,n,y,0,0,0,0,0,0,0,0,1.88,2.58,0,0,0,0,0.7,104th to Queen/York
+O5,Queen/York to Queen at PSAB (Lap 2),5,on_course_open,uni,n,n,n,n,y,0,0,0,0,0,0,0,0,2.58,3.15,0,0,0,0,0.57,Queen/York to Queen at PSAB
+O6,Queen at PSAB to PSAB/WSB (Lap 2),5,on_course_open,uni,n,n,n,n,y,0,0,0,0,0,0,0,0,3.15,3.68,0,0,0,0,0.53,Queen at PSAB to PSAB/WSB
+O7,PSAB/WSB to 104th Bridge (Lap 2),5,on_course_open,uni,n,n,n,n,y,0,0,0,0,0,0,0,0,3.68,4.11,0,0,0,0,0.43,PSAB/WSB to 104th Bridge
+O8,104th to Queen/York (Lap 2),5,on_course_open,uni,n,n,n,n,y,0,0,0,0,0,0,0,0,4.11,4.81,0,0,0,0,0.7,104th to Queen/York
+O9,Queen/York to Finish,5,on_course_open,uni,n,n,n,n,y,0,0,0,0,0,0,0,0,4.81,5,0,0,0,0,0.19,Queen/York to Finish
