@@ -101,25 +101,21 @@ PHASE_MAPPING = {
 }
 
 
-def compute_operational_status(los_letter: str, flow_utilization: Optional[float] = None) -> str:
+def compute_operational_status(los_letter: str) -> str:
     """
-    Compute operational status based on LOS and flow utilization.
+    Compute operational status based on LOS.
     
     Issue #569: Implements the same logic as density_report.py::_render_key_takeaways_v2
     
     Args:
         los_letter: LOS grade (A-F)
-        flow_utilization: Optional flow utilization percentage (None if not available)
         
     Returns:
-        Operational status string: "Stable", "Moderate", "Critical", or "Overload"
+        Operational status string: "Stable", "Moderate", or "Critical"
     """
-    # Determine status based on LOS and flow
+    # Determine status based on LOS
     if los_letter in ["A", "B"]:
-        if flow_utilization and flow_utilization > 200:
-            return "Overload"  # Flow utilization exceeds 200% - consider flow management
-        else:
-            return "Stable"  # Density and flow within acceptable ranges
+        return "Stable"  # Density within acceptable ranges
     elif los_letter in ["C", "D"]:
         return "Moderate"  # Density approaching comfort limits - monitor closely
     else:  # E, F
@@ -1321,21 +1317,10 @@ def create_full_analysis_pipeline(
             
             # Calculate operational status
             peak_density = segment_metrics_data.get("peak_density", 0.0)
-            max_flow_utilization = None
-            
-            # Find max flow_utilization from segment-level data
-            for seg_id, seg_data in segment_metrics_data.items():
-                if seg_id not in ["peak_density", "peak_rate", "segments_with_flags", 
-                                 "flagged_bins", "overtaking_segments", "co_presence_segments"]:
-                    if isinstance(seg_data, dict):
-                        flow_util = seg_data.get("flow_utilization")
-                        if flow_util is not None:
-                            if max_flow_utilization is None or flow_util > max_flow_utilization:
-                                max_flow_utilization = flow_util
             
             # Compute LOS and operational status
             los_letter = calculate_peak_density_los(peak_density)
-            operational_status = compute_operational_status(los_letter, max_flow_utilization)
+            operational_status = compute_operational_status(los_letter)
             
             # Calculate RES per event group
             event_groups_res = {}
@@ -1399,7 +1384,6 @@ def create_full_analysis_pipeline(
                 "operational_status": operational_status,
                 "los": los_letter,
                 "peak_density": peak_density,
-                "max_flow_utilization": max_flow_utilization,
                 "event_groups": event_groups_res if event_groups_res else None
             }
             

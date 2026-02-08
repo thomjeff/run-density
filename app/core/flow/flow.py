@@ -34,7 +34,7 @@ from app.utils.constants import (
     SECONDS_PER_MINUTE, SECONDS_PER_HOUR,
     DEFAULT_CONVERGENCE_STEP_KM, DEFAULT_MIN_OVERLAP_DURATION, 
     DEFAULT_CONFLICT_LENGTH_METERS, TEMPORAL_OVERLAP_TOLERANCE_SECONDS,
-    METERS_PER_KM, PACE_SIMILAR_THRESHOLD, PACE_MODERATE_DIFFERENCE_THRESHOLD,
+    METERS_PER_KM,
     TEMPORAL_BINNING_THRESHOLD_MINUTES, SPATIAL_BINNING_THRESHOLD_METERS,
     SUSPICIOUS_OVERTAKING_RATE_THRESHOLD,
     MIN_NORMALIZED_FRACTION, MAX_NORMALIZED_FRACTION,
@@ -184,7 +184,6 @@ def _compute_flow_segment_task(
         "first_entry_b": first_entry_b,
         "last_exit_b": last_exit_b,
         "overlap_window_duration": overlap_window_duration,
-        "prior_segment_id": segment_data.get("prior_segment_id", "") if pd.notna(segment_data.get("prior_segment_id", "")) else "",
         # Issue #612: Multi-zone fields
         "convergence_points": convergence_points,
         "zones": zones,
@@ -3253,157 +3252,6 @@ def format_bib_range(bib_list: List[str], max_individual: int = 3) -> str:
     first_few = sorted_bibs[:max_individual]
     return f"{', '.join(map(str, first_few))}, ... ({len(bib_list)} total)"
 
-
-def generate_deep_dive_analysis(
-    df_a: pd.DataFrame,
-    df_b: pd.DataFrame,
-    event_a: str,
-    event_b: str,
-    start_times: Dict[str, float],
-    from_km_a: float,
-    to_km_a: float,
-    from_km_b: float,
-    to_km_b: float,
-    segment_label: str,
-    flow_type: str = "overtake",
-    prior_segment_id: str = None,
-    prior_segment_data: Dict[str, Any] = None,
-    current_segment_data: Dict[str, Any] = None,
-) -> List[str]:
-    """Generate comprehensive deep dive analysis for a segment."""
-    if df_a.empty or df_b.empty:
-        return ["❌ Deep Dive: No data available for analysis"]
-    
-    analysis = []
-    analysis.append("🔍 DEEP DIVE ANALYSIS")
-    analysis.append("=" * 40)
-    
-    # Basic segment information
-    analysis.append(f"📍 Segment: {segment_label}")
-    analysis.append(f"🔄 Flow Type: {flow_type}")
-    analysis.append(f"🔍 Events: {event_a} vs {event_b}")
-    analysis.append("")
-    
-    # Entry/exit times (already calculated)
-    first_entry_a, last_exit_a, first_entry_b, last_exit_b, overlap_duration = calculate_entry_exit_times(
-        df_a, df_b, event_a, event_b, start_times,
-        from_km_a, to_km_a, from_km_b, to_km_b
-    )
-    
-    analysis.append("⏰ TIMING ANALYSIS:")
-    analysis.append(f"   • {event_a} Entry/Exit: {first_entry_a} {last_exit_a}")
-    analysis.append(f"   • {event_b} Entry/Exit: {first_entry_b} {last_exit_b}")
-    analysis.append(f"   • Overlap Window Duration: {overlap_duration}")
-    analysis.append("")
-    
-    # Runner characteristics
-    analysis.append("👥 RUNNER CHARACTERISTICS:")
-    
-    # Event A characteristics
-    pace_a = df_a["pace"].values
-    offset_a = df_a.get("start_offset", pd.Series([0]*len(df_a))).fillna(0).values.astype(float)
-    analysis.append(f"   • {event_a} Runners: {len(df_a)} total")
-    analysis.append(f"     - Pace Range: {pace_a.min():.2f} - {pace_a.max():.2f} min/km")
-    analysis.append(f"     - Pace Median: {np.median(pace_a):.2f} min/km")
-    analysis.append(f"     - Start Offset Range: {offset_a.min():.0f} - {offset_a.max():.0f} seconds")
-    analysis.append(f"     - Start Offset Median: {np.median(offset_a):.0f} seconds")
-    
-    # Event B characteristics
-    pace_b = df_b["pace"].values
-    offset_b = df_b.get("start_offset", pd.Series([0]*len(df_b))).fillna(0).values.astype(float)
-    analysis.append(f"   • {event_b} Runners: {len(df_b)} total")
-    analysis.append(f"     - Pace Range: {pace_b.min():.2f} - {pace_b.max():.2f} min/km")
-    analysis.append(f"     - Pace Median: {np.median(pace_b):.2f} min/km")
-    analysis.append(f"     - Start Offset Range: {offset_b.min():.0f} - {offset_b.max():.0f} seconds")
-    analysis.append(f"     - Start Offset Median: {np.median(offset_b):.0f} seconds")
-    analysis.append("")
-    
-    # Start offset analysis
-    analysis.append("🚀 START OFFSET ANALYSIS:")
-    analysis.append(f"   • {event_a} Start Time: {start_times.get(event_a, 0):.0f} minutes")
-    analysis.append(f"   • {event_b} Start Time: {start_times.get(event_b, 0):.0f} minutes")
-    analysis.append(f"   • Start Time Difference: {abs(start_times.get(event_a, 0) - start_times.get(event_b, 0)):.0f} minutes")
-    
-    # Calculate effective start times (including offsets)
-    start_a_sec = start_times.get(event_a, 0) * 60.0
-    start_b_sec = start_times.get(event_b, 0) * 60.0
-    effective_start_a = start_a_sec + np.median(offset_a)
-    effective_start_b = start_b_sec + np.median(offset_b)
-    analysis.append(f"   • Effective Start Difference: {abs(effective_start_a - effective_start_b)/60:.1f} minutes")
-    analysis.append("")
-    
-    # Contextual narrative summary
-    analysis.append("📝 CONTEXTUAL SUMMARY:")
-    
-    # Determine interaction potential based on timing and pace
-    time_diff = abs(effective_start_a - effective_start_b) / 60.0  # minutes
-    pace_diff = abs(np.median(pace_a) - np.median(pace_b))
-    
-    if time_diff < 5:
-        analysis.append("   • High interaction potential: Events start within 5 minutes")
-    elif time_diff < 15:
-        analysis.append("   • Moderate interaction potential: Events start within 15 minutes")
-    else:
-        analysis.append("   • Low interaction potential: Events start >15 minutes apart")
-    
-    from app.utils.constants import (
-        PACE_SIMILAR_THRESHOLD,
-        PACE_MODERATE_DIFFERENCE_THRESHOLD
-    )
-    
-    if pace_diff < PACE_SIMILAR_THRESHOLD:
-        analysis.append("   • Similar pace groups: Runners likely to stay together")
-    elif pace_diff < PACE_MODERATE_DIFFERENCE_THRESHOLD:
-        analysis.append("   • Moderate pace difference: Some overtaking expected")
-    else:
-        analysis.append("   • Large pace difference: Significant overtaking expected")
-    
-    # Overlap window analysis
-    if overlap_duration != "N/A" and overlap_duration != "00:00":
-        analysis.append(f"   • Active overlap period: {overlap_duration} when both events are present")
-    else:
-        analysis.append("   • No temporal overlap: Events do not share time in segment")
-    
-    analysis.append("")
-    
-    # Prior segment overlap analysis
-    if prior_segment_id and prior_segment_data:
-        analysis.append("🔗 PRIOR SEGMENT OVERLAP ANALYSIS:")
-        analysis.append(f"   • Prior Segment: {prior_segment_id}")
-        
-        # Compare current segment with prior segment
-        current_overtaking_a = current_segment_data.get('overtaking_a', 0) if current_segment_data else 0
-        current_overtaking_b = current_segment_data.get('overtaking_b', 0) if current_segment_data else 0
-        prior_overtaking_a = prior_segment_data.get('overtaking_a', 0)
-        prior_overtaking_b = prior_segment_data.get('overtaking_b', 0)
-        
-        analysis.append(f"   • Current Segment Overtaking: {event_a}={current_overtaking_a}, {event_b}={current_overtaking_b}")
-        analysis.append(f"   • Prior Segment Overtaking: {event_a}={prior_overtaking_a}, {event_b}={prior_overtaking_b}")
-        
-        # Calculate overlap counts and unique runners
-        current_unique_encounters = current_segment_data.get('unique_encounters', 0) if current_segment_data else 0
-        current_participants = current_segment_data.get('participants_involved', 0) if current_segment_data else 0
-        prior_unique_encounters = prior_segment_data.get('unique_encounters', 0)
-        prior_participants = prior_segment_data.get('participants_involved', 0)
-        
-        analysis.append(f"   • Current Unique Encounters: {current_unique_encounters}")
-        analysis.append(f"   • Prior Unique Encounters: {prior_unique_encounters}")
-        analysis.append(f"   • Current Participants: {current_participants}")
-        analysis.append(f"   • Prior Participants: {prior_participants}")
-        
-        # Interaction pattern analysis
-        if current_unique_encounters > prior_unique_encounters:
-            analysis.append("   • Interaction Pattern: Increasing encounters from prior segment")
-        elif current_unique_encounters < prior_unique_encounters:
-            analysis.append("   • Interaction Pattern: Decreasing encounters from prior segment")
-        else:
-            analysis.append("   • Interaction Pattern: Similar encounter levels to prior segment")
-        
-        analysis.append("")
-    
-    return analysis
-
-
 def convert_segments_new_to_flow_format(segments_df: pd.DataFrame) -> pd.DataFrame:
     """
     Convert segments_new.csv wide format to flow.csv long format.
@@ -3424,7 +3272,6 @@ def convert_segments_new_to_flow_format(segments_df: pd.DataFrame) -> pd.DataFra
                 converted_segment = _create_converted_segment(segment, event_a, event_b)
                 # Add additional fields not handled by utility function
                 converted_segment.update({
-                    "prior_segment_id": segment.get("prior_segment_id", ""),
                     "notes": segment.get("notes", "")
                 })
                 converted_segments.append(converted_segment)
@@ -3848,7 +3695,7 @@ def analyze_temporal_flow_segments(
     """
     Analyze all segments for temporal flow patterns.
     Supports overtake, merge, and diverge flow types.
-    Processes ALL segments and calculates convergence for all segments with flow_type != 'none'.
+    Processes all segments and calculates convergence.
     
     START TIMES REQUIREMENT: start_times must be offsets from midnight in minutes.
     Example: {'10K': 420, 'Half': 440, 'Full': 460} means 10K starts at 7:00 AM,
@@ -3949,44 +3796,6 @@ def analyze_temporal_flow_segments(
         
         results["segments"].append(segment_result)
     
-    # Generate Deep Dive analysis for segments with flow_type != 'none' after all segments are processed
-    for segment_result in results["segments"]:
-        if segment_result.get("flow_type") != "none":
-            # Find prior segment data if it exists
-            prior_segment_id = segment_result.get("prior_segment_id")
-            prior_segment_data = None
-            if prior_segment_id:
-                # Find the prior segment in the results
-                for prev_segment in results["segments"]:
-                    if prev_segment["seg_id"] == prior_segment_id:
-                        prior_segment_data = prev_segment
-                        break
-            
-            # Get the segment data from all_segments (converted format)
-            seg_id = segment_result["seg_id"]
-            segment_row = all_segments[all_segments["seg_id"] == seg_id].iloc[0]
-            event_a = segment_row["eventa"]
-            event_b = segment_row["eventb"]
-            from_km_a = segment_row["from_km_a"]
-            to_km_a = segment_row["to_km_a"]
-            from_km_b = segment_row["from_km_b"]
-            to_km_b = segment_row["to_km_b"]
-            
-            # Get the dataframes for this segment
-            df_a = pace_df[pace_df["event"] == event_a].copy()
-            df_b = pace_df[pace_df["event"] == event_b].copy()
-            
-            deep_dive = generate_deep_dive_analysis(
-                df_a, df_b, event_a, event_b, start_times,
-                from_km_a, to_km_a, from_km_b, to_km_b,
-                segment_result.get("segment_label", seg_id),
-                segment_result.get("flow_type", "overtake"),
-                prior_segment_id,
-                prior_segment_data,
-                segment_result
-            )
-            segment_result["deep_dive_analysis"] = deep_dive
-    
     # Return segment timings (will be collected and written sorted at v2 level)
     # Note: Don't write here - v2 flow collects across all days and writes once
     results["_segment_timings"] = segment_timings if performance_log_path else []
@@ -4066,10 +3875,6 @@ def generate_temporal_flow_narrative(results: Dict[str, Any]) -> str:
             narrative.append(f"🏃‍♂️ Sample {segment['event_b']}: {format_bib_range(segment['sample_b'])}")
         else:
             narrative.append("❌ No convergence zone detected")
-        
-        # Add Deep Dive analysis for all segments with flow_type != 'none'
-        if segment.get("deep_dive_analysis"):
-            narrative.extend(segment["deep_dive_analysis"])
         
         narrative.append("")
     

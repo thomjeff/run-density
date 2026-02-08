@@ -137,7 +137,7 @@ def build_segment_context_v2(segment_id: str, segment_data: dict, summary_dict: 
     Returns:
         dict: Complete v2 segment context ready for rendering
     """
-    from app.density_template_engine import get_schema_config, compute_flow_rate, evaluate_triggers
+    from app.density_template_engine import get_schema_config, evaluate_triggers
     from app.schema_resolver import resolve_schema as resolve_schema_from_csv
     
     # Issue #616: Use schema directly from segment_data (loaded from user-specified CSV file)
@@ -170,33 +170,9 @@ def build_segment_context_v2(segment_id: str, segment_data: dict, summary_dict: 
     
     schema_config = get_schema_config(schema_name, rulebook)
     
-    # Get flow rate if enabled for this segment
-    flow_rate = None
-    flow_enabled = segment_data.get("flow_enabled", "n")
-    if flow_enabled == "y" or flow_enabled is True:
-        # Calculate flow rate from peak concurrency
-        # Use active_peak_concurrency which is the correct field name
-        peak_concurrency = summary_dict.get("active_peak_concurrency", 0)
-        width_m = segment_data.get("width_m")
-        if width_m is None or (isinstance(width_m, float) and pd.isna(width_m)) or width_m <= 0:
-            raise ValueError(
-                f"Segment {segment_id} missing valid width_m for flow rate computation."
-            )
-        from app.utils.constants import DEFAULT_BIN_TIME_WINDOW_SECONDS
-        bin_seconds = DEFAULT_BIN_TIME_WINDOW_SECONDS  # Use constant (Issue #512)
-        flow_rate = compute_flow_rate(peak_concurrency, width_m, bin_seconds)
-        
-        # For merge segments, add flow-specific analysis
-        if segment_data.get("flow_type") in ["merge", "parallel", "counterflow"]:
-            # Add flow capacity analysis for merge segments
-            flow_capacity = width_m * 60  # Theoretical max flow (runners/min/m)
-            flow_utilization = (flow_rate / flow_capacity) * 100 if flow_capacity > 0 else 0
-            logger.info(f"Merge segment {segment_id}: flow_rate={flow_rate:.1f} p/min/m, capacity={flow_capacity:.1f}, utilization={flow_utilization:.1f}%")
-    
     # Evaluate triggers
     metrics = {
-        "density": summary_dict.get("peak_areal_density", 0.0),
-        "flow": flow_rate
+        "density": summary_dict.get("peak_areal_density", 0.0)
     }
     fired_actions = evaluate_triggers(segment_id, metrics, schema_name, schema_config, rulebook)
     
@@ -220,12 +196,6 @@ def build_segment_context_v2(segment_id: str, segment_data: dict, summary_dict: 
         "active_start": summary_dict.get("active_start", "N/A"),
         "active_end": summary_dict.get("active_end", "N/A"),
         
-        # Flow metrics
-        "flow_rate": flow_rate,
-        "flow_enabled": flow_enabled == "y" or flow_enabled is True,
-        "flow_capacity": flow_capacity if 'flow_capacity' in locals() else None,
-        "flow_utilization": flow_utilization if 'flow_utilization' in locals() else None,
-        
         # Trigger results
         "fired_actions": fired_actions,
         
@@ -235,7 +205,6 @@ def build_segment_context_v2(segment_id: str, segment_data: dict, summary_dict: 
         # Additional v2 data
         "width_m": segment_data.get("width_m", 1.0),
         "direction": segment_data.get("direction", "uni"),
-        "notes": segment_data.get("notes", ""),
     }
     
     return v2_context
@@ -305,7 +274,6 @@ def load_density_cfg(path: str) -> Dict[str, dict]:
             direction=str(r.get("direction", "uni")),
             schema=schema,  # Issue #616: Include schema from CSV (SSOT for this analysis run)
             flow_type=str(r.get("flow_type", "default")),
-            flow_enabled=str(r.get("flow_enabled", "n")),
             events=events,
             # v1 events (backward compatibility)
             full_from_km=float(r.get("full_from_km", 0)) if r.get("full_from_km") != "" else None,
@@ -320,7 +288,6 @@ def load_density_cfg(path: str) -> Dict[str, dict]:
             elite_to_km=float(r.get("elite_to_km", 0)) if r.get("elite_to_km") != "" else None,
             open_from_km=float(r.get("open_from_km", 0)) if r.get("open_from_km") != "" else None,
             open_to_km=float(r.get("open_to_km", 0)) if r.get("open_to_km") != "" else None,
-            notes=str(r.get("notes", ""))
         )
     
     return cfg
@@ -1930,10 +1897,8 @@ def analyze_density_segments(pace_data: pd.DataFrame,
                 
                 # Add v2 data to summary_dict for backward compatibility
                 summary_dict["schema_name"] = v2_context["schema_name"]
-                summary_dict["flow_rate"] = v2_context["flow_rate"]
                 summary_dict["fired_actions"] = v2_context["fired_actions"]
-                
-                logger.info(f"Segment {seg_id}: schema_name={v2_context['schema_name']}, flow_enabled={v2_context['flow_enabled']}, flow_rate={v2_context['flow_rate']}")
+                logger.info(f"Segment {seg_id}: schema_name={v2_context['schema_name']}")
                 
             except Exception as e:
                 import traceback
@@ -1941,7 +1906,6 @@ def analyze_density_segments(pace_data: pd.DataFrame,
                 logger.debug(f"Full traceback for segment {seg_id}:\n{traceback.format_exc()}")
                 summary_dict = summary.__dict__.copy()
                 summary_dict["schema_name"] = "on_course_open"
-                summary_dict["flow_rate"] = None
                 summary_dict["fired_actions"] = []
             
             # Calculate segment length from segment boundaries (Issue #248 fix)

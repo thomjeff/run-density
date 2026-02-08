@@ -65,7 +65,6 @@ def extract_analysis_metrics(run_id: str) -> Dict[str, Any]:
             "units": {
                 "density": "runners/m²",
                 "rate": "runners/min/m",
-                "flow_rate": "runners/s",
                 "time": "ISO 8601 UTC"
             }
         },
