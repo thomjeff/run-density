@@ -55,8 +55,7 @@ def load_segments_csv(url_or_path: str) -> pd.DataFrame:
         # New format - keep original column names
         expected = {"seg_id", "seg_label", "width_m", "direction", "full", "half", "10K",
                    "full_from_km", "full_to_km", "half_from_km", "half_to_km", 
-                   "10K_from_km", "10K_to_km", "flow_type", 
-                   "prior_segment_id", "notes"}
+                   "10K_from_km", "10K_to_km", "flow_type", "notes"}
         if not expected.issubset(df.columns):
             raise ValueError(f"segments_new.csv must have columns {sorted(expected)}; got {df.columns.tolist()}")
     else:
