@@ -205,7 +205,6 @@ def build_segment_context_v2(segment_id: str, segment_data: dict, summary_dict: 
         # Additional v2 data
         "width_m": segment_data.get("width_m", 1.0),
         "direction": segment_data.get("direction", "uni"),
-        "notes": segment_data.get("notes", ""),
     }
     
     return v2_context
@@ -289,7 +288,6 @@ def load_density_cfg(path: str) -> Dict[str, dict]:
             elite_to_km=float(r.get("elite_to_km", 0)) if r.get("elite_to_km") != "" else None,
             open_from_km=float(r.get("open_from_km", 0)) if r.get("open_from_km") != "" else None,
             open_to_km=float(r.get("open_to_km", 0)) if r.get("open_to_km") != "" else None,
-            notes=str(r.get("notes", ""))
         )
     
     return cfg
