@@ -280,7 +280,7 @@ def create_flow_segments_from_flow_csv(
     Uses flow.csv as authoritative source for:
     - Event ordering (event_a, event_b)
     - Distance ranges (from_km_a, to_km_a, from_km_b, to_km_b)
-    - Flow metadata (flow_type, notes, prior_seg_id)
+    - Flow metadata (flow_type, notes)
     
     Args:
         flow_rows: DataFrame with matching rows from flow.csv
@@ -343,7 +343,6 @@ def create_flow_segments_from_flow_csv(
             "direction": direction,  # Issue #549: Always from segments.csv (physical property)
             "width_m": width_m,  # Issue #549: Always from segments.csv (physical property)
             "flow_type": _get_required_flow_type(flow_row, seg_id, event_a, event_b),
-            "prior_segment_id": flow_row.get("prior_seg_id", "") if pd.notna(flow_row.get("prior_seg_id", "")) else "",
             "notes": flow_row.get("notes", ""),
             "length_km": to_km_a - from_km_a if to_km_a > from_km_a else 0
         }

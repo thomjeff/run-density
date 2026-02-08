@@ -184,7 +184,6 @@ def _compute_flow_segment_task(
         "first_entry_b": first_entry_b,
         "last_exit_b": last_exit_b,
         "overlap_window_duration": overlap_window_duration,
-        "prior_segment_id": segment_data.get("prior_segment_id", "") if pd.notna(segment_data.get("prior_segment_id", "")) else "",
         # Issue #612: Multi-zone fields
         "convergence_points": convergence_points,
         "zones": zones,
@@ -3266,8 +3265,6 @@ def generate_deep_dive_analysis(
     to_km_b: float,
     segment_label: str,
     flow_type: str = "overtake",
-    prior_segment_id: str = None,
-    prior_segment_data: Dict[str, Any] = None,
     current_segment_data: Dict[str, Any] = None,
 ) -> List[str]:
     """Generate comprehensive deep dive analysis for a segment."""
@@ -3366,41 +3363,6 @@ def generate_deep_dive_analysis(
     
     analysis.append("")
     
-    # Prior segment overlap analysis
-    if prior_segment_id and prior_segment_data:
-        analysis.append("🔗 PRIOR SEGMENT OVERLAP ANALYSIS:")
-        analysis.append(f"   • Prior Segment: {prior_segment_id}")
-        
-        # Compare current segment with prior segment
-        current_overtaking_a = current_segment_data.get('overtaking_a', 0) if current_segment_data else 0
-        current_overtaking_b = current_segment_data.get('overtaking_b', 0) if current_segment_data else 0
-        prior_overtaking_a = prior_segment_data.get('overtaking_a', 0)
-        prior_overtaking_b = prior_segment_data.get('overtaking_b', 0)
-        
-        analysis.append(f"   • Current Segment Overtaking: {event_a}={current_overtaking_a}, {event_b}={current_overtaking_b}")
-        analysis.append(f"   • Prior Segment Overtaking: {event_a}={prior_overtaking_a}, {event_b}={prior_overtaking_b}")
-        
-        # Calculate overlap counts and unique runners
-        current_unique_encounters = current_segment_data.get('unique_encounters', 0) if current_segment_data else 0
-        current_participants = current_segment_data.get('participants_involved', 0) if current_segment_data else 0
-        prior_unique_encounters = prior_segment_data.get('unique_encounters', 0)
-        prior_participants = prior_segment_data.get('participants_involved', 0)
-        
-        analysis.append(f"   • Current Unique Encounters: {current_unique_encounters}")
-        analysis.append(f"   • Prior Unique Encounters: {prior_unique_encounters}")
-        analysis.append(f"   • Current Participants: {current_participants}")
-        analysis.append(f"   • Prior Participants: {prior_participants}")
-        
-        # Interaction pattern analysis
-        if current_unique_encounters > prior_unique_encounters:
-            analysis.append("   • Interaction Pattern: Increasing encounters from prior segment")
-        elif current_unique_encounters < prior_unique_encounters:
-            analysis.append("   • Interaction Pattern: Decreasing encounters from prior segment")
-        else:
-            analysis.append("   • Interaction Pattern: Similar encounter levels to prior segment")
-        
-        analysis.append("")
-    
     return analysis
 
 
@@ -3424,7 +3386,6 @@ def convert_segments_new_to_flow_format(segments_df: pd.DataFrame) -> pd.DataFra
                 converted_segment = _create_converted_segment(segment, event_a, event_b)
                 # Add additional fields not handled by utility function
                 converted_segment.update({
-                    "prior_segment_id": segment.get("prior_segment_id", ""),
                     "notes": segment.get("notes", "")
                 })
                 converted_segments.append(converted_segment)
@@ -3952,16 +3913,6 @@ def analyze_temporal_flow_segments(
     # Generate Deep Dive analysis for segments with flow_type != 'none' after all segments are processed
     for segment_result in results["segments"]:
         if segment_result.get("flow_type") != "none":
-            # Find prior segment data if it exists
-            prior_segment_id = segment_result.get("prior_segment_id")
-            prior_segment_data = None
-            if prior_segment_id:
-                # Find the prior segment in the results
-                for prev_segment in results["segments"]:
-                    if prev_segment["seg_id"] == prior_segment_id:
-                        prior_segment_data = prev_segment
-                        break
-            
             # Get the segment data from all_segments (converted format)
             seg_id = segment_result["seg_id"]
             segment_row = all_segments[all_segments["seg_id"] == seg_id].iloc[0]
@@ -3981,8 +3932,6 @@ def analyze_temporal_flow_segments(
                 from_km_a, to_km_a, from_km_b, to_km_b,
                 segment_result.get("segment_label", seg_id),
                 segment_result.get("flow_type", "overtake"),
-                prior_segment_id,
-                prior_segment_data,
                 segment_result
             )
             segment_result["deep_dive_analysis"] = deep_dive
