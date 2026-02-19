@@ -18,7 +18,6 @@ from app.core.course.storage import (
     load_course,
     save_course,
 )
-from app.core.v2.analysis_config import get_data_directory
 from app.utils.run_id import get_runflow_root
 
 router = APIRouter(prefix="/api/courses", tags=["course"])
@@ -58,8 +57,9 @@ def resolve_course_data_dir(
             )
         return config_path
 
+    # Issue #732: When no data_dir/config_dir provided, use runflow root from constants (same as analysis/baseline).
     if not data_dir:
-        data_dir = get_data_directory()
+        data_dir = str(get_runflow_root())
     data_path = Path(data_dir)
     if not data_path.exists():
         raise HTTPException(

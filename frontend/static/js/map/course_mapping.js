@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const loadingEl = container.querySelector('.map-loading');
     const toggleEl = document.getElementById('basemap-toggle');
 
-    // Course state (no data_dir in UI for now — API uses default)
+    // Course state; data_dir is always from app utils constants (runflow root)
     let currentCourseId = null;
     let currentCourse = null;
 
