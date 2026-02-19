@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Course Mapping{% endblock %}
+
+{% block extra_head %}
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+    #course-mapping-map {
+        height: 600px;
+        border-radius: 4px;
+        overflow: hidden;
+        position: relative;
+        background: transparent !important;
+    }
+
+    .map-loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(255, 255, 255, 0.9);
+        padding: 1rem 2rem;
+        border-radius: 4px;
+        font-weight: 500;
+        color: #666;
+        z-index: 1000;
+    }
+
+    #basemap-toggle {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 1000;
+        background: rgba(255, 255, 255, 0.95);
+        padding: 0.5rem 0.75rem;
+        border-radius: 4px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        display: flex;
+        gap: 0.25rem;
+    }
+
+    #basemap-toggle button {
+        padding: 0.35rem 0.6rem;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        background: #fff;
+        cursor: pointer;
+        font-size: 0.875rem;
+    }
+
+    #basemap-toggle button.active {
+        background: #3498db;
+        color: #fff;
+        border-color: #2980b9;
+    }
+
+    #basemap-toggle button:hover:not(.active) {
+        background: #ecf0f1;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Course Mapping</h2>
+    <p style="color: #7f8c8d; font-size: 0.95rem; margin-top: 0.25rem;">Map a route/course with snap-to-road, segment pins, and operational locations. Export segments.csv, flow.csv, locations.csv, and GPX.</p>
+</div>
+
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Map</h3>
+    <div id="course-mapping-map" aria-label="Course mapping map" style="position: relative;">
+        <div class="map-loading">Loading map...</div>
+        <div id="basemap-toggle" style="display: none;">
+            <button type="button" id="btn-street" class="active">Street</button>
+            <button type="button" id="btn-satellite">Satellite</button>
+        </div>
+    </div>
+</div>
+
+<p style="margin-top: 1rem; color: #95a5a6; font-size: 0.875rem;">Issue #732: Course drawing, segment pins, location pins, and export will be added in follow-up commits.</p>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/static/js/map/base_map.js"></script>
+<script src="/static/js/map/course_mapping.js"></script>
+{% endblock %}
