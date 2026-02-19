@@ -58,6 +58,37 @@
     #basemap-toggle button:hover:not(.active) {
         background: #ecf0f1;
     }
+
+    #course-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    #course-toolbar button {
+        padding: 0.4rem 0.75rem;
+        border: 1px solid #bdc3c7;
+        border-radius: 4px;
+        background: #fff;
+        cursor: pointer;
+        font-size: 0.875rem;
+    }
+
+    #course-toolbar button:hover {
+        background: #ecf0f1;
+    }
+
+    #course-toolbar button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    #course-toolbar .course-id {
+        font-size: 0.875rem;
+        color: #7f8c8d;
+    }
 </style>
 {% endblock %}
 
@@ -68,7 +99,17 @@
 </div>
 
 <div class="card">
-    <h3 style="margin-bottom: 1rem;">Map</h3>
+    <h3 style="margin-bottom: 0.5rem;">Map</h3>
+    <div id="course-toolbar">
+        <button type="button" id="btn-new-course">New course</button>
+        <button type="button" id="btn-open-course">Open</button>
+        <select id="course-list" style="display: none; padding: 0.35rem 0.5rem; border-radius: 4px; font-size: 0.875rem;">
+            <option value="">Select a course...</option>
+        </select>
+        <button type="button" id="btn-load-course" style="display: none;">Load</button>
+        <button type="button" id="btn-save-course" disabled>Save</button>
+        <span id="current-course-label" class="course-id"></span>
+    </div>
     <div id="course-mapping-map" aria-label="Course mapping map" style="position: relative;">
         <div class="map-loading">Loading map...</div>
         <div id="basemap-toggle" style="display: none;">
