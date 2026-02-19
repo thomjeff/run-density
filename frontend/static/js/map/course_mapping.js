@@ -25,6 +25,33 @@ document.addEventListener('DOMContentLoaded', function () {
         currentCourseId = id;
         currentCourse = course;
         updateCourseUI();
+        updateDrawButtons();
+        renderCourseLine();
+    }
+
+    let courseLineLayer = null;   // L.polyline or L.layerGroup for line + markers
+    let drawMode = false;
+    let mapClickHandler = null;
+
+    function updateDrawButtons() {
+        const drawBtn = document.getElementById('btn-draw-line');
+        const clearBtn = document.getElementById('btn-clear-line');
+        const hasCourse = !!currentCourseId && !!currentCourse;
+        if (drawBtn) drawBtn.disabled = !hasCourse;
+        if (clearBtn) clearBtn.disabled = !hasCourse || !(currentCourse && currentCourse.geometry && currentCourse.geometry.coordinates && currentCourse.geometry.coordinates.length);
+        if (drawBtn && drawMode) drawBtn.classList.add('active'); else if (drawBtn) drawBtn.classList.remove('active');
+    }
+
+    function renderCourseLine() {
+        if (!window.courseMappingMap) return;
+        if (courseLineLayer) {
+            window.courseMappingMap.removeLayer(courseLineLayer);
+            courseLineLayer = null;
+        }
+        if (!currentCourse || !currentCourse.geometry || currentCourse.geometry.type !== 'LineString' || !currentCourse.geometry.coordinates || currentCourse.geometry.coordinates.length < 2) return;
+        const latlngs = currentCourse.geometry.coordinates.map(function (c) { return [c[1], c[0]]; });
+        courseLineLayer = L.polyline(latlngs, { color: '#3498db', weight: 4 });
+        courseLineLayer.addTo(window.courseMappingMap);
     }
 
     try {
@@ -160,7 +187,52 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
 
+        // ——— Draw line ———
+        const btnDraw = document.getElementById('btn-draw-line');
+        const btnClear = document.getElementById('btn-clear-line');
+
+        function startDrawMode() {
+            if (drawMode || !currentCourse) return;
+            drawMode = true;
+            if (btnDraw) btnDraw.classList.add('active');
+            if (!currentCourse.geometry || currentCourse.geometry.type !== 'LineString') {
+                currentCourse.geometry = { type: 'LineString', coordinates: [] };
+            }
+            if (!Array.isArray(currentCourse.geometry.coordinates)) currentCourse.geometry.coordinates = [];
+            mapClickHandler = function (e) {
+                currentCourse.geometry.coordinates.push([e.latlng.lng, e.latlng.lat]);
+                renderCourseLine();
+                updateDrawButtons();
+            };
+            map.on('click', mapClickHandler);
+        }
+
+        function stopDrawMode() {
+            drawMode = false;
+            if (btnDraw) btnDraw.classList.remove('active');
+            if (mapClickHandler) {
+                map.off('click', mapClickHandler);
+                mapClickHandler = null;
+            }
+        }
+
+        if (btnDraw) {
+            btnDraw.addEventListener('click', function () {
+                if (drawMode) stopDrawMode(); else startDrawMode();
+            });
+        }
+        if (btnClear) {
+            btnClear.addEventListener('click', function () {
+                if (!currentCourse) return;
+                currentCourse.geometry = null;
+                stopDrawMode();
+                renderCourseLine();
+                updateDrawButtons();
+            });
+        }
+
         updateCourseUI();
+        updateDrawButtons();
     } catch (e) {
         console.error('Course mapping map init failed:', e);
         if (loadingEl) loadingEl.textContent = 'Failed to load map';

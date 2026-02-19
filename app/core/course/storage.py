@@ -29,6 +29,7 @@ def _default_course_json(course_id: str, data_dir: str) -> Dict[str, Any]:
         "events": [{"id": eid, "name": eid, "distance_label": eid} for eid in COURSE_EVENT_IDS],
         "segments": [],
         "locations": [],
+        "geometry": None,  # GeoJSON LineString: { type: "LineString", coordinates: [[lon, lat], ...] }
     }
 
 
