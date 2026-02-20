@@ -23,6 +23,7 @@ def _default_course_json(course_id: str, data_dir: str) -> Dict[str, Any]:
     now = datetime.now(timezone.utc).isoformat()
     return {
         "id": course_id,
+        "name": "",  # User-defined display name (shown in course list)
         "data_dir": data_dir,
         "created": now,
         "updated": now,
@@ -30,6 +31,8 @@ def _default_course_json(course_id: str, data_dir: str) -> Dict[str, Any]:
         "segments": [],
         "locations": [],
         "geometry": None,  # GeoJSON LineString: { type: "LineString", coordinates: [[lon, lat], ...] }
+        "segment_breaks": [],  # Indices into geometry.coordinates where segment ends (segment i = breaks[i-1]..breaks[i], breaks[0]=0 implied)
+        "segment_break_labels": {},  # Optional labels for segment boundaries: { "index": "label" }
     }
 
 
@@ -78,18 +81,19 @@ def list_courses(data_dir: Path) -> List[Dict[str, Any]]:
             continue
         course_file = path / "course.json"
         if not course_file.exists():
-            result.append({"id": path.name, "path": str(path), "updated": None})
+            result.append({"id": path.name, "name": "", "path": str(path), "updated": None})
             continue
         try:
             with open(course_file, "r") as f:
                 data = json.load(f)
             result.append({
                 "id": data.get("id", path.name),
+                "name": data.get("name") or "",
                 "path": str(path),
                 "updated": data.get("updated"),
             })
         except (json.JSONDecodeError, IOError):
-            result.append({"id": path.name, "path": str(path), "updated": None})
+            result.append({"id": path.name, "name": "", "path": str(path), "updated": None})
     return result
 
 

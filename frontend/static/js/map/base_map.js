@@ -9,9 +9,10 @@
 /**
  * Initialize a Leaflet map with standard configuration
  * @param {string} containerId - HTML element ID for map container
+ * @param {object} [options] - Optional: { zoomPosition: 'topleft' } to put zoom control on left (e.g. so topright is free for custom controls)
  * @returns {L.Map} Configured Leaflet map instance
  */
-function initMap(containerId) {
+function initMap(containerId, options) {
     // Check if map already exists and clean it up
     if (window.existingMap) {
         try {
@@ -32,8 +33,15 @@ function initMap(containerId) {
         }
     }
     
+    const mapOptions = {};
+    if (options && options.zoomPosition === 'topleft') {
+        mapOptions.zoomControl = false;
+    }
     // Default view centered on course area (New Brunswick, Canada)
-    const map = L.map(containerId).setView([45.95, -66.64], 13);
+    const map = L.map(containerId, mapOptions).setView([45.95, -66.64], 13);
+    if (options && options.zoomPosition === 'topleft') {
+        L.control.zoom({ position: 'topleft' }).addTo(map);
+    }
     
     // Store reference to prevent double initialization
     window.existingMap = map;

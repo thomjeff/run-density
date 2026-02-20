@@ -27,11 +27,12 @@
         z-index: 1000;
     }
 
+    /* Above Leaflet overlay pane (400) and all map content so course line never draws behind buttons */
     #basemap-toggle {
         position: absolute;
         top: 10px;
         right: 10px;
-        z-index: 1000;
+        z-index: 10000;
         background: rgba(255, 255, 255, 0.95);
         padding: 0.5rem 0.75rem;
         border-radius: 4px;
@@ -95,6 +96,25 @@
         font-size: 0.875rem;
         color: #7f8c8d;
     }
+
+    #course-toolbar .toolbar-check {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.875rem;
+        color: #555;
+        cursor: pointer;
+    }
+    #course-toolbar .toolbar-check input { cursor: pointer; }
+
+    .segment-pin-square { background: transparent !important; border: none !important; }
+    .segment-pin-square > div { cursor: pointer; }
+    .segment-info-icon { background: transparent !important; border: none !important; }
+    .segment-info-icon > div { cursor: pointer; }
+    .start-finish-icon { background: transparent !important; border: none !important; }
+    .start-finish-icon > div { cursor: default; }
+    .location-pin-circle { background: transparent !important; border: none !important; }
+    .location-pin-circle > div { cursor: pointer; }
 </style>
 {% endblock %}
 
@@ -115,7 +135,12 @@
         <button type="button" id="btn-load-course" style="display: none;">Load</button>
         <button type="button" id="btn-save-course" disabled>Save</button>
         <button type="button" id="btn-draw-line" disabled title="Click map to add points to course line">Draw line</button>
+        <button type="button" id="btn-undo-point" disabled title="Remove the last point from the course line">Undo last point</button>
         <button type="button" id="btn-clear-line" disabled title="Remove course line from map and course">Clear line</button>
+        <label class="toolbar-check" title="When on, new segments follow roads (routing). When off, line is straight between clicks."><input type="checkbox" id="snap-to-road" checked> Snap to road</label>
+        <button type="button" id="btn-add-segment-pin" disabled title="Click on the course line to add a segment boundary">Add segment pin</button>
+        <button type="button" id="btn-add-location" disabled title="Click map to place first-aid, traffic, course, or water location">Add location</button>
+        <button type="button" id="btn-export" disabled title="Download segments.csv, flow.csv, locations.csv, and GPX">Export</button>
         <span id="current-course-label" class="course-id"></span>
     </div>
     <div id="course-mapping-map" aria-label="Course mapping map" style="position: relative;">
@@ -127,10 +152,40 @@
     </div>
 </div>
 
-<p style="margin-top: 1rem; color: #95a5a6; font-size: 0.875rem;">Issue #732: Course drawing, segment pins, location pins, and export will be added in follow-up commits.</p>
+<div class="card" id="segments-card" style="margin-top: 1rem; display: none;">
+    <h3 style="margin-bottom: 0.5rem;">Segments</h3>
+    <p id="segments-empty" style="color: #95a5a6; font-size: 0.875rem;">Add segment pins on the course line to split it into segments (A1, A2, ...).</p>
+    <div id="segments-table-wrap" style="display: none;">
+        <table id="segments-table" class="table-sticky-header" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+            <thead>
+                <tr><th>ID</th><th>Segment label</th><th>From (km)</th><th>To (km)</th><th>Length (km)</th></tr>
+            </thead>
+            <tbody id="segments-tbody"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card" id="locations-card" style="margin-top: 1rem; display: none;">
+    <h3 style="margin-bottom: 0.5rem;">Locations</h3>
+    <p id="locations-empty" style="color: #95a5a6; font-size: 0.875rem;">Add location pins on the map (aid, course, official, traffic, water).</p>
+    <div id="locations-table-wrap" style="display: none;">
+        <table id="locations-table" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+            <thead>
+                <tr><th>Type</th><th>Label</th><th>Lat</th><th>Lon</th><th></th></tr>
+            </thead>
+            <tbody id="locations-tbody"></tbody>
+        </table>
+    </div>
+</div>
+
+<p style="margin-top: 1rem; color: #95a5a6; font-size: 0.875rem;">Issue #732: Export downloads segments.csv, flow.csv, locations.csv, and GPX for the current course.</p>
 {% endblock %}
 
 {% block extra_scripts %}
+<script>
+    window.LOCATION_TYPES_FROM_SERVER = {{ location_types | tojson }};
+    window.EVENT_CHOICES_FROM_SERVER = {{ event_choices | tojson }};
+</script>
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/js/map/base_map.js"></script>

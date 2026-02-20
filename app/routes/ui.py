@@ -18,6 +18,7 @@ from fastapi.templating import Jinja2Templates
 from typing import Optional
 
 from app.common.config import load_reporting
+from app.utils.constants import LOCATION_TYPE_CHOICES, COURSE_EVENT_IDS
 from app.utils.auth import (
     validate_password,
     create_session_response,
@@ -298,9 +299,12 @@ async def course_mapping(request: Request):
     if auth_redirect:
         return auth_redirect
     meta = get_stub_meta()
+    # Issue #732: Location types and course events from constants
+    location_types = [{"value": t, "label": t.capitalize()} for t in LOCATION_TYPE_CHOICES]
+    event_choices = [{"value": e, "label": e.upper() if e == "10k" else e.capitalize()} for e in COURSE_EVENT_IDS]
     return templates.TemplateResponse(
         "pages/course_mapping.html",
-        {"request": request, "meta": meta}
+        {"request": request, "meta": meta, "location_types": location_types, "event_choices": event_choices}
     )
 
 
