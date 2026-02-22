@@ -18,12 +18,38 @@ logger = logging.getLogger(__name__)
 COURSE_EVENT_IDS = ["full", "half", "10k", "elite", "open"]
 
 
+def _haversine_km(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
+    """Distance in km between two WGS84 points."""
+    import math
+    R = 6371000  # Earth radius in meters
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a)) / 1000
+
+
+def _course_distance_km(course_data: Dict[str, Any]) -> float:
+    """Total distance from geometry coordinates, in km."""
+    geom = course_data.get("geometry")
+    if not geom or geom.get("type") != "LineString":
+        return 0.0
+    coords = geom.get("coordinates") or []
+    if len(coords) < 2:
+        return 0.0
+    total = 0.0
+    for i in range(1, len(coords)):
+        c0, c1 = coords[i - 1], coords[i]
+        total += _haversine_km(c0[0], c0[1], c1[0], c1[1])
+    return round(total, 2)
+
+
 def _default_course_json(course_id: str, data_dir: str) -> Dict[str, Any]:
     """Minimal course state for a new course."""
     now = datetime.now(timezone.utc).isoformat()
     return {
         "id": course_id,
-        "name": "",  # User-defined display name (shown in course list)
+        "name": "",
+        "description": "",
         "data_dir": data_dir,
         "created": now,
         "updated": now,
@@ -33,6 +59,8 @@ def _default_course_json(course_id: str, data_dir: str) -> Dict[str, Any]:
         "geometry": None,  # GeoJSON LineString: { type: "LineString", coordinates: [[lon, lat], ...] }
         "segment_breaks": [],  # Indices into geometry.coordinates where segment ends (segment i = breaks[i-1]..breaks[i], breaks[0]=0 implied)
         "segment_break_labels": {},  # Optional labels for segment boundaries: { "index": "label" }
+        "segment_break_descriptions": {},  # Optional descriptions for segment boundaries: { "index": "description" }
+        "segment_break_ids": {},  # Optional stable IDs: { "index": id } (sequential int, e.g. 1, 2, 3)
     }
 
 
@@ -62,13 +90,8 @@ def create_course_directory(data_dir: Path) -> Path:
 
 def list_courses(data_dir: Path) -> List[Dict[str, Any]]:
     """
-    List courses under data_dir/courses/. Each entry has id, path, updated (from course.json).
-
-    Args:
-        data_dir: Resolved data directory path.
-
-    Returns:
-        List of {"id": str, "path": str, "updated": str} (updated from course.json if present).
+    List courses under data_dir/courses/. Each entry has id, name, description, path, updated,
+    distance_km, segments_count, locations_count (from course.json).
 
     Issue #732: Course storage.
     """
@@ -81,19 +104,31 @@ def list_courses(data_dir: Path) -> List[Dict[str, Any]]:
             continue
         course_file = path / "course.json"
         if not course_file.exists():
-            result.append({"id": path.name, "name": "", "path": str(path), "updated": None})
+            result.append({
+                "id": path.name, "name": "", "description": "", "path": str(path),
+                "updated": None, "distance_km": 0, "segments_count": 0, "locations_count": 0,
+            })
             continue
         try:
             with open(course_file, "r") as f:
                 data = json.load(f)
+            segments = data.get("segments") or []
+            locations = data.get("locations") or []
             result.append({
                 "id": data.get("id", path.name),
-                "name": data.get("name") or "",
+                "name": (data.get("name") or "")[:255],
+                "description": (data.get("description") or "")[:255],
                 "path": str(path),
                 "updated": data.get("updated"),
+                "distance_km": _course_distance_km(data),
+                "segments_count": len(segments),
+                "locations_count": len(locations),
             })
         except (json.JSONDecodeError, IOError):
-            result.append({"id": path.name, "name": "", "path": str(path), "updated": None})
+            result.append({
+                "id": path.name, "name": "", "description": "", "path": str(path),
+                "updated": None, "distance_km": 0, "segments_count": 0, "locations_count": 0,
+            })
     return result
 
 
@@ -122,6 +157,26 @@ def load_course(data_dir: Path, course_id: str) -> Dict[str, Any]:
         raise FileNotFoundError(f"Course not found: {course_dir}")
     with open(course_file, "r") as f:
         return json.load(f)
+
+
+def delete_course(data_dir: Path, course_id: str) -> None:
+    """
+    Delete a course directory and all contents. Cannot be undone.
+
+    Raises:
+        ValueError: If course_id invalid.
+        FileNotFoundError: If course directory does not exist.
+
+    Issue #732.
+    """
+    import shutil
+    if "/" in course_id or "\\" in course_id or course_id in ("", ".", ".."):
+        raise ValueError(f"Invalid course_id: {course_id}")
+    course_dir = data_dir / "courses" / course_id
+    if not course_dir.exists() or not course_dir.is_dir():
+        raise FileNotFoundError(f"Course not found: {course_dir}")
+    shutil.rmtree(course_dir)
+    logger.info(f"Deleted course: {course_dir}")
 
 
 def save_course(data_dir: Path, course_id: str, course_data: Dict[str, Any]) -> Path:

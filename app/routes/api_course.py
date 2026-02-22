@@ -21,6 +21,7 @@ OSRM_BASE = "https://router.project-osrm.org/route/v1/driving"
 
 from app.core.course.storage import (
     create_course_directory,
+    delete_course,
     list_courses,
     load_course,
     save_course,
@@ -189,14 +190,47 @@ async def api_route_segment(
 @router.get("/{course_id}/export")
 async def api_export_course(
     course_id: str,
+    to_folder: Optional[bool] = Query(False, description="Write files to course folder instead of download"),
     data_dir: Optional[str] = None,
     config_dir: Optional[str] = None,
 ) -> Response:
-    """Export course as zip (segments.csv, flow.csv, locations.csv, course.gpx). Issue #732."""
+    """Export course: write segments.csv, flow.csv, locations.csv, course.gpx.
+    With to_folder=1: write to data_dir/courses/{id}/ and return JSON.
+    Otherwise: return zip for download. Issue #732."""
     try:
         root = resolve_course_data_dir(data_dir=data_dir, config_dir=config_dir)
+        course_dir = root / "courses" / course_id
+        if not course_dir.exists() or not course_dir.is_dir():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
         course_data = load_course(root, course_id)
         course_name = (course_data.get("name") or "").strip() or course_id
+        if to_folder:
+            from app.core.course.export import (
+                build_segments_csv,
+                build_flow_csv,
+                build_locations_csv,
+                build_gpx,
+            )
+            segments_csv = build_segments_csv(course_data)
+            flow_csv = build_flow_csv(course_data)
+            locations_csv = build_locations_csv(course_data)
+            gpx_content = build_gpx(course_data, course_name)
+            files_written = []
+            for name, content in [
+                ("segments.csv", segments_csv),
+                ("flow.csv", flow_csv),
+                ("locations.csv", locations_csv),
+                ("course.gpx", gpx_content),
+            ]:
+                path = course_dir / name
+                path.write_text(content, encoding="utf-8")
+                files_written.append(name)
+            return JSONResponse(content={
+                "ok": True,
+                "course_id": course_id,
+                "path": str(course_dir),
+                "files": files_written,
+            })
         zip_bytes = export_course_zip(course_data, course_id, course_name)
         return Response(
             content=zip_bytes,
@@ -233,6 +267,28 @@ async def api_load_course(
         raise
     except Exception as e:
         logger.exception("Load course failed")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.delete("/{course_id}")
+async def api_delete_course(
+    course_id: str,
+    data_dir: Optional[str] = None,
+    config_dir: Optional[str] = None,
+) -> JSONResponse:
+    """Delete course folder and all contents. Cannot be undone."""
+    try:
+        root = resolve_course_data_dir(data_dir=data_dir, config_dir=config_dir)
+        delete_course(root, course_id)
+        return JSONResponse(content={"ok": True, "id": course_id})
+    except FileNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Delete course failed")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 

@@ -32,8 +32,15 @@ def _pin_label(course: Dict[str, Any], index: int, coords_len: int, role: str) -
     return (labels.get(index) or labels.get(str(index)) or "").strip()
 
 
+def _segment_display_id(segment_index: int) -> str:
+    """Return segment ID S1, S2, S3, ... for pipeline compatibility."""
+    return f"S{segment_index + 1}"
+
+
 def build_segments_csv(course: Dict[str, Any]) -> str:
-    """Build segments.csv content from course.segments and course.events."""
+    """Build segments.csv content from course.segments and course.events.
+    Uses system segment pin IDs (1, 2, ...) and 'F' for finish segment, not A1/A2.
+    """
     segments = course.get("segments") or []
     events = course.get("events") or []
     event_ids = [_event_id(e) for e in events]
@@ -58,8 +65,8 @@ def build_segments_csv(course: Dict[str, Any]) -> str:
     w = csv.writer(out)
     w.writerow(header)
 
-    for seg in segments:
-        seg_id = seg.get("seg_id", "")
+    for i, seg in enumerate(segments):
+        seg_id = _segment_display_id(i)
         seg_label = seg.get("seg_label", "")
         start_idx = seg.get("start_index", 0)
         end_idx = seg.get("end_index", coords_len - 1 if coords_len else 0)
@@ -88,13 +95,15 @@ def build_segments_csv(course: Dict[str, Any]) -> str:
 
 
 def build_flow_csv(course: Dict[str, Any]) -> str:
-    """Build minimal flow.csv from course.segments (one row per segment with default flow_type)."""
+    """Build minimal flow.csv from course.segments (one row per segment with default flow_type).
+    Uses system segment pin IDs (1, 2, ...) and 'F' for finish segment.
+    """
     segments = course.get("segments") or []
     out = io.StringIO()
     w = csv.writer(out)
     w.writerow(["seg_id", "seg_label", "event_a", "event_b", "from_km_a", "to_km_a", "from_km_b", "to_km_b", "flow_type", "direction", "notes"])
-    for seg in segments:
-        seg_id = seg.get("seg_id", "")
+    for i, seg in enumerate(segments):
+        seg_id = _segment_display_id(i)
         seg_label = seg.get("seg_label", "")
         from_km = seg.get("from_km", 0)
         to_km = seg.get("to_km", 0)
@@ -110,14 +119,15 @@ def build_locations_csv(course: Dict[str, Any]) -> str:
     locations = course.get("locations") or []
     out = io.StringIO()
     w = csv.writer(out)
-    w.writerow(["loc_id", "loc_label", "loc_type", "lat", "lon"])
+    w.writerow(["loc_id", "loc_label", "loc_type", "loc_description", "lat", "lon"])
     for i, loc in enumerate(locations):
         loc_id = loc.get("id", i + 1)
         loc_label = loc.get("loc_label", "")
         loc_type = loc.get("loc_type", "course")
+        loc_description = loc.get("loc_description", "")
         lat = loc.get("lat", "")
         lon = loc.get("lon", "")
-        w.writerow([loc_id, loc_label, loc_type, lat, lon])
+        w.writerow([loc_id, loc_label, loc_type, loc_description, lat, lon])
     return out.getvalue()
 
 
