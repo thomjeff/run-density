@@ -115,26 +115,29 @@
     .start-finish-icon > div { cursor: default; }
     .location-pin-circle { background: transparent !important; border: none !important; }
     .location-pin-circle > div { cursor: pointer; }
-    /* Course map popups/tooltips: match Locations UI look and feel, larger for small screens */
+    .turnaround-marker { background: transparent !important; border: none !important; }
+    .turnaround-marker > div { cursor: move; }
+    .uturn-icon { background: transparent !important; border: none !important; }
+    /* Course map popups: match Locations UI (shared styles in common.css for tooltips) */
     .course-map-popup, .leaflet-popup-content .course-map-popup {
         font-family: Arial, sans-serif;
-        font-size: 1.05rem;
+        font-size: 0.875rem;
         line-height: 1.4;
         min-width: 200px;
         max-width: 280px;
     }
     .course-map-popup .popup-row { margin-bottom: 0.5rem; }
     .course-map-popup .popup-row:last-child { margin-bottom: 0; }
-    .course-map-popup .popup-label { font-weight: 600; color: #2c3e50; font-size: 1.05rem; }
-    .course-map-popup .popup-value { color: #34495e; font-size: 1.05rem; }
-    .course-map-popup .popup-heading { margin: 0 0 0.5rem 0; font-size: 1.2rem; color: #2c3e50; font-weight: 600; }
+    .course-map-popup .popup-label { font-weight: 600; color: #2c3e50; font-size: 0.875rem; }
+    .course-map-popup .popup-value { color: #34495e; font-size: 0.875rem; }
+    .course-map-popup .popup-heading { margin: 0 0 0.5rem 0; font-size: 1rem; color: #2c3e50; font-weight: 600; }
+    .course-map-popup-wrap { font-size: 0.875rem; }
     .course-map-popup input, .course-map-popup select, .course-map-popup textarea,
     .course-map-popup-wrap input, .course-map-popup-wrap select, .course-map-popup-wrap textarea,
     .leaflet-popup-content input, .leaflet-popup-content select, .leaflet-popup-content textarea {
         margin: 5px !important;
-        font-size: 1.05rem;
+        font-size: 0.875rem;
     }
-    .course-map-tooltip .leaflet-tooltip-inner { font-family: Arial, sans-serif; font-size: 1.05rem; line-height: 1.4; max-width: 260px; text-align: left; }
     #course-list-table tbody tr.course-row { cursor: pointer; }
     #course-list-table tbody tr.course-row.selected { background: #e3f2fd; }
     .course-label { font-weight: 600; color: #2c3e50; margin-right: 0.25rem; }
@@ -202,6 +205,9 @@
             <button type="button" id="btn-draw-line" disabled title="Click map to add points to course line">Draw Line</button>
             <button type="button" id="btn-undo-point" disabled title="Remove the last point from the course line">Undo Last Point</button>
             <button type="button" id="btn-clear-line" disabled title="Remove course line from map and course">Clear Line</button>
+            <button type="button" id="btn-same-route-back" disabled title="Add return leg from turnaround point (Draw Line mode only)">Same Route Back</button>
+            <button type="button" id="btn-confirm-turnaround" disabled style="display: none;" title="Confirm turnaround point and add return leg">Confirm</button>
+            <button type="button" id="btn-cancel-turnaround" disabled style="display: none;" title="Cancel Same Route Back">Cancel</button>
             <button type="button" id="snap-to-road" class="active" title="When on, new segments follow roads (routing). When off, line is straight between clicks.">Snap to Road</button>
             <button type="button" id="btn-add-segment-pin" disabled title="Click on the course line to add a segment boundary">Add Segment Pin</button>
             <button type="button" id="btn-add-location" disabled title="Click map to place first-aid, traffic, course, or water location">Add Location</button>

@@ -26,7 +26,8 @@ document.addEventListener('DOMContentLoaded', function () {
             segment_breaks: [],
             segment_break_labels: {},
             segment_break_descriptions: {},
-            segment_break_ids: {}
+            segment_break_ids: {},
+            turnaround_indices: []
         };
     }
 
@@ -66,6 +67,7 @@ document.addEventListener('DOMContentLoaded', function () {
         renderCourseLine();
         renderSegmentPins();
         renderLocationPins();
+        updateSameRouteBackButtons();
     }
 
     function resizeDescriptionTextarea() {
@@ -96,7 +98,10 @@ document.addEventListener('DOMContentLoaded', function () {
         const idEl = document.getElementById('course-map-id');
         const exportBtn = document.getElementById('btn-export');
         const delBtn = document.getElementById('btn-delete-course');
-        if (saveBtn) saveBtn.disabled = !currentCourse;
+        if (saveBtn) {
+            saveBtn.disabled = !currentCourse || sameRouteBackMode;
+            saveBtn.title = sameRouteBackMode ? 'Confirm or Cancel Same Route Back first' : '';
+        }
         if (idEl) idEl.textContent = currentCourseId ? 'Course: ' + currentCourseId : '';
         if (exportBtn) exportBtn.disabled = !currentCourseId;
         if (delBtn) delBtn.disabled = !currentCourseId;
@@ -116,18 +121,22 @@ document.addEventListener('DOMContentLoaded', function () {
             if (segmentPinsLayer) { window.courseMappingMap.removeLayer(segmentPinsLayer); segmentPinsLayer = null; }
             if (startFinishLayer) { window.courseMappingMap.removeLayer(startFinishLayer); startFinishLayer = null; }
             if (locationsLayer) { window.courseMappingMap.removeLayer(locationsLayer); locationsLayer = null; }
+            if (turnaroundMarkerLayer) { window.courseMappingMap.removeLayer(turnaroundMarkerLayer); turnaroundMarkerLayer = null; }
+            if (uturnIconsLayer) { window.courseMappingMap.removeLayer(uturnIconsLayer); uturnIconsLayer = null; }
         }
         if (currentCourse && !Array.isArray(currentCourse.segment_breaks)) currentCourse.segment_breaks = [];
         if (currentCourse && !Array.isArray(currentCourse.locations)) currentCourse.locations = [];
         if (currentCourse && typeof currentCourse.segment_break_labels !== 'object') currentCourse.segment_break_labels = {};
         if (currentCourse && typeof currentCourse.segment_break_descriptions !== 'object') currentCourse.segment_break_descriptions = {};
         if (currentCourse && typeof currentCourse.segment_break_ids !== 'object') currentCourse.segment_break_ids = {};
+        if (currentCourse && !Array.isArray(currentCourse.turnaround_indices)) currentCourse.turnaround_indices = [];
         syncCourseToHeaderInputs();
         updateCourseUI();
         updateDrawButtons();
         updateSegmentPinButton();
         updateUndoButton();
         updateAddLocationButton();
+        updateSameRouteBackButtons();
         updateExportButton();
         renderCourseLine();
         renderSegmentPins();
@@ -136,6 +145,7 @@ document.addEventListener('DOMContentLoaded', function () {
         renderSegmentsList();
         renderLocationsList();
         renderStartFinishIcons();
+        renderUturnIcons();
         fitMapToCourse();
     }
 
@@ -153,7 +163,10 @@ document.addEventListener('DOMContentLoaded', function () {
     let segmentPinsLayer = null;
     let startFinishLayer = null;
     let locationsLayer = null;
+    let turnaroundMarkerLayer = null;
+    let uturnIconsLayer = null;
     let drawMode = false;
+    let sameRouteBackMode = false;
     let segmentPinMode = false;
     let locationPinMode = false;
     let drawRoutingInProgress = false;
@@ -283,6 +296,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (drawBtn) drawBtn.disabled = !hasCourse;
         if (clearBtn) clearBtn.disabled = !hasCourse || !(currentCourse && currentCourse.geometry && currentCourse.geometry.coordinates && currentCourse.geometry.coordinates.length);
         if (drawBtn && drawMode) drawBtn.classList.add('active'); else if (drawBtn) drawBtn.classList.remove('active');
+        updateSameRouteBackButtons();
     }
 
     function updateSegmentPinButton() {
@@ -301,6 +315,26 @@ document.addEventListener('DOMContentLoaded', function () {
         const btn = document.getElementById('btn-add-location');
         if (btn) btn.disabled = !currentCourse;
         if (btn && locationPinMode) btn.classList.add('active'); else if (btn) btn.classList.remove('active');
+    }
+
+    function updateSameRouteBackButtons() {
+        var btnSame = document.getElementById('btn-same-route-back');
+        var btnConfirm = document.getElementById('btn-confirm-turnaround');
+        var btnCancel = document.getElementById('btn-cancel-turnaround');
+        var canSame = !!(currentCourse && currentCourse.geometry && currentCourse.geometry.coordinates && currentCourse.geometry.coordinates.length >= 3) && drawMode && isEditMode;
+        if (btnSame) {
+            btnSame.disabled = !canSame;
+            btnSame.style.display = (isEditMode && drawMode && !sameRouteBackMode) ? 'inline-block' : 'none';
+        }
+        if (btnConfirm) {
+            btnConfirm.disabled = !sameRouteBackMode;
+            btnConfirm.style.display = sameRouteBackMode ? 'inline-block' : 'none';
+        }
+        if (btnCancel) {
+            btnCancel.disabled = !sameRouteBackMode;
+            btnCancel.style.display = sameRouteBackMode ? 'inline-block' : 'none';
+        }
+        if (btnSame && sameRouteBackMode) btnSame.classList.add('active'); else if (btnSame) btnSame.classList.remove('active');
     }
 
     function updateExportButton() {
@@ -392,7 +426,7 @@ document.addEventListener('DOMContentLoaded', function () {
         btnSave.type = 'button';
         btnSave.textContent = 'Save';
         content.appendChild(btnSave);
-        var pop = L.popup().setContent(content).setLatLng(latlng).openOn(window.courseMappingMap);
+        var pop = L.popup({ maxWidth: 300, className: 'location-popup' }).setContent(content).setLatLng(latlng).openOn(window.courseMappingMap);
         btnSave.onclick = function () {
             s.seg_label = (inputLabel.value && inputLabel.value.trim()) ? inputLabel.value.trim() : segId;
             s.width_m = parseFloat(inputWidth.value);
@@ -465,7 +499,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 { label: 'Description', value: seg.description },
                 { label: 'Events', value: (seg.events || []).join(', ') || '(none)' }
             ]) + (isEditMode ? '<div class="popup-row" style="font-size:0.75rem;color:#7f8c8d;">(drag to move)</div>' : '');
-            m.bindTooltip(tipHtml, { permanent: false, direction: 'top', className: 'course-map-tooltip' });
+            m.bindTooltip(tipHtml, { permanent: false, direction: 'top', offset: [0, -10], className: 'course-map-tooltip' });
             m.on('dragend', function () {
                 var ll = m.getLatLng();
                 var segEl = currentCourse.segments[m._segmentIndex];
@@ -507,7 +541,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         openSegmentAnnotationPopup(m._segmentIndex, e.latlng);
                     };
                 }
-                var pop = L.popup().setContent(info).setLatLng(e.latlng).openOn(window.courseMappingMap);
+                var pop = L.popup({ maxWidth: 300, className: 'location-popup' }).setContent(info).setLatLng(e.latlng).openOn(window.courseMappingMap);
             });
             segmentInfoIconsLayer.addLayer(m);
         });
@@ -522,24 +556,38 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (!currentCourse || !currentCourse.geometry || !currentCourse.geometry.coordinates || currentCourse.geometry.coordinates.length === 0) return;
         var coords = currentCourse.geometry.coordinates;
+        var turnaroundSet = new Set(Array.isArray(currentCourse.turnaround_indices) ? currentCourse.turnaround_indices : []);
+        var lastIdx = coords.length - 1;
         startFinishLayer = L.layerGroup();
         var first = coords[0];
-        var startIcon = L.divIcon({
-            className: 'start-finish-icon',
-            html: '<div style="width:20px;height:20px;background:#27ae60;color:#fff;border:2px solid #1e8449;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;">S</div>',
-            iconSize: [20, 20],
-            iconAnchor: [10, 10]
-        });
-        startFinishLayer.addLayer(L.marker([first[1], first[0]], { icon: startIcon }));
-        if (coords.length >= 2) {
-            var last = coords[coords.length - 1];
-            var finishIcon = L.divIcon({
+        var last = coords.length >= 2 ? coords[lastIdx] : null;
+        var lastIsTurnaround = turnaroundSet.has(lastIdx);
+        var samePoint = last && !lastIsTurnaround && Math.abs(first[0] - last[0]) < 1e-9 && Math.abs(first[1] - last[1]) < 1e-9;
+        if (samePoint && last) {
+            var sfIcon = L.divIcon({
                 className: 'start-finish-icon',
-                html: '<div style="width:20px;height:20px;background:#27ae60;color:#fff;border:2px solid #1e8449;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;">F</div>',
+                html: '<div style="width:20px;height:20px;background:#27ae60;color:#fff;border:2px solid #1e8449;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;">S/F</div>',
                 iconSize: [20, 20],
                 iconAnchor: [10, 10]
             });
-            startFinishLayer.addLayer(L.marker([last[1], last[0]], { icon: finishIcon }));
+            startFinishLayer.addLayer(L.marker([first[1], first[0]], { icon: sfIcon }));
+        } else {
+            var startIcon = L.divIcon({
+                className: 'start-finish-icon',
+                html: '<div style="width:20px;height:20px;background:#27ae60;color:#fff;border:2px solid #1e8449;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;">S</div>',
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
+            });
+            startFinishLayer.addLayer(L.marker([first[1], first[0]], { icon: startIcon }));
+            if (coords.length >= 2 && !lastIsTurnaround) {
+                var finishIcon = L.divIcon({
+                    className: 'start-finish-icon',
+                    html: '<div style="width:20px;height:20px;background:#27ae60;color:#fff;border:2px solid #1e8449;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;">F</div>',
+                    iconSize: [20, 20],
+                    iconAnchor: [10, 10]
+                });
+                startFinishLayer.addLayer(L.marker([last[1], last[0]], { icon: finishIcon }));
+            }
         }
         startFinishLayer.addTo(window.courseMappingMap);
     }
@@ -567,6 +615,11 @@ document.addEventListener('DOMContentLoaded', function () {
             var line = L.polyline(latlngs, ROUTE_LINE_STYLE);
             line._segmentIndex = segIdx;
             var openPopup = function (e) {
+                if (sameRouteBackMode && e && e.latlng) {
+                    L.DomEvent.stopPropagation(e);
+                    setTurnaroundFromClick(e.latlng);
+                    return;
+                }
                 if (segmentPinMode || locationPinMode) return;
                 L.DomEvent.stopPropagation(e);
                 var latlng = e.latlng || (latlngs.length ? L.latLng(latlngs[Math.floor(latlngs.length / 2)][0], latlngs[Math.floor(latlngs.length / 2)][1]) : null);
@@ -589,7 +642,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             { label: 'Events', value: (s.events || []).join(', ') || '(none)' },
                             { label: 'From–To (km)', value: (s.from_km != null ? s.from_km : '') + ' – ' + (s.to_km != null ? s.to_km : '') }
                         ]);
-                        L.popup().setContent(viewInfo).setLatLng(latlng).openOn(window.courseMappingMap);
+                        L.popup({ maxWidth: 300, className: 'location-popup' }).setContent(viewInfo).setLatLng(latlng).openOn(window.courseMappingMap);
                     }
                 }
             };
@@ -602,6 +655,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         segmentLinesLayer.addTo(window.courseMappingMap);
         renderSegmentInfoIcons();
+        renderUturnIcons();
     }
 
     function getSegmentBreakLabel(idx) {
@@ -683,7 +737,7 @@ document.addEventListener('DOMContentLoaded', function () {
         btnCancel.textContent = 'Cancel';
         content.appendChild(btnSave);
         content.appendChild(btnCancel);
-        var pop = L.popup().setContent(content).setLatLng(latlng).openOn(window.courseMappingMap);
+        var pop = L.popup({ maxWidth: 300, className: 'location-popup' }).setContent(content).setLatLng(latlng).openOn(window.courseMappingMap);
         btnSave.onclick = function () {
             if (!currentCourse.segment_break_labels) currentCourse.segment_break_labels = {};
             if (!currentCourse.segment_break_descriptions) currentCourse.segment_break_descriptions = {};
@@ -725,7 +779,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 { label: 'Label', value: label },
                 { label: 'Description', value: desc }
             ]) + (isEditMode ? '<div class="popup-row" style="font-size:0.75rem;color:#7f8c8d;">Segment boundary (drag to move)</div>' : '');
-            m.bindTooltip(tipHtml, { permanent: false, direction: 'top', className: 'course-map-tooltip' });
+            m.bindTooltip(tipHtml, { permanent: false, direction: 'top', offset: [0, -10], className: 'course-map-tooltip' });
             m.on('dragend', function () {
                 var ll = m.getLatLng();
                 currentCourse.geometry.coordinates[idx] = [ll.lng, ll.lat];
@@ -785,7 +839,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         updateCourseUI();
                     };
                 }
-                var pop = L.popup().setContent(content).setLatLng(e.latlng).openOn(window.courseMappingMap);
+                var pop = L.popup({ maxWidth: 300, className: 'location-popup' }).setContent(content).setLatLng(e.latlng).openOn(window.courseMappingMap);
             });
             segmentPinsLayer.addLayer(m);
         });
@@ -859,7 +913,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 { label: 'Type', value: getLocationTypeLabel(loc.loc_type) },
                 { label: 'Description', value: loc.loc_description || '' }
             ]) + (isEditMode ? '<div class="popup-row" style="font-size:0.75rem;color:#7f8c8d;">(drag to move)</div>' : '');
-            m.bindTooltip(tipHtml, { permanent: false, direction: 'top', className: 'course-map-tooltip' });
+            m.bindTooltip(tipHtml, { permanent: false, direction: 'top', offset: [0, -10], className: 'course-map-tooltip' });
             m.on('dragend', function () {
                 var ll = m.getLatLng();
                 loc.lat = ll.lat;
@@ -951,7 +1005,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     btnCancel.textContent = 'Cancel';
                     editContent.appendChild(btnSave);
                     editContent.appendChild(btnCancel);
-                    var editPop = L.popup().setContent(editContent).setLatLng(e.latlng).openOn(window.courseMappingMap);
+                    var editPop = L.popup({ maxWidth: 300, className: 'location-popup' }).setContent(editContent).setLatLng(e.latlng).openOn(window.courseMappingMap);
                     btnSave.onclick = function () {
                         locEl.loc_type = sel.value || 'course';
                         locEl.loc_label = (input.value && input.value.trim()) ? input.value.trim() : '';
@@ -974,7 +1028,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     updateCourseUI();
                 };
                 }
-                var pop = L.popup().setContent(content).setLatLng(e.latlng).openOn(window.courseMappingMap);
+                var pop = L.popup({ maxWidth: 300, className: 'location-popup' }).setContent(content).setLatLng(e.latlng).openOn(window.courseMappingMap);
             });
             locationsLayer.addLayer(m);
         });
@@ -1296,10 +1350,24 @@ document.addEventListener('DOMContentLoaded', function () {
                         courseIdToSave = createData.id;
                         currentCourse.id = courseIdToSave;
                     }
+                    // Build payload with explicit geometry and turnaround_indices to ensure Same Route Back is persisted (Issue #732)
+                    var toSave = JSON.parse(JSON.stringify({
+                        id: currentCourse.id,
+                        name: currentCourse.name,
+                        description: currentCourse.description,
+                        segments: currentCourse.segments || [],
+                        locations: currentCourse.locations || [],
+                        geometry: currentCourse.geometry,
+                        segment_breaks: currentCourse.segment_breaks || [],
+                        segment_break_labels: currentCourse.segment_break_labels || {},
+                        segment_break_descriptions: currentCourse.segment_break_descriptions || {},
+                        segment_break_ids: currentCourse.segment_break_ids || {},
+                        turnaround_indices: Array.isArray(currentCourse.turnaround_indices) ? currentCourse.turnaround_indices.slice() : []
+                    }));
                     const res = await fetch('/api/courses/' + encodeURIComponent(courseIdToSave), {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ course: currentCourse })
+                        body: JSON.stringify({ course: toSave })
                     });
                     const data = await res.json();
                     if (!res.ok) throw new Error(data.detail || res.statusText);
@@ -1330,7 +1398,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             if (!Array.isArray(currentCourse.geometry.coordinates)) currentCourse.geometry.coordinates = [];
             mapClickHandler = function (e) {
-                if (drawRoutingInProgress) return;
+                if (drawRoutingInProgress || sameRouteBackMode) return;
                 var snapEl = document.getElementById('snap-to-road');
                 var coords = currentCourse.geometry.coordinates;
                 var toPoint = [e.latlng.lng, e.latlng.lat];
@@ -1370,11 +1438,138 @@ document.addEventListener('DOMContentLoaded', function () {
 
         function stopDrawMode() {
             drawMode = false;
+            stopSameRouteBackMode();
             if (btnDraw) btnDraw.classList.remove('active');
             if (mapClickHandler) {
                 map.off('click', mapClickHandler);
                 mapClickHandler = null;
             }
+        }
+
+        var turnaroundMarkerIndex = 0;
+        var turnaroundMarker = null;
+        var sameRouteBackClickHandler = null;
+
+        function setTurnaroundFromClick(latlng) {
+            if (!currentCourse || !currentCourse.geometry || !currentCourse.geometry.coordinates || !turnaroundMarker) return;
+            var coords = currentCourse.geometry.coordinates;
+            var idx = closestVertexIndex(latlng, coords);
+            idx = Math.max(0, Math.min(idx, coords.length - 1));
+            turnaroundMarkerIndex = idx;
+            turnaroundMarker._turnaroundIndex = idx;
+            var c = coords[idx];
+            turnaroundMarker.setLatLng([c[1], c[0]]);
+        }
+
+        function startSameRouteBackMode() {
+            if (sameRouteBackMode || !currentCourse || !currentCourse.geometry || !currentCourse.geometry.coordinates) return;
+            var coords = currentCourse.geometry.coordinates;
+            if (coords.length < 3) return;
+            stopSegmentPinMode();
+            stopLocationPinMode();
+            sameRouteBackMode = true;
+            turnaroundMarkerIndex = Math.max(0, coords.length - 2);
+            var c = coords[turnaroundMarkerIndex];
+            var redIcon = L.divIcon({
+                className: 'turnaround-marker',
+                html: '<div style="width:20px;height:20px;background:#e74c3c;border:2px solid #c0392b;border-radius:50%;"></div>',
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
+            });
+            if (turnaroundMarkerLayer) {
+                window.courseMappingMap.removeLayer(turnaroundMarkerLayer);
+                turnaroundMarkerLayer = null;
+            }
+            turnaroundMarkerLayer = L.layerGroup();
+            turnaroundMarker = L.marker([c[1], c[0]], { icon: redIcon, draggable: true });
+            turnaroundMarker._turnaroundIndex = turnaroundMarkerIndex;
+            turnaroundMarker.bindTooltip('Click route or drag to set where return ends (finish point)', { permanent: false, direction: 'top', offset: [0, -10], className: 'course-map-tooltip' });
+            turnaroundMarker.on('dragend', function () {
+                var ll = turnaroundMarker.getLatLng();
+                setTurnaroundFromClick(ll);
+            });
+            turnaroundMarkerLayer.addLayer(turnaroundMarker);
+            turnaroundMarkerLayer.addTo(window.courseMappingMap);
+            sameRouteBackClickHandler = function (e) {
+                if (!sameRouteBackMode || !turnaroundMarker) return;
+                L.DomEvent.stopPropagation(e);
+                setTurnaroundFromClick(e.latlng);
+            };
+            map.on('click', sameRouteBackClickHandler);
+            updateSameRouteBackButtons();
+        }
+
+        function stopSameRouteBackMode() {
+            sameRouteBackMode = false;
+            if (sameRouteBackClickHandler) {
+                map.off('click', sameRouteBackClickHandler);
+                sameRouteBackClickHandler = null;
+            }
+            if (turnaroundMarkerLayer && window.courseMappingMap) {
+                window.courseMappingMap.removeLayer(turnaroundMarkerLayer);
+                turnaroundMarkerLayer = null;
+            }
+            turnaroundMarker = null;
+            updateSameRouteBackButtons();
+        }
+
+        function confirmSameRouteBack() {
+            if (!sameRouteBackMode || !currentCourse || !currentCourse.geometry || !currentCourse.geometry.coordinates) return;
+            var coords = currentCourse.geometry.coordinates;
+            var k = turnaroundMarkerIndex;
+            if (k < 0 || k >= coords.length) return;
+            var turnaroundIdx = coords.length - 1;
+            var returnSegment = [];
+            for (var i = turnaroundIdx - 1; i >= k; i--) returnSegment.push(coords[i].slice());
+            coords.push.apply(coords, returnSegment);
+            if (!Array.isArray(currentCourse.turnaround_indices)) currentCourse.turnaround_indices = [];
+            currentCourse.turnaround_indices.push(turnaroundIdx);
+            setDirty();
+            stopSameRouteBackMode();
+            syncSegmentsFromBreaks();
+            renderCourseLine();
+            renderSegmentPins();
+            renderSegmentsList();
+            renderStartFinishIcons();
+            renderUturnIcons();
+            setDirty();
+            updateDrawButtons();
+            updateSegmentPinButton();
+            updateUndoButton();
+            updateExportButton();
+            updateCourseUI();
+        }
+
+        function cancelSameRouteBack() {
+            stopSameRouteBackMode();
+            updateDrawButtons();
+        }
+
+        function renderUturnIcons() {
+            if (!window.courseMappingMap || !currentCourse) return;
+            if (uturnIconsLayer) {
+                window.courseMappingMap.removeLayer(uturnIconsLayer);
+                uturnIconsLayer = null;
+            }
+            var indices = currentCourse.turnaround_indices;
+            if (!Array.isArray(indices) || indices.length === 0) return;
+            var coords = (currentCourse.geometry && currentCourse.geometry.coordinates) || [];
+            if (coords.length < 2) return;
+            uturnIconsLayer = L.layerGroup();
+            indices.forEach(function (idx) {
+                if (idx < 0 || idx >= coords.length) return;
+                var c = coords[idx];
+                var icon = L.divIcon({
+                    className: 'uturn-icon',
+                    html: '<div style="width:24px;height:24px;background:#3498db;color:#fff;border:2px solid #2980b9;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:bold;">↺</div>',
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                });
+                var m = L.marker([c[1], c[0]], { icon: icon });
+                m.bindTooltip('U-turn (Same Route Back)', { permanent: false, direction: 'top', offset: [0, -10], className: 'course-map-tooltip' });
+                uturnIconsLayer.addLayer(m);
+            });
+            uturnIconsLayer.addTo(window.courseMappingMap);
         }
 
         function startSegmentPinMode() {
@@ -1470,7 +1665,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 btnCancel.textContent = 'Cancel';
                 content.appendChild(btnAdd);
                 content.appendChild(btnCancel);
-                var pop = L.popup().setContent(content).setLatLng(e.latlng).openOn(window.courseMappingMap);
+                var pop = L.popup({ maxWidth: 300, className: 'location-popup' }).setContent(content).setLatLng(e.latlng).openOn(window.courseMappingMap);
                 btnAdd.onclick = function () {
                     var locType = sel.value || 'course';
                     var locLabel = (input.value && input.value.trim()) ? input.value.trim() : '';
@@ -1514,6 +1709,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 currentCourse.geometry = null;
                 if (currentCourse.segment_breaks) currentCourse.segment_breaks = [];
                 currentCourse.segments = [];
+                if (currentCourse.turnaround_indices) currentCourse.turnaround_indices = [];
                 setDirty();
                 stopDrawMode();
                 stopSegmentPinMode();
@@ -1531,6 +1727,17 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var btnUndo = document.getElementById('btn-undo-point');
         if (btnUndo) btnUndo.addEventListener('click', undoLastPoint);
+
+        var btnSameRouteBack = document.getElementById('btn-same-route-back');
+        if (btnSameRouteBack) {
+            btnSameRouteBack.addEventListener('click', function () {
+                if (sameRouteBackMode) stopSameRouteBackMode(); else startSameRouteBackMode();
+            });
+        }
+        var btnConfirmTurnaround = document.getElementById('btn-confirm-turnaround');
+        if (btnConfirmTurnaround) btnConfirmTurnaround.addEventListener('click', confirmSameRouteBack);
+        var btnCancelTurnaround = document.getElementById('btn-cancel-turnaround');
+        if (btnCancelTurnaround) btnCancelTurnaround.addEventListener('click', cancelSameRouteBack);
 
         var btnSegmentPin = document.getElementById('btn-add-segment-pin');
         if (btnSegmentPin) {
@@ -1573,6 +1780,7 @@ document.addEventListener('DOMContentLoaded', function () {
         updateSegmentPinButton();
         updateUndoButton();
         updateAddLocationButton();
+        updateSameRouteBackButtons();
         updateExportButton();
     } catch (e) {
         console.error('Course mapping map init failed:', e);

@@ -57,6 +57,7 @@ def _default_course_json(course_id: str, data_dir: str) -> Dict[str, Any]:
         "segment_break_labels": {},  # Optional labels for segment boundaries: { "index": "label" }
         "segment_break_descriptions": {},  # Optional descriptions for segment boundaries: { "index": "description" }
         "segment_break_ids": {},  # Optional stable IDs: { "index": id } (sequential int, e.g. 1, 2, 3)
+        "turnaround_indices": [],  # Indices where Same Route Back turnaround points are (UI U-turn icons)
     }
 
 

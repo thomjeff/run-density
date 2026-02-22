@@ -196,3 +196,27 @@
     text-align: center;
     color: #6c757d;
 }
+
+/* ============================================
+   Map Tooltips & Popups (Locations, Segments, Course Mapping)
+   Consistent look and feel across map UIs
+   ============================================ */
+.location-tooltip,
+.segment-tooltip,
+.course-map-tooltip {
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.location-tooltip .leaflet-tooltip-inner,
+.segment-tooltip .leaflet-tooltip-inner,
+.course-map-tooltip .leaflet-tooltip-inner {
+    font-family: Arial, sans-serif;
+    max-width: 260px;
+    text-align: left;
+}
+
+.leaflet-popup.location-popup .leaflet-popup-content-wrapper,
+.leaflet-popup.location-popup .leaflet-popup-content {
+    font-size: 0.875rem;
+}
