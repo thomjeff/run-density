@@ -194,7 +194,7 @@ async def api_export_course(
     data_dir: Optional[str] = None,
     config_dir: Optional[str] = None,
 ) -> Response:
-    """Export course: write segments.csv, flow.csv, locations.csv, course.gpx.
+    """Export course: write segments.csv, flow.csv, locations.csv, course.gpx, course.json.
     With to_folder=1: write to data_dir/courses/{id}/ and return JSON.
     Otherwise: return zip for download. Issue #732."""
     try:
@@ -210,17 +210,20 @@ async def api_export_course(
                 build_flow_csv,
                 build_locations_csv,
                 build_gpx,
+                build_course_json,
             )
             segments_csv = build_segments_csv(course_data)
             flow_csv = build_flow_csv(course_data)
             locations_csv = build_locations_csv(course_data)
             gpx_content = build_gpx(course_data, course_name)
+            course_json = build_course_json(course_data)
             files_written = []
             for name, content in [
                 ("segments.csv", segments_csv),
                 ("flow.csv", flow_csv),
                 ("locations.csv", locations_csv),
                 ("course.gpx", gpx_content),
+                ("course.json", course_json),
             ]:
                 path = course_dir / name
                 path.write_text(content, encoding="utf-8")

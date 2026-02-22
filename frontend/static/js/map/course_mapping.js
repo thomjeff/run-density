@@ -20,7 +20,6 @@ document.addEventListener('DOMContentLoaded', function () {
             id: null,
             name: '',
             description: '',
-            events: [{ id: 'full', name: 'full', distance_label: 'full' }, { id: 'half', name: 'half', distance_label: 'half' }, { id: '10k', name: '10k', distance_label: '10k' }, { id: 'elite', name: 'elite', distance_label: 'elite' }, { id: 'open', name: 'open', distance_label: 'open' }],
             segments: [],
             locations: [],
             geometry: null,
@@ -64,6 +63,9 @@ document.addEventListener('DOMContentLoaded', function () {
             nameInput.value = currentCourse.name || '';
             descInput.value = currentCourse.description || '';
         }
+        renderCourseLine();
+        renderSegmentPins();
+        renderLocationPins();
     }
 
     function resizeDescriptionTextarea() {
@@ -216,7 +218,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var cum = cumulativeKm(coords);
         var breaks = currentCourse.segment_breaks.slice().sort(function (a, b) { return a - b; });
         breaks = breaks.filter(function (idx) { return idx > 0 && idx < coords.length; });
-        var eventIds = (currentCourse.events || []).map(function (e) { return e.id || e; });
+        var eventIds = (EVENT_CHOICES || []).map(function (e) { return e.value || e; });
         var existing = (currentCourse.segments || []).reduce(function (acc, s) {
             var key = (s.start_index != null && s.end_index != null) ? s.start_index + '-' + s.end_index : null;
             if (key) acc[key] = { seg_label: s.seg_label, events: s.events, width_m: s.width_m, schema: s.schema, direction: s.direction, description: s.description, info_icon_lat: s.info_icon_lat, info_icon_lon: s.info_icon_lon };
@@ -232,9 +234,9 @@ document.addEventListener('DOMContentLoaded', function () {
             var prev = existing[key];
             var pinLabel = (currentCourse.segment_break_labels && (currentCourse.segment_break_labels[endIdx] || currentCourse.segment_break_labels['' + endIdx] || '').trim()) || '';
             var isLastSegment = (b >= breaks.length && endIdx === coords.length - 1);
-            var defaultLabel = pinLabel || (isLastSegment ? 'Finish' : ('Segment S' + (segs.length + 1)));
+            var defaultLabel = pinLabel || (isLastSegment ? 'Finish' : ('Segment ' + (segs.length + 1)));
             segs.push({
-                seg_id: 'A' + (segs.length + 1),
+                seg_id: String(segs.length + 1),
                 seg_label: (prev && prev.seg_label) ? prev.seg_label : defaultLabel,
                 width_m: (prev && prev.width_m != null) ? prev.width_m : 3,
                 direction: (prev && prev.direction) ? prev.direction : 'uni',
@@ -256,8 +258,8 @@ document.addEventListener('DOMContentLoaded', function () {
             var endIdx0 = coords.length - 1;
             var pinLabel0 = (currentCourse.segment_break_labels && (currentCourse.segment_break_labels[endIdx0] || currentCourse.segment_break_labels['' + endIdx0] || '').trim()) || '';
             segs.push({
-                seg_id: 'A1',
-                seg_label: (prev0 && prev0.seg_label) ? prev0.seg_label : (pinLabel0 || 'Segment S1'),
+                seg_id: '1',
+                seg_label: (prev0 && prev0.seg_label) ? prev0.seg_label : (pinLabel0 || 'Segment 1'),
                 width_m: (prev0 && prev0.width_m != null) ? prev0.width_m : 3,
                 direction: (prev0 && prev0.direction) ? prev0.direction : 'uni',
                 schema: (prev0 && prev0.schema) ? prev0.schema : 'on_course_open',
@@ -336,7 +338,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function openSegmentAnnotationPopup(segIdx, latlng) {
         var s = currentCourse.segments[segIdx];
         if (!s) return;
-        var segId = 'S' + (segIdx + 1);
+        var segId = (s.seg_id != null && s.seg_id !== '') ? String(s.seg_id) : String(segIdx + 1);
         var content = document.createElement('div');
         content.style.minWidth = '240px';
         content.innerHTML = '<strong>Segment ' + segId + '</strong><br/>';
@@ -400,7 +402,7 @@ document.addEventListener('DOMContentLoaded', function () {
             s.description = (inputDesc.value && inputDesc.value.trim()) ? inputDesc.value.trim() : '';
             s.events = [];
             eventsDiv.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { if (cb.checked) s.events.push(cb.value); });
-            if (s.events.length === 0) s.events = (currentCourse.events || []).map(function (e) { return e.id || e; });
+            if (s.events.length === 0) s.events = (EVENT_CHOICES || []).map(function (e) { return e.value || e; });
             window.courseMappingMap.closePopup();
             renderSegmentInfoIcons();
             renderSegmentPins();
@@ -453,16 +455,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 iconSize: [18, 18],
                 iconAnchor: [9, 9]
             });
-            var m = L.marker([lat, lon], { icon: icon, draggable: true });
+            var m = L.marker([lat, lon], { icon: icon, draggable: isEditMode });
             m._segmentIndex = segIdx;
             var seg = currentCourse.segments[segIdx];
-            var segId = 'S' + (segIdx + 1);
+            var segId = (seg.seg_id != null && seg.seg_id !== '') ? String(seg.seg_id) : String(segIdx + 1);
             var tipHtml = buildPopupRowsHtml([
                 { label: 'Seg ID', value: segId },
                 { label: 'Label', value: seg.seg_label },
                 { label: 'Description', value: seg.description },
                 { label: 'Events', value: (seg.events || []).join(', ') || '(none)' }
-            ]) + '<div class="popup-row" style="font-size:0.75rem;color:#7f8c8d;">(drag to move)</div>';
+            ]) + (isEditMode ? '<div class="popup-row" style="font-size:0.75rem;color:#7f8c8d;">(drag to move)</div>' : '');
             m.bindTooltip(tipHtml, { permanent: false, direction: 'top', className: 'course-map-tooltip' });
             m.on('dragend', function () {
                 var ll = m.getLatLng();
@@ -482,7 +484,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 var s = currentCourse.segments[m._segmentIndex];
                 if (!s) return;
                 var evts = (s.events || []).join(', ') || '(none)';
-                var segId = 'S' + (m._segmentIndex + 1);
+                var segId = (s.seg_id != null && s.seg_id !== '') ? String(s.seg_id) : String(m._segmentIndex + 1);
                 var info = document.createElement('div');
                 info.innerHTML = buildPopupRowsHtml([
                     { label: 'Seg ID', value: segId },
@@ -494,16 +496,18 @@ document.addEventListener('DOMContentLoaded', function () {
                     { label: 'Events', value: evts },
                     { label: 'From–To (km)', value: (s.from_km != null ? s.from_km : '') + ' – ' + (s.to_km != null ? s.to_km : '') }
                 ]);
-                var btnEdit = document.createElement('button');
-                btnEdit.type = 'button';
-                btnEdit.textContent = 'Edit';
-                btnEdit.style.marginTop = '6px';
-                info.appendChild(btnEdit);
+                if (isEditMode) {
+                    var btnEdit = document.createElement('button');
+                    btnEdit.type = 'button';
+                    btnEdit.textContent = 'Edit';
+                    btnEdit.style.marginTop = '6px';
+                    info.appendChild(btnEdit);
+                    btnEdit.onclick = function () {
+                        window.courseMappingMap.closePopup();
+                        openSegmentAnnotationPopup(m._segmentIndex, e.latlng);
+                    };
+                }
                 var pop = L.popup().setContent(info).setLatLng(e.latlng).openOn(window.courseMappingMap);
-                btnEdit.onclick = function () {
-                    window.courseMappingMap.closePopup();
-                    openSegmentAnnotationPopup(m._segmentIndex, e.latlng);
-                };
             });
             segmentInfoIconsLayer.addLayer(m);
         });
@@ -567,7 +571,27 @@ document.addEventListener('DOMContentLoaded', function () {
                 L.DomEvent.stopPropagation(e);
                 var latlng = e.latlng || (latlngs.length ? L.latLng(latlngs[Math.floor(latlngs.length / 2)][0], latlngs[Math.floor(latlngs.length / 2)][1]) : null);
                 var idx = latlng ? segmentIndexAtLatLng(latlng) : segIdx;
-                if (latlng) openSegmentAnnotationPopup(idx, latlng);
+                if (latlng) {
+                    if (isEditMode) {
+                        openSegmentAnnotationPopup(idx, latlng);
+                    } else {
+                        var s = currentCourse.segments[idx];
+                        if (!s) return;
+                        var segId = (s.seg_id != null && s.seg_id !== '') ? String(s.seg_id) : String(idx + 1);
+                        var viewInfo = document.createElement('div');
+                        viewInfo.innerHTML = buildPopupRowsHtml([
+                            { label: 'Seg ID', value: segId },
+                            { label: 'Label', value: s.seg_label },
+                            { label: 'Description', value: s.description },
+                            { label: 'Width', value: (s.width_m != null ? s.width_m : 3) + ' m' },
+                            { label: 'Schema', value: s.schema || 'on_course_open' },
+                            { label: 'Direction', value: s.direction || 'uni' },
+                            { label: 'Events', value: (s.events || []).join(', ') || '(none)' },
+                            { label: 'From–To (km)', value: (s.from_km != null ? s.from_km : '') + ' – ' + (s.to_km != null ? s.to_km : '') }
+                        ]);
+                        L.popup().setContent(viewInfo).setLatLng(latlng).openOn(window.courseMappingMap);
+                    }
+                }
             };
             line.on('click', openPopup);
             segmentLinesLayer.addLayer(line);
@@ -692,7 +716,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 iconSize: [12, 12],
                 iconAnchor: [6, 6]
             });
-            var m = L.marker([c[1], c[0]], { icon: squareIcon, draggable: true });
+            var m = L.marker([c[1], c[0]], { icon: squareIcon, draggable: isEditMode });
             m._segmentBreakIndex = idx;
             var desc = getSegmentBreakDescription(idx);
             var pinId = getSegmentBreakId(idx);
@@ -700,7 +724,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 { label: 'ID', value: pinId },
                 { label: 'Label', value: label },
                 { label: 'Description', value: desc }
-            ]) + '<div class="popup-row" style="font-size:0.75rem;color:#7f8c8d;">Segment boundary (drag to move)</div>';
+            ]) + (isEditMode ? '<div class="popup-row" style="font-size:0.75rem;color:#7f8c8d;">Segment boundary (drag to move)</div>' : '');
             m.bindTooltip(tipHtml, { permanent: false, direction: 'top', className: 'course-map-tooltip' });
             m.on('dragend', function () {
                 var ll = m.getLatLng();
@@ -725,41 +749,43 @@ document.addEventListener('DOMContentLoaded', function () {
                     { label: 'Description', value: desc }
                 ]);
                 content.classList.add('course-map-popup-wrap');
-                var btnWrap = document.createElement('div');
-                btnWrap.style.marginTop = '0.5rem';
-                var btnEdit = document.createElement('button');
-                btnEdit.type = 'button';
-                btnEdit.textContent = 'Edit';
-                btnEdit.style.marginRight = '6px';
-                btnEdit.style.marginTop = '6px';
-                var btnDel = document.createElement('button');
-                btnDel.type = 'button';
-                btnDel.textContent = 'Delete';
-                btnWrap.appendChild(btnEdit);
-                btnWrap.appendChild(btnDel);
-                content.appendChild(btnWrap);
-                var pop = L.popup().setContent(content).setLatLng(e.latlng).openOn(window.courseMappingMap);
-                btnEdit.onclick = function () {
-                    window.courseMappingMap.closePopup();
-                    openSegmentPinFormTile(i, e.latlng, function () {
+                if (isEditMode) {
+                    var btnWrap = document.createElement('div');
+                    btnWrap.style.marginTop = '0.5rem';
+                    var btnEdit = document.createElement('button');
+                    btnEdit.type = 'button';
+                    btnEdit.textContent = 'Edit';
+                    btnEdit.style.marginRight = '6px';
+                    btnEdit.style.marginTop = '6px';
+                    var btnDel = document.createElement('button');
+                    btnDel.type = 'button';
+                    btnDel.textContent = 'Delete';
+                    btnWrap.appendChild(btnEdit);
+                    btnWrap.appendChild(btnDel);
+                    content.appendChild(btnWrap);
+                    btnEdit.onclick = function () {
+                        window.courseMappingMap.closePopup();
+                        openSegmentPinFormTile(i, e.latlng, function () {
+                            renderSegmentPins();
+                            renderSegmentsList();
+                            updateCourseUI();
+                        });
+                    };
+                    btnDel.onclick = function () {
+                        if (!window.confirm('Remove this segment boundary? This cannot be undone.')) return;
+                        window.courseMappingMap.closePopup();
+                        currentCourse.segment_breaks = currentCourse.segment_breaks.filter(function (x) { return x !== i; });
+                        if (currentCourse.segment_break_labels) delete currentCourse.segment_break_labels[i];
+                        if (currentCourse.segment_break_descriptions) delete currentCourse.segment_break_descriptions[i];
+                        if (currentCourse.segment_break_ids) delete currentCourse.segment_break_ids[i];
+                        syncSegmentsFromBreaks();
                         renderSegmentPins();
                         renderSegmentsList();
+                        setDirty();
                         updateCourseUI();
-                    });
-                };
-                btnDel.onclick = function () {
-                    if (!window.confirm('Remove this segment boundary? This cannot be undone.')) return;
-                    window.courseMappingMap.closePopup();
-                    currentCourse.segment_breaks = currentCourse.segment_breaks.filter(function (x) { return x !== i; });
-                    if (currentCourse.segment_break_labels) delete currentCourse.segment_break_labels[i];
-                    if (currentCourse.segment_break_descriptions) delete currentCourse.segment_break_descriptions[i];
-                    if (currentCourse.segment_break_ids) delete currentCourse.segment_break_ids[i];
-                    syncSegmentsFromBreaks();
-                    renderSegmentPins();
-                    renderSegmentsList();
-                    setDirty();
-                    updateCourseUI();
-                };
+                    };
+                }
+                var pop = L.popup().setContent(content).setLatLng(e.latlng).openOn(window.courseMappingMap);
             });
             segmentPinsLayer.addLayer(m);
         });
@@ -788,7 +814,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var len = (seg.to_km - seg.from_km);
             var startIdx = seg.start_index != null ? seg.start_index : 0;
             var endIdx = seg.end_index != null ? seg.end_index : (coordsLen ? coordsLen - 1 : 0);
-            var segId = 'S' + (segIdx + 1);
+            var segId = (seg.seg_id != null && seg.seg_id !== '') ? String(seg.seg_id) : String(segIdx + 1);
             var pinStart = getPinLabelForIndex(startIdx, coordsLen);
             var pinEnd = getPinLabelForIndex(endIdx, coordsLen);
             var displayLabel = (seg.seg_label && seg.seg_label.trim()) ? seg.seg_label : (pinEnd || '');
@@ -824,7 +850,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 iconSize: [16, 16],
                 iconAnchor: [8, 8]
             });
-            var m = L.marker([lat, lon], { icon: locIcon, draggable: true });
+            var m = L.marker([lat, lon], { icon: locIcon, draggable: isEditMode });
             m._locationIndex = i;
             var locId = loc.id != null ? String(loc.id) : (i + 1);
             var tipHtml = buildPopupRowsHtml([
@@ -832,7 +858,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 { label: 'Label', value: loc.loc_label || getLocationTypeLabel(loc.loc_type) || 'Location' },
                 { label: 'Type', value: getLocationTypeLabel(loc.loc_type) },
                 { label: 'Description', value: loc.loc_description || '' }
-            ]) + '<div class="popup-row" style="font-size:0.75rem;color:#7f8c8d;">(drag to move)</div>';
+            ]) + (isEditMode ? '<div class="popup-row" style="font-size:0.75rem;color:#7f8c8d;">(drag to move)</div>' : '');
             m.bindTooltip(tipHtml, { permanent: false, direction: 'top', className: 'course-map-tooltip' });
             m.on('dragend', function () {
                 var ll = m.getLatLng();
@@ -860,22 +886,22 @@ document.addEventListener('DOMContentLoaded', function () {
                     { label: 'Description', value: desc }
                 ]);
                 content.classList.add('course-map-popup-wrap');
-                var btnWrap = document.createElement('div');
-                btnWrap.style.marginTop = '0.5rem';
-                var btnEdit = document.createElement('button');
-                btnEdit.type = 'button';
-                btnEdit.textContent = 'Edit';
-                btnEdit.style.marginRight = '6px';
-                var btnDel = document.createElement('button');
-                btnDel.type = 'button';
-                btnDel.textContent = 'Delete';
-                btnWrap.appendChild(btnEdit);
-                btnWrap.appendChild(btnDel);
-                content.appendChild(btnWrap);
-                var pop = L.popup().setContent(content).setLatLng(e.latlng).openOn(window.courseMappingMap);
-                btnEdit.onclick = function () {
-                    window.courseMappingMap.closePopup();
-                    var editContent = document.createElement('div');
+                if (isEditMode) {
+                    var btnWrap = document.createElement('div');
+                    btnWrap.style.marginTop = '0.5rem';
+                    var btnEdit = document.createElement('button');
+                    btnEdit.type = 'button';
+                    btnEdit.textContent = 'Edit';
+                    btnEdit.style.marginRight = '6px';
+                    var btnDel = document.createElement('button');
+                    btnDel.type = 'button';
+                    btnDel.textContent = 'Delete';
+                    btnWrap.appendChild(btnEdit);
+                    btnWrap.appendChild(btnDel);
+                    content.appendChild(btnWrap);
+                    btnEdit.onclick = function () {
+                        window.courseMappingMap.closePopup();
+                        var editContent = document.createElement('div');
                     editContent.style.minWidth = '180px';
                     var lblType = document.createElement('label');
                     lblType.textContent = 'Type';
@@ -947,6 +973,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     setDirty();
                     updateCourseUI();
                 };
+                }
+                var pop = L.popup().setContent(content).setLatLng(e.latlng).openOn(window.courseMappingMap);
             });
             locationsLayer.addLayer(m);
         });
@@ -1531,7 +1559,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (!currentCourseId || !currentCourse) return;
                 var url = '/api/courses/' + encodeURIComponent(currentCourseId) + '/export?to_folder=1';
                 fetch(url).then(function (r) { return r.json(); }).then(function (data) {
-                    if (data.ok) alert('Exported to ' + (data.path || 'course folder') + ': ' + (data.files || []).join(', '));
+                    if (data.ok) alert('All map files exported to map folder.');
                     else alert('Export failed');
                 }).catch(function () { alert('Export failed'); });
             });

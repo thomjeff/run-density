@@ -14,9 +14,6 @@ from app.utils.run_id import generate_run_id
 
 logger = logging.getLogger(__name__)
 
-# Issue #732: Fixed event list until Issue 701. Lowercase per quick-reference.
-COURSE_EVENT_IDS = ["full", "half", "10k", "elite", "open"]
-
 
 def _haversine_km(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
     """Distance in km between two WGS84 points."""
@@ -53,7 +50,6 @@ def _default_course_json(course_id: str, data_dir: str) -> Dict[str, Any]:
         "data_dir": data_dir,
         "created": now,
         "updated": now,
-        "events": [{"id": eid, "name": eid, "distance_label": eid} for eid in COURSE_EVENT_IDS],
         "segments": [],
         "locations": [],
         "geometry": None,  # GeoJSON LineString: { type: "LineString", coordinates: [[lon, lat], ...] }
@@ -156,7 +152,10 @@ def load_course(data_dir: Path, course_id: str) -> Dict[str, Any]:
     if not course_file.exists():
         raise FileNotFoundError(f"Course not found: {course_dir}")
     with open(course_file, "r") as f:
-        return json.load(f)
+        data = json.load(f)
+    # Events come from constants (SSOT); strip if present in stored file
+    data.pop("events", None)
+    return data
 
 
 def delete_course(data_dir: Path, course_id: str) -> None:
@@ -187,7 +186,7 @@ def save_course(data_dir: Path, course_id: str, course_data: Dict[str, Any]) -> 
     Args:
         data_dir: Resolved data directory path.
         course_id: Course directory name.
-        course_data: Full course dict (must include id, events; segments, locations optional).
+        course_data: Full course dict (must include id; segments, locations optional). events is stripped before save (SSOT: constants.COURSE_EVENT_IDS).
 
     Returns:
         Path to course.json.
@@ -206,6 +205,8 @@ def save_course(data_dir: Path, course_id: str, course_data: Dict[str, Any]) -> 
     data = dict(course_data)
     data["updated"] = datetime.now(timezone.utc).isoformat()
     data["data_dir"] = str(data_dir)
+    # Events come from constants (COURSE_EVENT_IDS); do not persist to course.json
+    data.pop("events", None)
     course_path = course_dir / "course.json"
     with open(course_path, "w") as f:
         json.dump(data, f, indent=2)

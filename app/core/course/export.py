@@ -1,14 +1,17 @@
 """
-Course Mapping export: generate segments.csv, flow.csv, locations.csv, and GPX from course.json.
+Course Mapping export: generate segments.csv, flow.csv, locations.csv, course.gpx, and course.json.
 
 Issue #732: Pipeline-compatible CSV/GPX for the current course.
 """
 
 import csv
 import io
+import json
 import zipfile
 from typing import Any, Dict, List
 import xml.etree.ElementTree as ET
+
+from app.utils.constants import COURSE_EVENT_IDS
 
 # GPX 1.1 namespace
 GPX_NS = "http://www.topografix.com/GPX/1/1"
@@ -33,19 +36,17 @@ def _pin_label(course: Dict[str, Any], index: int, coords_len: int, role: str) -
 
 
 def _segment_display_id(segment_index: int) -> str:
-    """Return segment ID S1, S2, S3, ... for pipeline compatibility."""
-    return f"S{segment_index + 1}"
+    """Return segment ID as sequential number (1, 2, 3, ...) for pipeline compatibility."""
+    return str(segment_index + 1)
 
 
 def build_segments_csv(course: Dict[str, Any]) -> str:
     """Build segments.csv content from course.segments and course.events.
-    Uses system segment pin IDs (1, 2, ...) and 'F' for finish segment, not A1/A2.
+    Uses sequential segment IDs (1, 2, 3, ...) for pipeline compatibility.
     """
     segments = course.get("segments") or []
-    events = course.get("events") or []
-    event_ids = [_event_id(e) for e in events]
-    if not event_ids:
-        event_ids = ["full", "half", "10k", "elite", "open"]
+    # Event list from constants (SSOT); course.json does not store events
+    event_ids = COURSE_EVENT_IDS
     coords = (course.get("geometry") or {}).get("coordinates") or []
     coords_len = len(coords)
 
@@ -96,7 +97,7 @@ def build_segments_csv(course: Dict[str, Any]) -> str:
 
 def build_flow_csv(course: Dict[str, Any]) -> str:
     """Build minimal flow.csv from course.segments (one row per segment with default flow_type).
-    Uses system segment pin IDs (1, 2, ...) and 'F' for finish segment.
+    Uses sequential segment IDs (1, 2, 3, ...) for pipeline compatibility.
     """
     segments = course.get("segments") or []
     out = io.StringIO()
@@ -157,12 +158,18 @@ def build_gpx(course: Dict[str, Any], course_name: str = "") -> str:
     return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding="unicode")
 
 
+def build_course_json(course: Dict[str, Any]) -> str:
+    """Serialize course dict to JSON string for export."""
+    return json.dumps(course, indent=2, ensure_ascii=False)
+
+
 def export_course_zip(course: Dict[str, Any], course_id: str, course_name: str = "") -> bytes:
-    """Build a zip with segments.csv, flow.csv, locations.csv, and course.gpx."""
+    """Build a zip with segments.csv, flow.csv, locations.csv, course.gpx, and course.json."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("segments.csv", build_segments_csv(course))
         zf.writestr("flow.csv", build_flow_csv(course))
         zf.writestr("locations.csv", build_locations_csv(course))
         zf.writestr("course.gpx", build_gpx(course, course_name))
+        zf.writestr("course.json", build_course_json(course))
     return buf.getvalue()

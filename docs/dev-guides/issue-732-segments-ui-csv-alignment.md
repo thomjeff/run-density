@@ -44,17 +44,17 @@
 - **Segment** = route from pin A to pin B; has segment label, width, schema, direction, from_km, to_km, length.
 
 ### Seg ID Format
-Use `S1`, `S2`, `S3`, `S4` (segment index) instead of pin IDs or "F". This:
-- Clearly distinguishes segments from pins
-- Avoids confusion with pin IDs (1, 2, 3)
+Use sequential numbers `1`, `2`, `3`, `4` (same pattern as location IDs). This:
+- Matches location IDs (loc_id: 1, 2, 3)
 - Works with the pipeline (seg_id is a string identifier)
+- No prefix required (A1/A2 was legacy alphanumeric convention)
 
 ---
 
 ## Proposed Changes
 
 ### 1. segments.csv
-- **seg_id:** Use `S1`, `S2`, `S3`, … instead of `1`, `2`, `3`, `F`
+- **seg_id:** Use `1`, `2`, `3`, … (sequential, same pattern as loc_id)
 - Keep: `seg_label`, `pin_start_label`, `pin_end_label`, `width_m`, `schema`, `direction`, event columns, from/to/km, length, description
 
 ### 2. UI Segments Table
@@ -62,12 +62,12 @@ Align columns with segments.csv:
 
 | Seg ID | From pin | To pin | Segment label | Width (m) | From (km) | To (km) | Length (km) |
 |--------|----------|--------|---------------|-----------|-----------|---------|-------------|
-| S1     | Start    | Block 1| Block 1       | 3         | 0         | 0.14    | 0.14        |
-| S2     | Block 1  | Block 2| Block 2       | 3         | 0.14      | 0.26    | 0.12        |
-| S3     | Block 2  | Block 3| Block 3       | 3         | 0.26      | 0.39    | 0.13        |
-| S4     | Block 3  | Finish | Block 4       | 3         | 0.39      | 0.51    | 0.12        |
+| 1      | Start    | Block 1| Block 1       | 3         | 0         | 0.14    | 0.14        |
+| 2      | Block 1  | Block 2| Block 2       | 3         | 0.14      | 0.26    | 0.12        |
+| 3      | Block 2  | Block 3| Block 3       | 3         | 0.26      | 0.39    | 0.13        |
+| 4      | Block 3  | Finish | Block 4       | 3         | 0.39      | 0.51    | 0.12        |
 
-- **Seg ID** = S1, S2, … (segment identity)
+- **Seg ID** = 1, 2, 3, … (segment identity, same pattern as loc_id)
 - **From pin / To pin** = boundary labels (same as `pin_start_label`, `pin_end_label` in CSV)
 - **Segment label** = user-defined label for the segment
 - **Width (m)** = from segment annotation
@@ -77,10 +77,10 @@ Align columns with segments.csv:
 - Update copy from "segment pins (A1, A2, ...)" to: "Segment pins split the course into segments. Each segment is the route between two pins (e.g. Start → Block 1)."
 
 ### 4. Implementation Checklist
-- [x] `app/core/course/export.py`: Change `_segment_display_id()` to return `S1`, `S2`, … (1-based segment index)
-- [x] `frontend/static/js/map/course_mapping.js`: Add `getPinLabelForIndex()`; update `renderSegmentsList()` to show Seg ID (S1…), From pin, To pin, Width; update segment annotation popup and info icon to show Seg ID
+- [x] `app/core/course/export.py`: Change `_segment_display_id()` to return `1`, `2`, … (sequential segment index)
+- [x] `frontend/static/js/map/course_mapping.js`: Use `seg_id` as numeric (1, 2, 3); no A/S prefix; events from `EVENT_CHOICES_FROM_SERVER` (constants)
 - [x] `frontend/templates/pages/course_mapping.html`: Update table header and empty state text
-- [x] `flow.csv` uses same `_segment_display_id()` — accepts `S1`, `S2`, … as seg_id
+- [x] `flow.csv` uses same `_segment_display_id()` — accepts `1`, `2`, … as seg_id
 
 ---
 
