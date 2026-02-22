@@ -13,22 +13,114 @@ document.addEventListener('DOMContentLoaded', function () {
     // Course state; data_dir is always from app utils constants (runflow root)
     let currentCourseId = null;
     let currentCourse = null;
+    let courseDirty = false;
+
+    function blankCourse() {
+        return {
+            id: null,
+            name: '',
+            description: '',
+            events: [{ id: 'full', name: 'full', distance_label: 'full' }, { id: 'half', name: 'half', distance_label: 'half' }, { id: '10k', name: '10k', distance_label: '10k' }, { id: 'elite', name: 'elite', distance_label: 'elite' }, { id: 'open', name: 'open', distance_label: 'open' }],
+            segments: [],
+            locations: [],
+            geometry: null,
+            segment_breaks: [],
+            segment_break_labels: {},
+            segment_break_descriptions: {},
+            segment_break_ids: {}
+        };
+    }
+
+    function setDirty() { courseDirty = true; }
+    function clearDirty() { courseDirty = false; }
+    function isDirty() { return courseDirty; }
+
+    var isEditMode = false;
+
+    function setEditMode(edit) {
+        isEditMode = !!edit;
+        var nameText = document.getElementById('course-map-name-text');
+        var nameInput = document.getElementById('course-map-name');
+        var descText = document.getElementById('course-map-description-text');
+        var descInput = document.getElementById('course-map-description');
+        var editToolbar = document.getElementById('course-edit-toolbar');
+        var saveBtn = document.getElementById('btn-save-course');
+        var editBtn = document.getElementById('btn-edit-course');
+        var exportBtn = document.getElementById('btn-export');
+        var delBtn = document.getElementById('btn-delete-course');
+        if (nameText) nameText.style.display = isEditMode ? 'none' : 'inline';
+        if (nameInput) nameInput.style.display = (isEditMode && currentCourse) ? 'inline-block' : 'none';
+        if (descText) descText.style.display = isEditMode ? 'none' : 'inline';
+        if (descInput) {
+            descInput.style.display = (isEditMode && currentCourse) ? 'block' : 'none';
+            if (isEditMode && currentCourse) resizeDescriptionTextarea();
+        }
+        if (editToolbar) editToolbar.style.display = (isEditMode && currentCourse) ? 'flex' : 'none';
+        if (saveBtn) saveBtn.style.display = isEditMode ? 'inline-block' : 'none';
+        if (editBtn) editBtn.textContent = isEditMode ? 'Cancel' : 'Edit';
+        if (exportBtn) exportBtn.style.display = isEditMode ? 'none' : 'inline-block';
+        if (delBtn) delBtn.style.display = isEditMode ? 'none' : 'inline-block';
+        if (!isEditMode && nameInput && descInput && currentCourse) {
+            nameInput.value = currentCourse.name || '';
+            descInput.value = currentCourse.description || '';
+        }
+    }
+
+    function resizeDescriptionTextarea() {
+        var el = document.getElementById('course-map-description');
+        if (!el) return;
+        el.style.height = 'auto';
+        el.style.height = Math.max(el.scrollHeight, 2.5 * 16) + 'px';
+    }
+
+    function syncCourseToHeaderInputs() {
+        var nameText = document.getElementById('course-map-name-text');
+        var nameInput = document.getElementById('course-map-name');
+        var descText = document.getElementById('course-map-description-text');
+        var descInput = document.getElementById('course-map-description');
+        var val = currentCourse ? (currentCourse.name || '') : '';
+        if (nameText) nameText.textContent = val || '(no name)';
+        if (nameInput) nameInput.value = val;
+        val = currentCourse ? (currentCourse.description || '') : '';
+        if (descText) descText.textContent = val || '(none)';
+        if (descInput) {
+            descInput.value = val;
+            if (descInput.style.display && descInput.style.display !== 'none') resizeDescriptionTextarea();
+        }
+    }
 
     function updateCourseUI() {
         const saveBtn = document.getElementById('btn-save-course');
-        const label = document.getElementById('current-course-label');
-        if (saveBtn) saveBtn.disabled = !currentCourseId;
-        var displayName = (currentCourse && currentCourse.name && currentCourse.name.trim()) ? currentCourse.name.trim() : currentCourseId;
-        if (label) label.textContent = currentCourseId ? 'Course: ' + displayName : '';
+        const idEl = document.getElementById('course-map-id');
+        const exportBtn = document.getElementById('btn-export');
+        const delBtn = document.getElementById('btn-delete-course');
+        if (saveBtn) saveBtn.disabled = !currentCourse;
+        if (idEl) idEl.textContent = currentCourseId ? 'Course: ' + currentCourseId : '';
+        if (exportBtn) exportBtn.disabled = !currentCourseId;
+        if (delBtn) delBtn.disabled = !currentCourseId;
+        syncCourseToHeaderInputs();
+        setEditMode(isEditMode);
         updateExportButton();
     }
 
     function setCourse(id, course) {
         currentCourseId = id;
         currentCourse = course;
+        clearDirty();
+        isEditMode = false;
+        if (window.courseMappingMap && (!course || !course.geometry)) {
+            if (segmentLinesLayer) { window.courseMappingMap.removeLayer(segmentLinesLayer); segmentLinesLayer = null; }
+            if (segmentInfoIconsLayer) { window.courseMappingMap.removeLayer(segmentInfoIconsLayer); segmentInfoIconsLayer = null; }
+            if (segmentPinsLayer) { window.courseMappingMap.removeLayer(segmentPinsLayer); segmentPinsLayer = null; }
+            if (startFinishLayer) { window.courseMappingMap.removeLayer(startFinishLayer); startFinishLayer = null; }
+            if (locationsLayer) { window.courseMappingMap.removeLayer(locationsLayer); locationsLayer = null; }
+        }
         if (currentCourse && !Array.isArray(currentCourse.segment_breaks)) currentCourse.segment_breaks = [];
         if (currentCourse && !Array.isArray(currentCourse.locations)) currentCourse.locations = [];
         if (currentCourse && typeof currentCourse.segment_break_labels !== 'object') currentCourse.segment_break_labels = {};
+        if (currentCourse && typeof currentCourse.segment_break_descriptions !== 'object') currentCourse.segment_break_descriptions = {};
+        if (currentCourse && typeof currentCourse.segment_break_ids !== 'object') currentCourse.segment_break_ids = {};
+        syncCourseToHeaderInputs();
         updateCourseUI();
         updateDrawButtons();
         updateSegmentPinButton();
@@ -64,6 +156,7 @@ document.addEventListener('DOMContentLoaded', function () {
     let locationPinMode = false;
     let drawRoutingInProgress = false;
     let mapClickHandler = null;
+    var lastAddedPointCount = 0;
 
     // Snap-to-road: use our backend proxy (avoids CORS, uses OSRM driving profile).
     function fetchRouteSegment(fromLonLat, toLonLat, callback) {
@@ -80,6 +173,22 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             })
             .catch(function (err) { callback(err); });
+    }
+
+    function escapeHtml(s) {
+        if (s == null) return '';
+        var t = String(s);
+        return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function buildPopupRowsHtml(rows) {
+        var html = '<div class="course-map-popup">';
+        rows.forEach(function (r) {
+            var val = r.value != null && r.value !== '' ? String(r.value) : '(none)';
+            html += '<div class="popup-row"><span class="popup-label">' + escapeHtml(r.label) + ':</span> <span class="popup-value">' + escapeHtml(val) + '</span></div>';
+        });
+        html += '</div>';
+        return html;
     }
 
     function haversineMeters(lon1, lat1, lon2, lat2) {
@@ -121,9 +230,12 @@ document.addEventListener('DOMContentLoaded', function () {
             var from_km = cum[startIdx], to_km = cum[endIdx];
             var key = startIdx + '-' + endIdx;
             var prev = existing[key];
+            var pinLabel = (currentCourse.segment_break_labels && (currentCourse.segment_break_labels[endIdx] || currentCourse.segment_break_labels['' + endIdx] || '').trim()) || '';
+            var isLastSegment = (b >= breaks.length && endIdx === coords.length - 1);
+            var defaultLabel = pinLabel || (isLastSegment ? 'Finish' : ('Segment S' + (segs.length + 1)));
             segs.push({
                 seg_id: 'A' + (segs.length + 1),
-                seg_label: (prev && prev.seg_label) ? prev.seg_label : ('Segment A' + (segs.length + 1)),
+                seg_label: (prev && prev.seg_label) ? prev.seg_label : defaultLabel,
                 width_m: (prev && prev.width_m != null) ? prev.width_m : 3,
                 direction: (prev && prev.direction) ? prev.direction : 'uni',
                 schema: (prev && prev.schema) ? prev.schema : 'on_course_open',
@@ -141,9 +253,11 @@ document.addEventListener('DOMContentLoaded', function () {
         if (segs.length === 0 && coords.length >= 2) {
             var key0 = '0-' + (coords.length - 1);
             var prev0 = existing[key0];
+            var endIdx0 = coords.length - 1;
+            var pinLabel0 = (currentCourse.segment_break_labels && (currentCourse.segment_break_labels[endIdx0] || currentCourse.segment_break_labels['' + endIdx0] || '').trim()) || '';
             segs.push({
                 seg_id: 'A1',
-                seg_label: (prev0 && prev0.seg_label) ? prev0.seg_label : 'Segment A1',
+                seg_label: (prev0 && prev0.seg_label) ? prev0.seg_label : (pinLabel0 || 'Segment S1'),
                 width_m: (prev0 && prev0.width_m != null) ? prev0.width_m : 3,
                 direction: (prev0 && prev0.direction) ? prev0.direction : 'uni',
                 schema: (prev0 && prev0.schema) ? prev0.schema : 'on_course_open',
@@ -163,7 +277,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function updateDrawButtons() {
         const drawBtn = document.getElementById('btn-draw-line');
         const clearBtn = document.getElementById('btn-clear-line');
-        const hasCourse = !!currentCourseId && !!currentCourse;
+        const hasCourse = !!currentCourse;
         if (drawBtn) drawBtn.disabled = !hasCourse;
         if (clearBtn) clearBtn.disabled = !hasCourse || !(currentCourse && currentCourse.geometry && currentCourse.geometry.coordinates && currentCourse.geometry.coordinates.length);
         if (drawBtn && drawMode) drawBtn.classList.add('active'); else if (drawBtn) drawBtn.classList.remove('active');
@@ -171,20 +285,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function updateSegmentPinButton() {
         const btn = document.getElementById('btn-add-segment-pin');
-        const hasLine = !!(currentCourse && currentCourse.geometry && currentCourse.geometry.coordinates && currentCourse.geometry.coordinates.length >= 2);
-        if (btn) btn.disabled = !currentCourseId || !currentCourse || !hasLine;
+        if (btn) btn.disabled = !currentCourse;
         if (btn && segmentPinMode) btn.classList.add('active'); else if (btn) btn.classList.remove('active');
     }
 
     function updateUndoButton() {
         const btn = document.getElementById('btn-undo-point');
         const canUndo = !!(currentCourse && currentCourse.geometry && currentCourse.geometry.coordinates && currentCourse.geometry.coordinates.length > 0);
-        if (btn) btn.disabled = !currentCourseId || !currentCourse || !canUndo;
+        if (btn) btn.disabled = !currentCourse || !canUndo;
     }
 
     function updateAddLocationButton() {
         const btn = document.getElementById('btn-add-location');
-        if (btn) btn.disabled = !currentCourseId || !currentCourse;
+        if (btn) btn.disabled = !currentCourse;
         if (btn && locationPinMode) btn.classList.add('active'); else if (btn) btn.classList.remove('active');
     }
 
@@ -196,7 +309,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function undoLastPoint() {
         if (!currentCourse || !currentCourse.geometry || !currentCourse.geometry.coordinates || currentCourse.geometry.coordinates.length === 0) return;
-        currentCourse.geometry.coordinates.pop();
+        var coords = currentCourse.geometry.coordinates;
+        var toRemove = (lastAddedPointCount > 0 && lastAddedPointCount < coords.length) ? lastAddedPointCount : 1;
+        for (var i = 0; i < toRemove; i++) coords.pop();
+        lastAddedPointCount = 0;
         if (currentCourse.segment_breaks) {
             var len = currentCourse.geometry.coordinates.length;
             currentCourse.segment_breaks = currentCourse.segment_breaks.filter(function (idx) { return idx > 0 && idx < len; });
@@ -210,6 +326,7 @@ document.addEventListener('DOMContentLoaded', function () {
         renderSegmentPins();
         renderSegmentsList();
         renderStartFinishIcons();
+        setDirty();
         updateDrawButtons();
         updateSegmentPinButton();
         updateUndoButton();
@@ -219,9 +336,10 @@ document.addEventListener('DOMContentLoaded', function () {
     function openSegmentAnnotationPopup(segIdx, latlng) {
         var s = currentCourse.segments[segIdx];
         if (!s) return;
+        var segId = 'S' + (segIdx + 1);
         var content = document.createElement('div');
         content.style.minWidth = '240px';
-        content.innerHTML = '<strong>Segment ' + (s.seg_id || '') + '</strong><br/>';
+        content.innerHTML = '<strong>Segment ' + segId + '</strong><br/>';
         function addLabel(text) { var l = document.createElement('label'); l.textContent = text; content.appendChild(l); }
         function addInput(attr, val) {
             var el = document.createElement('input');
@@ -274,7 +392,7 @@ document.addEventListener('DOMContentLoaded', function () {
         content.appendChild(btnSave);
         var pop = L.popup().setContent(content).setLatLng(latlng).openOn(window.courseMappingMap);
         btnSave.onclick = function () {
-            s.seg_label = (inputLabel.value && inputLabel.value.trim()) ? inputLabel.value.trim() : (s.seg_id || '');
+            s.seg_label = (inputLabel.value && inputLabel.value.trim()) ? inputLabel.value.trim() : segId;
             s.width_m = parseFloat(inputWidth.value);
             if (isNaN(s.width_m) || s.width_m < 0) s.width_m = 3;
             s.schema = selSchema.value || 'on_course_open';
@@ -287,6 +405,7 @@ document.addEventListener('DOMContentLoaded', function () {
             renderSegmentInfoIcons();
             renderSegmentPins();
             renderSegmentsList();
+            setDirty();
             updateCourseUI();
         };
     }
@@ -299,8 +418,8 @@ document.addEventListener('DOMContentLoaded', function () {
         return c ? [c[1], c[0]] : null;
     }
 
-    function isSegmentAnnotated(seg) {
-        var defaultLabel = 'Segment ' + (seg.seg_id || '');
+    function isSegmentAnnotated(seg, segIdx) {
+        var defaultLabel = 'Segment S' + ((segIdx != null ? segIdx + 1 : 1));
         if ((seg.seg_label && seg.seg_label.trim() && seg.seg_label !== defaultLabel)) return true;
         if (seg.description && seg.description.trim()) return true;
         if (seg.width_m != null && seg.width_m !== 3) return true;
@@ -319,7 +438,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var coords = (currentCourse.geometry && currentCourse.geometry.coordinates) || [];
         segmentInfoIconsLayer = L.layerGroup();
         currentCourse.segments.forEach(function (seg, segIdx) {
-            if (!isSegmentAnnotated(seg)) return;
+            if (!isSegmentAnnotated(seg, segIdx)) return;
             var lat = seg.info_icon_lat;
             var lon = seg.info_icon_lon;
             if (lat == null || lon == null) {
@@ -336,7 +455,15 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             var m = L.marker([lat, lon], { icon: icon, draggable: true });
             m._segmentIndex = segIdx;
-            m.bindTooltip('Segment info (drag to move)', { permanent: false, direction: 'top' });
+            var seg = currentCourse.segments[segIdx];
+            var segId = 'S' + (segIdx + 1);
+            var tipHtml = buildPopupRowsHtml([
+                { label: 'Seg ID', value: segId },
+                { label: 'Label', value: seg.seg_label },
+                { label: 'Description', value: seg.description },
+                { label: 'Events', value: (seg.events || []).join(', ') || '(none)' }
+            ]) + '<div class="popup-row" style="font-size:0.75rem;color:#7f8c8d;">(drag to move)</div>';
+            m.bindTooltip(tipHtml, { permanent: false, direction: 'top', className: 'course-map-tooltip' });
             m.on('dragend', function () {
                 var ll = m.getLatLng();
                 var segEl = currentCourse.segments[m._segmentIndex];
@@ -344,41 +471,29 @@ document.addEventListener('DOMContentLoaded', function () {
                     segEl.info_icon_lat = ll.lat;
                     segEl.info_icon_lon = ll.lng;
                     renderSegmentInfoIcons();
+                    setDirty();
                     updateCourseUI();
                 }
             });
             m.on('click', function (e) {
                 if (locationPinMode) return;
                 L.DomEvent.stopPropagation(e);
-                if (segmentPinMode) {
-                    var coords = (currentCourse.geometry && currentCourse.geometry.coordinates) || [];
-                    var ll = e.latlng || m.getLatLng();
-                    var idx = closestVertexIndex(ll, coords);
-                    if (idx > 0 && idx < coords.length - 1) {
-                        if (!Array.isArray(currentCourse.segment_breaks)) currentCourse.segment_breaks = [];
-                        if (currentCourse.segment_breaks.indexOf(idx) < 0) {
-                            currentCourse.segment_breaks.push(idx);
-                            currentCourse.segment_breaks.sort(function (a, b) { return a - b; });
-                            if (!currentCourse.segment_break_labels) currentCourse.segment_break_labels = {};
-                            var label = window.prompt('Segment pin label (optional)', '');
-                            if (label !== null) currentCourse.segment_break_labels[idx] = (label && label.trim()) ? label.trim() : '';
-                            syncSegmentsFromBreaks();
-                            renderCourseLine();
-                            renderSegmentPins();
-                            renderSegmentsList();
-                            updateCourseUI();
-                        }
-                    }
-                    return;
-                }
+                if (segmentPinMode) return;
                 var s = currentCourse.segments[m._segmentIndex];
                 if (!s) return;
+                var evts = (s.events || []).join(', ') || '(none)';
+                var segId = 'S' + (m._segmentIndex + 1);
                 var info = document.createElement('div');
-                info.style.minWidth = '200px';
-                info.innerHTML = '<strong>' + (s.seg_id || '') + ': ' + (s.seg_label || '') + '</strong><br/>' +
-                    'Width: ' + (s.width_m != null ? s.width_m : 3) + ' m<br/>Schema: ' + (s.schema || 'on_course_open') + '<br/>Direction: ' + (s.direction || 'uni') + '<br/>' +
-                    (s.description ? 'Description: ' + s.description + '<br/>' : '') +
-                    'From ' + (s.from_km != null ? s.from_km : '') + ' to ' + (s.to_km != null ? s.to_km : '') + ' km<br/>';
+                info.innerHTML = buildPopupRowsHtml([
+                    { label: 'Seg ID', value: segId },
+                    { label: 'Label', value: s.seg_label },
+                    { label: 'Description', value: s.description },
+                    { label: 'Width', value: (s.width_m != null ? s.width_m : 3) + ' m' },
+                    { label: 'Schema', value: s.schema || 'on_course_open' },
+                    { label: 'Direction', value: s.direction || 'uni' },
+                    { label: 'Events', value: evts },
+                    { label: 'From–To (km)', value: (s.from_km != null ? s.from_km : '') + ' – ' + (s.to_km != null ? s.to_km : '') }
+                ]);
                 var btnEdit = document.createElement('button');
                 btnEdit.type = 'button';
                 btnEdit.textContent = 'Edit';
@@ -470,6 +585,93 @@ document.addEventListener('DOMContentLoaded', function () {
         return (currentCourse.segment_break_labels[idx] || currentCourse.segment_break_labels['' + idx] || '').trim();
     }
 
+    function getPinLabelForIndex(idx, coordsLen) {
+        if (idx <= 0) return 'Start';
+        if (coordsLen && idx >= coordsLen - 1) return 'Finish';
+        return getSegmentBreakLabel(idx) || '';
+    }
+
+    function getSegmentBreakDescription(idx) {
+        if (!currentCourse || !currentCourse.segment_break_descriptions) return '';
+        return (currentCourse.segment_break_descriptions[idx] || currentCourse.segment_break_descriptions['' + idx] || '').trim();
+    }
+
+    function getSegmentBreakId(idx) {
+        if (!currentCourse || !currentCourse.segment_break_ids) return idx;
+        var id = currentCourse.segment_break_ids[idx] || currentCourse.segment_break_ids['' + idx];
+        return id != null ? id : idx;
+    }
+
+    function nextSegmentPinId() {
+        if (!currentCourse || !currentCourse.segment_break_ids) return 1;
+        var ids = Object.values(currentCourse.segment_break_ids);
+        var max = 0;
+        ids.forEach(function (v) { var n = parseInt(v, 10); if (!isNaN(n) && n > max) max = n; });
+        return max + 1;
+    }
+
+    function nextLocationId() {
+        if (!currentCourse || !currentCourse.locations || currentCourse.locations.length === 0) return 1;
+        var max = 0;
+        currentCourse.locations.forEach(function (loc) {
+            var v = loc.id;
+            var n = typeof v === 'number' ? v : parseInt(String(v).replace(/^loc_/, ''), 10);
+            if (!isNaN(n) && n > max) max = n;
+        });
+        return max + 1;
+    }
+
+    function openSegmentPinFormTile(idx, latlng, onSave) {
+        var label = getSegmentBreakLabel(idx);
+        var desc = getSegmentBreakDescription(idx);
+        var content = document.createElement('div');
+        content.style.minWidth = '220px';
+        var lblLabel = document.createElement('label');
+        lblLabel.textContent = 'Label';
+        content.appendChild(lblLabel);
+        var inputLabel = document.createElement('input');
+        inputLabel.type = 'text';
+        inputLabel.placeholder = 'Segment boundary label';
+        inputLabel.value = label;
+        inputLabel.style.display = 'block';
+        inputLabel.style.width = '100%';
+        inputLabel.style.marginBottom = '8px';
+        inputLabel.style.boxSizing = 'border-box';
+        content.appendChild(inputLabel);
+        var lblDesc = document.createElement('label');
+        lblDesc.textContent = 'Description';
+        content.appendChild(lblDesc);
+        var inputDesc = document.createElement('textarea');
+        inputDesc.rows = 2;
+        inputDesc.placeholder = 'Optional description';
+        inputDesc.value = desc;
+        inputDesc.style.display = 'block';
+        inputDesc.style.width = '100%';
+        inputDesc.style.marginBottom = '8px';
+        inputDesc.style.boxSizing = 'border-box';
+        content.appendChild(inputDesc);
+        var btnSave = document.createElement('button');
+        btnSave.type = 'button';
+        btnSave.textContent = 'Save';
+        btnSave.style.marginRight = '6px';
+        var btnCancel = document.createElement('button');
+        btnCancel.type = 'button';
+        btnCancel.textContent = 'Cancel';
+        content.appendChild(btnSave);
+        content.appendChild(btnCancel);
+        var pop = L.popup().setContent(content).setLatLng(latlng).openOn(window.courseMappingMap);
+        btnSave.onclick = function () {
+            if (!currentCourse.segment_break_labels) currentCourse.segment_break_labels = {};
+            if (!currentCourse.segment_break_descriptions) currentCourse.segment_break_descriptions = {};
+            currentCourse.segment_break_labels[idx] = (inputLabel.value && inputLabel.value.trim()) ? inputLabel.value.trim() : '';
+            currentCourse.segment_break_descriptions[idx] = (inputDesc.value && inputDesc.value.trim()) ? inputDesc.value.trim() : '';
+            window.courseMappingMap.closePopup();
+            setDirty();
+            if (onSave) onSave();
+        };
+        btnCancel.onclick = function () { window.courseMappingMap.closePopup(); };
+    }
+
     function renderSegmentPins() {
         if (!window.courseMappingMap) return;
         if (segmentPinsLayer) {
@@ -492,7 +694,14 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             var m = L.marker([c[1], c[0]], { icon: squareIcon, draggable: true });
             m._segmentBreakIndex = idx;
-            m.bindTooltip(label || 'Segment boundary (drag to move)', { permanent: false, direction: 'top' });
+            var desc = getSegmentBreakDescription(idx);
+            var pinId = getSegmentBreakId(idx);
+            var tipHtml = buildPopupRowsHtml([
+                { label: 'ID', value: pinId },
+                { label: 'Label', value: label },
+                { label: 'Description', value: desc }
+            ]) + '<div class="popup-row" style="font-size:0.75rem;color:#7f8c8d;">Segment boundary (drag to move)</div>';
+            m.bindTooltip(tipHtml, { permanent: false, direction: 'top', className: 'course-map-tooltip' });
             m.on('dragend', function () {
                 var ll = m.getLatLng();
                 currentCourse.geometry.coordinates[idx] = [ll.lng, ll.lat];
@@ -500,42 +709,55 @@ document.addEventListener('DOMContentLoaded', function () {
                 renderSegmentPins();
                 syncSegmentsFromBreaks();
                 renderSegmentsList();
+                setDirty();
                 updateCourseUI();
             });
             m.on('click', function (e) {
                 L.DomEvent.stopPropagation(e);
                 var i = e.target._segmentBreakIndex;
-                var name = getSegmentBreakLabel(i) || 'Segment boundary';
+                var pinId = getSegmentBreakId(i);
+                var label = getSegmentBreakLabel(i);
+                var desc = getSegmentBreakDescription(i);
                 var content = document.createElement('div');
-                content.innerHTML = '<strong>' + (name || 'Segment boundary') + '</strong><br/><span style="color:#666;">Segment boundary</span><br/>';
+                content.innerHTML = buildPopupRowsHtml([
+                    { label: 'ID', value: pinId },
+                    { label: 'Label', value: label },
+                    { label: 'Description', value: desc }
+                ]);
+                content.classList.add('course-map-popup-wrap');
+                var btnWrap = document.createElement('div');
+                btnWrap.style.marginTop = '0.5rem';
                 var btnEdit = document.createElement('button');
                 btnEdit.type = 'button';
                 btnEdit.textContent = 'Edit';
                 btnEdit.style.marginRight = '6px';
+                btnEdit.style.marginTop = '6px';
                 var btnDel = document.createElement('button');
                 btnDel.type = 'button';
                 btnDel.textContent = 'Delete';
-                content.appendChild(btnEdit);
-                content.appendChild(btnDel);
+                btnWrap.appendChild(btnEdit);
+                btnWrap.appendChild(btnDel);
+                content.appendChild(btnWrap);
                 var pop = L.popup().setContent(content).setLatLng(e.latlng).openOn(window.courseMappingMap);
                 btnEdit.onclick = function () {
-                    var newLabel = window.prompt('Segment pin label', name || '');
-                    if (newLabel !== null && currentCourse.segment_break_labels) {
-                        currentCourse.segment_break_labels[i] = newLabel.trim();
-                        window.courseMappingMap.closePopup();
+                    window.courseMappingMap.closePopup();
+                    openSegmentPinFormTile(i, e.latlng, function () {
                         renderSegmentPins();
                         renderSegmentsList();
                         updateCourseUI();
-                    }
+                    });
                 };
                 btnDel.onclick = function () {
                     if (!window.confirm('Remove this segment boundary? This cannot be undone.')) return;
                     window.courseMappingMap.closePopup();
                     currentCourse.segment_breaks = currentCourse.segment_breaks.filter(function (x) { return x !== i; });
                     if (currentCourse.segment_break_labels) delete currentCourse.segment_break_labels[i];
+                    if (currentCourse.segment_break_descriptions) delete currentCourse.segment_break_descriptions[i];
+                    if (currentCourse.segment_break_ids) delete currentCourse.segment_break_ids[i];
                     syncSegmentsFromBreaks();
                     renderSegmentPins();
                     renderSegmentsList();
+                    setDirty();
                     updateCourseUI();
                 };
             });
@@ -551,7 +773,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var tbody = document.getElementById('segments-tbody');
         if (!card || !tbody) return;
         if (!currentCourse || !currentCourse.segments || currentCourse.segments.length === 0) {
-            card.style.display = currentCourseId && currentCourse ? 'block' : 'none';
+            card.style.display = currentCourse ? 'block' : 'none';
             if (empty) empty.style.display = 'block';
             if (wrap) wrap.style.display = 'none';
             return;
@@ -560,10 +782,19 @@ document.addEventListener('DOMContentLoaded', function () {
         if (empty) empty.style.display = 'none';
         if (wrap) wrap.style.display = 'block';
         tbody.innerHTML = '';
-        currentCourse.segments.forEach(function (seg) {
+        var coords = (currentCourse.geometry && currentCourse.geometry.coordinates) || [];
+        var coordsLen = coords.length;
+        currentCourse.segments.forEach(function (seg, segIdx) {
             var len = (seg.to_km - seg.from_km);
+            var startIdx = seg.start_index != null ? seg.start_index : 0;
+            var endIdx = seg.end_index != null ? seg.end_index : (coordsLen ? coordsLen - 1 : 0);
+            var segId = 'S' + (segIdx + 1);
+            var pinStart = getPinLabelForIndex(startIdx, coordsLen);
+            var pinEnd = getPinLabelForIndex(endIdx, coordsLen);
+            var displayLabel = (seg.seg_label && seg.seg_label.trim()) ? seg.seg_label : (pinEnd || '');
+            var width = (seg.width_m != null && seg.width_m !== '') ? seg.width_m : 3;
             var tr = document.createElement('tr');
-            tr.innerHTML = '<td>' + (seg.seg_id || '') + '</td><td>' + (seg.seg_label || '') + '</td><td>' + seg.from_km + '</td><td>' + seg.to_km + '</td><td>' + Math.round(len * 100) / 100 + '</td>';
+            tr.innerHTML = '<td>' + segId + '</td><td>' + escapeHtml(pinStart) + '</td><td>' + escapeHtml(pinEnd) + '</td><td>' + escapeHtml(displayLabel || '') + '</td><td>' + width + '</td><td>' + seg.from_km + '</td><td>' + seg.to_km + '</td><td>' + Math.round(len * 100) / 100 + '</td>';
             tbody.appendChild(tr);
         });
     }
@@ -595,14 +826,21 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             var m = L.marker([lat, lon], { icon: locIcon, draggable: true });
             m._locationIndex = i;
-            var tip = (loc.loc_label || getLocationTypeLabel(loc.loc_type) || 'Location');
-            m.bindTooltip(tip + ' (drag to move)', { permanent: false, direction: 'top' });
+            var locId = loc.id != null ? String(loc.id) : (i + 1);
+            var tipHtml = buildPopupRowsHtml([
+                { label: 'ID', value: locId },
+                { label: 'Label', value: loc.loc_label || getLocationTypeLabel(loc.loc_type) || 'Location' },
+                { label: 'Type', value: getLocationTypeLabel(loc.loc_type) },
+                { label: 'Description', value: loc.loc_description || '' }
+            ]) + '<div class="popup-row" style="font-size:0.75rem;color:#7f8c8d;">(drag to move)</div>';
+            m.bindTooltip(tipHtml, { permanent: false, direction: 'top', className: 'course-map-tooltip' });
             m.on('dragend', function () {
                 var ll = m.getLatLng();
                 loc.lat = ll.lat;
                 loc.lon = ll.lng;
                 renderLocationPins();
                 renderLocationsList();
+                setDirty();
                 updateCourseUI();
             });
             m.on('click', function (e) {
@@ -610,10 +848,20 @@ document.addEventListener('DOMContentLoaded', function () {
                 var idx = e.target._locationIndex;
                 var locEl = currentCourse.locations[idx];
                 if (!locEl) return;
-                var name = locEl.loc_label || getLocationTypeLabel(locEl.loc_type) || 'Location';
-                var typeLabel = getLocationTypeLabel(locEl.loc_type);
+            var locId = locEl.id != null ? String(locEl.id) : (idx + 1);
+            var name = locEl.loc_label || getLocationTypeLabel(locEl.loc_type) || 'Location';
+            var typeLabel = getLocationTypeLabel(locEl.loc_type);
+            var desc = locEl.loc_description || '';
                 var content = document.createElement('div');
-                content.innerHTML = '<strong>' + name + '</strong><br/><span style="color:#666;">' + typeLabel + '</span><br/>';
+                content.innerHTML = buildPopupRowsHtml([
+                    { label: 'ID', value: locId },
+                    { label: 'Label', value: name },
+                    { label: 'Type', value: typeLabel },
+                    { label: 'Description', value: desc }
+                ]);
+                content.classList.add('course-map-popup-wrap');
+                var btnWrap = document.createElement('div');
+                btnWrap.style.marginTop = '0.5rem';
                 var btnEdit = document.createElement('button');
                 btnEdit.type = 'button';
                 btnEdit.textContent = 'Edit';
@@ -621,21 +869,74 @@ document.addEventListener('DOMContentLoaded', function () {
                 var btnDel = document.createElement('button');
                 btnDel.type = 'button';
                 btnDel.textContent = 'Delete';
-                content.appendChild(btnEdit);
-                content.appendChild(btnDel);
+                btnWrap.appendChild(btnEdit);
+                btnWrap.appendChild(btnDel);
+                content.appendChild(btnWrap);
                 var pop = L.popup().setContent(content).setLatLng(e.latlng).openOn(window.courseMappingMap);
                 btnEdit.onclick = function () {
-                    var newType = window.prompt('Type: aid, course, official, traffic, water', locEl.loc_type || 'course');
-                    if (newType !== null) {
-                        var t = (newType && newType.trim()) ? newType.trim().toLowerCase() : 'course';
-                        if (['aid', 'course', 'official', 'traffic', 'water'].indexOf(t) >= 0) locEl.loc_type = t;
-                    }
-                    var newLabel = window.prompt('Label', locEl.loc_label || '');
-                    if (newLabel !== null) locEl.loc_label = (newLabel && newLabel.trim()) ? newLabel.trim() : '';
                     window.courseMappingMap.closePopup();
-                    renderLocationPins();
-                    renderLocationsList();
-                    updateCourseUI();
+                    var editContent = document.createElement('div');
+                    editContent.style.minWidth = '180px';
+                    var lblType = document.createElement('label');
+                    lblType.textContent = 'Type';
+                    editContent.appendChild(lblType);
+                    var sel = document.createElement('select');
+                    sel.style.display = 'block';
+                    sel.style.width = '100%';
+                    sel.style.marginBottom = '8px';
+                    LOCATION_TYPES.forEach(function (t) {
+                        var opt = document.createElement('option');
+                        opt.value = t.value;
+                        opt.textContent = t.label;
+                        if ((locEl.loc_type || 'course') === t.value) opt.selected = true;
+                        sel.appendChild(opt);
+                    });
+                    editContent.appendChild(sel);
+                    var lblLabel = document.createElement('label');
+                    lblLabel.textContent = 'Label (optional)';
+                    editContent.appendChild(lblLabel);
+                    var input = document.createElement('input');
+                    input.type = 'text';
+                    input.placeholder = 'Label';
+                    input.value = locEl.loc_label || '';
+                    input.style.display = 'block';
+                    input.style.width = '100%';
+                    input.style.marginBottom = '8px';
+                    input.style.boxSizing = 'border-box';
+                    editContent.appendChild(input);
+                    var lblDesc = document.createElement('label');
+                    lblDesc.textContent = 'Description (optional)';
+                    editContent.appendChild(lblDesc);
+                    var inputDesc = document.createElement('textarea');
+                    inputDesc.rows = 2;
+                    inputDesc.placeholder = 'Description';
+                    inputDesc.value = locEl.loc_description || '';
+                    inputDesc.style.display = 'block';
+                    inputDesc.style.width = '100%';
+                    inputDesc.style.marginBottom = '8px';
+                    inputDesc.style.boxSizing = 'border-box';
+                    editContent.appendChild(inputDesc);
+                    var btnSave = document.createElement('button');
+                    btnSave.type = 'button';
+                    btnSave.textContent = 'Save';
+                    btnSave.style.marginRight = '6px';
+                    var btnCancel = document.createElement('button');
+                    btnCancel.type = 'button';
+                    btnCancel.textContent = 'Cancel';
+                    editContent.appendChild(btnSave);
+                    editContent.appendChild(btnCancel);
+                    var editPop = L.popup().setContent(editContent).setLatLng(e.latlng).openOn(window.courseMappingMap);
+                    btnSave.onclick = function () {
+                        locEl.loc_type = sel.value || 'course';
+                        locEl.loc_label = (input.value && input.value.trim()) ? input.value.trim() : '';
+                        locEl.loc_description = (inputDesc.value && inputDesc.value.trim()) ? inputDesc.value.trim() : '';
+                        window.courseMappingMap.closePopup();
+                        renderLocationPins();
+                        renderLocationsList();
+                        setDirty();
+                        updateCourseUI();
+                    };
+                    btnCancel.onclick = function () { window.courseMappingMap.closePopup(); };
                 };
                 btnDel.onclick = function () {
                     if (!window.confirm('Remove this location? This cannot be undone.')) return;
@@ -643,6 +944,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     currentCourse.locations.splice(idx, 1);
                     renderLocationPins();
                     renderLocationsList();
+                    setDirty();
                     updateCourseUI();
                 };
             });
@@ -658,7 +960,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var tbody = document.getElementById('locations-tbody');
         if (!card || !tbody) return;
         if (!currentCourse || !currentCourse.locations || currentCourse.locations.length === 0) {
-            card.style.display = currentCourseId && currentCourse ? 'block' : 'none';
+            card.style.display = currentCourse ? 'block' : 'none';
             if (empty) empty.style.display = 'block';
             if (wrap) wrap.style.display = 'none';
             return;
@@ -682,6 +984,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     currentCourse.locations.splice(idx, 1);
                     renderLocationPins();
                     renderLocationsList();
+                    setDirty();
                     updateCourseUI();
                 }
             });
@@ -772,56 +1075,95 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // ——— Course API ———
         const btnNew = document.getElementById('btn-new-course');
-        const btnOpen = document.getElementById('btn-open-course');
-        const courseList = document.getElementById('course-list');
-        const btnLoad = document.getElementById('btn-load-course');
+        const courseTbody = document.getElementById('course-list-tbody');
+        const courseTable = document.getElementById('course-list-table');
         const btnSave = document.getElementById('btn-save-course');
+        let coursesListData = [];
+        let courseSortColumn = 'updated';
+        let courseSortDirection = 'desc';
 
-        if (btnNew) {
-            btnNew.addEventListener('click', async function () {
-                try {
-                    const res = await fetch('/api/courses', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({})
-                    });
-                    const data = await res.json();
-                    if (!res.ok) throw new Error(data.detail || res.statusText);
-                    if (data.ok && data.course) {
-                        setCourse(data.id, data.course);
-                        console.log('Created course:', data.id);
-                    }
-                } catch (e) {
-                    console.error('Create course failed:', e);
-                    alert('Failed to create course: ' + e.message);
+        function confirmUnsavedChanges(callback) {
+            if (isDirty()) {
+                if (!window.confirm('You have unsaved changes. Discard them and continue?')) return;
+            }
+            if (callback) callback();
+        }
+
+        function truncate(str, len) {
+            if (!str) return '';
+            var s = String(str).trim();
+            return s.length <= len ? s : s.slice(0, len) + '…';
+        }
+
+        function formatSavedOn(iso) {
+            if (!iso) return '—';
+            try {
+                var d = new Date(iso);
+                var m = ('0' + (d.getMonth() + 1)).slice(-2);
+                var day = ('0' + d.getDate()).slice(-2);
+                var h = ('0' + d.getHours()).slice(-2);
+                var min = ('0' + d.getMinutes()).slice(-2);
+                return m + '-' + day + ' ' + h + ':' + min;
+            } catch (e) { return '—'; }
+        }
+
+        function sortCourses(list) {
+            return list.slice().sort(function (a, b) {
+                var av = a[courseSortColumn];
+                var bv = b[courseSortColumn];
+                if (courseSortColumn === 'updated') {
+                    av = av ? new Date(av).getTime() : 0;
+                    bv = bv ? new Date(bv).getTime() : 0;
+                    return courseSortDirection === 'desc' ? (bv - av) : (av - bv);
                 }
+                if (typeof av === 'number' && typeof bv === 'number') return courseSortDirection === 'asc' ? (av - bv) : (bv - av);
+                av = (av != null ? String(av) : '');
+                bv = (bv != null ? String(bv) : '');
+                return courseSortDirection === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
             });
         }
 
-        if (btnOpen) {
-            btnOpen.addEventListener('click', async function () {
-                try {
-                    const res = await fetch('/api/courses');
-                    const data = await res.json();
-                    if (!res.ok) throw new Error(data.detail || res.statusText);
-                    if (!data.ok || !data.courses) return;
-                    if (courseList) {
-                        courseList.innerHTML = '<option value="">Select a course...</option>';
-                        data.courses.forEach(function (c) {
-                            const opt = document.createElement('option');
-                            opt.value = c.id;
-                            var displayName = (c.name && c.name.trim()) ? c.name.trim() : c.id;
-                            opt.textContent = displayName + (c.updated ? ' (' + c.updated.slice(0, 10) + ')' : '');
-                            courseList.appendChild(opt);
-                        });
-                        courseList.style.display = 'inline-block';
-                    }
-                    if (btnLoad) btnLoad.style.display = 'inline-block';
-                } catch (e) {
-                    console.error('List courses failed:', e);
-                    alert('Failed to list courses: ' + e.message);
-                }
+        function renderCourseTable() {
+            if (!courseTbody) return;
+            var sorted = sortCourses(coursesListData);
+            if (sorted.length === 0) {
+                courseTbody.innerHTML = '<tr><td colspan="6" class="placeholder">No courses yet. Click New course to create one.</td></tr>';
+                return;
+            }
+            courseTbody.innerHTML = '';
+            sorted.forEach(function (c) {
+                var tr = document.createElement('tr');
+                tr.className = 'course-row';
+                tr.dataset.courseId = c.id;
+                if (c.id === currentCourseId) tr.classList.add('selected');
+                tr.innerHTML = '<td>' + escapeHtml(truncate(c.name || '(Untitled)', 30)) + '</td><td>' + escapeHtml(truncate(c.description || '', 30)) + '</td><td>' + formatSavedOn(c.updated) + '</td><td style="text-align:right">' + (c.distance_km != null ? c.distance_km.toFixed(2) + ' km' : '—') + '</td><td style="text-align:center">' + (c.segments_count != null ? c.segments_count : 0) + '</td><td style="text-align:center">' + (c.locations_count != null ? c.locations_count : 0) + '</td>';
+                tr.addEventListener('click', function () {
+                    confirmUnsavedChanges(function () { loadCourseById(c.id); });
+                });
+                courseTbody.appendChild(tr);
             });
+        }
+
+        function loadCourseList() {
+            fetch('/api/courses')
+                .then(function (res) { return res.json(); })
+                .then(function (data) {
+                    if (!data.ok || !data.courses) {
+                        coursesListData = [];
+                    } else {
+                        coursesListData = data.courses;
+                    }
+                    renderCourseTable();
+                    if (coursesListData.length > 0 && !currentCourseId) {
+                        var first = sortCourses(coursesListData)[0];
+                        if (first) loadCourseById(first.id);
+                    }
+                })
+                .catch(function (e) {
+                    console.error('List courses failed:', e);
+                    coursesListData = [];
+                    if (courseTbody) courseTbody.innerHTML = '<tr><td colspan="6" class="placeholder">Failed to load courses.</td></tr>';
+                });
         }
 
         function loadCourseById(id) {
@@ -831,8 +1173,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 .then(function (data) {
                     if (data.ok && data.course) {
                         setCourse(data.course.id, data.course);
-                        if (courseList) courseList.style.display = 'none';
-                        if (btnLoad) btnLoad.style.display = 'none';
+                        renderCourseTable();
                         console.log('Loaded course:', data.course.id);
                     }
                 })
@@ -842,21 +1183,92 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
         }
 
-        if (btnLoad) {
-            btnLoad.addEventListener('click', function () {
-                if (courseList && courseList.value) loadCourseById(courseList.value);
+        if (courseTable && courseTable.querySelectorAll('.table-sortable').length) {
+            courseTable.querySelectorAll('.table-sortable').forEach(function (th) {
+                th.addEventListener('click', function () {
+                    var col = th.getAttribute('data-sort');
+                    if (!col) return;
+                    if (courseSortColumn === col) courseSortDirection = courseSortDirection === 'asc' ? 'desc' : 'asc';
+                    else { courseSortColumn = col; courseSortDirection = 'desc'; }
+                    courseTable.querySelectorAll('.table-sortable-indicator').forEach(function (ind) {
+                        ind.textContent = '↕';
+                    });
+                    var ind = th.querySelector('.table-sortable-indicator');
+                    if (ind) ind.textContent = courseSortDirection === 'asc' ? '↑' : '↓';
+                    renderCourseTable();
+                });
             });
         }
 
+        if (btnNew) {
+            btnNew.addEventListener('click', function () {
+                confirmUnsavedChanges(function () {
+                    setCourse(null, blankCourse());
+                    renderCourseTable();
+                });
+            });
+        }
+
+        var btnDelete = document.getElementById('btn-delete-course');
+        if (btnDelete) {
+            btnDelete.addEventListener('click', function () {
+                if (!currentCourseId) return;
+                if (!window.confirm('Delete this course? This action cannot be undone.')) return;
+                if (!window.confirm('Are you sure? The course folder and all files will be permanently deleted.')) return;
+                fetch('/api/courses/' + encodeURIComponent(currentCourseId), { method: 'DELETE' })
+                    .then(function (res) { return res.json(); })
+                    .then(function (data) {
+                        if (data.ok) {
+                            setCourse(null, blankCourse());
+                            loadCourseList();
+                        } else alert('Delete failed');
+                    })
+                    .catch(function (e) {
+                        alert('Delete failed: ' + e.message);
+                    });
+            });
+        }
+
+        var btnEdit = document.getElementById('btn-edit-course');
+        if (btnEdit) {
+            btnEdit.addEventListener('click', function () {
+                if (isEditMode) {
+                    if (isDirty() && !window.confirm('Discard unsaved changes?')) return;
+                    clearDirty();
+                    setEditMode(false);
+                    syncCourseToHeaderInputs();
+                } else {
+                    setEditMode(true);
+                }
+            });
+        }
+
+        var nameInput = document.getElementById('course-map-name');
+        var descInput = document.getElementById('course-map-description');
+        if (nameInput) nameInput.addEventListener('input', function () { if (currentCourse) setDirty(); });
+        if (descInput) descInput.addEventListener('input', function () {
+            if (currentCourse) setDirty();
+            resizeDescriptionTextarea();
+        });
+
         if (btnSave) {
             btnSave.addEventListener('click', async function () {
-                if (!currentCourseId || !currentCourse) return;
-                var currentName = (currentCourse.name && currentCourse.name.trim()) ? currentCourse.name.trim() : '';
-                var name = window.prompt('Course name (shown in list)', currentName || '');
-                if (name === null) return;
-                currentCourse.name = (name && name.trim()) ? name.trim() : '';
+                if (!currentCourse) return;
+                var n = nameInput ? String(nameInput.value || '').trim().slice(0, 255) : '';
+                var d = descInput ? String(descInput.value || '').trim().slice(0, 255) : '';
+                currentCourse.name = n;
+                currentCourse.description = d;
                 try {
-                    const res = await fetch('/api/courses/' + encodeURIComponent(currentCourseId), {
+                    var courseIdToSave = currentCourseId;
+                    if (!courseIdToSave) {
+                        var createRes = await fetch('/api/courses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+                        var createData = await createRes.json();
+                        if (!createRes.ok) throw new Error(createData.detail || createRes.statusText);
+                        if (!createData.ok || !createData.id) throw new Error('Failed to create course');
+                        courseIdToSave = createData.id;
+                        currentCourse.id = courseIdToSave;
+                    }
+                    const res = await fetch('/api/courses/' + encodeURIComponent(courseIdToSave), {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ course: currentCourse })
@@ -864,10 +1276,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     const data = await res.json();
                     if (!res.ok) throw new Error(data.detail || res.statusText);
                     if (data.ok && data.course) {
-                        currentCourse = data.course;
-                        updateCourseUI();
-                        updateExportButton();
-                        console.log('Saved course:', currentCourseId, currentCourse.name || '(no name)');
+                        setCourse(data.course.id, data.course);
+                        loadCourseList();
+                        console.log('Saved course:', data.course.id, data.course.name || '(no name)');
                     }
                 } catch (e) {
                     console.error('Save course failed:', e);
@@ -895,26 +1306,32 @@ document.addEventListener('DOMContentLoaded', function () {
                 var snapEl = document.getElementById('snap-to-road');
                 var coords = currentCourse.geometry.coordinates;
                 var toPoint = [e.latlng.lng, e.latlng.lat];
-                if (snapEl && snapEl.checked && coords.length >= 1) {
+                if (snapEl && snapEl.classList && snapEl.classList.contains('active') && coords.length >= 1) {
                     drawRoutingInProgress = true;
                     fetchRouteSegment(coords[coords.length - 1], toPoint, function (err, routeCoords) {
                         drawRoutingInProgress = false;
                         if (!err && routeCoords && routeCoords.length > 1) {
+                            var before = coords.length;
                             for (var i = 1; i < routeCoords.length; i++) coords.push(routeCoords[i]);
+                            lastAddedPointCount = coords.length - before;
                         } else {
                             coords.push(toPoint);
+                            lastAddedPointCount = 1;
                         }
                         syncSegmentsFromBreaks();
                         renderCourseLine();
                         renderStartFinishIcons();
+                        setDirty();
                         updateDrawButtons();
                         updateUndoButton();
                     });
                 } else {
                     coords.push(toPoint);
+                    lastAddedPointCount = 1;
                     syncSegmentsFromBreaks();
                     renderCourseLine();
                     renderStartFinishIcons();
+                    setDirty();
                     updateDrawButtons();
                     updateUndoButton();
                 }
@@ -947,12 +1364,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 currentCourse.segment_breaks.push(idx);
                 currentCourse.segment_breaks.sort(function (a, b) { return a - b; });
                 if (!currentCourse.segment_break_labels) currentCourse.segment_break_labels = {};
-                var label = window.prompt('Segment pin label (optional)', '');
-                if (label !== null) currentCourse.segment_break_labels[idx] = (label && label.trim()) ? label.trim() : '';
-                syncSegmentsFromBreaks();
-                renderSegmentPins();
-                renderSegmentsList();
-                updateCourseUI();
+                if (!currentCourse.segment_break_descriptions) currentCourse.segment_break_descriptions = {};
+                if (!currentCourse.segment_break_ids) currentCourse.segment_break_ids = {};
+                currentCourse.segment_break_ids[idx] = nextSegmentPinId();
+                setDirty();
+                openSegmentPinFormTile(idx, e.latlng, function () {
+                    syncSegmentsFromBreaks();
+                    renderSegmentPins();
+                    renderSegmentsList();
+                    updateCourseUI();
+                });
             };
             map.on('click', mapClickHandler);
         }
@@ -1001,6 +1422,17 @@ document.addEventListener('DOMContentLoaded', function () {
                 input.style.marginBottom = '8px';
                 input.style.boxSizing = 'border-box';
                 content.appendChild(input);
+                var lblDesc = document.createElement('label');
+                lblDesc.textContent = 'Description (optional)';
+                content.appendChild(lblDesc);
+                var inputDesc = document.createElement('textarea');
+                inputDesc.rows = 2;
+                inputDesc.placeholder = 'Description';
+                inputDesc.style.display = 'block';
+                inputDesc.style.width = '100%';
+                inputDesc.style.marginBottom = '8px';
+                inputDesc.style.boxSizing = 'border-box';
+                content.appendChild(inputDesc);
                 var btnAdd = document.createElement('button');
                 btnAdd.type = 'button';
                 btnAdd.textContent = 'Add';
@@ -1014,13 +1446,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 btnAdd.onclick = function () {
                     var locType = sel.value || 'course';
                     var locLabel = (input.value && input.value.trim()) ? input.value.trim() : '';
+                    var locDesc = (inputDesc.value && inputDesc.value.trim()) ? inputDesc.value.trim() : '';
                     currentCourse.locations.push({
-                        id: 'loc_' + Date.now(),
+                        id: nextLocationId(),
                         loc_type: locType,
                         loc_label: locLabel,
+                        loc_description: locDesc,
                         lat: e.latlng.lat,
                         lon: e.latlng.lng
                     });
+                    setDirty();
                     window.courseMappingMap.closePopup();
                     renderLocationPins();
                     renderLocationsList();
@@ -1051,6 +1486,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 currentCourse.geometry = null;
                 if (currentCourse.segment_breaks) currentCourse.segment_breaks = [];
                 currentCourse.segments = [];
+                setDirty();
                 stopDrawMode();
                 stopSegmentPinMode();
                 renderCourseLine();
@@ -1082,13 +1518,27 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
 
+        var snapBtn = document.getElementById('snap-to-road');
+        if (snapBtn) {
+            snapBtn.addEventListener('click', function () {
+                snapBtn.classList.toggle('active');
+            });
+        }
+
         var btnExport = document.getElementById('btn-export');
         if (btnExport) {
             btnExport.addEventListener('click', function () {
                 if (!currentCourseId || !currentCourse) return;
-                window.location.href = '/api/courses/' + encodeURIComponent(currentCourseId) + '/export?segments=1&flow=1&locations=1&gpx=1';
+                var url = '/api/courses/' + encodeURIComponent(currentCourseId) + '/export?to_folder=1';
+                fetch(url).then(function (r) { return r.json(); }).then(function (data) {
+                    if (data.ok) alert('Exported to ' + (data.path || 'course folder') + ': ' + (data.files || []).join(', '));
+                    else alert('Export failed');
+                }).catch(function () { alert('Export failed'); });
             });
         }
+
+        setCourse(null, blankCourse());
+        loadCourseList();
 
         updateCourseUI();
         updateDrawButtons();
