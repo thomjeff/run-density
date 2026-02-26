@@ -107,12 +107,49 @@
     }
     #course-toolbar .toolbar-check input { cursor: pointer; }
 
+    /* Segments table: left-align all columns; Action column icon buttons */
+    #segments-table th,
+    #segments-table td { text-align: left; }
+    #segment-pins-table th,
+    #segment-pins-table td { text-align: left; }
+    .course-map-action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        margin: 0 2px;
+        border: 1px solid #bdc3c7;
+        border-radius: 4px;
+        background: #fff;
+        cursor: pointer;
+        font-size: 0;
+        vertical-align: middle;
+    }
+    .course-map-action-btn:hover {
+        background: #ecf0f1;
+        border-color: #95a5a6;
+    }
+    .course-map-action-btn svg {
+        width: 16px;
+        height: 16px;
+        pointer-events: none;
+    }
+    #segments-table td.course-map-action-cell,
+    #segment-pins-table td.course-map-action-cell {
+        white-space: nowrap;
+    }
+
     .segment-pin-square { background: transparent !important; border: none !important; }
     .segment-pin-square > div { cursor: pointer; }
     .segment-info-icon { background: transparent !important; border: none !important; }
     .segment-info-icon > div { cursor: pointer; }
     .start-finish-icon { background: transparent !important; border: none !important; }
     .start-finish-icon > div { cursor: default; }
+    #course-mapping-map.course-mapping-edit-mode .start-finish-icon > div { cursor: move; }
+    .uturn-icon > div { cursor: default; }
+    #course-mapping-map.course-mapping-edit-mode .uturn-icon > div { cursor: move; }
     .location-pin-circle { background: transparent !important; border: none !important; }
     .location-pin-circle > div { cursor: pointer; }
     .turnaround-marker { background: transparent !important; border: none !important; }
@@ -152,6 +189,9 @@
     #course-edit-toolbar button:hover:not(:disabled) { background: #ecf0f1; }
     #course-edit-toolbar button:disabled { opacity: 0.6; cursor: not-allowed; }
     #course-edit-toolbar button.active { background: #3498db; color: #fff; border-color: #2980b9; }
+    /* Segments table: clickable From/To pin labels open pin popup on map */
+    .pin-link { background: none; border: none; padding: 0; font-size: inherit; color: #2980b9; cursor: pointer; text-decoration: none; }
+    .pin-link:hover { text-decoration: underline; }
 </style>
 {% endblock %}
 
@@ -206,12 +246,18 @@
             <button type="button" id="btn-undo-point" disabled title="Remove the last point from the course line">Undo Last Point</button>
             <button type="button" id="btn-clear-line" disabled title="Remove course line from map and course">Clear Line</button>
             <button type="button" id="btn-same-route-back" disabled title="Add return leg from turnaround point (Draw Line mode only)">Same Route Back</button>
+            <span id="rejoin-at-wrap" style="display: none; align-items: center; gap: 0.35rem;">
+                <label for="rejoin-at-pin" class="rejoin-label">Rejoin at:</label>
+                <select id="rejoin-at-pin" title="Choose rejoin point for return leg (or click/drag red marker on map)"></select>
+            </span>
             <button type="button" id="btn-confirm-turnaround" disabled style="display: none;" title="Confirm turnaround point and add return leg">Confirm</button>
             <button type="button" id="btn-cancel-turnaround" disabled style="display: none;" title="Cancel Same Route Back">Cancel</button>
             <button type="button" id="snap-to-road" class="active" title="When on, new segments follow roads (routing). When off, line is straight between clicks.">Snap to Road</button>
             <button type="button" id="btn-add-segment-pin" disabled title="Click on the course line to add a segment boundary">Add Segment Pin</button>
+            <button type="button" id="btn-done-extending" disabled style="display: none;" title="Finish extending from this point and return to normal draw">Done extending</button>
             <button type="button" id="btn-add-location" disabled title="Click map to place first-aid, traffic, course, or water location">Add Location</button>
         </div>
+        <p id="extend-hint" style="display: none; margin-top: 0.35rem; font-size: 0.8rem; color: #2980b9;"></p>
     </div>
     <div id="course-mapping-map" aria-label="Course mapping map" style="position: relative;">
         <div class="map-loading">Loading map...</div>
@@ -224,14 +270,39 @@
 
 <div class="card" id="segments-card" style="margin-top: 1rem; display: none;">
     <h3 style="margin-bottom: 0.5rem;">Segments</h3>
-    <p id="segments-empty" style="color: #95a5a6; font-size: 0.875rem;">Add segment pins on the course line to split it into segments. Each segment is the route between two pins (e.g. Start → Block 1).</p>
+    <p id="segments-empty" style="color: #95a5a6; font-size: 0.875rem;">Add segment pins on the course line to split it into segments. Each segment is the route between two pins (e.g. Start → Block 1). Use &quot;Show on map&quot; to focus a segment when it is hard to click on the map.</p>
     <div id="segments-table-wrap" style="display: none;">
-        <table id="segments-table" class="table-sticky-header" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
-            <thead>
-                <tr><th>Seg ID</th><th>From pin</th><th>To pin</th><th>Segment label</th><th>Width (m)</th><th>From (km)</th><th>To (km)</th><th>Length (km)</th></tr>
-            </thead>
-            <tbody id="segments-tbody"></tbody>
-        </table>
+        <div class="scrollable-table-container segments-table-scroll" style="max-height: 25vh;">
+            <table id="segments-table" class="table-sticky-header" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+                <thead>
+                    <tr><th>Seg ID</th><th>From pin</th><th>To pin</th><th>Segment label</th><th>Width (m)</th><th>Direction</th><th>Events</th><th>From (km)</th><th>To (km)</th><th>Length (km)</th><th>Action</th></tr>
+                </thead>
+                <tbody id="segments-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+    <div id="segment-edit-tile" style="display: none; margin-top: 1rem; padding: 1rem; border: 1px solid #ddd; border-radius: 4px; background: #fafafa;">
+        <h4 id="segment-edit-tile-title" style="margin-top: 0; margin-bottom: 0.75rem;">Edit segment</h4>
+        <div id="segment-edit-tile-content"></div>
+        <div style="margin-top: 0.75rem;">
+            <button type="button" id="segment-edit-tile-save">Save</button>
+            <button type="button" id="segment-edit-tile-cancel" style="margin-left: 0.5rem;">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div class="card" id="segment-pins-card" style="margin-top: 1rem; display: none;">
+    <h3 style="margin-bottom: 0.5rem;">Segment pins</h3>
+    <p id="segment-pins-empty" style="color: #95a5a6; font-size: 0.875rem;">No segment pins. Add pins on the course line to create segment boundaries.</p>
+    <div id="segment-pins-table-wrap" style="display: none;">
+        <div class="scrollable-table-container" style="max-height: 25vh;">
+            <table id="segment-pins-table" class="table-sticky-header" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+                <thead>
+                    <tr><th>Index</th><th>Label</th><th>Action</th></tr>
+                </thead>
+                <tbody id="segment-pins-tbody"></tbody>
+            </table>
+        </div>
     </div>
 </div>
 

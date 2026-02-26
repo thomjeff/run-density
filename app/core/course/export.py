@@ -40,15 +40,63 @@ def _segment_display_id(segment_index: int) -> str:
     return str(segment_index + 1)
 
 
+def _segment_events_set(seg: Dict[str, Any], event_ids: List[str]) -> set:
+    """Normalize segment 'events' to a set of lowercase strings for reliable membership checks."""
+    raw = seg.get("events")
+    if raw is None:
+        return set(event_ids)
+    if isinstance(raw, (list, tuple)):
+        return set(str(x).strip().lower() for x in raw if x)
+    if isinstance(raw, str):
+        return set(raw.strip().lower().split()) if raw.strip() else set(event_ids)
+    return set(event_ids)
+
+
+def _format_km(value: float) -> str:
+    """Format a distance value to exactly 2 decimal places for CSV output."""
+    return format(round(float(value), 2), ".2f")
+
+
+def _event_cumulative_distances(segments: List[Dict], event_ids: List[str]) -> List[Dict[str, tuple]]:
+    """
+    For each event, compute per-segment from_km/to_km as cumulative distance along
+    only the segments that include that event (so half skips segments 2/3, etc.).
+    Returns list of dicts: result[i][eid] = (from_km, to_km) for segment i and event eid.
+    Accumulated values are rounded to 2 decimal places to avoid float drift.
+    """
+    n = len(segments)
+    result = [{} for _ in range(n)]
+    event_ids_lower = [e.lower() for e in event_ids]
+    for ei, eid in enumerate(event_ids_lower):
+        accumulated = 0.0
+        for i, seg in enumerate(segments):
+            seg_events = _segment_events_set(seg, event_ids_lower)
+            if eid not in seg_events:
+                result[i][eid] = (0.0, 0.0)
+                continue
+            from_km = float(seg.get("from_km") or 0)
+            to_km = float(seg.get("to_km") or 0)
+            seg_len = round(to_km - from_km, 2)
+            from_accum = round(accumulated, 2)
+            to_accum = round(accumulated + seg_len, 2)
+            result[i][eid] = (from_accum, to_accum)
+            accumulated = to_accum
+    return result
+
+
 def build_segments_csv(course: Dict[str, Any]) -> str:
     """Build segments.csv content from course.segments and course.events.
     Uses sequential segment IDs (1, 2, 3, ...) for pipeline compatibility.
+    Event-specific from_km/to_km are cumulative along only segments that use that event.
     """
     segments = course.get("segments") or []
     # Event list from constants (SSOT); course.json does not store events
     event_ids = COURSE_EVENT_IDS
     coords = (course.get("geometry") or {}).get("coordinates") or []
     coords_len = len(coords)
+
+    # Per-segment, per-event (from_km, to_km) using event-cumulative distance
+    event_distances = _event_cumulative_distances(segments, event_ids)
 
     out = io.StringIO()
     # Header: seg_id, seg_label, pin_start_label, pin_end_label, width_m, schema, direction, then y/n, then per-event from_km/to_km/length
@@ -76,19 +124,18 @@ def build_segments_csv(course: Dict[str, Any]) -> str:
         width_m = seg.get("width_m", 0)
         schema = seg.get("schema", "on_course_open")
         direction = seg.get("direction", "uni")
-        from_km = seg.get("from_km", 0)
-        to_km = seg.get("to_km", 0)
-        seg_events = seg.get("events") or event_ids
-        # y/n per event
-        yn = ["y" if eid in seg_events else "n" for eid in event_ids]
-        # from_km/to_km only for events in segment; 0 for others
+        from_km = float(seg.get("from_km") or 0)
+        to_km = float(seg.get("to_km") or 0)
+        seg_events = _segment_events_set(seg, event_ids)
+        # y/n per event (use lowercase for lookup)
+        yn = ["y" if eid.lower() in seg_events else "n" for eid in event_ids]
+        # Event-specific from_km/to_km and lengths: all formatted to exactly 2 decimal places
         event_km = []
         for eid in event_ids:
-            if eid in seg_events:
-                event_km.extend([from_km, to_km])
-            else:
-                event_km.extend([0, 0])
-        lengths = [to_km - from_km if eid in seg_events else 0 for eid in event_ids]
+            ev_from, ev_to = event_distances[i].get(eid.lower(), (0.0, 0.0))
+            event_km.extend([_format_km(ev_from), _format_km(ev_to)])
+        seg_len = round(to_km - from_km, 2)
+        lengths = [_format_km(seg_len) if eid.lower() in seg_events else "0.00" for eid in event_ids]
         description = seg.get("description", "")
         row = [seg_id, seg_label, pin_start, pin_end, width_m, schema, direction] + yn + event_km + lengths + [description]
         w.writerow(row)

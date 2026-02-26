@@ -27,7 +27,11 @@ document.addEventListener('DOMContentLoaded', function () {
             segment_break_labels: {},
             segment_break_descriptions: {},
             segment_break_ids: {},
-            turnaround_indices: []
+            turnaround_indices: [],
+            start_description: '',
+            end_description: '',
+            turnaround_descriptions: {},
+            flow_control_points: []
         };
     }
 
@@ -66,8 +70,21 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         renderCourseLine();
         renderSegmentPins();
+        renderStartFinishIcons();
+        renderUturnIcons();
         renderLocationPins();
         updateSameRouteBackButtons();
+        if (!isEditMode) {
+            extendFromIndex = null;
+            extendInsertEndIndex = null;
+            if (drawMode) stopDrawMode();
+        }
+        updateExtendHint();
+        var mapContainer = document.getElementById('course-mapping-map');
+        if (mapContainer) {
+            if (isEditMode) mapContainer.classList.add('course-mapping-edit-mode');
+            else mapContainer.classList.remove('course-mapping-edit-mode');
+        }
     }
 
     function resizeDescriptionTextarea() {
@@ -126,10 +143,13 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (currentCourse && !Array.isArray(currentCourse.segment_breaks)) currentCourse.segment_breaks = [];
         if (currentCourse && !Array.isArray(currentCourse.locations)) currentCourse.locations = [];
+        if (currentCourse && !Array.isArray(currentCourse.flow_control_points)) currentCourse.flow_control_points = [];
         if (currentCourse && typeof currentCourse.segment_break_labels !== 'object') currentCourse.segment_break_labels = {};
         if (currentCourse && typeof currentCourse.segment_break_descriptions !== 'object') currentCourse.segment_break_descriptions = {};
         if (currentCourse && typeof currentCourse.segment_break_ids !== 'object') currentCourse.segment_break_ids = {};
         if (currentCourse && !Array.isArray(currentCourse.turnaround_indices)) currentCourse.turnaround_indices = [];
+        extendFromIndex = null;
+        extendInsertEndIndex = null;
         syncCourseToHeaderInputs();
         updateCourseUI();
         updateDrawButtons();
@@ -138,6 +158,7 @@ document.addEventListener('DOMContentLoaded', function () {
         updateAddLocationButton();
         updateSameRouteBackButtons();
         updateExportButton();
+        updateExtendHint();
         renderCourseLine();
         renderSegmentPins();
         renderLocationPins();
@@ -169,6 +190,12 @@ document.addEventListener('DOMContentLoaded', function () {
     let sameRouteBackMode = false;
     let segmentPinMode = false;
     let locationPinMode = false;
+    /** When set by "Add pin on segment", only allow adding a pin at a vertex in this range. { startIdx, endIdx } or null. */
+    let addPinSegmentRange = null;
+    /** When set, new points are inserted after this index (extend from segment pin). null = append at end. */
+    let extendFromIndex = null;
+    /** In extend mode, index of last inserted point (route from here for next click). */
+    let extendInsertEndIndex = null;
     let drawRoutingInProgress = false;
     let mapClickHandler = null;
     var lastAddedPointCount = 0;
@@ -232,22 +259,32 @@ document.addEventListener('DOMContentLoaded', function () {
         var breaks = currentCourse.segment_breaks.slice().sort(function (a, b) { return a - b; });
         breaks = breaks.filter(function (idx) { return idx > 0 && idx < coords.length; });
         var eventIds = (EVENT_CHOICES || []).map(function (e) { return e.value || e; });
-        var existing = (currentCourse.segments || []).reduce(function (acc, s) {
-            var key = (s.start_index != null && s.end_index != null) ? s.start_index + '-' + s.end_index : null;
-            if (key) acc[key] = { seg_label: s.seg_label, events: s.events, width_m: s.width_m, schema: s.schema, direction: s.direction, description: s.description, info_icon_lat: s.info_icon_lat, info_icon_lon: s.info_icon_lon };
-            return acc;
-        }, {});
+        // Preserve metadata by ordinal (position in list) so that moving a pin doesn't wipe events/labels.
+        // When segment count is unchanged, segment at position i keeps existing[i]'s metadata.
+        // When a pin is added (one more segment), the new segment inherits from the segment it was split from.
+        // When a pin is removed (one fewer segment), remaining segments keep their ordinal mapping.
+        var existingArr = (currentCourse.segments || []).slice();
+        function prevAt(ordinal) {
+            if (ordinal < 0 || existingArr.length === 0) return null;
+            var s = existingArr[Math.min(ordinal, existingArr.length - 1)];
+            return s ? { seg_label: s.seg_label, events: s.events, width_m: s.width_m, schema: s.schema, direction: s.direction, description: s.description, info_icon_lat: s.info_icon_lat, info_icon_lon: s.info_icon_lon } : null;
+        }
         var segs = [];
         var startIdx = 0;
         for (var b = 0; b <= breaks.length; b++) {
             var endIdx = b < breaks.length ? breaks[b] : coords.length - 1;
             if (endIdx <= startIdx) continue;
             var from_km = cum[startIdx], to_km = cum[endIdx];
-            var key = startIdx + '-' + endIdx;
-            var prev = existing[key];
+            var zeroLength = Math.abs(from_km - to_km) < 1e-6;
+            if (zeroLength && b < breaks.length) {
+                startIdx = endIdx;
+                continue;
+            }
+            var ordinal = segs.length;
+            var prev = prevAt(ordinal);
             var pinLabel = (currentCourse.segment_break_labels && (currentCourse.segment_break_labels[endIdx] || currentCourse.segment_break_labels['' + endIdx] || '').trim()) || '';
             var isLastSegment = (b >= breaks.length && endIdx === coords.length - 1);
-            var defaultLabel = pinLabel || (isLastSegment ? 'Finish' : ('Segment ' + (segs.length + 1)));
+            var defaultLabel = pinLabel || (isLastSegment ? 'Finish' : ('Segment ' + (ordinal + 1)));
             segs.push({
                 seg_id: String(segs.length + 1),
                 seg_label: (prev && prev.seg_label) ? prev.seg_label : defaultLabel,
@@ -266,8 +303,7 @@ document.addEventListener('DOMContentLoaded', function () {
             startIdx = endIdx;
         }
         if (segs.length === 0 && coords.length >= 2) {
-            var key0 = '0-' + (coords.length - 1);
-            var prev0 = existing[key0];
+            var prev0 = prevAt(0);
             var endIdx0 = coords.length - 1;
             var pinLabel0 = (currentCourse.segment_break_labels && (currentCourse.segment_break_labels[endIdx0] || currentCourse.segment_break_labels['' + endIdx0] || '').trim()) || '';
             segs.push({
@@ -285,6 +321,22 @@ document.addEventListener('DOMContentLoaded', function () {
                 info_icon_lat: prev0 && prev0.info_icon_lat,
                 info_icon_lon: prev0 && prev0.info_icon_lon
             });
+        }
+        // Apply flow-control: at each flow_control point, set segment.events for matching (start_index, end_index)
+        var fcp = currentCourse.flow_control_points || [];
+        for (var fc = 0; fc < fcp.length; fc++) {
+            var v = fcp[fc].vertex_index;
+            var branches = fcp[fc].branches || [];
+            for (var br = 0; br < branches.length; br++) {
+                var endV = branches[br].end_vertex_index;
+                var evts = branches[br].events || [];
+                for (var si = 0; si < segs.length; si++) {
+                    if (segs[si].start_index === v && segs[si].end_index === endV) {
+                        segs[si].events = evts.slice();
+                        break;
+                    }
+                }
+            }
         }
         currentCourse.segments = segs;
     }
@@ -321,6 +373,8 @@ document.addEventListener('DOMContentLoaded', function () {
         var btnSame = document.getElementById('btn-same-route-back');
         var btnConfirm = document.getElementById('btn-confirm-turnaround');
         var btnCancel = document.getElementById('btn-cancel-turnaround');
+        var rejoinWrap = document.getElementById('rejoin-at-wrap');
+        var rejoinSelect = document.getElementById('rejoin-at-pin');
         var canSame = !!(currentCourse && currentCourse.geometry && currentCourse.geometry.coordinates && currentCourse.geometry.coordinates.length >= 3) && drawMode && isEditMode;
         if (btnSame) {
             btnSame.disabled = !canSame;
@@ -335,6 +389,46 @@ document.addEventListener('DOMContentLoaded', function () {
             btnCancel.style.display = sameRouteBackMode ? 'inline-block' : 'none';
         }
         if (btnSame && sameRouteBackMode) btnSame.classList.add('active'); else if (btnSame) btnSame.classList.remove('active');
+        if (rejoinWrap) rejoinWrap.style.display = sameRouteBackMode ? 'inline-flex' : 'none';
+        if (sameRouteBackMode && rejoinSelect && currentCourse && currentCourse.geometry && currentCourse.geometry.coordinates) {
+            var coords = currentCourse.geometry.coordinates;
+            var breaks = (currentCourse.segment_breaks || []).slice().sort(function (a, b) { return a - b; }).filter(function (i) { return i >= 0 && i < coords.length; });
+            var labels = currentCourse.segment_break_labels || {};
+            rejoinSelect.innerHTML = '';
+            var addOpt = function (value, text) {
+                var opt = document.createElement('option');
+                opt.value = value;
+                opt.textContent = text;
+                rejoinSelect.appendChild(opt);
+            };
+            var added = {};
+            addOpt(0, 'Start');
+            added[0] = true;
+            breaks.forEach(function (idx) {
+                var label = (labels[idx] || labels['' + idx] || '').trim() || ('Segment boundary @ ' + idx);
+                addOpt(idx, label);
+                added[idx] = true;
+            });
+            if (coords.length > 1) {
+                addOpt(coords.length - 1, 'Last point');
+                added[coords.length - 1] = true;
+            }
+            var currentIdx = typeof turnaroundMarkerIndex !== 'undefined' ? turnaroundMarkerIndex : (coords.length > 1 ? coords.length - 2 : 0);
+            if (!added[currentIdx]) addOpt(currentIdx, 'Vertex ' + currentIdx);
+            rejoinSelect.value = String(currentIdx);
+        }
+    }
+
+    function setRejoinIndexFromSelect(idx) {
+        if (!currentCourse || !currentCourse.geometry || !currentCourse.geometry.coordinates || idx == null) return;
+        var coords = currentCourse.geometry.coordinates;
+        idx = Math.max(0, Math.min(parseInt(idx, 10), coords.length - 1));
+        turnaroundMarkerIndex = idx;
+        if (turnaroundMarker) {
+            var c = coords[idx];
+            turnaroundMarker._turnaroundIndex = idx;
+            turnaroundMarker.setLatLng([c[1], c[0]]);
+        }
     }
 
     function updateExportButton() {
@@ -343,11 +437,101 @@ document.addEventListener('DOMContentLoaded', function () {
         if (btn) btn.disabled = !canExport;
     }
 
+    function updateExtendHint() {
+        var hintEl = document.getElementById('extend-hint');
+        var doneBtn = document.getElementById('btn-done-extending');
+            if (extendFromIndex != null && currentCourse && currentCourse.geometry && currentCourse.geometry.coordinates) {
+            var label = (currentCourse.segment_break_labels && currentCourse.segment_break_labels[extendFromIndex]) ? currentCourse.segment_break_labels[extendFromIndex] : ('point ' + extendFromIndex);
+            var endLabel = (currentCourse.segment_break_labels && currentCourse.segment_break_labels[extendInsertEndIndex]) ? currentCourse.segment_break_labels[extendInsertEndIndex] : (extendInsertEndIndex != null ? ('point ' + extendInsertEndIndex) : '');
+            if (hintEl) {
+                hintEl.style.display = 'block';
+                hintEl.innerHTML = 'Fork from: <strong>' + label + '</strong>. '
+                    + (extendInsertEndIndex != null ? 'Line currently ends at <strong>' + (endLabel || 'rejoin') + '</strong>. Each map click adds a point <em>from here</em>. ' : '')
+                    + 'Add outbound points to the turn (e.g. Full Turn). Then in the <strong>toolbar</strong>, click <strong>Same Route Back</strong>, set Rejoin at to &quot;' + (label || 'this pin') + '&quot;, click Confirm. Then either add more points (from the rejoin) or click <strong>Done extending</strong>.';
+            }
+            if (doneBtn) {
+                doneBtn.style.display = 'inline-block';
+                doneBtn.disabled = false;
+            }
+        } else {
+            if (hintEl) hintEl.style.display = 'none';
+            if (doneBtn) {
+                doneBtn.style.display = 'none';
+                doneBtn.disabled = true;
+            }
+        }
+    }
+
+    function shiftIndicesAfter(breaksOrTurnarounds, afterIndex, delta) {
+        if (!Array.isArray(breaksOrTurnarounds)) return;
+        for (var j = 0; j < breaksOrTurnarounds.length; j++) {
+            if (breaksOrTurnarounds[j] > afterIndex) breaksOrTurnarounds[j] += delta;
+        }
+    }
+
+    /** When segment_breaks indices shift (insert/delete points), update labels/descriptions/ids and flow_control_points so keys/indices match. */
+    function shiftSegmentBreakMetadata(afterIndex, delta) {
+        if (!currentCourse || delta === 0) return;
+        ['segment_break_labels', 'segment_break_descriptions', 'segment_break_ids'].forEach(function (key) {
+            var obj = currentCourse[key];
+            if (!obj || typeof obj !== 'object') return;
+            var toAdd = {};
+            Object.keys(obj).forEach(function (k) {
+                var idx = parseInt(k, 10);
+                if (isNaN(idx)) return;
+                if (idx > afterIndex) {
+                    toAdd[idx + delta] = obj[k];
+                }
+            });
+            Object.keys(toAdd).forEach(function (newIdx) {
+                var oldIdx = newIdx - delta;
+                delete obj[oldIdx];
+                delete obj['' + oldIdx];
+                obj[newIdx] = toAdd[newIdx];
+            });
+        });
+        var fcp = currentCourse.flow_control_points;
+        if (Array.isArray(fcp)) {
+            fcp.forEach(function (pt) {
+                if (pt.vertex_index > afterIndex) pt.vertex_index += delta;
+                var branches = pt.branches || [];
+                branches.forEach(function (b) {
+                    if (b.end_vertex_index > afterIndex) b.end_vertex_index += delta;
+                });
+            });
+        }
+        var td = currentCourse.turnaround_descriptions;
+        if (td && typeof td === 'object') {
+            var toAddT = {};
+            Object.keys(td).forEach(function (k) {
+                var idx = parseInt(k, 10);
+                if (!isNaN(idx) && idx > afterIndex) toAddT[idx + delta] = td[k];
+            });
+            Object.keys(toAddT).forEach(function (newIdx) {
+                var oldIdx = newIdx - delta;
+                delete td[oldIdx];
+                delete td['' + oldIdx];
+                td[newIdx] = toAddT[newIdx];
+            });
+        }
+    }
+
     function undoLastPoint() {
         if (!currentCourse || !currentCourse.geometry || !currentCourse.geometry.coordinates || currentCourse.geometry.coordinates.length === 0) return;
         var coords = currentCourse.geometry.coordinates;
         var toRemove = (lastAddedPointCount > 0 && lastAddedPointCount < coords.length) ? lastAddedPointCount : 1;
-        for (var i = 0; i < toRemove; i++) coords.pop();
+        if (extendFromIndex != null && extendInsertEndIndex != null) {
+            var removeFrom = extendInsertEndIndex - toRemove + 1;
+            if (removeFrom <= extendFromIndex) return;
+            var oldEnd = extendInsertEndIndex;
+            coords.splice(removeFrom, toRemove);
+            shiftIndicesAfter(currentCourse.segment_breaks, oldEnd, -toRemove);
+            shiftSegmentBreakMetadata(oldEnd, -toRemove);
+            shiftIndicesAfter(currentCourse.turnaround_indices, oldEnd, -toRemove);
+            extendInsertEndIndex -= toRemove;
+        } else {
+            for (var i = 0; i < toRemove; i++) coords.pop();
+        }
         lastAddedPointCount = 0;
         if (currentCourse.segment_breaks) {
             var len = currentCourse.geometry.coordinates.length;
@@ -362,11 +546,104 @@ document.addEventListener('DOMContentLoaded', function () {
         renderSegmentPins();
         renderSegmentsList();
         renderStartFinishIcons();
+        renderUturnIcons();
         setDirty();
         updateDrawButtons();
         updateSegmentPinButton();
         updateUndoButton();
+        updateExtendHint();
         updateCourseUI();
+    }
+
+    function eventsToDisplayList(events) {
+        if (!events || !events.length) return '';
+        var eidLower = function (v) { return String(v || '').toLowerCase(); };
+        return (events || []).map(function (eid) {
+            var ev = (EVENT_CHOICES || []).find(function (x) { return eidLower(x.value || x) === eidLower(eid); });
+            return ev && ev.label ? ev.label : (eid && String(eid).charAt(0).toUpperCase() + String(eid).slice(1));
+        }).join(', ');
+    }
+
+    function openSegmentEditInTile(segIdx) {
+        var s = currentCourse.segments[segIdx];
+        if (!s) return;
+        var segId = (s.seg_id != null && s.seg_id !== '') ? String(s.seg_id) : String(segIdx + 1);
+        var tile = document.getElementById('segment-edit-tile');
+        var titleEl = document.getElementById('segment-edit-tile-title');
+        var contentEl = document.getElementById('segment-edit-tile-content');
+        var saveBtn = document.getElementById('segment-edit-tile-save');
+        var cancelBtn = document.getElementById('segment-edit-tile-cancel');
+        if (!tile || !contentEl) return;
+        titleEl.textContent = 'Edit segment ' + segId;
+        contentEl.innerHTML = '';
+        function addLabel(text) { var l = document.createElement('label'); l.textContent = text; l.style.display = 'block'; l.style.marginTop = '8px'; l.style.marginBottom = '2px'; contentEl.appendChild(l); }
+        function addInput(attr, val) {
+            var el = document.createElement('input');
+            el.type = attr === 'number' ? 'number' : 'text';
+            el.style.display = 'block'; el.style.width = '100%'; el.style.marginBottom = '8px'; el.style.boxSizing = 'border-box';
+            if (attr === 'number') { el.min = 0; el.step = 0.5; }
+            el.value = val != null ? val : '';
+            contentEl.appendChild(el);
+            return el;
+        }
+        addLabel('Segment label');
+        var inputLabel = addInput('text', s.seg_label || '');
+        addLabel('Width (m)');
+        var inputWidth = addInput('number', s.width_m != null ? s.width_m : 3);
+        addLabel('Schema');
+        var selSchema = document.createElement('select');
+        selSchema.style.display = 'block'; selSchema.style.width = '100%'; selSchema.style.marginBottom = '8px'; selSchema.style.boxSizing = 'border-box';
+        SCHEMA_OPTIONS.forEach(function (o) { var opt = document.createElement('option'); opt.value = o.value; opt.textContent = o.label; if (o.value === (s.schema || 'on_course_open')) opt.selected = true; selSchema.appendChild(opt); });
+        contentEl.appendChild(selSchema);
+        addLabel('Direction');
+        var selDirection = document.createElement('select');
+        selDirection.style.display = 'block'; selDirection.style.width = '100%'; selDirection.style.marginBottom = '8px'; selDirection.style.boxSizing = 'border-box';
+        DIRECTION_OPTIONS.forEach(function (o) { var opt = document.createElement('option'); opt.value = o.value; opt.textContent = o.label; if (o.value === (s.direction || 'uni')) opt.selected = true; selDirection.appendChild(opt); });
+        contentEl.appendChild(selDirection);
+        addLabel('Description');
+        var inputDesc = document.createElement('textarea');
+        inputDesc.rows = 2; inputDesc.style.display = 'block'; inputDesc.style.width = '100%'; inputDesc.style.marginBottom = '8px'; inputDesc.style.boxSizing = 'border-box';
+        inputDesc.value = s.description || '';
+        contentEl.appendChild(inputDesc);
+        addLabel('Events using this segment');
+        var eventsDiv = document.createElement('div');
+        eventsDiv.style.marginBottom = '8px';
+        var selectedEvents = (s.events || []).slice();
+        (EVENT_CHOICES || []).forEach(function (ev) {
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.value = ev.value || ev;
+            cb.checked = selectedEvents.indexOf(ev.value || ev) >= 0;
+            cb.style.marginRight = '4px';
+            var span = document.createElement('span');
+            span.textContent = ev.label || ev.value || ev;
+            span.style.marginRight = '10px';
+            eventsDiv.appendChild(cb);
+            eventsDiv.appendChild(span);
+        });
+        contentEl.appendChild(eventsDiv);
+        tile.style.display = 'block';
+        var onSave = function () {
+            s.seg_label = (inputLabel.value && inputLabel.value.trim()) ? inputLabel.value.trim() : segId;
+            s.width_m = parseFloat(inputWidth.value);
+            if (isNaN(s.width_m) || s.width_m < 0) s.width_m = 3;
+            s.schema = selSchema.value || 'on_course_open';
+            s.direction = selDirection.value || 'uni';
+            s.description = (inputDesc.value && inputDesc.value.trim()) ? inputDesc.value.trim() : '';
+            s.events = [];
+            eventsDiv.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { if (cb.checked) s.events.push(cb.value); });
+            if (s.events.length === 0) s.events = (EVENT_CHOICES || []).map(function (e) { return e.value || e; });
+            tile.style.display = 'none';
+            syncSegmentsFromBreaks();
+            renderSegmentInfoIcons();
+            renderSegmentPins();
+            renderSegmentsList();
+            setDirty();
+            updateCourseUI();
+        };
+        var onCancel = function () { tile.style.display = 'none'; };
+        saveBtn.onclick = onSave;
+        cancelBtn.onclick = onCancel;
     }
 
     function openSegmentAnnotationPopup(segIdx, latlng) {
@@ -455,8 +732,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function isSegmentAnnotated(seg, segIdx) {
-        var defaultLabel = 'Segment S' + ((segIdx != null ? segIdx + 1 : 1));
-        if ((seg.seg_label && seg.seg_label.trim() && seg.seg_label !== defaultLabel)) return true;
+        var label = (seg.seg_label || '').trim();
+        var isDefaultLabel = label === 'Finish' || /^Segment \d+$/.test(label);
+        if (label && !isDefaultLabel) return true;
         if (seg.description && seg.description.trim()) return true;
         if (seg.width_m != null && seg.width_m !== 3) return true;
         if (seg.schema && seg.schema !== 'on_course_open') return true;
@@ -563,6 +841,41 @@ document.addEventListener('DOMContentLoaded', function () {
         var last = coords.length >= 2 ? coords[lastIdx] : null;
         var lastIsTurnaround = turnaroundSet.has(lastIdx);
         var samePoint = last && !lastIsTurnaround && Math.abs(first[0] - last[0]) < 1e-9 && Math.abs(first[1] - last[1]) < 1e-9;
+        var addStartFinishMarker = function (lat, lon, icon, pointType, coordIndex, coordIndex2) {
+            var m = L.marker([lat, lon], { icon: icon, draggable: isEditMode });
+            m._pointType = pointType;
+            m._coordIndex = coordIndex;
+            m._coordIndex2 = coordIndex2;
+            var tip = pointType === 'sf' ? 'Start/Finish' : (pointType === 'start' ? 'Start' : 'Finish');
+            if (isEditMode) m.bindTooltip(tip + ' (drag to move or click to edit)', { permanent: false, direction: 'top', offset: [0, -10], className: 'course-map-tooltip' });
+            else m.bindTooltip(tip, { permanent: false, direction: 'top', offset: [0, -10], className: 'course-map-tooltip' });
+            if (isEditMode) {
+                m.on('dragend', function () {
+                    var ll = m.getLatLng();
+                    coords[coordIndex] = [ll.lng, ll.lat];
+                    if (coordIndex2 != null) coords[coordIndex2] = [ll.lng, ll.lat];
+                    syncSegmentsFromBreaks();
+                    renderCourseLine();
+                    renderSegmentPins();
+                    renderStartFinishIcons();
+                    renderUturnIcons();
+                    renderSegmentsList();
+                    setDirty();
+                    updateCourseUI();
+                });
+                m.on('click', function (e) {
+                    L.DomEvent.stopPropagation(e);
+                    var breaks = currentCourse.segment_breaks || [];
+                    var idx = pointType === 'sf' ? coordIndex2 : coordIndex;
+                    if (idx != null && breaks.indexOf(idx) >= 0) {
+                        openSegmentPinPopupForIndex(idx);
+                    } else {
+                        openPointEditTile(pointType === 'sf' ? 'start' : pointType, coordIndex, e.latlng, function () {}, pointType === 'sf' ? coordIndex2 : null);
+                    }
+                });
+            }
+            startFinishLayer.addLayer(m);
+        };
         if (samePoint && last) {
             var sfIcon = L.divIcon({
                 className: 'start-finish-icon',
@@ -570,7 +883,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 iconSize: [20, 20],
                 iconAnchor: [10, 10]
             });
-            startFinishLayer.addLayer(L.marker([first[1], first[0]], { icon: sfIcon }));
+            addStartFinishMarker(first[1], first[0], sfIcon, 'sf', 0, lastIdx);
         } else {
             var startIcon = L.divIcon({
                 className: 'start-finish-icon',
@@ -578,18 +891,22 @@ document.addEventListener('DOMContentLoaded', function () {
                 iconSize: [20, 20],
                 iconAnchor: [10, 10]
             });
-            startFinishLayer.addLayer(L.marker([first[1], first[0]], { icon: startIcon }));
-            if (coords.length >= 2 && !lastIsTurnaround) {
+            addStartFinishMarker(first[1], first[0], startIcon, 'start', 0, null);
+            if (coords.length >= 2) {
                 var finishIcon = L.divIcon({
                     className: 'start-finish-icon',
                     html: '<div style="width:20px;height:20px;background:#27ae60;color:#fff;border:2px solid #1e8449;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;">F</div>',
                     iconSize: [20, 20],
                     iconAnchor: [10, 10]
                 });
-                startFinishLayer.addLayer(L.marker([last[1], last[0]], { icon: finishIcon }));
+                addStartFinishMarker(last[1], last[0], finishIcon, 'finish', lastIdx, null);
             }
         }
         startFinishLayer.addTo(window.courseMappingMap);
+        if (window.courseMappingMap && segmentPinsLayer && window.courseMappingMap.hasLayer(segmentPinsLayer)) {
+            window.courseMappingMap.removeLayer(segmentPinsLayer);
+            segmentPinsLayer.addTo(window.courseMappingMap);
+        }
     }
 
     function renderCourseLine() {
@@ -606,11 +923,28 @@ document.addEventListener('DOMContentLoaded', function () {
             segments = currentCourse.segments || [];
         }
         segmentLinesLayer = L.layerGroup();
+        var inExtendMode = extendFromIndex != null && extendInsertEndIndex != null;
         segments.forEach(function (seg, segIdx) {
             var startIdx = seg.start_index != null ? seg.start_index : 0;
             var endIdx = seg.end_index != null ? seg.end_index : (coords.length - 1);
-            var latlngs = [];
-            for (var i = startIdx; i <= endIdx; i++) latlngs.push([coords[i][1], coords[i][0]]);
+            var latlngChunks = [];
+            if (inExtendMode && startIdx <= extendInsertEndIndex && endIdx >= extendInsertEndIndex + 1) {
+                var mainToFork = [];
+                for (var i = startIdx; i <= extendFromIndex; i++) mainToFork.push([coords[i][1], coords[i][0]]);
+                var forkOutbound = [];
+                for (var fi = extendFromIndex; fi <= extendInsertEndIndex; fi++) forkOutbound.push([coords[fi][1], coords[fi][0]]);
+                var mainContinuation = [];
+                mainContinuation.push([coords[extendFromIndex][1], coords[extendFromIndex][0]]);
+                for (var mi = extendInsertEndIndex + 1; mi <= endIdx; mi++) mainContinuation.push([coords[mi][1], coords[mi][0]]);
+                if (mainToFork.length >= 2) latlngChunks.push(mainToFork);
+                if (forkOutbound.length >= 2) latlngChunks.push(forkOutbound);
+                if (mainContinuation.length >= 2) latlngChunks.push(mainContinuation);
+            } else {
+                var latlngs = [];
+                for (var i = startIdx; i <= endIdx; i++) latlngs.push([coords[i][1], coords[i][0]]);
+                if (latlngs.length >= 2) latlngChunks.push(latlngs);
+            }
+            latlngChunks.forEach(function (latlngs) {
             if (latlngs.length < 2) return;
             var line = L.polyline(latlngs, ROUTE_LINE_STYLE);
             line._segmentIndex = segIdx;
@@ -621,6 +955,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     return;
                 }
                 if (segmentPinMode || locationPinMode) return;
+                if ((drawMode || (extendFromIndex != null && extendInsertEndIndex != null)) && mapClickHandler && e && e.latlng) {
+                    L.DomEvent.stopPropagation(e);
+                    mapClickHandler(e);
+                    return;
+                }
                 L.DomEvent.stopPropagation(e);
                 var latlng = e.latlng || (latlngs.length ? L.latLng(latlngs[Math.floor(latlngs.length / 2)][0], latlngs[Math.floor(latlngs.length / 2)][1]) : null);
                 var idx = latlng ? segmentIndexAtLatLng(latlng) : segIdx;
@@ -652,6 +991,7 @@ document.addEventListener('DOMContentLoaded', function () {
             hitLine._segmentIndex = segIdx;
             hitLine.on('click', openPopup);
             segmentLinesLayer.addLayer(hitLine);
+            });
         });
         segmentLinesLayer.addTo(window.courseMappingMap);
         renderSegmentInfoIcons();
@@ -678,6 +1018,257 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!currentCourse || !currentCourse.segment_break_ids) return idx;
         var id = currentCourse.segment_break_ids[idx] || currentCourse.segment_break_ids['' + idx];
         return id != null ? id : idx;
+    }
+
+    /** Return true if two coord pairs are the same (same location). */
+    function sameCoord(c1, c2) {
+        if (!c1 || !c2) return false;
+        return Math.abs((c1[0] || 0) - (c2[0] || 0)) < 1e-9 && Math.abs((c1[1] || 0) - (c2[1] || 0)) < 1e-9;
+    }
+
+    /** Open flow-control editor: at this pin, which events take which outgoing leg. Updates flow_control_points and syncs segments.
+     * When the same location has multiple vertices (e.g. Friel before 10K leg and Friel after return), we show all legs from any vertex at this location. */
+    function openFlowControlForPin(pinIndex, latlng) {
+        if (!currentCourse || !currentCourse.geometry || !currentCourse.geometry.coordinates) return;
+        syncSegmentsFromBreaks();
+        var coords = currentCourse.geometry.coordinates;
+        var segments = currentCourse.segments || [];
+        var pinCoord = coords[pinIndex];
+        var breaksAtSameLocation = (currentCourse.segment_breaks || []).filter(function (idx) {
+            return idx >= 0 && idx < coords.length && sameCoord(coords[idx], pinCoord);
+        });
+        var segmentsFromPin = segments.filter(function (s) {
+            return breaksAtSameLocation.indexOf(s.start_index) >= 0;
+        });
+        var pinLabel = getSegmentBreakLabel(pinIndex) || getPinLabelForIndex(pinIndex, coords.length) || ('Vertex ' + pinIndex);
+        var content = document.createElement('div');
+        content.className = 'course-map-popup-wrap';
+        var title = document.createElement('div');
+        title.style.fontWeight = 'bold';
+        title.style.marginBottom = '0.5rem';
+        title.textContent = 'Flow control at: ' + (pinLabel || 'this point');
+        content.appendChild(title);
+        var hint = document.createElement('p');
+        hint.style.fontSize = '0.8rem';
+        hint.style.color = '#7f8c8d';
+        hint.style.marginBottom = '0.5rem';
+        hint.textContent = 'Which event(s) take which leg from this point?';
+        content.appendChild(hint);
+        if (segmentsFromPin.length === 0) {
+            var none = document.createElement('p');
+            none.style.fontSize = '0.85rem';
+            none.textContent = 'No outgoing legs from this point (no segment starts here). Add segment pins and legs first.';
+            content.appendChild(none);
+        } else {
+            var fcp = currentCourse.flow_control_points || [];
+            var eventIds = (EVENT_CHOICES || []).map(function (e) { return (e.value != null ? e.value : e).toString().toLowerCase(); });
+            var checkboxesBySeg = {};
+            segmentsFromPin.forEach(function (seg) {
+                var row = document.createElement('div');
+                row.style.marginBottom = '0.6rem';
+                var endLabel = getPinLabelForIndex(seg.end_index, coords.length) || seg.seg_label || ('Segment to ' + seg.end_index);
+                var legLabel = document.createElement('label');
+                legLabel.style.display = 'block';
+                legLabel.style.fontWeight = '500';
+                legLabel.style.marginBottom = '0.25rem';
+                legLabel.textContent = 'Leg to: ' + endLabel;
+                row.appendChild(legLabel);
+                var boxWrap = document.createElement('div');
+                boxWrap.style.display = 'flex';
+                boxWrap.style.flexWrap = 'wrap';
+                boxWrap.style.gap = '0.5rem';
+                var existingAtV = fcp.filter(function (x) { return x.vertex_index === seg.start_index; })[0];
+                var branch = existingAtV && (existingAtV.branches || []).filter(function (b) { return b.end_vertex_index === seg.end_index; })[0];
+                var selectedEvents = (branch && branch.events && branch.events.length) ? branch.events.map(function (x) { return String(x).toLowerCase(); }) : (seg.events || []).map(function (x) { return String(x).toLowerCase(); });
+                checkboxesBySeg[seg.start_index + '-' + seg.end_index] = {};
+                eventIds.forEach(function (eid) {
+                    var evLabel = eid;
+                    (EVENT_CHOICES || []).forEach(function (ev) { if ((ev.value || ev) === eid && ev.label) evLabel = ev.label; });
+                    var lbl = document.createElement('label');
+                    lbl.style.display = 'inline-flex';
+                    lbl.style.alignItems = 'center';
+                    lbl.style.marginRight = '8px';
+                    var cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.value = eid;
+                    if (selectedEvents.indexOf(eid) >= 0) cb.checked = true;
+                    lbl.appendChild(cb);
+                    lbl.appendChild(document.createTextNode(' ' + evLabel));
+                    boxWrap.appendChild(lbl);
+                    checkboxesBySeg[seg.start_index + '-' + seg.end_index][eid] = cb;
+                });
+                row.appendChild(boxWrap);
+                content.appendChild(row);
+            });
+        }
+        var btnWrap = document.createElement('div');
+        btnWrap.style.marginTop = '0.75rem';
+        var btnSave = document.createElement('button');
+        btnSave.type = 'button';
+        btnSave.textContent = 'Save';
+        btnSave.style.marginRight = '6px';
+        var btnCancel = document.createElement('button');
+        btnCancel.type = 'button';
+        btnCancel.textContent = 'Cancel';
+        btnWrap.appendChild(btnSave);
+        btnWrap.appendChild(btnCancel);
+        content.appendChild(btnWrap);
+        btnCancel.onclick = function () { window.courseMappingMap.closePopup(); };
+        btnSave.onclick = function () {
+            if (segmentsFromPin.length === 0) { window.courseMappingMap.closePopup(); return; }
+            var fcpList = currentCourse.flow_control_points || [];
+            currentCourse.flow_control_points = fcpList.filter(function (x) { return breaksAtSameLocation.indexOf(x.vertex_index) < 0; });
+            for (var vi = 0; vi < breaksAtSameLocation.length; vi++) {
+                var v = breaksAtSameLocation[vi];
+                var segsAtV = segmentsFromPin.filter(function (s) { return s.start_index === v; });
+                var branches = segsAtV.map(function (seg) {
+                    var key = seg.start_index + '-' + seg.end_index;
+                    var cbs = checkboxesBySeg[key];
+                    var evts = [];
+                    if (cbs) for (var eid in cbs) if (cbs[eid].checked) evts.push(eid);
+                    return { end_vertex_index: seg.end_index, events: evts };
+                });
+                currentCourse.flow_control_points.push({ vertex_index: v, label: pinLabel, branches: branches });
+            }
+            syncSegmentsFromBreaks();
+            renderSegmentPins();
+            renderSegmentsList();
+            setDirty();
+            updateCourseUI();
+            window.courseMappingMap.closePopup();
+        };
+        var pop = L.popup({ maxWidth: 340, className: 'location-popup' }).setContent(content).setLatLng(latlng).openOn(window.courseMappingMap);
+    }
+
+    /** Open the segment-pin popup (Edit, Delete, Extend from here) at a pin by index. Used when clicking From/To in Segments table. */
+    function openSegmentPinPopupForIndex(pinIndex) {
+        if (!window.courseMappingMap || !currentCourse || !currentCourse.geometry || !currentCourse.geometry.coordinates) return;
+        var coords = currentCourse.geometry.coordinates;
+        if (pinIndex < 0 || pinIndex >= coords.length) return;
+        var c = coords[pinIndex];
+        var latlng = L.latLng(c[1], c[0]);
+        window.courseMappingMap.closePopup();
+        window.courseMappingMap.panTo(latlng, { animate: true, duration: 0.3 });
+        var coordsLen = coords.length;
+        var isStart = pinIndex <= 0;
+        var isFinish = pinIndex >= coordsLen - 1;
+        var label = isStart ? 'Start' : (isFinish ? 'Finish' : getSegmentBreakLabel(pinIndex));
+        var pinId = getSegmentBreakId(pinIndex);
+        var desc = getSegmentBreakDescription(pinIndex);
+        var content = document.createElement('div');
+        content.innerHTML = buildPopupRowsHtml([
+            { label: 'ID', value: String(pinId) },
+            { label: 'Label', value: label },
+            { label: 'Description', value: desc || '' }
+        ]);
+        content.classList.add('course-map-popup-wrap');
+        if (isEditMode) {
+            var btnWrap = document.createElement('div');
+            btnWrap.style.marginTop = '0.5rem';
+            if (!isStart && !isFinish) {
+                var btnEdit = document.createElement('button');
+                btnEdit.type = 'button';
+                btnEdit.textContent = 'Edit';
+                btnEdit.style.marginRight = '6px';
+                btnEdit.style.marginTop = '6px';
+                var btnDel = document.createElement('button');
+                btnDel.type = 'button';
+                btnDel.textContent = 'Delete';
+                btnDel.style.marginRight = '6px';
+                btnWrap.appendChild(btnEdit);
+                btnWrap.appendChild(btnDel);
+                btnEdit.onclick = function () {
+                    window.courseMappingMap.closePopup();
+                    openSegmentPinFormTile(pinIndex, latlng, function () {
+                        renderSegmentPins();
+                        renderSegmentsList();
+                        updateCourseUI();
+                    });
+                };
+                btnDel.onclick = function () {
+                    var isEndPin = pinIndex >= coords.length - 1;
+                    var msg = isEndPin
+                        ? 'Remove this segment boundary? The course will still end at the same location; only the segment split is removed.'
+                        : 'Remove this segment boundary? This cannot be undone.';
+                    if (!window.confirm(msg)) return;
+                    window.courseMappingMap.closePopup();
+                    currentCourse.segment_breaks = currentCourse.segment_breaks.filter(function (x) { return x !== pinIndex; });
+                    if (currentCourse.segment_break_labels) delete currentCourse.segment_break_labels[pinIndex];
+                    if (currentCourse.segment_break_descriptions) delete currentCourse.segment_break_descriptions[pinIndex];
+                    if (currentCourse.segment_break_ids) delete currentCourse.segment_break_ids[pinIndex];
+                    syncSegmentsFromBreaks();
+                    renderCourseLine();
+                    renderSegmentPins();
+                    renderStartFinishIcons();
+                    renderUturnIcons();
+                    renderSegmentsList();
+                    setDirty();
+                    updateCourseUI();
+                };
+            }
+            var btnExtend = document.createElement('button');
+            btnExtend.type = 'button';
+            btnExtend.textContent = 'Extend from here';
+            btnExtend.title = 'Start drawing a new leg from this point.';
+            btnWrap.appendChild(btnExtend);
+            btnExtend.onclick = function () {
+                window.courseMappingMap.closePopup();
+                extendFromIndex = pinIndex;
+                extendInsertEndIndex = pinIndex;
+                startDrawMode();
+                updateDrawButtons();
+                updateExtendHint();
+            };
+            if (!isStart && !isFinish && pinIndex < coordsLen - 1) {
+                var btnEndHere = document.createElement('button');
+                btnEndHere.type = 'button';
+                btnEndHere.textContent = 'End course here';
+                btnEndHere.title = 'Remove all points after this pin and make this the finish. Use this to fix an extra out-and-back or tail.';
+                btnEndHere.style.marginRight = '6px';
+                btnWrap.appendChild(btnEndHere);
+                btnEndHere.onclick = function () {
+                    window.courseMappingMap.closePopup();
+                    if (!window.confirm('End the course at this pin? All points after this will be removed. This cannot be undone.')) return;
+                    var coords = currentCourse.geometry.coordinates;
+                    var newLen = pinIndex + 1;
+                    currentCourse.geometry.coordinates = coords.slice(0, newLen);
+                    currentCourse.segment_breaks = (currentCourse.segment_breaks || []).filter(function (idx) { return idx <= pinIndex; });
+                    var labels = currentCourse.segment_break_labels;
+                    var descs = currentCourse.segment_break_descriptions;
+                    var ids = currentCourse.segment_break_ids;
+                    if (labels) { Object.keys(labels).forEach(function (k) { if (parseInt(k, 10) > pinIndex) delete labels[k]; }); }
+                    if (descs) { Object.keys(descs).forEach(function (k) { if (parseInt(k, 10) > pinIndex) delete descs[k]; }); }
+                    if (ids) { Object.keys(ids).forEach(function (k) { if (parseInt(k, 10) > pinIndex) delete ids[k]; }); }
+                    if (Array.isArray(currentCourse.turnaround_indices)) currentCourse.turnaround_indices = currentCourse.turnaround_indices.filter(function (i) { return i <= pinIndex; });
+                    extendFromIndex = null;
+                    extendInsertEndIndex = null;
+                    syncSegmentsFromBreaks();
+                    renderCourseLine();
+                    renderSegmentPins();
+                    renderStartFinishIcons();
+                    renderUturnIcons();
+                    renderSegmentsList();
+                    setDirty();
+                    updateCourseUI();
+                    updateDrawButtons();
+                    updateExtendHint();
+                };
+            }
+            if (isStart || isFinish) {
+                var btnEditPoint = document.createElement('button');
+                btnEditPoint.type = 'button';
+                btnEditPoint.textContent = 'Edit position';
+                btnEditPoint.style.marginRight = '6px';
+                btnWrap.insertBefore(btnEditPoint, btnExtend);
+                btnEditPoint.onclick = function () {
+                    window.courseMappingMap.closePopup();
+                    var lastIdx = coordsLen - 1;
+                    openPointEditTile(isStart ? 'start' : 'finish', isStart ? 0 : lastIdx, latlng, function () {}, (isStart && lastIdx > 0 && coords[0][0] === coords[lastIdx][0] && coords[0][1] === coords[lastIdx][1]) ? lastIdx : null);
+                };
+            }
+            content.appendChild(btnWrap);
+        }
+        var pop = L.popup({ maxWidth: 300, className: 'location-popup' }).setContent(content).setLatLng(latlng).openOn(window.courseMappingMap);
     }
 
     function nextSegmentPinId() {
@@ -750,6 +1341,122 @@ document.addEventListener('DOMContentLoaded', function () {
         btnCancel.onclick = function () { window.courseMappingMap.closePopup(); };
     }
 
+    function openPointEditTile(pointType, index, latlng, onSave, optSecondIndex) {
+        var lat = latlng.lat, lon = latlng.lng;
+        var desc = '';
+        if (pointType === 'start') desc = (currentCourse.start_description || '').trim();
+        else if (pointType === 'finish') desc = (currentCourse.end_description || '').trim();
+        else if (pointType === 'uturn' && currentCourse.turnaround_descriptions) desc = (currentCourse.turnaround_descriptions[index] || currentCourse.turnaround_descriptions['' + index] || '').trim();
+        var label = pointType === 'start' ? (optSecondIndex != null ? 'Start/Finish' : 'Start') : (pointType === 'finish' ? 'Finish' : 'U-turn');
+        var content = document.createElement('div');
+        content.style.minWidth = '240px';
+        content.innerHTML = '<strong>' + label + '</strong><br/>';
+        var lblLat = document.createElement('label');
+        lblLat.textContent = 'Latitude';
+        content.appendChild(lblLat);
+        var inputLat = document.createElement('input');
+        inputLat.type = 'text';
+        inputLat.value = String(lat);
+        inputLat.style.display = 'block';
+        inputLat.style.width = '100%';
+        inputLat.style.marginBottom = '8px';
+        inputLat.style.boxSizing = 'border-box';
+        content.appendChild(inputLat);
+        var lblLon = document.createElement('label');
+        lblLon.textContent = 'Longitude';
+        content.appendChild(lblLon);
+        var inputLon = document.createElement('input');
+        inputLon.type = 'text';
+        inputLon.value = String(lon);
+        inputLon.style.display = 'block';
+        inputLon.style.width = '100%';
+        inputLon.style.marginBottom = '8px';
+        inputLon.style.boxSizing = 'border-box';
+        content.appendChild(inputLon);
+        var lblDesc = document.createElement('label');
+        lblDesc.textContent = 'Description (optional)';
+        content.appendChild(lblDesc);
+        var inputDesc = document.createElement('textarea');
+        inputDesc.rows = 2;
+        inputDesc.placeholder = 'Optional description';
+        inputDesc.value = desc;
+        inputDesc.style.display = 'block';
+        inputDesc.style.width = '100%';
+        inputDesc.style.marginBottom = '8px';
+        inputDesc.style.boxSizing = 'border-box';
+        content.appendChild(inputDesc);
+        var btnSave = document.createElement('button');
+        btnSave.type = 'button';
+        btnSave.textContent = 'Save';
+        btnSave.style.marginRight = '6px';
+        var btnCancel = document.createElement('button');
+        btnCancel.type = 'button';
+        btnCancel.textContent = 'Cancel';
+        content.appendChild(btnSave);
+        content.appendChild(btnCancel);
+        if (pointType === 'uturn') {
+            var btnRemoveUturn = document.createElement('button');
+            btnRemoveUturn.type = 'button';
+            btnRemoveUturn.textContent = 'Remove this U-turn';
+            btnRemoveUturn.style.marginLeft = '6px';
+            btnRemoveUturn.title = 'Remove the U-turn marker (course geometry is unchanged)';
+            content.appendChild(btnRemoveUturn);
+            btnRemoveUturn.onclick = function () {
+                if (!currentCourse.turnaround_indices) return;
+                currentCourse.turnaround_indices = currentCourse.turnaround_indices.filter(function (i) { return i !== index; });
+                if (currentCourse.turnaround_descriptions) {
+                    delete currentCourse.turnaround_descriptions[index];
+                    delete currentCourse.turnaround_descriptions['' + index];
+                }
+                window.courseMappingMap.closePopup();
+                setDirty();
+                syncSegmentsFromBreaks();
+                renderCourseLine();
+                renderSegmentPins();
+                renderStartFinishIcons();
+                renderUturnIcons();
+                renderSegmentsList();
+                updateCourseUI();
+                if (onSave) onSave();
+            };
+        }
+        var pop = L.popup({ maxWidth: 320, className: 'location-popup' }).setContent(content).setLatLng(latlng).openOn(window.courseMappingMap);
+        btnSave.onclick = function () {
+            var newLat = parseFloat(inputLat.value);
+            var newLon = parseFloat(inputLon.value);
+            if (isNaN(newLat) || isNaN(newLon)) {
+                alert('Enter valid latitude and longitude.');
+                return;
+            }
+            var coords = currentCourse.geometry.coordinates;
+            if (pointType === 'start') {
+                coords[0] = [newLon, newLat];
+                if (optSecondIndex != null && optSecondIndex < coords.length) coords[optSecondIndex] = [newLon, newLat];
+                currentCourse.start_description = (inputDesc.value || '').trim();
+            } else if (pointType === 'finish') {
+                coords[coords.length - 1] = [newLon, newLat];
+                currentCourse.end_description = (inputDesc.value || '').trim();
+            } else if (pointType === 'uturn') {
+                if (index >= 0 && index < coords.length) {
+                    coords[index] = [newLon, newLat];
+                    if (!currentCourse.turnaround_descriptions) currentCourse.turnaround_descriptions = {};
+                    currentCourse.turnaround_descriptions[index] = (inputDesc.value || '').trim();
+                }
+            }
+            window.courseMappingMap.closePopup();
+            setDirty();
+            syncSegmentsFromBreaks();
+            renderCourseLine();
+            renderSegmentPins();
+            renderStartFinishIcons();
+            renderUturnIcons();
+            renderSegmentsList();
+            updateCourseUI();
+            if (onSave) onSave();
+        };
+        btnCancel.onclick = function () { window.courseMappingMap.closePopup(); };
+    }
+
     function renderSegmentPins() {
         if (!window.courseMappingMap) return;
         if (segmentPinsLayer) {
@@ -814,9 +1521,24 @@ document.addEventListener('DOMContentLoaded', function () {
                     var btnDel = document.createElement('button');
                     btnDel.type = 'button';
                     btnDel.textContent = 'Delete';
+                    btnDel.style.marginRight = '6px';
+                    var btnExtend = document.createElement('button');
+                    btnExtend.type = 'button';
+                    btnExtend.textContent = 'Extend from here';
+                    btnExtend.title = 'Start drawing a new leg from this point (e.g. full-only out-and-back). Click Draw Line, then add points; use Same Route Back for a U-turn.';
+                    var btnFlow = document.createElement('button');
+                    btnFlow.type = 'button';
+                    btnFlow.textContent = 'Flow control';
+                    btnFlow.title = 'Define which event(s) take which leg from this point (e.g. Full/10K left, Half right).';
                     btnWrap.appendChild(btnEdit);
                     btnWrap.appendChild(btnDel);
+                    btnWrap.appendChild(btnExtend);
+                    btnWrap.appendChild(btnFlow);
                     content.appendChild(btnWrap);
+                    btnFlow.onclick = function () {
+                        window.courseMappingMap.closePopup();
+                        openFlowControlForPin(i, e.latlng);
+                    };
                     btnEdit.onclick = function () {
                         window.courseMappingMap.closePopup();
                         openSegmentPinFormTile(i, e.latlng, function () {
@@ -826,18 +1548,69 @@ document.addEventListener('DOMContentLoaded', function () {
                         });
                     };
                     btnDel.onclick = function () {
-                        if (!window.confirm('Remove this segment boundary? This cannot be undone.')) return;
+                        var isEndPin = i >= coords.length - 1;
+                        var msg = isEndPin
+                            ? 'Remove this segment boundary? The course will still end at the same location; only the segment split is removed.'
+                            : 'Remove this segment boundary? This cannot be undone.';
+                        if (!window.confirm(msg)) return;
                         window.courseMappingMap.closePopup();
                         currentCourse.segment_breaks = currentCourse.segment_breaks.filter(function (x) { return x !== i; });
                         if (currentCourse.segment_break_labels) delete currentCourse.segment_break_labels[i];
                         if (currentCourse.segment_break_descriptions) delete currentCourse.segment_break_descriptions[i];
                         if (currentCourse.segment_break_ids) delete currentCourse.segment_break_ids[i];
                         syncSegmentsFromBreaks();
+                        renderCourseLine();
                         renderSegmentPins();
+                        renderStartFinishIcons();
+                        renderUturnIcons();
                         renderSegmentsList();
                         setDirty();
                         updateCourseUI();
                     };
+                    btnExtend.onclick = function () {
+                        window.courseMappingMap.closePopup();
+                        extendFromIndex = i;
+                        extendInsertEndIndex = i;
+                        startDrawMode();
+                        updateDrawButtons();
+                        updateExtendHint();
+                    };
+                    if (i > 0 && i < coords.length - 1) {
+                        var btnEndHere = document.createElement('button');
+                        btnEndHere.type = 'button';
+                        btnEndHere.textContent = 'End course here';
+                        btnEndHere.title = 'Remove all points after this pin and make this the finish.';
+                        btnEndHere.style.marginRight = '6px';
+                        btnWrap.appendChild(btnEndHere);
+                        btnEndHere.onclick = function () {
+                            window.courseMappingMap.closePopup();
+                            if (!window.confirm('End the course at this pin? All points after this will be removed. This cannot be undone.')) return;
+                            var coords = currentCourse.geometry.coordinates;
+                            var pinIdx = i;
+                            var newLen = pinIdx + 1;
+                            currentCourse.geometry.coordinates = coords.slice(0, newLen);
+                            currentCourse.segment_breaks = (currentCourse.segment_breaks || []).filter(function (idx) { return idx <= pinIdx; });
+                            var labels = currentCourse.segment_break_labels;
+                            var descs = currentCourse.segment_break_descriptions;
+                            var ids = currentCourse.segment_break_ids;
+                            if (labels) { Object.keys(labels).forEach(function (k) { if (parseInt(k, 10) > pinIdx) delete labels[k]; }); }
+                            if (descs) { Object.keys(descs).forEach(function (k) { if (parseInt(k, 10) > pinIdx) delete descs[k]; }); }
+                            if (ids) { Object.keys(ids).forEach(function (k) { if (parseInt(k, 10) > pinIdx) delete ids[k]; }); }
+                            if (Array.isArray(currentCourse.turnaround_indices)) currentCourse.turnaround_indices = currentCourse.turnaround_indices.filter(function (idx) { return idx <= pinIdx; });
+                            extendFromIndex = null;
+                            extendInsertEndIndex = null;
+                            syncSegmentsFromBreaks();
+                            renderCourseLine();
+                            renderSegmentPins();
+                            renderStartFinishIcons();
+                            renderUturnIcons();
+                            renderSegmentsList();
+                            setDirty();
+                            updateCourseUI();
+                            updateDrawButtons();
+                            updateExtendHint();
+                        };
+                    }
                 }
                 var pop = L.popup({ maxWidth: 300, className: 'location-popup' }).setContent(content).setLatLng(e.latlng).openOn(window.courseMappingMap);
             });
@@ -856,6 +1629,7 @@ document.addEventListener('DOMContentLoaded', function () {
             card.style.display = currentCourse ? 'block' : 'none';
             if (empty) empty.style.display = 'block';
             if (wrap) wrap.style.display = 'none';
+            renderSegmentPinsList();
             return;
         }
         card.style.display = 'block';
@@ -874,7 +1648,113 @@ document.addEventListener('DOMContentLoaded', function () {
             var displayLabel = (seg.seg_label && seg.seg_label.trim()) ? seg.seg_label : (pinEnd || '');
             var width = (seg.width_m != null && seg.width_m !== '') ? seg.width_m : 3;
             var tr = document.createElement('tr');
-            tr.innerHTML = '<td>' + segId + '</td><td>' + escapeHtml(pinStart) + '</td><td>' + escapeHtml(pinEnd) + '</td><td>' + escapeHtml(displayLabel || '') + '</td><td>' + width + '</td><td>' + seg.from_km + '</td><td>' + seg.to_km + '</td><td>' + Math.round(len * 100) / 100 + '</td>';
+            var fromCell = document.createElement('td');
+            var toCell = document.createElement('td');
+            var fromBtn = document.createElement('button');
+            fromBtn.type = 'button';
+            fromBtn.className = 'pin-link';
+            fromBtn.textContent = pinStart || '—';
+            fromBtn.title = 'Show pin on map: ' + (pinStart || 'From');
+            fromBtn.addEventListener('click', function () { openSegmentPinPopupForIndex(startIdx); });
+            fromCell.appendChild(fromBtn);
+            var toBtn = document.createElement('button');
+            toBtn.type = 'button';
+            toBtn.className = 'pin-link';
+            toBtn.textContent = pinEnd || '—';
+            toBtn.title = 'Show pin on map: ' + (pinEnd || 'To');
+            toBtn.addEventListener('click', function () { openSegmentPinPopupForIndex(endIdx); });
+            toCell.appendChild(toBtn);
+            var segIdCell = document.createElement('td');
+            var segIdBtn = document.createElement('button');
+            segIdBtn.type = 'button';
+            segIdBtn.className = 'pin-link';
+            segIdBtn.textContent = segId;
+            segIdBtn.title = 'Edit segment: label, width, schema, direction, description, events';
+            segIdBtn.addEventListener('click', function () { openSegmentEditInTile(segIdx); });
+            segIdCell.appendChild(segIdBtn);
+            tr.appendChild(segIdCell);
+            tr.appendChild(fromCell);
+            tr.appendChild(toCell);
+            tr.appendChild(document.createElement('td')).textContent = displayLabel || '';
+            tr.appendChild(document.createElement('td')).textContent = width;
+            var dirCell = document.createElement('td');
+            dirCell.textContent = seg.direction || 'uni';
+            tr.appendChild(dirCell);
+            var eventsCell = document.createElement('td');
+            eventsCell.textContent = eventsToDisplayList(seg.events);
+            tr.appendChild(eventsCell);
+            tr.appendChild(document.createElement('td')).textContent = seg.from_km;
+            tr.appendChild(document.createElement('td')).textContent = seg.to_km;
+            tr.appendChild(document.createElement('td')).textContent = Math.round(len * 100) / 100;
+            var mapCell = document.createElement('td');
+            mapCell.className = 'course-map-action-cell';
+            var mapBtn = document.createElement('button');
+            mapBtn.type = 'button';
+            mapBtn.className = 'pin-link course-map-action-btn';
+            mapBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+            mapBtn.title = 'Pan to this segment and open the end pin (use when the segment is hard to click on the map)';
+            mapBtn.addEventListener('click', function () { openSegmentPinPopupForIndex(endIdx); });
+            mapCell.appendChild(mapBtn);
+            var addPinBtn = document.createElement('button');
+            addPinBtn.type = 'button';
+            addPinBtn.className = 'pin-link course-map-action-btn';
+            addPinBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
+            addPinBtn.title = 'Pan to this segment and start Add Segment Pin mode — then click on the line where you want the new pin (e.g. at 10K Turn on the return leg)';
+            addPinBtn.addEventListener('click', function () {
+                window.courseMappingMap.closePopup();
+                var coords = currentCourse.geometry.coordinates;
+                var lo = Math.max(0, Math.min(startIdx, endIdx));
+                var hi = Math.min(coords.length - 1, Math.max(startIdx, endIdx));
+                if (lo <= hi) {
+                    var latlngs = [];
+                    for (var i = lo; i <= hi; i++) latlngs.push(L.latLng(coords[i][1], coords[i][0]));
+                    var bounds = L.latLngBounds(latlngs);
+                    window.courseMappingMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 18, duration: 0.3 });
+                }
+                if (typeof startSegmentPinMode === 'function') startSegmentPinMode({ startIdx: lo, endIdx: hi });
+            });
+            mapCell.appendChild(addPinBtn);
+            tr.appendChild(mapCell);
+            tbody.appendChild(tr);
+        });
+        renderSegmentPinsList();
+    }
+
+    function renderSegmentPinsList() {
+        var card = document.getElementById('segment-pins-card');
+        var empty = document.getElementById('segment-pins-empty');
+        var wrap = document.getElementById('segment-pins-table-wrap');
+        var tbody = document.getElementById('segment-pins-tbody');
+        if (!card || !tbody) return;
+        if (!currentCourse || !currentCourse.geometry || !currentCourse.geometry.coordinates || !Array.isArray(currentCourse.segment_breaks) || currentCourse.segment_breaks.length === 0) {
+            if (card) card.style.display = currentCourse ? 'block' : 'none';
+            if (empty) empty.style.display = 'block';
+            if (wrap) wrap.style.display = 'none';
+            return;
+        }
+        card.style.display = 'block';
+        empty.style.display = 'none';
+        wrap.style.display = 'block';
+        var coords = currentCourse.geometry.coordinates;
+        var coordsLen = coords.length;
+        var breaks = (currentCourse.segment_breaks || []).slice().sort(function (a, b) { return a - b; });
+        tbody.innerHTML = '';
+        breaks.forEach(function (idx) {
+            if (idx < 0 || idx >= coordsLen) return;
+            var label = getPinLabelForIndex(idx, coordsLen);
+            var tr = document.createElement('tr');
+            tr.appendChild(document.createElement('td')).textContent = idx;
+            tr.appendChild(document.createElement('td')).textContent = label || '—';
+            var actionCell = document.createElement('td');
+            actionCell.className = 'course-map-action-cell';
+            var showBtn = document.createElement('button');
+            showBtn.type = 'button';
+            showBtn.className = 'pin-link course-map-action-btn';
+            showBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+            showBtn.title = 'Pan to this pin and open its popup (use when the pin is behind others or the U-turn icon)';
+            showBtn.addEventListener('click', function () { openSegmentPinPopupForIndex(idx); });
+            actionCell.appendChild(showBtn);
+            tr.appendChild(actionCell);
             tbody.appendChild(tr);
         });
     }
@@ -1082,6 +1962,41 @@ document.addEventListener('DOMContentLoaded', function () {
             if (d < minD) { minD = d; best = i; }
         }
         return best;
+    }
+
+    /** Closest vertex to latLng within coordinate indices [startIdx, endIdx] (inclusive). Used when adding a pin restricted to one segment. */
+    function closestVertexIndexInRange(latLng, coordinates, startIdx, endIdx) {
+        var minD = 1e9, best = startIdx;
+        var lat = latLng.lat, lon = latLng.lng;
+        var lo = Math.max(0, Math.min(startIdx, endIdx));
+        var hi = Math.min(coordinates.length - 1, Math.max(startIdx, endIdx));
+        for (var i = lo; i <= hi; i++) {
+            var c = coordinates[i];
+            var d = (c[1] - lat) * (c[1] - lat) + (c[0] - lon) * (c[0] - lon);
+            if (d < minD) { minD = d; best = i; }
+        }
+        return best;
+    }
+
+    /** For Same Route Back: prefer segment-break (pin) vertex when click is near one, so rejoin point snaps to pins. */
+    function rejoinVertexIndex(latLng, coordinates) {
+        var idx = closestVertexIndex(latLng, coordinates);
+        var breaks = (currentCourse && currentCourse.segment_breaks) ? currentCourse.segment_breaks : [];
+        if (breaks.length === 0) return idx;
+        var lat = latLng.lat, lon = latLng.lng;
+        var dBest = 1e9;
+        var coordAt = function (i) {
+            var c = coordinates[i];
+            return (c[1] - lat) * (c[1] - lat) + (c[0] - lon) * (c[0] - lon);
+        };
+        var dIdx = coordAt(idx);
+        for (var b = 0; b < breaks.length; b++) {
+            var bi = breaks[b];
+            if (bi < 0 || bi >= coordinates.length) continue;
+            var db = coordAt(bi);
+            if (db <= dIdx * 1.5 && db < dBest) { dBest = db; idx = bi; }
+        }
+        return idx;
     }
 
     function segmentIndexAtLatLng(latlng) {
@@ -1362,7 +2277,11 @@ document.addEventListener('DOMContentLoaded', function () {
                         segment_break_labels: currentCourse.segment_break_labels || {},
                         segment_break_descriptions: currentCourse.segment_break_descriptions || {},
                         segment_break_ids: currentCourse.segment_break_ids || {},
-                        turnaround_indices: Array.isArray(currentCourse.turnaround_indices) ? currentCourse.turnaround_indices.slice() : []
+                        turnaround_indices: Array.isArray(currentCourse.turnaround_indices) ? currentCourse.turnaround_indices.slice() : [],
+                        start_description: currentCourse.start_description || '',
+                        end_description: currentCourse.end_description || '',
+                        turnaround_descriptions: currentCourse.turnaround_descriptions || {},
+                        flow_control_points: Array.isArray(currentCourse.flow_control_points) ? JSON.parse(JSON.stringify(currentCourse.flow_control_points)) : []
                     }));
                     const res = await fetch('/api/courses/' + encodeURIComponent(courseIdToSave), {
                         method: 'PUT',
@@ -1402,34 +2321,53 @@ document.addEventListener('DOMContentLoaded', function () {
                 var snapEl = document.getElementById('snap-to-road');
                 var coords = currentCourse.geometry.coordinates;
                 var toPoint = [e.latlng.lng, e.latlng.lat];
-                if (snapEl && snapEl.classList && snapEl.classList.contains('active') && coords.length >= 1) {
+                var fromPoint = (extendFromIndex != null && extendInsertEndIndex != null) ? coords[extendInsertEndIndex] : coords[coords.length - 1];
+                if (snapEl && snapEl.classList && snapEl.classList.contains('active') && fromPoint) {
                     drawRoutingInProgress = true;
-                    fetchRouteSegment(coords[coords.length - 1], toPoint, function (err, routeCoords) {
+                    fetchRouteSegment(fromPoint, toPoint, function (err, routeCoords) {
                         drawRoutingInProgress = false;
-                        if (!err && routeCoords && routeCoords.length > 1) {
-                            var before = coords.length;
-                            for (var i = 1; i < routeCoords.length; i++) coords.push(routeCoords[i]);
-                            lastAddedPointCount = coords.length - before;
+                        var newPoints = (!err && routeCoords && routeCoords.length > 1) ? routeCoords.slice(1) : [toPoint];
+                        lastAddedPointCount = newPoints.length;
+                        if (extendFromIndex != null && extendInsertEndIndex != null) {
+                            var insertAt = extendInsertEndIndex + 1;
+                            for (var ni = 0; ni < newPoints.length; ni++) coords.splice(insertAt + ni, 0, newPoints[ni].slice());
+                            shiftIndicesAfter(currentCourse.segment_breaks, extendFromIndex, newPoints.length);
+                            shiftSegmentBreakMetadata(extendFromIndex, newPoints.length);
+                            shiftIndicesAfter(currentCourse.turnaround_indices, extendFromIndex, newPoints.length);
+                            extendInsertEndIndex += newPoints.length;
                         } else {
-                            coords.push(toPoint);
-                            lastAddedPointCount = 1;
+                            for (var i = 0; i < newPoints.length; i++) coords.push(newPoints[i]);
                         }
                         syncSegmentsFromBreaks();
                         renderCourseLine();
+                        renderSegmentPins();
                         renderStartFinishIcons();
+                        renderUturnIcons();
                         setDirty();
                         updateDrawButtons();
                         updateUndoButton();
+                        updateExtendHint();
                     });
                 } else {
-                    coords.push(toPoint);
                     lastAddedPointCount = 1;
+                    if (extendFromIndex != null && extendInsertEndIndex != null) {
+                        coords.splice(extendInsertEndIndex + 1, 0, toPoint.slice());
+                        shiftIndicesAfter(currentCourse.segment_breaks, extendFromIndex, 1);
+                        shiftSegmentBreakMetadata(extendFromIndex, 1);
+                        shiftIndicesAfter(currentCourse.turnaround_indices, extendFromIndex, 1);
+                        extendInsertEndIndex += 1;
+                    } else {
+                        coords.push(toPoint);
+                    }
                     syncSegmentsFromBreaks();
                     renderCourseLine();
+                    renderSegmentPins();
                     renderStartFinishIcons();
+                    renderUturnIcons();
                     setDirty();
                     updateDrawButtons();
                     updateUndoButton();
+                    updateExtendHint();
                 }
             };
             map.on('click', mapClickHandler);
@@ -1446,6 +2384,18 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
+        function stopExtendMode() {
+            extendFromIndex = null;
+            extendInsertEndIndex = null;
+            stopDrawMode();
+            updateExtendHint();
+            updateDrawButtons();
+            renderCourseLine();
+            renderSegmentPins();
+            renderStartFinishIcons();
+            renderUturnIcons();
+        }
+
         var turnaroundMarkerIndex = 0;
         var turnaroundMarker = null;
         var sameRouteBackClickHandler = null;
@@ -1453,12 +2403,14 @@ document.addEventListener('DOMContentLoaded', function () {
         function setTurnaroundFromClick(latlng) {
             if (!currentCourse || !currentCourse.geometry || !currentCourse.geometry.coordinates || !turnaroundMarker) return;
             var coords = currentCourse.geometry.coordinates;
-            var idx = closestVertexIndex(latlng, coords);
+            var idx = rejoinVertexIndex(latlng, coords);
             idx = Math.max(0, Math.min(idx, coords.length - 1));
             turnaroundMarkerIndex = idx;
             turnaroundMarker._turnaroundIndex = idx;
             var c = coords[idx];
             turnaroundMarker.setLatLng([c[1], c[0]]);
+            var sel = document.getElementById('rejoin-at-pin');
+            if (sel && sameRouteBackMode) sel.value = String(idx);
         }
 
         function startSameRouteBackMode() {
@@ -1468,8 +2420,13 @@ document.addEventListener('DOMContentLoaded', function () {
             stopSegmentPinMode();
             stopLocationPinMode();
             sameRouteBackMode = true;
-            turnaroundMarkerIndex = Math.max(0, coords.length - 2);
-            var c = coords[turnaroundMarkerIndex];
+            if (extendFromIndex != null && extendInsertEndIndex != null) {
+                turnaroundMarkerIndex = extendFromIndex;
+                var c = coords[extendFromIndex];
+            } else {
+                turnaroundMarkerIndex = Math.max(0, coords.length - 2);
+                var c = coords[turnaroundMarkerIndex];
+            }
             var redIcon = L.divIcon({
                 className: 'turnaround-marker',
                 html: '<div style="width:20px;height:20px;background:#e74c3c;border:2px solid #c0392b;border-radius:50%;"></div>',
@@ -1483,7 +2440,7 @@ document.addEventListener('DOMContentLoaded', function () {
             turnaroundMarkerLayer = L.layerGroup();
             turnaroundMarker = L.marker([c[1], c[0]], { icon: redIcon, draggable: true });
             turnaroundMarker._turnaroundIndex = turnaroundMarkerIndex;
-            turnaroundMarker.bindTooltip('Click route or drag to set where return ends (finish point)', { permanent: false, direction: 'top', offset: [0, -10], className: 'course-map-tooltip' });
+            turnaroundMarker.bindTooltip('Rejoin point: return leg ends here. Same Route Back retraces to this point; or draw a different return by adding points and ending here, then Done extending.', { permanent: false, direction: 'top', offset: [0, -10], className: 'course-map-tooltip' });
             turnaroundMarker.on('dragend', function () {
                 var ll = turnaroundMarker.getLatLng();
                 setTurnaroundFromClick(ll);
@@ -1520,10 +2477,39 @@ document.addEventListener('DOMContentLoaded', function () {
             if (k < 0 || k >= coords.length) return;
             var turnaroundIdx = coords.length - 1;
             var returnSegment = [];
-            for (var i = turnaroundIdx - 1; i >= k; i--) returnSegment.push(coords[i].slice());
-            coords.push.apply(coords, returnSegment);
-            if (!Array.isArray(currentCourse.turnaround_indices)) currentCourse.turnaround_indices = [];
-            currentCourse.turnaround_indices.push(turnaroundIdx);
+            if (extendFromIndex != null && extendInsertEndIndex != null) {
+                turnaroundIdx = extendInsertEndIndex;
+                var rejoinTarget = k;
+                if (rejoinTarget < 0 || rejoinTarget > extendInsertEndIndex) rejoinTarget = extendFromIndex;
+                for (var r = extendInsertEndIndex - 1; r >= rejoinTarget + 1; r--) returnSegment.push(coords[r].slice());
+                returnSegment.push(coords[rejoinTarget].slice());
+                for (var si = 0; si < returnSegment.length; si++) coords.splice(extendInsertEndIndex + 1 + si, 0, returnSegment[si]);
+                shiftIndicesAfter(currentCourse.segment_breaks, extendInsertEndIndex, returnSegment.length);
+                shiftSegmentBreakMetadata(extendInsertEndIndex, returnSegment.length);
+                var rejoinIdx = extendInsertEndIndex + returnSegment.length;
+                if (currentCourse.segment_breaks.indexOf(rejoinIdx) < 0) {
+                    currentCourse.segment_breaks.push(rejoinIdx);
+                    currentCourse.segment_breaks.sort(function (a, b) { return a - b; });
+                    if (!currentCourse.segment_break_labels) currentCourse.segment_break_labels = {};
+                    currentCourse.segment_break_labels[rejoinIdx] = (currentCourse.segment_break_labels[rejoinTarget] || currentCourse.segment_break_labels['' + rejoinTarget] || '').trim() || 'Friel';
+                    if (currentCourse.segment_break_ids) {
+                        var nextId = 1;
+                        Object.keys(currentCourse.segment_break_ids).forEach(function (key) { var n = parseInt(currentCourse.segment_break_ids[key], 10); if (!isNaN(n) && n >= nextId) nextId = n + 1; });
+                        currentCourse.segment_break_ids[rejoinIdx] = nextId;
+                    }
+                }
+                if (!Array.isArray(currentCourse.turnaround_indices)) currentCourse.turnaround_indices = [];
+                var ti = currentCourse.turnaround_indices;
+                for (var j = 0; j < ti.length; j++) if (ti[j] > extendInsertEndIndex) ti[j] += returnSegment.length;
+                ti.push(extendInsertEndIndex);
+                ti.sort(function (a, b) { return a - b; });
+                extendInsertEndIndex += returnSegment.length;
+            } else {
+                for (var i = turnaroundIdx - 1; i >= k; i--) returnSegment.push(coords[i].slice());
+                coords.push.apply(coords, returnSegment);
+                if (!Array.isArray(currentCourse.turnaround_indices)) currentCourse.turnaround_indices = [];
+                currentCourse.turnaround_indices.push(turnaroundIdx);
+            }
             setDirty();
             stopSameRouteBackMode();
             syncSegmentsFromBreaks();
@@ -1537,6 +2523,7 @@ document.addEventListener('DOMContentLoaded', function () {
             updateSegmentPinButton();
             updateUndoButton();
             updateExportButton();
+            updateExtendHint();
             updateCourseUI();
         }
 
@@ -1559,29 +2546,60 @@ document.addEventListener('DOMContentLoaded', function () {
             indices.forEach(function (idx) {
                 if (idx < 0 || idx >= coords.length) return;
                 var c = coords[idx];
+                var labelText = getSegmentBreakLabel(idx) || (currentCourse.turnaround_descriptions && (currentCourse.turnaround_descriptions[idx] || currentCourse.turnaround_descriptions['' + idx])) || 'U-turn';
+                var labelEscaped = (labelText || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
                 var icon = L.divIcon({
                     className: 'uturn-icon',
-                    html: '<div style="width:24px;height:24px;background:#3498db;color:#fff;border:2px solid #2980b9;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:bold;">↺</div>',
-                    iconSize: [24, 24],
+                    html: '<div style="display:flex;flex-direction:column;align-items:center;gap:0;">' +
+                        '<div style="width:24px;height:24px;background:#3498db;color:#fff;border:2px solid #2980b9;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:bold;">↺</div>' +
+                        '<span style="font-size:10px;font-weight:600;color:#2980b9;white-space:nowrap;max-width:80px;overflow:hidden;text-overflow:ellipsis;text-shadow:0 0 2px #fff,0 0 2px #fff;">' + labelEscaped + '</span></div>',
+                    iconSize: [24, 36],
                     iconAnchor: [12, 12]
                 });
-                var m = L.marker([c[1], c[0]], { icon: icon });
-                m.bindTooltip('U-turn (Same Route Back)', { permanent: false, direction: 'top', offset: [0, -10], className: 'course-map-tooltip' });
+                var m = L.marker([c[1], c[0]], { icon: icon, draggable: isEditMode });
+                m._turnaroundIndex = idx;
+                var tip = 'U-turn (Same Route Back)';
+                if (isEditMode) tip += ' — drag to move or click to edit';
+                m.bindTooltip(tip, { permanent: false, direction: 'top', offset: [0, -10], className: 'course-map-tooltip' });
+                if (isEditMode) {
+                    m.on('dragend', function () {
+                        var ll = m.getLatLng();
+                        currentCourse.geometry.coordinates[m._turnaroundIndex] = [ll.lng, ll.lat];
+                        syncSegmentsFromBreaks();
+                        renderCourseLine();
+                        renderSegmentPins();
+                        renderStartFinishIcons();
+                        renderUturnIcons();
+                        renderSegmentsList();
+                        setDirty();
+                        updateCourseUI();
+                    });
+                    m.on('click', function (e) {
+                        L.DomEvent.stopPropagation(e);
+                        openPointEditTile('uturn', m._turnaroundIndex, e.latlng, function () {});
+                    });
+                }
                 uturnIconsLayer.addLayer(m);
             });
             uturnIconsLayer.addTo(window.courseMappingMap);
         }
 
-        function startSegmentPinMode() {
+        function startSegmentPinMode(segmentRange) {
             if (segmentPinMode || !currentCourse || !currentCourse.geometry || !currentCourse.geometry.coordinates || currentCourse.geometry.coordinates.length < 2) return;
             stopDrawMode();
             stopLocationPinMode();
             segmentPinMode = true;
+            addPinSegmentRange = segmentRange && typeof segmentRange.startIdx === 'number' && typeof segmentRange.endIdx === 'number' ? { startIdx: segmentRange.startIdx, endIdx: segmentRange.endIdx } : null;
             updateSegmentPinButton();
             mapClickHandler = function (e) {
                 var coords = currentCourse.geometry.coordinates;
-                var idx = closestVertexIndex(e.latlng, coords);
-                if (idx <= 0 || idx >= coords.length - 1) return;
+                var idx;
+                if (addPinSegmentRange) {
+                    idx = closestVertexIndexInRange(e.latlng, coords, addPinSegmentRange.startIdx, addPinSegmentRange.endIdx);
+                } else {
+                    idx = closestVertexIndex(e.latlng, coords);
+                }
+                if (idx <= 0 || idx >= coords.length) return;
                 if (!Array.isArray(currentCourse.segment_breaks)) currentCourse.segment_breaks = [];
                 if (currentCourse.segment_breaks.indexOf(idx) >= 0) return;
                 currentCourse.segment_breaks.push(idx);
@@ -1591,6 +2609,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (!currentCourse.segment_break_ids) currentCourse.segment_break_ids = {};
                 currentCourse.segment_break_ids[idx] = nextSegmentPinId();
                 setDirty();
+                addPinSegmentRange = null;
                 openSegmentPinFormTile(idx, e.latlng, function () {
                     syncSegmentsFromBreaks();
                     renderSegmentPins();
@@ -1603,6 +2622,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         function stopSegmentPinMode() {
             segmentPinMode = false;
+            addPinSegmentRange = null;
             updateSegmentPinButton();
             if (mapClickHandler) {
                 map.off('click', mapClickHandler);
@@ -1738,11 +2758,21 @@ document.addEventListener('DOMContentLoaded', function () {
         if (btnConfirmTurnaround) btnConfirmTurnaround.addEventListener('click', confirmSameRouteBack);
         var btnCancelTurnaround = document.getElementById('btn-cancel-turnaround');
         if (btnCancelTurnaround) btnCancelTurnaround.addEventListener('click', cancelSameRouteBack);
+        var rejoinAtPin = document.getElementById('rejoin-at-pin');
+        if (rejoinAtPin) rejoinAtPin.addEventListener('change', function () {
+            if (sameRouteBackMode) setRejoinIndexFromSelect(rejoinAtPin.value);
+        });
 
         var btnSegmentPin = document.getElementById('btn-add-segment-pin');
         if (btnSegmentPin) {
             btnSegmentPin.addEventListener('click', function () {
                 if (segmentPinMode) stopSegmentPinMode(); else startSegmentPinMode();
+            });
+        }
+        var btnDoneExtending = document.getElementById('btn-done-extending');
+        if (btnDoneExtending) {
+            btnDoneExtending.addEventListener('click', function () {
+                stopExtendMode();
             });
         }
 
