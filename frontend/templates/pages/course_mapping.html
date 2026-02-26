@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+
+{% block title %}Course Mapping{% endblock %}
+
+{% block extra_head %}
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+    #course-mapping-map {
+        height: 750px;
+        border-radius: 4px;
+        overflow: hidden;
+        position: relative;
+        background: transparent !important;
+    }
+
+    .map-loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(255, 255, 255, 0.9);
+        padding: 1rem 2rem;
+        border-radius: 4px;
+        font-weight: 500;
+        color: #666;
+        z-index: 1000;
+    }
+
+    /* Above Leaflet overlay pane (400) and all map content so course line never draws behind buttons */
+    #basemap-toggle {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 10000;
+        background: rgba(255, 255, 255, 0.95);
+        padding: 0.5rem 0.75rem;
+        border-radius: 4px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        display: flex;
+        gap: 0.25rem;
+    }
+
+    #basemap-toggle button {
+        padding: 0.35rem 0.6rem;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        background: #fff;
+        cursor: pointer;
+        font-size: 0.875rem;
+    }
+
+    #basemap-toggle button.active {
+        background: #3498db;
+        color: #fff;
+        border-color: #2980b9;
+    }
+
+    #basemap-toggle button:hover:not(.active) {
+        background: #ecf0f1;
+    }
+
+    #course-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    #course-toolbar button {
+        padding: 0.4rem 0.75rem;
+        border: 1px solid #bdc3c7;
+        border-radius: 4px;
+        background: #fff;
+        cursor: pointer;
+        font-size: 0.875rem;
+    }
+
+    #course-toolbar button:hover {
+        background: #ecf0f1;
+    }
+
+    #course-toolbar button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    #course-toolbar button.active {
+        background: #3498db;
+        color: #fff;
+        border-color: #2980b9;
+    }
+
+    #course-toolbar .course-id {
+        font-size: 0.875rem;
+        color: #7f8c8d;
+    }
+
+    #course-toolbar .toolbar-check {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.875rem;
+        color: #555;
+        cursor: pointer;
+    }
+    #course-toolbar .toolbar-check input { cursor: pointer; }
+
+    /* Segments table: compact padding, left-align all columns; Action column icon buttons */
+    #segments-table th,
+    #segments-table td {
+        padding: 0.35rem 0.5rem;
+        text-align: left;
+    }
+    #segment-pins-table th,
+    #segment-pins-table td {
+        text-align: left;
+        padding: 0.35rem 0.5rem;
+    }
+    .course-map-action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        margin: 0 2px;
+        border: 1px solid #bdc3c7;
+        border-radius: 4px;
+        background: #fff;
+        cursor: pointer;
+        font-size: 0;
+        vertical-align: middle;
+    }
+    .course-map-action-btn:hover {
+        background: #ecf0f1;
+        border-color: #95a5a6;
+    }
+    .course-map-action-btn svg {
+        width: 16px;
+        height: 16px;
+        pointer-events: none;
+    }
+    #segments-table td.course-map-action-cell,
+    #segment-pins-table td.course-map-action-cell {
+        white-space: nowrap;
+    }
+
+    .segment-pin-square { background: transparent !important; border: none !important; }
+    .segment-pin-square > div { cursor: pointer; }
+    .segment-info-icon { background: transparent !important; border: none !important; }
+    .segment-info-icon > div { cursor: pointer; }
+    .start-finish-icon { background: transparent !important; border: none !important; }
+    .start-finish-icon > div { cursor: default; }
+    #course-mapping-map.course-mapping-edit-mode .start-finish-icon > div { cursor: move; }
+    .uturn-icon > div { cursor: default; }
+    #course-mapping-map.course-mapping-edit-mode .uturn-icon > div { cursor: move; }
+    .location-pin-circle { background: transparent !important; border: none !important; }
+    .location-pin-circle > div { cursor: pointer; }
+    .turnaround-marker { background: transparent !important; border: none !important; }
+    .turnaround-marker > div { cursor: move; }
+    .uturn-icon { background: transparent !important; border: none !important; }
+    /* Course map popups: match Locations UI (shared styles in common.css for tooltips) */
+    .course-map-popup, .leaflet-popup-content .course-map-popup {
+        font-family: Arial, sans-serif;
+        font-size: 0.875rem;
+        line-height: 1.4;
+        min-width: 200px;
+        max-width: 280px;
+    }
+    .course-map-popup .popup-row { margin-bottom: 0.5rem; }
+    .course-map-popup .popup-row:last-child { margin-bottom: 0; }
+    .course-map-popup .popup-label { font-weight: 600; color: #2c3e50; font-size: 0.875rem; }
+    .course-map-popup .popup-value { color: #34495e; font-size: 0.875rem; }
+    .course-map-popup .popup-heading { margin: 0 0 0.5rem 0; font-size: 1rem; color: #2c3e50; font-weight: 600; }
+    .course-map-popup-wrap { font-size: 0.875rem; }
+    .course-map-popup input, .course-map-popup select, .course-map-popup textarea,
+    .course-map-popup-wrap input, .course-map-popup-wrap select, .course-map-popup-wrap textarea,
+    .leaflet-popup-content input, .leaflet-popup-content select, .leaflet-popup-content textarea {
+        margin: 5px !important;
+        font-size: 0.875rem;
+    }
+    #course-list-table tbody tr.course-row { cursor: pointer; }
+    #course-list-table tbody tr.course-row.selected { background: #e3f2fd; }
+    .course-label { font-weight: 600; color: #2c3e50; margin-right: 0.25rem; }
+    #course-map-header-buttons button { padding: 0.4rem 0.75rem; border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; font-size: 0.875rem; color: #000; }
+    #course-map-header-buttons button:hover { background: #ecf0f1; }
+    #course-map-header-buttons button:disabled { opacity: 0.6; cursor: not-allowed; }
+    #course-map-header-buttons button.active { background: #3498db; color: #fff; border-color: #2980b9; }
+    #btn-delete-course { background: #e8e8e8 !important; color: #c0392b !important; border-color: #bdc3c7 !important; }
+    #btn-delete-course:hover:not(:disabled) { background: #ddd !important; }
+    /* Edit toolbar: same look as Street/Satellite buttons */
+    #course-edit-toolbar button { padding: 0.35rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; font-size: 0.875rem; color: #000; }
+    #course-edit-toolbar button:hover:not(:disabled) { background: #ecf0f1; }
+    #course-edit-toolbar button:disabled { opacity: 0.6; cursor: not-allowed; }
+    #course-edit-toolbar button.active { background: #3498db; color: #fff; border-color: #2980b9; }
+    /* Segments table: clickable From/To pin labels open pin popup on map */
+    .pin-link { background: none; border: none; padding: 0; font-size: inherit; color: #2980b9; cursor: pointer; text-decoration: none; }
+    .pin-link:hover { text-decoration: underline; }
+    /* Pin labels in tables: left-align (buttons default to center-aligned text) */
+    #segments-table .pin-link,
+    #segment-pins-table .pin-link { text-align: left; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Course Mapping</h2>
+    <p style="color: #7f8c8d; font-size: 0.95rem; margin-top: 0.25rem;">Map a route/course with snap-to-road, segment pins, and operational locations. Export segments.csv, flow.csv, locations.csv, and GPX.</p>
+</div>
+
+<!-- Select A Course Table -->
+<div class="card" style="margin-bottom: 1rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="margin: 0; color: #2c3e50;">Select A Course</h3>
+        <button type="button" id="btn-new-course" style="padding: 0.4rem 0.75rem; border: 1px solid #bdc3c7; border-radius: 4px; background: #fff; cursor: pointer; font-size: 0.875rem;">New course</button>
+    </div>
+    <div class="scrollable-table-container">
+        <table id="course-list-table" class="table-sticky-header">
+            <thead>
+                <tr>
+                    <th class="table-sortable" data-sort="name">Name <span class="table-sortable-indicator">↕</span></th>
+                    <th class="table-sortable" data-sort="description">Description <span class="table-sortable-indicator">↕</span></th>
+                    <th class="table-sortable" data-sort="updated">Saved On <span class="table-sortable-indicator">↕</span></th>
+                    <th class="table-sortable" data-sort="distance_km" style="text-align: right;">Distance <span class="table-sortable-indicator">↕</span></th>
+                    <th class="table-sortable" data-sort="segments_count" style="text-align: center;">Segments <span class="table-sortable-indicator">↕</span></th>
+                    <th class="table-sortable" data-sort="locations_count" style="text-align: center;">Locations <span class="table-sortable-indicator">↕</span></th>
+                </tr>
+            </thead>
+            <tbody id="course-list-tbody">
+                <tr><td colspan="6" class="placeholder">Loading courses...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card" id="course-map-card">
+    <div id="course-map-header" style="margin-bottom: 0.5rem; position: relative;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem;">
+            <div style="flex: 1; min-width: 0;">
+                <div id="course-map-id" style="font-size: 0.8rem; color: #7f8c8d; margin-bottom: 0.25rem;"></div>
+                <div style="margin-bottom: 0.25rem;"><span class="course-label">Course Name:</span> <span id="course-map-name-text"></span><input type="text" id="course-map-name" placeholder="Course name" maxlength="255" style="display: none; width: 100%; max-width: 400px; padding: 0.35rem 0.5rem; font-size: 1rem; font-weight: 600; color: #2c3e50; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;" /></div>
+                <div style="width: 100%;"><span class="course-label">Description:</span> <span id="course-map-description-text"></span><textarea id="course-map-description" placeholder="Course description (optional)" maxlength="255" rows="2" style="display: none; width: 100%; min-height: 2.5em; padding: 0.35rem 0.5rem; font-size: 0.875rem; color: #34495e; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; resize: none; overflow: hidden; font-family: inherit;"></textarea></div>
+            </div>
+            <div id="course-map-header-buttons" style="display: flex; gap: 0.5rem; align-items: center;">
+                <button type="button" id="btn-edit-course">Edit</button>
+                <button type="button" id="btn-export" disabled title="Write segments.csv, flow.csv, locations.csv, GPX to course folder">Export</button>
+                <button type="button" id="btn-delete-course" disabled title="Delete this course (cannot be undone)">Delete Course</button>
+                <button type="button" id="btn-save-course" disabled style="display: none;">Save</button>
+            </div>
+        </div>
+        <div id="course-edit-toolbar" style="display: none; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #eee;">
+            <button type="button" id="btn-draw-line" disabled title="Click map to add points to course line">Draw Line</button>
+            <button type="button" id="btn-undo-point" disabled title="Remove the last point from the course line">Undo Last Point</button>
+            <button type="button" id="btn-clear-line" disabled title="Remove course line from map and course">Clear Line</button>
+            <button type="button" id="btn-same-route-back" disabled title="Add return leg from turnaround point (Draw Line mode only)">Same Route Back</button>
+            <span id="rejoin-at-wrap" style="display: none; align-items: center; gap: 0.35rem;">
+                <label for="rejoin-at-pin" class="rejoin-label">Rejoin at:</label>
+                <select id="rejoin-at-pin" title="Choose rejoin point for return leg (or click/drag red marker on map)"></select>
+            </span>
+            <button type="button" id="btn-confirm-turnaround" disabled style="display: none;" title="Confirm turnaround point and add return leg">Confirm</button>
+            <button type="button" id="btn-cancel-turnaround" disabled style="display: none;" title="Cancel Same Route Back">Cancel</button>
+            <button type="button" id="snap-to-road" class="active" title="When on, new segments follow roads (routing). When off, line is straight between clicks.">Snap to Road</button>
+            <button type="button" id="btn-add-segment-pin" disabled title="Click on the course line to add a segment boundary">Add Segment Pin</button>
+            <button type="button" id="btn-done-extending" disabled style="display: none;" title="Finish extending from this point and return to normal draw">Done extending</button>
+            <button type="button" id="btn-add-location" disabled title="Click map to place first-aid, traffic, course, or water location">Add Location</button>
+        </div>
+        <p id="extend-hint" style="display: none; margin-top: 0.35rem; font-size: 0.8rem; color: #2980b9;"></p>
+    </div>
+    <div id="course-mapping-map" aria-label="Course mapping map" style="position: relative;">
+        <div class="map-loading">Loading map...</div>
+        <div id="basemap-toggle" style="display: none;">
+            <button type="button" id="btn-street" class="active">Street</button>
+            <button type="button" id="btn-satellite">Satellite</button>
+        </div>
+    </div>
+</div>
+
+<div class="card" id="segments-card" style="margin-top: 1rem; display: none;">
+    <h3 style="margin-bottom: 0.5rem;">Segments</h3>
+    <p id="segments-empty" style="color: #95a5a6; font-size: 0.875rem;">Add segment pins on the course line to split it into segments. Each segment is the route between two pins (e.g. Start → Block 1). Use &quot;Show on map&quot; to focus a segment when it is hard to click on the map.</p>
+    <div id="segments-table-wrap" style="display: none;">
+        <div class="scrollable-table-container segments-table-scroll" style="max-height: 25vh;">
+            <table id="segments-table" class="table-sticky-header" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+                <thead>
+                    <tr><th>ID</th><th>From pin</th><th>To pin</th><th>Segment label</th><th>Events</th><th>Full</th><th>Half</th><th>10K</th><th>Elite</th><th>Open</th><th>Length</th><th>Action</th></tr>
+                </thead>
+                <tbody id="segments-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+    <div id="segment-edit-tile" style="display: none; margin-top: 1rem; padding: 1rem; border: 1px solid #ddd; border-radius: 4px; background: #fafafa;">
+        <h4 id="segment-edit-tile-title" style="margin-top: 0; margin-bottom: 0.75rem;">Edit segment</h4>
+        <div id="segment-edit-tile-content"></div>
+        <div style="margin-top: 0.75rem;">
+            <button type="button" id="segment-edit-tile-save">Save</button>
+            <button type="button" id="segment-edit-tile-cancel" style="margin-left: 0.5rem;">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div class="card" id="segment-pins-card" style="margin-top: 1rem; display: none;">
+    <h3 style="margin-bottom: 0.5rem;">Segment pins</h3>
+    <p id="segment-pins-empty" style="color: #95a5a6; font-size: 0.875rem;">No segment pins. Add pins on the course line to create segment boundaries.</p>
+    <div id="segment-pins-table-wrap" style="display: none;">
+        <div class="scrollable-table-container" style="max-height: 25vh;">
+            <table id="segment-pins-table" class="table-sticky-header" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+                <thead>
+                    <tr><th>Index</th><th>Label</th><th>Action</th></tr>
+                </thead>
+                <tbody id="segment-pins-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card" id="locations-card" style="margin-top: 1rem; display: none;">
+    <h3 style="margin-bottom: 0.5rem;">Locations</h3>
+    <p id="locations-empty" style="color: #95a5a6; font-size: 0.875rem;">Add location pins on the map (aid, course, official, traffic, water).</p>
+    <div id="locations-table-wrap" style="display: none;">
+        <table id="locations-table" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+            <thead>
+                <tr><th>Type</th><th>Label</th><th>Lat</th><th>Lon</th><th></th></tr>
+            </thead>
+            <tbody id="locations-tbody"></tbody>
+        </table>
+    </div>
+</div>
+
+<p style="margin-top: 1rem; color: #95a5a6; font-size: 0.875rem;">Issue #732: Export downloads segments.csv, flow.csv, locations.csv, and GPX for the current course.</p>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    window.LOCATION_TYPES_FROM_SERVER = {{ location_types | tojson }};
+    window.EVENT_CHOICES_FROM_SERVER = {{ event_choices | tojson }};
+</script>
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/static/js/map/base_map.js"></script>
+<script src="/static/js/map/course_mapping.js"></script>
+{% endblock %}

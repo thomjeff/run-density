@@ -191,6 +191,18 @@ RUN_ID_MIN_LENGTH = 10
 LOCATION_SNAP_THRESHOLD_M = 50.0  # Maximum distance for snapping location to segment
 LOCATION_SETUP_BUFFER_MINUTES = 45  # Minutes before earliest runner start for loc_start
 
+# Course Mapping location types (Issue #732) — alphabetical for UI dropdown
+LOCATION_TYPE_CHOICES = [
+    "aid",
+    "course",
+    "official",
+    "traffic",
+    "water",
+]
+
+# Course Mapping segment events (Issue #732) — used for segment annotation event selection
+COURSE_EVENT_IDS = ["full", "half", "10k", "elite", "open"]
+
 # RES (Runner Experience Score) thresholds and weights (Issue #573)
 RES_HIGH_DENSITY_THRESHOLD = 0.72  # LOS D threshold (p/m²) - configurable
 RES_HIGH_FLOW_THRESHOLD = 90.0     # runners/min/m - configurable

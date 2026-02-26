@@ -18,6 +18,7 @@ from fastapi.templating import Jinja2Templates
 from typing import Optional
 
 from app.common.config import load_reporting
+from app.utils.constants import LOCATION_TYPE_CHOICES, COURSE_EVENT_IDS
 from app.utils.auth import (
     validate_password,
     create_session_response,
@@ -280,6 +281,30 @@ async def locations(request: Request):
     return templates.TemplateResponse(
         "pages/locations.html",
         {"request": request, "meta": meta}
+    )
+
+
+@router.get("/course-mapping", response_class=HTMLResponse)
+async def course_mapping(request: Request):
+    """
+    Course Mapping page: map a route/course with snap-to-road, segments, and locations.
+    
+    Issue #732: New UI tab for course mapping. Does not replace or change existing
+    Segments/Locations/Density/Flow pages (view-only for analysis results).
+    
+    Returns:
+        HTML: Course mapping workspace (map + street/satellite toggle).
+    """
+    auth_redirect = require_auth(request)
+    if auth_redirect:
+        return auth_redirect
+    meta = get_stub_meta()
+    # Issue #732: Location types and course events from constants
+    location_types = [{"value": t, "label": t.capitalize()} for t in LOCATION_TYPE_CHOICES]
+    event_choices = [{"value": e, "label": e.upper() if e == "10k" else e.capitalize()} for e in COURSE_EVENT_IDS]
+    return templates.TemplateResponse(
+        "pages/course_mapping.html",
+        {"request": request, "meta": meta, "location_types": location_types, "event_choices": event_choices}
     )
 
 
