@@ -1619,6 +1619,45 @@ document.addEventListener('DOMContentLoaded', function () {
         segmentPinsLayer.addTo(window.courseMappingMap);
     }
 
+    /**
+     * Compute per-event cumulative from_km/to_km for each segment (same logic as backend).
+     * Returns array of dicts: result[i][eid] = { from_km, to_km }. Used when segment has no stored per-event keys.
+     */
+    function computeEventDistancesForSegments(segments, eventIds) {
+        var result = [];
+        for (var i = 0; i < segments.length; i++) result.push({});
+        function segEventsSet(seg) {
+            var ev = seg.events;
+            if (!ev || !Array.isArray(ev)) return {};
+            return ev.reduce(function (acc, e) { acc[String(e).toLowerCase()] = true; return acc; }, {});
+        }
+        for (var ei = 0; ei < eventIds.length; ei++) {
+            var eid = eventIds[ei];
+            var accumulated = 0;
+            for (var i = 0; i < segments.length; i++) {
+                var seg = segments[i];
+                var from_km = Number(seg.from_km) || 0;
+                var to_km = Number(seg.to_km) || 0;
+                var segLen = Math.round((to_km - from_km) * 100) / 100;
+                var onSegment = segEventsSet(seg)[eid];
+                if (!onSegment) {
+                    result[i][eid] = { from_km: 0, to_km: 0 };
+                } else {
+                    var fromAcc = Math.round(accumulated * 100) / 100;
+                    var toAcc = Math.round((accumulated + segLen) * 100) / 100;
+                    result[i][eid] = { from_km: fromAcc, to_km: toAcc };
+                    accumulated = toAcc;
+                }
+            }
+        }
+        return result;
+    }
+
+    function formatKm(val) {
+        if (val == null || isNaN(val)) return '0';
+        return Number(val).toFixed(2);
+    }
+
     function renderSegmentsList() {
         var card = document.getElementById('segments-card');
         var empty = document.getElementById('segments-empty');
@@ -1638,6 +1677,8 @@ document.addEventListener('DOMContentLoaded', function () {
         tbody.innerHTML = '';
         var coords = (currentCourse.geometry && currentCourse.geometry.coordinates) || [];
         var coordsLen = coords.length;
+        var eventIds = (EVENT_CHOICES || []).map(function (e) { return String(e.value != null ? e.value : e).toLowerCase(); });
+        var computedEventDistances = computeEventDistancesForSegments(currentCourse.segments, eventIds);
         currentCourse.segments.forEach(function (seg, segIdx) {
             var len = (seg.to_km - seg.from_km);
             var startIdx = seg.start_index != null ? seg.start_index : 0;
@@ -1646,7 +1687,6 @@ document.addEventListener('DOMContentLoaded', function () {
             var pinStart = getPinLabelForIndex(startIdx, coordsLen);
             var pinEnd = getPinLabelForIndex(endIdx, coordsLen);
             var displayLabel = (seg.seg_label && seg.seg_label.trim()) ? seg.seg_label : (pinEnd || '');
-            var width = (seg.width_m != null && seg.width_m !== '') ? seg.width_m : 3;
             var tr = document.createElement('tr');
             var fromCell = document.createElement('td');
             var toCell = document.createElement('td');
@@ -1676,15 +1716,24 @@ document.addEventListener('DOMContentLoaded', function () {
             tr.appendChild(fromCell);
             tr.appendChild(toCell);
             tr.appendChild(document.createElement('td')).textContent = displayLabel || '';
-            tr.appendChild(document.createElement('td')).textContent = width;
-            var dirCell = document.createElement('td');
-            dirCell.textContent = seg.direction || 'uni';
-            tr.appendChild(dirCell);
             var eventsCell = document.createElement('td');
             eventsCell.textContent = eventsToDisplayList(seg.events);
             tr.appendChild(eventsCell);
-            tr.appendChild(document.createElement('td')).textContent = seg.from_km;
-            tr.appendChild(document.createElement('td')).textContent = seg.to_km;
+            eventIds.forEach(function (eid) {
+                var fromVal = seg[eid + '_from_km'];
+                var toVal = seg[eid + '_to_km'];
+                if (fromVal == null || toVal == null) {
+                    var comp = computedEventDistances[segIdx] && computedEventDistances[segIdx][eid];
+                    fromVal = comp ? comp.from_km : 0;
+                    toVal = comp ? comp.to_km : 0;
+                } else {
+                    fromVal = Number(fromVal);
+                    toVal = Number(toVal);
+                }
+                var cell = document.createElement('td');
+                cell.textContent = (fromVal === 0 && toVal === 0) ? '0' : (formatKm(fromVal) + '–' + formatKm(toVal));
+                tr.appendChild(cell);
+            });
             tr.appendChild(document.createElement('td')).textContent = Math.round(len * 100) / 100;
             var mapCell = document.createElement('td');
             mapCell.className = 'course-map-action-cell';
@@ -1715,6 +1764,23 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             mapCell.appendChild(addPinBtn);
             tr.appendChild(mapCell);
+            tr.style.cursor = 'pointer';
+            tr.title = 'Click row to zoom map to this segment';
+            tr.addEventListener('click', function () {
+                if (!currentCourse || !currentCourse.geometry || !currentCourse.geometry.coordinates) return;
+                var coords = currentCourse.geometry.coordinates;
+                var lo = Math.min(startIdx, endIdx);
+                var hi = Math.max(startIdx, endIdx);
+                if (lo <= hi && coords.length) {
+                    var latlngs = [];
+                    for (var i = lo; i <= hi; i++) latlngs.push(L.latLng(coords[i][1], coords[i][0]));
+                    var bounds = L.latLngBounds(latlngs);
+                    if (window.courseMappingMap) {
+                        window.courseMappingMap.closePopup();
+                        window.courseMappingMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 18, duration: 0.3 });
+                    }
+                }
+            });
             tbody.appendChild(tr);
         });
         renderSegmentPinsList();

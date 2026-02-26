@@ -84,6 +84,24 @@ def _event_cumulative_distances(segments: List[Dict], event_ids: List[str]) -> L
     return result
 
 
+def enrich_segments_event_distances(segments: List[Dict], event_ids: List[str] = None) -> None:
+    """
+    Mutate each segment to add per-event from_km/to_km (e.g. full_from_km, full_to_km, 10k_from_km, 10k_to_km).
+    Uses cumulative distance along only segments that include that event. Events not on the segment get 0, 0.
+    Called before saving course.json so persisted data has per-event distances for the UI and CSV.
+    """
+    if not segments:
+        return
+    event_ids = event_ids or COURSE_EVENT_IDS
+    event_ids_lower = [e.lower() for e in event_ids]
+    distances = _event_cumulative_distances(segments, event_ids)
+    for i, seg in enumerate(segments):
+        for ei, eid in enumerate(event_ids_lower):
+            from_km, to_km = distances[i].get(eid, (0.0, 0.0))
+            seg[f"{eid}_from_km"] = round(float(from_km), 2)
+            seg[f"{eid}_to_km"] = round(float(to_km), 2)
+
+
 def build_segments_csv(course: Dict[str, Any]) -> str:
     """Build segments.csv content from course.segments and course.events.
     Uses sequential segment IDs (1, 2, 3, ...) for pipeline compatibility.
@@ -129,11 +147,17 @@ def build_segments_csv(course: Dict[str, Any]) -> str:
         seg_events = _segment_events_set(seg, event_ids)
         # y/n per event (use lowercase for lookup)
         yn = ["y" if eid.lower() in seg_events else "n" for eid in event_ids]
-        # Event-specific from_km/to_km and lengths: all formatted to exactly 2 decimal places
+        # Event-specific from_km/to_km: use stored per-event values if present, else computed
         event_km = []
         for eid in event_ids:
-            ev_from, ev_to = event_distances[i].get(eid.lower(), (0.0, 0.0))
-            event_km.extend([_format_km(ev_from), _format_km(ev_to)])
+            eid_lower = eid.lower()
+            ev_from = seg.get(f"{eid_lower}_from_km")
+            ev_to = seg.get(f"{eid_lower}_to_km")
+            if ev_from is not None and ev_to is not None:
+                event_km.extend([_format_km(ev_from), _format_km(ev_to)])
+            else:
+                ev_from, ev_to = event_distances[i].get(eid_lower, (0.0, 0.0))
+                event_km.extend([_format_km(ev_from), _format_km(ev_to)])
         seg_len = round(to_km - from_km, 2)
         lengths = [_format_km(seg_len) if eid.lower() in seg_events else "0.00" for eid in event_ids]
         description = seg.get("description", "")

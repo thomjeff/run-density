@@ -107,11 +107,17 @@
     }
     #course-toolbar .toolbar-check input { cursor: pointer; }
 
-    /* Segments table: left-align all columns; Action column icon buttons */
+    /* Segments table: compact padding, left-align all columns; Action column icon buttons */
     #segments-table th,
-    #segments-table td { text-align: left; }
+    #segments-table td {
+        padding: 0.35rem 0.5rem;
+        text-align: left;
+    }
     #segment-pins-table th,
-    #segment-pins-table td { text-align: left; }
+    #segment-pins-table td {
+        text-align: left;
+        padding: 0.35rem 0.5rem;
+    }
     .course-map-action-btn {
         display: inline-flex;
         align-items: center;
@@ -192,6 +198,9 @@
     /* Segments table: clickable From/To pin labels open pin popup on map */
     .pin-link { background: none; border: none; padding: 0; font-size: inherit; color: #2980b9; cursor: pointer; text-decoration: none; }
     .pin-link:hover { text-decoration: underline; }
+    /* Pin labels in tables: left-align (buttons default to center-aligned text) */
+    #segments-table .pin-link,
+    #segment-pins-table .pin-link { text-align: left; }
 </style>
 {% endblock %}
 
@@ -275,7 +284,7 @@
         <div class="scrollable-table-container segments-table-scroll" style="max-height: 25vh;">
             <table id="segments-table" class="table-sticky-header" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
                 <thead>
-                    <tr><th>Seg ID</th><th>From pin</th><th>To pin</th><th>Segment label</th><th>Width (m)</th><th>Direction</th><th>Events</th><th>From (km)</th><th>To (km)</th><th>Length (km)</th><th>Action</th></tr>
+                    <tr><th>ID</th><th>From pin</th><th>To pin</th><th>Segment label</th><th>Events</th><th>Full</th><th>Half</th><th>10K</th><th>Elite</th><th>Open</th><th>Length</th><th>Action</th></tr>
                 </thead>
                 <tbody id="segments-tbody"></tbody>
             </table>

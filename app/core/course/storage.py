@@ -10,7 +10,9 @@ import json
 import logging
 from datetime import datetime, timezone
 
+from app.utils.constants import COURSE_EVENT_IDS
 from app.utils.run_id import generate_run_id
+from app.core.course.export import enrich_segments_event_distances
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +60,10 @@ def _default_course_json(course_id: str, data_dir: str) -> Dict[str, Any]:
         "segment_break_descriptions": {},  # Optional descriptions for segment boundaries: { "index": "description" }
         "segment_break_ids": {},  # Optional stable IDs: { "index": id } (sequential int, e.g. 1, 2, 3)
         "turnaround_indices": [],  # Indices where Same Route Back turnaround points are (UI U-turn icons)
+        "start_description": "",  # Optional description for start point
+        "end_description": "",  # Optional description for finish point
+        "turnaround_descriptions": {},  # Optional descriptions for turnarounds: { "index": "description" }
+        "flow_control_points": [],  # At a vertex: which events take which outgoing leg. Each: { "vertex_index": int, "label": str (optional), "branches": [ { "end_vertex_index": int, "events": ["full","half","10k",...] } ] }
     }
 
 
@@ -208,6 +214,10 @@ def save_course(data_dir: Path, course_id: str, course_data: Dict[str, Any]) -> 
     data["data_dir"] = str(data_dir)
     # Events come from constants (COURSE_EVENT_IDS); do not persist to course.json
     data.pop("events", None)
+    # Per-event from_km/to_km on each segment for UI and CSV (Enhancement #1)
+    segments = data.get("segments") or []
+    if segments:
+        enrich_segments_event_distances(segments, COURSE_EVENT_IDS)
     course_path = course_dir / "course.json"
     with open(course_path, "w") as f:
         json.dump(data, f, indent=2)
