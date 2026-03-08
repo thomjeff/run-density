@@ -299,12 +299,14 @@
         <ul>
             {% if cloud_mode %}
             <li><a href="/locations" {% if request.url and request.url.path == "/locations" %}class="active"{% endif %}>Locations</a></li>
+            <li><a href="/locsheets" {% if request.url and request.url.path == "/locsheets" %}class="active"{% endif %}>Loc Sheets</a></li>
             {% else %}
             <li><a href="/dashboard" {% if request.url and request.url.path == "/dashboard" %}class="active"{% endif %}>Dashboard</a></li>
             <li><a href="/segments" {% if request.url and request.url.path == "/segments" %}class="active"{% endif %}>Segments</a></li>
             <li><a href="/density" {% if request.url and request.url.path == "/density" %}class="active"{% endif %}>Density</a></li>
             <li><a href="/flow" {% if request.url and request.url.path == "/flow" %}class="active"{% endif %}>Flow</a></li>
             <li><a href="/locations" {% if request.url and request.url.path == "/locations" %}class="active"{% endif %}>Locations</a></li>
+            <li><a href="/locsheets" {% if request.url and request.url.path == "/locsheets" %}class="active"{% endif %}>Loc Sheets</a></li>
             <li><a href="/reports" {% if request.url and request.url.path == "/reports" %}class="active"{% endif %}>Reports</a></li>
             <li><a href="/analysis" {% if request.url and request.url.path == "/analysis" %}class="active"{% endif %}>Analysis</a></li>
             <li><a href="/create-files" {% if request.url and request.url.path == "/create-files" %}class="active"{% endif %}>Create Files</a></li>
@@ -336,8 +338,12 @@
     <!-- Issue #314: Frontend session check (supplementary to server-side enforcement) -->
     <script>
     (function() {
-        // Skip session check on password page
-        if (window.location.pathname === '/' || window.location.pathname === '/login') {
+        // Skip session check on password page and public loc sheet URLs (Issue #735)
+        const path = window.location.pathname;
+        if (path === '/' || path === '/login') {
+            return;
+        }
+        if (path.startsWith('/locsheets/') && path.match(/^\/locsheets\/[^/]+\/(?:fri|sat|sun|mon)\/[^/]+$/)) {
             return;
         }
         
