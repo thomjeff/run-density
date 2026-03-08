@@ -338,12 +338,15 @@
     <!-- Issue #314: Frontend session check (supplementary to server-side enforcement) -->
     <script>
     (function() {
-        // Skip session check on password page and public loc sheet URLs (Issue #735)
+        // Skip session check on password page and public loc sheet URLs (Issue #735, #737 short URL)
         const path = window.location.pathname;
         if (path === '/' || path === '/login') {
             return;
         }
         if (path.startsWith('/locsheets/') && path.match(/^\/locsheets\/[^/]+\/(?:fri|sat|sun|mon)\/[^/]+$/)) {
+            return;
+        }
+        if (path.startsWith('/locsheets/') && path.match(/^\/locsheets\/(?:fri|sat|sun|mon)\/[^/]+$/)) {
             return;
         }
         

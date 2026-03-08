@@ -96,6 +96,22 @@ async def check_session(request: Request):
 
 
 # Issue #735: Loc Sheets index (behind auth) and public sheet URLs
+# Issue #737: Short URL (no run_id) for stable Volunteer Local links; register before 3-param route
+@router.get("/locsheets/{day}/{loc_id}", response_class=HTMLResponse)
+async def cloud_locsheet_html_short(request: Request, day: str, loc_id: str):
+    """Serve location one-pager HTML via short URL (no run_id); public. Stable across run updates (Issue #737)."""
+    run_id = _get_cloud_run_id()
+    if day not in ("fri", "sat", "sun", "mon"):
+        raise HTTPException(status_code=400, detail="Invalid day")
+    if not loc_id.replace("_", "").replace("-", "").isalnum():
+        raise HTTPException(status_code=400, detail="Invalid loc_id")
+    run_dir = get_run_directory(run_id)
+    html_path = Path(run_dir) / day / "reports" / "loc_sheets" / "html" / f"{loc_id}.html"
+    if not html_path.exists():
+        raise HTTPException(status_code=404, detail="Location sheet not found")
+    return FileResponse(html_path, media_type="text/html")
+
+
 @router.get("/locsheets", response_class=HTMLResponse)
 async def cloud_locsheets(request: Request, day: Optional[str] = Query(None)):
     """Day-based index of location sheets; requires auth."""
