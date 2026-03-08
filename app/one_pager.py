@@ -1,18 +1,22 @@
 """
-One-pager generator for location summaries (Issue #702).
+One-pager generator for location summaries (Issue #702, #735).
 
-Creates a PDF per location flagged onepage='y' using:
+Creates a PDF and an HTML page per location flagged onepage='y' using:
 - locations_results.json (static fields: label/type/GPS/equipment/contact/notes)
 - Locations.csv report (timings aligned with UI)
+
+Issue #735: PDFs under loc_sheets/pdf/; HTML under loc_sheets/html/{loc_id}.html.
 """
 
 from __future__ import annotations
 
+import base64
+import html
+import io
 import json
 import logging
 import math
 import re
-import io
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -80,6 +84,10 @@ def generate_location_onepagers(
 
     maps_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
+    pdf_dir = output_dir / "pdf"
+    html_dir = output_dir / "html"
+    pdf_dir.mkdir(parents=True, exist_ok=True)
+    html_dir.mkdir(parents=True, exist_ok=True)
 
     count = 0
     for location in locations_data:
@@ -108,11 +116,13 @@ def generate_location_onepagers(
             )
             _write_map_placeholder(map_path)
 
-        pdf_path = _build_pdf_path(output_dir, location)
+        pdf_path = _build_pdf_path(pdf_dir, location)
         _render_onepager_pdf(location, report_row, map_path, pdf_path)
+        html_path = html_dir / f"{loc_id}.html"
+        _render_onepager_html(location, report_row, map_path, html_path)
         count += 1
 
-    logger.info(f"Issue #702: Generated {count} one-pager PDFs for day {day}")
+    logger.info(f"Issue #702/#735: Generated {count} one-pagers (PDF + HTML) for day {day}")
     return count
 
 
@@ -444,6 +454,114 @@ def _render_onepager_pdf(
 
     c.showPage()
     c.save()
+
+
+def _render_onepager_html(
+    location: Dict[str, Any],
+    report_row: Dict[str, Any],
+    map_path: Path,
+    output_path: Path,
+) -> None:
+    """Render one-pager as self-contained HTML (Issue #735)."""
+    loc_id = location.get("loc_id", "")
+    loc_label = location.get("loc_label", "")
+    title = f"LOCATION: {loc_id} - {loc_label}"
+    loc_type = html.escape(str(location.get("loc_type", "")))
+    resources = _extract_resources(location)
+    lat = location.get("lat", "")
+    lon = location.get("lon", "")
+    gps_line = f"{lat}, {lon}"
+    maps_url = _build_google_maps_url(lat, lon)
+    loc_start = _format_time(report_row.get("loc_start"))
+    loc_end = _format_time(report_row.get("loc_end"))
+    duration = report_row.get("duration")
+    duration_text = f"{duration} min" if duration not in [None, "", "NA"] else "NA"
+    is_proxy = _is_proxy_location(location)
+    events = _extract_events(location)
+    notes_html = _format_bullets_html(location.get("notes", "") or "NA")
+    equipment_html = _format_bullets_html(location.get("equipment", "") or "NA")
+    contact_html = _format_bullets_html(location.get("contact", "") or "NA")
+
+    map_data_uri = ""
+    if map_path.exists():
+        try:
+            raw = map_path.read_bytes()
+            map_data_uri = f"data:image/png;base64,{base64.b64encode(raw).decode('ascii')}"
+        except Exception:
+            pass
+
+    if is_proxy:
+        runner_timings_html = "<p>This location is near the course, but not directly on one or more events' course.</p>"
+    else:
+        runner_timings_html = """
+        <p>The predicted timing for the first and last runner to arrive at and depart from this location.
+        The peak times are when to expect the highest number of runners.</p>
+        <ul>
+            <li>First: """ + html.escape(_format_time(report_row.get("first_runner"))) + """</li>
+            <li>Peak Start: """ + html.escape(_format_time(report_row.get("peak_start"))) + """</li>
+            <li>Peak End: """ + html.escape(_format_time(report_row.get("peak_end"))) + """</li>
+            <li>Last: """ + html.escape(_format_time(report_row.get("last_runner"))) + """</li>
+        </ul>"""
+
+    events_list = ", ".join(events) if events else "NA"
+
+    html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{html.escape(title)}</title>
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 1rem 2rem; }}
+        h1 {{ font-size: 1.25rem; margin-bottom: 0.5rem; }}
+        h2 {{ font-size: 1rem; margin-top: 1rem; margin-bottom: 0.25rem; }}
+        p, ul {{ margin: 0.25rem 0; }}
+        ul {{ padding-left: 1.5rem; }}
+        .map {{ max-width: 100%; height: auto; margin: 0.5rem 0; border: 1px solid #ddd; }}
+        a {{ color: #0066cc; }}
+    </style>
+</head>
+<body>
+    <h1>{html.escape(title)}</h1>
+    <h2>TYPE</h2>
+    <p>{loc_type}</p>
+    <h2>RESOURCES</h2>
+    <ul>
+        {"".join(f"<li>{html.escape(r)}</li>" for r in resources) if resources else "<li>NA</li>"}
+    </ul>
+    <h2>GPS</h2>
+    <p>{html.escape(gps_line)} <a href="{html.escape(maps_url)}" target="_blank" rel="noopener">Google Maps</a></p>
+    """ + (f'<img src="{map_data_uri}" alt="Map" class="map" width="640" height="360">' if map_data_uri else "") + """
+    <h2>LOCATION TIMES</h2>
+    <p>Time on location across all shifts.</p>
+    <p>""" + html.escape(f"{loc_start} - {loc_end} (Duration: {duration_text})") + """</p>
+    <h2>RUNNER TIMINGS</h2>
+    """ + runner_timings_html + """
+    <h2>EVENTS</h2>
+    <p>""" + (html.escape("Runners from the following events will be at this location during the times above: " + events_list) if not is_proxy else html.escape("This location is near the course, but not directly on one or more events' course.")) + """</p>
+    <h2>NOTES</h2>
+    """ + notes_html + """
+    <h2>EQUIPMENT PROVIDED</h2>
+    """ + equipment_html + """
+    <h2>CONTACT</h2>
+    """ + contact_html + """
+    <h2>WEATHER</h2>
+    <p>Dress for the weather conditions for the duration of your shift.</p>
+    <h2>FOOTWEAR</h2>
+    <p>Wear comfortable shoes as you will be standing for most of your shift. You are welcome to bring a lawn chair to wait outside of peak hours.</p>
+</body>
+</html>
+"""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(html_content, encoding="utf-8")
+
+
+def _format_bullets_html(text: str) -> str:
+    """Format text as HTML bullet list (Issue #735)."""
+    lines = [line.strip() for line in str(text).splitlines() if line.strip()]
+    if not lines:
+        return "<p>- NA</p>"
+    return "<ul>" + "".join(f"<li>{html.escape(line)}</li>" for line in lines) + "</ul>"
 
 
 def _extract_events(location: Dict[str, Any]) -> List[str]:
