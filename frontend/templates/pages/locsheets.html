@@ -27,7 +27,7 @@
                 <td style="padding: 0.5rem 0.75rem;">{{ s.loc_id }}</td>
                 <td style="padding: 0.5rem 0.75rem;">{{ s.label }}</td>
                 <td style="padding: 0.5rem 0.75rem;">
-                    <a href="/locsheets/{{ run_id }}/{{ day }}/{{ s.loc_id }}" target="_blank" rel="noopener">Open sheet</a>
+                    {% if cloud_mode %}<a href="/locsheets/{{ day }}/{{ s.loc_id }}" target="_blank" rel="noopener">Open sheet</a>{% else %}<a href="/locsheets/{{ run_id }}/{{ day }}/{{ s.loc_id }}" target="_blank" rel="noopener">Open sheet</a>{% endif %}
                 </td>
             </tr>
             {% endfor %}
