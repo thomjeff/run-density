@@ -355,10 +355,7 @@ async def locsheets(
 
 @router.get("/locsheets/{run_id}/{day}/{loc_id}", response_class=HTMLResponse)
 async def locsheet_html(request: Request, run_id: str, day: str, loc_id: str):
-    """Serve a single location one-pager HTML file (Issue #735)."""
-    auth_redirect = require_auth(request)
-    if auth_redirect:
-        return auth_redirect
+    """Serve a single location one-pager HTML file; public (no auth) for Volunteer Local (Issue #735)."""
     from pathlib import Path
     from fastapi.responses import FileResponse
 
