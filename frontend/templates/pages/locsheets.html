@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Loc Sheets{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Location Sheets</h2>
+    <p style="margin-top: 0.5rem; color: #666; font-size: 0.9rem;">
+        One-pager sheets for traffic control locations (onepage='y'). Use the day selector to switch days. Open a sheet to copy its URL for Volunteer Local job/shift configuration.
+    </p>
+</div>
+
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Sheets for day: {{ day | upper }}</h3>
+    {% if sheets %}
+    <table class="table" style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr style="border-bottom: 2px solid #e0e0e0; text-align: left;">
+                <th style="padding: 0.5rem 0.75rem;">loc_id</th>
+                <th style="padding: 0.5rem 0.75rem;">Label</th>
+                <th style="padding: 0.5rem 0.75rem;">Sheet</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in sheets %}
+            <tr style="border-bottom: 1px solid #eee;">
+                <td style="padding: 0.5rem 0.75rem;">{{ s.loc_id }}</td>
+                <td style="padding: 0.5rem 0.75rem;">{{ s.label }}</td>
+                <td style="padding: 0.5rem 0.75rem;">
+                    <a href="/locsheets/{{ run_id }}/{{ day }}/{{ s.loc_id }}" target="_blank" rel="noopener">Open sheet</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #666;">No location sheets for this day. Run analysis with locations that have onepage='y'.</p>
+    {% endif %}
+</div>
+{% endblock %}

@@ -284,6 +284,99 @@ async def locations(request: Request):
     )
 
 
+@router.get("/locsheets", response_class=HTMLResponse)
+async def locsheets(
+    request: Request,
+    run_id: Optional[str] = Query(None),
+    day: Optional[str] = Query(None),
+):
+    """
+    Day-based index of location one-pager sheets (Issue #735).
+    Lists loc_id and label for onepage='y' locations; controlled by day selector.
+    """
+    auth_redirect = require_auth(request)
+    if auth_redirect:
+        return auth_redirect
+    from app.utils.run_id import get_run_directory, get_latest_run_id, resolve_selected_day, get_available_days
+
+    if not run_id:
+        run_id = get_latest_run_id()
+    try:
+        selected_day, available_days = resolve_selected_day(run_id, day)
+    except ValueError:
+        avail = get_available_days(run_id) if run_id else []
+        first_day = avail[0] if avail else ""
+        url = f"/locsheets?run_id={run_id}&day={first_day}" if run_id else "/dashboard"
+        return RedirectResponse(url=url, status_code=303)
+
+    # Canonical URL: ensure run_id and day are in query so day selector works
+    q_run = request.query_params.get("run_id")
+    q_day = request.query_params.get("day")
+    if q_run != run_id or q_day != selected_day:
+        return RedirectResponse(
+            url=f"/locsheets?run_id={run_id}&day={selected_day}",
+            status_code=303,
+        )
+
+    run_dir = get_run_directory(run_id)
+    comp_path = run_dir / selected_day / "computation" / "locations_results.json"
+    sheets = []
+    if comp_path.exists():
+        try:
+            import json
+            data = json.loads(comp_path.read_text(encoding="utf-8"))
+            locations = data.get("locations") or []
+            for loc in locations:
+                if str(loc.get("onepage", "")).strip().lower() != "y":
+                    continue
+                loc_day = str(loc.get("day", "")).strip().lower()
+                if loc_day and loc_day != selected_day:
+                    continue
+                sheets.append({
+                    "loc_id": loc.get("loc_id"),
+                    "label": loc.get("loc_label", ""),
+                })
+            sheets.sort(key=lambda x: (x["loc_id"] is None, x["loc_id"]))
+        except Exception as e:
+            logger.warning("Failed to load locsheets for %s/%s: %s", run_id, selected_day, e)
+
+    meta = get_stub_meta()
+    return templates.TemplateResponse(
+        "pages/locsheets.html",
+        {
+            "request": request,
+            "meta": meta,
+            "run_id": run_id,
+            "day": selected_day,
+            "sheets": sheets,
+        },
+    )
+
+
+@router.get("/locsheets/{run_id}/{day}/{loc_id}", response_class=HTMLResponse)
+async def locsheet_html(request: Request, run_id: str, day: str, loc_id: str):
+    """Serve a single location one-pager HTML file (Issue #735)."""
+    auth_redirect = require_auth(request)
+    if auth_redirect:
+        return auth_redirect
+    from pathlib import Path
+    from fastapi.responses import FileResponse
+
+    from app.utils.run_id import get_run_directory
+    run_dir = get_run_directory(run_id)
+    if not run_dir.exists():
+        raise HTTPException(status_code=404, detail="Run not found")
+    # Path traversal: allow only alphanumeric loc_id and day
+    if not loc_id.replace("_", "").replace("-", "").isalnum():
+        raise HTTPException(status_code=400, detail="Invalid loc_id")
+    if day not in ("fri", "sat", "sun", "mon"):
+        raise HTTPException(status_code=400, detail="Invalid day")
+    html_path = run_dir / day / "reports" / "loc_sheets" / "html" / f"{loc_id}.html"
+    if not html_path.exists():
+        raise HTTPException(status_code=404, detail="Location sheet not found")
+    return FileResponse(html_path, media_type="text/html")
+
+
 @router.get("/course-mapping", response_class=HTMLResponse)
 async def course_mapping(request: Request):
     """
