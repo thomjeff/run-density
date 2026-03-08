@@ -117,9 +117,9 @@ def generate_location_onepagers(
             _write_map_placeholder(map_path)
 
         pdf_path = _build_pdf_path(pdf_dir, location)
-        _render_onepager_pdf(location, report_row, map_path, pdf_path)
+        _render_onepager_pdf(location, report_row, map_path, pdf_path, day=day)
         html_path = html_dir / f"{loc_id}.html"
-        _render_onepager_html(location, report_row, map_path, html_path)
+        _render_onepager_html(location, report_row, map_path, html_path, day=day)
         count += 1
 
     logger.info(f"Issue #702/#735: Generated {count} one-pagers (PDF + HTML) for day {day}")
@@ -301,7 +301,8 @@ def _render_onepager_pdf(
     location: Dict[str, Any],
     report_row: Dict[str, Any],
     map_path: Path,
-    output_path: Path
+    output_path: Path,
+    day: str = "",
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     c = canvas.Canvas(str(output_path), pagesize=_PAGE_SIZE)
@@ -316,11 +317,36 @@ def _render_onepager_pdf(
     y = _draw_text_block(c, title, font_bold, 16, _MARGIN, y, page_w - 2 * _MARGIN)
 
     loc_type = location.get("loc_type", "")
-    y = _draw_label_value(c, "TYPE", loc_type, font_bold, font_body, 14, 12, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
+    y = _draw_text_block(c, f"TYPE: {loc_type}", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
+
+    loc_start = _format_time(report_row.get("loc_start"))
+    loc_end = _format_time(report_row.get("loc_end"))
+    duration = report_row.get("duration")
+    duration_text = f"{duration} min" if duration not in [None, "", "NA"] else "NA"
+    y = _draw_text_block(c, "LOCATION TIMES:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
+    y = _draw_text_block(
+        c,
+        "Time on location across all shifts.",
+        font_body,
+        12,
+        _MARGIN + 16,
+        y - 2,
+        page_w - 2 * _MARGIN,
+    )
+    y = _draw_text_block(c, f"Day: {day}", font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
+    y = _draw_text_block(
+        c,
+        f"Times: {loc_start} - {loc_end} (Duration: {duration_text})",
+        font_body,
+        12,
+        _MARGIN + 16,
+        y - 2,
+        page_w - 2 * _MARGIN,
+    )
 
     resources = _extract_resources(location)
     if resources:
-        y = _draw_text_block(c, "RESOURCES:", font_bold, 14, _MARGIN, y - 2, page_w - 2 * _MARGIN)
+        y = _draw_text_block(c, "RESOURCES:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
         for resource in resources:
             y = _draw_text_block(c, f"- {resource}", font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
 
@@ -328,18 +354,7 @@ def _render_onepager_pdf(
     lon = location.get("lon", "")
     gps_line = f"{lat}, {lon}"
     maps_url = _build_google_maps_url(lat, lon)
-    y = _draw_gps_with_link(
-        c,
-        gps_line,
-        maps_url,
-        font_bold,
-        font_body,
-        14,
-        _MARGIN,
-        y - 4,
-        page_w - 2 * _MARGIN,
-    )
-
+    y = _draw_text_block(c, "MAP:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
     map_width = (page_w - 2 * _MARGIN) * 0.85
     map_height = map_width * (_MAP_SIZE[1] / _MAP_SIZE[0])
     if map_path.exists():
@@ -353,30 +368,8 @@ def _render_onepager_pdf(
             preserveAspectRatio=True,
         )
     y = y - map_height - _SECTION_GAP - 8
-
-    loc_start = _format_time(report_row.get("loc_start"))
-    loc_end = _format_time(report_row.get("loc_end"))
-    duration = report_row.get("duration")
-    duration_text = f"{duration} min" if duration not in [None, "", "NA"] else "NA"
-    y = _draw_text_block(c, "LOCATION TIMES:", font_bold, 14, _MARGIN, y, page_w - 2 * _MARGIN)
-    y = _draw_text_block(
-        c,
-        "Time on location across all shifts.",
-        font_body,
-        12,
-        _MARGIN + 16,
-        y - 2,
-        page_w - 2 * _MARGIN,
-    )
-    y = _draw_text_block(
-        c,
-        f"{loc_start} - {loc_end} (Duration: {duration_text})",
-        font_body,
-        12,
-        _MARGIN + 16,
-        y - 2,
-        page_w - 2 * _MARGIN,
-    )
+    y = _draw_text_block(c, f"GPS: {gps_line}", font_body, 12, _MARGIN, y, page_w - 2 * _MARGIN)
+    y = _draw_view_on_google_maps_link(c, maps_url, font_body, 12, _MARGIN, y - 4, page_w - 2 * _MARGIN)
 
     is_proxy = _is_proxy_location(location)
     if not is_proxy:
@@ -461,6 +454,7 @@ def _render_onepager_html(
     report_row: Dict[str, Any],
     map_path: Path,
     output_path: Path,
+    day: str = "",
 ) -> None:
     """Render one-pager as self-contained HTML (Issue #735)."""
     loc_id = location.get("loc_id", "")
@@ -476,6 +470,7 @@ def _render_onepager_html(
     loc_end = _format_time(report_row.get("loc_end"))
     duration = report_row.get("duration")
     duration_text = f"{duration} min" if duration not in [None, "", "NA"] else "NA"
+    day_esc = html.escape(day)
     is_proxy = _is_proxy_location(location)
     events = _extract_events(location)
     notes_html = _format_bullets_html(location.get("notes", "") or "NA")
@@ -505,6 +500,10 @@ def _render_onepager_html(
 
     events_list = ", ".join(events) if events else "NA"
 
+    map_block = (f'<img src="{map_data_uri}" alt="Map" class="map" width="640" height="360">' if map_data_uri else "")
+
+    resources_html = "".join(f"<li>{html.escape(r)}</li>" for r in resources) if resources else "<li>NA</li>"
+
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -523,18 +522,18 @@ def _render_onepager_html(
 </head>
 <body>
     <h1>{html.escape(title)}</h1>
-    <h2>TYPE</h2>
-    <p>{loc_type}</p>
-    <h2>RESOURCES</h2>
-    <ul>
-        {"".join(f"<li>{html.escape(r)}</li>" for r in resources) if resources else "<li>NA</li>"}
-    </ul>
-    <h2>GPS</h2>
-    <p>{html.escape(gps_line)} <a href="{html.escape(maps_url)}" target="_blank" rel="noopener">Google Maps</a></p>
-    """ + (f'<img src="{map_data_uri}" alt="Map" class="map" width="640" height="360">' if map_data_uri else "") + """
+    <p><strong>TYPE:</strong> {loc_type}</p>
     <h2>LOCATION TIMES</h2>
     <p>Time on location across all shifts.</p>
-    <p>""" + html.escape(f"{loc_start} - {loc_end} (Duration: {duration_text})") + """</p>
+    <p>Day: {day_esc}</p>
+    <p>Times: """ + html.escape(f"{loc_start} - {loc_end} (Duration: {duration_text})") + """</p>
+    <h2>RESOURCES</h2>
+    <ul>
+    """ + resources_html + """
+    </ul>
+    <h2>MAP</h2>
+    """ + (map_block + "\n    " if map_block else "") + """<p>GPS: """ + html.escape(gps_line) + """</p>
+    <p>View on <a href=\"""" + html.escape(maps_url) + """\" target="_blank" rel="noopener">Google Maps</a></p>
     <h2>RUNNER TIMINGS</h2>
     """ + runner_timings_html + """
     <h2>EVENTS</h2>
@@ -669,6 +668,32 @@ def _draw_label_value(
         c.drawString(x, y, line)
         y -= (value_size + 2)
     return y
+
+
+def _draw_view_on_google_maps_link(
+    c: canvas.Canvas,
+    maps_url: str,
+    font_name: str,
+    font_size: int,
+    x: float,
+    y: float,
+    max_width: float,
+) -> float:
+    """Draw 'View on ' then 'Google Maps' as a clickable link on one line."""
+    prefix = "View on "
+    link_text = "Google Maps"
+    c.setFont(font_name, font_size)
+    c.drawString(x, y, prefix)
+    prefix_width = pdfmetrics.stringWidth(prefix, font_name, font_size)
+    link_x = x + prefix_width
+    link_width = pdfmetrics.stringWidth(link_text, font_name, font_size)
+    c.setFillColorRGB(0, 0, 1)
+    c.drawString(link_x, y, link_text)
+    c.setLineWidth(0.5)
+    c.line(link_x, y - 1, link_x + link_width, y - 1)
+    c.setFillColorRGB(0, 0, 0)
+    c.linkURL(maps_url, (link_x, y - 2, link_x + link_width, y + font_size))
+    return y - (font_size + 2)
 
 
 def _draw_gps_with_link(
