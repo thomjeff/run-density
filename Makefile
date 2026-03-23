@@ -26,7 +26,7 @@ CLOUD_SERVICE ?= $(CLOUD_SERVICE_PREFIX)
 CLOUD_RUN_PATH ?= $(RUNFLOW_ROOT)/analysis/$(RUN_ID)
 
 # -------- Phony targets --------
-.PHONY: help usage --help dev e2e e2e-sat e2e-sun e2e-coverage-lite stop build validate-output validate-all prune-runs ai-prompt cloud-build cloud-run cloud-stop cloud-push cloud-deploy cloud-clean
+.PHONY: help usage --help dev e2e e2e-sat e2e-sun e2e-coverage-lite stop build validate-output validate-all prune-runs ai-prompt cloud-build cloud-run cloud-stop cloud-push cloud-deploy cloud-release cloud-clean
 
 # -------- Use same shell for multi-line targets --------
 .ONESHELL:
@@ -67,6 +67,7 @@ help usage --help: ## Show this help message
 	@echo "  cloud-stop         Stop local cloud UI container"
 	@echo "  cloud-push         Push cloud UI image"
 	@echo "  cloud-deploy       Deploy to Cloud Run"
+	@echo "  cloud-release      Build + push + deploy (RUN_ID=...; one command)"
 	@echo "  cloud-clean        Delete Cloud Run service"
 	@echo ""
 	@echo "Cloud Defaults:"
@@ -328,6 +329,14 @@ cloud-deploy: ## Deploy skinny cloud UI to Cloud Run (uses cloud.env)
 		--memory $(CLOUD_MEMORY) \
 		--allow-unauthenticated \
 		--set-env-vars CLOUD_MODE=true,CLOUD_RUN_ID=$(RESOLVED_RUN_ID),DASHBOARD_PASSWORD=$(CLOUD_PASSWORD)
+
+cloud-release: ## Build, push, and deploy Cloud Run in one step (RUN_ID=... required)
+	@if [ -z "$(RUN_ID)" ]; then \
+		echo "❌ Error: RUN_ID required (e.g., make cloud-release RUN_ID=YourRunId)"; \
+		exit 1; \
+	fi
+	@$(MAKE) cloud-build RUN_ID=$(RUN_ID) && $(MAKE) cloud-push RUN_ID=$(RUN_ID) && $(MAKE) cloud-deploy RUN_ID=$(RUN_ID) && \
+		echo "✅ cloud-release complete: $(CLOUD_IMAGE) → $(CLOUD_SERVICE) ($(CLOUD_REGION))"
 
 cloud-clean: ## Delete Cloud Run service
 	@if [ -z "$(RESOLVED_RUN_ID)" ]; then \
