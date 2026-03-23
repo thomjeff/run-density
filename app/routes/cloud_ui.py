@@ -64,7 +64,8 @@ async def password_page(request: Request):
     if is_session_valid(request):
         return RedirectResponse(url="/locations", status_code=303)
     context = _get_cloud_context(request)
-    return templates.TemplateResponse("pages/password.html", context)
+    # Starlette ≥0.29: TemplateResponse(request, name, context=...) — request must be first
+    return templates.TemplateResponse(request, "pages/password.html", context)
 
 
 @router.post("/login")
@@ -73,7 +74,7 @@ async def login(request: Request, password: str = Form(...)):
         return create_session_response("/locations", request)
     context = _get_cloud_context(request)
     context["error"] = "Incorrect password. Please try again."
-    return templates.TemplateResponse("pages/password.html", context, status_code=401)
+    return templates.TemplateResponse(request, "pages/password.html", context, status_code=401)
 
 
 @router.get("/logout")
@@ -87,7 +88,7 @@ async def locations(request: Request):
     if auth_redirect:
         return auth_redirect
     context = _get_cloud_context(request)
-    return templates.TemplateResponse("pages/locations.html", context)
+    return templates.TemplateResponse(request, "pages/locations.html", context)
 
 
 @router.get("/api/auth/check")
@@ -146,7 +147,7 @@ async def cloud_locsheets(request: Request, day: Optional[str] = Query(None)):
     context["run_id"] = run_id
     context["day"] = selected_day
     context["sheets"] = sheets
-    return templates.TemplateResponse("pages/locsheets.html", context)
+    return templates.TemplateResponse(request, "pages/locsheets.html", context)
 
 
 @router.get("/locsheets/{run_id}/{day}/{loc_id}", response_class=HTMLResponse)
