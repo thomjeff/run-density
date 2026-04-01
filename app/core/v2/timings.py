@@ -70,7 +70,7 @@ def compute_predicted_timings(
             "event_last_finisher": {"event_name": "HH:MM", ...},
             "day_last_finisher": "HH:MM",
             "day_end": "HH:MM",
-            "actual_event_duration": {"event_name": "HH:MM", ...},
+            "actual_event_duration": {"event_name": "HH:MM", ...},  # last_finisher − event start (gun)
             "day_duration": "HH:MM"
         }
     """
@@ -124,6 +124,8 @@ def compute_predicted_timings(
                     duration_minutes = event_durations[event_name]
                     event_last_min = event_start_min + duration_minutes
                     event_last_finisher[event_name] = _format_seconds_to_hhmm(event_last_min * 60)
+                    # Same semantics as with runners: elapsed from official start to last finisher
+                    actual_event_duration[event_name] = _format_seconds_to_hhmm(duration_minutes * 60)
                     # Leave event_first_finisher empty (no runners to compute from)
                     logger.debug(f"Issue #638: No runners for event {event_name}, using fallback duration")
                 else:
@@ -158,14 +160,20 @@ def compute_predicted_timings(
             event_first_finisher[event_name] = _format_seconds_to_hhmm(event_first_sec)
             event_last_finisher[event_name] = _format_seconds_to_hhmm(event_last_sec)
             
-            # Calculate actual_event_duration: event_last - event_first
-            duration_sec = event_last_sec - event_first_sec
+            # Elapsed time from official event start (gun) to last finisher — not (last − first).
+            event_start_sec = float(event_start_min) * 60.0
+            duration_sec = float(event_last_sec) - event_start_sec
+            if duration_sec < 0:
+                logger.warning(
+                    f"Issue #638: Negative event duration for {event_name} (last before start); clamping to 0"
+                )
+                duration_sec = 0.0
             actual_event_duration[event_name] = _format_seconds_to_hhmm(duration_sec)
             
             logger.debug(
                 f"Issue #638: Computed timings for event {event_name}: "
                 f"first={event_first_finisher[event_name]}, last={event_last_finisher[event_name]}, "
-                f"duration={actual_event_duration[event_name]}"
+                f"duration(last-start)={actual_event_duration[event_name]}"
             )
         
         # Day-level aggregation

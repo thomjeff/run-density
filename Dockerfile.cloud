@@ -12,6 +12,7 @@ COPY frontend /app/frontend
 
 RUN mkdir -p /app/runflow/analysis
 COPY runflow/analysis/${RUN_ID} /app/runflow/analysis/${RUN_ID}
+COPY runflow/analysis/index.json /app/runflow/analysis/index.json
 RUN echo "{\"run_id\":\"${RUN_ID}\"}" > /app/runflow/analysis/latest.json
 
 ENV PYTHONPATH=/app

@@ -121,6 +121,40 @@ def _calculate_flags_metrics(flags) -> tuple:
     return segments_flagged, bins_flagged
 
 
+def _analysis_inputs_from_day_metadata(day_meta: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Build Analysis Inputs payload for Issue #739 from day-level metadata.json.
+
+    Uses predicted_timings (day_start/day_end/day_duration, per-event finishers/durations)
+    and events (participants, start_time).
+    """
+    pt = day_meta.get("predicted_timings") or {}
+    ef = pt.get("event_first_finisher") or {}
+    el = pt.get("event_last_finisher") or {}
+    ad = pt.get("actual_event_duration") or {}
+    events_obj = day_meta.get("events", {}) if isinstance(day_meta.get("events"), dict) else {}
+    event_rows: List[Dict[str, Any]] = []
+    for ev_name in sorted(events_obj.keys()):
+        ev_info = events_obj.get(ev_name)
+        if not isinstance(ev_info, dict):
+            continue
+        lk = str(ev_name).lower()
+        event_rows.append({
+            "event": ev_name,
+            "participants": int(ev_info.get("participants", 0)),
+            "start_time": str(ev_info.get("start_time", "") or ""),
+            "first_finisher": ef.get(lk) if isinstance(ef, dict) else None,
+            "last_finisher": el.get(lk) if isinstance(el, dict) else None,
+            "duration": ad.get(lk) if isinstance(ad, dict) else None,
+        })
+    return {
+        "day_start": pt.get("day_start"),
+        "day_end": pt.get("day_end"),
+        "day_duration": pt.get("day_duration"),
+        "events": event_rows,
+    }
+
+
 def _calculate_peak_metrics(segment_metrics: dict) -> tuple:
     """
     Calculate peak density and rate from segment metrics.
@@ -334,29 +368,19 @@ async def get_runs_list():
     try:
         runs = get_run_index()
         
-        # Load analysis.json for each run to get description
-        from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER
-        from pathlib import Path
-        
-        if Path(RUNFLOW_ROOT_CONTAINER).exists():
-            runflow_root = Path(RUNFLOW_ROOT_CONTAINER)
-        else:
-            runflow_root = Path(RUNFLOW_ROOT_LOCAL)
-        
         runs_list = []
         for run in runs:
             run_id = run.get("run_id")
             if not run_id:
                 continue
             
-            # Load analysis.json for description
+            # Load analysis.json for description (readonly: no data_dir validation; Issue #740 cloud)
             description = None
             try:
-                from app.config.loader import load_analysis_context
-                # Issue #682: Use centralized get_run_directory() for correct path
+                from app.config.loader import load_analysis_config_readonly
                 from app.utils.run_id import get_run_directory
-                analysis_context = load_analysis_context(get_run_directory(run_id))
-                description = analysis_context.analysis_config.get("description")
+                cfg = load_analysis_config_readonly(get_run_directory(run_id))
+                description = cfg.get("description")
             except Exception as e:
                 logger.warning(f"Could not load analysis.json for {run_id}: {e}")
             
@@ -438,9 +462,10 @@ async def get_run_summary(run_id: str):
     Get detailed summary for specific run with metrics per day.
     
     Issue #565: Returns metrics for each day in column-per-day format for Run Detail View.
+    Issue #739: Includes analysis_inputs per day (day windows + per-event timings from metadata).
     
     Returns:
-        JSON with run_id, description, days, and metrics per day:
+        JSON with run_id, description, days, metrics per day, and analysis_inputs:
         - participants
         - events (list)
         - segments_with_flags (X / Y format)
@@ -459,23 +484,14 @@ async def get_run_summary(run_id: str):
           }
     """
     try:
-        from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER
-        from pathlib import Path
-        
-        if Path(RUNFLOW_ROOT_CONTAINER).exists():
-            runflow_root = Path(RUNFLOW_ROOT_CONTAINER)
-        else:
-            runflow_root = Path(RUNFLOW_ROOT_LOCAL)
-        
-        # Load analysis.json for description and days
-        from app.config.loader import load_analysis_context
+        from app.config.loader import load_analysis_config_readonly
+        from app.utils.run_id import get_run_directory
+
+        run_path = get_run_directory(run_id)
         try:
-            # Issue #682: Use centralized get_run_directory() for correct path
-            from app.utils.run_id import get_run_directory
-            analysis_context = load_analysis_context(get_run_directory(run_id))
+            analysis_data = load_analysis_config_readonly(run_path)
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
-        analysis_data = analysis_context.analysis_config
         
         description = analysis_data.get("description", f"Run {run_id[:8]}...")
         event_summary = analysis_data.get("event_summary", {})
@@ -487,7 +503,8 @@ async def get_run_summary(run_id: str):
         
         # Load metrics for each day
         storage = create_runflow_storage(run_id)
-        metrics_by_day = {}
+        metrics_by_day: Dict[str, Any] = {}
+        analysis_inputs: Dict[str, Any] = {}
         
         for day in day_list:
             try:
@@ -497,6 +514,7 @@ async def get_run_summary(run_id: str):
                     continue
                 
                 day_meta = json.loads(day_meta_path.read_text())
+                analysis_inputs[day] = _analysis_inputs_from_day_metadata(day_meta)
                 
                 # Get events for this day
                 events_obj = day_meta.get("events", {}) if isinstance(day_meta.get("events"), dict) else {}
@@ -540,7 +558,7 @@ async def get_run_summary(run_id: str):
                 
                 # Issue #636: Get predicted_timings for day_first_finisher and day_last_finisher
                 # Issue #638 follow-up: Get day_duration from predicted_timings
-                predicted_timings = day_meta.get("predicted_timings", {})
+                predicted_timings = day_meta.get("predicted_timings", {}) or {}
                 day_first_finisher = predicted_timings.get("day_first_finisher") if predicted_timings else None
                 day_last_finisher = predicted_timings.get("day_last_finisher") if predicted_timings else None
                 day_duration = predicted_timings.get("day_duration") if predicted_timings else None
@@ -564,6 +582,12 @@ async def get_run_summary(run_id: str):
                 
             except Exception as e:
                 logger.warning(f"Error loading metrics for day {day}: {e}")
+                analysis_inputs[day] = {
+                    "day_start": None,
+                    "day_end": None,
+                    "day_duration": None,
+                    "events": [],
+                }
                 metrics_by_day[day] = {
                     "participants": 0,
                     "events": [],
@@ -583,7 +607,8 @@ async def get_run_summary(run_id: str):
                 "run_id": run_id,
                 "description": description,
                 "days": day_list,
-                "metrics": metrics_by_day
+                "metrics": metrics_by_day,
+                "analysis_inputs": analysis_inputs,
             },
             headers={"Cache-Control": "public, max-age=60"}
         )

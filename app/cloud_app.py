@@ -1,5 +1,7 @@
 """
-Cloud-mode entrypoint for the skinny, read-only Locations UI.
+Cloud-mode entrypoint for the skinny, read-only UI (locations + dashboard).
+
+Issue #740: Dashboard, Analysis Inputs, session on all routes; landing on /dashboard.
 """
 import logging
 import os
@@ -7,9 +9,11 @@ import os
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app.cloud_middleware import CloudSessionMiddleware
 from app.routes.cloud_ui import router as cloud_ui_router
 from app.routes.api_locations import router as locations_router
 from app.routes.api_segments import router as segments_router
+from app.routes.api_dashboard import router as api_dashboard_router
 from app.utils.env import env_str
 from app.utils.run_id import get_available_days, get_run_directory
 
@@ -41,8 +45,11 @@ _validate_cloud_config()
 
 app = FastAPI(title="Runflow Cloud UI")
 
+app.add_middleware(CloudSessionMiddleware)
+
 app.include_router(cloud_ui_router)
 app.include_router(locations_router)
 app.include_router(segments_router)
+app.include_router(api_dashboard_router)
 
 app.mount("/static", StaticFiles(directory="frontend/static"), name="static")

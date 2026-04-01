@@ -133,7 +133,9 @@ async def dashboard(request: Request):
     Returns:
         HTML: Dashboard with model inputs/outputs and LOS colors
     """
-    require_auth(request)
+    auth_redirect = require_auth(request)
+    if auth_redirect:
+        return auth_redirect
     meta = get_stub_meta()
     
     # Load LOS colors from SSOT
@@ -319,26 +321,9 @@ async def locsheets(
         )
 
     run_dir = get_run_directory(run_id)
-    comp_path = run_dir / selected_day / "computation" / "locations_results.json"
-    sheets = []
-    if comp_path.exists():
-        try:
-            import json
-            data = json.loads(comp_path.read_text(encoding="utf-8"))
-            locations = data.get("locations") or []
-            for loc in locations:
-                if str(loc.get("onepage", "")).strip().lower() != "y":
-                    continue
-                loc_day = str(loc.get("day", "")).strip().lower()
-                if loc_day and loc_day != selected_day:
-                    continue
-                sheets.append({
-                    "loc_id": loc.get("loc_id"),
-                    "label": loc.get("loc_label", ""),
-                })
-            sheets.sort(key=lambda x: (x["loc_id"] is None, x["loc_id"]))
-        except Exception as e:
-            logger.warning("Failed to load locsheets for %s/%s: %s", run_id, selected_day, e)
+    from app.utils.loc_sheets_list import build_loc_sheet_entries
+
+    sheets = build_loc_sheet_entries(run_dir, selected_day)
 
     meta = get_stub_meta()
     return templates.TemplateResponse(

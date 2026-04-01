@@ -82,6 +82,9 @@ def load_locations(path: str):
     
     df = pd.read_csv(path)
     
+    # One-pager flag: canonical column name is ``onepage`` (y/n). Use this in locations.csv
+    # so locations_results.json and Loc Sheets use a single field (Issue #735).
+    
     # Normalize event flags (y/n)
     # Issue #553 Phase 4.2: Normalize known event columns, plus dynamically discover others
     known_events = ["full", "half", "10K", "elite", "open"]

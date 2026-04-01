@@ -102,6 +102,22 @@ def load_analysis_context(run_path: Path) -> AnalysisContext:
     return build_analysis_context(analysis_config, run_path, analysis_json_path)
 
 
+def load_analysis_config_readonly(run_path: Path) -> Dict[str, Any]:
+    """
+    Load analysis.json without validating data_dir or input CSV/GPX paths.
+
+    Use for read-only dashboard APIs (e.g. GET /api/runs/{run_id}/summary). Cloud Run
+    images contain run outputs under runflow/analysis/{run_id}/ but typically not the
+    original data/ tree referenced by analysis.json, so full load_analysis_context()
+    would raise FileNotFoundError.
+    """
+    analysis_json_path = run_path / "analysis.json"
+    if not analysis_json_path.exists():
+        raise FileNotFoundError(f"analysis.json not found at {analysis_json_path}")
+    with analysis_json_path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
 def build_analysis_context(
     analysis_config: Dict[str, Any],
     run_path: Path,

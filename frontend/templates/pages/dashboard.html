@@ -53,6 +53,12 @@
     </div>
 </div>
 
+<!-- Analysis Inputs (Issue #739): day windows + per-event timings from metadata.json / API -->
+<div id="analysis-inputs-section" class="card" style="display: none; margin-bottom: 2rem;">
+    <h3 style="margin-bottom: 1rem; color: #2c3e50;">Analysis Inputs</h3>
+    <div id="analysis-inputs-content"></div>
+</div>
+
 <!-- Run Detail View Section (Issue #565) -->
 <div id="run-detail-section" class="card" style="display: none; margin-bottom: 2rem;">
     <h3 style="margin-bottom: 1rem; color: #2c3e50;">Run Detail</h3>
@@ -151,6 +157,22 @@
     // Dashboard data binding
     let dashboardData = null;
     
+    function fetchJson(url) {
+        return fetch(url, { credentials: 'same-origin' }).then(function(response) {
+            if (response.status === 401) {
+                window.location.href = '/';
+                throw new Error('Unauthorized');
+            }
+            if (!response.ok) {
+                return response.text().then(function(text) {
+                    console.error('API error', response.status, url, text.slice(0, 500));
+                    throw new Error('HTTP ' + response.status);
+                });
+            }
+            return response.json();
+        });
+    }
+    
     // Initialize dashboard when page loads
     document.addEventListener('DOMContentLoaded', function() {
         // Issue #565: Load runs list first, then dashboard data
@@ -187,8 +209,7 @@
     
     // Issue #565: Run History Table functions
     function loadRunsList() {
-        fetch('/api/runs/list')
-            .then(response => response.json())
+        fetchJson('/api/runs/list')
             .then(data => {
                 runsList = data.runs || [];
                 filteredRuns = [...runsList];
@@ -432,18 +453,131 @@
     }
     
     function loadRunDetail(runId) {
-        return fetch(`/api/runs/${runId}/summary`)
-            .then(response => response.json())
+        return fetchJson(`/api/runs/${runId}/summary`)
             .then(data => {
-                renderRunDetailView(data);
-                updateDaySelector(data.days);
-                return data; // Return data for chaining
+                // Render separately: Run Detail used to throw on undefined metrics (e.g. flagged_bins)
+                // and the outer catch hid Analysis Inputs even when that block had succeeded.
+                try {
+                    renderAnalysisInputsView(data);
+                } catch (e) {
+                    console.error('Analysis Inputs render failed:', e);
+                }
+                try {
+                    renderRunDetailView(data);
+                } catch (e) {
+                    console.error('Run Detail render failed:', e);
+                }
+                try {
+                    updateDaySelector(data.days);
+                } catch (e) {
+                    console.error('Day selector update failed:', e);
+                }
+                return data;
             })
             .catch(error => {
                 console.error('Error loading run detail:', error);
-                document.getElementById('run-detail-section').style.display = 'none';
+                const rd = document.getElementById('run-detail-section');
+                if (rd) rd.style.display = 'none';
+                const ai = document.getElementById('analysis-inputs-section');
+                if (ai) ai.style.display = 'none';
                 throw error;
             });
+    }
+    
+    function renderAnalysisInputsView(data) {
+        const section = document.getElementById('analysis-inputs-section');
+        const content = document.getElementById('analysis-inputs-content');
+        if (!section || !content) return;
+        
+        section.style.display = 'block';
+        
+        const days = data.days || [];
+        const inputs = data.analysis_inputs || {};
+        
+        let html = `
+            <div style="margin-bottom: 1rem;">
+                <strong>Run ID:</strong> ${data.run_id || '—'}<br>
+                <strong>Description:</strong> ${data.description || 'N/A'}
+            </div>
+            <h4 style="margin: 1rem 0 0.5rem; font-size: 1rem; color: #34495e;">Day windows</h4>
+            <div style="overflow-x: auto; margin-bottom: 1.25rem;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+                            <th style="padding: 0.5rem 0.75rem; text-align: left;">Day</th>
+                            <th style="padding: 0.5rem 0.75rem; text-align: center;">Start</th>
+                            <th style="padding: 0.5rem 0.75rem; text-align: center;">End</th>
+                            <th style="padding: 0.5rem 0.75rem; text-align: center;">Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+        days.forEach(function(day) {
+            const row = inputs[day] || {};
+            html += '<tr>';
+            html += `<td style="padding: 0.5rem 0.75rem; border-bottom: 1px solid #dee2e6;">${day}</td>`;
+            html += `<td style="padding: 0.5rem 0.75rem; text-align: center; border-bottom: 1px solid #dee2e6;">${row.day_start || '—'}</td>`;
+            html += `<td style="padding: 0.5rem 0.75rem; text-align: center; border-bottom: 1px solid #dee2e6;">${row.day_end || '—'}</td>`;
+            html += `<td style="padding: 0.5rem 0.75rem; text-align: center; border-bottom: 1px solid #dee2e6;">${row.day_duration || '—'}</td>`;
+            html += '</tr>';
+        });
+        if (days.length === 0) {
+            html += '<tr><td colspan="4" style="padding: 0.75rem;">—</td></tr>';
+        }
+        html += `
+                    </tbody>
+                </table>
+            </div>
+            <h4 style="margin: 1rem 0 0.5rem; font-size: 1rem; color: #34495e;">Events</h4>
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+                            <th style="padding: 0.5rem 0.75rem; text-align: left;">Day</th>
+                            <th style="padding: 0.5rem 0.75rem; text-align: left;">Event</th>
+                            <th style="padding: 0.5rem 0.75rem; text-align: center;">Participants</th>
+                            <th style="padding: 0.5rem 0.75rem; text-align: center;">Start Time</th>
+                            <th style="padding: 0.5rem 0.75rem; text-align: center;">First Finisher</th>
+                            <th style="padding: 0.5rem 0.75rem; text-align: center;">Last Finisher</th>
+                            <th style="padding: 0.5rem 0.75rem; text-align: center;">Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+        let eventRows = 0;
+        days.forEach(function(day) {
+            const row = inputs[day] || {};
+            const evs = row.events || [];
+            if (evs.length === 0) {
+                html += `<tr><td style="padding: 0.5rem 0.75rem; border-bottom: 1px solid #dee2e6;">${day}</td>`;
+                html += '<td colspan="6" style="padding: 0.5rem 0.75rem; border-bottom: 1px solid #dee2e6; color: #6c757d;">—</td></tr>';
+                eventRows += 1;
+                return;
+            }
+            evs.forEach(function(ev, idx) {
+                html += '<tr>';
+                if (idx === 0) {
+                    html += `<td style="padding: 0.5rem 0.75rem; border-bottom: 1px solid #dee2e6; vertical-align: top;" rowspan="${evs.length}">${day}</td>`;
+                }
+                html += `<td style="padding: 0.5rem 0.75rem; border-bottom: 1px solid #dee2e6;">${ev.event || '—'}</td>`;
+                html += `<td style="padding: 0.5rem 0.75rem; text-align: center; border-bottom: 1px solid #dee2e6;">${ev.participants != null ? ev.participants : '—'}</td>`;
+                html += `<td style="padding: 0.5rem 0.75rem; text-align: center; border-bottom: 1px solid #dee2e6;">${ev.start_time || '—'}</td>`;
+                html += `<td style="padding: 0.5rem 0.75rem; text-align: center; border-bottom: 1px solid #dee2e6;">${ev.first_finisher || '—'}</td>`;
+                html += `<td style="padding: 0.5rem 0.75rem; text-align: center; border-bottom: 1px solid #dee2e6;">${ev.last_finisher || '—'}</td>`;
+                html += `<td style="padding: 0.5rem 0.75rem; text-align: center; border-bottom: 1px solid #dee2e6;">${ev.duration || '—'}</td>`;
+                html += '</tr>';
+                eventRows += 1;
+            });
+        });
+        if (eventRows === 0) {
+            html += '<tr><td colspan="7" style="padding: 0.75rem;">—</td></tr>';
+        }
+        html += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+        content.innerHTML = html;
     }
     
     function renderRunDetailView(data) {
@@ -485,7 +619,9 @@
             { key: 'peak_rate', label: 'Peak Rate (P/s)' },
             { key: 'overtaking_segments', label: 'Overtaking Segments' },
             { key: 'co_presence_segments', label: 'Co-Presence Segments' },
-            { key: 'flagged_bins', label: 'Flagged Bins', format: (val) => val.toLocaleString() },
+            { key: 'flagged_bins', label: 'Flagged Bins', format: (val) =>
+                (val !== undefined && val !== null && !Number.isNaN(Number(val))
+                    ? Number(val).toLocaleString() : '—') },
             { key: 'operational_status', label: 'Operational Status' },
             { key: 'event_groups', label: 'Runner Experience Scores (RES)', format: (val, dayMetrics) => {
                 // Format event_groups RES data (Issue #573)
@@ -596,8 +732,7 @@
         
         const day = currentDaySelection();
         const url = day ? `/api/dashboard/summary?day=${encodeURIComponent(day)}` : '/api/dashboard/summary';
-        fetch(url)
-            .then(response => response.json())
+        fetchJson(url)
             .then(data => {
                 dashboardData = data;
                 updateDashboard(data);

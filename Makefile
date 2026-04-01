@@ -269,6 +269,7 @@ cloud-build: ## Build skinny cloud UI image (RUN_ID=...)
 	@cp -R frontend "$(CLOUD_BUILD_CONTEXT)/"
 	@cp Dockerfile.cloud requirements-cloud.txt "$(CLOUD_BUILD_CONTEXT)/"
 	@cp -R "$(CLOUD_RUN_PATH)" "$(CLOUD_BUILD_CONTEXT)/runflow/analysis/"
+	@python3 scripts/write_cloud_index_json.py $(RUN_ID) "$(CLOUD_BUILD_CONTEXT)/runflow/analysis"
 	@docker buildx build --platform $(CLOUD_BUILD_PLATFORM) --load \
 		-f "$(CLOUD_BUILD_CONTEXT)/Dockerfile.cloud" \
 		--build-arg RUN_ID=$(RUN_ID) \

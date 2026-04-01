@@ -298,8 +298,10 @@
     <nav>
         <ul>
             {% if cloud_mode %}
+            <li><a href="/dashboard" {% if request.url and request.url.path == "/dashboard" %}class="active"{% endif %}>Dashboard</a></li>
             <li><a href="/locations" {% if request.url and request.url.path == "/locations" %}class="active"{% endif %}>Locations</a></li>
             <li><a href="/locsheets" {% if request.url and request.url.path == "/locsheets" %}class="active"{% endif %}>Loc Sheets</a></li>
+            <li><a href="/logout" style="color: #e74c3c;">Logout</a></li>
             {% else %}
             <li><a href="/dashboard" {% if request.url and request.url.path == "/dashboard" %}class="active"{% endif %}>Dashboard</a></li>
             <li><a href="/segments" {% if request.url and request.url.path == "/segments" %}class="active"{% endif %}>Segments</a></li>
@@ -338,32 +340,38 @@
     <!-- Issue #314: Frontend session check (supplementary to server-side enforcement) -->
     <script>
     (function() {
-        // Skip session check on password page and public loc sheet URLs (Issue #735, #737 short URL)
+        const CLOUD_UI = {% if cloud_mode %}true{% else %}false{% endif %};
+        // Skip session check on password page and public loc sheet URLs (local only; Issue #735, #737)
         const path = window.location.pathname;
         if (path === '/' || path === '/login') {
             return;
         }
-        if (path.startsWith('/locsheets/') && path.match(/^\/locsheets\/[^/]+\/(?:fri|sat|sun|mon)\/[^/]+$/)) {
+        if (!CLOUD_UI && path.startsWith('/locsheets/') && path.match(/^\/locsheets\/[^/]+\/(?:fri|sat|sun|mon)\/[^/]+$/)) {
             return;
         }
-        if (path.startsWith('/locsheets/') && path.match(/^\/locsheets\/(?:fri|sat|sun|mon)\/[^/]+$/)) {
+        if (!CLOUD_UI && path.startsWith('/locsheets/') && path.match(/^\/locsheets\/(?:fri|sat|sun|mon)\/[^/]+$/)) {
             return;
         }
         
-        // Check session status on page load
+        // Check session status on page load (401 from Cloud middleware → login)
         fetch('/api/auth/check', {
             method: 'GET',
-            credentials: 'include'  // Include cookies
+            credentials: 'include'
         })
-        .then(response => response.json())
+        .then(response => {
+            if (response.status === 401) {
+                window.location.href = '/';
+                return null;
+            }
+            return response.json();
+        })
         .then(data => {
+            if (!data) return;
             if (!data.authenticated) {
-                // Session expired or invalid - redirect to password page
                 window.location.href = '/';
             }
         })
         .catch(error => {
-            // If check fails, assume session is invalid
             console.error('Session check failed:', error);
             window.location.href = '/';
         });
