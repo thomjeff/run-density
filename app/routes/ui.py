@@ -74,8 +74,9 @@ async def password_page(request: Request):
     
     meta = get_stub_meta()
     return templates.TemplateResponse(
-        "pages/password.html",
-        {"request": request, "meta": meta}
+        request=request,
+        name="pages/password.html",
+        context={"request": request, "meta": meta},
     )
 
 
@@ -100,13 +101,14 @@ async def login(request: Request, password: str = Form(...)):
         # Note: In production, you might want to add a delay to prevent brute force
         meta = get_stub_meta()
         return templates.TemplateResponse(
-            "pages/password.html",
-            {
+            request=request,
+            name="pages/password.html",
+            context={
                 "request": request,
                 "meta": meta,
-                "error": "Incorrect password. Please try again."
+                "error": "Incorrect password. Please try again.",
             },
-            status_code=401
+            status_code=401,
         )
 
 
@@ -154,12 +156,13 @@ async def dashboard(request: Request):
         }
     
     return templates.TemplateResponse(
-        "pages/dashboard.html",
-        {
-            "request": request, 
+        request=request,
+        name="pages/dashboard.html",
+        context={
+            "request": request,
             "meta": meta,
-            "los_colors": los_colors
-        }
+            "los_colors": los_colors,
+        },
     )
 
 
@@ -194,12 +197,13 @@ async def segments(request: Request):
         }
     
     return templates.TemplateResponse(
-        "pages/segments.html",
-        {
-            "request": request, 
+        request=request,
+        name="pages/segments.html",
+        context={
+            "request": request,
             "meta": meta,
-            "los_colors": los_colors
-        }
+            "los_colors": los_colors,
+        },
     )
 
 
@@ -240,8 +244,9 @@ async def density(request: Request):
         logger.error(f"Error getting latest run_id: {e}")
     
     return templates.TemplateResponse(
-        "pages/density.html",
-        {"request": request, "meta": meta, "los_colors": los_colors, "run_id": run_id}
+        request=request,
+        name="pages/density.html",
+        context={"request": request, "meta": meta, "los_colors": los_colors, "run_id": run_id},
     )
 
 
@@ -260,8 +265,9 @@ async def flow(request: Request):
         return auth_redirect
     meta = get_stub_meta()
     return templates.TemplateResponse(
-        "pages/flow.html",
-        {"request": request, "meta": meta}
+        request=request,
+        name="pages/flow.html",
+        context={"request": request, "meta": meta},
     )
 
 
@@ -281,8 +287,9 @@ async def locations(request: Request):
         return auth_redirect
     meta = get_stub_meta()
     return templates.TemplateResponse(
-        "pages/locations.html",
-        {"request": request, "meta": meta}
+        request=request,
+        name="pages/locations.html",
+        context={"request": request, "meta": meta},
     )
 
 
@@ -327,8 +334,9 @@ async def locsheets(
 
     meta = get_stub_meta()
     return templates.TemplateResponse(
-        "pages/locsheets.html",
-        {
+        request=request,
+        name="pages/locsheets.html",
+        context={
             "request": request,
             "meta": meta,
             "run_id": run_id,
@@ -378,8 +386,14 @@ async def course_mapping(request: Request):
     location_types = [{"value": t, "label": t.capitalize()} for t in LOCATION_TYPE_CHOICES]
     event_choices = [{"value": e, "label": e.upper() if e == "10k" else e.capitalize()} for e in COURSE_EVENT_IDS]
     return templates.TemplateResponse(
-        "pages/course_mapping.html",
-        {"request": request, "meta": meta, "location_types": location_types, "event_choices": event_choices}
+        request=request,
+        name="pages/course_mapping.html",
+        context={
+            "request": request,
+            "meta": meta,
+            "location_types": location_types,
+            "event_choices": event_choices,
+        },
     )
 
 
@@ -434,8 +448,9 @@ async def reports(request: Request):
         return auth_redirect
     meta = get_stub_meta()
     return templates.TemplateResponse(
-        "pages/reports.html",
-        {"request": request, "meta": meta}
+        request=request,
+        name="pages/reports.html",
+        context={"request": request, "meta": meta},
     )
 
 
@@ -454,8 +469,9 @@ async def analysis_page(request: Request):
         return auth_redirect
     meta = get_stub_meta()
     return templates.TemplateResponse(
-        "pages/analysis.html",
-        {"request": request, "meta": meta}
+        request=request,
+        name="pages/analysis.html",
+        context={"request": request, "meta": meta},
     )
 
 
@@ -474,8 +490,9 @@ async def create_files_page(request: Request):
         return auth_redirect
     meta = get_stub_meta()
     return templates.TemplateResponse(
-        "pages/create_files.html",
-        {"request": request, "meta": meta}
+        request=request,
+        name="pages/create_files.html",
+        context={"request": request, "meta": meta},
     )
 
 
@@ -494,8 +511,9 @@ async def health_page(request: Request):
         return auth_redirect
     meta = get_stub_meta()
     return templates.TemplateResponse(
-        "pages/health.html",
-        {"request": request, "meta": meta}
+        request=request,
+        name="pages/health.html",
+        context={"request": request, "meta": meta},
     )
 
 
