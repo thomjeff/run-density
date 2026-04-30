@@ -74,7 +74,8 @@ def test_write_finish_times_csv_nonzero_rows_and_all(tmp_path):
     assert any(",all,3" in ln for ln in body)
 
 
-def test_write_finish_times_csv_blank_line_between_hours(tmp_path):
+def test_write_finish_times_csv_no_blank_lines_between_hours(tmp_path):
+    """Strict CSV: no empty rows when buckets span different clock hours."""
     finish_df = pd.DataFrame(
         {
             "runner_id": ["1", "2"],
@@ -88,4 +89,7 @@ def test_write_finish_times_csv_blank_line_between_hours(tmp_path):
     out = tmp_path / "finish_times.csv"
     assert write_finish_times_csv(out, "sun", finish_df) is True
     raw = out.read_text(encoding="utf-8")
-    assert "\n\n" in raw
+    assert "\n\n" not in raw
+    lines = [ln for ln in raw.splitlines() if ln.strip()]
+    # header + (full + all) per bucket × 2 buckets
+    assert len(lines) == 1 + 4

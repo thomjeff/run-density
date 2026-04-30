@@ -125,7 +125,7 @@ def write_finish_times_csv(output_path: Path, day_code: str, finish_df: pd.DataF
     """
     Issue #743: Aggregate predicted finishes into 20-minute waves; non-zero rows only plus ``all``.
 
-    Inserts a blank line between consecutive buckets when the clock hour changes (Excel-friendly).
+    Strict CSV (one record per line, RFC 4180-friendly): no blank separator rows.
 
     Returns:
         True if file was written with at least one data row; False if nothing to emit.
@@ -144,7 +144,6 @@ def write_finish_times_csv(output_path: Path, day_code: str, finish_df: pd.DataF
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    prev_hour: Optional[int] = None
     rows_written = 0
     with open(output_path, "w", encoding="utf-8", newline="") as fh:
         writer = csv.writer(fh)
@@ -152,10 +151,6 @@ def write_finish_times_csv(output_path: Path, day_code: str, finish_df: pd.DataF
 
         for bucket_start in sorted(grouped["_bucket"].unique()):
             chunk = grouped[grouped["_bucket"] == bucket_start]
-            hour = bucket_start // 3600
-            if prev_hour is not None and hour != prev_hour:
-                writer.writerow([])
-            prev_hour = hour
 
             window_start_str = _format_seconds_to_hhmmss(bucket_start)
             window_end_str = _format_seconds_to_hhmmss(bucket_start + _FINISH_BUCKET_SECONDS - 1)
