@@ -13,7 +13,7 @@
 <div class="card">
     <h3 style="margin-bottom: 1rem;">Reports</h3>
     <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
-        Generated Density, Flow, and Locations analysis reports, sorted by most recent first.
+        Generated Density, Flow, Locations, and finish-time wave reports (grouped by day).
     </p>
     <div id="reports-list">
         <p class="placeholder">Loading reports...</p>
@@ -87,9 +87,13 @@
         
         // Filter and categorize files
         const relevantReports = reports.filter(r => {
-            // Include Density, Flow, and Locations reports (.md and .csv files)
-            const isRelevantReport = (r.name.includes('Density') || r.name.includes('Flow') || r.name.includes('Locations')) && 
-                                   (r.name.endsWith('.md') || r.name.endsWith('.csv'));
+            // Include Density, Flow, Locations, and finish_times (Issue #743) — .md / .csv only
+            const isRelevantReport = (
+                r.name.includes('Density') ||
+                r.name.includes('Flow') ||
+                r.name.includes('Locations') ||
+                r.name === 'finish_times.csv'
+            ) && (r.name.endsWith('.md') || r.name.endsWith('.csv'));
             
             // Exclude technical files
             const isTechnicalFile = r.name.includes('bins.') || 
@@ -178,6 +182,18 @@
             
             sortedDays.forEach(day => {
                 const dayReports = reportsByDay[day];
+                const reportNameOrder = (name) => {
+                    if (name === 'Density.md') return 0;
+                    if (name === 'Flow.csv') return 1;
+                    if (name === 'Locations.csv') return 2;
+                    if (name === 'finish_times.csv') return 3;
+                    return 50;
+                };
+                dayReports.sort((a, b) => {
+                    const d = reportNameOrder(a.name) - reportNameOrder(b.name);
+                    if (d !== 0) return d;
+                    return (b.mtime || 0) - (a.mtime || 0);
+                });
                 const dayLabel = day.toUpperCase();
                 
                 reportsHtml += `<div style="margin-bottom: 2rem;">`;
