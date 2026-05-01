@@ -183,7 +183,13 @@ async def get_reports_list(
                     continue
                 
                 filename = report_file.name
-                description = _get_file_description_from_extension(filename)
+                report_descriptions = {
+                    "finish_times.csv": "Predicted finisher counts by 20-minute clock window (per event and all)",
+                    "finish_area_demand.pdf": "Finish-area operational PDF: bar chart, cumulative curve, demand table (event=all)",
+                }
+                description = report_descriptions.get(
+                    filename, _get_file_description_from_extension(filename)
+                )
                 
                 # Get file metadata
                 stat = report_file.stat()

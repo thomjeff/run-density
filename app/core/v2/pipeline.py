@@ -1459,7 +1459,8 @@ def create_full_analysis_pipeline(
         density_summary = {}
         flow_summary_by_day = {}
         day_metadata_map: Dict[str, Dict[str, Any]] = {}
-        
+        runners_df_by_day: Dict[str, pd.DataFrame] = {}
+
         for day, day_events in events_by_day.items():
             day_code = day.value
             days_processed.append(day_code)
@@ -1505,6 +1506,8 @@ def create_full_analysis_pipeline(
                 from app.core.v2.density import combine_runners_for_events
                 event_names = [e.name.lower() for e in day_events]
                 day_runners_df = combine_runners_for_events(event_names, day_code, runner_paths)
+                if day_runners_df.empty:
+                    day_runners_df = filter_runners_by_day(all_runners_df, day, day_events)
                 if not day_runners_df.empty:
                     # event column should be lowercase
                     participants_by_event = (
@@ -1512,6 +1515,7 @@ def create_full_analysis_pipeline(
                     )
             except Exception as e:
                 logger.warning(f"Could not compute participants per event for {day_code}: {e}")
+            runners_df_by_day[day_code] = day_runners_df
             
             # Create metadata.json per day with v1 parity + events
             metadata = create_metadata_json(
@@ -1710,6 +1714,54 @@ def create_full_analysis_pipeline(
                     reports_dir=reports_path,
                     segments_df=segments_df
                 )
+
+                # Issue #743: Predicted finish waves (20-minute buckets; same runner math as timings)
+                dr_day = runners_df_by_day.get(day_code)
+                if analysis_config is not None and dr_day is not None and not dr_day.empty:
+                    from app.core.v2.timings import build_runner_finish_times_df, write_finish_times_csv
+
+                    ft_df = build_runner_finish_times_df(
+                        events=day_events,
+                        analysis_config=analysis_config,
+                        runners_df=dr_day,
+                    )
+                    if ft_df is not None and not ft_df.empty:
+                        ft_path = reports_path / "finish_times.csv"
+                        write_finish_times_csv(ft_path, day_code, ft_df)
+                        try:
+                            from app.finish_area_pdf import (
+                                expected_runners_for_day,
+                                generate_finish_area_demand_pdf,
+                            )
+
+                            _day_pdf_titles = {
+                                "fri": "Friday",
+                                "sat": "Saturday",
+                                "sun": "Sunday",
+                                "mon": "Monday",
+                            }
+                            day_pdf_title = _day_pdf_titles.get(
+                                day_code, day_code.upper()
+                            )
+                            exp_total = (
+                                expected_runners_for_day(analysis_config, day_code)
+                                if analysis_config
+                                else None
+                            )
+                            generate_finish_area_demand_pdf(
+                                finish_times_csv=ft_path,
+                                output_pdf=reports_path / "finish_area_demand.pdf",
+                                day_display_name=day_pdf_title,
+                                run_id=run_id,
+                                expected_runner_total=exp_total,
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                "finish_area_demand.pdf failed for %s: %s",
+                                day_code,
+                                exc,
+                                exc_info=True,
+                            )
             
             # Update metadata verification after reports are generated
             # Bug fix: Metadata was created before reports, causing false FAIL status
