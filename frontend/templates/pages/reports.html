@@ -87,13 +87,14 @@
         
         // Filter and categorize files
         const relevantReports = reports.filter(r => {
-            // Include Density, Flow, Locations, and finish_times (Issue #743) — .md / .csv only
+            // Include Density, Flow, Locations, finish_times, finish-area PDF (Issue #743)
             const isRelevantReport = (
                 r.name.includes('Density') ||
                 r.name.includes('Flow') ||
                 r.name.includes('Locations') ||
-                r.name === 'finish_times.csv'
-            ) && (r.name.endsWith('.md') || r.name.endsWith('.csv'));
+                r.name === 'finish_times.csv' ||
+                r.name === 'finish_area_demand.pdf'
+            ) && (r.name.endsWith('.md') || r.name.endsWith('.csv') || r.name === 'finish_area_demand.pdf');
             
             // Exclude technical files
             const isTechnicalFile = r.name.includes('bins.') || 
@@ -187,6 +188,7 @@
                     if (name === 'Flow.csv') return 1;
                     if (name === 'Locations.csv') return 2;
                     if (name === 'finish_times.csv') return 3;
+                    if (name === 'finish_area_demand.pdf') return 4;
                     return 50;
                 };
                 dayReports.sort((a, b) => {

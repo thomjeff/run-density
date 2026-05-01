@@ -1726,7 +1726,42 @@ def create_full_analysis_pipeline(
                         runners_df=dr_day,
                     )
                     if ft_df is not None and not ft_df.empty:
-                        write_finish_times_csv(reports_path / "finish_times.csv", day_code, ft_df)
+                        ft_path = reports_path / "finish_times.csv"
+                        write_finish_times_csv(ft_path, day_code, ft_df)
+                        try:
+                            from app.finish_area_pdf import (
+                                expected_runners_for_day,
+                                generate_finish_area_demand_pdf,
+                            )
+
+                            _day_pdf_titles = {
+                                "fri": "Friday",
+                                "sat": "Saturday",
+                                "sun": "Sunday",
+                                "mon": "Monday",
+                            }
+                            day_pdf_title = _day_pdf_titles.get(
+                                day_code, day_code.upper()
+                            )
+                            exp_total = (
+                                expected_runners_for_day(analysis_config, day_code)
+                                if analysis_config
+                                else None
+                            )
+                            generate_finish_area_demand_pdf(
+                                finish_times_csv=ft_path,
+                                output_pdf=reports_path / "finish_area_demand.pdf",
+                                day_display_name=day_pdf_title,
+                                run_id=run_id,
+                                expected_runner_total=exp_total,
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                "finish_area_demand.pdf failed for %s: %s",
+                                day_code,
+                                exc,
+                                exc_info=True,
+                            )
             
             # Update metadata verification after reports are generated
             # Bug fix: Metadata was created before reports, causing false FAIL status
