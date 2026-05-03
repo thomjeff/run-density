@@ -213,6 +213,20 @@ function createLocationPopup(properties) {
     if (locStartFormatted && locEndFormatted) {
         popup += `<div style="margin-bottom: 0.5rem;"><strong>Operational Window:</strong> ${locStartFormatted} → ${locEndFormatted}</div>`;
     }
+
+    // First/last runner — same rules as Course Resource Timing table (locations.html)
+    const firstRunnerRaw = props.first_runner;
+    const firstRunnerFormatted = (firstRunnerRaw && firstRunnerRaw !== "NA" && firstRunnerRaw !== "null")
+        ? (formatTimeToHHMM(firstRunnerRaw) || "—")
+        : "—";
+    const lastRunnerRaw = props.last_runner;
+    const lastRunnerFormatted = (lastRunnerRaw && lastRunnerRaw !== "NA" && lastRunnerRaw !== "null")
+        ? (formatTimeToHHMM(lastRunnerRaw) || "—")
+        : "—";
+    const firstLastRunner = (firstRunnerFormatted !== "—" && lastRunnerFormatted !== "—")
+        ? `${firstRunnerFormatted} → ${lastRunnerFormatted}`
+        : "—";
+    popup += `<div style="margin-bottom: 0.5rem;"><strong>First/last runner:</strong> ${firstLastRunner}</div>`;
     
     if (duration != null) {
         popup += `<div style="margin-bottom: 0.5rem;"><strong>Duration:</strong> ${duration} minutes</div>`;
