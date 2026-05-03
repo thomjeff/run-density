@@ -382,6 +382,7 @@
     <script>
     (function() {
         const CLOUD_MODE = {% if cloud_mode %}true{% else %}false{% endif %};
+        window.CLOUD_UI = CLOUD_MODE;
         const CLOUD_RUN_ID = {{ cloud_run_id_json | default('null') | safe }};
         const CLOUD_AVAILABLE_DAYS = {{ cloud_available_days_json | default('[]') | safe }};
 

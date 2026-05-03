@@ -44,7 +44,8 @@ function convertToGeoJSON(locations) {
                 flagged_seg_id: loc.flagged_seg_id,  // Issue #598: Include flagged_seg_id
                 flag_severity: loc.flag_severity,     // Issue #598: Include flag_severity
                 flag_worst_los: loc.flag_worst_los,   // Issue #598: Include flag_worst_los
-                flag_note: loc.flag_note              // Issue #598: Include flag_note
+                flag_note: loc.flag_note,             // Issue #598: Include flag_note
+                onepage: loc.onepage                // Issue #745: SSOT for loc sheet links (table)
             };
             
             // Issue #591: Dynamically add all resource count and mins fields
@@ -201,31 +202,6 @@ function createLocationPopup(properties) {
         }
     }
     
-    let popup = `
-        <div style="font-family: Arial, sans-serif; font-size: 14px; width: 260px;">
-            <h3 style="margin: 0 0 0.5rem 0; font-size: 16px; color: #2c3e50;">${heading}</h3>
-            <div style="margin-bottom: 0.5rem;">
-                <strong>Type:</strong> <span style="color: ${getLocationMarkerColor(locType)}; font-weight: bold;">${locType}</span>
-            </div>
-    `;
-    
-    if (locStartFormatted && locEndFormatted) {
-        popup += `<div style="margin-bottom: 0.5rem;"><strong>Operational Window:</strong> ${locStartFormatted} → ${locEndFormatted}</div>`;
-    }
-    
-    if (duration != null) {
-        popup += `<div style="margin-bottom: 0.5rem;"><strong>Duration:</strong> ${duration} minutes</div>`;
-    }
-    
-    if (peakStartFormatted && peakEndFormatted) {
-        popup += `<div style="margin-bottom: 0.5rem;"><strong>Peak Window:</strong> ${peakStartFormatted} → ${peakEndFormatted}</div>`;
-    }
-    
-    if (props.zone) {
-        popup += `<div style="margin-bottom: 0.5rem;"><strong>Zone:</strong> ${props.zone}</div>`;
-    }
-    
-    // Issue #592: Add resource counts to popup (after Zone, before Source)
     const resourceCounts = [];
     Object.keys(props).forEach(key => {
         if (key.endsWith('_count')) {
@@ -236,8 +212,48 @@ function createLocationPopup(properties) {
             }
         }
     });
+
+    // First/last runner — same rules as Course Resource Timing table (locations.html)
+    const firstRunnerRaw = props.first_runner;
+    const firstRunnerFormatted = (firstRunnerRaw && firstRunnerRaw !== "NA" && firstRunnerRaw !== "null")
+        ? (formatTimeToHHMM(firstRunnerRaw) || "—")
+        : "—";
+    const lastRunnerRaw = props.last_runner;
+    const lastRunnerFormatted = (lastRunnerRaw && lastRunnerRaw !== "NA" && lastRunnerRaw !== "null")
+        ? (formatTimeToHHMM(lastRunnerRaw) || "—")
+        : "—";
+    const firstLastRunner = (firstRunnerFormatted !== "—" && lastRunnerFormatted !== "—")
+        ? `${firstRunnerFormatted} → ${lastRunnerFormatted}`
+        : "—";
+
+    let popup = `
+        <div style="font-family: Arial, sans-serif; font-size: 14px; width: 260px;">
+            <h3 style="margin: 0 0 0.5rem 0; font-size: 16px; color: #2c3e50;">${heading}</h3>
+            <div style="margin-bottom: 0.5rem;">
+                <strong>Type:</strong> <span style="color: ${getLocationMarkerColor(locType)}; font-weight: bold;">${locType}</span>
+            </div>
+    `;
+
     if (resourceCounts.length > 0) {
         popup += `<div style="margin-bottom: 0.5rem;"><strong>Resources:</strong> ${resourceCounts.join(', ')}</div>`;
+    }
+
+    if (locStartFormatted && locEndFormatted) {
+        popup += `<div style="margin-bottom: 0.5rem;"><strong>Operational Window:</strong> ${locStartFormatted} → ${locEndFormatted}</div>`;
+    }
+
+    if (duration != null) {
+        popup += `<div style="margin-bottom: 0.5rem;"><strong>Duration:</strong> ${duration} minutes</div>`;
+    }
+
+    popup += `<div style="margin-bottom: 0.5rem;"><strong>First/last runner:</strong> ${firstLastRunner}</div>`;
+
+    if (peakStartFormatted && peakEndFormatted) {
+        popup += `<div style="margin-bottom: 0.5rem;"><strong>Peak Window:</strong> ${peakStartFormatted} → ${peakEndFormatted}</div>`;
+    }
+
+    if (props.zone) {
+        popup += `<div style="margin-bottom: 0.5rem;"><strong>Zone:</strong> ${props.zone}</div>`;
     }
     
     // Issue #598: Add flag to popup
