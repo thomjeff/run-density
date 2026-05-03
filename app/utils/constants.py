@@ -195,7 +195,7 @@ LOCATION_SETUP_BUFFER_MINUTES = 45  # Minutes before earliest runner start for l
 LOCATION_TYPE_CHOICES = [
     "aid",
     "course",
-    "extraction",
+    "extract",
     "official",
     "traffic",
     "water",

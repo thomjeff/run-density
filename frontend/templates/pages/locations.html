@@ -194,7 +194,7 @@
             </tr>
             <tr>
                 <td><strong>Type</strong></td>
-                <td>The location type: <em>traffic</em> (traffic control), <em>course</em> (on-course), <em>water</em> (water stop), <em>aid</em> (aid station), <em>official</em> (official point), <em>extraction</em> (remote trail extraction / stretcher-mule access), or <em>marshal</em> (legacy marshal point).</td>
+                <td>The location type: <em>traffic</em> (traffic control), <em>course</em> (on-course), <em>water</em> (water stop), <em>aid</em> (aid station), <em>official</em> (official point), <em>extract</em> (remote trail extract / stretcher-mule access), or <em>marshal</em> (legacy marshal point).</td>
             </tr>
             <tr>
                 <td><strong>Zone</strong></td>
@@ -224,7 +224,7 @@
 
 <!-- External JavaScript modules -->
 <script src="/static/js/map/base_map.js"></script>
-<script src="/static/js/map/locations.js?v=2026-05-03T747Z"></script>
+<script src="/static/js/map/locations.js?v=2026-05-03T747Z-extract"></script>
 
 <!-- Table interaction script -->
 <script>
@@ -870,7 +870,7 @@
             'water': '#2196F3',    // Blue
             'marshal': '#FF9800',  // Orange (legacy)
             'official': '#FFC107', // Amber
-            'extraction': '#9C27B0' // Purple (Issue #747)
+            'extract': '#9C27B0' // Purple (Issue #747)
         };
         return locationTypeColors[locType?.toLowerCase()] || '#999999';
     }

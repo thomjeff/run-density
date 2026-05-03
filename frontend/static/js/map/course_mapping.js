@@ -175,7 +175,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var LOCATION_PIN_COLORS = {
         aid: '#e74c3c',
         course: '#27ae60',
-        extraction: '#9c27b0',
+        extract: '#9c27b0',
         official: '#f1c40f',
         traffic: '#95a5a6',
         water: '#3498db'
