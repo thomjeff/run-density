@@ -44,7 +44,8 @@ function convertToGeoJSON(locations) {
                 flagged_seg_id: loc.flagged_seg_id,  // Issue #598: Include flagged_seg_id
                 flag_severity: loc.flag_severity,     // Issue #598: Include flag_severity
                 flag_worst_los: loc.flag_worst_los,   // Issue #598: Include flag_worst_los
-                flag_note: loc.flag_note              // Issue #598: Include flag_note
+                flag_note: loc.flag_note,             // Issue #598: Include flag_note
+                onepage: loc.onepage                // Issue #745: SSOT for loc sheet links (table)
             };
             
             // Issue #591: Dynamically add all resource count and mins fields

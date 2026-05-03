@@ -27,6 +27,42 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _merge_onepage_into_report_rows(
+    report_data: list,
+    locations_results: Optional[Dict[str, Any]],
+    selected_day: str,
+) -> None:
+    """
+    Issue #745: Add ``onepage`` per row from locations_results.json (SSOT for loc sheets).
+
+    Day matching matches ``build_loc_sheet_entries`` / Loc Sheets index behavior.
+    """
+    sel = (selected_day or "").strip().lower()
+    if not locations_results:
+        for row in report_data:
+            row["onepage"] = "n"
+        return
+
+    onepage_by_id: Dict[str, str] = {}
+    for loc in locations_results.get("locations") or []:
+        if not isinstance(loc, dict):
+            continue
+        loc_day = str(loc.get("day", "")).strip().lower()
+        if loc_day and loc_day != sel:
+            continue
+        lid = loc.get("loc_id")
+        if lid is None or str(lid).strip() == "":
+            continue
+        key = str(lid).strip()
+        raw = str(loc.get("onepage", "")).strip().lower()
+        onepage_by_id[key] = raw if raw else "n"
+
+    for row in report_data:
+        lid = row.get("loc_id")
+        key = str(lid).strip() if lid is not None else ""
+        row["onepage"] = onepage_by_id.get(key, "n")
+
+
 @router.get("/api/locations")
 async def get_locations_report(
     request: Request,
@@ -37,7 +73,8 @@ async def get_locations_report(
     """
     Get locations report data.
     
-    Issue #277: Returns location report as JSON.
+    Issue #277: Returns location report as JSON. Issue #745: each row may include
+    ``onepage`` (y|n) from ``locations_results.json`` for loc sheet link eligibility.
     
     Args:
         run_id: Optional run ID (defaults to latest)
@@ -66,15 +103,16 @@ async def get_locations_report(
         selected_day, available_days = resolve_selected_day(run_id, day)
         storage = create_runflow_storage(run_id)
         
-        # Issue #591: Load resources_available from locations_results.json
+        # Issue #591 / #745: Load locations_results.json for resources_available and onepage (SSOT)
         resources_available = []
+        locations_results: Optional[Dict[str, Any]] = None
         locations_results_path = f"{selected_day}/computation/locations_results.json"
         if storage.exists(locations_results_path):
             try:
                 locations_results = storage.read_json(locations_results_path)
                 resources_available = locations_results.get("resources_available", [])
             except Exception as e:
-                logger.warning(f"Could not load resources_available from {locations_results_path}: {e}")
+                logger.warning(f"Could not load locations_results from {locations_results_path}: {e}")
         
         # Try to load existing report from day-scoped path
         report_path = f"{selected_day}/reports/Locations.csv"
@@ -94,6 +132,7 @@ async def get_locations_report(
                 # Convert flag column: handle both boolean and string representations
                 df['flag'] = df['flag'].apply(lambda x: True if (x is True or str(x).lower() in ['true', '1', 'y', 'yes']) else False)
             report_data = df.to_dict('records')
+            _merge_onepage_into_report_rows(report_data, locations_results, selected_day)
         elif generate:
             # Generate new report
             # Issue #512: Start times must be provided - cannot use hardcoded constants

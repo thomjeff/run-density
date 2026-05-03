@@ -35,6 +35,15 @@
     .location-popup {
         font-size: 0.875rem;
     }
+    
+    #locations-table a.loc-sheet-link {
+        color: #0d6efd;
+        text-decoration: underline;
+        font-weight: 500;
+    }
+    #locations-table a.loc-sheet-link:hover {
+        color: #0a58ca;
+    }
 </style>
 {% endblock %}
 
@@ -215,7 +224,7 @@
 
 <!-- External JavaScript modules -->
 <script src="/static/js/map/base_map.js"></script>
-<script src="/static/js/map/locations.js?v=2026-01-23T1730Z"></script>
+<script src="/static/js/map/locations.js?v=2026-05-03T745Z"></script>
 
 <!-- Table interaction script -->
 <script>
@@ -334,7 +343,8 @@
                 peak_end: feature.properties.peak_end,
                 timing_source: feature.properties.timing_source,
                 first_runner: feature.properties.first_runner,
-                last_runner: feature.properties.last_runner
+                last_runner: feature.properties.last_runner,
+                onepage: feature.properties.onepage
             };
             // Issue #591: Dynamically add all resource count and mins fields
             // Issue #598: Include flag fields
@@ -389,7 +399,8 @@
                 peak_end: feature.properties.peak_end,
                 timing_source: feature.properties.timing_source,
                 first_runner: feature.properties.first_runner,
-                last_runner: feature.properties.last_runner
+                last_runner: feature.properties.last_runner,
+                onepage: feature.properties.onepage
             };
             // Issue #591: Dynamically add all resource count and mins fields
             // Issue #598: Include flag fields
@@ -1048,6 +1059,50 @@
         });
     }
     
+    function escapeHtml(str) {
+        if (str == null || str === undefined) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function getRunDayForLocSheets() {
+        const params = new URLSearchParams(window.location.search);
+        const day = (params.get('day') || (window.runflowDay && window.runflowDay.selected) || '').toLowerCase().trim();
+        const run_id = (params.get('run_id') || (window.runflowDay && window.runflowDay.run_id) || '').trim();
+        return { day, run_id };
+    }
+
+    /**
+     * Issue #745: Location column — link to loc sheet when onepage=y (paths match pages/locsheets.html).
+     */
+    function formatLocationCellHtml(location) {
+        const rawLabel = location.loc_label;
+        const displayText = rawLabel != null && rawLabel !== '' ? String(rawLabel) : '—';
+        const escaped = escapeHtml(displayText);
+        if (String(location.onepage || '').toLowerCase() !== 'y') {
+            return escaped;
+        }
+        const { day, run_id } = getRunDayForLocSheets();
+        if (!day) {
+            return escaped;
+        }
+        const lid = String(location.loc_id);
+        const cloudUi = !!window.CLOUD_UI;
+        let path;
+        if (cloudUi) {
+            path = `/locsheets/${encodeURIComponent(day)}/${encodeURIComponent(lid)}`;
+        } else {
+            if (!run_id) {
+                return escaped;
+            }
+            path = `/locsheets/${encodeURIComponent(run_id)}/${encodeURIComponent(day)}/${encodeURIComponent(lid)}`;
+        }
+        return `<a href="${path}" target="_blank" rel="noopener" class="loc-sheet-link" onclick="event.stopPropagation()">${escaped}</a>`;
+    }
+    
     function renderLocationsTable(locations) {
         const tbody = document.getElementById('locations-tbody');
         tbody.innerHTML = '';
@@ -1059,9 +1114,6 @@
         
         locations.forEach(location => {
             const row = document.createElement('tr');
-            
-            // Format values with fallback to "—" for null/NA
-            const locLabel = location.loc_label || "—";
             
             // Format location type
             const locType = location.loc_type && location.loc_type !== "NA" ? location.loc_type : "—";
@@ -1111,7 +1163,7 @@
             // Column order: ID, Location, Type, Zone, Flag, Operational Window, First/Last Runner, Peak Window
             row.innerHTML = `
                 <td>${locId}</td>
-                <td>${locLabel}</td>
+                <td>${formatLocationCellHtml(location)}</td>
                 <td>${locType}</td>
                 <td>${zone}</td>
                 <td>${flagDisplay}</td>
