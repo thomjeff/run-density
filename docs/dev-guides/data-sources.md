@@ -401,6 +401,7 @@ runner_id,event,pace,distance,start_offset,day
 **Required Columns**:
 - `loc_id`: Location identifier
 - `loc_label`: Human-readable label
+- `loc_type`: Location category; allowed values are **`LOCATION_TYPE_CHOICES`** in `app/utils/constants.py` (SSOT for Course Mapping and Locations UI).
 - `seg_id`: Associated segment ID
 - `timing_source`: Source of timing data (e.g., "proxy:n")
 

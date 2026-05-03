@@ -172,7 +172,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var LOCATION_TYPES = (window.LOCATION_TYPES_FROM_SERVER || []).slice().sort(function (a, b) { return (a.label || a.value).localeCompare(b.label || b.value); });
     var EVENT_CHOICES = window.EVENT_CHOICES_FROM_SERVER || [{ value: 'full', label: 'Full' }, { value: 'half', label: 'Half' }, { value: '10k', label: '10K' }, { value: 'elite', label: 'Elite' }, { value: 'open', label: 'Open' }];
-    var LOCATION_PIN_COLORS = { aid: '#e74c3c', course: '#27ae60', official: '#f1c40f', traffic: '#95a5a6', water: '#3498db' };
+    var LOCATION_PIN_COLORS = {
+        aid: '#e74c3c',
+        course: '#27ae60',
+        extract: '#9c27b0',
+        official: '#f1c40f',
+        traffic: '#95a5a6',
+        water: '#3498db'
+    };
     var SEGMENT_PIN_COLOR = '#3498db';
     var ROUTE_LINE_STYLE = { color: '#2f9e44', weight: 2, opacity: 0.45, dashArray: '4 6' };
     var SEGMENT_HIT_STYLE = { color: '#2f9e44', weight: 20, opacity: 0, dashArray: '4 6' };

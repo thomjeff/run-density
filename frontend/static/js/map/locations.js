@@ -12,7 +12,9 @@ const locationTypeColors = {
     'course': '#4CAF50',   // Green
     'aid': '#F44336',      // Red
     'water': '#2196F3',    // Blue
-    'marshal': '#FF9800'   // Orange
+    'marshal': '#FF9800',  // Orange (legacy)
+    'official': '#FFC107', // Amber
+    'extract': '#9C27B0' // Purple — remote trail extract / stretcher access (Issue #747)
 };
 
 /**
