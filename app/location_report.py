@@ -369,13 +369,35 @@ def find_nearest_segment(
                 if from_km <= distance_km <= to_km:
                     # Check distance from location to segment centerline
                     seg_id = seg_row["seg_id"]
-                    
-                    # Get segment centerline
+
+                    # Issue #655 / extract+empty seg_id: generate_segment_coordinates requires
+                    # segment_label, direction, width_m (same as calculate_arrival_times_for_location).
+                    seg_label = seg_row.get("seg_label") or seg_row.get("segment_label")
+                    if not seg_label:
+                        logger.warning(
+                            "find_nearest_segment: segment %s missing seg_label/segment_label; skipping",
+                            seg_id,
+                        )
+                        continue
+                    direction = seg_row.get("direction")
+                    width_m = seg_row.get("width_m")
+                    if not direction or width_m is None or (
+                        isinstance(width_m, float) and pd.isna(width_m)
+                    ):
+                        logger.warning(
+                            "find_nearest_segment: segment %s missing direction or width_m; skipping",
+                            seg_id,
+                        )
+                        continue
+
                     segments_list = [{
                         "seg_id": seg_id,
+                        "segment_label": seg_label,
+                        "direction": direction,
+                        "width_m": width_m,
                         event_col: "y",
                         f"{event_col}_from_km": from_km,
-                        f"{event_col}_to_km": to_km
+                        f"{event_col}_to_km": to_km,
                     }]
                     seg_coords = generate_segment_coordinates(courses, segments_list)
                     
