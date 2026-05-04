@@ -541,7 +541,8 @@ This section maps each UI page to its API endpoints and underlying artifact sour
 - `GET /api/locations` - Locations report data
 
 **Artifact Sources:**
-- `reports/Locations.csv` → Location report data
+- `{day}/reports/Locations.csv` → Day-scoped location report (includes `day` column after `loc_label`; Issue #749)
+- `Locations.csv` (run root, next to day folders) → Combined file for all days in chronological order (Issue #749)
 - `computation/locations_results.json` → `resources_available` array
 
 **UI Elements → Data Mapping:**
