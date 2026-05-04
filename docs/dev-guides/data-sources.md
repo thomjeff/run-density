@@ -402,8 +402,14 @@ runner_id,event,pace,distance,start_offset,day
 - `loc_id`: Location identifier
 - `loc_label`: Human-readable label
 - `loc_type`: Location category; allowed values are **`LOCATION_TYPE_CHOICES`** in `app/utils/constants.py` (SSOT for Course Mapping and Locations UI).
-- `seg_id`: Associated segment ID
-- `timing_source`: Source of timing data (e.g., "proxy:n")
+- `seg_id`: Associated segment ID(s); may be empty for off-course or proxy-only timing rows
+- `proxy_loc_id`: Optional; when set with **empty** `seg_id`, the locations report copies **operational** timing (`loc_end`, `duration`) from that `loc_id` for **all** `loc_type` values (`timing_source` becomes `proxy:<id>` in output). Issue #751.
+- `timing_source`: Optional advanced override (e.g. `proxy:n`) when present in input
+
+**Issue #751 — `proxy_loc_id` vs `seg_id` (locations report)**:
+- **`proxy_loc_id` set, `seg_id` empty:** skip runner arrival modeling for that row; apply operational window from the proxy location (same idea as former traffic-only behavior, now config-driven for every type).
+- **Both `proxy_loc_id` and `seg_id` set:** ambiguous configuration; report row uses `timing_source=error:proxy_and_seg` (no guessed timing).
+- **Neither set:** use coordinate / nearest-segment modeling when applicable (normal on-course case).
 
 **Validation**:
 - File must exist (404 if missing)

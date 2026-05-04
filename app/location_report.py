@@ -119,6 +119,33 @@ def parse_segment_ids(seg_id_value: Any) -> List[str]:
     return segment_ids
 
 
+def seg_id_effectively_empty(seg_id_value: Any) -> bool:
+    """Issue #751: True when ``seg_id`` parses to no segment ids."""
+    return len(parse_segment_ids(seg_id_value)) == 0
+
+
+def proxy_loc_id_is_set(proxy_val: Any) -> bool:
+    """Issue #751: True when ``proxy_loc_id`` should be treated as present."""
+    if proxy_val is None:
+        return False
+    if pd.isna(proxy_val):
+        return False
+    if isinstance(proxy_val, str) and not str(proxy_val).strip():
+        return False
+    return True
+
+
+def location_has_proxy_and_seg_conflict(location: pd.Series) -> bool:
+    """
+    Issue #751: Both ``proxy_loc_id`` and ``seg_id`` are set — ambiguous configuration.
+
+    Caller must not apply proxy timing or segment modeling without explicit resolution.
+    """
+    if not proxy_loc_id_is_set(location.get("proxy_loc_id")):
+        return False
+    return not seg_id_effectively_empty(location.get("seg_id"))
+
+
 def load_flagged_segments(run_id: Optional[str] = None, day: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
     """
     Load flagged segments from flags.json.
@@ -815,6 +842,24 @@ def generate_location_report(
             "flag_note": None
         }
         
+        # Issue #751: proxy_loc_id + seg_id both set — ambiguous; fail this row for timing
+        if location_has_proxy_and_seg_conflict(location):
+            report_row["timing_source"] = "error:proxy_and_seg"
+            extra = "Issue #751: set only proxy_loc_id or seg_id, not both."
+            base_notes = location.get("notes", "")
+            if base_notes and str(base_notes).strip():
+                report_row["notes"] = f"{base_notes} ({extra})"
+            else:
+                report_row["notes"] = extra
+            logger.error(
+                "Location %s (%s): proxy_loc_id and seg_id are both set; ambiguous configuration (Issue #751).",
+                loc_id,
+                loc_label,
+            )
+            report_rows.append(report_row)
+            locations_by_id[loc_id] = report_row
+            continue
+        
         # Check if timing_source is set to proxy:n in input locations.csv
         # This handles locations that should copy timing from another location
         timing_source = location.get("timing_source", "")
@@ -862,13 +907,7 @@ def generate_location_report(
                 )
                 report_row["timing_source"] = "error:invalid_proxy_format"
         
-        # Validate proxy_loc_id usage (Issue #479)
         proxy_loc_id = location.get("proxy_loc_id")
-        if pd.notna(proxy_loc_id) and proxy_loc_id != "" and loc_type != "traffic":
-            logger.warning(
-                f"Location {loc_id} ({loc_label}): proxy_loc_id={proxy_loc_id} provided but loc_type={loc_type} is not 'traffic'. "
-                f"Ignoring proxy_loc_id for non-traffic locations."
-            )
         
         # Issue #598: Propagate flags from segments
         # 1. Get seg_id(s) for this location (direct or via proxy)
@@ -927,9 +966,12 @@ def generate_location_report(
                 f"(severity={flag_severity}, los={flag_worst_los})"
             )
         
-        # Skip arrival modeling for traffic locations
-        # Note: timing_source will be updated later in proxy processing loop
-        if loc_type == "traffic":
+        # Issue #751: Skip arrival modeling for traffic, or any loc_type with proxy_loc_id and empty seg_id
+        # (operational window filled from proxy in Issue #479 / #751 loop below).
+        skip_arrival_modeling = loc_type == "traffic" or (
+            proxy_loc_id_is_set(proxy_loc_id) and seg_id_effectively_empty(location.get("seg_id"))
+        )
+        if skip_arrival_modeling:
             report_rows.append(report_row)
             locations_by_id[loc_id] = report_row
             continue
@@ -1046,16 +1088,14 @@ def generate_location_report(
                 )
                 report_row["timing_source"] = "error:invalid_proxy_format"
     
-    # Issue #479: Process proxy_loc_id for traffic locations
+    # Issue #751 / #479: Process proxy_loc_id when seg_id is empty (all loc_types)
     # Build lookup dictionary for all processed locations (refresh after second pass)
     locations_by_id = {row["loc_id"]: row for row in report_rows}
     
-    # Iterate through report_rows to update traffic locations with proxy data
     for report_row in report_rows:
-        if report_row["loc_type"] != "traffic":
+        if report_row.get("timing_source") == "error:proxy_and_seg":
             continue
         
-        # Get original location data to access proxy_loc_id
         loc_id = report_row["loc_id"]
         location_row = locations_df[locations_df['loc_id'] == loc_id]
         
@@ -1065,18 +1105,22 @@ def generate_location_report(
         location = location_row.iloc[0]
         proxy_loc_id = location.get("proxy_loc_id")
         
-        # Debug logging for proxy_loc_id
         logger.debug(
-            f"Traffic location {loc_id}: proxy_loc_id={proxy_loc_id}, type={type(proxy_loc_id)}, "
-            f"isna={pd.isna(proxy_loc_id) if hasattr(pd, 'isna') else 'N/A'}"
+            "Location %s: proxy_loc_id=%s, type=%s, isna=%s",
+            loc_id,
+            proxy_loc_id,
+            type(proxy_loc_id),
+            pd.isna(proxy_loc_id) if hasattr(pd, "isna") else "N/A",
         )
         
-        # Skip if no proxy_loc_id provided
-        # Handle both pandas NaN and empty string cases
-        if pd.isna(proxy_loc_id) or (isinstance(proxy_loc_id, str) and proxy_loc_id.strip() == ""):
-            # Traffic location without proxy should keep default "modeled" or could be set to something else
-            # For now, keep as "modeled" to indicate it wasn't proxy-based
-            logger.debug(f"Traffic location {loc_id}: No proxy_loc_id, keeping timing_source as 'modeled'")
+        if not proxy_loc_id_is_set(proxy_loc_id):
+            logger.debug(
+                "Location %s: No proxy_loc_id, keeping timing_source as modeled",
+                loc_id,
+            )
+            continue
+        
+        if not seg_id_effectively_empty(location.get("seg_id")):
             continue
         
         # Convert proxy_loc_id to int for lookup (handle string/numeric)
