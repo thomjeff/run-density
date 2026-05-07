@@ -30,6 +30,16 @@ It is read-only, self-contained, and does **not** run the analysis pipeline.
    # edit cloud.env
    ```
 
+Optional public loc-sheet access (direct one-pager URLs only):
+```
+PUBLIC_LOCSHEETS=true
+```
+When enabled, direct loc-sheet HTML routes are accessible without password auth:
+- `/locsheets/{day}/{loc_id}`
+- `/locsheets/{run_id}/{day}/{loc_id}`
+
+The `/locsheets` index page remains behind password auth.
+
 ---
 
 ## Build, Push, Deploy (Makefile)

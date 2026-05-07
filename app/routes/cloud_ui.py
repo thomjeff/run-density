@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 templates = Jinja2Templates(directory="frontend/templates")
 
 router = APIRouter()
+_PUBLIC_LOCSHEET_HEADERS = {"X-Robots-Tag": "noindex, nofollow"}
 
 
 def _get_cloud_run_id() -> str:
@@ -128,7 +129,7 @@ async def cloud_locsheet_html_short(request: Request, day: str, loc_id: str):
     html_path = Path(run_dir) / day / "reports" / "loc_sheets" / "html" / f"{loc_id}.html"
     if not html_path.exists():
         raise HTTPException(status_code=404, detail="Location sheet not found")
-    return FileResponse(html_path, media_type="text/html")
+    return FileResponse(html_path, media_type="text/html", headers=_PUBLIC_LOCSHEET_HEADERS)
 
 
 @router.get("/locsheets", response_class=HTMLResponse)
@@ -166,4 +167,4 @@ async def cloud_locsheet_html(request: Request, run_id: str, day: str, loc_id: s
     html_path = Path(run_dir) / day / "reports" / "loc_sheets" / "html" / f"{loc_id}.html"
     if not html_path.exists():
         raise HTTPException(status_code=404, detail="Location sheet not found")
-    return FileResponse(html_path, media_type="text/html")
+    return FileResponse(html_path, media_type="text/html", headers=_PUBLIC_LOCSHEET_HEADERS)
