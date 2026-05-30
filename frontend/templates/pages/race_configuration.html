@@ -184,8 +184,8 @@
 
 {% block extra_scripts %}
 <script>
-    window.LOCATION_TYPES_FROM_SERVER = {{ location_types | tojson }};
-    window.EVENT_CHOICES_FROM_SERVER = {{ event_choices | tojson }};
+    window.LOCATION_TYPES_FROM_SERVER = {{ (location_types | default([])) | tojson }};
+    window.EVENT_CHOICES_FROM_SERVER = {{ (event_choices | default([])) | tojson }};
 </script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/js/map/base_map.js"></script>
