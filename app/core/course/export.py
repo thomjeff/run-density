@@ -267,22 +267,36 @@ def build_flow_csv(course: Dict[str, Any]) -> str:
     return out.getvalue()
 
 
-def build_locations_csv(course: Dict[str, Any]) -> str:
-    """Build locations.csv from course.locations (minimal columns; notes for loc sheets)."""
+def build_locations_csv(
+    course: Dict[str, Any],
+    resource_codes: Optional[List[str]] = None,
+) -> str:
+    """Build full locations.csv from course.locations (Issue #765 pipeline schema)."""
+    from app.core.locations.schema import (
+        location_to_csv_row,
+        locations_csv_columns,
+        normalize_resource_code,
+        normalize_resource_registry,
+    )
+
+    registry = resource_codes
+    if registry is None:
+        codes = [
+            normalize_resource_code(r["code"])
+            for r in normalize_resource_registry(None)
+        ]
+    else:
+        codes = [normalize_resource_code(c) for c in registry]
+
+    columns = locations_csv_columns(codes)
     locations = course.get("locations") or []
     out = io.StringIO()
-    w = csv.writer(out)
-    w.writerow(["loc_id", "loc_label", "loc_type", "lat", "lon", "notes"])
+    w = csv.DictWriter(out, fieldnames=columns, extrasaction="ignore")
+    w.writeheader()
     for i, loc in enumerate(locations):
-        loc_id = loc.get("id", i + 1)
-        loc_label = loc.get("loc_label", "")
-        loc_type = loc.get("loc_type", "course")
-        lat = loc.get("lat", "")
-        lon = loc.get("lon", "")
-        notes = loc.get("notes", "")
-        if not notes and loc.get("loc_description"):
-            notes = loc.get("loc_description", "")
-        w.writerow([loc_id, loc_label, loc_type, lat, lon, notes])
+        if not isinstance(loc, dict):
+            continue
+        w.writerow(location_to_csv_row(loc, codes))
     return out.getvalue()
 
 

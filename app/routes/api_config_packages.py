@@ -23,8 +23,10 @@ from app.core.config_package import (
     package_readiness,
     resolve_config_package_path,
     save_config_course,
+    save_config_package_resources,
     update_config_package_metadata,
 )
+from app.core.locations.suggest_events import suggest_location_events
 from app.core.config_package.storage import validate_config_id
 from app.utils.auth import require_auth
 
@@ -49,6 +51,20 @@ class ImportRunnersRequest(BaseModel):
 
 class SaveConfigCourseRequest(BaseModel):
     course: Dict[str, Any]
+
+
+class PackageResourceEntry(BaseModel):
+    code: str = Field(..., min_length=1, max_length=16)
+    label: str = Field(..., min_length=1, max_length=64)
+
+
+class SavePackageResourcesRequest(BaseModel):
+    resources: List[PackageResourceEntry]
+
+
+class SuggestLocationEventsRequest(BaseModel):
+    location_index: Optional[int] = Field(None, ge=0)
+    location: Optional[Dict[str, Any]] = None
 
 
 @router.get("/api/config/packages")
@@ -213,6 +229,69 @@ async def api_export_config_package_segments(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to export segments: {e}",
+        )
+
+
+@router.put("/api/config/packages/{config_id}/resources")
+async def api_save_package_resources(
+    request: Request,
+    config_id: str,
+    body: SavePackageResourcesRequest,
+) -> JSONResponse:
+    """Update schedulable resource types for this config package (FPF, YSSR, etc.)."""
+    require_auth(request)
+    try:
+        payload = [r.model_dump() for r in body.resources]
+        result = save_config_package_resources(config_id, payload)
+        return JSONResponse(content={"ok": True, **result})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to save package resources")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save resources: {e}",
+        )
+
+
+@router.post("/api/config/packages/{config_id}/locations/suggest-events")
+async def api_suggest_location_events(
+    request: Request,
+    config_id: str,
+    body: SuggestLocationEventsRequest,
+) -> JSONResponse:
+    """Suggest full/half/10k/elite/open flags from seg_id and course segments."""
+    require_auth(request)
+    try:
+        course = load_config_course(config_id)
+        segments = course.get("segments") or []
+        loc: Optional[Dict[str, Any]] = body.location
+        if loc is None:
+            if body.location_index is None:
+                raise ValueError("location_index or location is required")
+            locations = course.get("locations") or []
+            if body.location_index >= len(locations):
+                raise ValueError("location_index out of range")
+            loc = locations[body.location_index]
+        flags, rationale = suggest_location_events(loc, segments)
+        return JSONResponse(
+            content={
+                "ok": True,
+                "events": flags,
+                "rationale": rationale,
+            }
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to suggest location events")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to suggest events: {e}",
         )
 
 

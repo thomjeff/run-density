@@ -18,6 +18,11 @@ from app.core.course.export import (
     build_segments_csv,
     enrich_segments_event_distances,
 )
+from app.core.locations.schema import (
+    ensure_manifest_resources,
+    normalize_location_record,
+    normalize_resource_registry,
+)
 from app.io.loader import load_segments
 from app.utils.constants import COURSE_EVENT_IDS
 from app.utils.run_id import generate_run_id, get_runflow_root
@@ -172,19 +177,31 @@ def validate_config_course_data(course_data: Any, config_id: str) -> Dict[str, A
     return course_data
 
 
-def _normalize_course_locations(course_data: Dict[str, Any]) -> None:
-    """Migrate deprecated loc_description to notes; drop loc_direction if present."""
+def load_package_resource_codes(config_id: str) -> List[str]:
+    """Return normalized resource code list for a config package."""
+    try:
+        manifest = load_config_manifest(config_id)
+    except FileNotFoundError:
+        registry = normalize_resource_registry(None)
+    else:
+        registry = ensure_manifest_resources(manifest)
+    return [r["code"] for r in registry]
+
+
+def _normalize_course_locations(
+    course_data: Dict[str, Any], resource_codes: List[str]
+) -> None:
+    """Normalize location records for editor round-trip and CSV export."""
     locations = course_data.get("locations")
     if not isinstance(locations, list):
         return
-    for loc in locations:
-        if not isinstance(loc, dict):
-            continue
-        if loc.get("loc_description") and not loc.get("notes"):
-            loc["notes"] = str(loc.pop("loc_description")).strip()
-        elif "loc_description" in loc:
-            loc.pop("loc_description", None)
-        loc.pop("loc_direction", None)
+    normalized: List[Dict[str, Any]] = []
+    for i, loc in enumerate(locations):
+        if isinstance(loc, dict):
+            normalized.append(
+                normalize_location_record(loc, resource_codes, index=i)
+            )
+    course_data["locations"] = normalized
 
 
 def load_config_course(config_id: str) -> Dict[str, Any]:
@@ -206,7 +223,8 @@ def load_config_course(config_id: str) -> Dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError(f"Invalid {COURSE_WORKSPACE_NAME} in package {config_id}")
     data.pop("events", None)
-    _normalize_course_locations(data)
+    resource_codes = load_package_resource_codes(config_id)
+    _normalize_course_locations(data, resource_codes)
     return data
 
 
@@ -221,7 +239,8 @@ def save_config_course(config_id: str, course_data: Dict[str, Any]) -> Path:
     cid = validate_config_id(config_id)
     package_path = resolve_config_package_path(cid)
     data = validate_config_course_data(course_data, cid)
-    _normalize_course_locations(data)
+    resource_codes = load_package_resource_codes(cid)
+    _normalize_course_locations(data, resource_codes)
 
     data = dict(data)
     data["id"] = cid
@@ -282,7 +301,24 @@ def load_config_manifest(config_id: str) -> Dict[str, Any]:
         raise FileNotFoundError(
             f"{CONFIG_MANIFEST_NAME} not found in package {config_id}"
         )
+    ensure_manifest_resources(manifest)
     return manifest
+
+
+def save_config_package_resources(
+    config_id: str, resources: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """Update package resource registry in config.json."""
+    cid = validate_config_id(config_id)
+    package_path = resolve_config_package_path(cid)
+    manifest = load_config_manifest(cid)
+    manifest["resources"] = normalize_resource_registry(resources)
+    save_config_manifest(package_path, manifest)
+    logger.info("Updated resources for config package %s", cid)
+    return {
+        "config_id": cid,
+        "resources": manifest["resources"],
+    }
 
 
 def save_config_manifest(package_path: Path, manifest: Dict[str, Any]) -> None:
@@ -431,6 +467,7 @@ def create_config_package(label: str, description: str = "") -> Dict[str, Any]:
         "created": now,
         "updated": now,
         "legacy": False,
+        "resources": normalize_resource_registry(None),
     }
     package_path.mkdir(parents=True, exist_ok=False)
     save_config_manifest(package_path, manifest)
@@ -627,7 +664,8 @@ def export_config_package_segments(config_id: str) -> Dict[str, Any]:
     locations_target = package_path / "locations.csv"
     locations_backup_path: Optional[Path] = None
     locations = course.get("locations") or []
-    locations_csv = build_locations_csv(course)
+    resource_codes = load_package_resource_codes(cid)
+    locations_csv = build_locations_csv(course, resource_codes=resource_codes)
     if locations_target.is_file():
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         locations_backup_path = package_path / f"locations.csv.bak.{stamp}"

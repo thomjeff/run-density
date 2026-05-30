@@ -141,6 +141,7 @@
             window.updateConfigNavLinks(configId);
         }
         syncCourseMappingConfigId(configId);
+        window.CONFIG_PACKAGE_RESOURCES = (manifest && manifest.resources) || [];
         if (getTab() === 'course' && window.courseMappingMap) {
             setTimeout(function () {
                 window.courseMappingMap.invalidateSize();

@@ -107,8 +107,12 @@ def test_export_config_package_segments_writes_and_validates(tmp_path, monkeypat
     assert locations_path.is_file()
     assert result["location_count"] == 1
     loc_lines = locations_path.read_text(encoding="utf-8").strip().splitlines()
-    assert loc_lines[0].startswith("loc_id,")
-    assert "notes" in loc_lines[0]
+    header = loc_lines[0]
+    assert header.startswith("loc_id,")
+    assert "notes" in header
+    assert "fpf_count" in header
+    assert "yssr_count" in header
+    assert "loc_direction" not in header
     assert "Aid 1" in loc_lines[1]
     assert "North side" in loc_lines[1]
 

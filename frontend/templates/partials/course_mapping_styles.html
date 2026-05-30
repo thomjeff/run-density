@@ -226,4 +226,148 @@
     /* Pin labels in tables: left-align (buttons default to center-aligned text) */
     #segments-table .pin-link,
     #segment-pins-table .pin-link { text-align: left; }
+    #locations-table .loc-id-link {
+        background: none;
+        border: none;
+        padding: 0;
+        font-size: inherit;
+        color: #2980b9;
+        cursor: pointer;
+        text-decoration: underline;
+        font-weight: 600;
+    }
+    #locations-table .loc-id-link:hover { color: #1a5276; }
+    #locations-table tr.location-row-highlight { background: #e8f4fc; }
+    .course-map-action-text-btn {
+        padding: 0.35rem 0.65rem;
+        border: 1px solid #bdc3c7;
+        border-radius: 4px;
+        background: #fff;
+        cursor: pointer;
+        font-size: 0.875rem;
+    }
+    .course-map-action-text-btn:hover { background: #ecf0f1; }
+    .course-location-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 20000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+    }
+    .course-location-modal[hidden] { display: none !important; }
+    .course-location-modal-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+    }
+    .course-location-modal-panel {
+        position: relative;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        max-width: 520px;
+        width: 100%;
+        max-height: 90vh;
+        overflow: auto;
+        padding: 1.25rem;
+    }
+    .course-location-modal-panel-narrow { max-width: 440px; }
+    .course-location-modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+    .course-location-modal-header h4 { margin: 0; font-size: 1.15rem; color: #2c3e50; }
+    #location-editor-close, #resources-editor-close {
+        border: none;
+        background: none;
+        font-size: 1.5rem;
+        line-height: 1;
+        cursor: pointer;
+        color: #7f8c8d;
+    }
+    .course-location-modal-body label {
+        display: block;
+        font-weight: 600;
+        font-size: 0.875rem;
+        margin-top: 0.65rem;
+        color: #2c3e50;
+    }
+    .course-location-modal-body input,
+    .course-location-modal-body select,
+    .course-location-modal-body textarea {
+        width: 100%;
+        box-sizing: border-box;
+        margin-top: 0.25rem;
+        padding: 0.4rem 0.5rem;
+        font-size: 0.875rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+    .location-editor-section {
+        margin-bottom: 1rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid #eee;
+    }
+    .location-editor-section:last-child { border-bottom: none; }
+    .location-editor-section h5 {
+        margin: 0 0 0.5rem 0;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #7f8c8d;
+    }
+    .location-event-flags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem 1rem;
+    }
+    .location-event-flags label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-weight: normal;
+        margin-top: 0;
+    }
+    .location-resource-grid {
+        display: grid;
+        grid-template-columns: 1fr 80px;
+        gap: 0.35rem 0.75rem;
+        align-items: center;
+    }
+    #location-suggest-rationale {
+        font-size: 0.8rem;
+        color: #7f8c8d;
+        margin-top: 0.35rem;
+    }
+    .course-location-modal-footer {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 1rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid #eee;
+    }
+    .course-location-modal-footer button {
+        padding: 0.45rem 0.85rem;
+        border: 1px solid #bdc3c7;
+        border-radius: 4px;
+        background: #fff;
+        cursor: pointer;
+        font-size: 0.875rem;
+    }
+    .course-location-modal-footer button.primary {
+        background: #3498db;
+        color: #fff;
+        border-color: #2980b9;
+    }
+    #resources-editor-list .resource-row {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        margin-bottom: 0.35rem;
+    }
 </style>

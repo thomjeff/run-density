@@ -80,8 +80,11 @@
 </div>
 
 <div class="card" id="locations-card" style="margin-top: 1rem; display: none;">
-    <h3 style="margin-bottom: 0.5rem;">Locations</h3>
-    <p id="locations-empty" style="color: #95a5a6; font-size: 0.875rem;">Add location pins on the map (types are selected per pin; includes extract for remote trail stretcher access).</p>
+    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.5rem;">
+        <h3 style="margin: 0;">Locations</h3>
+        <button type="button" id="btn-manage-resources" class="course-map-action-text-btn" title="Define schedulable resources (FPF, YSSR, AWP, VOL, …)">Manage resources</button>
+    </div>
+    <p id="locations-empty" style="color: #95a5a6; font-size: 0.875rem;">Add location pins on the map (type + label). Edit full details (events, resources, notes) from the table.</p>
     <div id="locations-table-wrap" style="display: none;">
         <table id="locations-table" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
             <thead>
@@ -89,6 +92,39 @@
             </thead>
             <tbody id="locations-tbody"></tbody>
         </table>
+    </div>
+</div>
+
+<div id="location-editor-modal" class="course-location-modal" hidden aria-hidden="true">
+    <div class="course-location-modal-backdrop"></div>
+    <div class="course-location-modal-panel" role="dialog" aria-labelledby="location-editor-title">
+        <div class="course-location-modal-header">
+            <h4 id="location-editor-title">Location</h4>
+            <button type="button" id="location-editor-close" aria-label="Close">&times;</button>
+        </div>
+        <div id="location-editor-body" class="course-location-modal-body"></div>
+        <div id="location-editor-footer" class="course-location-modal-footer"></div>
+    </div>
+</div>
+
+<div id="resources-editor-modal" class="course-location-modal" hidden aria-hidden="true">
+    <div class="course-location-modal-backdrop"></div>
+    <div class="course-location-modal-panel course-location-modal-panel-narrow" role="dialog" aria-labelledby="resources-editor-title">
+        <div class="course-location-modal-header">
+            <h4 id="resources-editor-title">Package resources</h4>
+            <button type="button" id="resources-editor-close" aria-label="Close">&times;</button>
+        </div>
+        <p style="font-size: 0.875rem; color: #7f8c8d; margin: 0 0 0.75rem 0;">Resources scheduled at locations (e.g. FPF, YSSR). Add orgs for new years; each exports as <code>{code}_count</code>.</p>
+        <div id="resources-editor-list"></div>
+        <div style="margin-top: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
+            <input type="text" id="resources-new-code" placeholder="code (e.g. nwo)" maxlength="16" style="width: 100px;" />
+            <input type="text" id="resources-new-label" placeholder="Label" maxlength="64" style="flex: 1; min-width: 120px;" />
+            <button type="button" id="resources-add-row">Add resource</button>
+        </div>
+        <div class="course-location-modal-footer" style="margin-top: 1rem;">
+            <button type="button" id="resources-editor-save">Save resources</button>
+            <button type="button" id="resources-editor-cancel">Cancel</button>
+        </div>
     </div>
 </div>
 </div>

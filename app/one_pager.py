@@ -579,8 +579,21 @@ def _is_proxy_location(location: Dict[str, Any]) -> bool:
 
 def _extract_resources(location: Dict[str, Any]) -> List[str]:
     resources = []
-    for code in ["awp", "caf", "fdsa", "fpf", "ofc", "sja", "vol", "yssr"]:
-        count = location.get(f"{code}_count")
+    nested = location.get("resources")
+    if isinstance(nested, dict):
+        for code, count in nested.items():
+            try:
+                count_value = int(count)
+            except (TypeError, ValueError):
+                continue
+            if count_value > 0:
+                resources.append(f"{code}: {count_value}")
+        if resources:
+            return resources
+    for key, count in location.items():
+        if not str(key).endswith("_count"):
+            continue
+        code = str(key)[: -len("_count")]
         if count is None or (isinstance(count, float) and pd.isna(count)):
             continue
         try:
