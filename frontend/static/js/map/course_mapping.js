@@ -33,8 +33,8 @@ document.addEventListener('DOMContentLoaded', function () {
         if (btnDelete) btnDelete.style.display = 'none';
         var btnExport = document.getElementById('btn-export');
         if (btnExport) {
-            btnExport.disabled = true;
-            btnExport.title = 'Export CSV/GPX to package folder (#758)';
+            btnExport.disabled = false;
+            btnExport.title = 'Write segments.csv to this config package';
         }
     }
 
@@ -2946,8 +2946,30 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var btnExport = document.getElementById('btn-export');
         if (btnExport) {
-            btnExport.addEventListener('click', function () {
+            btnExport.addEventListener('click', async function () {
                 if (!currentCourseId || !currentCourse) return;
+                if (isConfigPackageMode) {
+                    if (!currentCourse.segments || currentCourse.segments.length === 0) {
+                        alert('Add segment pins on the course line before exporting segments.csv.');
+                        return;
+                    }
+                    if (isDirty()) {
+                        alert('Save the course (Edit → Save) before exporting segments.csv.');
+                        return;
+                    }
+                    try {
+                        var url = '/api/config/packages/' + encodeURIComponent(configPackageId) + '/export/segments';
+                        var res = await fetch(url, { method: 'POST', credentials: 'same-origin' });
+                        var data = await res.json();
+                        if (!res.ok) throw new Error(data.detail || res.statusText);
+                        var msg = 'segments.csv exported to config package';
+                        if (data.backup_path) msg += ' (previous file backed up)';
+                        alert(msg);
+                    } catch (e) {
+                        alert('Export failed: ' + (e.message || String(e)));
+                    }
+                    return;
+                }
                 var url = '/api/courses/' + encodeURIComponent(currentCourseId) + '/export?to_folder=1';
                 fetch(url).then(function (r) { return r.json(); }).then(function (data) {
                     if (data.ok) alert('All map files exported to map folder.');

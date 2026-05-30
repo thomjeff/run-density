@@ -8,7 +8,7 @@ import csv
 import io
 import json
 import zipfile
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 import xml.etree.ElementTree as ET
 
 from app.utils.constants import COURSE_EVENT_IDS
@@ -36,8 +36,65 @@ def _pin_label(course: Dict[str, Any], index: int, coords_len: int, role: str) -
 
 
 def _segment_display_id(segment_index: int) -> str:
-    """Return segment ID as sequential number (1, 2, 3, ...) for pipeline compatibility."""
+    """Return segment ID as sequential number (1, 2, 3, ...) for legacy export."""
     return str(segment_index + 1)
+
+
+def _format_km_pipeline(value: float) -> str:
+    """Format km like 2026_final segments.csv (0, 0.9 — not always two decimals)."""
+    v = round(float(value), 2)
+    if v == int(v):
+        return str(int(v))
+    text = format(v, ".2f")
+    return text.rstrip("0").rstrip(".")
+
+
+def _leg_letter_from_break_id(raw: Any, leg_order: List[str]) -> str:
+    """Map segment_break_ids value to leg letter A, B, C, …"""
+    key = str(raw).strip()
+    if not key:
+        return "A"
+    if len(key) == 1 and key.isalpha():
+        return key.upper()
+    if key not in leg_order:
+        leg_order.append(key)
+    idx = leg_order.index(key)
+    if idx < 26:
+        return chr(ord("A") + idx)
+    return f"L{idx + 1}"
+
+
+def _resolve_pipeline_seg_id(
+    course: Dict[str, Any],
+    seg: Dict[str, Any],
+    segment_index: int,
+    leg_order: List[str],
+    leg_counters: Dict[str, int],
+    prev_leg: Optional[str],
+) -> tuple:
+    """
+    Resolve 2026-style seg_id (e.g. A1, B1). Returns (seg_id, leg_letter).
+    """
+    stored = (seg.get("seg_id") or "").strip()
+    if stored:
+        leg = stored[0].upper() if stored[0].isalpha() else (prev_leg or "A")
+        return stored, leg
+
+    break_ids = course.get("segment_break_ids") or {}
+    start_idx = seg.get("start_index", 0)
+    raw_leg = break_ids.get(start_idx)
+    if raw_leg is None:
+        raw_leg = break_ids.get(str(start_idx))
+
+    if raw_leg is not None and str(raw_leg).strip():
+        leg = _leg_letter_from_break_id(raw_leg, leg_order)
+    elif prev_leg:
+        leg = prev_leg
+    else:
+        leg = "A"
+
+    leg_counters[leg] = leg_counters.get(leg, 0) + 1
+    return f"{leg}{leg_counters[leg]}", leg
 
 
 def _segment_events_set(seg: Dict[str, Any], event_ids: List[str]) -> set:
@@ -102,38 +159,60 @@ def enrich_segments_event_distances(segments: List[Dict], event_ids: List[str] =
             seg[f"{eid}_to_km"] = round(float(to_km), 2)
 
 
-def build_segments_csv(course: Dict[str, Any]) -> str:
-    """Build segments.csv content from course.segments and course.events.
-    Uses sequential segment IDs (1, 2, 3, ...) for pipeline compatibility.
+def build_segments_csv(course: Dict[str, Any], fmt: str = "pipeline") -> str:
+    """
+    Build segments.csv from course.segments.
+
+    Args:
+        course: Course workspace dict (course.json).
+        fmt: ``pipeline`` (2026-style: leg seg_id, no pin columns) or ``legacy`` (pins + sequential ids).
+
     Event-specific from_km/to_km are cumulative along only segments that use that event.
     """
     segments = course.get("segments") or []
-    # Event list from constants (SSOT); course.json does not store events
     event_ids = COURSE_EVENT_IDS
     coords = (course.get("geometry") or {}).get("coordinates") or []
     coords_len = len(coords)
+    use_pipeline = fmt != "legacy"
+    km_fmt = _format_km_pipeline if use_pipeline else _format_km
 
-    # Per-segment, per-event (from_km, to_km) using event-cumulative distance
     event_distances = _event_cumulative_distances(segments, event_ids)
 
     out = io.StringIO()
-    # Header: seg_id, seg_label, pin_start_label, pin_end_label, width_m, schema, direction, then y/n, then per-event from_km/to_km/length
     event_cols = []
     for eid in event_ids:
         event_cols.extend([f"{eid}_from_km", f"{eid}_to_km"])
     length_cols = [f"{eid}_length" for eid in event_ids]
-    header = (
-        ["seg_id", "seg_label", "pin_start_label", "pin_end_label", "width_m", "schema", "direction"]
-        + event_ids
-        + event_cols
-        + length_cols
-        + ["description"]
-    )
+    if use_pipeline:
+        header = (
+            ["seg_id", "seg_label", "width_m", "schema", "direction"]
+            + event_ids
+            + event_cols
+            + length_cols
+            + ["description"]
+        )
+    else:
+        header = (
+            ["seg_id", "seg_label", "pin_start_label", "pin_end_label", "width_m", "schema", "direction"]
+            + event_ids
+            + event_cols
+            + length_cols
+            + ["description"]
+        )
     w = csv.writer(out)
     w.writerow(header)
 
+    leg_order: List[str] = []
+    leg_counters: Dict[str, int] = {}
+    prev_leg: Optional[str] = None
+
     for i, seg in enumerate(segments):
-        seg_id = _segment_display_id(i)
+        if use_pipeline:
+            seg_id, prev_leg = _resolve_pipeline_seg_id(
+                course, seg, i, leg_order, leg_counters, prev_leg
+            )
+        else:
+            seg_id = _segment_display_id(i)
         seg_label = seg.get("seg_label", "")
         start_idx = seg.get("start_index", 0)
         end_idx = seg.get("end_index", coords_len - 1 if coords_len else 0)
@@ -145,23 +224,25 @@ def build_segments_csv(course: Dict[str, Any]) -> str:
         from_km = float(seg.get("from_km") or 0)
         to_km = float(seg.get("to_km") or 0)
         seg_events = _segment_events_set(seg, event_ids)
-        # y/n per event (use lowercase for lookup)
         yn = ["y" if eid.lower() in seg_events else "n" for eid in event_ids]
-        # Event-specific from_km/to_km: use stored per-event values if present, else computed
         event_km = []
         for eid in event_ids:
             eid_lower = eid.lower()
             ev_from = seg.get(f"{eid_lower}_from_km")
             ev_to = seg.get(f"{eid_lower}_to_km")
             if ev_from is not None and ev_to is not None:
-                event_km.extend([_format_km(ev_from), _format_km(ev_to)])
+                event_km.extend([km_fmt(ev_from), km_fmt(ev_to)])
             else:
                 ev_from, ev_to = event_distances[i].get(eid_lower, (0.0, 0.0))
-                event_km.extend([_format_km(ev_from), _format_km(ev_to)])
+                event_km.extend([km_fmt(ev_from), km_fmt(ev_to)])
         seg_len = round(to_km - from_km, 2)
-        lengths = [_format_km(seg_len) if eid.lower() in seg_events else "0.00" for eid in event_ids]
+        zero_km = km_fmt(0.0) if use_pipeline else _format_km(0.0)
+        lengths = [km_fmt(seg_len) if eid.lower() in seg_events else zero_km for eid in event_ids]
         description = seg.get("description", "")
-        row = [seg_id, seg_label, pin_start, pin_end, width_m, schema, direction] + yn + event_km + lengths + [description]
+        if use_pipeline:
+            row = [seg_id, seg_label, width_m, schema, direction] + yn + event_km + lengths + [description]
+        else:
+            row = [seg_id, seg_label, pin_start, pin_end, width_m, schema, direction] + yn + event_km + lengths + [description]
         w.writerow(row)
     return out.getvalue()
 

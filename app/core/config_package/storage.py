@@ -13,7 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from app.core.course.export import enrich_segments_event_distances
+from app.core.course.export import build_segments_csv, enrich_segments_event_distances
+from app.io.loader import load_segments
 from app.utils.constants import COURSE_EVENT_IDS
 from app.utils.run_id import generate_run_id, get_runflow_root
 
@@ -546,3 +547,67 @@ def import_runner_files_from_package(
         target_id,
     )
     return copied
+
+
+def _validate_exported_segments_file(segments_path: Path) -> None:
+    """Fail-fast checks so exported segments.csv is loadable by the pipeline."""
+    if not segments_path.is_file():
+        raise FileNotFoundError(f"segments.csv not written: {segments_path}")
+    df = load_segments(str(segments_path))
+    if df.empty:
+        raise ValueError("segments.csv must contain at least one row")
+    if "seg_id" not in df.columns:
+        raise ValueError("segments.csv missing seg_id column")
+    if df["seg_id"].duplicated().any():
+        dupes = df[df.duplicated(subset=["seg_id"], keep=False)]["seg_id"].tolist()
+        raise ValueError(f"Duplicate seg_id values: {dupes}")
+    for col in ("width_m", "schema", "direction"):
+        if col not in df.columns:
+            raise ValueError(f"segments.csv missing required column: {col}")
+    for eid in COURSE_EVENT_IDS:
+        if eid not in df.columns:
+            raise ValueError(f"segments.csv missing event column: {eid}")
+        from_col = f"{eid}_from_km"
+        to_col = f"{eid}_to_km"
+        if from_col not in df.columns or to_col not in df.columns:
+            raise ValueError(f"segments.csv missing km columns for {eid}")
+
+
+def export_config_package_segments(config_id: str) -> Dict[str, Any]:
+    """
+    Export segments.csv from package course.json into runflow/config/{config_id}/.
+
+    Backs up existing segments.csv to segments.csv.bak.{timestamp} when present.
+
+    Raises:
+        FileNotFoundError: Package or course.json missing
+        ValueError: No segments or validation failed
+    """
+    cid = validate_config_id(config_id)
+    package_path = resolve_config_package_path(cid)
+    course = load_config_course(cid)
+    segments = course.get("segments") or []
+    if not segments:
+        raise ValueError("Course has no segments; add segment pins before export")
+
+    enrich_segments_event_distances(segments, COURSE_EVENT_IDS)
+    csv_content = build_segments_csv(course, fmt="pipeline")
+
+    target = package_path / "segments.csv"
+    backup_path: Optional[Path] = None
+    if target.is_file():
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        backup_path = package_path / f"segments.csv.bak.{stamp}"
+        shutil.copy2(target, backup_path)
+
+    target.write_text(csv_content, encoding="utf-8")
+    _validate_exported_segments_file(target)
+
+    logger.info("Exported segments.csv for config package %s (%s rows)", cid, len(segments))
+    return {
+        "config_id": cid,
+        "path": str(target),
+        "backup_path": str(backup_path) if backup_path else None,
+        "segment_count": len(segments),
+        "readiness": package_readiness(package_path),
+    }

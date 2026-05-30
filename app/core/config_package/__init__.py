@@ -3,12 +3,14 @@ Race configuration packages under runflow/config/{config_id}/.
 
 Issue #756: UUID config_id + manifest (config.json) + course.json workspace.
 Issue #757: load/save course.json via config package APIs.
+Issue #758: export segments.csv from course.json into config package.
 """
 
 from app.core.config_package.storage import (
     append_package_index,
     create_config_package,
     default_course_json,
+    export_config_package_segments,
     get_config_root,
     import_runner_files_from_package,
     list_config_packages,
@@ -27,6 +29,7 @@ __all__ = [
     "append_package_index",
     "create_config_package",
     "default_course_json",
+    "export_config_package_segments",
     "get_config_root",
     "import_runner_files_from_package",
     "list_config_packages",
