@@ -503,10 +503,20 @@ async def race_configuration_page(request: Request):
     if auth_redirect:
         return auth_redirect
     meta = get_stub_meta()
+    location_types = [{"value": t, "label": t.capitalize()} for t in LOCATION_TYPE_CHOICES]
+    event_choices = [
+        {"value": e, "label": e.upper() if e == "10k" else e.capitalize()}
+        for e in COURSE_EVENT_IDS
+    ]
     return templates.TemplateResponse(
         request=request,
         name="pages/race_configuration.html",
-        context={"request": request, "meta": meta},
+        context={
+            "request": request,
+            "meta": meta,
+            "location_types": location_types,
+            "event_choices": event_choices,
+        },
     )
 
 

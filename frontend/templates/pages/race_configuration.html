@@ -3,7 +3,12 @@
 {% block title %}Race Configuration{% endblock %}
 
 {% block extra_head %}
+{% include 'partials/course_mapping_styles.html' %}
 <style>
+    #race-config-tab-course #course-mapping-map {
+        height: 55vh;
+        min-height: 420px;
+    }
     .race-config-tabs {
         display: flex;
         gap: 0.5rem;
@@ -164,15 +169,11 @@
     </div>
 
     <div id="race-config-tab-course" role="tabpanel">
-        <div class="card">
-            <h3 style="margin-bottom: 0.5rem;">Course editor</h3>
-            <p style="color: #7f8c8d; font-size: 0.9rem; margin-bottom: 1rem;">
-                Draw-first map editor lands in <a href="/course-mapping">Course Mapping</a> (#757). This package stores <code>course.json</code> here when integrated.
-            </p>
-            <p style="margin: 0; font-size: 0.875rem; color: #95a5a6;">
-                Next: wire Course Mapping to this <code>config_id</code> and export <code>segments.csv</code>, <code>flow.csv</code>, <code>locations.csv</code> (#758–#760).
-            </p>
-        </div>
+        <p style="color: #7f8c8d; font-size: 0.9rem; margin-bottom: 1rem;">
+            Draw-first course for this package. Saves to <code>runflow/config/{config_id}/course.json</code>.
+            <a id="race-config-course-fullpage-link" href="/course-mapping" style="margin-left: 0.5rem;">Open full page</a>
+        </p>
+        {% include 'partials/course_mapping_workspace.html' %}
     </div>
 
     <div id="race-config-tab-runners" role="tabpanel" style="display: none;">
@@ -182,6 +183,13 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script>
+    window.LOCATION_TYPES_FROM_SERVER = {{ location_types | tojson }};
+    window.EVENT_CHOICES_FROM_SERVER = {{ event_choices | tojson }};
+</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/static/js/map/base_map.js"></script>
+<script src="/static/js/map/course_mapping.js?v=757a"></script>
 <script src="/static/js/runners_baseline.js?v=756i"></script>
-<script src="/static/js/race_configuration.js?v=756k"></script>
+<script src="/static/js/race_configuration.js?v=757a"></script>
 {% endblock %}

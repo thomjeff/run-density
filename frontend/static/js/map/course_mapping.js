@@ -1,6 +1,7 @@
 /**
  * Course Mapping page: map, Street/Satellite toggle, course New/Open/Save.
  * Issue #732: Course storage under {data_dir}/courses/{id}.
+ * Issue #757: Config package mode uses /api/config/packages/{config_id}/course.
  */
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -9,6 +10,69 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const loadingEl = container.querySelector('.map-loading');
     const toggleEl = document.getElementById('basemap-toggle');
+
+    function getConfigPackageId() {
+        var root = document.getElementById('course-mapping-root');
+        if (root && root.dataset && root.dataset.configId) {
+            return String(root.dataset.configId).trim();
+        }
+        var params = new URLSearchParams(window.location.search);
+        var fromUrl = params.get('config_id');
+        return fromUrl ? fromUrl.trim() : null;
+    }
+
+    var configPackageId = getConfigPackageId();
+    var isConfigPackageMode = !!configPackageId;
+
+    function applyConfigPackageUIMode() {
+        var listCard = document.getElementById('course-list-card');
+        if (listCard) listCard.style.display = 'none';
+        var btnNew = document.getElementById('btn-new-course');
+        if (btnNew) btnNew.style.display = 'none';
+        var btnDelete = document.getElementById('btn-delete-course');
+        if (btnDelete) btnDelete.style.display = 'none';
+        var btnExport = document.getElementById('btn-export');
+        if (btnExport) {
+            btnExport.disabled = true;
+            btnExport.title = 'Export CSV/GPX to package folder (#758)';
+        }
+    }
+
+    function loadConfigPackageCourse() {
+        if (!configPackageId) return;
+        fetch(
+            '/api/config/packages/' + encodeURIComponent(configPackageId) + '/course',
+            { credentials: 'same-origin' }
+        )
+            .then(function (res) {
+                if (res.status === 404) {
+                    var c = blankCourse();
+                    c.id = configPackageId;
+                    c.config_id = configPackageId;
+                    setCourse(configPackageId, c);
+                    clearDirty();
+                    return null;
+                }
+                if (!res.ok) {
+                    return res.json().then(function (d) {
+                        throw new Error(d.detail || res.statusText);
+                    });
+                }
+                return res.json();
+            })
+            .then(function (data) {
+                if (!data) return;
+                if (data.ok && data.course) {
+                    setCourse(configPackageId, data.course);
+                    clearDirty();
+                    console.log('Loaded config package course:', configPackageId);
+                }
+            })
+            .catch(function (e) {
+                console.error('Load config package course failed:', e);
+                alert('Failed to load course: ' + (e.message || String(e)));
+            });
+    }
 
     // Course state; data_dir is always from app utils constants (runflow root)
     let currentCourseId = null;
@@ -119,7 +183,13 @@ document.addEventListener('DOMContentLoaded', function () {
             saveBtn.disabled = !currentCourse || sameRouteBackMode;
             saveBtn.title = sameRouteBackMode ? 'Confirm or Cancel Same Route Back first' : '';
         }
-        if (idEl) idEl.textContent = currentCourseId ? 'Course: ' + currentCourseId : '';
+        if (idEl) {
+            idEl.textContent = currentCourseId
+                ? (isConfigPackageMode
+                    ? 'Config package: ' + currentCourseId
+                    : 'Course: ' + currentCourseId)
+                : '';
+        }
         if (exportBtn) exportBtn.disabled = !currentCourseId;
         if (delBtn) delBtn.disabled = !currentCourseId;
         syncCourseToHeaderInputs();
@@ -2330,7 +2400,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 currentCourse.description = d;
                 try {
                     var courseIdToSave = currentCourseId;
-                    if (!courseIdToSave) {
+                    if (isConfigPackageMode) {
+                        courseIdToSave = configPackageId;
+                        currentCourse.id = configPackageId;
+                        currentCourse.config_id = configPackageId;
+                    } else if (!courseIdToSave) {
                         var createRes = await fetch('/api/courses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
                         var createData = await createRes.json();
                         if (!createRes.ok) throw new Error(createData.detail || createRes.statusText);
@@ -2340,7 +2414,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                     // Build payload with explicit geometry and turnaround_indices to ensure Same Route Back is persisted (Issue #732)
                     var toSave = JSON.parse(JSON.stringify({
-                        id: currentCourse.id,
+                        id: courseIdToSave,
+                        config_id: isConfigPackageMode ? configPackageId : currentCourse.config_id,
                         name: currentCourse.name,
                         description: currentCourse.description,
                         segments: currentCourse.segments || [],
@@ -2356,17 +2431,23 @@ document.addEventListener('DOMContentLoaded', function () {
                         turnaround_descriptions: currentCourse.turnaround_descriptions || {},
                         flow_control_points: Array.isArray(currentCourse.flow_control_points) ? JSON.parse(JSON.stringify(currentCourse.flow_control_points)) : []
                     }));
-                    const res = await fetch('/api/courses/' + encodeURIComponent(courseIdToSave), {
+                    var saveUrl = isConfigPackageMode
+                        ? '/api/config/packages/' + encodeURIComponent(configPackageId) + '/course'
+                        : '/api/courses/' + encodeURIComponent(courseIdToSave);
+                    const res = await fetch(saveUrl, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
                         body: JSON.stringify({ course: toSave })
                     });
                     const data = await res.json();
                     if (!res.ok) throw new Error(data.detail || res.statusText);
                     if (data.ok && data.course) {
-                        setCourse(data.course.id, data.course);
-                        loadCourseList();
-                        console.log('Saved course:', data.course.id, data.course.name || '(no name)');
+                        var savedId = isConfigPackageMode ? configPackageId : data.course.id;
+                        setCourse(savedId, data.course);
+                        clearDirty();
+                        if (!isConfigPackageMode) loadCourseList();
+                        console.log('Saved course:', savedId, data.course.name || '(no name)');
                     }
                 } catch (e) {
                     console.error('Save course failed:', e);
@@ -2875,8 +2956,13 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
 
-        setCourse(null, blankCourse());
-        loadCourseList();
+        if (isConfigPackageMode) {
+            applyConfigPackageUIMode();
+            loadConfigPackageCourse();
+        } else {
+            setCourse(null, blankCourse());
+            loadCourseList();
+        }
 
         updateCourseUI();
         updateDrawButtons();

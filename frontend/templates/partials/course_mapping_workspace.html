@@ -1,0 +1,94 @@
+<div id="course-mapping-root">
+<div class="card" id="course-map-card">
+    <div id="course-map-header" style="margin-bottom: 0.5rem; position: relative;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem;">
+            <div style="flex: 1; min-width: 0;">
+                <div id="course-map-id" style="font-size: 0.8rem; color: #7f8c8d; margin-bottom: 0.25rem;"></div>
+                <div style="margin-bottom: 0.25rem;"><span class="course-label">Course Name:</span> <span id="course-map-name-text"></span><input type="text" id="course-map-name" placeholder="Course name" maxlength="255" style="display: none; width: 100%; max-width: 400px; padding: 0.35rem 0.5rem; font-size: 1rem; font-weight: 600; color: #2c3e50; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;" /></div>
+                <div style="width: 100%;"><span class="course-label">Description:</span> <span id="course-map-description-text"></span><textarea id="course-map-description" placeholder="Course description (optional)" maxlength="255" rows="2" style="display: none; width: 100%; min-height: 2.5em; padding: 0.35rem 0.5rem; font-size: 0.875rem; color: #34495e; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; resize: none; overflow: hidden; font-family: inherit;"></textarea></div>
+            </div>
+            <div id="course-map-header-buttons" style="display: flex; gap: 0.5rem; align-items: center;">
+                <button type="button" id="btn-edit-course">Edit</button>
+                <button type="button" id="btn-export" disabled title="Write segments.csv, flow.csv, locations.csv, GPX to course folder">Export</button>
+                <button type="button" id="btn-delete-course" disabled title="Delete this course (cannot be undone)">Delete Course</button>
+                <button type="button" id="btn-save-course" disabled style="display: none;">Save</button>
+            </div>
+        </div>
+        <div id="course-edit-toolbar" style="display: none; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #eee;">
+            <button type="button" id="btn-draw-line" disabled title="Click map to add points to course line">Draw Line</button>
+            <button type="button" id="btn-undo-point" disabled title="Remove the last point from the course line">Undo Last Point</button>
+            <button type="button" id="btn-clear-line" disabled title="Remove course line from map and course">Clear Line</button>
+            <button type="button" id="btn-same-route-back" disabled title="Add return leg from turnaround point (Draw Line mode only)">Same Route Back</button>
+            <span id="rejoin-at-wrap" style="display: none; align-items: center; gap: 0.35rem;">
+                <label for="rejoin-at-pin" class="rejoin-label">Rejoin at:</label>
+                <select id="rejoin-at-pin" title="Choose rejoin point for return leg (or click/drag red marker on map)"></select>
+            </span>
+            <button type="button" id="btn-confirm-turnaround" disabled style="display: none;" title="Confirm turnaround point and add return leg">Confirm</button>
+            <button type="button" id="btn-cancel-turnaround" disabled style="display: none;" title="Cancel Same Route Back">Cancel</button>
+            <button type="button" id="snap-to-road" class="active" title="When on, new segments follow roads (routing). When off, line is straight between clicks.">Snap to Road</button>
+            <button type="button" id="btn-add-segment-pin" disabled title="Click on the course line to add a segment boundary">Add Segment Pin</button>
+            <button type="button" id="btn-done-extending" disabled style="display: none;" title="Finish extending from this point and return to normal draw">Done extending</button>
+            <button type="button" id="btn-add-location" disabled title="Click map to place first-aid, traffic, course, or water location">Add Location</button>
+        </div>
+        <p id="extend-hint" style="display: none; margin-top: 0.35rem; font-size: 0.8rem; color: #2980b9;"></p>
+    </div>
+    <div id="course-mapping-map" aria-label="Course mapping map" style="position: relative;">
+        <div class="map-loading">Loading map...</div>
+        <div id="basemap-toggle" style="display: none;">
+            <button type="button" id="btn-street" class="active">Street</button>
+            <button type="button" id="btn-satellite">Satellite</button>
+        </div>
+    </div>
+</div>
+
+<div class="card" id="segments-card" style="margin-top: 1rem; display: none;">
+    <h3 style="margin-bottom: 0.5rem;">Segments</h3>
+    <p id="segments-empty" style="color: #95a5a6; font-size: 0.875rem;">Add segment pins on the course line to split it into segments. Each segment is the route between two pins (e.g. Start → Block 1). Use &quot;Show on map&quot; to focus a segment when it is hard to click on the map.</p>
+    <div id="segments-table-wrap" style="display: none;">
+        <div class="scrollable-table-container segments-table-scroll" style="max-height: 25vh;">
+            <table id="segments-table" class="table-sticky-header" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+                <thead>
+                    <tr><th>ID</th><th>From pin</th><th>To pin</th><th>Segment label</th><th>Events</th><th>Full</th><th>Half</th><th>10K</th><th>Elite</th><th>Open</th><th>Length</th><th>Action</th></tr>
+                </thead>
+                <tbody id="segments-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+    <div id="segment-edit-tile" style="display: none; margin-top: 1rem; padding: 1rem; border: 1px solid #ddd; border-radius: 4px; background: #fafafa;">
+        <h4 id="segment-edit-tile-title" style="margin-top: 0; margin-bottom: 0.75rem;">Edit segment</h4>
+        <div id="segment-edit-tile-content"></div>
+        <div style="margin-top: 0.75rem;">
+            <button type="button" id="segment-edit-tile-save">Save</button>
+            <button type="button" id="segment-edit-tile-cancel" style="margin-left: 0.5rem;">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div class="card" id="segment-pins-card" style="margin-top: 1rem; display: none;">
+    <h3 style="margin-bottom: 0.5rem;">Segment pins</h3>
+    <p id="segment-pins-empty" style="color: #95a5a6; font-size: 0.875rem;">No segment pins. Add pins on the course line to create segment boundaries.</p>
+    <div id="segment-pins-table-wrap" style="display: none;">
+        <div class="scrollable-table-container" style="max-height: 25vh;">
+            <table id="segment-pins-table" class="table-sticky-header" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+                <thead>
+                    <tr><th>Index</th><th>Label</th><th>Action</th></tr>
+                </thead>
+                <tbody id="segment-pins-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card" id="locations-card" style="margin-top: 1rem; display: none;">
+    <h3 style="margin-bottom: 0.5rem;">Locations</h3>
+    <p id="locations-empty" style="color: #95a5a6; font-size: 0.875rem;">Add location pins on the map (types are selected per pin; includes extract for remote trail stretcher access).</p>
+    <div id="locations-table-wrap" style="display: none;">
+        <table id="locations-table" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+            <thead>
+                <tr><th>Type</th><th>Label</th><th>Lat</th><th>Lon</th><th></th></tr>
+            </thead>
+            <tbody id="locations-tbody"></tbody>
+        </table>
+    </div>
+</div>
+</div>

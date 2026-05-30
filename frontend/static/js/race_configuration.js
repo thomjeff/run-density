@@ -101,6 +101,12 @@
         if (window.updateConfigNavLinks) {
             window.updateConfigNavLinks(configId);
         }
+        syncCourseMappingConfigId(configId);
+        if (getTab() === 'course' && window.courseMappingMap) {
+            setTimeout(function () {
+                window.courseMappingMap.invalidateSize();
+            }, 150);
+        }
     }
 
     async function savePackageMetadata() {
@@ -160,6 +166,25 @@
         if (runnersPanel) runnersPanel.style.display = tab === 'runners' ? 'block' : 'none';
         if (tab === 'runners' && window.initRunnersBaseline) {
             window.initRunnersBaseline();
+        }
+        if (tab === 'course' && window.courseMappingMap) {
+            setTimeout(function () {
+                window.courseMappingMap.invalidateSize();
+            }, 100);
+        }
+    }
+
+    function syncCourseMappingConfigId(configId) {
+        var root = document.getElementById('course-mapping-root');
+        if (root) {
+            if (configId) root.dataset.configId = configId;
+            else delete root.dataset.configId;
+        }
+        var link = document.getElementById('race-config-course-fullpage-link');
+        if (link) {
+            link.href = configId
+                ? '/course-mapping?config_id=' + encodeURIComponent(configId)
+                : '/course-mapping';
         }
     }
 
