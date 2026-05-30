@@ -13,9 +13,26 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app.core.course.export import enrich_segments_event_distances
+from app.utils.constants import COURSE_EVENT_IDS
 from app.utils.run_id import generate_run_id, get_runflow_root
 
 logger = logging.getLogger(__name__)
+
+# Top-level keys allowed in config package course.json (Issue #757)
+_COURSE_LIST_FIELDS = (
+    "segments",
+    "locations",
+    "segment_breaks",
+    "turnaround_indices",
+    "flow_control_points",
+)
+_COURSE_DICT_FIELDS = (
+    "segment_break_labels",
+    "segment_break_descriptions",
+    "segment_break_ids",
+    "turnaround_descriptions",
+)
 
 CONFIG_MANIFEST_NAME = "config.json"
 COURSE_WORKSPACE_NAME = "course.json"
@@ -105,6 +122,101 @@ def package_readiness(package_path: Path) -> Dict[str, Any]:
         "analyze_ready": analyze_ready,
         "missing": missing,
     }
+
+
+def validate_config_course_data(course_data: Any, config_id: str) -> Dict[str, Any]:
+    """
+    Validate course workspace payload before save.
+
+    Raises:
+        ValueError: Invalid structure or id mismatch
+    """
+    cid = validate_config_id(config_id)
+    if not isinstance(course_data, dict):
+        raise ValueError("course must be a JSON object")
+
+    course_id = course_data.get("id") or course_data.get("config_id")
+    if course_id is not None and str(course_id) != cid:
+        raise ValueError(f"course id must equal config_id: {cid}")
+
+    for key in _COURSE_LIST_FIELDS:
+        value = course_data.get(key)
+        if value is not None and not isinstance(value, list):
+            raise ValueError(f"course.{key} must be a list")
+
+    for key in _COURSE_DICT_FIELDS:
+        value = course_data.get(key)
+        if value is not None and not isinstance(value, dict):
+            raise ValueError(f"course.{key} must be an object")
+
+    geometry = course_data.get("geometry")
+    if geometry is not None:
+        if not isinstance(geometry, dict):
+            raise ValueError("course.geometry must be an object or null")
+        if geometry.get("type") != "LineString":
+            raise ValueError("course.geometry.type must be LineString")
+        coords = geometry.get("coordinates")
+        if coords is not None and not isinstance(coords, list):
+            raise ValueError("course.geometry.coordinates must be a list")
+
+    for key in ("name", "description", "start_description", "end_description"):
+        value = course_data.get(key)
+        if value is not None and not isinstance(value, str):
+            raise ValueError(f"course.{key} must be a string")
+
+    return course_data
+
+
+def load_config_course(config_id: str) -> Dict[str, Any]:
+    """
+    Load course.json from runflow/config/{config_id}/.
+
+    Raises:
+        FileNotFoundError: Package or course.json missing
+        ValueError: Invalid config_id
+    """
+    package_path = resolve_config_package_path(config_id)
+    course_path = package_path / COURSE_WORKSPACE_NAME
+    if not course_path.is_file():
+        raise FileNotFoundError(
+            f"{COURSE_WORKSPACE_NAME} not found in package {config_id}"
+        )
+    with open(course_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError(f"Invalid {COURSE_WORKSPACE_NAME} in package {config_id}")
+    data.pop("events", None)
+    return data
+
+
+def save_config_course(config_id: str, course_data: Dict[str, Any]) -> Path:
+    """
+    Save course workspace to runflow/config/{config_id}/course.json.
+
+    Raises:
+        FileNotFoundError: Package not found
+        ValueError: Invalid config_id or course payload
+    """
+    cid = validate_config_id(config_id)
+    package_path = resolve_config_package_path(cid)
+    data = validate_config_course_data(course_data, cid)
+
+    data = dict(data)
+    data["id"] = cid
+    data["config_id"] = cid
+    data["updated"] = datetime.now(timezone.utc).isoformat()
+    data.pop("events", None)
+    data.pop("data_dir", None)
+
+    segments = data.get("segments") or []
+    if segments:
+        enrich_segments_event_distances(segments, COURSE_EVENT_IDS)
+
+    course_path = package_path / COURSE_WORKSPACE_NAME
+    with open(course_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    logger.info("Saved config package course: %s", course_path)
+    return course_path
 
 
 def default_course_json(config_id: str) -> Dict[str, Any]:
