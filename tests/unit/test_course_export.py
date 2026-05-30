@@ -49,7 +49,7 @@ def test_build_segments_csv_half_from_to_km():
             {"seg_label": "Station to Finish", "from_km": 8.2, "to_km": 10.08, "events": ["full", "half", "10k"], "start_index": 4, "end_index": 5},
         ],
     }
-    csv_content = build_segments_csv(course)
+    csv_content = build_segments_csv(course, fmt="legacy")
     reader = csv.DictReader(io.StringIO(csv_content))
     rows = list(reader)
     assert len(rows) == 5

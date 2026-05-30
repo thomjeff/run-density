@@ -3,6 +3,7 @@ API routes for Race Configuration packages (config_id).
 
 Issue #756: List, create, and resolve packages under runflow/config/{config_id}/.
 Issue #757: GET/PUT course.json workspace per config_id.
+Issue #758: Export segments.csv from course.json into config package.
 """
 
 import logging
@@ -14,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from app.core.config_package import (
     create_config_package,
+    export_config_package_segments,
     import_runner_files_from_package,
     list_config_packages,
     load_config_course,
@@ -189,6 +191,28 @@ async def api_save_config_course(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to save course: {e}",
+        )
+
+
+@router.post("/api/config/packages/{config_id}/export/segments")
+async def api_export_config_package_segments(
+    request: Request,
+    config_id: str,
+) -> JSONResponse:
+    """Export segments.csv from package course.json (2026-style pipeline format)."""
+    require_auth(request)
+    try:
+        result = export_config_package_segments(config_id)
+        return JSONResponse(content={"ok": True, **result})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to export config package segments")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to export segments: {e}",
         )
 
 
