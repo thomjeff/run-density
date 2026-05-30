@@ -1,0 +1,94 @@
+<!-- Error Banner -->
+<div id="error-banner" class="card" style="display: none; background: #fee; border-left: 4px solid #e74c3c; margin-bottom: 1.5rem;">
+    <h3 style="color: #e74c3c; margin-bottom: 0.5rem;">Error</h3>
+    <p id="error-message" style="color: #c0392b; margin: 0;"></p>
+</div>
+
+<div class="card" style="margin-bottom: 2rem;">
+    <h3 style="margin-bottom: 1rem;">Runner Files</h3>
+    <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
+        Generate new runner CSV files with scenario-based modifications (participant counts and pace adjustments).
+        <strong>Create New Files</strong> saves into this config package.
+    </p>
+
+    <div id="baseline-empty-package-hint" style="display: none; margin-bottom: 1rem; padding: 0.75rem 1rem; background: #f0f7ff; border-left: 4px solid #3498db; border-radius: 4px;">
+        <p style="margin: 0; color: #2c3e50; font-size: 0.9rem;">
+            This package has no <code>*_runners.csv</code> files yet. Pick an existing folder below to build a scenario; <strong>Create New Files</strong> will save into this package.
+        </p>
+    </div>
+
+    <div id="baseline-config-selection" style="display: none; margin-bottom: 1.5rem;">
+        <label for="baseline-config-dir" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
+            Load runners from <span style="color: #e74c3c;">*</span>
+        </label>
+        <select
+            id="baseline-config-dir"
+            style="width: 100%; max-width: 480px; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"
+        >
+            <option value="">Select a package…</option>
+        </select>
+        <small style="color: #7f8c8d; font-size: 0.875rem; display: block; margin-top: 0.25rem;">
+            Folder under <code>runflow/config/</code> with <code>*_runners.csv</code> (e.g. <code>2026_final</code>).
+        </small>
+    </div>
+
+    <p id="baseline-change-source-wrap" style="display: none; margin: 0 0 1rem 0;">
+        <button type="button" id="baseline-change-source-btn" style="padding: 0.35rem 0; background: none; border: none; color: #3498db; font-size: 0.875rem; cursor: pointer; text-decoration: underline;">
+            Use a different package as source
+        </button>
+    </p>
+
+    <div id="baseline-step1" style="display: none; margin-bottom: 1.5rem;">
+        <p id="baseline-source-summary" style="margin: 0 0 0.75rem 0; color: #2c3e50; font-size: 0.9rem;"></p>
+        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
+            Select runner files <span style="color: #e74c3c;">*</span>
+        </label>
+        <div id="baseline-file-selection" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem; margin-bottom: 1rem;"></div>
+        <button
+            type="button"
+            id="baseline-calculate-btn"
+            style="padding: 0.75rem 2rem; background: #3498db; color: white; border: none; border-radius: 4px; font-size: 1rem; font-weight: 600; cursor: pointer;"
+            disabled
+        >Calculate Baseline</button>
+        <div class="field-error" id="baseline-file-selection-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.5rem;"></div>
+    </div>
+
+    <div id="baseline-step2" style="display: none; margin-bottom: 1.5rem;">
+        <h4 style="margin-bottom: 1rem; color: #2c3e50;">Baseline Metrics</h4>
+        <div id="baseline-metrics-table" style="overflow-x: auto;"></div>
+    </div>
+
+    <div id="baseline-step3" style="display: none; margin-bottom: 1.5rem;">
+        <h4 style="margin-bottom: 1rem; color: #2c3e50;">Control Variables</h4>
+        <div id="baseline-control-variables-table" style="overflow-x: auto;"></div>
+        <div class="field-error" id="baseline-control-variables-error" style="display: none; color: #e74c3c; font-size: 0.875rem; margin-top: 0.5rem;"></div>
+        <div style="margin-top: 1rem; display: flex; gap: 1rem;">
+            <button type="button" id="baseline-calculate-new-btn" style="padding: 0.75rem 2rem; background: #2ecc71; color: white; border: none; border-radius: 4px; font-size: 1rem; font-weight: 600; cursor: pointer;">Calculate New Baseline</button>
+            <button type="button" id="baseline-clear-btn" style="padding: 0.75rem 2rem; background: #95a5a6; color: white; border: none; border-radius: 4px; font-size: 1rem; font-weight: 600; cursor: pointer;">Clear</button>
+        </div>
+    </div>
+
+    <div id="baseline-step4" style="display: none; margin-bottom: 1.5rem;">
+        <h4 style="margin-bottom: 1rem; color: #2c3e50;">New Baseline Metrics</h4>
+        <div id="baseline-new-metrics-table" style="overflow-x: auto;"></div>
+        <div style="margin-top: 1.5rem; margin-bottom: 1rem;">
+            <label for="baseline-file-suffix" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
+                File Name Suffix <span style="color: #95a5a6; font-weight: normal;">(optional)</span>
+            </label>
+            <input type="text" id="baseline-file-suffix" placeholder="_issue676" maxlength="50" pattern="^[a-zA-Z0-9_-]*$" style="width: 100%; max-width: 400px; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; font-family: monospace;">
+        </div>
+        <div style="margin-top: 1rem;">
+            <button type="button" id="baseline-create-files-btn" style="padding: 0.75rem 2rem; background: #e74c3c; color: white; border: none; border-radius: 4px; font-size: 1rem; font-weight: 600; cursor: pointer;">Create New Files</button>
+        </div>
+        <div id="baseline-success-message" style="display: none; margin-top: 1.5rem; padding: 1rem; background: #efe; border-left: 4px solid #2ecc71; border-radius: 4px;">
+            <p style="color: #27ae60; margin: 0 0 0.5rem 0; font-weight: 600;">New File(s) created</p>
+            <p id="baseline-file-path" style="color: #2c3e50; margin: 0 0 0.75rem 0; font-family: monospace; font-size: 0.9rem;"></p>
+            <a id="baseline-download-link" href="#" style="display: inline-block; padding: 0.5rem 1rem; background: #3498db; color: white; text-decoration: none; border-radius: 4px; font-weight: 600;">Download All Files</a>
+        </div>
+    </div>
+</div>
+
+<div class="card" id="control-variables-reference" style="display: none;">
+    <h3 style="margin-bottom: 1rem;">Control Variables Reference</h3>
+    <div id="baseline-reference-table"></div>
+</div>

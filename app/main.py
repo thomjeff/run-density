@@ -37,6 +37,7 @@ from app.routes.api_bins import router as api_bins_router
 from app.routes.api_locations import router as api_locations_router
 from app.routes.api_baseline import router as api_baseline_router
 from app.routes.api_course import router as api_course_router
+from app.routes.api_config_packages import router as api_config_packages_router
 from app.routes.v2.analyze import router as v2_analyze_router
 from app.utils.constants import DEFAULT_STEP_KM, DEFAULT_TIME_WINDOW_SECONDS, DEFAULT_MIN_OVERLAP_DURATION, DEFAULT_CONFLICT_LENGTH_METERS
 from app.version import get_version
@@ -152,6 +153,7 @@ app.include_router(api_bins_router)
 app.include_router(api_locations_router)
 app.include_router(api_baseline_router)
 app.include_router(api_course_router)
+app.include_router(api_config_packages_router)
 # v2 API routes
 app.include_router(v2_analyze_router, prefix="/runflow/v2", tags=["v2"])
 

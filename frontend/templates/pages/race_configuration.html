@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Race Configuration{% endblock %}
+
+{% block extra_head %}
+<style>
+    .race-config-tabs {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        border-bottom: 2px solid #ecf0f1;
+        padding-bottom: 0.5rem;
+    }
+    .race-config-tab {
+        padding: 0.5rem 1.25rem;
+        border: 1px solid #bdc3c7;
+        border-radius: 4px 4px 0 0;
+        background: #fff;
+        cursor: pointer;
+        font-size: 0.95rem;
+    }
+    .race-config-tab.active {
+        background: #3498db;
+        color: #fff;
+        border-color: #2980b9;
+    }
+    .race-config-package-banner {
+        margin-bottom: 1rem;
+        padding: 0.75rem 1rem;
+        background: #f8f9fa;
+        border-left: 4px solid #3498db;
+        border-radius: 4px;
+    }
+    .race-config-package-banner .banner-top {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+    }
+    .race-config-package-banner code {
+        font-size: 0.8rem;
+        color: #7f8c8d;
+    }
+    .race-config-package-banner label {
+        display: block;
+        font-weight: 600;
+        color: #2c3e50;
+        font-size: 0.875rem;
+        margin-bottom: 0.25rem;
+    }
+    .race-config-package-banner input,
+    .race-config-package-banner textarea {
+        width: 100%;
+        max-width: 520px;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 1rem;
+        box-sizing: border-box;
+        font-family: inherit;
+    }
+    .race-config-package-banner textarea {
+        resize: vertical;
+        min-height: 2.5rem;
+    }
+    .race-config-meta-readonly {
+        color: #7f8c8d;
+        font-size: 0.875rem;
+        margin: 0.5rem 0 0 0;
+    }
+    #race-config-list-table tbody tr.config-row { cursor: pointer; }
+    #race-config-list-table tbody tr.config-row.selected { background: #e3f2fd; }
+    #race-config-new-modal {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.4);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+    }
+    #race-config-new-modal.open { display: flex; }
+    #race-config-new-modal .modal-panel {
+        background: #fff;
+        border-radius: 6px;
+        padding: 1.5rem;
+        width: 100%;
+        max-width: 480px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Race Configuration</h2>
+    <p style="color: #7f8c8d; font-size: 0.95rem; margin-top: 0.25rem;">
+        Draw-first course packages for race-day operations. Exports feed analysis inputs in <code>runflow/config/{config_id}/</code>.
+    </p>
+</div>
+
+<div id="race-config-entry" class="card" style="margin-bottom: 2rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="margin: 0; color: #2c3e50;">Select a configuration</h3>
+        <button type="button" id="race-config-new-btn" style="padding: 0.4rem 0.75rem; border: 1px solid #bdc3c7; border-radius: 4px; background: #fff; cursor: pointer; font-size: 0.875rem;">New configuration</button>
+    </div>
+    <div class="scrollable-table-container">
+        <table id="race-config-list-table" class="table-sticky-header">
+            <thead>
+                <tr>
+                    <th class="table-sortable" data-sort="label">Name <span class="table-sortable-indicator">↕</span></th>
+                    <th class="table-sortable" data-sort="description">Description <span class="table-sortable-indicator">↕</span></th>
+                    <th class="table-sortable" data-sort="updated">Saved On <span class="table-sortable-indicator">↕</span></th>
+                </tr>
+            </thead>
+            <tbody id="race-config-list-tbody">
+                <tr><td colspan="3" class="placeholder">Loading configurations…</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <p style="margin: 1rem 0 0 0; color: #7f8c8d; font-size: 0.875rem;">Click a row to open. New packages are stored under <code>runflow/config/{config_id}/</code>.</p>
+</div>
+
+<div id="race-config-new-modal" role="dialog" aria-labelledby="race-config-new-title" aria-modal="true">
+    <div class="modal-panel">
+        <h3 id="race-config-new-title" style="margin: 0 0 1rem 0; color: #2c3e50;">New configuration</h3>
+        <label for="race-config-new-label" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Name</label>
+        <input type="text" id="race-config-new-label" placeholder="FM 2027 Test" maxlength="120" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box;">
+        <label for="race-config-new-description" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Description <span style="color: #95a5a6; font-weight: normal;">(optional)</span></label>
+        <textarea id="race-config-new-description" placeholder="e.g. Sunday full/half/10k draft" maxlength="255" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1.25rem; box-sizing: border-box; resize: vertical; font-family: inherit;"></textarea>
+        <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+            <button type="button" id="race-config-new-cancel" style="padding: 0.5rem 1.25rem; border: 1px solid #bdc3c7; border-radius: 4px; background: #fff; cursor: pointer;">Cancel</button>
+            <button type="button" id="race-config-create-btn" style="padding: 0.5rem 1.25rem; background: #27ae60; color: #fff; border: none; border-radius: 4px; font-weight: 600; cursor: pointer;">Create &amp; open</button>
+        </div>
+    </div>
+</div>
+
+<div id="race-config-workspace" style="display: none;">
+    <div class="race-config-package-banner">
+        <div class="banner-top">
+            <code id="race-config-package-id"></code>
+            <div style="display: flex; gap: 0.5rem; align-items: center; flex-shrink: 0;">
+                <button type="button" id="race-config-save-meta" style="padding: 0.4rem 0.75rem; border: 1px solid #2980b9; border-radius: 4px; background: #3498db; color: #fff; font-size: 0.875rem; font-weight: 600; cursor: pointer;">Save</button>
+                <button type="button" id="race-config-change-package" style="padding: 0.35rem 0.75rem; font-size: 0.875rem; cursor: pointer;">Change package</button>
+            </div>
+        </div>
+        <div id="race-config-meta-editable">
+            <label for="race-config-edit-label">Name</label>
+            <input type="text" id="race-config-edit-label" maxlength="120" placeholder="Package name">
+            <label for="race-config-edit-description" style="margin-top: 0.75rem;">Description</label>
+            <textarea id="race-config-edit-description" maxlength="255" rows="2" placeholder="Optional description"></textarea>
+        </div>
+        <p id="race-config-meta-readonly" class="race-config-meta-readonly" style="display: none;">
+            Legacy package: name and description cannot be edited here (no <code>config.json</code>).
+        </p>
+        <span id="race-config-save-status" style="display: none; margin-top: 0.5rem; font-size: 0.875rem; color: #27ae60;"></span>
+    </div>
+
+    <div class="race-config-tabs" role="tablist">
+        <button type="button" class="race-config-tab active" data-tab="course" role="tab" aria-selected="true">Course</button>
+        <button type="button" class="race-config-tab" data-tab="runners" role="tab" aria-selected="false">Runners</button>
+    </div>
+
+    <div id="race-config-tab-course" role="tabpanel">
+        <div class="card">
+            <h3 style="margin-bottom: 0.5rem;">Course editor</h3>
+            <p style="color: #7f8c8d; font-size: 0.9rem; margin-bottom: 1rem;">
+                Draw-first map editor lands in <a href="/course-mapping">Course Mapping</a> (#757). This package stores <code>course.json</code> here when integrated.
+            </p>
+            <p style="margin: 0; font-size: 0.875rem; color: #95a5a6;">
+                Next: wire Course Mapping to this <code>config_id</code> and export <code>segments.csv</code>, <code>flow.csv</code>, <code>locations.csv</code> (#758–#760).
+            </p>
+        </div>
+    </div>
+
+    <div id="race-config-tab-runners" role="tabpanel" style="display: none;">
+        {% include 'partials/runners_baseline_body.html' %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="/static/js/runners_baseline.js?v=756i"></script>
+<script src="/static/js/race_configuration.js?v=756k"></script>
+{% endblock %}

@@ -36,13 +36,20 @@ logger = logging.getLogger(__name__)
 
 def resolve_baseline_data_dir(
     data_dir: Optional[str],
-    config_dir: Optional[str]
+    config_dir: Optional[str],
+    config_id: Optional[str] = None,
 ) -> Path:
     """
-    Resolve baseline data directory from data_dir or config_dir.
-    
+    Resolve baseline data directory from data_dir, config_id, or config_dir.
+
     Issue #693: Allow baseline generation from runflow/config/{config_dir}.
+    Issue #756: config_id (UUID package) takes precedence over legacy config_dir slug.
     """
+    if config_id:
+        from app.core.config_package import resolve_config_package_path
+
+        return resolve_config_package_path(config_id.strip())
+
     if config_dir:
         normalized = config_dir.strip()
         if not normalized:
@@ -142,7 +149,8 @@ async def calculate_baseline(
         
         data_dir = request.get("data_dir")
         config_dir = request.get("config_dir")
-        data_path = resolve_baseline_data_dir(data_dir, config_dir)
+        config_id = request.get("config_id")
+        data_path = resolve_baseline_data_dir(data_dir, config_dir, config_id)
         data_dir = str(data_path)
         
         # Get reports path (runflow root) - for response only, not creating directory yet
@@ -254,6 +262,7 @@ async def generate_scenario(
         selected_files = request.get("selected_files", [])
         data_dir = request.get("data_dir")
         config_dir = request.get("config_dir")
+        config_id = request.get("config_id")
         control_variables = request.get("control_variables", {})
         
         # Validate required parameters
@@ -269,7 +278,7 @@ async def generate_scenario(
                 detail="selected_files is required"
             )
         
-        data_path = resolve_baseline_data_dir(data_dir, config_dir)
+        data_path = resolve_baseline_data_dir(data_dir, config_dir, config_id)
         data_dir = str(data_path)
         
         if not control_variables:
@@ -443,6 +452,8 @@ async def create_baseline_files(
         selected_files = request.get("selected_files", [])
         data_dir = request.get("data_dir")
         config_dir = request.get("config_dir")
+        config_id = request.get("config_id")
+        target_config_id = request.get("target_config_id")
         control_variables = request.get("control_variables", {})
         file_suffix = request.get("file_suffix")  # Optional
         
@@ -459,7 +470,7 @@ async def create_baseline_files(
                 detail="selected_files is required"
             )
         
-        data_path = resolve_baseline_data_dir(data_dir, config_dir)
+        data_path = resolve_baseline_data_dir(data_dir, config_dir, config_id)
         data_dir = str(data_path)
         data_dir_path = Path(data_dir)
         
@@ -565,8 +576,22 @@ async def create_baseline_files(
         reports_path = get_runflow_root()
         baseline_dir = create_baseline_directory(reports_path)
         run_id = baseline_dir.name
+
+        # Issue #756: write runner CSVs into active config package when provided
+        target_id = (target_config_id or "").strip() or None
+        if target_id:
+            from app.core.config_package import (
+                load_config_manifest,
+                resolve_config_package_path,
+                save_config_manifest,
+            )
+
+            output_dir = resolve_config_package_path(target_id)
+            logger.info("Writing generated runner CSVs to config package %s", target_id)
+        else:
+            output_dir = baseline_dir
         
-        # Save baseline.json (first time)
+        # Save baseline.json (audit trail under runflow/baseline/{run_id}/)
         baseline_json_path = save_baseline_metrics(
             baseline_dir=baseline_dir,
             run_id=run_id,
@@ -595,7 +620,7 @@ async def create_baseline_files(
             else:
                 output_filename = runners_file
             
-            output_file = baseline_dir / output_filename
+            output_file = output_dir / output_filename
             file_data["df"].to_csv(output_file, index=False)
             
             generated_files.append({
@@ -603,12 +628,19 @@ async def create_baseline_files(
                 "path": str(output_file),
                 "filename": output_filename
             })
+
+        if target_id:
+            manifest = load_config_manifest(target_id)
+            save_config_manifest(output_dir, manifest)
         
         # Update baseline.json with control variables, new metrics, and file suffix
         baseline_json["control_variables"] = control_variables
         baseline_json["new_baseline_metrics"] = new_baseline_metrics
         if file_suffix:
             baseline_json["file_suffix"] = file_suffix
+        if target_id:
+            baseline_json["target_config_id"] = target_id
+            baseline_json["output_dir"] = str(output_dir)
         
         # Save updated baseline.json
         with open(baseline_json_path, "w") as f:
@@ -620,11 +652,18 @@ async def create_baseline_files(
         # Build response
         response = {
             "run_id": run_id,
-            "generated_files": generated_files
+            "generated_files": generated_files,
         }
+        if target_id:
+            response["target_config_id"] = target_id
+            response["output_dir"] = str(output_dir)
         
         logger.info(
-            f"Created {len(generated_files)} runner files for baseline run_id={run_id} with suffix={file_suffix or 'none'}"
+            "Created %s runner files (run_id=%s, target_config_id=%s, suffix=%s)",
+            len(generated_files),
+            run_id,
+            target_id or "none",
+            file_suffix or "none",
         )
         return JSONResponse(content=response, status_code=status.HTTP_200_OK)
     

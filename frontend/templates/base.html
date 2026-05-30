@@ -311,11 +311,11 @@
             <li><a href="/locsheets" {% if request.url and request.url.path == "/locsheets" %}class="active"{% endif %}>Loc Sheets</a></li>
             <li><a href="/reports" {% if request.url and request.url.path == "/reports" %}class="active"{% endif %}>Reports</a></li>
             <li><a href="/analysis" {% if request.url and request.url.path == "/analysis" %}class="active"{% endif %}>Analysis</a></li>
-            <li><a href="/create-files" {% if request.url and request.url.path == "/create-files" %}class="active"{% endif %}>Create Files</a></li>
+            <li><a href="/config" {% if request.url and request.url.path == "/config" %}class="active"{% endif %}>Race Configuration</a></li>
             <li><a href="/course-mapping" {% if request.url and request.url.path == "/course-mapping" %}class="active"{% endif %}>Course Mapping</a></li>
             <li><a href="/health-check" {% if request.url and request.url.path == "/health-check" %}class="active"{% endif %}>Health</a></li>
             {% endif %}
-            <li style="margin-left:auto; padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.5rem;">
+            <li id="day-selector-wrap" style="margin-left:auto; padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.5rem;">
                 <label for="day-selector" style="color:#ecf0f1; font-weight:600;">Day</label>
                 <select id="day-selector" style="padding: 0.35rem 0.5rem; border-radius: 4px; border: 1px solid #2c3e50; background: #fff; color: #2c3e50; min-width: 90px;">
                     <option value="">—</option>
@@ -403,17 +403,53 @@
             return u.pathname + (u.search ? u.search : "");
         }
 
+        const CONFIG_ROUTE_PREFIXES = ["/config"];
+
+        function isConfigRoutePath(pathname) {
+            return CONFIG_ROUTE_PREFIXES.some(p => pathname === p || pathname.startsWith(p + "/"));
+        }
+
+        function isAnalysisRoutePath(pathname) {
+            if (isConfigRoutePath(pathname)) return false;
+            if (pathname === "/course-mapping" || pathname === "/health-check" || pathname === "/logout") {
+                return false;
+            }
+            return true;
+        }
+
         function updateNavLinks(day, runId) {
+            const onConfigPage = isConfigRoutePath(window.location.pathname);
             document.querySelectorAll("nav a").forEach(a => {
                 const href = a.getAttribute("href");
                 if (!href || href === "/logout" || href === "/health-check") return;
-                let newHref = href;
-                if (day) newHref = setQueryParam(newHref, "day", day);
-                if (runId) newHref = setQueryParam(newHref, "run_id", runId);
+                const linkPath = href.split("?")[0];
+                let newHref = href.split("?")[0];
+                if (isConfigRoutePath(linkPath)) {
+                    const configId = localStorage.getItem("selected_config_id");
+                    if (configId) {
+                        newHref = setQueryParam(newHref, "config_id", configId);
+                        if (linkPath === "/config") {
+                            newHref = setQueryParam(newHref, "tab", "course");
+                        }
+                    }
+                    newHref = setQueryParam(newHref, "run_id", null);
+                    newHref = setQueryParam(newHref, "day", null);
+                } else if (isAnalysisRoutePath(linkPath) && !onConfigPage) {
+                    if (day) newHref = setQueryParam(newHref, "day", day);
+                    if (runId) newHref = setQueryParam(newHref, "run_id", runId);
+                    newHref = setQueryParam(newHref, "config_id", null);
+                }
                 a.setAttribute("href", newHref);
             });
         }
-        
+
+        window.updateConfigNavLinks = function(configId) {
+            if (configId) {
+                localStorage.setItem("selected_config_id", configId);
+            }
+            updateNavLinks(null, null);
+        };
+
         // Make updateNavLinks globally accessible for dashboard.html
         window.updateNavLinks = updateNavLinks;
 
@@ -422,9 +458,42 @@
             if (runId) localStorage.setItem("selected_run_id", runId);
         }
 
+        function initConfigPageNav() {
+            const wrap = document.getElementById("day-selector-wrap");
+            if (wrap) wrap.style.display = "none";
+
+            const params = new URLSearchParams(window.location.search);
+            let changed = false;
+            if (params.has("day")) {
+                params.delete("day");
+                changed = true;
+            }
+            if (params.has("run_id")) {
+                params.delete("run_id");
+                changed = true;
+            }
+            const configId = (params.get("config_id") || localStorage.getItem("selected_config_id") || "").trim();
+            if (configId) {
+                localStorage.setItem("selected_config_id", configId);
+            }
+            const newUrl = window.location.pathname + (params.toString() ? "?" + params.toString() : "");
+            if (changed && newUrl !== window.location.pathname + window.location.search) {
+                window.history.replaceState({}, "", newUrl);
+            }
+            updateNavLinks(null, null);
+        }
+
         async function initDaySelector() {
             const select = document.getElementById("day-selector");
             if (!select) return;
+
+            if (isConfigRoutePath(window.location.pathname)) {
+                initConfigPageNav();
+                return;
+            }
+
+            const wrap = document.getElementById("day-selector-wrap");
+            if (wrap) wrap.style.display = "flex";
 
             const params = new URLSearchParams(window.location.search);
             const urlDayRaw = params.get("day");
@@ -557,6 +626,9 @@
             window.runflowDay = { selected: selectedDay, available: availableDays, run_id: runId };
 
             select.addEventListener("change", (e) => {
+                if (isConfigRoutePath(window.location.pathname)) {
+                    return;
+                }
                 const day = (e.target.value || "").toLowerCase().trim();
                 if (!runId) return; // do not navigate without run_id
                 localStorage.setItem("selected_day", day);
