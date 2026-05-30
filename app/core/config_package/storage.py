@@ -13,7 +13,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from app.core.course.export import build_segments_csv, enrich_segments_event_distances
+from app.core.course.export import (
+    build_locations_csv,
+    build_segments_csv,
+    enrich_segments_event_distances,
+)
 from app.io.loader import load_segments
 from app.utils.constants import COURSE_EVENT_IDS
 from app.utils.run_id import generate_run_id, get_runflow_root
@@ -168,6 +172,21 @@ def validate_config_course_data(course_data: Any, config_id: str) -> Dict[str, A
     return course_data
 
 
+def _normalize_course_locations(course_data: Dict[str, Any]) -> None:
+    """Migrate deprecated loc_description to notes; drop loc_direction if present."""
+    locations = course_data.get("locations")
+    if not isinstance(locations, list):
+        return
+    for loc in locations:
+        if not isinstance(loc, dict):
+            continue
+        if loc.get("loc_description") and not loc.get("notes"):
+            loc["notes"] = str(loc.pop("loc_description")).strip()
+        elif "loc_description" in loc:
+            loc.pop("loc_description", None)
+        loc.pop("loc_direction", None)
+
+
 def load_config_course(config_id: str) -> Dict[str, Any]:
     """
     Load course.json from runflow/config/{config_id}/.
@@ -187,6 +206,7 @@ def load_config_course(config_id: str) -> Dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError(f"Invalid {COURSE_WORKSPACE_NAME} in package {config_id}")
     data.pop("events", None)
+    _normalize_course_locations(data)
     return data
 
 
@@ -201,6 +221,7 @@ def save_config_course(config_id: str, course_data: Dict[str, Any]) -> Path:
     cid = validate_config_id(config_id)
     package_path = resolve_config_package_path(cid)
     data = validate_config_course_data(course_data, cid)
+    _normalize_course_locations(data)
 
     data = dict(data)
     data["id"] = cid
@@ -603,11 +624,30 @@ def export_config_package_segments(config_id: str) -> Dict[str, Any]:
     target.write_text(csv_content, encoding="utf-8")
     _validate_exported_segments_file(target)
 
-    logger.info("Exported segments.csv for config package %s (%s rows)", cid, len(segments))
+    locations_target = package_path / "locations.csv"
+    locations_backup_path: Optional[Path] = None
+    locations = course.get("locations") or []
+    locations_csv = build_locations_csv(course)
+    if locations_target.is_file():
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        locations_backup_path = package_path / f"locations.csv.bak.{stamp}"
+        shutil.copy2(locations_target, locations_backup_path)
+    locations_target.write_text(locations_csv, encoding="utf-8")
+
+    logger.info(
+        "Exported segments.csv (%s rows) and locations.csv (%s rows) for config package %s",
+        len(segments),
+        len(locations),
+        cid,
+    )
     return {
         "config_id": cid,
         "path": str(target),
         "backup_path": str(backup_path) if backup_path else None,
+        "segments_backup_path": str(backup_path) if backup_path else None,
         "segment_count": len(segments),
+        "locations_path": str(locations_target),
+        "locations_backup_path": str(locations_backup_path) if locations_backup_path else None,
+        "location_count": len(locations),
         "readiness": package_readiness(package_path),
     }

@@ -412,10 +412,11 @@ async function addSegmentsOverlay(map) {
     const overlayLayer = L.geoJSON(geojson, {
         pane: paneName,
         style: {
-            color: '#2f9e44',
-            weight: 2,
-            opacity: 0.45,
-            dashArray: '4 6'
+            color: '#2563eb',
+            weight: 5,
+            opacity: 0.92,
+            lineCap: 'round',
+            lineJoin: 'round'
         }
     });
     

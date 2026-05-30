@@ -79,6 +79,16 @@ def test_export_config_package_segments_writes_and_validates(tmp_path, monkeypat
                 "direction": "uni",
             }
         ],
+        "locations": [
+            {
+                "id": 1,
+                "loc_label": "Aid 1",
+                "loc_type": "aid",
+                "notes": "North side",
+                "lat": 45.95,
+                "lon": -66.64,
+            }
+        ],
         "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
     }
     (package / "course.json").write_text(
@@ -93,6 +103,14 @@ def test_export_config_package_segments_writes_and_validates(tmp_path, monkeypat
     df = load_segments(str(segments_path))
     assert len(df) == 1
     assert df.iloc[0]["seg_id"] == "A1"
+    locations_path = Path(result["locations_path"])
+    assert locations_path.is_file()
+    assert result["location_count"] == 1
+    loc_lines = locations_path.read_text(encoding="utf-8").strip().splitlines()
+    assert loc_lines[0].startswith("loc_id,")
+    assert "notes" in loc_lines[0]
+    assert "Aid 1" in loc_lines[1]
+    assert "North side" in loc_lines[1]
 
 
 def test_export_backs_up_existing_segments(tmp_path, monkeypatch):

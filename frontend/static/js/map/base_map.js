@@ -46,8 +46,8 @@ function initMap(containerId, options) {
     // Store reference to prevent double initialization
     window.existingMap = map;
     
-    // Primary tile layer - Carto Light (minimal, grayscale-friendly styling)
-    const cartoLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    // Primary tile layer - Carto Voyager (richer street detail, similar to route-planning maps)
+    const cartoLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '© OpenStreetMap contributors, © CARTO',
         maxZoom: 19
     });

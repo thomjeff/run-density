@@ -199,7 +199,7 @@ async def api_export_config_package_segments(
     request: Request,
     config_id: str,
 ) -> JSONResponse:
-    """Export segments.csv from package course.json (2026-style pipeline format)."""
+    """Export segments.csv and locations.csv from package course.json."""
     require_auth(request)
     try:
         result = export_config_package_segments(config_id)

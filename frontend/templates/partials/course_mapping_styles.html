@@ -156,24 +156,55 @@
     .turnaround-marker > div { cursor: move; }
     .uturn-icon { background: transparent !important; border: none !important; }
     /* Course map popups: match Locations UI (shared styles in common.css for tooltips) */
+    .leaflet-popup-content {
+        font-size: 1.09rem;
+        line-height: 1.45;
+        min-width: 250px;
+    }
     .course-map-popup, .leaflet-popup-content .course-map-popup {
         font-family: Arial, sans-serif;
-        font-size: 0.875rem;
-        line-height: 1.4;
-        min-width: 200px;
-        max-width: 280px;
+        font-size: 1.09rem;
+        line-height: 1.45;
+        min-width: 250px;
+        max-width: 350px;
     }
-    .course-map-popup .popup-row { margin-bottom: 0.5rem; }
+    .course-map-popup .popup-row { margin-bottom: 0.65rem; }
     .course-map-popup .popup-row:last-child { margin-bottom: 0; }
-    .course-map-popup .popup-label { font-weight: 600; color: #2c3e50; font-size: 0.875rem; }
-    .course-map-popup .popup-value { color: #34495e; font-size: 0.875rem; }
-    .course-map-popup .popup-heading { margin: 0 0 0.5rem 0; font-size: 1rem; color: #2c3e50; font-weight: 600; }
-    .course-map-popup-wrap { font-size: 0.875rem; }
+    .course-map-popup .popup-label { font-weight: 600; color: #2c3e50; font-size: 1.09rem; }
+    .course-map-popup .popup-value { color: #34495e; font-size: 1.09rem; }
+    .course-map-popup .popup-heading { margin: 0 0 0.65rem 0; font-size: 1.25rem; color: #2c3e50; font-weight: 600; }
+    .course-map-popup-wrap, .course-map-popup-form {
+        font-size: 1.09rem;
+        min-width: 275px;
+    }
+    .course-map-popup-wrap label, .course-map-popup-form label {
+        display: block;
+        font-weight: 600;
+        margin-top: 0.35rem;
+        font-size: 1.09rem;
+    }
     .course-map-popup input, .course-map-popup select, .course-map-popup textarea,
     .course-map-popup-wrap input, .course-map-popup-wrap select, .course-map-popup-wrap textarea,
+    .course-map-popup-form input, .course-map-popup-form select, .course-map-popup-form textarea,
     .leaflet-popup-content input, .leaflet-popup-content select, .leaflet-popup-content textarea {
-        margin: 5px !important;
-        font-size: 0.875rem;
+        margin: 6px 0 10px 0 !important;
+        font-size: 1.09rem !important;
+        padding: 0.45rem 0.55rem !important;
+    }
+    .course-map-popup-wrap button, .course-map-popup-form button,
+    .leaflet-popup-content .course-map-popup-wrap button,
+    .leaflet-popup-content .course-map-popup-form button {
+        padding: 0.44rem 0.75rem;
+        font-size: 1.09rem;
+        border: 1px solid #bdc3c7;
+        border-radius: 4px;
+        background: #fff;
+        cursor: pointer;
+        margin-right: 0.35rem;
+        margin-top: 0.35rem;
+    }
+    .course-map-popup-wrap button:hover, .course-map-popup-form button:hover {
+        background: #ecf0f1;
     }
     #course-list-table tbody tr.course-row { cursor: pointer; }
     #course-list-table tbody tr.course-row.selected { background: #e3f2fd; }
@@ -185,7 +216,7 @@
     #btn-delete-course { background: #e8e8e8 !important; color: #c0392b !important; border-color: #bdc3c7 !important; }
     #btn-delete-course:hover:not(:disabled) { background: #ddd !important; }
     /* Edit toolbar: same look as Street/Satellite buttons */
-    #course-edit-toolbar button { padding: 0.35rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; font-size: 0.875rem; color: #000; }
+    #course-edit-toolbar button { padding: 0.44rem 0.75rem; border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; font-size: 1.09rem; color: #000; }
     #course-edit-toolbar button:hover:not(:disabled) { background: #ecf0f1; }
     #course-edit-toolbar button:disabled { opacity: 0.6; cursor: not-allowed; }
     #course-edit-toolbar button.active { background: #3498db; color: #fff; border-color: #2980b9; }

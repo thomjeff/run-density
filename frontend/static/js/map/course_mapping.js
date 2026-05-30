@@ -11,18 +11,29 @@ document.addEventListener('DOMContentLoaded', function () {
     const loadingEl = container.querySelector('.map-loading');
     const toggleEl = document.getElementById('basemap-toggle');
 
-    function getConfigPackageId() {
+    function resolveConfigPackageId() {
         var root = document.getElementById('course-mapping-root');
         if (root && root.dataset && root.dataset.configId) {
             return String(root.dataset.configId).trim();
         }
         var params = new URLSearchParams(window.location.search);
         var fromUrl = params.get('config_id');
-        return fromUrl ? fromUrl.trim() : null;
+        if (fromUrl) return fromUrl.trim();
+        if (currentCourse && currentCourse.config_id) {
+            return String(currentCourse.config_id).trim();
+        }
+        if (window.location.pathname.indexOf('/config') === 0) {
+            var cid = params.get('config_id');
+            if (cid) return cid.trim();
+        }
+        return null;
     }
 
-    var configPackageId = getConfigPackageId();
-    var isConfigPackageMode = !!configPackageId;
+    function isConfigPackageMode() {
+        return !!resolveConfigPackageId();
+    }
+
+    var POPUP_MAX_WIDTH = 375;
 
     function applyConfigPackageUIMode() {
         var listCard = document.getElementById('course-list-card');
@@ -39,17 +50,18 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function loadConfigPackageCourse() {
-        if (!configPackageId) return;
+        var pkgId = resolveConfigPackageId();
+        if (!pkgId) return;
         fetch(
-            '/api/config/packages/' + encodeURIComponent(configPackageId) + '/course',
+            '/api/config/packages/' + encodeURIComponent(pkgId) + '/course',
             { credentials: 'same-origin' }
         )
             .then(function (res) {
                 if (res.status === 404) {
                     var c = blankCourse();
-                    c.id = configPackageId;
-                    c.config_id = configPackageId;
-                    setCourse(configPackageId, c);
+                    c.id = pkgId;
+                    c.config_id = pkgId;
+                    setCourse(pkgId, c);
                     clearDirty();
                     return null;
                 }
@@ -63,9 +75,9 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(function (data) {
                 if (!data) return;
                 if (data.ok && data.course) {
-                    setCourse(configPackageId, data.course);
+                    setCourse(pkgId, data.course);
                     clearDirty();
-                    console.log('Loaded config package course:', configPackageId);
+                    console.log('Loaded config package course:', pkgId);
                 }
             })
             .catch(function (e) {
@@ -185,7 +197,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (idEl) {
             idEl.textContent = currentCourseId
-                ? (isConfigPackageMode
+                ? (isConfigPackageMode()
                     ? 'Config package: ' + currentCourseId
                     : 'Course: ' + currentCourseId)
                 : '';
@@ -213,6 +225,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (currentCourse && !Array.isArray(currentCourse.segment_breaks)) currentCourse.segment_breaks = [];
         if (currentCourse && !Array.isArray(currentCourse.locations)) currentCourse.locations = [];
+        if (currentCourse) normalizeCourseLocations(currentCourse);
         if (currentCourse && !Array.isArray(currentCourse.flow_control_points)) currentCourse.flow_control_points = [];
         if (currentCourse && typeof currentCourse.segment_break_labels !== 'object') currentCourse.segment_break_labels = {};
         if (currentCourse && typeof currentCourse.segment_break_descriptions !== 'object') currentCourse.segment_break_descriptions = {};
@@ -240,6 +253,23 @@ document.addEventListener('DOMContentLoaded', function () {
         fitMapToCourse();
     }
 
+    /** Drop deprecated loc_description; migrate into notes for one-pager export. */
+    function normalizeCourseLocations(course) {
+        if (!course || !Array.isArray(course.locations)) return;
+        course.locations.forEach(function (loc) {
+            if (loc.loc_description && !loc.notes) {
+                loc.notes = String(loc.loc_description).trim();
+            }
+            if (loc.loc_description != null) delete loc.loc_description;
+        });
+    }
+
+    function truncateNotesPreview(notes, maxLen) {
+        var s = (notes || '').trim();
+        if (!s) return '—';
+        return s.length <= maxLen ? s : s.slice(0, maxLen) + '…';
+    }
+
     var LOCATION_TYPES = (window.LOCATION_TYPES_FROM_SERVER || []).slice().sort(function (a, b) { return (a.label || a.value).localeCompare(b.label || b.value); });
     var EVENT_CHOICES = window.EVENT_CHOICES_FROM_SERVER || [{ value: 'full', label: 'Full' }, { value: 'half', label: 'Half' }, { value: '10k', label: '10K' }, { value: 'elite', label: 'Elite' }, { value: 'open', label: 'Open' }];
     var LOCATION_PIN_COLORS = {
@@ -250,9 +280,12 @@ document.addEventListener('DOMContentLoaded', function () {
         traffic: '#95a5a6',
         water: '#3498db'
     };
-    var SEGMENT_PIN_COLOR = '#3498db';
-    var ROUTE_LINE_STYLE = { color: '#2f9e44', weight: 2, opacity: 0.45, dashArray: '4 6' };
-    var SEGMENT_HIT_STYLE = { color: '#2f9e44', weight: 20, opacity: 0, dashArray: '4 6' };
+    var ROUTE_COLOR = '#2563eb';
+    var ROUTE_LINE_CASING_STYLE = { color: '#ffffff', weight: 7, opacity: 0.9, lineCap: 'round', lineJoin: 'round' };
+    var ROUTE_LINE_STYLE = { color: ROUTE_COLOR, weight: 5, opacity: 0.92, lineCap: 'round', lineJoin: 'round' };
+    var SEGMENT_HIT_STYLE = { color: ROUTE_COLOR, weight: 22, opacity: 0, lineCap: 'round', lineJoin: 'round' };
+    var START_MARKER = { bg: '#22c55e', border: '#15803d' };
+    var FINISH_MARKER = { bg: '#ef4444', border: '#b91c1c' };
     var SCHEMA_OPTIONS = [{ value: 'on_course_open', label: 'on_course_open' }, { value: 'on_course_narrow', label: 'on_course_narrow' }];
     var DIRECTION_OPTIONS = [{ value: 'uni', label: 'uni' }, { value: 'bi', label: 'bi' }];
 
@@ -342,9 +375,15 @@ document.addEventListener('DOMContentLoaded', function () {
         // When a pin is removed (one fewer segment), remaining segments keep their ordinal mapping.
         var existingArr = (currentCourse.segments || []).slice();
         function prevAt(ordinal) {
-            if (ordinal < 0 || existingArr.length === 0) return null;
-            var s = existingArr[Math.min(ordinal, existingArr.length - 1)];
+            if (ordinal < 0 || ordinal >= existingArr.length) return null;
+            var s = existingArr[ordinal];
             return s ? { seg_label: s.seg_label, events: s.events, width_m: s.width_m, schema: s.schema, direction: s.direction, description: s.description, info_icon_lat: s.info_icon_lat, info_icon_lon: s.info_icon_lon } : null;
+        }
+        function segmentLabelFromPinRange(startIdx, endIdx, coordsLen, ordinal) {
+            var startLbl = getPinLabelForIndex(startIdx, coordsLen);
+            var endLbl = getPinLabelForIndex(endIdx, coordsLen);
+            if (startLbl && endLbl && startLbl !== endLbl) return startLbl + ' to ' + endLbl;
+            return endLbl || startLbl || ('Segment ' + (ordinal + 1));
         }
         var segs = [];
         var startIdx = 0;
@@ -359,12 +398,12 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             var ordinal = segs.length;
             var prev = prevAt(ordinal);
-            var pinLabel = (currentCourse.segment_break_labels && (currentCourse.segment_break_labels[endIdx] || currentCourse.segment_break_labels['' + endIdx] || '').trim()) || '';
-            var isLastSegment = (b >= breaks.length && endIdx === coords.length - 1);
-            var defaultLabel = pinLabel || (isLastSegment ? 'Finish' : ('Segment ' + (ordinal + 1)));
+            var defaultLabel = segmentLabelFromPinRange(startIdx, endIdx, coords.length, ordinal);
+            var inheritedLabel = (prev && prev.seg_label) ? prev.seg_label : '';
+            var useInherited = inheritedLabel && inheritedLabel !== 'Finish' && !/^Segment \d+$/.test(inheritedLabel);
             segs.push({
                 seg_id: String(segs.length + 1),
-                seg_label: (prev && prev.seg_label) ? prev.seg_label : defaultLabel,
+                seg_label: useInherited ? inheritedLabel : defaultLabel,
                 width_m: (prev && prev.width_m != null) ? prev.width_m : 3,
                 direction: (prev && prev.direction) ? prev.direction : 'uni',
                 schema: (prev && prev.schema) ? prev.schema : 'on_course_open',
@@ -780,7 +819,7 @@ document.addEventListener('DOMContentLoaded', function () {
         btnSave.type = 'button';
         btnSave.textContent = 'Save';
         content.appendChild(btnSave);
-        var pop = L.popup({ maxWidth: 300, className: 'location-popup' }).setContent(content).setLatLng(latlng).openOn(window.courseMappingMap);
+        var pop = L.popup({ maxWidth: POPUP_MAX_WIDTH, className: 'location-popup' }).setContent(content).setLatLng(latlng).openOn(window.courseMappingMap);
         btnSave.onclick = function () {
             s.seg_label = (inputLabel.value && inputLabel.value.trim()) ? inputLabel.value.trim() : segId;
             s.width_m = parseFloat(inputWidth.value);
@@ -896,7 +935,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         openSegmentAnnotationPopup(m._segmentIndex, e.latlng);
                     };
                 }
-                var pop = L.popup({ maxWidth: 300, className: 'location-popup' }).setContent(info).setLatLng(e.latlng).openOn(window.courseMappingMap);
+                var pop = L.popup({ maxWidth: POPUP_MAX_WIDTH, className: 'location-popup' }).setContent(info).setLatLng(e.latlng).openOn(window.courseMappingMap);
             });
             segmentInfoIconsLayer.addLayer(m);
         });
@@ -956,7 +995,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (samePoint && last) {
             var sfIcon = L.divIcon({
                 className: 'start-finish-icon',
-                html: '<div style="width:20px;height:20px;background:#27ae60;color:#fff;border:2px solid #1e8449;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;">S/F</div>',
+                html: '<div style="width:20px;height:20px;background:' + START_MARKER.bg + ';color:#fff;border:3px solid ' + FINISH_MARKER.border + ';border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;">S/F</div>',
                 iconSize: [20, 20],
                 iconAnchor: [10, 10]
             });
@@ -964,7 +1003,7 @@ document.addEventListener('DOMContentLoaded', function () {
         } else {
             var startIcon = L.divIcon({
                 className: 'start-finish-icon',
-                html: '<div style="width:20px;height:20px;background:#27ae60;color:#fff;border:2px solid #1e8449;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;">S</div>',
+                html: '<div style="width:20px;height:20px;background:' + START_MARKER.bg + ';color:#fff;border:2px solid ' + START_MARKER.border + ';border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;">S</div>',
                 iconSize: [20, 20],
                 iconAnchor: [10, 10]
             });
@@ -972,7 +1011,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (coords.length >= 2) {
                 var finishIcon = L.divIcon({
                     className: 'start-finish-icon',
-                    html: '<div style="width:20px;height:20px;background:#27ae60;color:#fff;border:2px solid #1e8449;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;">F</div>',
+                    html: '<div style="width:20px;height:20px;background:' + FINISH_MARKER.bg + ';color:#fff;border:2px solid ' + FINISH_MARKER.border + ';border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;">F</div>',
                     iconSize: [20, 20],
                     iconAnchor: [10, 10]
                 });
@@ -1023,6 +1062,9 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             latlngChunks.forEach(function (latlngs) {
             if (latlngs.length < 2) return;
+            var casing = L.polyline(latlngs, ROUTE_LINE_CASING_STYLE);
+            casing._segmentIndex = segIdx;
+            segmentLinesLayer.addLayer(casing);
             var line = L.polyline(latlngs, ROUTE_LINE_STYLE);
             line._segmentIndex = segIdx;
             var openPopup = function (e) {
@@ -1058,7 +1100,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             { label: 'Events', value: (s.events || []).join(', ') || '(none)' },
                             { label: 'From–To (km)', value: (s.from_km != null ? s.from_km : '') + ' – ' + (s.to_km != null ? s.to_km : '') }
                         ]);
-                        L.popup({ maxWidth: 300, className: 'location-popup' }).setContent(viewInfo).setLatLng(latlng).openOn(window.courseMappingMap);
+                        L.popup({ maxWidth: POPUP_MAX_WIDTH, className: 'location-popup' }).setContent(viewInfo).setLatLng(latlng).openOn(window.courseMappingMap);
                     }
                 }
             };
@@ -1214,7 +1256,7 @@ document.addEventListener('DOMContentLoaded', function () {
             updateCourseUI();
             window.courseMappingMap.closePopup();
         };
-        var pop = L.popup({ maxWidth: 340, className: 'location-popup' }).setContent(content).setLatLng(latlng).openOn(window.courseMappingMap);
+        var pop = L.popup({ maxWidth: POPUP_MAX_WIDTH, className: 'location-popup' }).setContent(content).setLatLng(latlng).openOn(window.courseMappingMap);
     }
 
     /** Open the segment-pin popup (Edit, Delete, Extend from here) at a pin by index. Used when clicking From/To in Segments table. */
@@ -1242,10 +1284,23 @@ document.addEventListener('DOMContentLoaded', function () {
         if (isEditMode) {
             var btnWrap = document.createElement('div');
             btnWrap.style.marginTop = '0.5rem';
+            var pinTitle = isStart ? 'Start' : (isFinish ? 'Finish' : label);
+            addEditLatLonButton(btnWrap, pinIndex, latlng, pinTitle, desc, function (d) {
+                if (isStart) currentCourse.start_description = d;
+                else if (isFinish) currentCourse.end_description = d;
+                else {
+                    if (!currentCourse.segment_break_descriptions) currentCourse.segment_break_descriptions = {};
+                    currentCourse.segment_break_descriptions[pinIndex] = d;
+                }
+            }, function () {
+                renderSegmentPins();
+                renderSegmentsList();
+                updateCourseUI();
+            });
             if (!isStart && !isFinish) {
                 var btnEdit = document.createElement('button');
                 btnEdit.type = 'button';
-                btnEdit.textContent = 'Edit';
+                btnEdit.textContent = 'Edit label';
                 btnEdit.style.marginRight = '6px';
                 btnEdit.style.marginTop = '6px';
                 var btnDel = document.createElement('button');
@@ -1331,21 +1386,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     updateExtendHint();
                 };
             }
-            if (isStart || isFinish) {
-                var btnEditPoint = document.createElement('button');
-                btnEditPoint.type = 'button';
-                btnEditPoint.textContent = 'Edit position';
-                btnEditPoint.style.marginRight = '6px';
-                btnWrap.insertBefore(btnEditPoint, btnExtend);
-                btnEditPoint.onclick = function () {
-                    window.courseMappingMap.closePopup();
-                    var lastIdx = coordsLen - 1;
-                    openPointEditTile(isStart ? 'start' : 'finish', isStart ? 0 : lastIdx, latlng, function () {}, (isStart && lastIdx > 0 && coords[0][0] === coords[lastIdx][0] && coords[0][1] === coords[lastIdx][1]) ? lastIdx : null);
-                };
-            }
             content.appendChild(btnWrap);
         }
-        var pop = L.popup({ maxWidth: 300, className: 'location-popup' }).setContent(content).setLatLng(latlng).openOn(window.courseMappingMap);
+        var pop = L.popup({ maxWidth: POPUP_MAX_WIDTH, className: 'location-popup' }).setContent(content).setLatLng(latlng).openOn(window.courseMappingMap);
     }
 
     function nextSegmentPinId() {
@@ -1367,11 +1410,146 @@ document.addEventListener('DOMContentLoaded', function () {
         return max + 1;
     }
 
+    function openCoordinateEditTile(coordIndex, latlng, title, descValue, onDescSave, onSave) {
+        var content = document.createElement('div');
+        content.className = 'course-map-popup-form';
+        content.innerHTML = '<strong>' + escapeHtml(title || 'Edit position') + '</strong><br/>';
+        var lblLat = document.createElement('label');
+        lblLat.textContent = 'Latitude';
+        content.appendChild(lblLat);
+        var inputLat = document.createElement('input');
+        inputLat.type = 'text';
+        inputLat.value = String(latlng.lat);
+        inputLat.style.display = 'block';
+        inputLat.style.width = '100%';
+        inputLat.style.boxSizing = 'border-box';
+        content.appendChild(inputLat);
+        var lblLon = document.createElement('label');
+        lblLon.textContent = 'Longitude';
+        content.appendChild(lblLon);
+        var inputLon = document.createElement('input');
+        inputLon.type = 'text';
+        inputLon.value = String(latlng.lng);
+        inputLon.style.display = 'block';
+        inputLon.style.width = '100%';
+        inputLon.style.boxSizing = 'border-box';
+        content.appendChild(inputLon);
+        var inputDesc = null;
+        if (descValue !== undefined) {
+            var lblDesc = document.createElement('label');
+            lblDesc.textContent = 'Description (optional)';
+            content.appendChild(lblDesc);
+            inputDesc = document.createElement('textarea');
+            inputDesc.rows = 2;
+            inputDesc.placeholder = 'Optional description';
+            inputDesc.value = descValue || '';
+            inputDesc.style.display = 'block';
+            inputDesc.style.width = '100%';
+            inputDesc.style.boxSizing = 'border-box';
+            content.appendChild(inputDesc);
+        }
+        var btnSave = document.createElement('button');
+        btnSave.type = 'button';
+        btnSave.textContent = 'Save';
+        var btnCancel = document.createElement('button');
+        btnCancel.type = 'button';
+        btnCancel.textContent = 'Cancel';
+        content.appendChild(btnSave);
+        content.appendChild(btnCancel);
+        var pop = L.popup({ maxWidth: POPUP_MAX_WIDTH, className: 'location-popup' }).setContent(content).setLatLng(latlng).openOn(window.courseMappingMap);
+        btnSave.onclick = function () {
+            var newLat = parseFloat(inputLat.value);
+            var newLon = parseFloat(inputLon.value);
+            if (isNaN(newLat) || isNaN(newLon)) {
+                alert('Enter valid latitude and longitude.');
+                return;
+            }
+            var coords = currentCourse.geometry.coordinates;
+            if (coordIndex >= 0 && coordIndex < coords.length) {
+                coords[coordIndex] = [newLon, newLat];
+            }
+            if (inputDesc && onDescSave) onDescSave((inputDesc.value || '').trim());
+            window.courseMappingMap.closePopup();
+            setDirty();
+            syncSegmentsFromBreaks();
+            renderCourseLine();
+            renderSegmentPins();
+            renderStartFinishIcons();
+            renderUturnIcons();
+            renderSegmentsList();
+            renderLocationPins();
+            updateCourseUI();
+            if (onSave) onSave();
+        };
+        btnCancel.onclick = function () { window.courseMappingMap.closePopup(); };
+    }
+
+    function addEditLatLonButton(btnWrap, coordIndex, latlng, title, descValue, onDescSave, onAfterSave) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = 'Edit lat/lon';
+        btn.title = 'Edit latitude and longitude for this point';
+        btn.onclick = function () {
+            window.courseMappingMap.closePopup();
+            openCoordinateEditTile(coordIndex, latlng, title, descValue, onDescSave, onAfterSave);
+        };
+        btnWrap.appendChild(btn);
+    }
+
+    function openLocationLatLonEdit(locEl, latlng, onSave) {
+        var content = document.createElement('div');
+        content.className = 'course-map-popup-form';
+        content.innerHTML = '<strong>' + escapeHtml(locEl.loc_label || 'Location') + '</strong><br/>';
+        var lblLat = document.createElement('label');
+        lblLat.textContent = 'Latitude';
+        content.appendChild(lblLat);
+        var inputLat = document.createElement('input');
+        inputLat.type = 'text';
+        inputLat.value = String(typeof locEl.lat === 'number' ? locEl.lat : parseFloat(locEl.lat));
+        inputLat.style.display = 'block';
+        inputLat.style.width = '100%';
+        inputLat.style.boxSizing = 'border-box';
+        content.appendChild(inputLat);
+        var lblLon = document.createElement('label');
+        lblLon.textContent = 'Longitude';
+        content.appendChild(lblLon);
+        var inputLon = document.createElement('input');
+        inputLon.type = 'text';
+        inputLon.value = String(typeof locEl.lon === 'number' ? locEl.lon : parseFloat(locEl.lon));
+        inputLon.style.display = 'block';
+        inputLon.style.width = '100%';
+        inputLon.style.boxSizing = 'border-box';
+        content.appendChild(inputLon);
+        var btnSave = document.createElement('button');
+        btnSave.type = 'button';
+        btnSave.textContent = 'Save';
+        var btnCancel = document.createElement('button');
+        btnCancel.type = 'button';
+        btnCancel.textContent = 'Cancel';
+        content.appendChild(btnSave);
+        content.appendChild(btnCancel);
+        var pop = L.popup({ maxWidth: POPUP_MAX_WIDTH, className: 'location-popup' }).setContent(content).setLatLng(latlng).openOn(window.courseMappingMap);
+        btnSave.onclick = function () {
+            var newLat = parseFloat(inputLat.value);
+            var newLon = parseFloat(inputLon.value);
+            if (isNaN(newLat) || isNaN(newLon)) {
+                alert('Enter valid latitude and longitude.');
+                return;
+            }
+            locEl.lat = newLat;
+            locEl.lon = newLon;
+            window.courseMappingMap.closePopup();
+            setDirty();
+            if (onSave) onSave();
+        };
+        btnCancel.onclick = function () { window.courseMappingMap.closePopup(); };
+    }
+
     function openSegmentPinFormTile(idx, latlng, onSave) {
         var label = getSegmentBreakLabel(idx);
         var desc = getSegmentBreakDescription(idx);
         var content = document.createElement('div');
-        content.style.minWidth = '220px';
+        content.className = 'course-map-popup-form';
         var lblLabel = document.createElement('label');
         lblLabel.textContent = 'Label';
         content.appendChild(lblLabel);
@@ -1405,12 +1583,14 @@ document.addEventListener('DOMContentLoaded', function () {
         btnCancel.textContent = 'Cancel';
         content.appendChild(btnSave);
         content.appendChild(btnCancel);
-        var pop = L.popup({ maxWidth: 300, className: 'location-popup' }).setContent(content).setLatLng(latlng).openOn(window.courseMappingMap);
+        var pop = L.popup({ maxWidth: POPUP_MAX_WIDTH, className: 'location-popup' }).setContent(content).setLatLng(latlng).openOn(window.courseMappingMap);
         btnSave.onclick = function () {
             if (!currentCourse.segment_break_labels) currentCourse.segment_break_labels = {};
             if (!currentCourse.segment_break_descriptions) currentCourse.segment_break_descriptions = {};
             currentCourse.segment_break_labels[idx] = (inputLabel.value && inputLabel.value.trim()) ? inputLabel.value.trim() : '';
             currentCourse.segment_break_descriptions[idx] = (inputDesc.value && inputDesc.value.trim()) ? inputDesc.value.trim() : '';
+            syncSegmentsFromBreaks();
+            renderSegmentsList();
             window.courseMappingMap.closePopup();
             setDirty();
             if (onSave) onSave();
@@ -1497,7 +1677,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (onSave) onSave();
             };
         }
-        var pop = L.popup({ maxWidth: 320, className: 'location-popup' }).setContent(content).setLatLng(latlng).openOn(window.courseMappingMap);
+        content.className = 'course-map-popup-form';
+        var pop = L.popup({ maxWidth: POPUP_MAX_WIDTH, className: 'location-popup' }).setContent(content).setLatLng(latlng).openOn(window.courseMappingMap);
         btnSave.onclick = function () {
             var newLat = parseFloat(inputLat.value);
             var newLon = parseFloat(inputLon.value);
@@ -1549,8 +1730,8 @@ document.addEventListener('DOMContentLoaded', function () {
             var c = coords[idx];
             var label = getSegmentBreakLabel(idx);
             var squareIcon = L.divIcon({
-                className: 'segment-pin-square',
-                html: '<div style="width:12px;height:12px;background:' + SEGMENT_PIN_COLOR + ';border:2px solid #2980b9;border-radius:0;"></div>',
+                className: 'segment-pin-circle',
+                html: '<div style="width:12px;height:12px;background:#fff;border:2px solid ' + ROUTE_COLOR + ';border-radius:50%;"></div>',
                 iconSize: [12, 12],
                 iconAnchor: [6, 6]
             });
@@ -1590,9 +1771,17 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (isEditMode) {
                     var btnWrap = document.createElement('div');
                     btnWrap.style.marginTop = '0.5rem';
+                    addEditLatLonButton(btnWrap, i, e.latlng, label, desc, function (d) {
+                        if (!currentCourse.segment_break_descriptions) currentCourse.segment_break_descriptions = {};
+                        currentCourse.segment_break_descriptions[i] = d;
+                    }, function () {
+                        renderSegmentPins();
+                        renderSegmentsList();
+                        updateCourseUI();
+                    });
                     var btnEdit = document.createElement('button');
                     btnEdit.type = 'button';
-                    btnEdit.textContent = 'Edit';
+                    btnEdit.textContent = 'Edit label';
                     btnEdit.style.marginRight = '6px';
                     btnEdit.style.marginTop = '6px';
                     var btnDel = document.createElement('button');
@@ -1689,7 +1878,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         };
                     }
                 }
-                var pop = L.popup({ maxWidth: 300, className: 'location-popup' }).setContent(content).setLatLng(e.latlng).openOn(window.courseMappingMap);
+                var pop = L.popup({ maxWidth: POPUP_MAX_WIDTH, className: 'location-popup' }).setContent(content).setLatLng(e.latlng).openOn(window.courseMappingMap);
             });
             segmentPinsLayer.addLayer(m);
         });
@@ -1933,9 +2122,8 @@ document.addEventListener('DOMContentLoaded', function () {
             var tipHtml = buildPopupRowsHtml([
                 { label: 'ID', value: locId },
                 { label: 'Label', value: loc.loc_label || getLocationTypeLabel(loc.loc_type) || 'Location' },
-                { label: 'Type', value: getLocationTypeLabel(loc.loc_type) },
-                { label: 'Description', value: loc.loc_description || '' }
-            ]) + (isEditMode ? '<div class="popup-row" style="font-size:0.75rem;color:#7f8c8d;">(drag to move)</div>' : '');
+                { label: 'Type', value: getLocationTypeLabel(loc.loc_type) }
+            ]) + (isEditMode ? '<div class="popup-row" style="font-size:0.75rem;color:#7f8c8d;">(drag to move; edit details in Locations table)</div>' : '');
             m.bindTooltip(tipHtml, { permanent: false, direction: 'top', offset: [0, -10], className: 'course-map-tooltip' });
             m.on('dragend', function () {
                 var ll = m.getLatLng();
@@ -1954,21 +2142,33 @@ document.addEventListener('DOMContentLoaded', function () {
             var locId = locEl.id != null ? String(locEl.id) : (idx + 1);
             var name = locEl.loc_label || getLocationTypeLabel(locEl.loc_type) || 'Location';
             var typeLabel = getLocationTypeLabel(locEl.loc_type);
-            var desc = locEl.loc_description || '';
+            var notesPreview = truncateNotesPreview(locEl.notes, 120);
                 var content = document.createElement('div');
                 content.innerHTML = buildPopupRowsHtml([
                     { label: 'ID', value: locId },
                     { label: 'Label', value: name },
                     { label: 'Type', value: typeLabel },
-                    { label: 'Description', value: desc }
+                    { label: 'Notes', value: notesPreview }
                 ]);
                 content.classList.add('course-map-popup-wrap');
                 if (isEditMode) {
                     var btnWrap = document.createElement('div');
                     btnWrap.style.marginTop = '0.5rem';
+                    var btnLatLon = document.createElement('button');
+                    btnLatLon.type = 'button';
+                    btnLatLon.textContent = 'Edit lat/lon';
+                    btnLatLon.onclick = function () {
+                        window.courseMappingMap.closePopup();
+                        openLocationLatLonEdit(locEl, e.latlng, function () {
+                            renderLocationPins();
+                            renderLocationsList();
+                            updateCourseUI();
+                        });
+                    };
+                    btnWrap.appendChild(btnLatLon);
                     var btnEdit = document.createElement('button');
                     btnEdit.type = 'button';
-                    btnEdit.textContent = 'Edit';
+                    btnEdit.textContent = 'Edit details';
                     btnEdit.style.marginRight = '6px';
                     var btnDel = document.createElement('button');
                     btnDel.type = 'button';
@@ -1979,7 +2179,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     btnEdit.onclick = function () {
                         window.courseMappingMap.closePopup();
                         var editContent = document.createElement('div');
-                    editContent.style.minWidth = '180px';
+                    editContent.className = 'course-map-popup-form';
                     var lblType = document.createElement('label');
                     lblType.textContent = 'Type';
                     editContent.appendChild(lblType);
@@ -2007,18 +2207,18 @@ document.addEventListener('DOMContentLoaded', function () {
                     input.style.marginBottom = '8px';
                     input.style.boxSizing = 'border-box';
                     editContent.appendChild(input);
-                    var lblDesc = document.createElement('label');
-                    lblDesc.textContent = 'Description (optional)';
-                    editContent.appendChild(lblDesc);
-                    var inputDesc = document.createElement('textarea');
-                    inputDesc.rows = 2;
-                    inputDesc.placeholder = 'Description';
-                    inputDesc.value = locEl.loc_description || '';
-                    inputDesc.style.display = 'block';
-                    inputDesc.style.width = '100%';
-                    inputDesc.style.marginBottom = '8px';
-                    inputDesc.style.boxSizing = 'border-box';
-                    editContent.appendChild(inputDesc);
+                    var lblNotes = document.createElement('label');
+                    lblNotes.textContent = 'Notes (optional, for loc sheets)';
+                    editContent.appendChild(lblNotes);
+                    var inputNotes = document.createElement('textarea');
+                    inputNotes.rows = 3;
+                    inputNotes.placeholder = 'Operational notes for resources at this location';
+                    inputNotes.value = locEl.notes || '';
+                    inputNotes.style.display = 'block';
+                    inputNotes.style.width = '100%';
+                    inputNotes.style.marginBottom = '8px';
+                    inputNotes.style.boxSizing = 'border-box';
+                    editContent.appendChild(inputNotes);
                     var btnSave = document.createElement('button');
                     btnSave.type = 'button';
                     btnSave.textContent = 'Save';
@@ -2028,11 +2228,12 @@ document.addEventListener('DOMContentLoaded', function () {
                     btnCancel.textContent = 'Cancel';
                     editContent.appendChild(btnSave);
                     editContent.appendChild(btnCancel);
-                    var editPop = L.popup({ maxWidth: 300, className: 'location-popup' }).setContent(editContent).setLatLng(e.latlng).openOn(window.courseMappingMap);
+                    var editPop = L.popup({ maxWidth: POPUP_MAX_WIDTH, className: 'location-popup' }).setContent(editContent).setLatLng(e.latlng).openOn(window.courseMappingMap);
                     btnSave.onclick = function () {
                         locEl.loc_type = sel.value || 'course';
                         locEl.loc_label = (input.value && input.value.trim()) ? input.value.trim() : '';
-                        locEl.loc_description = (inputDesc.value && inputDesc.value.trim()) ? inputDesc.value.trim() : '';
+                        locEl.notes = (inputNotes.value && inputNotes.value.trim()) ? inputNotes.value.trim() : '';
+                        if (locEl.loc_description != null) delete locEl.loc_description;
                         window.courseMappingMap.closePopup();
                         renderLocationPins();
                         renderLocationsList();
@@ -2051,7 +2252,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     updateCourseUI();
                 };
                 }
-                var pop = L.popup({ maxWidth: 300, className: 'location-popup' }).setContent(content).setLatLng(e.latlng).openOn(window.courseMappingMap);
+                var pop = L.popup({ maxWidth: POPUP_MAX_WIDTH, className: 'location-popup' }).setContent(content).setLatLng(e.latlng).openOn(window.courseMappingMap);
             });
             locationsLayer.addLayer(m);
         });
@@ -2079,7 +2280,15 @@ document.addEventListener('DOMContentLoaded', function () {
             var lon = typeof loc.lon === 'number' ? loc.lon : parseFloat(loc.lon);
             var tr = document.createElement('tr');
             var typeLabel = getLocationTypeLabel(loc.loc_type);
-            tr.innerHTML = '<td>' + typeLabel + '</td><td>' + (loc.loc_label || '') + '</td><td>' + (isNaN(lat) ? '' : lat.toFixed(5)) + '</td><td>' + (isNaN(lon) ? '' : lon.toFixed(5)) + '</td><td><button type="button" class="btn-remove-loc" data-index="' + i + '" style="font-size: 0.75rem;">Remove</button></td>';
+            var locId = loc.id != null ? String(loc.id) : String(i + 1);
+            tr.innerHTML =
+                '<td>' + escapeHtml(locId) + '</td>' +
+                '<td>' + escapeHtml(typeLabel) + '</td>' +
+                '<td>' + escapeHtml(loc.loc_label || '') + '</td>' +
+                '<td>' + escapeHtml(truncateNotesPreview(loc.notes, 80)) + '</td>' +
+                '<td>' + (isNaN(lat) ? '' : lat.toFixed(5)) + '</td>' +
+                '<td>' + (isNaN(lon) ? '' : lon.toFixed(5)) + '</td>' +
+                '<td><button type="button" class="btn-remove-loc" data-index="' + i + '">Remove</button></td>';
             tbody.appendChild(tr);
         });
         tbody.querySelectorAll('.btn-remove-loc').forEach(function (btn) {
@@ -2400,10 +2609,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 currentCourse.description = d;
                 try {
                     var courseIdToSave = currentCourseId;
-                    if (isConfigPackageMode) {
-                        courseIdToSave = configPackageId;
-                        currentCourse.id = configPackageId;
-                        currentCourse.config_id = configPackageId;
+                    if (isConfigPackageMode()) {
+                        courseIdToSave = resolveConfigPackageId();
+                        currentCourse.id = courseIdToSave;
+                        currentCourse.config_id = courseIdToSave;
                     } else if (!courseIdToSave) {
                         var createRes = await fetch('/api/courses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
                         var createData = await createRes.json();
@@ -2415,7 +2624,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     // Build payload with explicit geometry and turnaround_indices to ensure Same Route Back is persisted (Issue #732)
                     var toSave = JSON.parse(JSON.stringify({
                         id: courseIdToSave,
-                        config_id: isConfigPackageMode ? configPackageId : currentCourse.config_id,
+                        config_id: isConfigPackageMode() ? resolveConfigPackageId() : currentCourse.config_id,
                         name: currentCourse.name,
                         description: currentCourse.description,
                         segments: currentCourse.segments || [],
@@ -2431,8 +2640,8 @@ document.addEventListener('DOMContentLoaded', function () {
                         turnaround_descriptions: currentCourse.turnaround_descriptions || {},
                         flow_control_points: Array.isArray(currentCourse.flow_control_points) ? JSON.parse(JSON.stringify(currentCourse.flow_control_points)) : []
                     }));
-                    var saveUrl = isConfigPackageMode
-                        ? '/api/config/packages/' + encodeURIComponent(configPackageId) + '/course'
+                    var saveUrl = isConfigPackageMode()
+                        ? '/api/config/packages/' + encodeURIComponent(resolveConfigPackageId()) + '/course'
                         : '/api/courses/' + encodeURIComponent(courseIdToSave);
                     const res = await fetch(saveUrl, {
                         method: 'PUT',
@@ -2443,10 +2652,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     const data = await res.json();
                     if (!res.ok) throw new Error(data.detail || res.statusText);
                     if (data.ok && data.course) {
-                        var savedId = isConfigPackageMode ? configPackageId : data.course.id;
+                        var savedId = isConfigPackageMode() ? resolveConfigPackageId() : data.course.id;
                         setCourse(savedId, data.course);
                         clearDirty();
-                        if (!isConfigPackageMode) loadCourseList();
+                        if (!isConfigPackageMode()) loadCourseList();
                         console.log('Saved course:', savedId, data.course.name || '(no name)');
                     }
                 } catch (e) {
@@ -2819,17 +3028,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 input.style.marginBottom = '8px';
                 input.style.boxSizing = 'border-box';
                 content.appendChild(input);
-                var lblDesc = document.createElement('label');
-                lblDesc.textContent = 'Description (optional)';
-                content.appendChild(lblDesc);
-                var inputDesc = document.createElement('textarea');
-                inputDesc.rows = 2;
-                inputDesc.placeholder = 'Description';
-                inputDesc.style.display = 'block';
-                inputDesc.style.width = '100%';
-                inputDesc.style.marginBottom = '8px';
-                inputDesc.style.boxSizing = 'border-box';
-                content.appendChild(inputDesc);
                 var btnAdd = document.createElement('button');
                 btnAdd.type = 'button';
                 btnAdd.textContent = 'Add';
@@ -2839,16 +3037,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 btnCancel.textContent = 'Cancel';
                 content.appendChild(btnAdd);
                 content.appendChild(btnCancel);
-                var pop = L.popup({ maxWidth: 300, className: 'location-popup' }).setContent(content).setLatLng(e.latlng).openOn(window.courseMappingMap);
+                var pop = L.popup({ maxWidth: POPUP_MAX_WIDTH, className: 'location-popup' }).setContent(content).setLatLng(e.latlng).openOn(window.courseMappingMap);
                 btnAdd.onclick = function () {
                     var locType = sel.value || 'course';
                     var locLabel = (input.value && input.value.trim()) ? input.value.trim() : '';
-                    var locDesc = (inputDesc.value && inputDesc.value.trim()) ? inputDesc.value.trim() : '';
                     currentCourse.locations.push({
                         id: nextLocationId(),
                         loc_type: locType,
                         loc_label: locLabel,
-                        loc_description: locDesc,
+                        notes: '',
                         lat: e.latlng.lat,
                         lon: e.latlng.lng
                     });
@@ -2948,7 +3145,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (btnExport) {
             btnExport.addEventListener('click', async function () {
                 if (!currentCourseId || !currentCourse) return;
-                if (isConfigPackageMode) {
+                if (isConfigPackageMode()) {
                     if (!currentCourse.segments || currentCourse.segments.length === 0) {
                         alert('Add segment pins on the course line before exporting segments.csv.');
                         return;
@@ -2958,12 +3155,14 @@ document.addEventListener('DOMContentLoaded', function () {
                         return;
                     }
                     try {
-                        var url = '/api/config/packages/' + encodeURIComponent(configPackageId) + '/export/segments';
+                        var url = '/api/config/packages/' + encodeURIComponent(resolveConfigPackageId()) + '/export/segments';
                         var res = await fetch(url, { method: 'POST', credentials: 'same-origin' });
                         var data = await res.json();
                         if (!res.ok) throw new Error(data.detail || res.statusText);
-                        var msg = 'segments.csv exported to config package';
-                        if (data.backup_path) msg += ' (previous file backed up)';
+                        var msg = 'Exported to config package: segments.csv';
+                        if (data.location_count != null) msg += ', locations.csv (' + data.location_count + ' rows)';
+                        if (data.segments_backup_path) msg += ' (segments.csv backed up)';
+                        if (data.locations_backup_path) msg += ' (locations.csv backed up)';
                         alert(msg);
                     } catch (e) {
                         alert('Export failed: ' + (e.message || String(e)));
@@ -2978,7 +3177,7 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
 
-        if (isConfigPackageMode) {
+        if (isConfigPackageMode()) {
             applyConfigPackageUIMode();
             loadConfigPackageCourse();
         } else {
