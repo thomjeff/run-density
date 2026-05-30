@@ -2,6 +2,7 @@
 API routes for Race Configuration packages (config_id).
 
 Issue #756: List, create, and resolve packages under runflow/config/{config_id}/.
+Issue #757: GET/PUT course.json workspace per config_id.
 """
 
 import logging
@@ -15,9 +16,11 @@ from app.core.config_package import (
     create_config_package,
     import_runner_files_from_package,
     list_config_packages,
+    load_config_course,
     load_config_manifest,
     package_readiness,
     resolve_config_package_path,
+    save_config_course,
     update_config_package_metadata,
 )
 from app.core.config_package.storage import validate_config_id
@@ -40,6 +43,10 @@ class UpdateConfigPackageRequest(BaseModel):
 
 class ImportRunnersRequest(BaseModel):
     source_config_id: str = Field(..., min_length=1)
+
+
+class SaveConfigCourseRequest(BaseModel):
+    course: Dict[str, Any]
 
 
 @router.get("/api/config/packages")
@@ -138,6 +145,50 @@ async def api_update_config_package(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update config package: {e}",
+        )
+
+
+@router.get("/api/config/packages/{config_id}/course")
+async def api_load_config_course(
+    request: Request,
+    config_id: str,
+) -> JSONResponse:
+    """Load draw-first course workspace (course.json) for a config package."""
+    require_auth(request)
+    try:
+        course = load_config_course(config_id)
+        return JSONResponse(
+            content={"ok": True, "config_id": config_id, "course": course}
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.put("/api/config/packages/{config_id}/course")
+async def api_save_config_course(
+    request: Request,
+    config_id: str,
+    body: SaveConfigCourseRequest,
+) -> JSONResponse:
+    """Save course.json for a config package (validated workspace schema)."""
+    require_auth(request)
+    try:
+        save_config_course(config_id, body.course)
+        course = load_config_course(config_id)
+        return JSONResponse(
+            content={"ok": True, "config_id": config_id, "course": course}
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to save config package course")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save course: {e}",
         )
 
 

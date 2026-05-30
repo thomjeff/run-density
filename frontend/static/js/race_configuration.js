@@ -69,6 +69,35 @@
         if (workspace) workspace.style.display = 'none';
     }
 
+    function setMetaDisplayValues(label, description) {
+        const labelEl = document.getElementById('race-config-display-label');
+        const descEl = document.getElementById('race-config-display-description');
+        const name = (label || '').trim();
+        const desc = (description || '').trim();
+        if (labelEl) {
+            labelEl.textContent = name || '(no name)';
+            labelEl.classList.toggle('meta-value-empty', !name);
+        }
+        if (descEl) {
+            descEl.textContent = desc || '(none)';
+            descEl.classList.toggle('meta-value-empty', !desc);
+        }
+    }
+
+    function setMetaViewMode(mode) {
+        const displayBlock = document.getElementById('race-config-meta-display');
+        const editableBlock = document.getElementById('race-config-meta-editable');
+        const editBtn = document.getElementById('race-config-edit-meta');
+        const saveBtn = document.getElementById('race-config-save-meta');
+        const statusEl = document.getElementById('race-config-save-status');
+        const isEdit = mode === 'edit';
+        if (displayBlock) displayBlock.style.display = isEdit ? 'none' : 'block';
+        if (editableBlock) editableBlock.style.display = isEdit ? 'block' : 'none';
+        if (editBtn) editBtn.style.display = isEdit ? 'none' : 'inline-block';
+        if (saveBtn) saveBtn.style.display = isEdit ? 'inline-block' : 'none';
+        if (!isEdit && statusEl) statusEl.style.display = 'none';
+    }
+
     function showWorkspace(manifest, configId, manifestEditable) {
         const entry = document.getElementById('race-config-entry');
         const workspace = document.getElementById('race-config-workspace');
@@ -76,7 +105,9 @@
         const labelInput = document.getElementById('race-config-edit-label');
         const descInput = document.getElementById('race-config-edit-description');
         const editableBlock = document.getElementById('race-config-meta-editable');
+        const displayBlock = document.getElementById('race-config-meta-display');
         const readonlyMsg = document.getElementById('race-config-meta-readonly');
+        const editBtn = document.getElementById('race-config-edit-meta');
         const saveBtn = document.getElementById('race-config-save-meta');
         const statusEl = document.getElementById('race-config-save-status');
 
@@ -86,20 +117,34 @@
         if (idEl) idEl.textContent = configId;
         if (statusEl) statusEl.style.display = 'none';
 
+        const label = (manifest && manifest.label) || configId;
+        const description = (manifest && manifest.description) || '';
         const canEdit = manifestEditable !== false;
-        if (editableBlock) editableBlock.style.display = canEdit ? 'block' : 'none';
-        if (readonlyMsg) readonlyMsg.style.display = canEdit ? 'none' : 'block';
-        if (saveBtn) saveBtn.style.display = canEdit ? 'inline-block' : 'none';
 
-        if (canEdit && labelInput) {
-            labelInput.value = (manifest && manifest.label) || configId;
-        }
-        if (canEdit && descInput) {
-            descInput.value = (manifest && manifest.description) || '';
+        if (canEdit && labelInput) labelInput.value = label;
+        if (canEdit && descInput) descInput.value = description;
+
+        if (readonlyMsg) readonlyMsg.style.display = canEdit ? 'none' : 'block';
+        if (displayBlock) displayBlock.style.display = canEdit ? 'none' : 'block';
+        if (editableBlock) editableBlock.style.display = 'none';
+        if (editBtn) editBtn.style.display = 'none';
+        if (saveBtn) saveBtn.style.display = 'none';
+
+        if (canEdit) {
+            setMetaDisplayValues(label, description);
+            setMetaViewMode('display');
+        } else {
+            setMetaDisplayValues(configId, '');
         }
 
         if (window.updateConfigNavLinks) {
             window.updateConfigNavLinks(configId);
+        }
+        syncCourseMappingConfigId(configId);
+        if (getTab() === 'course' && window.courseMappingMap) {
+            setTimeout(function () {
+                window.courseMappingMap.invalidateSize();
+            }, 150);
         }
     }
 
@@ -131,15 +176,20 @@
             if (!resp.ok) {
                 throw new Error(data.detail || 'Failed to save');
             }
+            const savedLabel =
+                (data.manifest && data.manifest.label) || label;
+            const savedDescription =
+                (data.manifest && data.manifest.description) || description || '';
+            if (labelInput) labelInput.value = savedLabel;
+            if (descInput) descInput.value = savedDescription;
+            setMetaDisplayValues(savedLabel, savedDescription);
+            setMetaViewMode('display');
             if (statusEl) {
                 statusEl.textContent = 'Saved.';
                 statusEl.style.display = 'inline';
-            }
-            if (data.manifest && labelInput) {
-                labelInput.value = data.manifest.label || label;
-            }
-            if (data.manifest && descInput) {
-                descInput.value = data.manifest.description || '';
+                setTimeout(function () {
+                    if (statusEl) statusEl.style.display = 'none';
+                }, 2000);
             }
         } catch (err) {
             alert(err.message || String(err));
@@ -160,6 +210,25 @@
         if (runnersPanel) runnersPanel.style.display = tab === 'runners' ? 'block' : 'none';
         if (tab === 'runners' && window.initRunnersBaseline) {
             window.initRunnersBaseline();
+        }
+        if (tab === 'course' && window.courseMappingMap) {
+            setTimeout(function () {
+                window.courseMappingMap.invalidateSize();
+            }, 100);
+        }
+    }
+
+    function syncCourseMappingConfigId(configId) {
+        var root = document.getElementById('course-mapping-root');
+        if (root) {
+            if (configId) root.dataset.configId = configId;
+            else delete root.dataset.configId;
+        }
+        var link = document.getElementById('race-config-course-fullpage-link');
+        if (link) {
+            link.href = configId
+                ? '/course-mapping?config_id=' + encodeURIComponent(configId)
+                : '/course-mapping';
         }
     }
 
@@ -354,6 +423,13 @@
 
         const saveMetaBtn = document.getElementById('race-config-save-meta');
         if (saveMetaBtn) saveMetaBtn.addEventListener('click', savePackageMetadata);
+
+        const editMetaBtn = document.getElementById('race-config-edit-meta');
+        if (editMetaBtn) {
+            editMetaBtn.addEventListener('click', function () {
+                setMetaViewMode('edit');
+            });
+        }
 
         const changePkg = document.getElementById('race-config-change-package');
         if (changePkg) {
