@@ -70,6 +70,22 @@
         resize: vertical;
         min-height: 2.5rem;
     }
+    .race-config-meta-display .meta-row {
+        margin-bottom: 0.35rem;
+        font-size: 1rem;
+        color: #2c3e50;
+    }
+    .race-config-meta-display .meta-row:last-child {
+        margin-bottom: 0;
+    }
+    .race-config-meta-display .meta-label {
+        font-weight: 600;
+        margin-right: 0.35rem;
+    }
+    .race-config-meta-display .meta-value-empty {
+        color: #95a5a6;
+        font-style: italic;
+    }
     .race-config-meta-readonly {
         color: #7f8c8d;
         font-size: 0.875rem;
@@ -147,11 +163,22 @@
         <div class="banner-top">
             <code id="race-config-package-id"></code>
             <div style="display: flex; gap: 0.5rem; align-items: center; flex-shrink: 0;">
-                <button type="button" id="race-config-save-meta" style="padding: 0.4rem 0.75rem; border: 1px solid #2980b9; border-radius: 4px; background: #3498db; color: #fff; font-size: 0.875rem; font-weight: 600; cursor: pointer;">Save</button>
+                <button type="button" id="race-config-edit-meta" style="display: none; padding: 0.4rem 0.75rem; border: 1px solid #bdc3c7; border-radius: 4px; background: #fff; font-size: 0.875rem; cursor: pointer;">Edit</button>
+                <button type="button" id="race-config-save-meta" style="display: none; padding: 0.4rem 0.75rem; border: 1px solid #2980b9; border-radius: 4px; background: #3498db; color: #fff; font-size: 0.875rem; font-weight: 600; cursor: pointer;">Save</button>
                 <button type="button" id="race-config-change-package" style="padding: 0.35rem 0.75rem; font-size: 0.875rem; cursor: pointer;">Change package</button>
             </div>
         </div>
-        <div id="race-config-meta-editable">
+        <div id="race-config-meta-display" class="race-config-meta-display" style="display: none;">
+            <div class="meta-row">
+                <span class="meta-label">Name</span>
+                <span id="race-config-display-label"></span>
+            </div>
+            <div class="meta-row">
+                <span class="meta-label">Description</span>
+                <span id="race-config-display-description"></span>
+            </div>
+        </div>
+        <div id="race-config-meta-editable" style="display: none;">
             <label for="race-config-edit-label">Name</label>
             <input type="text" id="race-config-edit-label" maxlength="120" placeholder="Package name">
             <label for="race-config-edit-description" style="margin-top: 0.75rem;">Description</label>
@@ -191,5 +218,5 @@
 <script src="/static/js/map/base_map.js"></script>
 <script src="/static/js/map/course_mapping.js?v=757a"></script>
 <script src="/static/js/runners_baseline.js?v=756i"></script>
-<script src="/static/js/race_configuration.js?v=757a"></script>
+<script src="/static/js/race_configuration.js?v=757b"></script>
 {% endblock %}
