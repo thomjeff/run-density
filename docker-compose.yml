@@ -42,7 +42,7 @@ services:
       # - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
       # - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
     # Override CMD for coverage-enabled dev mode with --parallel-mode to capture server process
-    command: python -m coverage run --parallel-mode --rcfile=/app/coverage.rc -m uvicorn app.main:app --host 0.0.0.0 --port 8080
+    command: python -m coverage run --parallel-mode --rcfile=/app/coverage.rc -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
     stdin_open: true
     tty: true
     # Issue #503: Memory and CPU limits for performance optimization

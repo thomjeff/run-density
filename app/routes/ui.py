@@ -478,12 +478,26 @@ async def analysis_page(request: Request):
 @router.get("/create-files", response_class=HTMLResponse)
 async def create_files_page(request: Request):
     """
-    Create new runner data files page for baseline utility.
-    
-    Issue #676: New page for creating scenario-based runner files.
-    
-    Returns:
-        HTML: Baseline utility form
+    Legacy URL — redirect to Race Configuration Runners tab.
+
+    Issue #756: Create Files moved under /config?tab=runners
+    """
+    auth_redirect = require_auth(request)
+    if auth_redirect:
+        return auth_redirect
+    config_id = request.query_params.get("config_id")
+    target = "/config?tab=runners"
+    if config_id:
+        target = f"/config?tab=runners&config_id={config_id.strip()}"
+    return RedirectResponse(url=target, status_code=302)
+
+
+@router.get("/config", response_class=HTMLResponse)
+async def race_configuration_page(request: Request):
+    """
+    Race Configuration hub: config packages, course workspace, runners tab.
+
+    Issue #756
     """
     auth_redirect = require_auth(request)
     if auth_redirect:
@@ -491,7 +505,7 @@ async def create_files_page(request: Request):
     meta = get_stub_meta()
     return templates.TemplateResponse(
         request=request,
-        name="pages/create_files.html",
+        name="pages/race_configuration.html",
         context={"request": request, "meta": meta},
     )
 
