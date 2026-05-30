@@ -268,19 +268,21 @@ def build_flow_csv(course: Dict[str, Any]) -> str:
 
 
 def build_locations_csv(course: Dict[str, Any]) -> str:
-    """Build locations.csv from course.locations (minimal columns)."""
+    """Build locations.csv from course.locations (minimal columns; notes for loc sheets)."""
     locations = course.get("locations") or []
     out = io.StringIO()
     w = csv.writer(out)
-    w.writerow(["loc_id", "loc_label", "loc_type", "loc_description", "lat", "lon"])
+    w.writerow(["loc_id", "loc_label", "loc_type", "lat", "lon", "notes"])
     for i, loc in enumerate(locations):
         loc_id = loc.get("id", i + 1)
         loc_label = loc.get("loc_label", "")
         loc_type = loc.get("loc_type", "course")
-        loc_description = loc.get("loc_description", "")
         lat = loc.get("lat", "")
         lon = loc.get("lon", "")
-        w.writerow([loc_id, loc_label, loc_type, loc_description, lat, lon])
+        notes = loc.get("notes", "")
+        if not notes and loc.get("loc_description"):
+            notes = loc.get("loc_description", "")
+        w.writerow([loc_id, loc_label, loc_type, lat, lon, notes])
     return out.getvalue()
 
 
