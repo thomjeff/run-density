@@ -27,7 +27,10 @@ from app.core.config_package import (
     update_config_package_metadata,
 )
 from app.core.locations.suggest_events import suggest_location_events
-from app.core.config_package.storage import validate_config_id
+from app.core.config_package.storage import validate_config_course_data, validate_config_id
+from app.core.course.export import enrich_segments_event_distances
+from app.core.course.waypoints import normalize_course_waypoints
+from app.utils.constants import COURSE_EVENT_IDS
 from app.utils.auth import require_auth
 
 logger = logging.getLogger(__name__)
@@ -209,6 +212,29 @@ async def api_save_config_course(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to save course: {e}",
         )
+
+
+@router.post("/api/config/packages/{config_id}/course/preview-resolve")
+async def api_preview_resolve_config_course(
+    request: Request,
+    config_id: str,
+    body: SaveConfigCourseRequest,
+) -> JSONResponse:
+    """Resolve segment_defs + waypoints to segments without writing course.json."""
+    require_auth(request)
+    try:
+        data = validate_config_course_data(body.course, config_id)
+        normalized = normalize_course_waypoints(dict(data))
+        segments = normalized.get("segments") or []
+        if segments:
+            enrich_segments_event_distances(segments, COURSE_EVENT_IDS)
+        return JSONResponse(
+            content={"ok": True, "config_id": config_id, "course": normalized}
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/api/config/packages/{config_id}/export/segments")

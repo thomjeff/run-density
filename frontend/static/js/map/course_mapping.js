@@ -210,8 +210,275 @@ document.addEventListener('DOMContentLoaded', function () {
             turnaround_descriptions: currentCourse.turnaround_descriptions || {},
             flow_control_points: Array.isArray(currentCourse.flow_control_points)
                 ? JSON.parse(JSON.stringify(currentCourse.flow_control_points))
+                : [],
+            waypoints: Array.isArray(currentCourse.waypoints)
+                ? JSON.parse(JSON.stringify(currentCourse.waypoints))
+                : [],
+            segment_defs: Array.isArray(currentCourse.segment_defs)
+                ? JSON.parse(JSON.stringify(currentCourse.segment_defs))
                 : []
         };
+    }
+
+    function usesSegmentPlanner() {
+        return !!(currentCourse && currentCourse.segment_defs && currentCourse.segment_defs.length);
+    }
+
+    function syncWaypointsFromSegmentPins() {
+        if (!currentCourse || !currentCourse.geometry || !currentCourse.geometry.coordinates) return;
+        var coords = currentCourse.geometry.coordinates;
+        if (coords.length < 2) return;
+        var labels = currentCourse.segment_break_labels || {};
+        var breaks = (currentCourse.segment_breaks || []).slice().sort(function (a, b) { return a - b; })
+            .filter(function (i) { return i > 0 && i < coords.length; });
+        var waypoints = [
+            {
+                id: 'wp-start',
+                label: 'Start',
+                lat: coords[0][1],
+                lon: coords[0][0],
+                kind: 'start',
+                path_occurrence: 1
+            }
+        ];
+        breaks.forEach(function (bi) {
+            var c = coords[bi];
+            waypoints.push({
+                id: 'wp-pin-' + bi,
+                label: (labels[bi] || labels['' + bi] || '').trim() || ('Pin ' + bi),
+                lat: c[1],
+                lon: c[0],
+                kind: 'pin',
+                path_occurrence: 1
+            });
+        });
+        var last = coords[coords.length - 1];
+        waypoints.push({
+            id: 'wp-finish',
+            label: 'Finish',
+            lat: last[1],
+            lon: last[0],
+            kind: 'finish',
+            path_occurrence: 1
+        });
+        currentCourse.waypoints = waypoints;
+        if (!currentCourse.segment_defs || !currentCourse.segment_defs.length) {
+            var wpAt = {};
+            waypoints.forEach(function (wp) {
+                if (wp.id.indexOf('wp-pin-') === 0) {
+                    wpAt[parseInt(wp.id.replace('wp-pin-', ''), 10)] = wp.id;
+                }
+            });
+            wpAt[0] = 'wp-start';
+            wpAt[coords.length - 1] = 'wp-finish';
+            var defs = [];
+            (currentCourse.segments || []).forEach(function (seg, i) {
+                var sid = seg.start_index != null ? seg.start_index : 0;
+                var eid = seg.end_index != null ? seg.end_index : coords.length - 1;
+                defs.push({
+                    id: 'sd-' + (seg.seg_id || (i + 1)),
+                    from_waypoint_id: wpAt[sid] || 'wp-start',
+                    to_waypoint_id: wpAt[eid] || 'wp-finish',
+                    events: (seg.events || []).slice(),
+                    seg_label: (seg.seg_label || '').trim() || ('Segment ' + (i + 1)),
+                    width_m: seg.width_m != null ? seg.width_m : 3,
+                    schema: seg.schema || 'on_course_open',
+                    direction: seg.direction || 'uni',
+                    description: (seg.description || '').trim()
+                });
+            });
+            currentCourse.segment_defs = defs;
+        }
+        setDirty();
+        renderWaypointsList();
+        renderSegmentPlannerList();
+    }
+
+    function renderWaypointsList() {
+        var card = document.getElementById('waypoints-card');
+        var wrap = document.getElementById('waypoints-table-wrap');
+        var tbody = document.getElementById('waypoints-tbody');
+        var syncBtn = document.getElementById('btn-sync-waypoints');
+        if (!card || !tbody) return;
+        var show = isConfigPackageMode() && currentCourse && currentCourse.geometry && currentCourse.geometry.coordinates && currentCourse.geometry.coordinates.length >= 2;
+        card.style.display = show ? 'block' : 'none';
+        if (!show) return;
+        if (syncBtn) syncBtn.disabled = !isEditMode;
+        var waypoints = currentCourse.waypoints || [];
+        if (!waypoints.length) {
+            if (wrap) wrap.style.display = 'none';
+            return;
+        }
+        if (wrap) wrap.style.display = 'block';
+        tbody.innerHTML = '';
+        waypoints.forEach(function (wp) {
+            var tr = document.createElement('tr');
+            tr.innerHTML = '<td>' + escapeHtml(wp.label || '') + '</td>'
+                + '<td>' + escapeHtml(wp.kind || 'pin') + '</td>'
+                + '<td>' + (wp.lat != null ? Number(wp.lat).toFixed(5) : '') + '</td>'
+                + '<td>' + (wp.lon != null ? Number(wp.lon).toFixed(5) : '') + '</td>';
+            tbody.appendChild(tr);
+        });
+    }
+
+    function renderSegmentPlannerList() {
+        var card = document.getElementById('segment-planner-card');
+        var wrap = document.getElementById('segment-planner-table-wrap');
+        var tbody = document.getElementById('segment-planner-tbody');
+        var addBtn = document.getElementById('btn-add-segment-def');
+        var updateBtn = document.getElementById('btn-update-segment-defs');
+        if (!card || !tbody) return;
+        var show = isConfigPackageMode() && currentCourse && currentCourse.geometry && currentCourse.geometry.coordinates && currentCourse.geometry.coordinates.length >= 2;
+        card.style.display = show ? 'block' : 'none';
+        if (!show) return;
+        var editable = isEditMode;
+        if (addBtn) addBtn.disabled = !editable;
+        if (updateBtn) updateBtn.disabled = !editable;
+        var waypoints = currentCourse.waypoints || [];
+        var defs = currentCourse.segment_defs || [];
+        if (!waypoints.length) {
+            if (wrap) wrap.style.display = 'none';
+            return;
+        }
+        if (wrap) wrap.style.display = 'block';
+        if (!defs.length && editable) {
+            currentCourse.segment_defs = [{
+                id: 'sd-1',
+                from_waypoint_id: waypoints[0].id,
+                to_waypoint_id: waypoints[waypoints.length - 1].id,
+                events: (EVENT_CHOICES || []).map(function (e) { return e.value || e; }),
+                seg_label: 'Segment 1'
+            }];
+            defs = currentCourse.segment_defs;
+        }
+        tbody.innerHTML = '';
+        defs.forEach(function (sd, idx) {
+            var tr = document.createElement('tr');
+            var tdFrom = document.createElement('td');
+            var selFrom = document.createElement('select');
+            selFrom.disabled = !editable;
+            waypoints.forEach(function (wp) {
+                var opt = document.createElement('option');
+                opt.value = wp.id;
+                opt.textContent = wp.label || wp.id;
+                if (wp.id === sd.from_waypoint_id) opt.selected = true;
+                selFrom.appendChild(opt);
+            });
+            selFrom.onchange = function () {
+                sd.from_waypoint_id = selFrom.value;
+                setDirty();
+            };
+            tdFrom.appendChild(selFrom);
+            var tdTo = document.createElement('td');
+            var selTo = document.createElement('select');
+            selTo.disabled = !editable;
+            waypoints.forEach(function (wp) {
+                var opt = document.createElement('option');
+                opt.value = wp.id;
+                opt.textContent = wp.label || wp.id;
+                if (wp.id === sd.to_waypoint_id) opt.selected = true;
+                selTo.appendChild(opt);
+            });
+            selTo.onchange = function () {
+                sd.to_waypoint_id = selTo.value;
+                setDirty();
+            };
+            tdTo.appendChild(selTo);
+            var tdLabel = document.createElement('td');
+            var inpLabel = document.createElement('input');
+            inpLabel.type = 'text';
+            inpLabel.value = sd.seg_label || '';
+            inpLabel.disabled = !editable;
+            inpLabel.style.width = '100%';
+            inpLabel.oninput = function () {
+                sd.seg_label = inpLabel.value;
+                setDirty();
+            };
+            tdLabel.appendChild(inpLabel);
+            var tdEv = document.createElement('td');
+            var evWrap = document.createElement('div');
+            evWrap.style.display = 'flex';
+            evWrap.style.flexWrap = 'wrap';
+            evWrap.style.gap = '0.35rem';
+            (EVENT_CHOICES || []).forEach(function (ev) {
+                var eid = ev.value || ev;
+                var lbl = document.createElement('label');
+                lbl.style.fontWeight = 'normal';
+                lbl.style.fontSize = '0.8rem';
+                var cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.disabled = !editable;
+                cb.checked = (sd.events || []).indexOf(eid) >= 0;
+                cb.onchange = function () {
+                    if (!sd.events) sd.events = [];
+                    if (cb.checked) {
+                        if (sd.events.indexOf(eid) < 0) sd.events.push(eid);
+                    } else {
+                        sd.events = sd.events.filter(function (x) { return x !== eid; });
+                    }
+                    setDirty();
+                };
+                lbl.appendChild(cb);
+                lbl.appendChild(document.createTextNode(' ' + (ev.label || eid)));
+                evWrap.appendChild(lbl);
+            });
+            tdEv.appendChild(evWrap);
+            var tdDel = document.createElement('td');
+            if (editable) {
+                var btnDel = document.createElement('button');
+                btnDel.type = 'button';
+                btnDel.textContent = 'Remove';
+                btnDel.onclick = function () {
+                    currentCourse.segment_defs.splice(idx, 1);
+                    setDirty();
+                    renderSegmentPlannerList();
+                };
+                tdDel.appendChild(btnDel);
+            }
+            tr.appendChild(tdFrom);
+            tr.appendChild(tdTo);
+            tr.appendChild(tdLabel);
+            tr.appendChild(tdEv);
+            tr.appendChild(tdDel);
+            tbody.appendChild(tr);
+        });
+    }
+
+    function previewResolveSegmentPlanner() {
+        var pkgId = resolveConfigPackageId();
+        if (!pkgId || !currentCourse) return Promise.reject(new Error('No package loaded'));
+        var payload = buildCourseSavePayload(pkgId);
+        return fetch('/api/config/packages/' + encodeURIComponent(pkgId) + '/course/preview-resolve', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ course: payload })
+        }).then(function (res) {
+            return res.json().then(function (data) {
+                if (!res.ok) throw new Error(data.detail || res.statusText);
+                return data;
+            });
+        });
+    }
+
+    function applySegmentPlannerToCourse() {
+        return previewResolveSegmentPlanner().then(function (data) {
+            if (data && data.course) {
+                currentCourse.segments = data.course.segments || currentCourse.segments;
+                currentCourse.segment_breaks = data.course.segment_breaks || currentCourse.segment_breaks;
+                currentCourse.segment_break_labels = data.course.segment_break_labels || currentCourse.segment_break_labels;
+                currentCourse.waypoints = data.course.waypoints || currentCourse.waypoints;
+                currentCourse.segment_defs = data.course.segment_defs || currentCourse.segment_defs;
+                setDirty();
+                renderCourseLine();
+                renderSegmentPins();
+                renderSegmentsList();
+                renderWaypointsList();
+                renderSegmentPlannerList();
+            }
+        }).catch(function (e) {
+            alert('Could not update segments: ' + (e.message || String(e)));
+        });
     }
 
     function persistConfigPackageResources() {
@@ -537,6 +804,8 @@ document.addEventListener('DOMContentLoaded', function () {
         setEditMode(isEditMode);
         updateManageResourcesButton();
         updateExportButton();
+        renderWaypointsList();
+        renderSegmentPlannerList();
     }
 
     function setCourse(id, course) {
@@ -576,7 +845,11 @@ document.addEventListener('DOMContentLoaded', function () {
         renderCourseLine();
         renderSegmentPins();
         renderLocationPins();
-        syncSegmentsFromBreaks();
+        if (!usesSegmentPlanner()) {
+            syncSegmentsFromBreaks();
+        }
+        renderWaypointsList();
+        renderSegmentPlannerList();
         renderSegmentsList();
         renderLocationsList();
         renderStartFinishIcons();
@@ -3988,6 +4261,36 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var btnUndo = document.getElementById('btn-undo-point');
         if (btnUndo) btnUndo.addEventListener('click', undoLastPoint);
+
+        var btnSyncWaypoints = document.getElementById('btn-sync-waypoints');
+        if (btnSyncWaypoints) {
+            btnSyncWaypoints.addEventListener('click', function () {
+                syncWaypointsFromSegmentPins();
+            });
+        }
+        var btnAddSegmentDef = document.getElementById('btn-add-segment-def');
+        if (btnAddSegmentDef) {
+            btnAddSegmentDef.addEventListener('click', function () {
+                if (!currentCourse || !currentCourse.waypoints || !currentCourse.waypoints.length) return;
+                var wps = currentCourse.waypoints;
+                if (!currentCourse.segment_defs) currentCourse.segment_defs = [];
+                currentCourse.segment_defs.push({
+                    id: 'sd-' + (currentCourse.segment_defs.length + 1),
+                    from_waypoint_id: wps[0].id,
+                    to_waypoint_id: wps[wps.length - 1].id,
+                    events: (EVENT_CHOICES || []).map(function (e) { return e.value || e; }),
+                    seg_label: 'Segment ' + (currentCourse.segment_defs.length + 1)
+                });
+                setDirty();
+                renderSegmentPlannerList();
+            });
+        }
+        var btnUpdateSegmentDefs = document.getElementById('btn-update-segment-defs');
+        if (btnUpdateSegmentDefs) {
+            btnUpdateSegmentDefs.addEventListener('click', function () {
+                applySegmentPlannerToCourse();
+            });
+        }
 
         var btnSameRouteBack = document.getElementById('btn-same-route-back');
         if (btnSameRouteBack) {

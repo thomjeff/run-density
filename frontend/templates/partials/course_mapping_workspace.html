@@ -72,9 +72,44 @@
         </div>
     </div>
 
+    <section class="course-derived-section" id="waypoints-card" style="display: none;">
+        <h4 class="course-derived-heading">Waypoints</h4>
+        <p class="course-derived-empty" style="margin-bottom: 0.5rem;">Named places on the course (Issue #767). Use the segment planner below to define legs by waypoint instead of invisible vertices.</p>
+        <div class="course-planner-toolbar" style="margin-bottom: 0.5rem;">
+            <button type="button" id="btn-sync-waypoints" disabled title="Build waypoints from Start, segment pins, and Finish">Sync from segment pins</button>
+        </div>
+        <div id="waypoints-table-wrap" style="display: none;">
+            <table id="waypoints-table" class="course-planner-table" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+                <thead>
+                    <tr><th>Label</th><th>Kind</th><th>Lat</th><th>Lon</th></tr>
+                </thead>
+                <tbody id="waypoints-tbody"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="course-derived-section" id="segment-planner-card" style="display: none;">
+        <h4 class="course-derived-heading">Segment planner</h4>
+        <p class="course-derived-empty" style="margin-bottom: 0.5rem;">Define segments by From → To waypoint and events. Click <strong>Update segments</strong> to apply to the map (save the package to persist).</p>
+        <div class="course-planner-toolbar" style="margin-bottom: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
+            <button type="button" id="btn-add-segment-def" disabled>Add segment</button>
+            <button type="button" id="btn-update-segment-defs" disabled class="primary">Update segments</button>
+        </div>
+        <div id="segment-planner-table-wrap" style="display: none;">
+            <div class="scrollable-table-container segments-table-scroll" style="max-height: 22vh;">
+                <table id="segment-planner-table" class="table-sticky-header course-planner-table" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+                    <thead>
+                        <tr><th>From</th><th>To</th><th>Label</th><th>Events</th><th></th></tr>
+                    </thead>
+                    <tbody id="segment-planner-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
     <section class="course-derived-section" id="segments-card" style="display: none;">
-        <h4 class="course-derived-heading">Segments</h4>
-        <p id="segments-empty" class="course-derived-empty">Add segment pins on the course line to split it into segments. Click a row to zoom the map to that leg; use From/To pin links to open a pin.</p>
+        <h4 class="course-derived-heading">Segments (resolved)</h4>
+        <p id="segments-empty" class="course-derived-empty">Add segment pins or use the segment planner above. Click a row to zoom the map to that leg; use From/To pin links to open a pin.</p>
         <div id="segments-table-wrap" style="display: none;">
             <div class="scrollable-table-container segments-table-scroll" style="max-height: 25vh;">
                 <table id="segments-table" class="table-sticky-header" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">

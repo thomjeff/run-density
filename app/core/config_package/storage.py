@@ -24,6 +24,7 @@ from app.core.locations.schema import (
     normalize_resource_registry,
 )
 from app.io.loader import load_segments
+from app.core.course.waypoints import normalize_course_waypoints
 from app.utils.constants import COURSE_EVENT_IDS
 from app.utils.run_id import generate_run_id, get_runflow_root
 
@@ -36,6 +37,8 @@ _COURSE_LIST_FIELDS = (
     "segment_breaks",
     "turnaround_indices",
     "flow_control_points",
+    "waypoints",
+    "segment_defs",
 )
 _COURSE_DICT_FIELDS = (
     "segment_break_labels",
@@ -225,6 +228,7 @@ def load_config_course(config_id: str) -> Dict[str, Any]:
     data.pop("events", None)
     resource_codes = load_package_resource_codes(config_id)
     _normalize_course_locations(data, resource_codes)
+    data = normalize_course_waypoints(data)
     return data
 
 
@@ -241,6 +245,7 @@ def save_config_course(config_id: str, course_data: Dict[str, Any]) -> Path:
     data = validate_config_course_data(course_data, cid)
     resource_codes = load_package_resource_codes(cid)
     _normalize_course_locations(data, resource_codes)
+    data = normalize_course_waypoints(dict(data))
 
     data = dict(data)
     data["id"] = cid
@@ -282,6 +287,8 @@ def default_course_json(config_id: str) -> Dict[str, Any]:
         "end_description": "",
         "turnaround_descriptions": {},
         "flow_control_points": [],
+        "waypoints": [],
+        "segment_defs": [],
     }
 
 
