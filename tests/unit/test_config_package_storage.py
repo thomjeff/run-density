@@ -71,11 +71,15 @@ def test_update_config_package_metadata(tmp_path, monkeypatch):
     )
     result = create_config_package("Original", "First desc")
     config_id = result["config_id"]
-    updated = update_config_package_metadata(config_id, "Renamed", "New desc")
+    updated = update_config_package_metadata(config_id, "Renamed", "New desc", "sun")
     assert updated["label"] == "Renamed"
     manifest = load_config_manifest(config_id)
     assert manifest["label"] == "Renamed"
     assert manifest["description"] == "New desc"
+    assert manifest["event_day"] == "sun"
+
+    with pytest.raises(ValueError, match="event_day must be one of"):
+        update_config_package_metadata(config_id, "Renamed", "New desc", "tuesday")
     course = json.loads((tmp_path / config_id / "course.json").read_text())
     assert course["name"] == "Renamed"
     assert course["description"] == "New desc"

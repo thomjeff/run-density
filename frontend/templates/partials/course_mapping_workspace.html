@@ -1,13 +1,45 @@
 <div id="course-mapping-root">
-<div class="card" id="course-map-card">
-    <div id="course-map-header" style="margin-bottom: 0.5rem; position: relative;">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem;">
-            <div style="flex: 1; min-width: 0;">
-                <div id="course-map-id" style="font-size: 0.8rem; color: #7f8c8d; margin-bottom: 0.25rem;"></div>
-                <div style="margin-bottom: 0.25rem;"><span class="course-label">Course Name:</span> <span id="course-map-name-text"></span><input type="text" id="course-map-name" placeholder="Course name" maxlength="255" style="display: none; width: 100%; max-width: 400px; padding: 0.35rem 0.5rem; font-size: 1rem; font-weight: 600; color: #2c3e50; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;" /></div>
-                <div style="width: 100%;"><span class="course-label">Description:</span> <span id="course-map-description-text"></span><textarea id="course-map-description" placeholder="Course description (optional)" maxlength="255" rows="2" style="display: none; width: 100%; min-height: 2.5em; padding: 0.35rem 0.5rem; font-size: 0.875rem; color: #34495e; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; resize: none; overflow: hidden; font-family: inherit;"></textarea></div>
+
+<div class="card config-package-details-card" id="config-package-details-card" style="display: none; margin-bottom: 1rem;">
+    <div class="config-package-details-body">
+        <div class="config-package-field config-package-field-id">
+            <span class="config-package-label">Package ID</span>
+            <code id="course-map-id" class="config-package-id-value"></code>
+        </div>
+        <div class="config-package-field">
+            <span class="config-package-label">Name</span>
+            <span id="course-map-name-text" class="config-package-value"></span>
+            <input type="text" id="course-map-name" class="config-package-input" placeholder="Package name" maxlength="120" />
+        </div>
+        <div class="config-package-field">
+            <span class="config-package-label">Description</span>
+            <span id="course-map-description-text" class="config-package-value config-package-value-multiline"></span>
+            <textarea id="course-map-description" class="config-package-input config-package-textarea" placeholder="Optional description" maxlength="255" rows="2"></textarea>
+        </div>
+        <div class="config-package-field">
+            <span class="config-package-label">Event day</span>
+            <span id="course-map-event-day-text" class="config-package-value"></span>
+            <select id="course-map-event-day" class="config-package-input">
+                <option value="">(not set)</option>
+                {% for day in day_short_codes | default(['fri', 'sat', 'sun', 'mon'], true) %}
+                <option value="{{ day }}">{{ day }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+</div>
+
+<div class="card" id="course-from-map-card">
+    <h3 class="course-from-map-title">Course (map)</h3>
+    <p class="course-from-map-lead">Draw the route to define <strong>segments</strong> and place <strong>locations</strong> on the course. Tables below list what you set on the map.</p>
+    <div id="course-map-header" class="course-map-header-inner">
+        <div class="course-map-header-top" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem;">
+            <div id="course-map-meta-block" class="course-map-meta-standalone" style="flex: 1; min-width: 0;">
+                <div id="course-map-id-standalone" style="font-size: 0.8rem; color: #7f8c8d; margin-bottom: 0.25rem;"></div>
+                <div style="margin-bottom: 0.25rem;"><span class="course-label">Course Name:</span> <span id="course-map-name-text-standalone"></span><input type="text" id="course-map-name-standalone" placeholder="Course name" maxlength="255" style="display: none; width: 100%; max-width: 400px; padding: 0.35rem 0.5rem; font-size: 1rem; font-weight: 600; color: #2c3e50; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;" /></div>
+                <div style="width: 100%;"><span class="course-label">Description:</span> <span id="course-map-description-text-standalone"></span><textarea id="course-map-description-standalone" placeholder="Course description (optional)" maxlength="255" rows="2" style="display: none; width: 100%; min-height: 2.5em; padding: 0.35rem 0.5rem; font-size: 0.875rem; color: #34495e; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; resize: none; overflow: hidden; font-family: inherit;"></textarea></div>
             </div>
-            <div id="course-map-header-buttons" style="display: flex; gap: 0.5rem; align-items: center;">
+            <div id="course-map-header-buttons" class="course-map-header-buttons-standalone" style="display: flex; gap: 0.5rem; align-items: center;">
                 <button type="button" id="btn-edit-course">Edit</button>
                 <button type="button" id="btn-export" disabled title="Write segments.csv, flow.csv, locations.csv, GPX to course folder">Export</button>
                 <button type="button" id="btn-delete-course" disabled title="Delete this course (cannot be undone)">Delete Course</button>
@@ -39,60 +71,45 @@
             <button type="button" id="btn-satellite">Satellite</button>
         </div>
     </div>
-</div>
 
-<div class="card" id="segments-card" style="margin-top: 1rem; display: none;">
-    <h3 style="margin-bottom: 0.5rem;">Segments</h3>
-    <p id="segments-empty" style="color: #95a5a6; font-size: 0.875rem;">Add segment pins on the course line to split it into segments. Each segment is the route between two pins (e.g. Start → Block 1). Use &quot;Show on map&quot; to focus a segment when it is hard to click on the map.</p>
-    <div id="segments-table-wrap" style="display: none;">
-        <div class="scrollable-table-container segments-table-scroll" style="max-height: 25vh;">
-            <table id="segments-table" class="table-sticky-header" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+    <section class="course-derived-section" id="segments-card" style="display: none;">
+        <h4 class="course-derived-heading">Segments</h4>
+        <p id="segments-empty" class="course-derived-empty">Add segment pins on the course line to split it into segments. Click a row to zoom the map to that leg; use From/To pin links to open a pin.</p>
+        <div id="segments-table-wrap" style="display: none;">
+            <div class="scrollable-table-container segments-table-scroll" style="max-height: 25vh;">
+                <table id="segments-table" class="table-sticky-header" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+                    <thead>
+                        <tr><th>ID</th><th>From pin</th><th>To pin</th><th>Segment label</th><th>Events</th><th>Full</th><th>Half</th><th>10K</th><th>Elite</th><th>Open</th><th>Length</th></tr>
+                    </thead>
+                    <tbody id="segments-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div id="segment-edit-tile" class="course-derived-edit-tile" style="display: none;">
+            <h4 id="segment-edit-tile-title" style="margin-top: 0; margin-bottom: 0.75rem;">Edit segment</h4>
+            <div id="segment-edit-tile-content"></div>
+            <div style="margin-top: 0.75rem;">
+                <button type="button" id="segment-edit-tile-save">Save</button>
+                <button type="button" id="segment-edit-tile-cancel" style="margin-left: 0.5rem;">Cancel</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="course-derived-section" id="locations-card" style="display: none;">
+        <div class="course-derived-heading-row">
+            <h4 class="course-derived-heading">Locations</h4>
+            <button type="button" id="btn-manage-resources" class="course-map-action-text-btn" title="Define schedulable resources (FPF, YSSR, AWP, VOL, …)">Manage resources</button>
+        </div>
+        <p id="locations-empty" class="course-derived-empty">Add location pins on the map (Edit mode). Click a location ID in the table to view or edit details.</p>
+        <div id="locations-table-wrap" style="display: none;">
+            <table id="locations-table" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
                 <thead>
-                    <tr><th>ID</th><th>From pin</th><th>To pin</th><th>Segment label</th><th>Events</th><th>Full</th><th>Half</th><th>10K</th><th>Elite</th><th>Open</th><th>Length</th><th>Action</th></tr>
+                    <tr id="locations-thead-row"><th>ID</th><th>Type</th><th>Label</th><th></th></tr>
                 </thead>
-                <tbody id="segments-tbody"></tbody>
+                <tbody id="locations-tbody"></tbody>
             </table>
         </div>
-    </div>
-    <div id="segment-edit-tile" style="display: none; margin-top: 1rem; padding: 1rem; border: 1px solid #ddd; border-radius: 4px; background: #fafafa;">
-        <h4 id="segment-edit-tile-title" style="margin-top: 0; margin-bottom: 0.75rem;">Edit segment</h4>
-        <div id="segment-edit-tile-content"></div>
-        <div style="margin-top: 0.75rem;">
-            <button type="button" id="segment-edit-tile-save">Save</button>
-            <button type="button" id="segment-edit-tile-cancel" style="margin-left: 0.5rem;">Cancel</button>
-        </div>
-    </div>
-</div>
-
-<div class="card" id="segment-pins-card" style="margin-top: 1rem; display: none;">
-    <h3 style="margin-bottom: 0.5rem;">Segment pins</h3>
-    <p id="segment-pins-empty" style="color: #95a5a6; font-size: 0.875rem;">No segment pins. Add pins on the course line to create segment boundaries.</p>
-    <div id="segment-pins-table-wrap" style="display: none;">
-        <div class="scrollable-table-container" style="max-height: 25vh;">
-            <table id="segment-pins-table" class="table-sticky-header" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
-                <thead>
-                    <tr><th>Index</th><th>Label</th><th>Action</th></tr>
-                </thead>
-                <tbody id="segment-pins-tbody"></tbody>
-            </table>
-        </div>
-    </div>
-</div>
-
-<div class="card" id="locations-card" style="margin-top: 1rem; display: none;">
-    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.5rem;">
-        <h3 style="margin: 0;">Locations</h3>
-        <button type="button" id="btn-manage-resources" class="course-map-action-text-btn" title="Define schedulable resources (FPF, YSSR, AWP, VOL, …)">Manage resources</button>
-    </div>
-    <p id="locations-empty" style="color: #95a5a6; font-size: 0.875rem;">Add location pins on the map (type + label). Edit full details (events, resources, notes) from the table.</p>
-    <div id="locations-table-wrap" style="display: none;">
-        <table id="locations-table" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
-            <thead>
-                <tr><th>ID</th><th>Type</th><th>Label</th><th>Notes</th><th>Lat</th><th>Lon</th><th></th></tr>
-            </thead>
-            <tbody id="locations-tbody"></tbody>
-        </table>
-    </div>
+    </section>
 </div>
 
 <div id="location-editor-modal" class="course-location-modal" hidden aria-hidden="true">

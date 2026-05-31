@@ -33,26 +33,74 @@ document.addEventListener('DOMContentLoaded', function () {
         return !!resolveConfigPackageId();
     }
 
+    /** Race Configuration hub: same course card + Edit/Save as full-page mapping. */
+    function usePackageLevelEditSave() {
+        return isConfigPackageMode() && !!document.getElementById('race-config-workspace');
+    }
+
     var POPUP_MAX_WIDTH = 375;
+    var resourcesDirty = false;
+
+    var workspaceActionsHome = null;
+
+    function moveWorkspaceActionButtons() {
+        if (!usePackageLevelEditSave()) return;
+        var navHome = document.getElementById('race-config-workspace-actions');
+        var courseHome = document.getElementById('course-map-header-buttons');
+        if (!navHome || !courseHome) return;
+        if (!workspaceActionsHome) {
+            workspaceActionsHome = courseHome;
+        }
+        var ids = ['btn-edit-course', 'btn-export', 'btn-save-course', 'btn-delete-course'];
+        ids.forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el && el.parentNode !== navHome) {
+                navHome.appendChild(el);
+            }
+        });
+        var del = document.getElementById('btn-delete-course');
+        if (del) del.style.display = 'none';
+    }
+
+    function initPackageEventDaySelect() {
+        var sel = document.getElementById('course-map-event-day');
+        if (!sel) return;
+        var selected = sel.value || getPackageEventDay();
+        if (sel.options.length <= 1) {
+            populateDaySelect(sel, selected, '(not set)');
+        }
+    }
 
     function applyConfigPackageUIMode() {
+        initPackageEventDaySelect();
         var listCard = document.getElementById('course-list-card');
         if (listCard) listCard.style.display = 'none';
         var btnNew = document.getElementById('btn-new-course');
         if (btnNew) btnNew.style.display = 'none';
+        var pkgCard = document.getElementById('config-package-details-card');
+        if (usePackageLevelEditSave()) {
+            if (pkgCard) pkgCard.style.display = 'block';
+            moveWorkspaceActionButtons();
+        } else if (pkgCard) {
+            pkgCard.style.display = 'none';
+        }
         var btnDelete = document.getElementById('btn-delete-course');
-        if (btnDelete) btnDelete.style.display = 'none';
+        if (btnDelete && !usePackageLevelEditSave()) {
+            btnDelete.style.display = '';
+        }
         var btnExport = document.getElementById('btn-export');
         if (btnExport) {
             btnExport.disabled = false;
-            btnExport.title = 'Write segments.csv to this config package';
+            btnExport.title = usePackageLevelEditSave()
+                ? 'Export segments, locations, and related files for this package'
+                : 'Write segments.csv, flow.csv, locations.csv, GPX to course folder';
         }
     }
 
     function loadConfigPackageCourse() {
         var pkgId = resolveConfigPackageId();
-        if (!pkgId) return;
-        fetch(
+        if (!pkgId) return Promise.resolve();
+        return fetch(
             '/api/config/packages/' + encodeURIComponent(pkgId) + '/course',
             { credentials: 'same-origin' }
         )
@@ -76,14 +124,211 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (!data) return;
                 if (data.ok && data.course) {
                     setCourse(pkgId, data.course);
+                    if (window.PENDING_PACKAGE_META) {
+                        syncCourseHeaderFromPackageMeta(
+                            window.PENDING_PACKAGE_META.label,
+                            window.PENDING_PACKAGE_META.description,
+                            window.PENDING_PACKAGE_META.event_day || ''
+                        );
+                        delete window.PENDING_PACKAGE_META;
+                    }
                     clearDirty();
                     console.log('Loaded config package course:', pkgId);
                 }
+                return reloadConfigPackageManifest();
             })
             .catch(function (e) {
                 console.error('Load config package course failed:', e);
                 alert('Failed to load course: ' + (e.message || String(e)));
             });
+    }
+
+    function getDayShortCodes() {
+        var codes = window.DAY_SHORT_CODES_FROM_SERVER;
+        return Array.isArray(codes) && codes.length
+            ? codes
+            : ['fri', 'sat', 'sun', 'mon'];
+    }
+
+    function populateDaySelect(selectEl, selectedValue, emptyLabel) {
+        if (!selectEl) return;
+        selectEl.innerHTML = '';
+        var emptyOpt = document.createElement('option');
+        emptyOpt.value = '';
+        emptyOpt.textContent = emptyLabel || '(not set)';
+        selectEl.appendChild(emptyOpt);
+        getDayShortCodes().forEach(function (day) {
+            var opt = document.createElement('option');
+            opt.value = day;
+            opt.textContent = day;
+            if (selectedValue === day) opt.selected = true;
+            selectEl.appendChild(opt);
+        });
+    }
+
+    function getPackageEventDay() {
+        var d = window.CONFIG_PACKAGE_EVENT_DAY;
+        return d ? String(d).trim().toLowerCase() : '';
+    }
+
+    function syncCourseHeaderFromPackageMeta(label, description, eventDay) {
+        if (!currentCourse) return;
+        if (label != null) currentCourse.name = String(label).trim();
+        if (description != null) currentCourse.description = String(description).trim();
+        if (eventDay != null) {
+            window.CONFIG_PACKAGE_EVENT_DAY = String(eventDay).trim().toLowerCase();
+        }
+        syncCourseToHeaderInputs();
+    }
+
+    function applyPackageDayToLocation(loc) {
+        if (!loc) return;
+        var pkgDay = getPackageEventDay();
+        if (pkgDay && !(loc.day || '').trim()) {
+            loc.day = pkgDay;
+        }
+    }
+
+    function buildCourseSavePayload(courseIdToSave) {
+        return {
+            id: courseIdToSave,
+            config_id: resolveConfigPackageId() || currentCourse.config_id,
+            name: currentCourse.name,
+            description: currentCourse.description,
+            segments: currentCourse.segments || [],
+            locations: currentCourse.locations || [],
+            geometry: currentCourse.geometry,
+            segment_breaks: currentCourse.segment_breaks || [],
+            segment_break_labels: currentCourse.segment_break_labels || {},
+            segment_break_descriptions: currentCourse.segment_break_descriptions || {},
+            segment_break_ids: currentCourse.segment_break_ids || {},
+            turnaround_indices: Array.isArray(currentCourse.turnaround_indices)
+                ? currentCourse.turnaround_indices.slice()
+                : [],
+            start_description: currentCourse.start_description || '',
+            end_description: currentCourse.end_description || '',
+            turnaround_descriptions: currentCourse.turnaround_descriptions || {},
+            flow_control_points: Array.isArray(currentCourse.flow_control_points)
+                ? JSON.parse(JSON.stringify(currentCourse.flow_control_points))
+                : []
+        };
+    }
+
+    function persistConfigPackageResources() {
+        var pkgId = resolveConfigPackageId();
+        if (!pkgId || !resourcesDirty) return Promise.resolve();
+        return fetch('/api/config/packages/' + encodeURIComponent(pkgId) + '/resources', {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ resources: getPackageResources() })
+        }).then(function (res) {
+            return res.json().then(function (d) {
+                if (!res.ok) throw new Error(d.detail || res.statusText);
+                window.CONFIG_PACKAGE_RESOURCES = d.resources || getPackageResources();
+                resourcesDirty = false;
+                if (currentCourse && currentCourse.locations) {
+                    currentCourse.locations.forEach(syncLocationResourceCounts);
+                }
+            });
+        });
+    }
+
+    function persistConfigPackageCourse(meta) {
+        if (!currentCourse) return Promise.reject(new Error('No course loaded'));
+        var pkgId = resolveConfigPackageId();
+        if (!pkgId) return Promise.reject(new Error('No config package'));
+        if (meta) syncCourseHeaderFromPackageMeta(meta.label, meta.description);
+        var toSave = buildCourseSavePayload(pkgId);
+        currentCourse.id = pkgId;
+        currentCourse.config_id = pkgId;
+        return fetch('/api/config/packages/' + encodeURIComponent(pkgId) + '/course', {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ course: toSave })
+        }).then(function (res) {
+            return res.json().then(function (data) {
+                if (!res.ok) throw new Error(data.detail || res.statusText);
+                if (data.ok && data.course) {
+                    setCourse(pkgId, data.course);
+                }
+                clearDirty();
+            });
+        });
+    }
+
+    function saveConfigPackageWorkspace(meta) {
+        return persistConfigPackageResources()
+            .then(function () { return persistConfigPackageCourse(meta); })
+            .then(function () {
+                renderLocationsTableHeader();
+                renderLocationsList();
+                updateCourseUI();
+            });
+    }
+
+    function reloadConfigPackageManifest() {
+        var pkgId = resolveConfigPackageId();
+        if (!pkgId) return Promise.resolve();
+        return fetch('/api/config/packages/' + encodeURIComponent(pkgId), { credentials: 'same-origin' })
+            .then(function (res) { return res.ok ? res.json() : null; })
+            .then(function (data) {
+                if (!data || !data.manifest) return;
+                var m = data.manifest;
+                window.CONFIG_PACKAGE_RESOURCES = m.resources || [];
+                syncCourseHeaderFromPackageMeta(
+                    m.label || pkgId,
+                    m.description || '',
+                    m.event_day || ''
+                );
+            });
+    }
+
+    function cancelConfigPackageEdit() {
+        resourcesDirty = false;
+        return loadConfigPackageCourse()
+            .then(function () { return reloadConfigPackageManifest(); })
+            .then(function () {
+                setEditMode(false);
+                updateCourseUI();
+                renderLocationsList();
+            });
+    }
+
+    function saveConfigPackageWorkspaceWithManifest() {
+        var pkgId = resolveConfigPackageId();
+        if (!pkgId || !currentCourse) return Promise.reject(new Error('No package loaded'));
+        var nameInput = activeNameInputEl();
+        var descInput = activeDescriptionInputEl();
+        var label = nameInput ? String(nameInput.value || '').trim().slice(0, 120) : '';
+        var description = descInput ? String(descInput.value || '').trim().slice(0, 255) : '';
+        var eventDayInput = document.getElementById('course-map-event-day');
+        var event_day = eventDayInput
+            ? String(eventDayInput.value || '').trim().toLowerCase().slice(0, 16)
+            : '';
+        if (!label) return Promise.reject(new Error('Name is required.'));
+        return fetch('/api/config/packages/' + encodeURIComponent(pkgId), {
+            method: 'PATCH',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ label: label, description: description, event_day: event_day })
+        }).then(function (res) {
+            return res.json().then(function (data) {
+                if (!res.ok) throw new Error(data.detail || res.statusText);
+                var m = data.manifest || {};
+                window.CONFIG_PACKAGE_RESOURCES = m.resources || window.CONFIG_PACKAGE_RESOURCES || [];
+                syncCourseHeaderFromPackageMeta(
+                    m.label || label,
+                    m.description != null ? m.description : description,
+                    m.event_day != null ? m.event_day : event_day
+                );
+                return saveConfigPackageWorkspace({
+                    label: m.label || label,
+                    description: m.description != null ? m.description : description
+                });
+            });
+        });
     }
 
     // Course state; data_dir is always from app utils constants (runflow root)
@@ -117,32 +362,71 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var isEditMode = false;
 
+    function updateManageResourcesButton() {
+        var btn = document.getElementById('btn-manage-resources');
+        if (!btn) return;
+        if (usePackageLevelEditSave()) {
+            btn.disabled = !isEditMode;
+            btn.title = isEditMode
+                ? 'Define schedulable resources (FPF, YSSR, AWP, VOL, …)'
+                : 'Click Edit to change resources';
+        } else {
+            btn.disabled = false;
+            btn.title = 'Define schedulable resources (FPF, YSSR, AWP, VOL, …)';
+        }
+    }
+
     function setEditMode(edit) {
         isEditMode = !!edit;
         var nameText = document.getElementById('course-map-name-text');
         var nameInput = document.getElementById('course-map-name');
         var descText = document.getElementById('course-map-description-text');
         var descInput = document.getElementById('course-map-description');
+        var dayText = document.getElementById('course-map-event-day-text');
+        var dayInput = document.getElementById('course-map-event-day');
+        var nameTextSt = document.getElementById('course-map-name-text-standalone');
+        var nameInputSt = document.getElementById('course-map-name-standalone');
+        var descTextSt = document.getElementById('course-map-description-text-standalone');
+        var descInputSt = document.getElementById('course-map-description-standalone');
         var editToolbar = document.getElementById('course-edit-toolbar');
         var saveBtn = document.getElementById('btn-save-course');
         var editBtn = document.getElementById('btn-edit-course');
         var exportBtn = document.getElementById('btn-export');
         var delBtn = document.getElementById('btn-delete-course');
+        var showInput = isEditMode && currentCourse;
         if (nameText) nameText.style.display = isEditMode ? 'none' : 'inline';
-        if (nameInput) nameInput.style.display = (isEditMode && currentCourse) ? 'inline-block' : 'none';
+        if (nameTextSt) nameTextSt.style.display = isEditMode ? 'none' : 'inline';
+        if (nameInput) nameInput.style.display = showInput ? 'block' : 'none';
+        if (nameInputSt) nameInputSt.style.display = showInput ? 'inline-block' : 'none';
         if (descText) descText.style.display = isEditMode ? 'none' : 'inline';
+        if (descTextSt) descTextSt.style.display = isEditMode ? 'none' : 'inline';
         if (descInput) {
-            descInput.style.display = (isEditMode && currentCourse) ? 'block' : 'none';
-            if (isEditMode && currentCourse) resizeDescriptionTextarea();
+            descInput.style.display = showInput ? 'block' : 'none';
+            if (showInput) resizeDescriptionTextarea();
         }
-        if (editToolbar) editToolbar.style.display = (isEditMode && currentCourse) ? 'flex' : 'none';
+        if (descInputSt) {
+            descInputSt.style.display = showInput ? 'block' : 'none';
+            if (showInput) resizeDescriptionTextarea();
+        }
+        if (dayText) dayText.style.display = isEditMode ? 'none' : 'inline';
+        if (dayInput) dayInput.style.display = showInput ? 'block' : 'none';
         if (saveBtn) saveBtn.style.display = isEditMode ? 'inline-block' : 'none';
         if (editBtn) editBtn.textContent = isEditMode ? 'Cancel' : 'Edit';
+        if (editToolbar) editToolbar.style.display = (isEditMode && currentCourse) ? 'flex' : 'none';
         if (exportBtn) exportBtn.style.display = isEditMode ? 'none' : 'inline-block';
-        if (delBtn) delBtn.style.display = isEditMode ? 'none' : 'inline-block';
-        if (!isEditMode && nameInput && descInput && currentCourse) {
-            nameInput.value = currentCourse.name || '';
-            descInput.value = currentCourse.description || '';
+        if (delBtn) {
+            if (usePackageLevelEditSave()) {
+                delBtn.style.display = 'none';
+            } else {
+                delBtn.style.display = isEditMode ? 'none' : 'inline-block';
+            }
+        }
+        if (!isEditMode && currentCourse) {
+            if (nameInput) nameInput.value = currentCourse.name || '';
+            if (nameInputSt) nameInputSt.value = currentCourse.name || '';
+            if (descInput) descInput.value = currentCourse.description || '';
+            if (descInputSt) descInputSt.value = currentCourse.description || '';
+            if (dayInput) dayInput.value = getPackageEventDay();
         }
         renderCourseLine();
         renderSegmentPins();
@@ -161,13 +445,33 @@ document.addEventListener('DOMContentLoaded', function () {
             if (isEditMode) mapContainer.classList.add('course-mapping-edit-mode');
             else mapContainer.classList.remove('course-mapping-edit-mode');
         }
+        updateManageResourcesButton();
+        renderLocationsList();
+    }
+
+    function isConfigPackageDirty() {
+        return isDirty() || resourcesDirty;
+    }
+
+    function activeNameInputEl() {
+        return usePackageLevelEditSave()
+            ? document.getElementById('course-map-name')
+            : document.getElementById('course-map-name-standalone');
+    }
+
+    function activeDescriptionInputEl() {
+        return usePackageLevelEditSave()
+            ? document.getElementById('course-map-description')
+            : document.getElementById('course-map-description-standalone');
     }
 
     function resizeDescriptionTextarea() {
-        var el = document.getElementById('course-map-description');
-        if (!el) return;
-        el.style.height = 'auto';
-        el.style.height = Math.max(el.scrollHeight, 2.5 * 16) + 'px';
+        [document.getElementById('course-map-description'), document.getElementById('course-map-description-standalone')]
+            .forEach(function (el) {
+                if (!el || el.style.display === 'none') return;
+                el.style.height = 'auto';
+                el.style.height = Math.max(el.scrollHeight, 2.5 * 16) + 'px';
+            });
     }
 
     function syncCourseToHeaderInputs() {
@@ -175,14 +479,45 @@ document.addEventListener('DOMContentLoaded', function () {
         var nameInput = document.getElementById('course-map-name');
         var descText = document.getElementById('course-map-description-text');
         var descInput = document.getElementById('course-map-description');
+        var dayText = document.getElementById('course-map-event-day-text');
+        var dayInput = document.getElementById('course-map-event-day');
+        var nameTextSt = document.getElementById('course-map-name-text-standalone');
+        var nameInputSt = document.getElementById('course-map-name-standalone');
+        var descTextSt = document.getElementById('course-map-description-text-standalone');
+        var descInputSt = document.getElementById('course-map-description-standalone');
+        var idSt = document.getElementById('course-map-id-standalone');
+        var pkgDay = getPackageEventDay();
+        var dayDisplay = pkgDay || '(not set)';
         var val = currentCourse ? (currentCourse.name || '') : '';
-        if (nameText) nameText.textContent = val || '(no name)';
+        var nameDisplay = val || '(no name)';
+        if (nameText) nameText.textContent = nameDisplay;
+        if (nameTextSt) nameTextSt.textContent = nameDisplay;
         if (nameInput) nameInput.value = val;
+        if (nameInputSt) nameInputSt.value = val;
         val = currentCourse ? (currentCourse.description || '') : '';
-        if (descText) descText.textContent = val || '(none)';
+        var descDisplay = val || '(none)';
+        if (descText) descText.textContent = descDisplay;
+        if (descTextSt) descTextSt.textContent = descDisplay;
         if (descInput) {
             descInput.value = val;
             if (descInput.style.display && descInput.style.display !== 'none') resizeDescriptionTextarea();
+        }
+        if (descInputSt) {
+            descInputSt.value = val;
+            if (descInputSt.style.display && descInputSt.style.display !== 'none') resizeDescriptionTextarea();
+        }
+        if (dayText) dayText.textContent = dayDisplay;
+        if (dayInput) {
+            initPackageEventDaySelect();
+            dayInput.value = pkgDay;
+        }
+        var idVal = currentCourseId || '';
+        var idEl = document.getElementById('course-map-id');
+        if (idEl) idEl.textContent = idVal;
+        if (idSt) {
+            idSt.textContent = idVal
+                ? (isConfigPackageMode() ? 'Config package: ' + idVal : 'Course: ' + idVal)
+                : '';
         }
     }
 
@@ -195,17 +530,12 @@ document.addEventListener('DOMContentLoaded', function () {
             saveBtn.disabled = !currentCourse || sameRouteBackMode;
             saveBtn.title = sameRouteBackMode ? 'Confirm or Cancel Same Route Back first' : '';
         }
-        if (idEl) {
-            idEl.textContent = currentCourseId
-                ? (isConfigPackageMode()
-                    ? 'Config package: ' + currentCourseId
-                    : 'Course: ' + currentCourseId)
-                : '';
-        }
+        syncCourseToHeaderInputs();
         if (exportBtn) exportBtn.disabled = !currentCourseId;
         if (delBtn) delBtn.disabled = !currentCourseId;
         syncCourseToHeaderInputs();
         setEditMode(isEditMode);
+        updateManageResourcesButton();
         updateExportButton();
     }
 
@@ -213,6 +543,7 @@ document.addEventListener('DOMContentLoaded', function () {
         currentCourseId = id;
         currentCourse = course;
         clearDirty();
+        resourcesDirty = false;
         isEditMode = false;
         if (window.courseMappingMap && (!course || !course.geometry)) {
             if (segmentLinesLayer) { window.courseMappingMap.removeLayer(segmentLinesLayer); segmentLinesLayer = null; }
@@ -277,7 +608,139 @@ document.addEventListener('DOMContentLoaded', function () {
         { code: 'vol', label: 'VOL' }
     ];
     var locationEditorIndex = null;
+    var locationEditorMap = null;
+    var locationEditorMapMarker = null;
+
+    function destroyLocationEditorMap() {
+        if (locationEditorMap) {
+            locationEditorMap.remove();
+            locationEditorMap = null;
+            locationEditorMapMarker = null;
+        }
+    }
+
+    function refreshLocationEditorMap(lat, lon) {
+        if (typeof L === 'undefined') return;
+        var el = document.getElementById('location-editor-map');
+        if (!el) return;
+        if (isNaN(lat) || isNaN(lon)) return;
+        if (!locationEditorMap) {
+            locationEditorMap = L.map(el, {
+                scrollWheelZoom: false,
+                zoomControl: true,
+                attributionControl: false
+            });
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
+                subdomains: ['a', 'b', 'c', 'd'],
+                maxZoom: 19
+            }).addTo(locationEditorMap);
+            locationEditorMapMarker = L.marker([lat, lon]).addTo(locationEditorMap);
+            locationEditorMap.setView([lat, lon], 16);
+            setTimeout(function () {
+                if (locationEditorMap) locationEditorMap.invalidateSize();
+            }, 80);
+        } else {
+            locationEditorMapMarker.setLatLng([lat, lon]);
+            locationEditorMap.setView([lat, lon], locationEditorMap.getZoom());
+        }
+    }
+
+    function distancePointToSegmentMeters(lat, lon, lon1, lat1, lon2, lat2) {
+        var dx = lon2 - lon1;
+        var dy = lat2 - lat1;
+        var len2 = dx * dx + dy * dy;
+        var t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((lon - lon1) * dx + (lat - lat1) * dy) / len2));
+        var px = lon1 + t * dx;
+        var py = lat1 + t * dy;
+        return haversineMeters(lon, lat, px, py);
+    }
+
+    function distancePointToPolylineMeters(lat, lon, coords, startIdx, endIdx) {
+        var best = Infinity;
+        for (var i = startIdx; i < endIdx; i++) {
+            var c0 = coords[i];
+            var c1 = coords[i + 1];
+            var d = distancePointToSegmentMeters(lat, lon, c0[0], c0[1], c1[0], c1[1]);
+            if (d < best) best = d;
+        }
+        return best;
+    }
+
+    function suggestLocationSegIdClient(location) {
+        if (!currentCourse || !currentCourse.geometry || !currentCourse.segments) {
+            return { seg_id: '', rationale: '' };
+        }
+        var coords = currentCourse.geometry.coordinates;
+        if (!coords || coords.length < 2) {
+            return { seg_id: '', rationale: 'Draw the course route to suggest a segment.' };
+        }
+        var lat = parseFloat(location.lat);
+        var lon = parseFloat(location.lon);
+        if (isNaN(lat) || isNaN(lon)) {
+            return { seg_id: '', rationale: 'Set coordinates to suggest a segment.' };
+        }
+        var bestSeg = null;
+        var bestDist = Infinity;
+        currentCourse.segments.forEach(function (seg) {
+            var startIdx = seg.start_index != null ? seg.start_index : 0;
+            var endIdx = seg.end_index != null ? seg.end_index : coords.length - 1;
+            var d = distancePointToPolylineMeters(lat, lon, coords, startIdx, endIdx);
+            if (d < bestDist) {
+                bestDist = d;
+                bestSeg = seg;
+            }
+        });
+        if (!bestSeg) return { seg_id: '', rationale: '' };
+        return {
+            seg_id: String(bestSeg.seg_id || '').trim(),
+            rationale: 'Nearest segment: ' + (bestSeg.seg_label || bestSeg.seg_id) + '.'
+        };
+    }
+
+    function applySuggestedSegIdToLocation(loc) {
+        if (!loc || (loc.seg_id || '').trim()) return '';
+        var result = suggestLocationSegIdClient(loc);
+        if (result.seg_id) loc.seg_id = result.seg_id;
+        return result.rationale || '';
+    }
     var resourcesEditorDraft = null;
+    var resourcesEditingIndex = null;
+    var RESOURCE_CODE_MAX_LEN = 16;
+
+    function normalizeResourceCodeInput(value) {
+        var s = (value || '').toLowerCase().replace(/[^a-z0-9_]/g, '');
+        if (s.length > RESOURCE_CODE_MAX_LEN) {
+            s = s.slice(0, RESOURCE_CODE_MAX_LEN);
+        }
+        return s;
+    }
+
+    function attachResourceCodeInput(el) {
+        if (!el) return;
+        el.setAttribute('maxlength', String(RESOURCE_CODE_MAX_LEN));
+        el.addEventListener('input', function () {
+            var normalized = normalizeResourceCodeInput(el.value);
+            if (el.value !== normalized) el.value = normalized;
+        });
+    }
+
+    function migrateLocationResourceCode(oldCode, newCode) {
+        if (!oldCode || !newCode || oldCode === newCode || !currentCourse || !currentCourse.locations) return;
+        currentCourse.locations.forEach(function (loc) {
+            if (!loc.resources || typeof loc.resources !== 'object') loc.resources = {};
+            if (loc.resources[oldCode] != null) {
+                loc.resources[newCode] = loc.resources[oldCode];
+                delete loc.resources[oldCode];
+            }
+            var oldCol = oldCode + '_count';
+            var newCol = newCode + '_count';
+            if (loc[oldCol] != null) {
+                loc[newCol] = loc[oldCol];
+                delete loc[oldCol];
+            }
+        });
+        setDirty();
+    }
 
     function getPackageResources() {
         var r = window.CONFIG_PACKAGE_RESOURCES;
@@ -315,9 +778,14 @@ document.addEventListener('DOMContentLoaded', function () {
             alert('Open a config package to manage resources.');
             return;
         }
+        if (usePackageLevelEditSave() && !isEditMode) {
+            alert('Click Edit to change resources.');
+            return;
+        }
         resourcesEditorDraft = getPackageResources().map(function (r) {
             return { code: r.code, label: r.label || r.code.toUpperCase() };
         });
+        resourcesEditingIndex = null;
         renderResourcesEditorList();
         showModal(document.getElementById('resources-editor-modal'));
     }
@@ -329,17 +797,78 @@ document.addEventListener('DOMContentLoaded', function () {
         resourcesEditorDraft.forEach(function (res, i) {
             var row = document.createElement('div');
             row.className = 'resource-row';
-            row.innerHTML =
-                '<span style="flex:1;"><strong>' + escapeHtml(res.code) + '</strong> — ' + escapeHtml(res.label) + '</span>' +
-                '<button type="button" data-idx="' + i + '">Remove</button>';
-            row.querySelector('button').addEventListener('click', function () {
-                if (resourcesEditorDraft.length <= 1) {
-                    alert('At least one resource is required.');
-                    return;
-                }
-                resourcesEditorDraft.splice(i, 1);
-                renderResourcesEditorList();
-            });
+            if (resourcesEditingIndex === i) {
+                var codeInp = document.createElement('input');
+                codeInp.type = 'text';
+                codeInp.value = res.code;
+                codeInp.style.width = '90px';
+                codeInp.title = 'Lowercase, max ' + RESOURCE_CODE_MAX_LEN + ' chars';
+                attachResourceCodeInput(codeInp);
+                var labelInp = document.createElement('input');
+                labelInp.type = 'text';
+                labelInp.value = res.label;
+                labelInp.style.flex = '1';
+                labelInp.style.minWidth = '120px';
+                labelInp.maxLength = 64;
+                var btnDone = document.createElement('button');
+                btnDone.type = 'button';
+                btnDone.textContent = 'Done';
+                btnDone.addEventListener('click', function () {
+                    var newCode = normalizeResourceCodeInput(codeInp.value);
+                    var newLabel = (labelInp.value || '').trim();
+                    if (!newCode || !/^[a-z]/.test(newCode)) {
+                        alert('Code must start with a letter (lowercase, max ' + RESOURCE_CODE_MAX_LEN + ' chars).');
+                        return;
+                    }
+                    if (resourcesEditorDraft.some(function (r, j) { return j !== i && r.code === newCode; })) {
+                        alert('Resource code already exists.');
+                        return;
+                    }
+                    if (!newLabel) newLabel = newCode.toUpperCase();
+                    migrateLocationResourceCode(res.code, newCode);
+                    resourcesEditorDraft[i] = { code: newCode, label: newLabel };
+                    resourcesEditingIndex = null;
+                    renderResourcesEditorList();
+                });
+                var btnCancelEdit = document.createElement('button');
+                btnCancelEdit.type = 'button';
+                btnCancelEdit.textContent = 'Cancel';
+                btnCancelEdit.addEventListener('click', function () {
+                    resourcesEditingIndex = null;
+                    renderResourcesEditorList();
+                });
+                row.appendChild(codeInp);
+                row.appendChild(labelInp);
+                row.appendChild(btnDone);
+                row.appendChild(btnCancelEdit);
+            } else {
+                var span = document.createElement('span');
+                span.style.flex = '1';
+                span.innerHTML = '<strong>' + escapeHtml(res.code) + '</strong> — ' + escapeHtml(res.label);
+                var btnEdit = document.createElement('button');
+                btnEdit.type = 'button';
+                btnEdit.textContent = 'Edit';
+                btnEdit.addEventListener('click', function () {
+                    resourcesEditingIndex = i;
+                    renderResourcesEditorList();
+                });
+                var btnRemove = document.createElement('button');
+                btnRemove.type = 'button';
+                btnRemove.textContent = 'Remove';
+                btnRemove.addEventListener('click', function () {
+                    if (resourcesEditorDraft.length <= 1) {
+                        alert('At least one resource is required.');
+                        return;
+                    }
+                    resourcesEditorDraft.splice(i, 1);
+                    if (resourcesEditingIndex === i) resourcesEditingIndex = null;
+                    else if (resourcesEditingIndex != null && resourcesEditingIndex > i) resourcesEditingIndex -= 1;
+                    renderResourcesEditorList();
+                });
+                row.appendChild(span);
+                row.appendChild(btnEdit);
+                row.appendChild(btnRemove);
+            }
             list.appendChild(row);
         });
     }
@@ -347,6 +876,20 @@ document.addEventListener('DOMContentLoaded', function () {
     function savePackageResources() {
         var pkgId = resolveConfigPackageId();
         if (!pkgId || !resourcesEditorDraft) return;
+        if (usePackageLevelEditSave()) {
+            window.CONFIG_PACKAGE_RESOURCES = resourcesEditorDraft.map(function (r) {
+                return { code: r.code, label: r.label || r.code.toUpperCase() };
+            });
+            resourcesDirty = true;
+            setDirty();
+            hideModal(document.getElementById('resources-editor-modal'));
+            if (currentCourse && currentCourse.locations) {
+                currentCourse.locations.forEach(syncLocationResourceCounts);
+            }
+            renderLocationsTableHeader();
+            renderLocationsList();
+            return;
+        }
         fetch('/api/config/packages/' + encodeURIComponent(pkgId) + '/resources', {
             method: 'PUT',
             credentials: 'same-origin',
@@ -368,6 +911,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function openLocationEditorModal(idx, readOnly) {
         if (!currentCourse || !currentCourse.locations || idx < 0 || idx >= currentCourse.locations.length) return;
+        destroyLocationEditorMap();
         locationEditorIndex = idx;
         var loc = currentCourse.locations[idx];
         syncLocationResourceCounts(loc);
@@ -377,9 +921,14 @@ document.addEventListener('DOMContentLoaded', function () {
         var title = document.getElementById('location-editor-title');
         if (!modal || !body || !footer) return;
         var locId = loc.id != null ? String(loc.id) : String(idx + 1);
-        if (title) title.textContent = 'Location ' + locId + (readOnly ? ' (view)' : '');
+        var editable = !readOnly;
+        var labelDisplay = (loc.loc_label || '').trim() || '(no label)';
+        if (title) title.textContent = locId + ': ' + labelDisplay;
         body.innerHTML = '';
         footer.innerHTML = '';
+        applyPackageDayToLocation(loc);
+        var segRationale = applySuggestedSegIdToLocation(loc);
+        var eventsRationale = applySuggestedEventsToLocation(loc);
 
         function addSection(heading) {
             var sec = document.createElement('div');
@@ -402,7 +951,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var inpLabel = document.createElement('input');
         inpLabel.type = 'text';
         inpLabel.value = loc.loc_label || '';
-        inpLabel.disabled = !!readOnly;
+        inpLabel.disabled = !editable;
         addField(secId, 'Label', inpLabel);
         var selType = document.createElement('select');
         LOCATION_TYPES.forEach(function (t) {
@@ -412,111 +961,97 @@ document.addEventListener('DOMContentLoaded', function () {
             if ((loc.loc_type || 'course') === t.value) opt.selected = true;
             selType.appendChild(opt);
         });
-        selType.disabled = !!readOnly;
+        selType.disabled = !editable;
         addField(secId, 'Type', selType);
 
         var secPlace = addSection('Placement');
         var inpLat = document.createElement('input');
         inpLat.type = 'text';
         inpLat.value = loc.lat != null ? String(loc.lat) : '';
-        inpLat.disabled = !!readOnly;
+        inpLat.disabled = !editable;
         addField(secPlace, 'Latitude', inpLat);
         var inpLon = document.createElement('input');
         inpLon.type = 'text';
         inpLon.value = loc.lon != null ? String(loc.lon) : '';
-        inpLon.disabled = !!readOnly;
+        inpLon.disabled = !editable;
         addField(secPlace, 'Longitude', inpLon);
+        var mapWrap = document.createElement('div');
+        mapWrap.className = 'location-editor-map-wrap';
+        var mapEl = document.createElement('div');
+        mapEl.id = 'location-editor-map';
+        mapEl.className = 'location-editor-map';
+        mapWrap.appendChild(mapEl);
+        secPlace.appendChild(mapWrap);
+        function updateLocationEditorMapFromInputs() {
+            var la = parseFloat(inpLat.value);
+            var lo = parseFloat(inpLon.value);
+            if (!isNaN(la) && !isNaN(lo)) refreshLocationEditorMap(la, lo);
+        }
+        updateLocationEditorMapFromInputs();
+        if (editable) {
+            inpLat.addEventListener('input', updateLocationEditorMapFromInputs);
+            inpLon.addEventListener('input', updateLocationEditorMapFromInputs);
+        }
 
         var secCourse = addSection('Course link');
         var inpSeg = document.createElement('input');
         inpSeg.type = 'text';
         inpSeg.placeholder = 'e.g. A1 or A1,G1';
         inpSeg.value = loc.seg_id || '';
-        inpSeg.disabled = !!readOnly;
+        inpSeg.disabled = !editable;
         addField(secCourse, 'Segment ID(s)', inpSeg);
-        var inpDay = document.createElement('input');
-        inpDay.type = 'text';
-        inpDay.placeholder = 'sun / sat';
-        inpDay.value = loc.day || '';
-        inpDay.disabled = !!readOnly;
+        var pkgDay = getPackageEventDay();
+        var inpDay = document.createElement('select');
+        populateDaySelect(inpDay, loc.day || pkgDay || '', 'Select day');
+        inpDay.disabled = !editable || !!pkgDay;
         addField(secCourse, 'Day', inpDay);
+        if (pkgDay) {
+            var dayHint = document.createElement('div');
+            dayHint.style.cssText = 'font-size:0.8rem;color:#7f8c8d;margin-top:0.25rem;';
+            dayHint.textContent = 'From package event day (' + pkgDay + ').';
+            secCourse.appendChild(dayHint);
+        }
         var inpZone = document.createElement('input');
         inpZone.type = 'text';
         inpZone.value = loc.zone != null ? String(loc.zone) : '';
-        inpZone.disabled = !!readOnly;
+        inpZone.disabled = !editable;
         addField(secCourse, 'Zone', inpZone);
-        var flagsWrap = document.createElement('div');
-        flagsWrap.className = 'location-event-flags';
-        var eventInputs = {};
-        EVENT_CHOICES.forEach(function (ev) {
-            var lbl = document.createElement('label');
-            var cb = document.createElement('input');
-            cb.type = 'checkbox';
-            cb.checked = (loc[ev.value] || 'n').toString().toLowerCase() === 'y';
-            cb.disabled = !!readOnly;
-            eventInputs[ev.value] = cb;
-            lbl.appendChild(cb);
-            lbl.appendChild(document.createTextNode(' ' + ev.label));
-            flagsWrap.appendChild(lbl);
-        });
-        secCourse.appendChild(flagsWrap);
+        var eventsDisplay = document.createElement('div');
+        eventsDisplay.className = 'location-events-readonly';
+        eventsDisplay.style.cssText = 'font-size:0.875rem;color:#34495e;margin-top:0.35rem;';
+        var activeEvents = EVENT_CHOICES.filter(function (ev) {
+            return (loc[ev.value] || 'n').toString().toLowerCase() === 'y';
+        }).map(function (ev) { return ev.label; });
+        eventsDisplay.textContent = activeEvents.length
+            ? ('Events (from segments): ' + activeEvents.join(', '))
+            : 'Events (from segments): none';
+        secCourse.appendChild(eventsDisplay);
         var rationaleEl = document.createElement('div');
         rationaleEl.id = 'location-suggest-rationale';
+        rationaleEl.style.cssText = 'font-size:0.8rem;color:#7f8c8d;margin-top:0.35rem;';
+        var rationaleParts = [];
+        if (segRationale) rationaleParts.push(segRationale);
+        if (eventsRationale) rationaleParts.push(eventsRationale);
+        rationaleEl.textContent = rationaleParts.join(' ');
         secCourse.appendChild(rationaleEl);
-        if (!readOnly) {
-            var btnSuggest = document.createElement('button');
-            btnSuggest.type = 'button';
-            btnSuggest.textContent = 'Suggest events from segment';
-            btnSuggest.style.marginTop = '0.5rem';
-            btnSuggest.onclick = function () {
-                var pkgId = resolveConfigPackageId();
-                if (!pkgId) return;
-                var payload = {
-                    location: {
-                        seg_id: inpSeg.value.trim(),
-                        full: loc.full,
-                        half: loc.half,
-                        '10k': loc['10k'],
-                        elite: loc.elite,
-                        open: loc.open
-                    }
-                };
-                fetch('/api/config/packages/' + encodeURIComponent(pkgId) + '/locations/suggest-events', {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                }).then(function (res) { return res.json(); })
-                    .then(function (data) {
-                        if (!data.ok) throw new Error(data.detail || 'Suggest failed');
-                        EVENT_CHOICES.forEach(function (ev) {
-                            if (data.events && data.events[ev.value] === 'y') eventInputs[ev.value].checked = true;
-                            else if (data.events) eventInputs[ev.value].checked = false;
-                        });
-                        rationaleEl.textContent = data.rationale || '';
-                    })
-                    .catch(function (e) { rationaleEl.textContent = e.message || String(e); });
-            };
-            secCourse.appendChild(btnSuggest);
-        }
 
         var secTiming = addSection('Timing');
         var inpBuffer = document.createElement('input');
         inpBuffer.type = 'number';
         inpBuffer.min = '0';
         inpBuffer.value = loc.buffer != null ? loc.buffer : 10;
-        inpBuffer.disabled = !!readOnly;
+        inpBuffer.disabled = !editable;
         addField(secTiming, 'Buffer (min)', inpBuffer);
         var inpInterval = document.createElement('input');
         inpInterval.type = 'number';
         inpInterval.min = '1';
         inpInterval.value = loc.interval != null ? loc.interval : 5;
-        inpInterval.disabled = !!readOnly;
+        inpInterval.disabled = !editable;
         addField(secTiming, 'Interval (min)', inpInterval);
         var inpProxy = document.createElement('input');
         inpProxy.type = 'text';
         inpProxy.value = loc.proxy_loc_id != null ? String(loc.proxy_loc_id) : '';
-        inpProxy.disabled = !!readOnly;
+        inpProxy.disabled = !editable;
         addField(secTiming, 'Proxy loc ID', inpProxy);
 
         var secRes = addSection('Resources scheduled');
@@ -531,7 +1066,7 @@ document.addEventListener('DOMContentLoaded', function () {
             inp.type = 'number';
             inp.min = '0';
             inp.value = (loc.resources && loc.resources[code] != null) ? loc.resources[code] : (loc[code + '_count'] || 0);
-            inp.disabled = !!readOnly;
+            inp.disabled = !editable;
             resourceInputs[code] = inp;
             resGrid.appendChild(lbl);
             resGrid.appendChild(inp);
@@ -542,38 +1077,41 @@ document.addEventListener('DOMContentLoaded', function () {
         var inpOnepage = document.createElement('input');
         inpOnepage.type = 'checkbox';
         inpOnepage.checked = (loc.onepage || 'n').toString().toLowerCase() === 'y';
-        inpOnepage.disabled = !!readOnly;
+        inpOnepage.disabled = !editable;
         var lblOp = document.createElement('label');
-        lblOp.style.fontWeight = 'normal';
+        lblOp.className = 'location-onepager-inline';
         lblOp.appendChild(inpOnepage);
-        lblOp.appendChild(document.createTextNode(' Include on one-pager'));
+        var onepagerText = document.createElement('span');
+        onepagerText.textContent = 'Create One-Pager';
+        lblOp.appendChild(onepagerText);
         secSheet.appendChild(lblOp);
         var inpEquip = document.createElement('input');
         inpEquip.type = 'text';
         inpEquip.value = loc.equipment || '';
-        inpEquip.disabled = !!readOnly;
+        inpEquip.disabled = !editable;
         addField(secSheet, 'Equipment', inpEquip);
         var inpContact = document.createElement('input');
         inpContact.type = 'text';
         inpContact.value = loc.contact || '';
-        inpContact.disabled = !!readOnly;
+        inpContact.disabled = !editable;
         addField(secSheet, 'Contact', inpContact);
         var inpNotes = document.createElement('textarea');
         inpNotes.rows = 4;
         inpNotes.value = loc.notes || '';
-        inpNotes.disabled = !!readOnly;
+        inpNotes.disabled = !editable;
         addField(secSheet, 'Notes', inpNotes);
 
         var btnClose = document.createElement('button');
         btnClose.type = 'button';
         btnClose.textContent = 'Close';
         btnClose.onclick = function () {
+            destroyLocationEditorMap();
             hideModal(modal);
             locationEditorIndex = null;
         };
         footer.appendChild(btnClose);
 
-        if (!readOnly && isEditMode) {
+        if (editable) {
             var btnSave = document.createElement('button');
             btnSave.type = 'button';
             btnSave.className = 'primary';
@@ -590,11 +1128,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 loc.lat = lat;
                 loc.lon = lon;
                 loc.seg_id = inpSeg.value.trim();
-                loc.day = inpDay.value.trim();
+                if (!loc.seg_id) applySuggestedSegIdToLocation(loc);
+                loc.day = getPackageEventDay() || inpDay.value.trim();
                 loc.zone = inpZone.value.trim();
-                EVENT_CHOICES.forEach(function (ev) {
-                    loc[ev.value] = eventInputs[ev.value].checked ? 'y' : 'n';
-                });
+                applySuggestedEventsToLocation(loc);
                 loc.buffer = parseInt(inpBuffer.value, 10) || 10;
                 loc.interval = parseInt(inpInterval.value, 10) || 5;
                 loc.proxy_loc_id = inpProxy.value.trim();
@@ -608,6 +1145,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     loc.resources[res.code] = isNaN(n) ? 0 : Math.max(0, n);
                     loc[res.code + '_count'] = loc.resources[res.code];
                 });
+                destroyLocationEditorMap();
                 hideModal(modal);
                 locationEditorIndex = null;
                 setDirty();
@@ -616,41 +1154,91 @@ document.addEventListener('DOMContentLoaded', function () {
                 updateCourseUI();
             };
             footer.insertBefore(btnSave, btnClose);
-            var btnPan = document.createElement('button');
-            btnPan.type = 'button';
-            btnPan.textContent = 'Show on map';
-            btnPan.onclick = function () {
-                if (window.courseMappingMap && loc.lat != null && loc.lon != null) {
-                    window.courseMappingMap.setView([loc.lat, loc.lon], 16);
-                }
-            };
-            footer.insertBefore(btnPan, btnSave);
-        } else if (!readOnly) {
-            var btnEdit = document.createElement('button');
-            btnEdit.type = 'button';
-            btnEdit.className = 'primary';
-            btnEdit.textContent = 'Edit';
-            btnEdit.onclick = function () {
-                hideModal(modal);
-                if (!isEditMode) {
-                    alert('Click Edit on the course header to change locations.');
-                    openLocationEditorModal(idx, true);
-                    return;
-                }
-                openLocationEditorModal(idx, false);
-            };
-            footer.insertBefore(btnEdit, btnClose);
         }
 
         highlightLocationRow(idx);
         showModal(modal);
+        setTimeout(updateLocationEditorMapFromInputs, 120);
+    }
+
+    function suggestLocationEventsClient(location) {
+        var segments = (currentCourse && currentCourse.segments) || [];
+        var segRaw = (location && location.seg_id) ? String(location.seg_id).trim() : '';
+        var segIds = [];
+        if (segRaw) {
+            segRaw.replace(/"/g, '').split(',').forEach(function (s) {
+                s = s.trim();
+                if (s) segIds.push(s);
+            });
+        }
+        var events = {};
+        EVENT_CHOICES.forEach(function (ev) { events[ev.value] = 'n'; });
+        if (!segIds.length) {
+            return { events: events, rationale: 'Set segment ID(s) to derive events from the course.' };
+        }
+        var matched = [];
+        var union = {};
+        segments.forEach(function (seg) {
+            var sid = String(seg.seg_id || '').trim();
+            if (sid && segIds.indexOf(sid) >= 0) matched.push(seg);
+        });
+        if (!matched.length) {
+            return { events: events, rationale: 'No course segment matches seg_id "' + segIds.join(',') + '".' };
+        }
+        var labels = [];
+        matched.forEach(function (seg) {
+            labels.push(seg.seg_label || seg.seg_id || '');
+            (seg.events || []).forEach(function (ev) {
+                union[String(ev).trim().toLowerCase()] = true;
+            });
+        });
+        EVENT_CHOICES.forEach(function (ev) {
+            events[ev.value] = union[ev.value] ? 'y' : 'n';
+        });
+        var active = EVENT_CHOICES.filter(function (ev) { return events[ev.value] === 'y'; })
+            .map(function (ev) { return ev.label; });
+        return {
+            events: events,
+            rationale: 'From segment(s) ' + labels.join(', ') + ': ' + (active.length ? active.join(', ') : '(none)')
+        };
+    }
+
+    function applySuggestedEventsToLocation(loc) {
+        if (!loc) return;
+        var result = suggestLocationEventsClient(loc);
+        EVENT_CHOICES.forEach(function (ev) {
+            loc[ev.value] = result.events[ev.value] || 'n';
+        });
+        return result.rationale;
+    }
+
+    function renderLocationsTableHeader() {
+        var row = document.getElementById('locations-thead-row');
+        if (!row) return;
+        row.innerHTML = '';
+        ['ID', 'Type', 'Label'].forEach(function (text) {
+            var th = document.createElement('th');
+            th.textContent = text;
+            row.appendChild(th);
+        });
+        getPackageResources().forEach(function (res) {
+            var th = document.createElement('th');
+            th.textContent = res.code;
+            th.title = (res.label || res.code) + ' (' + res.code + '_count)';
+            row.appendChild(th);
+        });
+        if (isEditMode) {
+            var actionTh = document.createElement('th');
+            actionTh.textContent = '';
+            row.appendChild(actionTh);
+        }
     }
 
     function highlightLocationRow(idx) {
-        document.querySelectorAll('#locations-tbody tr').forEach(function (tr) {
+        document.querySelectorAll('#locations-tbody tr:not(.locations-totals-row)').forEach(function (tr) {
             tr.classList.remove('location-row-highlight');
         });
-        var rows = document.querySelectorAll('#locations-tbody tr');
+        var rows = document.querySelectorAll('#locations-tbody tr:not(.locations-totals-row)');
         if (rows[idx]) rows[idx].classList.add('location-row-highlight');
     }
 
@@ -2318,7 +2906,6 @@ document.addEventListener('DOMContentLoaded', function () {
             card.style.display = currentCourse ? 'block' : 'none';
             if (empty) empty.style.display = 'block';
             if (wrap) wrap.style.display = 'none';
-            renderSegmentPinsList();
             return;
         }
         card.style.display = 'block';
@@ -2345,14 +2932,20 @@ document.addEventListener('DOMContentLoaded', function () {
             fromBtn.className = 'pin-link';
             fromBtn.textContent = pinStart || '—';
             fromBtn.title = 'Show pin on map: ' + (pinStart || 'From');
-            fromBtn.addEventListener('click', function () { openSegmentPinPopupForIndex(startIdx); });
+            fromBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                openSegmentPinPopupForIndex(startIdx);
+            });
             fromCell.appendChild(fromBtn);
             var toBtn = document.createElement('button');
             toBtn.type = 'button';
             toBtn.className = 'pin-link';
             toBtn.textContent = pinEnd || '—';
             toBtn.title = 'Show pin on map: ' + (pinEnd || 'To');
-            toBtn.addEventListener('click', function () { openSegmentPinPopupForIndex(endIdx); });
+            toBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                openSegmentPinPopupForIndex(endIdx);
+            });
             toCell.appendChild(toBtn);
             var segIdCell = document.createElement('td');
             var segIdBtn = document.createElement('button');
@@ -2360,7 +2953,10 @@ document.addEventListener('DOMContentLoaded', function () {
             segIdBtn.className = 'pin-link';
             segIdBtn.textContent = segId;
             segIdBtn.title = 'Edit segment: label, width, schema, direction, description, events';
-            segIdBtn.addEventListener('click', function () { openSegmentEditInTile(segIdx); });
+            segIdBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                openSegmentEditInTile(segIdx);
+            });
             segIdCell.appendChild(segIdBtn);
             tr.appendChild(segIdCell);
             tr.appendChild(fromCell);
@@ -2385,35 +2981,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 tr.appendChild(cell);
             });
             tr.appendChild(document.createElement('td')).textContent = Math.round(len * 100) / 100;
-            var mapCell = document.createElement('td');
-            mapCell.className = 'course-map-action-cell';
-            var mapBtn = document.createElement('button');
-            mapBtn.type = 'button';
-            mapBtn.className = 'pin-link course-map-action-btn';
-            mapBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
-            mapBtn.title = 'Pan to this segment and open the end pin (use when the segment is hard to click on the map)';
-            mapBtn.addEventListener('click', function () { openSegmentPinPopupForIndex(endIdx); });
-            mapCell.appendChild(mapBtn);
-            var addPinBtn = document.createElement('button');
-            addPinBtn.type = 'button';
-            addPinBtn.className = 'pin-link course-map-action-btn';
-            addPinBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
-            addPinBtn.title = 'Pan to this segment and start Add Segment Pin mode — then click on the line where you want the new pin (e.g. at 10K Turn on the return leg)';
-            addPinBtn.addEventListener('click', function () {
-                window.courseMappingMap.closePopup();
-                var coords = currentCourse.geometry.coordinates;
-                var lo = Math.max(0, Math.min(startIdx, endIdx));
-                var hi = Math.min(coords.length - 1, Math.max(startIdx, endIdx));
-                if (lo <= hi) {
-                    var latlngs = [];
-                    for (var i = lo; i <= hi; i++) latlngs.push(L.latLng(coords[i][1], coords[i][0]));
-                    var bounds = L.latLngBounds(latlngs);
-                    window.courseMappingMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 18, duration: 0.3 });
-                }
-                if (typeof startSegmentPinMode === 'function') startSegmentPinMode({ startIdx: lo, endIdx: hi });
-            });
-            mapCell.appendChild(addPinBtn);
-            tr.appendChild(mapCell);
             tr.style.cursor = 'pointer';
             tr.title = 'Click row to zoom map to this segment';
             tr.addEventListener('click', function () {
@@ -2431,46 +2998,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                 }
             });
-            tbody.appendChild(tr);
-        });
-        renderSegmentPinsList();
-    }
-
-    function renderSegmentPinsList() {
-        var card = document.getElementById('segment-pins-card');
-        var empty = document.getElementById('segment-pins-empty');
-        var wrap = document.getElementById('segment-pins-table-wrap');
-        var tbody = document.getElementById('segment-pins-tbody');
-        if (!card || !tbody) return;
-        if (!currentCourse || !currentCourse.geometry || !currentCourse.geometry.coordinates || !Array.isArray(currentCourse.segment_breaks) || currentCourse.segment_breaks.length === 0) {
-            if (card) card.style.display = currentCourse ? 'block' : 'none';
-            if (empty) empty.style.display = 'block';
-            if (wrap) wrap.style.display = 'none';
-            return;
-        }
-        card.style.display = 'block';
-        empty.style.display = 'none';
-        wrap.style.display = 'block';
-        var coords = currentCourse.geometry.coordinates;
-        var coordsLen = coords.length;
-        var breaks = (currentCourse.segment_breaks || []).slice().sort(function (a, b) { return a - b; });
-        tbody.innerHTML = '';
-        breaks.forEach(function (idx) {
-            if (idx < 0 || idx >= coordsLen) return;
-            var label = getPinLabelForIndex(idx, coordsLen);
-            var tr = document.createElement('tr');
-            tr.appendChild(document.createElement('td')).textContent = idx;
-            tr.appendChild(document.createElement('td')).textContent = label || '—';
-            var actionCell = document.createElement('td');
-            actionCell.className = 'course-map-action-cell';
-            var showBtn = document.createElement('button');
-            showBtn.type = 'button';
-            showBtn.className = 'pin-link course-map-action-btn';
-            showBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
-            showBtn.title = 'Pan to this pin and open its popup (use when the pin is behind others or the U-turn icon)';
-            showBtn.addEventListener('click', function () { openSegmentPinPopupForIndex(idx); });
-            actionCell.appendChild(showBtn);
-            tr.appendChild(actionCell);
             tbody.appendChild(tr);
         });
     }
@@ -2589,10 +3116,12 @@ document.addEventListener('DOMContentLoaded', function () {
         card.style.display = 'block';
         if (empty) empty.style.display = 'none';
         if (wrap) wrap.style.display = 'block';
+        renderLocationsTableHeader();
         tbody.innerHTML = '';
+        var resourceTotals = {};
+        getPackageResources().forEach(function (res) { resourceTotals[res.code] = 0; });
         currentCourse.locations.forEach(function (loc, i) {
-            var lat = typeof loc.lat === 'number' ? loc.lat : parseFloat(loc.lat);
-            var lon = typeof loc.lon === 'number' ? loc.lon : parseFloat(loc.lon);
+            syncLocationResourceCounts(loc);
             var tr = document.createElement('tr');
             var typeLabel = getLocationTypeLabel(loc.loc_type);
             var locId = loc.id != null ? String(loc.id) : String(i + 1);
@@ -2601,7 +3130,7 @@ document.addEventListener('DOMContentLoaded', function () {
             idBtn.type = 'button';
             idBtn.className = 'loc-id-link';
             idBtn.textContent = locId;
-            idBtn.title = 'Open location details';
+            idBtn.title = isEditMode ? 'Edit location details' : 'View location details';
             idBtn.addEventListener('click', function () {
                 openLocationEditorModal(i, !isEditMode);
             });
@@ -2609,28 +3138,42 @@ document.addEventListener('DOMContentLoaded', function () {
             tr.appendChild(idCell);
             tr.appendChild(document.createElement('td')).textContent = typeLabel;
             tr.appendChild(document.createElement('td')).textContent = loc.loc_label || '';
-            tr.appendChild(document.createElement('td')).textContent = truncateNotesPreview(loc.notes, 80);
-            tr.appendChild(document.createElement('td')).textContent = isNaN(lat) ? '' : lat.toFixed(5);
-            tr.appendChild(document.createElement('td')).textContent = isNaN(lon) ? '' : lon.toFixed(5);
-            var actionCell = document.createElement('td');
-            actionCell.style.whiteSpace = 'nowrap';
+            getPackageResources().forEach(function (res) {
+                var code = res.code;
+                var count = (loc.resources && loc.resources[code] != null)
+                    ? loc.resources[code]
+                    : (loc[code + '_count'] || 0);
+                var n = parseInt(count, 10);
+                if (isNaN(n)) n = 0;
+                resourceTotals[code] += n;
+                tr.appendChild(document.createElement('td')).textContent = String(n);
+            });
             if (isEditMode) {
-                var editBtn = document.createElement('button');
-                editBtn.type = 'button';
-                editBtn.textContent = 'Edit';
-                editBtn.style.marginRight = '4px';
-                editBtn.addEventListener('click', function () { openLocationEditorModal(i, false); });
-                actionCell.appendChild(editBtn);
+                var actionCell = document.createElement('td');
+                actionCell.style.whiteSpace = 'nowrap';
+                var removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'btn-remove-loc';
+                removeBtn.setAttribute('data-index', String(i));
+                removeBtn.textContent = 'Remove';
+                actionCell.appendChild(removeBtn);
+                tr.appendChild(actionCell);
             }
-            var removeBtn = document.createElement('button');
-            removeBtn.type = 'button';
-            removeBtn.className = 'btn-remove-loc';
-            removeBtn.setAttribute('data-index', String(i));
-            removeBtn.textContent = 'Remove';
-            actionCell.appendChild(removeBtn);
-            tr.appendChild(actionCell);
             tbody.appendChild(tr);
         });
+        var totalTr = document.createElement('tr');
+        totalTr.className = 'locations-totals-row';
+        totalTr.appendChild(document.createElement('td')).textContent = 'Total';
+        totalTr.appendChild(document.createElement('td')).textContent = '';
+        totalTr.appendChild(document.createElement('td')).textContent = '';
+        getPackageResources().forEach(function (res) {
+            totalTr.appendChild(document.createElement('td')).textContent =
+                String(resourceTotals[res.code] || 0);
+        });
+        if (isEditMode) {
+            totalTr.appendChild(document.createElement('td'));
+        }
+        tbody.appendChild(totalTr);
         tbody.querySelectorAll('.btn-remove-loc').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var idx = parseInt(btn.getAttribute('data-index'), 10);
@@ -2922,38 +3465,62 @@ document.addEventListener('DOMContentLoaded', function () {
         if (btnEdit) {
             btnEdit.addEventListener('click', function () {
                 if (isEditMode) {
-                    if (isDirty() && !window.confirm('Discard unsaved changes?')) return;
-                    clearDirty();
-                    setEditMode(false);
-                    syncCourseToHeaderInputs();
+                    var dirty = usePackageLevelEditSave() ? isConfigPackageDirty() : isDirty();
+                    if (dirty && !window.confirm('Discard unsaved changes?')) return;
+                    if (usePackageLevelEditSave()) {
+                        cancelConfigPackageEdit();
+                    } else {
+                        clearDirty();
+                        setEditMode(false);
+                        syncCourseToHeaderInputs();
+                    }
                 } else {
                     setEditMode(true);
                 }
             });
         }
 
-        var nameInput = document.getElementById('course-map-name');
-        var descInput = document.getElementById('course-map-description');
-        if (nameInput) nameInput.addEventListener('input', function () { if (currentCourse) setDirty(); });
-        if (descInput) descInput.addEventListener('input', function () {
-            if (currentCourse) setDirty();
-            resizeDescriptionTextarea();
+        ['course-map-name', 'course-map-name-standalone'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) el.addEventListener('input', function () { if (currentCourse) setDirty(); });
+        });
+        ['course-map-description', 'course-map-description-standalone'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('input', function () {
+                    if (currentCourse) setDirty();
+                    resizeDescriptionTextarea();
+                });
+            }
         });
 
         if (btnSave) {
             btnSave.addEventListener('click', async function () {
                 if (!currentCourse) return;
-                var n = nameInput ? String(nameInput.value || '').trim().slice(0, 255) : '';
-                var d = descInput ? String(descInput.value || '').trim().slice(0, 255) : '';
+                var nameEl = activeNameInputEl();
+                var descEl = activeDescriptionInputEl();
+                var n = nameEl ? String(nameEl.value || '').trim().slice(0, 255) : '';
+                var d = descEl ? String(descEl.value || '').trim().slice(0, 255) : '';
                 currentCourse.name = n;
                 currentCourse.description = d;
                 try {
+                    if (usePackageLevelEditSave()) {
+                        await saveConfigPackageWorkspaceWithManifest();
+                        setEditMode(false);
+                        console.log('Saved config package:', resolveConfigPackageId());
+                        return;
+                    }
                     var courseIdToSave = currentCourseId;
                     if (isConfigPackageMode()) {
                         courseIdToSave = resolveConfigPackageId();
                         currentCourse.id = courseIdToSave;
                         currentCourse.config_id = courseIdToSave;
-                    } else if (!courseIdToSave) {
+                        await saveConfigPackageWorkspace({ label: n, description: d });
+                        setEditMode(false);
+                        console.log('Saved config package course:', courseIdToSave);
+                        return;
+                    }
+                    if (!courseIdToSave) {
                         var createRes = await fetch('/api/courses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
                         var createData = await createRes.json();
                         if (!createRes.ok) throw new Error(createData.detail || createRes.statusText);
@@ -2961,29 +3528,8 @@ document.addEventListener('DOMContentLoaded', function () {
                         courseIdToSave = createData.id;
                         currentCourse.id = courseIdToSave;
                     }
-                    // Build payload with explicit geometry and turnaround_indices to ensure Same Route Back is persisted (Issue #732)
-                    var toSave = JSON.parse(JSON.stringify({
-                        id: courseIdToSave,
-                        config_id: isConfigPackageMode() ? resolveConfigPackageId() : currentCourse.config_id,
-                        name: currentCourse.name,
-                        description: currentCourse.description,
-                        segments: currentCourse.segments || [],
-                        locations: currentCourse.locations || [],
-                        geometry: currentCourse.geometry,
-                        segment_breaks: currentCourse.segment_breaks || [],
-                        segment_break_labels: currentCourse.segment_break_labels || {},
-                        segment_break_descriptions: currentCourse.segment_break_descriptions || {},
-                        segment_break_ids: currentCourse.segment_break_ids || {},
-                        turnaround_indices: Array.isArray(currentCourse.turnaround_indices) ? currentCourse.turnaround_indices.slice() : [],
-                        start_description: currentCourse.start_description || '',
-                        end_description: currentCourse.end_description || '',
-                        turnaround_descriptions: currentCourse.turnaround_descriptions || {},
-                        flow_control_points: Array.isArray(currentCourse.flow_control_points) ? JSON.parse(JSON.stringify(currentCourse.flow_control_points)) : []
-                    }));
-                    var saveUrl = isConfigPackageMode()
-                        ? '/api/config/packages/' + encodeURIComponent(resolveConfigPackageId()) + '/course'
-                        : '/api/courses/' + encodeURIComponent(courseIdToSave);
-                    const res = await fetch(saveUrl, {
+                    var toSave = JSON.parse(JSON.stringify(buildCourseSavePayload(courseIdToSave)));
+                    const res = await fetch('/api/courses/' + encodeURIComponent(courseIdToSave), {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         credentials: 'same-origin',
@@ -2992,11 +3538,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     const data = await res.json();
                     if (!res.ok) throw new Error(data.detail || res.statusText);
                     if (data.ok && data.course) {
-                        var savedId = isConfigPackageMode() ? resolveConfigPackageId() : data.course.id;
-                        setCourse(savedId, data.course);
-                        clearDirty();
-                        if (!isConfigPackageMode()) loadCourseList();
-                        console.log('Saved course:', savedId, data.course.name || '(no name)');
+                        setCourse(data.course.id, data.course);
+                        loadCourseList();
+                        console.log('Saved course:', data.course.id, data.course.name || '(no name)');
                     }
                 } catch (e) {
                     console.error('Save course failed:', e);
@@ -3532,13 +4076,14 @@ document.addEventListener('DOMContentLoaded', function () {
         var resSave = document.getElementById('resources-editor-save');
         if (resSave) resSave.addEventListener('click', savePackageResources);
         var resAdd = document.getElementById('resources-add-row');
+        attachResourceCodeInput(document.getElementById('resources-new-code'));
         if (resAdd) resAdd.addEventListener('click', function () {
             var codeInp = document.getElementById('resources-new-code');
             var labelInp = document.getElementById('resources-new-label');
-            var code = (codeInp && codeInp.value || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+            var code = normalizeResourceCodeInput(codeInp && codeInp.value);
             var label = (labelInp && labelInp.value || '').trim() || code.toUpperCase();
             if (!code || !/^[a-z]/.test(code)) {
-                alert('Enter a resource code (lowercase letters, optional digits/underscore).');
+                alert('Enter a resource code (lowercase letters, optional digits/underscore, max ' + RESOURCE_CODE_MAX_LEN + ').');
                 return;
             }
             if (!resourcesEditorDraft) resourcesEditorDraft = getPackageResources().slice();
@@ -3553,15 +4098,33 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         var locModalClose = document.getElementById('location-editor-close');
         if (locModalClose) locModalClose.addEventListener('click', function () {
+            destroyLocationEditorMap();
             hideModal(document.getElementById('location-editor-modal'));
             locationEditorIndex = null;
         });
         document.querySelectorAll('.course-location-modal-backdrop').forEach(function (el) {
             el.addEventListener('click', function () {
+                destroyLocationEditorMap();
                 hideModal(el.closest('.course-location-modal'));
                 locationEditorIndex = null;
             });
         });
+
+        window.configPackageCourse = {
+            enterEdit: function () {
+                setEditMode(true);
+                updateCourseUI();
+            },
+            exitEdit: function () {
+                setEditMode(false);
+                updateCourseUI();
+            },
+            isEditMode: function () { return isEditMode; },
+            isDirty: isConfigPackageDirty,
+            cancelEdit: cancelConfigPackageEdit,
+            saveAll: saveConfigPackageWorkspace,
+            syncHeaderFromMeta: syncCourseHeaderFromPackageMeta
+        };
 
         if (isConfigPackageMode()) {
             applyConfigPackageUIMode();

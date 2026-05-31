@@ -18,7 +18,11 @@ from fastapi.templating import Jinja2Templates
 from typing import Optional
 
 from app.common.config import load_reporting
-from app.utils.constants import LOCATION_TYPE_CHOICES, COURSE_EVENT_IDS
+from app.utils.constants import (
+    COURSE_EVENT_IDS,
+    DAY_SHORT_CODES,
+    LOCATION_TYPE_CHOICES,
+)
 from app.utils.auth import (
     validate_password,
     create_session_response,
@@ -393,6 +397,7 @@ async def course_mapping(request: Request):
             "meta": meta,
             "location_types": location_types,
             "event_choices": event_choices,
+            "day_short_codes": DAY_SHORT_CODES,
         },
     )
 
@@ -516,6 +521,7 @@ async def race_configuration_page(request: Request):
             "meta": meta,
             "location_types": location_types,
             "event_choices": event_choices,
+            "day_short_codes": DAY_SHORT_CODES,
         },
     )
 

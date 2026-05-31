@@ -47,6 +47,7 @@
 <script>
     window.LOCATION_TYPES_FROM_SERVER = {{ location_types | tojson }};
     window.EVENT_CHOICES_FROM_SERVER = {{ event_choices | tojson }};
+    window.DAY_SHORT_CODES_FROM_SERVER = {{ (day_short_codes | default(['fri', 'sat', 'sun', 'mon'], true)) | tojson }};
 </script>
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

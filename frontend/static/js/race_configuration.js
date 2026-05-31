@@ -65,137 +65,45 @@
     function showEntryOnly() {
         const entry = document.getElementById('race-config-entry');
         const workspace = document.getElementById('race-config-workspace');
+        const pageHeader = document.querySelector('.page-header');
         if (entry) entry.style.display = 'block';
         if (workspace) workspace.style.display = 'none';
+        if (pageHeader) pageHeader.style.display = '';
     }
 
-    function setMetaDisplayValues(label, description) {
-        const labelEl = document.getElementById('race-config-display-label');
-        const descEl = document.getElementById('race-config-display-description');
-        const name = (label || '').trim();
-        const desc = (description || '').trim();
-        if (labelEl) {
-            labelEl.textContent = name || '(no name)';
-            labelEl.classList.toggle('meta-value-empty', !name);
-        }
-        if (descEl) {
-            descEl.textContent = desc || '(none)';
-            descEl.classList.toggle('meta-value-empty', !desc);
-        }
+    function isPackageWorkspaceDirty() {
+        return window.configPackageCourse && window.configPackageCourse.isDirty();
     }
 
-    function setMetaViewMode(mode) {
-        const displayBlock = document.getElementById('race-config-meta-display');
-        const editableBlock = document.getElementById('race-config-meta-editable');
-        const editBtn = document.getElementById('race-config-edit-meta');
-        const saveBtn = document.getElementById('race-config-save-meta');
-        const statusEl = document.getElementById('race-config-save-status');
-        const isEdit = mode === 'edit';
-        if (displayBlock) displayBlock.style.display = isEdit ? 'none' : 'block';
-        if (editableBlock) editableBlock.style.display = isEdit ? 'block' : 'none';
-        if (editBtn) editBtn.style.display = isEdit ? 'none' : 'inline-block';
-        if (saveBtn) saveBtn.style.display = isEdit ? 'inline-block' : 'none';
-        if (!isEdit && statusEl) statusEl.style.display = 'none';
-    }
-
-    function showWorkspace(manifest, configId, manifestEditable) {
+    function showWorkspace(manifest, configId) {
         const entry = document.getElementById('race-config-entry');
         const workspace = document.getElementById('race-config-workspace');
-        const idEl = document.getElementById('race-config-package-id');
-        const labelInput = document.getElementById('race-config-edit-label');
-        const descInput = document.getElementById('race-config-edit-description');
-        const editableBlock = document.getElementById('race-config-meta-editable');
-        const displayBlock = document.getElementById('race-config-meta-display');
-        const readonlyMsg = document.getElementById('race-config-meta-readonly');
-        const editBtn = document.getElementById('race-config-edit-meta');
-        const saveBtn = document.getElementById('race-config-save-meta');
-        const statusEl = document.getElementById('race-config-save-status');
+        const pageHeader = document.querySelector('.page-header');
 
         currentConfigId = configId;
         if (entry) entry.style.display = 'none';
         if (workspace) workspace.style.display = 'block';
-        if (idEl) idEl.textContent = configId;
-        if (statusEl) statusEl.style.display = 'none';
+        if (pageHeader) pageHeader.style.display = 'none';
 
         const label = (manifest && manifest.label) || configId;
         const description = (manifest && manifest.description) || '';
-        const canEdit = manifestEditable !== false;
-
-        if (canEdit && labelInput) labelInput.value = label;
-        if (canEdit && descInput) descInput.value = description;
-
-        if (readonlyMsg) readonlyMsg.style.display = canEdit ? 'none' : 'block';
-        if (displayBlock) displayBlock.style.display = canEdit ? 'none' : 'block';
-        if (editableBlock) editableBlock.style.display = 'none';
-        if (editBtn) editBtn.style.display = 'none';
-        if (saveBtn) saveBtn.style.display = 'none';
-
-        if (canEdit) {
-            setMetaDisplayValues(label, description);
-            setMetaViewMode('display');
-        } else {
-            setMetaDisplayValues(configId, '');
-        }
+        const eventDay = (manifest && manifest.event_day) || '';
 
         if (window.updateConfigNavLinks) {
             window.updateConfigNavLinks(configId);
         }
         syncCourseMappingConfigId(configId);
         window.CONFIG_PACKAGE_RESOURCES = (manifest && manifest.resources) || [];
+        window.CONFIG_PACKAGE_EVENT_DAY = eventDay;
+        window.PENDING_PACKAGE_META = { label: label, description: description, event_day: eventDay };
+        if (window.configPackageCourse && window.configPackageCourse.syncHeaderFromMeta) {
+            window.configPackageCourse.syncHeaderFromMeta(label, description, eventDay);
+            delete window.PENDING_PACKAGE_META;
+        }
         if (getTab() === 'course' && window.courseMappingMap) {
             setTimeout(function () {
                 window.courseMappingMap.invalidateSize();
             }, 150);
-        }
-    }
-
-    async function savePackageMetadata() {
-        if (!currentConfigId) return;
-        const labelInput = document.getElementById('race-config-edit-label');
-        const descInput = document.getElementById('race-config-edit-description');
-        const saveBtn = document.getElementById('race-config-save-meta');
-        const statusEl = document.getElementById('race-config-save-status');
-        const label = labelInput && labelInput.value.trim();
-        const description = descInput && descInput.value.trim();
-        if (!label) {
-            alert('Name is required.');
-            return;
-        }
-        if (saveBtn) saveBtn.disabled = true;
-        if (statusEl) statusEl.style.display = 'none';
-        try {
-            const resp = await fetch(
-                '/api/config/packages/' + encodeURIComponent(currentConfigId),
-                {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({ label: label, description: description || '' }),
-                }
-            );
-            const data = await resp.json();
-            if (!resp.ok) {
-                throw new Error(data.detail || 'Failed to save');
-            }
-            const savedLabel =
-                (data.manifest && data.manifest.label) || label;
-            const savedDescription =
-                (data.manifest && data.manifest.description) || description || '';
-            if (labelInput) labelInput.value = savedLabel;
-            if (descInput) descInput.value = savedDescription;
-            setMetaDisplayValues(savedLabel, savedDescription);
-            setMetaViewMode('display');
-            if (statusEl) {
-                statusEl.textContent = 'Saved.';
-                statusEl.style.display = 'inline';
-                setTimeout(function () {
-                    if (statusEl) statusEl.style.display = 'none';
-                }, 2000);
-            }
-        } catch (err) {
-            alert(err.message || String(err));
-        } finally {
-            if (saveBtn) saveBtn.disabled = false;
         }
     }
 
@@ -224,12 +132,6 @@
         if (root) {
             if (configId) root.dataset.configId = configId;
             else delete root.dataset.configId;
-        }
-        var link = document.getElementById('race-config-course-fullpage-link');
-        if (link) {
-            link.href = configId
-                ? '/course-mapping?config_id=' + encodeURIComponent(configId)
-                : '/course-mapping';
         }
     }
 
@@ -386,7 +288,7 @@
             }
             const data = await resp.json();
             const manifest = data.manifest || {};
-            showWorkspace(manifest, configId, data.manifest_editable);
+            showWorkspace(manifest, configId);
             setActiveTab(getTab());
         } catch (e) {
             console.error(e);
@@ -422,28 +324,33 @@
         const createBtn = document.getElementById('race-config-create-btn');
         if (createBtn) createBtn.addEventListener('click', createPackage);
 
-        const saveMetaBtn = document.getElementById('race-config-save-meta');
-        if (saveMetaBtn) saveMetaBtn.addEventListener('click', savePackageMetadata);
-
-        const editMetaBtn = document.getElementById('race-config-edit-meta');
-        if (editMetaBtn) {
-            editMetaBtn.addEventListener('click', function () {
-                setMetaViewMode('edit');
-            });
-        }
-
         const changePkg = document.getElementById('race-config-change-package');
         if (changePkg) {
-            changePkg.addEventListener('click', function () {
+            changePkg.addEventListener('click', function (e) {
+                if (
+                    isPackageWorkspaceDirty() &&
+                    !window.confirm('Discard unsaved changes to this package?')
+                ) {
+                    e.preventDefault();
+                    return;
+                }
                 window.location.href = CONFIG_PATH_PREFIX;
             });
         }
 
         document.querySelectorAll('.race-config-tab').forEach(function (btn) {
-            btn.addEventListener('click', function () {
+            btn.addEventListener('click', function (e) {
                 const tab = btn.getAttribute('data-tab');
                 const cid = getConfigId();
                 if (!cid) return;
+                if (tab === getTab()) return;
+                if (
+                    isPackageWorkspaceDirty() &&
+                    !window.confirm('Discard unsaved changes to this package?')
+                ) {
+                    e.preventDefault();
+                    return;
+                }
                 window.location.href = buildConfigUrl(cid, tab);
             });
         });

@@ -72,10 +72,9 @@ Click **Save** to persist the course. Use **Export** (e.g. “to folder”) to g
 
 ---
 
-## Segments table and Segment pins table
+## Segments table
 
-- **Segments table:** Lists each segment with ID, From pin, To pin, Segment label, Events, and **per-event distances** (Full, Half, 10K, Elite, Open). Each event column shows the distance range (e.g. 0.00–2.72 or 0 if that event does not use the segment). **Click a row** to zoom the map to that segment. You can edit a segment (label, events, etc.) by clicking its **ID**.
-- **Segment pins table:** Lists all pins (Index, Label). Use **Show on map** (eye icon) to pan to a pin.
+- **Segments table:** Lists each segment with ID, From pin, To pin, Segment label, Events, and **per-event distances** (Full, Half, 10K, Elite, Open). Each event column shows the distance range (e.g. 0.00–2.72 or 0 if that event does not use the segment). **Click a row** to zoom the map to that segment. You can edit a segment (label, events, etc.) by clicking its **ID**. **Click From pin or To pin** to pan to that boundary and open its pin popup (edit label, flow control, extend, etc.).
 
 Use the **Action** column in the Segments table to **Show on map** (eye) for a segment or **Add pin on segment** (pin icon) to add a new boundary on that leg. Segment boundaries are determined by the **next** pin along the path—to have a segment end at a specific place (e.g. 10K Turn on the return leg), use **Add pin on segment** on that leg and click on the line at that spot, then label the new pin.
 
