@@ -26,125 +26,190 @@
                 {% endfor %}
             </select>
         </div>
+        <div class="config-package-field" id="config-package-events-field" style="display: none;">
+            <span class="config-package-label">Events</span>
+            <span id="course-map-package-events-text" class="config-package-value"></span>
+        </div>
     </div>
 </div>
 
 <div class="card" id="course-from-map-card">
-    <h3 class="course-from-map-title">Course (map)</h3>
-    <p class="course-from-map-lead">Draw the route to define <strong>segments</strong> and place <strong>locations</strong> on the course. Tables below list what you set on the map.</p>
-    <div id="course-map-header" class="course-map-header-inner">
-        <div class="course-map-header-top" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem;">
-            <div id="course-map-meta-block" class="course-map-meta-standalone" style="flex: 1; min-width: 0;">
-                <div id="course-map-id-standalone" style="font-size: 0.8rem; color: #7f8c8d; margin-bottom: 0.25rem;"></div>
-                <div style="margin-bottom: 0.25rem;"><span class="course-label">Course Name:</span> <span id="course-map-name-text-standalone"></span><input type="text" id="course-map-name-standalone" placeholder="Course name" maxlength="255" style="display: none; width: 100%; max-width: 400px; padding: 0.35rem 0.5rem; font-size: 1rem; font-weight: 600; color: #2c3e50; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;" /></div>
-                <div style="width: 100%;"><span class="course-label">Description:</span> <span id="course-map-description-text-standalone"></span><textarea id="course-map-description-standalone" placeholder="Course description (optional)" maxlength="255" rows="2" style="display: none; width: 100%; min-height: 2.5em; padding: 0.35rem 0.5rem; font-size: 0.875rem; color: #34495e; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; resize: none; overflow: hidden; font-family: inherit;"></textarea></div>
+    <div id="course-legacy-draw-header">
+        <h3 class="course-from-map-title">Course (map)</h3>
+        <p class="course-from-map-lead">Draw the route to define <strong>segments</strong> and place <strong>locations</strong> on the course. Tables below list what you set on the map.</p>
+        <div id="course-map-header" class="course-map-header-inner">
+            <div class="course-map-header-top" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem;">
+                <div id="course-map-meta-block" class="course-map-meta-standalone" style="flex: 1; min-width: 0;">
+                    <div id="course-map-id-standalone" style="font-size: 0.8rem; color: #7f8c8d; margin-bottom: 0.25rem;"></div>
+                    <div style="margin-bottom: 0.25rem;"><span class="course-label">Course Name:</span> <span id="course-map-name-text-standalone"></span><input type="text" id="course-map-name-standalone" placeholder="Course name" maxlength="255" style="display: none; width: 100%; max-width: 400px; padding: 0.35rem 0.5rem; font-size: 1rem; font-weight: 600; color: #2c3e50; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;" /></div>
+                    <div style="width: 100%;"><span class="course-label">Description:</span> <span id="course-map-description-text-standalone"></span><textarea id="course-map-description-standalone" placeholder="Course description (optional)" maxlength="255" rows="2" style="display: none; width: 100%; min-height: 2.5em; padding: 0.35rem 0.5rem; font-size: 0.875rem; color: #34495e; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; resize: none; overflow: hidden; font-family: inherit;"></textarea></div>
+                </div>
+                <div id="course-map-header-buttons" class="course-map-header-buttons-standalone" style="display: flex; gap: 0.5rem; align-items: center;">
+                    <button type="button" id="btn-edit-course" class="course-btn">Edit</button>
+                    <button type="button" id="btn-export" class="course-btn" disabled title="Write segments.csv, flow.csv, locations.csv, GPX to course folder">Export</button>
+                    <button type="button" id="btn-delete-course" class="course-btn" disabled title="Delete this course (cannot be undone)">Delete Course</button>
+                    <button type="button" id="btn-save-course" class="course-btn primary" disabled style="display: none;">Save</button>
+                </div>
             </div>
-            <div id="course-map-header-buttons" class="course-map-header-buttons-standalone" style="display: flex; gap: 0.5rem; align-items: center;">
-                <button type="button" id="btn-edit-course">Edit</button>
-                <button type="button" id="btn-export" disabled title="Write segments.csv, flow.csv, locations.csv, GPX to course folder">Export</button>
-                <button type="button" id="btn-delete-course" disabled title="Delete this course (cannot be undone)">Delete Course</button>
-                <button type="button" id="btn-save-course" disabled style="display: none;">Save</button>
+            <div id="course-edit-toolbar" style="display: none; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #eee;">
+                <button type="button" id="btn-draw-line" class="course-btn" disabled title="Click map to add points to course line">Draw Line</button>
+                <button type="button" id="btn-undo-point" class="course-btn" disabled>Undo Last Point</button>
+                <button type="button" id="btn-clear-line" class="course-btn" disabled>Clear Line</button>
+                <button type="button" id="btn-same-route-back" class="course-btn" disabled>Same Route Back</button>
+                <span id="rejoin-at-wrap" style="display: none; align-items: center; gap: 0.35rem;">
+                    <label for="rejoin-at-pin" class="rejoin-label">Rejoin at:</label>
+                    <select id="rejoin-at-pin" title="Choose rejoin point for return leg"></select>
+                </span>
+                <button type="button" id="btn-confirm-turnaround" class="course-btn" disabled style="display: none;">Confirm</button>
+                <button type="button" id="btn-cancel-turnaround" class="course-btn" disabled style="display: none;">Cancel</button>
+                <button type="button" id="snap-to-road" class="course-btn active">Snap to Road</button>
+                <button type="button" id="btn-add-segment-pin" class="course-btn" disabled>Add Segment Pin</button>
+                <button type="button" id="btn-done-extending" class="course-btn" disabled style="display: none;">Done extending</button>
+                <button type="button" id="btn-add-location" class="course-btn" disabled>Add Location</button>
             </div>
-        </div>
-        <div id="course-edit-toolbar" style="display: none; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #eee;">
-            <button type="button" id="btn-draw-line" disabled title="Click map to add points to course line">Draw Line</button>
-            <button type="button" id="btn-undo-point" disabled title="Remove the last point from the course line">Undo Last Point</button>
-            <button type="button" id="btn-clear-line" disabled title="Remove course line from map and course">Clear Line</button>
-            <button type="button" id="btn-same-route-back" disabled title="Add return leg from turnaround point (Draw Line mode only)">Same Route Back</button>
-            <span id="rejoin-at-wrap" style="display: none; align-items: center; gap: 0.35rem;">
-                <label for="rejoin-at-pin" class="rejoin-label">Rejoin at:</label>
-                <select id="rejoin-at-pin" title="Choose rejoin point for return leg (or click/drag red marker on map)"></select>
-            </span>
-            <button type="button" id="btn-confirm-turnaround" disabled style="display: none;" title="Confirm turnaround point and add return leg">Confirm</button>
-            <button type="button" id="btn-cancel-turnaround" disabled style="display: none;" title="Cancel Same Route Back">Cancel</button>
-            <button type="button" id="snap-to-road" class="active" title="When on, new segments follow roads (routing). When off, line is straight between clicks.">Snap to Road</button>
-            <button type="button" id="btn-add-segment-pin" disabled title="Click on the course line to add a segment boundary">Add Segment Pin</button>
-            <button type="button" id="btn-done-extending" disabled style="display: none;" title="Finish extending from this point and return to normal draw">Done extending</button>
-            <button type="button" id="btn-add-location" disabled title="Click map to place first-aid, traffic, course, or water location">Add Location</button>
-        </div>
-        <p id="extend-hint" style="display: none; margin-top: 0.35rem; font-size: 0.8rem; color: #2980b9;"></p>
-    </div>
-    <div id="course-mapping-map" aria-label="Course mapping map" style="position: relative;">
-        <div class="map-loading">Loading map...</div>
-        <div id="basemap-toggle" style="display: none;">
-            <button type="button" id="btn-street" class="active">Street</button>
-            <button type="button" id="btn-satellite">Satellite</button>
+            <p id="extend-hint" style="display: none; margin-top: 0.35rem; font-size: 0.8rem; color: #2980b9;"></p>
         </div>
     </div>
 
-    <section class="course-derived-section" id="course-legs-card" style="display: none;">
-        <h4 class="course-derived-heading">Course legs</h4>
-        <p class="course-derived-empty" style="margin-bottom: 0.5rem;">
-            Build the course from reusable legs (GPX route pieces). Each leg has a <strong>start</strong> and <strong>end</strong> place name and optional <strong>locations</strong> (aid, water, traffic, …).
-            <em>Load Fredericton reference</em> is optional bootstrap from PlotARoute test data—not required for new events.
-        </p>
-        <div class="course-planner-toolbar" style="margin-bottom: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
-            <button type="button" id="btn-add-leg" class="primary">Add leg (GPX)</button>
-            <button type="button" id="btn-segment-library-seed" title="Optional: copy Fredericton PlotARoute legs + default recipes">Load Fredericton reference</button>
-            <label class="segment-recipes-upload-label">
-                <span class="btn-like">Bulk import GPX</span>
+    <div id="course-map-legacy-slot"></div>
+
+    <div id="config-package-legs-panel" class="config-package-panel config-legs-layout" style="display: none;">
+        <section class="course-derived-section" id="course-legs-card">
+            <h4 class="course-derived-heading">Course legs</h4>
+            <p class="course-derived-empty" style="margin-bottom: 0.5rem;">
+                Import GPX files, then select a leg in the table (use <strong>Edit</strong> on that row for leg details).
+                Use <strong>Add location on map</strong> to place pins on the purple route (placement only).
+                Assign resources, segment ID, and other details on the
+                <button type="button" id="btn-go-to-recipes" class="course-link-btn">Course</button> tab.
+            </p>
+            <div class="course-planner-toolbar config-legs-table-toolbar">
                 <input type="file" id="segment-library-gpx-input" accept=".gpx" multiple style="display: none;" />
-            </label>
-        </div>
-        <p id="course-legs-status" class="course-derived-empty" style="display: none;"></p>
-        <div id="course-legs-table-wrap" style="display: none;">
-            <div class="scrollable-table-container segments-table-scroll" style="max-height: 22vh;">
-                <table id="course-legs-table" class="table-sticky-header course-planner-table" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+                <button type="button" id="btn-import-gpx" class="course-btn">Import GPX…</button>
+                <button type="button" id="btn-draw-leg-map" class="course-btn" disabled title="Coming soon: draw a new leg on the map">Draw leg on map</button>
+            </div>
+            <p id="course-legs-status" class="course-derived-empty" style="display: none;"></p>
+            <div id="course-legs-table-wrap" class="config-legs-table-region" style="display: none;">
+                <div class="scrollable-table-container config-legs-table-scroll">
+                    <table id="course-legs-table" class="table-sticky-header course-planner-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Label</th>
+                                <th>From</th>
+                                <th>To</th>
+                                <th>km</th>
+                                <th>Width</th>
+                                <th>Schema</th>
+                                <th>Dir</th>
+                                <th>Locs</th>
+                                <th class="course-map-action-cell">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="course-legs-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <p id="course-legs-empty" class="course-derived-empty">No legs yet. Use <strong>Import GPX</strong> to add one or more route files.</p>
+        </section>
+        <section class="course-derived-section config-legs-map-section" aria-labelledby="config-legs-map-heading">
+            <h4 id="config-legs-map-heading" class="course-derived-heading">Leg map</h4>
+            <p class="course-derived-empty config-legs-map-lead">
+                Select a leg, then <strong>Add location on map</strong> and click the purple route to place a pin.
+                Full configuration (resources, segment ID, delete) is on the <strong>Course</strong> tab.
+            </p>
+            <div id="config-legs-map-slot" class="config-legs-map-slot">
+                <div id="course-map-container" class="config-legs-map-region">
+                <div id="course-mapping-map" aria-label="Leg and course map">
+                    <div class="map-loading">Loading map...</div>
+                    <div id="leg-map-toolbar" class="leg-map-toolbar">
+                        <button type="button" id="btn-leg-add-location" class="course-btn" disabled title="Select a leg in the table first">Add location on map</button>
+                    </div>
+                    <div id="basemap-toggle" style="display: none;">
+                        <button type="button" id="btn-street" class="course-btn active">Street</button>
+                        <button type="button" id="btn-satellite" class="course-btn">Satellite</button>
+                    </div>
+                </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <div id="config-package-course-panel" class="config-package-panel" style="display: none;">
+        <section class="course-derived-section" id="segments-card">
+            <div class="course-derived-heading-row">
+                <h4 class="course-derived-heading">Segments (combined course)</h4>
+                <button type="button" id="btn-edit-event-recipes" class="course-map-action-text-btn" style="display: none;" title="Change leg order per event and re-export segments">Edit event recipes</button>
+            </div>
+            <p id="segments-empty" class="course-derived-empty">Build the combined course from your legs using <strong>event recipes</strong> (set leg order per distance, then export).</p>
+            <div id="segments-table-wrap" style="display: none;">
+                <div class="scrollable-table-container segments-table-scroll" style="max-height: 25vh;">
+                    <table id="segments-table" class="table-sticky-header" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+                        <thead>
+                            <tr id="segments-thead-row"></tr>
+                        </thead>
+                        <tbody id="segments-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section class="course-derived-section" id="locations-card">
+            <div class="course-derived-heading-row">
+                <h4 class="course-derived-heading">Locations (combined course)</h4>
+                <button type="button" id="btn-manage-resources" class="course-map-action-text-btn" title="Define schedulable resources">Manage resources</button>
+            </div>
+            <p id="locations-empty" class="course-derived-empty">Locations appear here after you save event recipes. Placements from the Legs tab map sync when you open this tab. Edit resources, segment ID, and remove locations here.</p>
+            <div id="locations-table-wrap" style="display: none;">
+                <table id="locations-table" class="table-sticky-header" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
                     <thead>
-                        <tr>
-                            <th>Leg</th>
-                            <th>Label</th>
-                            <th>Start</th>
-                            <th>End</th>
-                            <th>km</th>
-                            <th>Locs</th>
-                            <th></th>
-                        </tr>
+                        <tr id="locations-thead-row"><th>ID</th><th>Type</th><th>Label</th><th></th></tr>
                     </thead>
-                    <tbody id="course-legs-tbody"></tbody>
+                    <tbody id="locations-tbody"></tbody>
                 </table>
             </div>
-        </div>
-        <p id="course-legs-empty" class="course-derived-empty">No legs yet. Click <strong>Add leg</strong> and upload a GPX file for each piece of the course.</p>
-    </section>
+        </section>
+    </div>
 
-    <section class="course-derived-section" id="segment-recipes-card" style="display: none;">
-        <h4 class="course-derived-heading">Event recipes</h4>
-        <p class="course-derived-empty" style="margin-bottom: 0.5rem;">
-            Enter <strong>order numbers</strong> (1, 2, 3…) per event to define each race distance from the legs above. Then <em>Save recipes &amp; export</em> for <code>segments.csv</code> and per-event GPX.
-        </p>
-        <div class="course-planner-toolbar" style="margin-bottom: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
-            <button type="button" id="btn-segment-recipes-apply" class="primary" disabled>Save recipes &amp; export</button>
+    <div id="segment-recipes-modal" class="course-location-modal" hidden aria-hidden="true">
+    <div class="course-location-modal-backdrop"></div>
+    <div class="course-location-modal-panel segment-recipes-modal-panel" role="dialog" aria-labelledby="segment-recipes-modal-title">
+        <div class="course-location-modal-header">
+            <h4 id="segment-recipes-modal-title" class="course-derived-heading" style="margin: 0;">Event recipes</h4>
+            <button type="button" id="segment-recipes-modal-close" aria-label="Close">&times;</button>
         </div>
-        <p id="segment-recipes-status" class="course-derived-empty" style="display: none;"></p>
-        <div id="segment-recipes-totals" style="display: none; margin-bottom: 0.5rem; font-size: 0.875rem;">
-            <strong>Totals:</strong>
-            <span id="recipe-total-full"></span>
-            <span id="recipe-total-half"></span>
-            <span id="recipe-total-10k"></span>
-        </div>
-        <div id="segment-recipes-warnings" style="display: none; margin-bottom: 0.5rem; font-size: 0.8rem; color: #c0392b;"></div>
-        <div id="segment-recipes-table-wrap" style="display: none;">
-            <div class="scrollable-table-container segments-table-scroll" style="max-height: 28vh;">
-                <table id="segment-recipes-table" class="table-sticky-header course-planner-table" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
-                    <thead>
-                        <tr>
-                            <th>Leg</th>
-                            <th>Label</th>
-                            <th>km</th>
-                            <th>Full</th>
-                            <th>Half</th>
-                            <th>10K</th>
-                        </tr>
-                    </thead>
-                    <tbody id="segment-recipes-tbody"></tbody>
-                </table>
+        <div class="course-location-modal-body">
+            <p class="course-derived-empty" style="margin: 0 0 0.75rem 0;">
+                Assign <strong>order numbers</strong> (1, 2, 3…) per event to build each distance from your legs. Then <em>Save recipes &amp; export</em> for <code>segments.csv</code> and per-event GPX.
+            </p>
+            <p id="segment-recipes-status" class="course-derived-empty" style="display: none;"></p>
+            <div id="segment-recipes-totals" style="display: none; margin-bottom: 0.5rem; font-size: 0.875rem;">
+                <strong>Totals:</strong> <span id="recipe-totals-list"></span>
             </div>
+            <div id="segment-recipes-warnings" style="display: none; margin-bottom: 0.5rem; font-size: 0.8rem; color: #c0392b;"></div>
+            <div id="segment-recipes-table-wrap" style="display: none;">
+                <div class="scrollable-table-container segments-table-scroll" style="max-height: 40vh;">
+                    <table id="segment-recipes-table" class="table-sticky-header course-planner-table" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+                        <thead>
+                            <tr id="segment-recipes-thead-row">
+                                <th>Leg</th>
+                                <th>Label</th>
+                                <th>km</th>
+                            </tr>
+                        </thead>
+                        <tbody id="segment-recipes-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <p id="segment-recipes-empty" class="course-derived-empty">Add legs on the <strong>Legs</strong> tab, then set recipe order for each event.</p>
         </div>
-        <p id="segment-recipes-empty" class="course-derived-empty">Add legs above, then set recipe order for each event.</p>
-    </section>
+        <div class="course-location-modal-footer">
+            <button type="button" id="btn-segment-recipes-apply" class="course-btn primary" disabled>Save recipes &amp; export</button>
+            <button type="button" id="segment-recipes-modal-cancel" class="course-btn">Close</button>
+        </div>
+    </div>
+</div>
 
-    <div id="leg-editor-modal" class="course-location-modal" hidden aria-hidden="true">
+<div id="leg-editor-modal" class="course-location-modal" hidden aria-hidden="true">
         <div class="course-location-modal-backdrop"></div>
         <div class="course-location-modal-panel course-location-modal-panel-narrow" role="dialog" aria-labelledby="leg-editor-title">
             <div class="course-location-modal-header">
@@ -156,44 +221,18 @@
         </div>
     </div>
 
-    <section class="course-derived-section" id="segments-card" style="display: none;">
-        <h4 class="course-derived-heading">Segments</h4>
-        <p id="segments-empty" class="course-derived-empty">Add segment pins on the course line, or use <strong>Event recipes</strong> above. Click a row to zoom the map to that leg.</p>
-        <div id="segments-table-wrap" style="display: none;">
-            <div class="scrollable-table-container segments-table-scroll" style="max-height: 25vh;">
-                <table id="segments-table" class="table-sticky-header" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
-                    <thead>
-                        <tr><th>ID</th><th>From pin</th><th>To pin</th><th>Segment label</th><th>Events</th><th>Full</th><th>Half</th><th>10K</th><th>Elite</th><th>Open</th><th>Length</th></tr>
-                    </thead>
-                    <tbody id="segments-tbody"></tbody>
-                </table>
-            </div>
-        </div>
-        <div id="segment-edit-tile" class="course-derived-edit-tile" style="display: none;">
-            <h4 id="segment-edit-tile-title" style="margin-top: 0; margin-bottom: 0.75rem;">Edit segment</h4>
-            <div id="segment-edit-tile-content"></div>
-            <div style="margin-top: 0.75rem;">
-                <button type="button" id="segment-edit-tile-save">Save</button>
-                <button type="button" id="segment-edit-tile-cancel" style="margin-left: 0.5rem;">Cancel</button>
-            </div>
-        </div>
-    </section>
+</div>
 
-    <section class="course-derived-section" id="locations-card" style="display: none;">
-        <div class="course-derived-heading-row">
-            <h4 class="course-derived-heading">Locations</h4>
-            <button type="button" id="btn-manage-resources" class="course-map-action-text-btn" title="Define schedulable resources (FPF, YSSR, AWP, VOL, …)">Manage resources</button>
+<div id="segment-editor-modal" class="course-location-modal" hidden aria-hidden="true">
+    <div class="course-location-modal-backdrop"></div>
+    <div class="course-location-modal-panel course-location-modal-panel-narrow" role="dialog" aria-labelledby="segment-editor-title">
+        <div class="course-location-modal-header">
+            <h4 id="segment-editor-title">Segment</h4>
+            <button type="button" id="segment-editor-close" aria-label="Close">&times;</button>
         </div>
-        <p id="locations-empty" class="course-derived-empty">Add location pins on the map (Edit mode). Click a location ID in the table to view or edit details.</p>
-        <div id="locations-table-wrap" style="display: none;">
-            <table id="locations-table" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
-                <thead>
-                    <tr id="locations-thead-row"><th>ID</th><th>Type</th><th>Label</th><th></th></tr>
-                </thead>
-                <tbody id="locations-tbody"></tbody>
-            </table>
-        </div>
-    </section>
+        <div class="course-location-modal-body" id="segment-editor-body"></div>
+        <div class="course-location-modal-footer" id="segment-editor-footer"></div>
+    </div>
 </div>
 
 <div id="location-editor-modal" class="course-location-modal" hidden aria-hidden="true">
@@ -215,16 +254,16 @@
             <h4 id="resources-editor-title">Package resources</h4>
             <button type="button" id="resources-editor-close" aria-label="Close">&times;</button>
         </div>
-        <p style="font-size: 0.875rem; color: #7f8c8d; margin: 0 0 0.75rem 0;">Resources scheduled at locations (e.g. FPF, YSSR). Add orgs for new years; each exports as <code>{code}_count</code>.</p>
+        <p style="font-size: 0.875rem; color: #7f8c8d; margin: 0 0 0.75rem 0;">Resources scheduled at locations (e.g. FPF, YSSR).</p>
         <div id="resources-editor-list"></div>
         <div style="margin-top: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
-            <input type="text" id="resources-new-code" placeholder="code (e.g. nwo)" maxlength="16" style="width: 100px;" />
+            <input type="text" id="resources-new-code" placeholder="code" maxlength="16" style="width: 100px;" />
             <input type="text" id="resources-new-label" placeholder="Label" maxlength="64" style="flex: 1; min-width: 120px;" />
-            <button type="button" id="resources-add-row">Add resource</button>
+            <button type="button" id="resources-add-row" class="course-btn">Add resource</button>
         </div>
         <div class="course-location-modal-footer" style="margin-top: 1rem;">
-            <button type="button" id="resources-editor-save">Save resources</button>
-            <button type="button" id="resources-editor-cancel">Cancel</button>
+            <button type="button" id="resources-editor-save" class="course-btn primary">Save resources</button>
+            <button type="button" id="resources-editor-cancel" class="course-btn">Cancel</button>
         </div>
     </div>
 </div>

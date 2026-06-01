@@ -204,6 +204,22 @@ LOCATION_TYPE_CHOICES = [
 # Course Mapping segment events (Issue #732) — used for segment annotation event selection
 COURSE_EVENT_IDS = ["full", "half", "10k", "elite", "open"]
 
+# Segment schema keys (density rulebook + analysis pipeline; config/density_rulebook.yml schemas)
+SEGMENT_SCHEMA_CHOICES = [
+    {"value": "on_course_narrow", "label": "Narrow"},
+    {"value": "on_course_open", "label": "Open"},
+    {"value": "start_corral", "label": "Corral"},
+]
+
+# Segment travel direction (uni = one-way, bi = bidirectional counterflow)
+SEGMENT_DIRECTION_CHOICES = [
+    {"value": "uni", "label": "Uni"},
+    {"value": "bi", "label": "Bi"},
+]
+
+SEGMENT_SCHEMA_VALUES = [c["value"] for c in SEGMENT_SCHEMA_CHOICES]
+SEGMENT_DIRECTION_VALUES = [c["value"] for c in SEGMENT_DIRECTION_CHOICES]
+
 # RES (Runner Experience Score) thresholds and weights (Issue #573)
 RES_HIGH_DENSITY_THRESHOLD = 0.72  # LOS D threshold (p/m²) - configurable
 RES_HIGH_FLOW_THRESHOLD = 90.0     # runners/min/m - configurable

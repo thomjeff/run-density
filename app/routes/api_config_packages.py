@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from app.core.config_package import (
     create_config_package,
+    delete_config_package,
     export_config_package_segments,
     import_runner_files_from_package,
     list_config_packages,
@@ -29,6 +30,9 @@ from app.core.config_package import (
 from app.core.config_package.legs import (
     create_package_leg,
     delete_package_leg,
+    get_leg_line_geojson,
+    remove_leg_location_from_manifest,
+    sync_leg_locations_if_applied,
     update_package_leg,
 )
 from app.core.config_package.segment_recipes import (
@@ -50,6 +54,12 @@ router = APIRouter(tags=["config-packages"])
 class CreateConfigPackageRequest(BaseModel):
     label: str = Field(..., min_length=1, max_length=120)
     description: str = Field("", max_length=255)
+    event_day: str = Field("", max_length=16)
+    package_events: List[str] = Field(
+        ...,
+        min_length=1,
+        description="Event ids for this package (e.g. full, half, 10k)",
+    )
 
 
 class UpdateConfigPackageRequest(BaseModel):
@@ -91,6 +101,10 @@ class UpdateLegRequest(BaseModel):
     locations: Optional[List[Dict[str, Any]]] = None
 
 
+class RemoveLegLocationRequest(BaseModel):
+    leg_loc_key: str = Field(..., min_length=3, description="Leg location key, e.g. 01:0")
+
+
 class SaveSegmentRecipesRequest(BaseModel):
     order_by_event: Dict[str, Dict[str, Optional[int]]] = Field(
         default_factory=dict,
@@ -125,7 +139,12 @@ async def api_create_config_package(
     """Create a new config package (UUID directory + config.json + course.json)."""
     require_auth(request)
     try:
-        result = create_config_package(body.label, body.description)
+        result = create_config_package(
+            body.label,
+            body.description,
+            event_day=body.event_day,
+            package_events=body.package_events,
+        )
         return JSONResponse(
             status_code=status.HTTP_201_CREATED,
             content={"ok": True, **result},
@@ -201,6 +220,28 @@ async def api_update_config_package(
         )
 
 
+@router.delete("/api/config/packages/{config_id}")
+async def api_delete_config_package(
+    request: Request,
+    config_id: str,
+) -> JSONResponse:
+    """Permanently delete a config package directory."""
+    require_auth(request)
+    try:
+        result = delete_config_package(config_id)
+        return JSONResponse(content={"ok": True, **result})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to delete config package")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete config package: {e}",
+        )
+
+
 @router.get("/api/config/packages/{config_id}/course")
 async def api_load_config_course(
     request: Request,
@@ -209,6 +250,7 @@ async def api_load_config_course(
     """Load draw-first course workspace (course.json) for a config package."""
     require_auth(request)
     try:
+        sync_leg_locations_if_applied(config_id)
         course = load_config_course(config_id)
         return JSONResponse(
             content={"ok": True, "config_id": config_id, "course": course}
@@ -293,6 +335,74 @@ async def api_create_package_leg(
             description=description,
         )
         return JSONResponse(content={"ok": True, **state})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/api/config/packages/{config_id}/segment-library/legs/{leg_id}/geometry")
+async def api_get_package_leg_geometry(
+    request: Request,
+    config_id: str,
+    leg_id: str,
+) -> JSONResponse:
+    """GeoJSON LineString for one leg (map display)."""
+    require_auth(request)
+    try:
+        feature = get_leg_line_geojson(config_id, leg_id)
+        return JSONResponse(content={"ok": True, "feature": feature})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/api/config/packages/{config_id}/segment-library/sync-leg-locations")
+async def api_sync_leg_locations_to_course(
+    request: Request,
+    config_id: str,
+) -> JSONResponse:
+    """Merge leg map placements into course.json (after recipes applied)."""
+    require_auth(request)
+    try:
+        synced = sync_leg_locations_if_applied(config_id)
+        course = load_config_course(config_id)
+        return JSONResponse(
+            content={
+                "ok": True,
+                "synced": synced,
+                "config_id": config_id,
+                "course": course,
+            }
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/api/config/packages/{config_id}/segment-library/leg-locations/remove")
+async def api_remove_leg_location_from_manifest(
+    request: Request,
+    config_id: str,
+    body: RemoveLegLocationRequest,
+) -> JSONResponse:
+    """Remove a leg placement from the library when deleted on the Course tab."""
+    require_auth(request)
+    try:
+        remove_leg_location_from_manifest(config_id, body.leg_loc_key)
+        sync_leg_locations_if_applied(config_id)
+        course = load_config_course(config_id)
+        state = get_package_segment_library_state(config_id)
+        return JSONResponse(
+            content={
+                "ok": True,
+                "config_id": config_id,
+                "course": course,
+                "library": state,
+            }
+        )
     except FileNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValueError as e:

@@ -10,6 +10,11 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
+from app.core.config_package.location_ids import (
+    allocate_location_id,
+    assign_unique_location_ids,
+    parse_location_id,
+)
 from app.core.config_package.segment_recipes import (
     load_package_segment_manifest,
     package_segment_library_dir,
@@ -22,9 +27,44 @@ from app.core.config_package.storage import (
     validate_config_id,
 )
 from app.core.course.segment_library import parse_chunk_gpx
-from app.utils.constants import LOCATION_TYPE_CHOICES
+from app.core.config_package.segment_recipes import package_recipe_event_ids
+from app.utils.constants import (
+    COURSE_EVENT_IDS,
+    LOCATION_TYPE_CHOICES,
+    SEGMENT_DIRECTION_CHOICES,
+    SEGMENT_DIRECTION_VALUES,
+    SEGMENT_SCHEMA_CHOICES,
+    SEGMENT_SCHEMA_VALUES,
+)
+
+_LEG_LOC_PRESERVE_FIELDS = (
+    "notes",
+    "buffer",
+    "interval",
+    "zone",
+    "equipment",
+    "contact",
+    "proxy_loc_id",
+    "day",
+    "onepage",
+    "resources",
+)
 
 _LEG_ID_RE = re.compile(r"^\d{2,3}$")
+
+
+def _normalize_segment_schema(schema: Any) -> str:
+    value = str(schema or "on_course_open").strip()
+    if value not in SEGMENT_SCHEMA_VALUES:
+        raise ValueError(f"schema must be one of: {', '.join(SEGMENT_SCHEMA_VALUES)}")
+    return value
+
+
+def _normalize_segment_direction(direction: Any) -> str:
+    value = str(direction or "uni").strip()
+    if value not in SEGMENT_DIRECTION_VALUES:
+        raise ValueError(f"direction must be one of: {', '.join(SEGMENT_DIRECTION_VALUES)}")
+    return value
 
 
 def _slugify(text: str) -> str:
@@ -173,6 +213,8 @@ def create_package_leg(
 
     s_label = start_label.strip() or _default_endpoint_labels(label, parsed)[0]
     e_label = end_label.strip() or _default_endpoint_labels(label, parsed)[1]
+    schema = _normalize_segment_schema(schema)
+    direction = _normalize_segment_direction(direction)
 
     entry = {
         "id": new_id,
@@ -222,9 +264,13 @@ def update_package_leg(
         entry["start_label"] = str(fields.get("start_label") or "").strip()
     if "end_label" in fields:
         entry["end_label"] = str(fields.get("end_label") or "").strip()
-    for key in ("width_m", "schema", "direction", "description"):
+    for key in ("width_m", "description"):
         if key in fields:
             entry[key] = fields[key]
+    if "schema" in fields:
+        entry["schema"] = _normalize_segment_schema(fields["schema"])
+    if "direction" in fields:
+        entry["direction"] = _normalize_segment_direction(fields["direction"])
     if "locations" in fields:
         entry["locations"] = _normalize_locations(fields.get("locations"))
 
@@ -244,6 +290,12 @@ def update_package_leg(
     chunks[idx] = entry
     manifest["chunks"] = chunks
     save_package_segment_manifest(cid, manifest)
+    label_fields = ("locations", "start_label", "end_label", "leg_label", "seg_label")
+    if any(key in fields for key in label_fields):
+        try:
+            sync_leg_locations_if_applied(cid)
+        except FileNotFoundError:
+            pass
     from app.core.config_package.segment_recipes import get_package_segment_library_state
 
     return get_package_segment_library_state(cid)
@@ -275,37 +327,269 @@ def delete_package_leg(config_id: str, leg_id: str) -> Dict[str, Any]:
     return get_package_segment_library_state(cid)
 
 
+def get_leg_line_geojson(config_id: str, leg_id: str) -> Dict[str, Any]:
+    """GeoJSON LineString for map display of one leg."""
+    cid = validate_config_id(config_id)
+    leg_id = str(leg_id).strip()
+    package_path = resolve_config_package_path(cid)
+    lib_dir = package_segment_library_dir(package_path)
+    manifest = load_package_segment_manifest(cid)
+    chunks: List[Dict[str, Any]] = list(manifest.get("chunks") or [])
+    idx = _find_chunk_index(chunks, leg_id)
+    if idx < 0:
+        raise ValueError(f"Leg not found: {leg_id}")
+    entry = chunks[idx]
+    file_name = entry.get("file")
+    if not file_name:
+        raise ValueError(f"Leg {leg_id} has no GPX file")
+    gpx_path = lib_dir / str(file_name)
+    if not gpx_path.is_file():
+        raise FileNotFoundError(f"GPX not found: {file_name}")
+    parsed = parse_chunk_gpx(gpx_path)
+    coords = parsed.get("coordinates") or []
+    if len(coords) < 2:
+        raise ValueError(f"Leg {leg_id} GPX has insufficient points")
+    return {
+        "type": "Feature",
+        "properties": {
+            "leg_id": leg_id,
+            "leg_label": (entry.get("seg_label") or "").strip(),
+            "start_label": (entry.get("start_label") or "").strip(),
+            "end_label": (entry.get("end_label") or "").strip(),
+        },
+        "geometry": {"type": "LineString", "coordinates": coords},
+    }
+
+
+def leg_loc_key(leg_id: str, index: int) -> str:
+    return f"{leg_id}:{index}"
+
+
+def _segment_for_leg(
+    segments: Sequence[Dict[str, Any]], leg_id: str
+) -> Optional[Dict[str, Any]]:
+    for seg in segments:
+        if not isinstance(seg, dict):
+            continue
+        if str(seg.get("chunk_id", "")).strip() == leg_id:
+            return seg
+    return None
+
+
+def _event_flags_for_segment(
+    seg: Optional[Dict[str, Any]], event_ids: Sequence[str]
+) -> Dict[str, str]:
+    on_seg = set()
+    if seg:
+        on_seg = {
+            str(e).strip().lower()
+            for e in (seg.get("events") or [])
+            if str(e).strip()
+        }
+    flags: Dict[str, str] = {}
+    for eid in event_ids:
+        el = str(eid).strip().lower()
+        flags[el] = "y" if el in on_seg else "n"
+    return flags
+
+
 def merge_leg_locations_into_course(config_id: str) -> None:
-    """Copy leg-scoped locations into course.json (replaces prior leg-sourced rows)."""
+    """
+    Copy leg-scoped placements from the segment library into course.json.
+
+    Replaces prior ``source=leg`` rows. Preserves Course-tab edits (resources,
+  notes, etc.) matched by ``leg_loc_key``. Sets ``seg_id`` from the combined
+    segment whose ``chunk_id`` matches the leg.
+    """
     cid = validate_config_id(config_id)
     manifest = load_package_segment_manifest(cid)
     course = load_config_course(cid)
+    segments = [
+        s for s in (course.get("segments") or []) if isinstance(s, dict)
+    ]
+    try:
+        package_events = list(package_recipe_event_ids(cid))
+    except (FileNotFoundError, ValueError):
+        package_events = list(COURSE_EVENT_IDS)
+    event_ids = package_events or list(COURSE_EVENT_IDS)
+
+    existing_leg: Dict[str, Dict[str, Any]] = {}
+    for loc in course.get("locations") or []:
+        if not isinstance(loc, dict) or loc.get("source") != "leg":
+            continue
+        key = str(loc.get("leg_loc_key") or "").strip()
+        if key:
+            existing_leg[key] = loc
+
     locations: List[Dict[str, Any]] = [
         loc
         for loc in (course.get("locations") or [])
         if isinstance(loc, dict) and loc.get("source") != "leg"
     ]
+    used_ids: set[int] = set()
+    for loc in locations:
+        parsed = parse_location_id(loc.get("id", loc.get("loc_id")))
+        if parsed is not None and parsed > 0:
+            used_ids.add(parsed)
+
     for entry in manifest.get("chunks") or []:
         if not isinstance(entry, dict):
             continue
         leg_id = str(entry.get("id", "")).strip()
+        if not leg_id:
+            continue
+        seg = _segment_for_leg(segments, leg_id)
+        seg_id = str(seg.get("seg_id", "")).strip() if seg else ""
+        event_flags = _event_flags_for_segment(seg, event_ids)
+
         for i, loc in enumerate(_normalize_locations(entry.get("locations"))):
-            locations.append(
-                {
-                    "loc_id": f"L{leg_id}-{i + 1}",
-                    "loc_label": loc["loc_label"],
-                    "loc_type": loc["loc_type"],
-                    "lat": loc["lat"],
-                    "lon": loc["lon"],
-                    "leg_id": leg_id,
-                    "placement": loc.get("placement", "along"),
-                    "source": "leg",
-                    "full": "n",
-                    "half": "n",
-                    "10k": "n",
-                    "elite": "n",
-                    "open": "n",
-                }
-            )
+            key = leg_loc_key(leg_id, i)
+            prev = existing_leg.get(key)
+            row: Dict[str, Any] = {
+                "loc_label": loc["loc_label"],
+                "loc_type": loc["loc_type"],
+                "lat": loc["lat"],
+                "lon": loc["lon"],
+                "leg_id": leg_id,
+                "leg_loc_key": key,
+                "placement": loc.get("placement", "along"),
+                "source": "leg",
+                "seg_id": seg_id,
+            }
+            for ev, flag in event_flags.items():
+                row[ev] = flag
+            for ev in COURSE_EVENT_IDS:
+                row.setdefault(ev, "n")
+
+            if prev:
+                prev_id = parse_location_id(prev.get("id", prev.get("loc_id")))
+                if prev_id is not None and prev_id > 0 and prev_id not in used_ids:
+                    row["id"] = prev_id
+                    used_ids.add(prev_id)
+                else:
+                    row["id"] = allocate_location_id(used_ids)
+                if (prev.get("seg_id") or "").strip():
+                    row["seg_id"] = str(prev["seg_id"]).strip()
+                for field in _LEG_LOC_PRESERVE_FIELDS:
+                    if field in prev and prev[field] not in (None, ""):
+                        row[field] = prev[field]
+            else:
+                row["id"] = allocate_location_id(used_ids)
+            locations.append(row)
+
+    assign_unique_location_ids(locations)
     course["locations"] = locations
     save_config_course(cid, course)
+
+
+def _manifest_chunk_order(manifest: Dict[str, Any]) -> List[str]:
+    order: List[str] = []
+    for entry in manifest.get("chunks") or []:
+        if not isinstance(entry, dict):
+            continue
+        leg_id = str(entry.get("id", "")).strip()
+        if leg_id:
+            order.append(leg_id)
+    return order
+
+
+def _leg_id_for_segment(seg: Dict[str, Any], chunk_order: Sequence[str]) -> str:
+    leg_id = str(seg.get("chunk_id", "")).strip()
+    if leg_id:
+        return leg_id
+    match = re.match(r"^S(\d+)$", str(seg.get("seg_id", "")).strip(), re.IGNORECASE)
+    if match:
+        idx = int(match.group(1)) - 1
+        if 0 <= idx < len(chunk_order):
+            return chunk_order[idx]
+    return ""
+
+
+def sync_leg_segment_labels_into_course(config_id: str) -> bool:
+    """
+    Refresh segment from/to/label fields from leg library metadata.
+
+    Called after leg renames without re-running full recipe export.
+    """
+    cid = validate_config_id(config_id)
+    course = load_config_course(cid)
+    if not course.get("segment_library_applied"):
+        return False
+    manifest = load_package_segment_manifest(cid)
+    chunk_order = _manifest_chunk_order(manifest)
+    chunk_by_id: Dict[str, Dict[str, Any]] = {}
+    for entry in manifest.get("chunks") or []:
+        if not isinstance(entry, dict):
+            continue
+        leg_id = str(entry.get("id", "")).strip()
+        if leg_id:
+            chunk_by_id[leg_id] = entry
+
+    updated = False
+    for seg in course.get("segments") or []:
+        if not isinstance(seg, dict):
+            continue
+        leg_id = _leg_id_for_segment(seg, chunk_order)
+        entry = chunk_by_id.get(leg_id) if leg_id else None
+        if not entry:
+            continue
+        if leg_id and str(seg.get("chunk_id", "")).strip() != leg_id:
+            seg["chunk_id"] = leg_id
+            updated = True
+        row = leg_row_from_entry(entry)
+        start = row["start_label"]
+        end = row["end_label"]
+        label = row["leg_label"]
+        if start != str(seg.get("from_label") or "").strip():
+            seg["from_label"] = start
+            updated = True
+        if end != str(seg.get("to_label") or "").strip():
+            seg["to_label"] = end
+            updated = True
+        if label != str(seg.get("seg_label") or "").strip():
+            seg["seg_label"] = label
+            updated = True
+
+    if updated:
+        save_config_course(cid, course)
+    return updated
+
+
+def sync_leg_locations_if_applied(config_id: str) -> bool:
+    """Merge leg placements and labels into course.json when recipes have been applied."""
+    course = load_config_course(config_id)
+    if not course.get("segment_library_applied"):
+        return False
+    merge_leg_locations_into_course(config_id)
+    sync_leg_segment_labels_into_course(config_id)
+    return True
+
+
+def remove_leg_location_from_manifest(config_id: str, leg_loc_key: str) -> None:
+    """Remove one leg placement from the library (e.g. after delete on Course tab)."""
+    cid = validate_config_id(config_id)
+    key = str(leg_loc_key or "").strip()
+    if ":" not in key:
+        raise ValueError("Invalid leg_loc_key")
+    leg_id, _, idx_s = key.partition(":")
+    leg_id = leg_id.strip()
+    try:
+        idx = int(idx_s)
+    except ValueError as exc:
+        raise ValueError("Invalid leg_loc_key index") from exc
+
+    manifest = load_package_segment_manifest(cid)
+    chunks: List[Dict[str, Any]] = list(manifest.get("chunks") or [])
+    chunk_idx = _find_chunk_index(chunks, leg_id)
+    if chunk_idx < 0:
+        raise ValueError(f"Leg not found: {leg_id}")
+
+    entry = dict(chunks[chunk_idx])
+    locs = _normalize_locations(entry.get("locations"))
+    if idx < 0 or idx >= len(locs):
+        raise ValueError(f"Location index out of range for leg {leg_id}")
+    locs.pop(idx)
+    entry["locations"] = locs
+    chunks[chunk_idx] = entry
+    manifest["chunks"] = chunks
+    save_package_segment_manifest(cid, manifest)

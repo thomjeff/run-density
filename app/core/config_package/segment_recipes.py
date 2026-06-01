@@ -19,6 +19,7 @@ import yaml
 from app.core.config_package.storage import (
     export_config_package_segments,
     load_config_course,
+    load_config_manifest,
     resolve_config_package_path,
     save_config_course,
     validate_config_id,
@@ -39,8 +40,32 @@ SEGMENT_LIBRARY_DIRNAME = "segment_library"
 MANIFEST_YAML = "manifest.yaml"
 MANIFEST_JSON = "manifest.json"
 
-# Sun events for Phase 1 recipe UI
-RECIPE_EVENT_IDS = ("full", "half", "10k")
+# Legacy default when package has no package_events (pre-#769 packages only)
+_LEGACY_RECIPE_EVENT_IDS = ("full", "half", "10k")
+
+
+def package_recipe_event_ids(config_id: str) -> List[str]:
+    """
+    Event ids for recipe grid and export — from package manifest, not hardcoded.
+
+    Falls back to keys already in segment_library recipes, then legacy FM trio.
+    """
+    cid = validate_config_id(config_id)
+    try:
+        manifest = load_config_manifest(cid)
+        raw = manifest.get("package_events")
+        if isinstance(raw, list) and raw:
+            return [str(e).strip().lower() for e in raw if str(e).strip()]
+    except FileNotFoundError:
+        pass
+    package_path = resolve_config_package_path(cid)
+    path = _manifest_path(package_path)
+    if path.is_file():
+        data = _read_manifest_file(path)
+        recipes = data.get("recipes") or {}
+        if isinstance(recipes, dict) and recipes:
+            return sorted(str(k).strip().lower() for k in recipes.keys() if str(k).strip())
+    return list(_LEGACY_RECIPE_EVENT_IDS)
 
 def _repo_root() -> Path:
     """Project root (/app in Docker, repo root on host)."""
@@ -96,14 +121,26 @@ def _write_manifest_file(path: Path, manifest: Dict[str, Any]) -> None:
         path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
 
-def _default_manifest() -> Dict[str, Any]:
+def _default_manifest(event_ids: Optional[Sequence[str]] = None) -> Dict[str, Any]:
+    eids = list(event_ids) if event_ids else []
     return {
         "version": 1,
         "label": "",
         "chunks": [],
-        "recipes": {eid: [] for eid in RECIPE_EVENT_IDS},
+        "recipes": {eid: [] for eid in eids},
         "flow_overrides": [],
     }
+
+
+def _ensure_recipe_keys(manifest: Dict[str, Any], event_ids: Sequence[str]) -> None:
+    recipes = manifest.setdefault("recipes", {})
+    if not isinstance(recipes, dict):
+        recipes = {}
+        manifest["recipes"] = recipes
+    for eid in event_ids:
+        key = str(eid).strip().lower()
+        if key and key not in recipes:
+            recipes[key] = []
 
 
 def load_package_segment_manifest(config_id: str) -> Dict[str, Any]:
@@ -112,14 +149,14 @@ def load_package_segment_manifest(config_id: str) -> Dict[str, Any]:
     package_path = resolve_config_package_path(cid)
     path = _manifest_path(package_path)
     if not path.is_file():
-        return _default_manifest()
+        return _default_manifest(package_recipe_event_ids(cid))
     data = _read_manifest_file(path)
     if not isinstance(data, dict):
         raise ValueError("segment library manifest must be an object")
-    if "recipes" not in data:
-        data["recipes"] = {eid: [] for eid in RECIPE_EVENT_IDS}
     if "chunks" not in data:
         data["chunks"] = []
+    event_ids = package_recipe_event_ids(cid)
+    _ensure_recipe_keys(data, event_ids)
     return data
 
 
@@ -130,10 +167,9 @@ def save_package_segment_manifest(config_id: str, manifest: Dict[str, Any]) -> P
     lib_dir.mkdir(parents=True, exist_ok=True)
     path = package_segment_library_dir(package_path) / MANIFEST_YAML
     out = dict(manifest)
-    if "recipes" not in out:
-        out["recipes"] = {eid: [] for eid in RECIPE_EVENT_IDS}
     if "chunks" not in out:
         out["chunks"] = []
+    _ensure_recipe_keys(out, package_recipe_event_ids(cid))
     _write_manifest_file(path, out)
     logger.info("Saved segment library manifest: %s", path)
     return path
@@ -236,7 +272,7 @@ def seed_reference_segment_library(config_id: str) -> Dict[str, Any]:
 def recipes_from_order_grid(
     chunks: Sequence[Dict[str, Any]],
     order_by_event: Dict[str, Dict[str, Optional[int]]],
-    event_ids: Sequence[str] = RECIPE_EVENT_IDS,
+    event_ids: Optional[Sequence[str]] = None,
 ) -> Dict[str, List[str]]:
     """
     Convert UI order grid to recipe lists.
@@ -245,7 +281,8 @@ def recipes_from_order_grid(
     """
     recipes: Dict[str, List[str]] = {}
     chunk_ids = [str(c.get("id", "")).strip() for c in chunks if c.get("id")]
-    for eid in event_ids:
+    eids = list(event_ids) if event_ids is not None else []
+    for eid in eids:
         key = eid if eid in order_by_event else eid.lower()
         orders = order_by_event.get(key) or order_by_event.get(eid) or {}
         pairs: List[tuple] = []
@@ -267,12 +304,13 @@ def recipes_from_order_grid(
 def order_grid_from_recipes(
     chunks: Sequence[Dict[str, Any]],
     recipes: Dict[str, Any],
-    event_ids: Sequence[str] = RECIPE_EVENT_IDS,
+    event_ids: Optional[Sequence[str]] = None,
 ) -> Dict[str, Dict[str, Optional[int]]]:
     """Inverse of recipes_from_order_grid for UI."""
     chunk_ids = [str(c.get("id", "")).strip() for c in chunks if c.get("id")]
     grid: Dict[str, Dict[str, Optional[int]]] = {}
-    for eid in event_ids:
+    eids = list(event_ids) if event_ids is not None else []
+    for eid in eids:
         key = eid if eid in recipes else eid.lower()
         seq = recipes.get(key) or []
         row: Dict[str, Optional[int]] = {cid: None for cid in chunk_ids}
@@ -290,17 +328,21 @@ def get_package_segment_library_state(config_id: str) -> Dict[str, Any]:
     lib_dir = package_segment_library_dir(package_path)
     manifest = load_package_segment_manifest(cid)
     chunks_meta = manifest.get("chunks") or []
+    event_ids = package_recipe_event_ids(cid)
 
     if not lib_dir.is_dir() or not chunks_meta:
         return {
             "config_id": cid,
             "library_dir": str(lib_dir),
             "has_library": False,
+            "package_events": event_ids,
             "manifest": manifest,
             "chunks": [],
             "recipes": manifest.get("recipes") or {},
-            "order_grid": order_grid_from_recipes([], manifest.get("recipes") or {}),
-            "recipe_lengths_km": {eid: 0.0 for eid in RECIPE_EVENT_IDS},
+            "order_grid": order_grid_from_recipes(
+                [], manifest.get("recipes") or {}, event_ids
+            ),
+            "recipe_lengths_km": {eid: 0.0 for eid in event_ids},
             "stitch_warnings": [],
         }
 
@@ -319,7 +361,7 @@ def get_package_segment_library_state(config_id: str) -> Dict[str, Any]:
     recipes = manifest.get("recipes") or {}
     stitch_warnings: List[str] = []
     recipe_lengths: Dict[str, float] = {}
-    for eid in RECIPE_EVENT_IDS:
+    for eid in event_ids:
         key = eid if eid in recipes else eid.lower()
         seq = recipes.get(key) or []
         stitch_warnings.extend(validate_recipe_stitch(lib_dir, seq, chunks_by_id))
@@ -332,10 +374,11 @@ def get_package_segment_library_state(config_id: str) -> Dict[str, Any]:
         "config_id": cid,
         "library_dir": str(lib_dir),
         "has_library": bool(chunk_rows),
+        "package_events": event_ids,
         "manifest": manifest,
         "chunks": chunk_rows,
         "recipes": recipes,
-        "order_grid": order_grid_from_recipes(chunk_rows, recipes),
+        "order_grid": order_grid_from_recipes(chunk_rows, recipes, event_ids),
         "recipe_lengths_km": recipe_lengths,
         "stitch_warnings": stitch_warnings,
     }
@@ -349,10 +392,13 @@ def save_package_recipes(
 ) -> Dict[str, Any]:
     """Persist recipe lists to package manifest."""
     manifest = load_package_segment_manifest(config_id)
+    event_ids = package_recipe_event_ids(config_id)
     if order_by_event is not None:
-        recipes = recipes_from_order_grid(manifest.get("chunks") or [], order_by_event)
+        recipes = recipes_from_order_grid(
+            manifest.get("chunks") or [], order_by_event, event_ids
+        )
     normalized: Dict[str, List[str]] = {}
-    for eid in RECIPE_EVENT_IDS:
+    for eid in event_ids:
         key = eid if eid in recipes else eid.lower()
         seq = recipes.get(key) or []
         normalized[eid] = [str(x).strip() for x in seq if str(x).strip()]
@@ -378,7 +424,8 @@ def apply_package_recipes(
     if not manifest_path.is_file():
         raise ValueError("No segment library; import or seed GPX chunks first")
 
-    bundle = export_library_to_course(lib_dir, manifest_path, event_ids=RECIPE_EVENT_IDS)
+    event_ids = package_recipe_event_ids(cid)
+    bundle = export_library_to_course(lib_dir, manifest_path, event_ids=event_ids)
     segments = bundle["segments"]
     if not segments:
         raise ValueError("Recipes produced no segments; check chunk GPX and recipe order")

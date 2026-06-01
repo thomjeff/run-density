@@ -17,7 +17,7 @@ def test_recipes_from_order_grid():
         "half": {"01": 1, "05": 2, "02": None},
         "10k": {"01": 1, "02": 2},
     }
-    recipes = recipes_from_order_grid(chunks, grid)
+    recipes = recipes_from_order_grid(chunks, grid, ["full", "half", "10k"])
     assert recipes["full"] == ["01", "02"]
     assert recipes["half"] == ["01", "05"]
     assert recipes["10k"] == ["01", "02"]
@@ -31,10 +31,11 @@ def test_chunk_id_from_filename():
 def test_order_grid_roundtrip():
     chunks = [{"id": "a"}, {"id": "b"}, {"id": "c"}]
     recipes = {"full": ["a", "c"], "half": ["b"], "10k": ["a", "b", "c"]}
-    grid = order_grid_from_recipes(chunks, recipes)
+    events = ["full", "half", "10k"]
+    grid = order_grid_from_recipes(chunks, recipes, events)
     assert grid["full"]["a"] == 1
     assert grid["full"]["c"] == 2
     assert grid["full"]["b"] is None
     assert grid["half"]["b"] == 1
-    back = recipes_from_order_grid(chunks, grid)
+    back = recipes_from_order_grid(chunks, grid, events)
     assert back == recipes
