@@ -189,7 +189,6 @@ def sync_manifest_chunks_from_gpx(
             {
                 "id": cid,
                 "file": name,
-                "seg_id": (prior.get("seg_id") or cid).strip(),
                 "seg_label": label,
                 "width_m": prior.get("width_m", 3),
                 "schema": prior.get("schema", "on_course_open"),
@@ -314,8 +313,7 @@ def get_package_segment_library_state(config_id: str) -> Dict[str, Any]:
             {
                 "id": cid_chunk,
                 "file": entry.get("file") or loaded.get("file"),
-                "seg_id": entry.get("seg_id") or cid_chunk,
-                "seg_label": entry.get("seg_label") or loaded.get("name") or cid_chunk,
+                "leg_label": entry.get("seg_label") or loaded.get("name") or cid_chunk,
                 "length_km": loaded.get("length_km", 0),
                 "width_m": entry.get("width_m", 3),
                 "schema": entry.get("schema", "on_course_open"),

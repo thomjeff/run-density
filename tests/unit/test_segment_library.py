@@ -48,14 +48,15 @@ def test_multi_event_segment_rows(manifest, chunks):
         manifest, chunks, event_ids=["full", "half", "10k"]
     )
     assert len(segments) == len(manifest["chunks"])
-    a1 = next(s for s in segments if s["seg_id"] == "A1")
-    assert set(a1["events"]) == {"full", "half", "10k"}
-    assert a1["10k_from_km"] == 0.0
-    assert a1["10k_to_km"] == pytest.approx(2.71, abs=0.05)
-    b1 = next(s for s in segments if s["seg_id"] == "B1")
-    assert "half" not in b1["events"]
-    assert b1["full_from_km"] == pytest.approx(2.71, abs=0.05)
-    assert b1["10k_from_km"] == pytest.approx(2.71, abs=0.05)
+    s1 = next(s for s in segments if s["seg_id"] == "S1")
+    assert set(s1["events"]) == {"full", "half", "10k"}
+    assert s1["10k_from_km"] == 0.0
+    assert s1["10k_to_km"] == pytest.approx(2.71, abs=0.05)
+    s2 = next(s for s in segments if s["seg_id"] == "S2")
+    assert "half" not in s2["events"]
+    assert s2["full_from_km"] == pytest.approx(2.71, abs=0.05)
+    assert s2["10k_from_km"] == pytest.approx(2.71, abs=0.05)
+    assert [s["seg_id"] for s in segments] == [f"S{i}" for i in range(1, len(segments) + 1)]
 
 
 def test_10k_recipe_length(manifest, chunks):
@@ -71,7 +72,7 @@ def test_flow_pairs_on_shared_segment(manifest, chunks):
     lines = [ln for ln in csv_text.strip().splitlines() if ln]
     assert lines[0].startswith("seg_id,")
     assert any(",10k,half," in ln or ",half,10k," in ln for ln in lines)
-    assert any(ln.startswith("A1,") for ln in lines[1:])
+    assert any(ln.startswith("S1,") for ln in lines[1:])
 
 
 def test_export_bundle_writes_csv():

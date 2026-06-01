@@ -137,10 +137,10 @@
         tbody.innerHTML = '';
         libraryState.chunks.forEach(function (ch) {
             var tr = document.createElement('tr');
+            var label = (ch.leg_label || ch.seg_label || '').slice(0, 48);
             var cells = [
                 ch.id,
-                ch.seg_id || '',
-                (ch.seg_label || '').slice(0, 48),
+                label,
                 (ch.length_km != null ? Number(ch.length_km).toFixed(2) : '—')
             ];
             cells.forEach(function (text) {
@@ -214,7 +214,7 @@
                 renderTable();
                 renderTotals(data.recipe_lengths_km);
                 renderWarnings(data.stitch_warnings);
-                setStatus('Reference library loaded (' + (data.chunks || []).length + ' chunks).');
+                setStatus('Reference library loaded (' + (data.chunks || []).length + ' legs).');
             })
             .catch(function (err) {
                 setStatus(err.message || String(err), true);
@@ -246,8 +246,8 @@
                 var n = (data.chunks || []).length;
                 setStatus(
                     n
-                        ? 'Imported ' + n + ' segment(s). Set order numbers, then Save recipes & export.'
-                        : 'GPX saved but no segments detected. Use Load reference library or name files like 01_start.gpx.'
+                        ? 'Imported ' + n + ' leg(s). Set order numbers, then Save recipes & export.'
+                        : 'GPX saved but no legs detected. Use Load reference library or name files like 01_start.gpx.'
                 );
             })
             .catch(function (err) {

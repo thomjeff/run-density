@@ -195,6 +195,7 @@ def build_course_segments_from_library(
 
     segments: List[Dict[str, Any]] = []
     chunk_order = manifest.get("chunks") or []
+    segment_index = 0
     for entry in chunk_order:
         if not isinstance(entry, dict):
             continue
@@ -202,10 +203,11 @@ def build_course_segments_from_library(
         ch = chunks_by_id.get(cid)
         if not ch:
             continue
+        segment_index += 1
         length_km = float(ch["length_km"])
         events = _events_for_chunk(cid, recipes, event_ids)
         seg: Dict[str, Any] = {
-            "seg_id": (entry.get("seg_id") or cid).strip(),
+            "seg_id": f"S{segment_index}",
             "seg_label": (entry.get("seg_label") or ch.get("name") or cid).strip(),
             "width_m": entry.get("width_m", 3),
             "schema": entry.get("schema", "on_course_open"),

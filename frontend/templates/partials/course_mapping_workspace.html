@@ -75,14 +75,14 @@
     <section class="course-derived-section" id="segment-recipes-card" style="display: none;">
         <h4 class="course-derived-heading">Event recipes</h4>
         <p class="course-derived-empty" style="margin-bottom: 0.5rem;">
-            <strong>1.</strong> <em>Load reference library</em> (Fredericton chunks + default recipes) <em>or</em> <em>Import GPX chunks</em> (one file per segment, e.g. <code>01_start.gpx</code>).<br>
+            <strong>1.</strong> <em>Load reference library</em> (Fredericton legs + default recipes) <em>or</em> <em>Import GPX legs</em> (one file per leg, e.g. <code>01_start.gpx</code>).<br>
             <strong>2.</strong> Enter <strong>order numbers</strong> (1, 2, 3…) for Full / Half / 10K; leave blank if unused.<br>
             <strong>3.</strong> <em>Save recipes &amp; export</em> writes <code>segments.csv</code> for analysis.
         </p>
         <div class="course-planner-toolbar" style="margin-bottom: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
-            <button type="button" id="btn-segment-library-seed" title="Copy built-in Fredericton PlotARoute chunks and default recipes into this package">Load reference library</button>
+            <button type="button" id="btn-segment-library-seed" title="Copy built-in Fredericton PlotARoute legs and default recipes into this package">Load reference library</button>
             <label class="segment-recipes-upload-label">
-                <span class="btn-like">Import GPX chunks</span>
+                <span class="btn-like">Import GPX legs</span>
                 <input type="file" id="segment-library-gpx-input" accept=".gpx" multiple style="display: none;" />
             </label>
             <button type="button" id="btn-segment-recipes-apply" class="primary" disabled>Save recipes &amp; export</button>
@@ -100,8 +100,7 @@
                 <table id="segment-recipes-table" class="table-sticky-header course-planner-table" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
                     <thead>
                         <tr>
-                            <th>Chunk</th>
-                            <th>Seg ID</th>
+                            <th>Leg</th>
                             <th>Label</th>
                             <th>km</th>
                             <th>Full</th>
@@ -113,7 +112,7 @@
                 </table>
             </div>
         </div>
-        <p id="segment-recipes-empty" class="course-derived-empty">No segment library yet. Load the reference library or import GPX chunk files.</p>
+        <p id="segment-recipes-empty" class="course-derived-empty">No leg library yet. Load the reference library or import GPX leg files.</p>
     </section>
 
     <section class="course-derived-section" id="segments-card" style="display: none;">
