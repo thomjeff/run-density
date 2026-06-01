@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1" creator="www.plotaroute.com" version="1.1"  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
+<metadata>
+<desc>Route created on plotaroute.com</desc>
+</metadata>
+<wpt lat="45.980194" lon="-66.656652">
+<time>2026-05-31T00:00:00Z</time>
+<name>Start on </name>
+<cmt>Start on </cmt>
+<desc>Start on </desc>
+<sym>Flag, Blue</sym>
+<type>Waypoint</type>
+</wpt>
+<wpt lat="45.973747" lon="-66.638243">
+<time>2026-05-31T00:09:35Z</time>
+<name>FINISH</name>
+<cmt>FINISH</cmt>
+<desc>FINISH</desc>
+<sym>Flag, Blue</sym>
+<type>Waypoint</type>
+</wpt>
+<trk>
+<name>04_10kturn_friel</name>
+<trkseg>
+<trkpt lat="45.980194" lon="-66.656652">
+<ele>12</ele>
+<time>2026-05-31T00:00:00Z</time></trkpt>
+<trkpt lat="45.980194" lon="-66.656652">
+<ele>12</ele>
+<time>2026-05-31T00:00:00Z</time></trkpt>
+<trkpt lat="45.979219" lon="-66.654489">
+<ele>18</ele>
+<time>2026-05-31T00:01:12Z</time></trkpt>
+<trkpt lat="45.978663" lon="-66.652916">
+<ele>18</ele>
+<time>2026-05-31T00:02:01Z</time></trkpt>
+<trkpt lat="45.978663" lon="-66.652916">
+<ele>18</ele>
+<time>2026-05-31T00:02:01Z</time></trkpt>
+<trkpt lat="45.976557" lon="-66.646625">
+<ele>17</ele>
+<time>2026-05-31T00:05:15Z</time></trkpt>
+<trkpt lat="45.976557" lon="-66.646625">
+<ele>17</ele>
+<time>2026-05-31T00:05:15Z</time></trkpt>
+<trkpt lat="45.975454" lon="-66.64332">
+<ele>15</ele>
+<time>2026-05-31T00:06:58Z</time></trkpt>
+<trkpt lat="45.974819" lon="-66.641478">
+<ele>12</ele>
+<time>2026-05-31T00:07:55Z</time></trkpt>
+<trkpt lat="45.974819" lon="-66.641478">
+<ele>12</ele>
+<time>2026-05-31T00:07:55Z</time></trkpt>
+<trkpt lat="45.9744" lon="-66.640206">
+<ele>10</ele>
+<time>2026-05-31T00:08:34Z</time></trkpt>
+<trkpt lat="45.974311" lon="-66.639976">
+<ele>10</ele>
+<time>2026-05-31T00:08:41Z</time></trkpt>
+<trkpt lat="45.973747" lon="-66.638243">
+<ele>11</ele>
+<time>2026-05-31T00:09:35Z</time></trkpt>
+</trkseg>
+</trk>
+</gpx>

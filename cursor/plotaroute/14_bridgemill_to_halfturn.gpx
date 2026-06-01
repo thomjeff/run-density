@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1" creator="www.plotaroute.com" version="1.1"  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
+<metadata>
+<desc>Route created on plotaroute.com</desc>
+</metadata>
+<wpt lat="45.978817" lon="-66.591903">
+<time>2026-06-01T00:00:00Z</time>
+<name>Start on </name>
+<cmt>Start on </cmt>
+<desc>Start on </desc>
+<sym>Flag, Blue</sym>
+<type>Waypoint</type>
+</wpt>
+<wpt lat="45.995971" lon="-66.574397">
+<time>2026-06-01T00:15:26Z</time>
+<name>FINISH</name>
+<cmt>FINISH</cmt>
+<desc>FINISH</desc>
+<sym>Flag, Blue</sym>
+<type>Waypoint</type>
+</wpt>
+<trk>
+<name>14_bridgemill_to_halfturn</name>
+<trkseg>
+<trkpt lat="45.978817" lon="-66.591903">
+<ele>12</ele>
+<time>2026-06-01T00:00:00Z</time></trkpt>
+<trkpt lat="45.978817" lon="-66.591903">
+<ele>12</ele>
+<time>2026-06-01T00:00:00Z</time></trkpt>
+<trkpt lat="45.978925" lon="-66.591881">
+<ele>12</ele>
+<time>2026-06-01T00:00:04Z</time></trkpt>
+<trkpt lat="45.979174" lon="-66.591865">
+<ele>11</ele>
+<time>2026-06-01T00:00:14Z</time></trkpt>
+<trkpt lat="45.979505" lon="-66.591875">
+<ele>12</ele>
+<time>2026-06-01T00:00:28Z</time></trkpt>
+<trkpt lat="45.979505" lon="-66.591875">
+<ele>12</ele>
+<time>2026-06-01T00:00:28Z</time></trkpt>
+<trkpt lat="45.979756" lon="-66.591883">
+<ele>12</ele>
+<time>2026-06-01T00:00:38Z</time></trkpt>
+<trkpt lat="45.980648" lon="-66.592009">
+<ele>13</ele>
+<time>2026-06-01T00:01:14Z</time></trkpt>
+<trkpt lat="45.981295" lon="-66.592012">
+<ele>18</ele>
+<time>2026-06-01T00:01:40Z</time></trkpt>
+<trkpt lat="45.982824" lon="-66.591745">
+<ele>15</ele>
+<time>2026-06-01T00:02:41Z</time></trkpt>
+<trkpt lat="45.983354" lon="-66.591705">
+<ele>13</ele>
+<time>2026-06-01T00:03:03Z</time></trkpt>
+<trkpt lat="45.984739" lon="-66.591659">
+<ele>14</ele>
+<time>2026-06-01T00:03:58Z</time></trkpt>
+<trkpt lat="45.985251" lon="-66.591525">
+<ele>12</ele>
+<time>2026-06-01T00:04:19Z</time></trkpt>
+<trkpt lat="45.98571" lon="-66.591319">
+<ele>14</ele>
+<time>2026-06-01T00:04:38Z</time></trkpt>
+<trkpt lat="45.986009" lon="-66.591097">
+<ele>13</ele>
+<time>2026-06-01T00:04:52Z</time></trkpt>
+<trkpt lat="45.986348" lon="-66.590762">
+<ele>13</ele>
+<time>2026-06-01T00:05:08Z</time></trkpt>
+<trkpt lat="45.986715" lon="-66.590203">
+<ele>12</ele>
+<time>2026-06-01T00:05:30Z</time></trkpt>
+<trkpt lat="45.986955" lon="-66.589677">
+<ele>12</ele>
+<time>2026-06-01T00:05:47Z</time></trkpt>
+<trkpt lat="45.987026" lon="-66.589492">
+<ele>12</ele>
+<time>2026-06-01T00:05:53Z</time></trkpt>
+<trkpt lat="45.987372" lon="-66.588201">
+<ele>9</ele>
+<time>2026-06-01T00:06:31Z</time></trkpt>
+<trkpt lat="45.987621" lon="-66.587191">
+<ele>10</ele>
+<time>2026-06-01T00:07:01Z</time></trkpt>
+<trkpt lat="45.987926" lon="-66.586193">
+<ele>11</ele>
+<time>2026-06-01T00:07:32Z</time></trkpt>
+<trkpt lat="45.988087" lon="-66.585774">
+<ele>12</ele>
+<time>2026-06-01T00:07:45Z</time></trkpt>
+<trkpt lat="45.988805" lon="-66.584382">
+<ele>11</ele>
+<time>2026-06-01T00:08:33Z</time></trkpt>
+<trkpt lat="45.988931" lon="-66.58411">
+<ele>12</ele>
+<time>2026-06-01T00:08:42Z</time></trkpt>
+<trkpt lat="45.989032" lon="-66.583864">
+<ele>12</ele>
+<time>2026-06-01T00:08:50Z</time></trkpt>
+<trkpt lat="45.989504" lon="-66.582529">
+<ele>15</ele>
+<time>2026-06-01T00:09:32Z</time></trkpt>
+<trkpt lat="45.990072" lon="-66.581083">
+<ele>13</ele>
+<time>2026-06-01T00:10:18Z</time></trkpt>
+<trkpt lat="45.990072" lon="-66.581083">
+<ele>13</ele>
+<time>2026-06-01T00:10:18Z</time></trkpt>
+<trkpt lat="45.990625" lon="-66.579677">
+<ele>13</ele>
+<time>2026-06-01T00:11:03Z</time></trkpt>
+<trkpt lat="45.9908" lon="-66.579277">
+<ele>13</ele>
+<time>2026-06-01T00:11:16Z</time></trkpt>
+<trkpt lat="45.990882" lon="-66.579114">
+<ele>13</ele>
+<time>2026-06-01T00:11:22Z</time></trkpt>
+<trkpt lat="45.991099" lon="-66.578811">
+<ele>12</ele>
+<time>2026-06-01T00:11:34Z</time></trkpt>
+<trkpt lat="45.991238" lon="-66.578647">
+<ele>13</ele>
+<time>2026-06-01T00:11:41Z</time></trkpt>
+<trkpt lat="45.995066" lon="-66.574953">
+<ele>10</ele>
+<time>2026-06-01T00:14:46Z</time></trkpt>
+<trkpt lat="45.995404" lon="-66.574686">
+<ele>10</ele>
+<time>2026-06-01T00:15:02Z</time></trkpt>
+<trkpt lat="45.995971" lon="-66.574397">
+<ele>4</ele>
+<time>2026-06-01T00:15:26Z</time></trkpt>
+</trkseg>
+</trk>
+</gpx>

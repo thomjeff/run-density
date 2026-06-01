@@ -1,0 +1,157 @@
+# Segment library (PlotARoute GPX chunks) — developer import only.
+# End users will edit a recipe table in the app; this file backs import/tests until then.
+#
+# Full 2026 fix: routes 09/10 (out-and-back) replaced by 14 → 13 → 15 → 11 for Marysville.
+
+version: 2
+label: "Fredericton Marathon (PlotARoute library)"
+
+chunks:
+  - id: "01"
+    file: "01_start_friel.gpx"
+    seg_id: "A1"
+    seg_label: "Start to Northside Trail at Friel"
+    width_m: 5
+    schema: on_course_open
+    direction: uni
+  - id: "02"
+    file: "02_friel_10kturn.gpx"
+    seg_id: "B1"
+    seg_label: "Friel to 10K Turn (Out)"
+    width_m: 1.5
+    schema: on_course_narrow
+    direction: bi
+  - id: "03"
+    file: "03_10kturn_fullturn.gpx"
+    seg_id: "C1"
+    seg_label: "10K Turn to Full Turn at Blake (Out)"
+    width_m: 1.5
+    schema: on_course_narrow
+    direction: bi
+  - id: "04"
+    file: "04_10kturn_friel.gpx"
+    seg_id: "B2"
+    seg_label: "10K Turn to Friel (Back)"
+    width_m: 1.5
+    schema: on_course_narrow
+    direction: bi
+  - id: "05"
+    file: "05_friel_station.gpx"
+    seg_id: "E1"
+    seg_label: "Friel to Station Rd"
+    width_m: 3
+    schema: on_course_open
+    direction: uni
+  - id: "06"
+    file: "06_station_gibsontrail.gpx"
+    seg_id: "E2"
+    seg_label: "Station connector (Gibson)"
+    width_m: 3
+    schema: on_course_open
+    direction: uni
+  - id: "07"
+    file: "07_station_qsloop.gpx"
+    seg_id: "G1"
+    seg_label: "Station to QS loop"
+    width_m: 3
+    schema: on_course_open
+    direction: uni
+  - id: "08"
+    file: "08_gibsontrail_bridgemill.gpx"
+    seg_id: "I1"
+    seg_label: "Gibson Trail to Bridge/Mill"
+    width_m: 3
+    schema: on_course_open
+    direction: uni
+  - id: "09"
+    file: "09_bridgemill_fullturn.gpx"
+    seg_id: "J2"
+    seg_label: "Bridge/Mill to Full Turn (legacy)"
+    width_m: 1.5
+    schema: on_course_narrow
+    direction: uni
+    description: "Superseded for Full by 13–15; kept for reference."
+  - id: "10"
+    file: "10_bridgemill_halfturn.gpx"
+    seg_id: "J1"
+    seg_label: "Bridge/Mill to Half Turn (legacy out-and-back)"
+    width_m: 1.5
+    schema: on_course_narrow
+    direction: bi
+    description: "Do not use on Full combine (stranded runner with 13). Half may still use."
+  - id: "11"
+    file: "11_bridgemill_finish.gpx"
+    seg_id: "K2"
+    seg_label: "Bridge/Mill to QS finish leg"
+    width_m: 1.5
+    schema: on_course_narrow
+    direction: uni
+  - id: "12"
+    file: "12_station_finish.gpx"
+    seg_id: "M1"
+    seg_label: "Station to Finish"
+    width_m: 3
+    schema: on_course_open
+    direction: uni
+  - id: "13"
+    file: "13_halfturn_to_fullturn.gpx"
+    seg_id: "J3"
+    seg_label: "Half Turn to Full Turn (Out and back)"
+    width_m: 1.5
+    schema: on_course_narrow
+    direction: bi
+    description: "Full only — Chase tree farm / full turn."
+  - id: "14"
+    file: "14_bridgemill_to_halfturn.gpx"
+    seg_id: "J4"
+    seg_label: "Bridge/Mill to Half Turn"
+    width_m: 1.5
+    schema: on_course_narrow
+    direction: uni
+    description: "One-way to half turn; Full and Half."
+  - id: "15"
+    file: "15_halfturn_to_bridgemill.gpx"
+    seg_id: "J5"
+    seg_label: "Half Turn to Bridge/Mill"
+    width_m: 1.5
+    schema: on_course_narrow
+    direction: uni
+    description: "One-way Half Turn to Bridge/Mill; Full and Half (replaces legacy 10 out-and-back)."
+
+# Recipe order = event column numbers in the end-user table (Phase 1 UI).
+recipes:
+  "10k":
+    - "01"
+    - "02"
+    - "04"
+    - "05"
+    - "12"
+  "half":
+    - "01"
+    - "05"
+    - "06"
+    - "08"
+    - "14"
+    - "15"
+    - "11"
+  "full":
+    - "01"
+    - "02"
+    - "03"
+    - "04"
+    - "05"
+    - "06"
+    - "07"
+    - "08"
+    - "14"
+    - "13"
+    - "15"
+    - "11"
+
+reference_combined:
+  full: "00_full_new.gpx"
+  half: "00_half.gpx"
+  "10k": "00_10k.gpx"
+  # half: 00_half.gpx uses orphaned route 10; use recipe below (~21.2 km), not 00_half combine
+
+flow_overrides: []

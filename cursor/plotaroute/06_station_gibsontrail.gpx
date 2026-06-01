@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1" creator="www.plotaroute.com" version="1.1"  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
+<metadata>
+<desc>Route created on plotaroute.com</desc>
+</metadata>
+<wpt lat="45.958895" lon="-66.6202169">
+<time>2026-05-31T00:00:39Z</time>
+<name>FINISH</name>
+<cmt>FINISH</cmt>
+<desc>FINISH</desc>
+<sym>Flag, Blue</sym>
+<type>Waypoint</type>
+</wpt>
+<trk>
+<name>06_station_gibsontrail</name>
+<trkseg>
+<trkpt lat="45.959572" lon="-66.6192542">
+<ele>10</ele>
+<time>2026-05-31T00:00:00Z</time></trkpt>
+<trkpt lat="45.9594916" lon="-66.6194552">
+<ele>10</ele>
+<time>2026-05-31T00:00:06Z</time></trkpt>
+<trkpt lat="45.9592734" lon="-66.6198601">
+<ele>9</ele>
+<time>2026-05-31T00:00:21Z</time></trkpt>
+<trkpt lat="45.9591243" lon="-66.6200801">
+<ele>9</ele>
+<time>2026-05-31T00:00:29Z</time></trkpt>
+<trkpt lat="45.9590068" lon="-66.6201579">
+<ele>10</ele>
+<time>2026-05-31T00:00:34Z</time></trkpt>
+<trkpt lat="45.958895" lon="-66.6202169">
+<ele>10</ele>
+<time>2026-05-31T00:00:39Z</time></trkpt>
+</trkseg>
+</trk>
+</gpx>
