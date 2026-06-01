@@ -72,9 +72,49 @@
         </div>
     </div>
 
+    <section class="course-derived-section" id="segment-recipes-card" style="display: none;">
+        <h4 class="course-derived-heading">Event recipes</h4>
+        <p class="course-derived-empty" style="margin-bottom: 0.5rem;">Build each event from reusable GPX segments. Enter <strong>order numbers</strong> (1, 2, 3…) per event; leave blank if a segment is not used. Save applies recipes and writes <code>segments.csv</code>.</p>
+        <div class="course-planner-toolbar" style="margin-bottom: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
+            <button type="button" id="btn-segment-library-seed" title="Load Fredericton reference chunks (PlotARoute library)">Load reference library</button>
+            <label class="segment-recipes-upload-label">
+                <span class="btn-like">Import GPX chunks</span>
+                <input type="file" id="segment-library-gpx-input" accept=".gpx" multiple style="display: none;" />
+            </label>
+            <button type="button" id="btn-segment-recipes-apply" class="primary" disabled>Save recipes &amp; export</button>
+        </div>
+        <p id="segment-recipes-status" class="course-derived-empty" style="display: none;"></p>
+        <div id="segment-recipes-totals" style="display: none; margin-bottom: 0.5rem; font-size: 0.875rem;">
+            <strong>Totals:</strong>
+            <span id="recipe-total-full"></span>
+            <span id="recipe-total-half"></span>
+            <span id="recipe-total-10k"></span>
+        </div>
+        <div id="segment-recipes-warnings" style="display: none; margin-bottom: 0.5rem; font-size: 0.8rem; color: #c0392b;"></div>
+        <div id="segment-recipes-table-wrap" style="display: none;">
+            <div class="scrollable-table-container segments-table-scroll" style="max-height: 28vh;">
+                <table id="segment-recipes-table" class="table-sticky-header course-planner-table" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+                    <thead>
+                        <tr>
+                            <th>Chunk</th>
+                            <th>Seg ID</th>
+                            <th>Label</th>
+                            <th>km</th>
+                            <th>Full</th>
+                            <th>Half</th>
+                            <th>10K</th>
+                        </tr>
+                    </thead>
+                    <tbody id="segment-recipes-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+        <p id="segment-recipes-empty" class="course-derived-empty">No segment library yet. Load the reference library or import GPX chunk files.</p>
+    </section>
+
     <section class="course-derived-section" id="segments-card" style="display: none;">
         <h4 class="course-derived-heading">Segments</h4>
-        <p id="segments-empty" class="course-derived-empty">Add segment pins on the course line to split it into segments. Click a row to zoom the map to that leg; use From/To pin links to open a pin.</p>
+        <p id="segments-empty" class="course-derived-empty">Add segment pins on the course line, or use <strong>Event recipes</strong> above. Click a row to zoom the map to that leg.</p>
         <div id="segments-table-wrap" style="display: none;">
             <div class="scrollable-table-container segments-table-scroll" style="max-height: 25vh;">
                 <table id="segments-table" class="table-sticky-header" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">

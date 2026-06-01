@@ -4126,9 +4126,19 @@ document.addEventListener('DOMContentLoaded', function () {
             syncHeaderFromMeta: syncCourseHeaderFromPackageMeta
         };
 
+        document.addEventListener('segment-recipes-applied', function (ev) {
+            if (!isConfigPackageMode() || !ev.detail || !ev.detail.course) return;
+            currentCourse = ev.detail.course;
+            updateCourseUI();
+            renderSegmentsList();
+        });
+
         if (isConfigPackageMode()) {
             applyConfigPackageUIMode();
             loadConfigPackageCourse();
+            if (window.segmentRecipes && window.segmentRecipes.load) {
+                window.segmentRecipes.load();
+            }
         } else {
             setCourse(null, blankCourse());
             loadCourseList();
