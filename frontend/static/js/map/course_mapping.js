@@ -2921,8 +2921,13 @@ document.addEventListener('DOMContentLoaded', function () {
             var startIdx = seg.start_index != null ? seg.start_index : 0;
             var endIdx = seg.end_index != null ? seg.end_index : (coordsLen ? coordsLen - 1 : 0);
             var segId = (seg.seg_id != null && seg.seg_id !== '') ? String(seg.seg_id) : String(segIdx + 1);
-            var pinStart = getPinLabelForIndex(startIdx, coordsLen);
-            var pinEnd = getPinLabelForIndex(endIdx, coordsLen);
+            var pinStart = (seg.from_label && String(seg.from_label).trim())
+                ? String(seg.from_label).trim()
+                : getPinLabelForIndex(startIdx, coordsLen);
+            var pinEnd = (seg.to_label && String(seg.to_label).trim())
+                ? String(seg.to_label).trim()
+                : getPinLabelForIndex(endIdx, coordsLen);
+            var useLegLabels = !!(seg.from_label || seg.to_label);
             var displayLabel = (seg.seg_label && seg.seg_label.trim()) ? seg.seg_label : (pinEnd || '');
             var tr = document.createElement('tr');
             var fromCell = document.createElement('td');
@@ -2932,21 +2937,29 @@ document.addEventListener('DOMContentLoaded', function () {
             fromBtn.className = 'pin-link';
             fromBtn.textContent = pinStart || '—';
             fromBtn.title = 'Show pin on map: ' + (pinStart || 'From');
-            fromBtn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                openSegmentPinPopupForIndex(startIdx);
-            });
-            fromCell.appendChild(fromBtn);
+            if (useLegLabels) {
+                fromCell.textContent = pinStart || '—';
+            } else {
+                fromBtn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    openSegmentPinPopupForIndex(startIdx);
+                });
+                fromCell.appendChild(fromBtn);
+            }
             var toBtn = document.createElement('button');
             toBtn.type = 'button';
             toBtn.className = 'pin-link';
             toBtn.textContent = pinEnd || '—';
             toBtn.title = 'Show pin on map: ' + (pinEnd || 'To');
-            toBtn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                openSegmentPinPopupForIndex(endIdx);
-            });
-            toCell.appendChild(toBtn);
+            if (useLegLabels) {
+                toCell.textContent = pinEnd || '—';
+            } else {
+                toBtn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    openSegmentPinPopupForIndex(endIdx);
+                });
+                toCell.appendChild(toBtn);
+            }
             var segIdCell = document.createElement('td');
             var segIdBtn = document.createElement('button');
             segIdBtn.type = 'button';

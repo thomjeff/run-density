@@ -190,10 +190,13 @@ def sync_manifest_chunks_from_gpx(
                 "id": cid,
                 "file": name,
                 "seg_label": label,
+                "start_label": (prior.get("start_label") or "").strip(),
+                "end_label": (prior.get("end_label") or "").strip(),
                 "width_m": prior.get("width_m", 3),
                 "schema": prior.get("schema", "on_course_open"),
                 "direction": prior.get("direction", "uni"),
                 "description": (prior.get("description") or "").strip(),
+                "locations": prior.get("locations") or [],
             }
         )
     manifest["chunks"] = chunks
@@ -303,24 +306,15 @@ def get_package_segment_library_state(config_id: str) -> Dict[str, Any]:
 
     manifest_path = _manifest_path(package_path)
     chunks_by_id = load_chunk_library(lib_dir, manifest)
+    from app.core.config_package.legs import leg_row_from_entry
+
     chunk_rows: List[Dict[str, Any]] = []
     for entry in chunks_meta:
         if not isinstance(entry, dict):
             continue
         cid_chunk = str(entry.get("id", "")).strip()
         loaded = chunks_by_id.get(cid_chunk) or {}
-        chunk_rows.append(
-            {
-                "id": cid_chunk,
-                "file": entry.get("file") or loaded.get("file"),
-                "leg_label": entry.get("seg_label") or loaded.get("name") or cid_chunk,
-                "length_km": loaded.get("length_km", 0),
-                "width_m": entry.get("width_m", 3),
-                "schema": entry.get("schema", "on_course_open"),
-                "direction": entry.get("direction", "uni"),
-                "description": (entry.get("description") or "").strip(),
-            }
-        )
+        chunk_rows.append(leg_row_from_entry(entry, loaded))
 
     recipes = manifest.get("recipes") or {}
     stitch_warnings: List[str] = []
@@ -393,6 +387,10 @@ def apply_package_recipes(
     course["segments"] = segments
     course["segment_library_applied"] = True
     save_config_course(cid, course)
+
+    from app.core.config_package.legs import merge_leg_locations_into_course
+
+    merge_leg_locations_into_course(cid)
 
     export_result: Optional[Dict[str, Any]] = None
     if export_csv:

@@ -72,19 +72,48 @@
         </div>
     </div>
 
+    <section class="course-derived-section" id="course-legs-card" style="display: none;">
+        <h4 class="course-derived-heading">Course legs</h4>
+        <p class="course-derived-empty" style="margin-bottom: 0.5rem;">
+            Build the course from reusable legs (GPX route pieces). Each leg has a <strong>start</strong> and <strong>end</strong> place name and optional <strong>locations</strong> (aid, water, traffic, …).
+            <em>Load Fredericton reference</em> is optional bootstrap from PlotARoute test data—not required for new events.
+        </p>
+        <div class="course-planner-toolbar" style="margin-bottom: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
+            <button type="button" id="btn-add-leg" class="primary">Add leg (GPX)</button>
+            <button type="button" id="btn-segment-library-seed" title="Optional: copy Fredericton PlotARoute legs + default recipes">Load Fredericton reference</button>
+            <label class="segment-recipes-upload-label">
+                <span class="btn-like">Bulk import GPX</span>
+                <input type="file" id="segment-library-gpx-input" accept=".gpx" multiple style="display: none;" />
+            </label>
+        </div>
+        <p id="course-legs-status" class="course-derived-empty" style="display: none;"></p>
+        <div id="course-legs-table-wrap" style="display: none;">
+            <div class="scrollable-table-container segments-table-scroll" style="max-height: 22vh;">
+                <table id="course-legs-table" class="table-sticky-header course-planner-table" style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+                    <thead>
+                        <tr>
+                            <th>Leg</th>
+                            <th>Label</th>
+                            <th>Start</th>
+                            <th>End</th>
+                            <th>km</th>
+                            <th>Locs</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="course-legs-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+        <p id="course-legs-empty" class="course-derived-empty">No legs yet. Click <strong>Add leg</strong> and upload a GPX file for each piece of the course.</p>
+    </section>
+
     <section class="course-derived-section" id="segment-recipes-card" style="display: none;">
         <h4 class="course-derived-heading">Event recipes</h4>
         <p class="course-derived-empty" style="margin-bottom: 0.5rem;">
-            <strong>1.</strong> <em>Load reference library</em> (Fredericton legs + default recipes) <em>or</em> <em>Import GPX legs</em> (one file per leg, e.g. <code>01_start.gpx</code>).<br>
-            <strong>2.</strong> Enter <strong>order numbers</strong> (1, 2, 3…) for Full / Half / 10K; leave blank if unused.<br>
-            <strong>3.</strong> <em>Save recipes &amp; export</em> writes <code>segments.csv</code> for analysis.
+            Enter <strong>order numbers</strong> (1, 2, 3…) per event to define each race distance from the legs above. Then <em>Save recipes &amp; export</em> for <code>segments.csv</code> and per-event GPX.
         </p>
         <div class="course-planner-toolbar" style="margin-bottom: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
-            <button type="button" id="btn-segment-library-seed" title="Copy built-in Fredericton PlotARoute legs and default recipes into this package">Load reference library</button>
-            <label class="segment-recipes-upload-label">
-                <span class="btn-like">Import GPX legs</span>
-                <input type="file" id="segment-library-gpx-input" accept=".gpx" multiple style="display: none;" />
-            </label>
             <button type="button" id="btn-segment-recipes-apply" class="primary" disabled>Save recipes &amp; export</button>
         </div>
         <p id="segment-recipes-status" class="course-derived-empty" style="display: none;"></p>
@@ -112,8 +141,20 @@
                 </table>
             </div>
         </div>
-        <p id="segment-recipes-empty" class="course-derived-empty">No leg library yet. Load the reference library or import GPX leg files.</p>
+        <p id="segment-recipes-empty" class="course-derived-empty">Add legs above, then set recipe order for each event.</p>
     </section>
+
+    <div id="leg-editor-modal" class="course-location-modal" hidden aria-hidden="true">
+        <div class="course-location-modal-backdrop"></div>
+        <div class="course-location-modal-panel course-location-modal-panel-narrow" role="dialog" aria-labelledby="leg-editor-title">
+            <div class="course-location-modal-header">
+                <h4 id="leg-editor-title">Leg</h4>
+                <button type="button" id="leg-editor-close" aria-label="Close">&times;</button>
+            </div>
+            <div class="course-location-modal-body" id="leg-editor-body"></div>
+            <div class="course-location-modal-footer" id="leg-editor-footer"></div>
+        </div>
+    </div>
 
     <section class="course-derived-section" id="segments-card" style="display: none;">
         <h4 class="course-derived-heading">Segments</h4>

@@ -209,6 +209,8 @@ def build_course_segments_from_library(
         seg: Dict[str, Any] = {
             "seg_id": f"S{segment_index}",
             "seg_label": (entry.get("seg_label") or ch.get("name") or cid).strip(),
+            "from_label": (entry.get("start_label") or "").strip(),
+            "to_label": (entry.get("end_label") or "").strip(),
             "width_m": entry.get("width_m", 3),
             "schema": entry.get("schema", "on_course_open"),
             "direction": entry.get("direction", "uni"),
