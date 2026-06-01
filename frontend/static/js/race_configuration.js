@@ -105,6 +105,9 @@
                 window.courseMappingMap.invalidateSize();
             }, 150);
         }
+        if (getTab() === 'course' && window.segmentRecipes && window.segmentRecipes.load) {
+            window.segmentRecipes.load();
+        }
     }
 
     function setActiveTab(tab) {

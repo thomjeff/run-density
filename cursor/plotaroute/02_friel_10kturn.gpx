@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1" creator="www.plotaroute.com" version="1.1"  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
+<metadata>
+<desc>Route created on plotaroute.com</desc>
+</metadata>
+<wpt lat="45.973749" lon="-66.63825">
+<time>2026-05-31T00:00:00Z</time>
+<name>Start on R</name>
+<cmt>Start on Rue Friel Street</cmt>
+<desc>Start on Rue Friel Street</desc>
+<sym>Flag, Blue</sym>
+<type>Waypoint</type>
+</wpt>
+<wpt lat="45.980191" lon="-66.656647">
+<time>2026-05-31T00:09:34Z</time>
+<name>FINISH</name>
+<cmt>FINISH</cmt>
+<desc>FINISH</desc>
+<sym>Flag, Blue</sym>
+<type>Waypoint</type>
+</wpt>
+<trk>
+<name>02_friel_10kturn</name>
+<trkseg>
+<trkpt lat="45.973749" lon="-66.63825">
+<ele>11</ele>
+<time>2026-05-31T00:00:00Z</time></trkpt>
+<trkpt lat="45.973749" lon="-66.63825">
+<ele>11</ele>
+<time>2026-05-31T00:00:00Z</time></trkpt>
+<trkpt lat="45.974311" lon="-66.639976">
+<ele>10</ele>
+<time>2026-05-31T00:00:53Z</time></trkpt>
+<trkpt lat="45.9744" lon="-66.640206">
+<ele>10</ele>
+<time>2026-05-31T00:01:00Z</time></trkpt>
+<trkpt lat="45.974796" lon="-66.641408">
+<ele>11</ele>
+<time>2026-05-31T00:01:37Z</time></trkpt>
+<trkpt lat="45.974796" lon="-66.641408">
+<ele>11</ele>
+<time>2026-05-31T00:01:37Z</time></trkpt>
+<trkpt lat="45.975824" lon="-66.644429">
+<ele>15</ele>
+<time>2026-05-31T00:03:11Z</time></trkpt>
+<trkpt lat="45.976555" lon="-66.64662">
+<ele>17</ele>
+<time>2026-05-31T00:04:19Z</time></trkpt>
+<trkpt lat="45.976555" lon="-66.64662">
+<ele>17</ele>
+<time>2026-05-31T00:04:19Z</time></trkpt>
+<trkpt lat="45.978655" lon="-66.652895">
+<ele>18</ele>
+<time>2026-05-31T00:07:33Z</time></trkpt>
+<trkpt lat="45.978655" lon="-66.652895">
+<ele>18</ele>
+<time>2026-05-31T00:07:33Z</time></trkpt>
+<trkpt lat="45.978997" lon="-66.653873">
+<ele>18</ele>
+<time>2026-05-31T00:08:03Z</time></trkpt>
+<trkpt lat="45.979083" lon="-66.654112">
+<ele>18</ele>
+<time>2026-05-31T00:08:11Z</time></trkpt>
+<trkpt lat="45.979083" lon="-66.654112">
+<ele>18</ele>
+<time>2026-05-31T00:08:11Z</time></trkpt>
+<trkpt lat="45.979301" lon="-66.654676">
+<ele>17</ele>
+<time>2026-05-31T00:08:29Z</time></trkpt>
+<trkpt lat="45.979301" lon="-66.654676">
+<ele>17</ele>
+<time>2026-05-31T00:08:29Z</time></trkpt>
+<trkpt lat="45.980191" lon="-66.656647">
+<ele>12</ele>
+<time>2026-05-31T00:09:34Z</time></trkpt>
+</trkseg>
+</trk>
+</gpx>

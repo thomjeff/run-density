@@ -9,7 +9,7 @@ Issue #758: Export segments.csv from course.json into config package.
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -26,8 +26,15 @@ from app.core.config_package import (
     save_config_package_resources,
     update_config_package_metadata,
 )
-from app.core.locations.suggest_events import suggest_location_events
+from app.core.config_package.segment_recipes import (
+    apply_package_recipes,
+    get_package_segment_library_state,
+    import_gpx_files_to_library,
+    save_package_recipes,
+    seed_reference_segment_library,
+)
 from app.core.config_package.storage import validate_config_id
+from app.core.locations.suggest_events import suggest_location_events
 from app.utils.auth import require_auth
 
 logger = logging.getLogger(__name__)
@@ -66,6 +73,17 @@ class SavePackageResourcesRequest(BaseModel):
 class SuggestLocationEventsRequest(BaseModel):
     location_index: Optional[int] = Field(None, ge=0)
     location: Optional[Dict[str, Any]] = None
+
+
+class SaveSegmentRecipesRequest(BaseModel):
+    order_by_event: Dict[str, Dict[str, Optional[int]]] = Field(
+        default_factory=dict,
+        description="Per event, chunk id -> 1-based order (omit or null if unused)",
+    )
+    export_csv: bool = Field(
+        True,
+        description="After save, apply recipes to course.json and write segments.csv",
+    )
 
 
 @router.get("/api/config/packages")
@@ -208,6 +226,113 @@ async def api_save_config_course(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to save course: {e}",
+        )
+
+
+@router.get("/api/config/packages/{config_id}/segment-library")
+async def api_get_segment_library(
+    request: Request,
+    config_id: str,
+) -> JSONResponse:
+    """Load segment library chunks, recipes, and per-event km totals."""
+    require_auth(request)
+    try:
+        state = get_package_segment_library_state(config_id)
+        return JSONResponse(content={"ok": True, **state})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/api/config/packages/{config_id}/segment-library/seed-reference")
+async def api_seed_reference_segment_library(
+    request: Request,
+    config_id: str,
+) -> JSONResponse:
+    """Copy built-in PlotARoute reference library into the package (dev / bootstrap)."""
+    require_auth(request)
+    try:
+        state = seed_reference_segment_library(config_id)
+        return JSONResponse(content={"ok": True, **state})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/api/config/packages/{config_id}/segment-library/upload")
+async def api_upload_segment_library_gpx(
+    request: Request,
+    config_id: str,
+    files: List[UploadFile] = File(...),
+) -> JSONResponse:
+    """Upload GPX chunk files into the package segment_library folder."""
+    require_auth(request)
+    try:
+        uploads = []
+        for uf in files:
+            data = await uf.read()
+            uploads.append((uf.filename or "chunk.gpx", data))
+        state = import_gpx_files_to_library(config_id, uploads)
+        return JSONResponse(content={"ok": True, **state})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.put("/api/config/packages/{config_id}/segment-library/recipes")
+async def api_save_segment_recipes(
+    request: Request,
+    config_id: str,
+    body: SaveSegmentRecipesRequest,
+) -> JSONResponse:
+    """Save recipe order grid; optionally apply to course and export segments.csv."""
+    require_auth(request)
+    try:
+        state = save_package_recipes(config_id, {}, order_by_event=body.order_by_event)
+        result: Dict[str, Any] = {"ok": True, "library": state}
+        if body.export_csv:
+            apply_result = apply_package_recipes(config_id, export_csv=True)
+            result["apply"] = apply_result
+            course = load_config_course(config_id)
+            result["course"] = course
+        return JSONResponse(content=result)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to save segment recipes")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save recipes: {e}",
+        )
+
+
+@router.post("/api/config/packages/{config_id}/segment-library/apply")
+async def api_apply_segment_recipes(
+    request: Request,
+    config_id: str,
+) -> JSONResponse:
+    """Apply saved recipes to course.json and export segments.csv."""
+    require_auth(request)
+    try:
+        result = apply_package_recipes(config_id, export_csv=True)
+        course = load_config_course(config_id)
+        return JSONResponse(
+            content={"ok": True, **result, "course": course}
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to apply segment recipes")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to apply recipes: {e}",
         )
 
 

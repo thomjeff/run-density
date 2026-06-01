@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1" creator="www.plotaroute.com" version="1.1"  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
+<metadata>
+<desc>Route created on plotaroute.com</desc>
+</metadata>
+<wpt lat="45.9539395" lon="-66.6399014">
+<time>2026-05-31T00:11:15Z</time>
+<name>FINISH</name>
+<cmt>FINISH</cmt>
+<desc>FINISH</desc>
+<sym>Flag, Blue</sym>
+<type>Waypoint</type>
+</wpt>
+<trk>
+<name>12_station_finish</name>
+<trkseg>
+<trkpt lat="45.9595734" lon="-66.6192701">
+<ele>10</ele>
+<time>2026-05-31T00:00:00Z</time></trkpt>
+<trkpt lat="45.9592053" lon="-66.6199726">
+<ele>9</ele>
+<time>2026-05-31T00:00:25Z</time></trkpt>
+<trkpt lat="45.9589182" lon="-66.6204447">
+<ele>10</ele>
+<time>2026-05-31T00:00:42Z</time></trkpt>
+<trkpt lat="45.9588771" lon="-66.6204983">
+<ele>10</ele>
+<time>2026-05-31T00:00:44Z</time></trkpt>
+<trkpt lat="45.95881" lon="-66.6206163">
+<ele>10</ele>
+<time>2026-05-31T00:00:48Z</time></trkpt>
+<trkpt lat="45.958728" lon="-66.6208094">
+<ele>9</ele>
+<time>2026-05-31T00:00:55Z</time></trkpt>
+<trkpt lat="45.9585042" lon="-66.6213566">
+<ele>10</ele>
+<time>2026-05-31T00:01:12Z</time></trkpt>
+<trkpt lat="45.9584446" lon="-66.6215658">
+<ele>10</ele>
+<time>2026-05-31T00:01:19Z</time></trkpt>
+<trkpt lat="45.9583401" lon="-66.6220111">
+<ele>10</ele>
+<time>2026-05-31T00:01:32Z</time></trkpt>
+<trkpt lat="45.9580642" lon="-66.6235507">
+<ele>7</ele>
+<time>2026-05-31T00:02:16Z</time></trkpt>
+<trkpt lat="45.957806" lon="-66.6251547">
+<ele>3</ele>
+<time>2026-05-31T00:03:02Z</time></trkpt>
+<trkpt lat="45.9573966" lon="-66.6274559">
+<ele>2</ele>
+<time>2026-05-31T00:04:08Z</time></trkpt>
+<trkpt lat="45.9564308" lon="-66.6329193">
+<ele>8</ele>
+<time>2026-05-31T00:06:45Z</time></trkpt>
+<trkpt lat="45.9562927" lon="-66.6336787">
+<ele>8</ele>
+<time>2026-05-31T00:07:07Z</time></trkpt>
+<trkpt lat="45.9561622" lon="-66.6343224">
+<ele>9</ele>
+<time>2026-05-31T00:07:26Z</time></trkpt>
+<trkpt lat="45.9560914" lon="-66.6345102">
+<ele>9</ele>
+<time>2026-05-31T00:07:32Z</time></trkpt>
+<trkpt lat="45.9559981" lon="-66.6347516">
+<ele>10</ele>
+<time>2026-05-31T00:07:39Z</time></trkpt>
+<trkpt lat="45.9558788" lon="-66.6349822">
+<ele>10</ele>
+<time>2026-05-31T00:07:47Z</time></trkpt>
+<trkpt lat="45.9558042" lon="-66.63517">
+<ele>10</ele>
+<time>2026-05-31T00:07:53Z</time></trkpt>
+<trkpt lat="45.9557557" lon="-66.635288">
+<ele>10</ele>
+<time>2026-05-31T00:07:57Z</time></trkpt>
+<trkpt lat="45.9556662" lon="-66.635406">
+<ele>10</ele>
+<time>2026-05-31T00:08:02Z</time></trkpt>
+<trkpt lat="45.9553716" lon="-66.6357011">
+<ele>10</ele>
+<time>2026-05-31T00:08:17Z</time></trkpt>
+<trkpt lat="45.9550956" lon="-66.6359586">
+<ele>10</ele>
+<time>2026-05-31T00:08:30Z</time></trkpt>
+<trkpt lat="45.9547711" lon="-66.6362321">
+<ele>10</ele>
+<time>2026-05-31T00:08:45Z</time></trkpt>
+<trkpt lat="45.9530784" lon="-66.6376535">
+<ele>8</ele>
+<time>2026-05-31T00:10:03Z</time></trkpt>
+<trkpt lat="45.9530928" lon="-66.6378307">
+<ele>8</ele>
+<time>2026-05-31T00:10:08Z</time></trkpt>
+<trkpt lat="45.9536224" lon="-66.6391021">
+<ele>9</ele>
+<time>2026-05-31T00:10:50Z</time></trkpt>
+<trkpt lat="45.9539395" lon="-66.6399014">
+<ele>9</ele>
+<time>2026-05-31T00:11:15Z</time></trkpt>
+</trkseg>
+</trk>
+</gpx>

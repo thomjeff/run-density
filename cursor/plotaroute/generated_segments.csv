@@ -1,0 +1,16 @@
+seg_id,seg_label,width_m,schema,direction,full,half,10k,elite,open,full_from_km,full_to_km,half_from_km,half_to_km,10k_from_km,10k_to_km,elite_from_km,elite_to_km,open_from_km,open_to_km,full_length,half_length,10k_length,elite_length,open_length,description
+A1,Start to Northside Trail at Friel,5,on_course_open,uni,y,y,y,n,n,0,2.71,0,2.71,0,2.71,0,0,0,0,2.71,2.71,2.71,0,0,
+B1,Friel to 10K Turn (Out),1.5,on_course_narrow,bi,y,n,y,n,n,2.71,4.3,0,0,2.71,4.3,0,0,0,0,1.59,0,1.59,0,0,
+C1,10K Turn to Full Turn at Blake (Out),1.5,on_course_narrow,bi,y,n,n,n,n,4.3,15.44,0,0,0,0,0,0,0,0,11.14,0,0,0,0,
+B2,10K Turn to Friel (Back),1.5,on_course_narrow,bi,y,n,y,n,n,15.44,17.03,0,0,4.3,5.89,0,0,0,0,1.59,0,1.59,0,0,
+E1,Friel to Station Rd,3,on_course_open,uni,y,y,y,n,n,17.03,19.27,2.71,4.95,5.89,8.13,0,0,0,0,2.24,2.24,2.24,0,0,
+E2,Station connector (Gibson),3,on_course_open,uni,y,y,n,n,n,19.27,19.38,4.95,5.06,0,0,0,0,0,0,0.11,0.11,0,0,0,
+G1,Station to QS loop,3,on_course_open,uni,y,n,n,n,n,19.38,24.07,0,0,0,0,0,0,0,0,4.69,0,0,0,0,
+I1,Gibson Trail to Bridge/Mill,3,on_course_open,uni,y,y,n,n,n,24.07,29.84,5.06,10.83,0,0,0,0,0,0,5.77,5.77,0,0,0,
+J2,Bridge/Mill to Full Turn (legacy),1.5,on_course_narrow,uni,n,n,n,n,n,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,Superseded for Full by 13–15; kept for reference.
+J1,Bridge/Mill to Half Turn (legacy out-and-back),1.5,on_course_narrow,bi,n,n,n,n,n,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,Do not use on Full combine (stranded runner with 13). Half may still use.
+K2,Bridge/Mill to QS finish leg,1.5,on_course_narrow,uni,y,y,n,n,n,29.84,35.06,10.83,16.05,0,0,0,0,0,0,5.22,5.22,0,0,0,
+M1,Station to Finish,3,on_course_open,uni,n,n,y,n,n,0,0,0,0,8.13,10,0,0,0,0,0,0,1.87,0,0,
+J3,Half Turn to Full Turn (Out and back),1.5,on_course_narrow,bi,y,n,n,n,n,35.06,36.64,0,0,0,0,0,0,0,0,1.58,0,0,0,0,Full only — Chase tree farm / full turn.
+J4,Bridge/Mill to Half Turn,1.5,on_course_narrow,uni,y,y,n,n,n,36.64,39.21,16.05,18.62,0,0,0,0,0,0,2.57,2.57,0,0,0,One-way to half turn; Full and Half.
+J5,Half Turn to Bridge/Mill,1.5,on_course_narrow,uni,y,y,n,n,n,39.21,41.79,18.62,21.2,0,0,0,0,0,0,2.58,2.58,0,0,0,One-way Half Turn to Bridge/Mill; Full and Half (replaces legacy 10 out-and-back).
