@@ -14,6 +14,8 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
+import yaml
+
 from app.core.config_package.storage import (
     export_config_package_segments,
     load_config_course,
@@ -26,6 +28,7 @@ from app.core.course.segment_library import (
     export_library_to_course,
     load_chunk_library,
     load_manifest,
+    parse_chunk_gpx,
     validate_recipe_stitch,
 )
 from app.utils.constants import COURSE_EVENT_IDS
@@ -33,14 +36,30 @@ from app.utils.constants import COURSE_EVENT_IDS
 logger = logging.getLogger(__name__)
 
 SEGMENT_LIBRARY_DIRNAME = "segment_library"
-MANIFEST_NAME = "manifest.json"
+MANIFEST_YAML = "manifest.yaml"
+MANIFEST_JSON = "manifest.json"
 
 # Sun events for Phase 1 recipe UI
 RECIPE_EVENT_IDS = ("full", "half", "10k")
 
-REFERENCE_LIBRARY_DIR = (
-    Path(__file__).resolve().parents[2] / "cursor" / "plotaroute"
-)
+def _repo_root() -> Path:
+    """Project root (/app in Docker, repo root on host)."""
+    return Path(__file__).resolve().parents[3]
+
+
+def _reference_library_dir() -> Path:
+    """Built-in PlotARoute reference chunks (image or repo cursor/plotaroute)."""
+    candidates = [
+        _repo_root() / "cursor" / "plotaroute",
+        Path("/app/cursor/plotaroute"),
+    ]
+    for path in candidates:
+        if (path / MANIFEST_YAML).is_file() or (path / MANIFEST_JSON).is_file():
+            return path
+    return candidates[0]
+
+
+REFERENCE_LIBRARY_DIR = _reference_library_dir()
 
 
 def package_segment_library_dir(package_path: Path) -> Path:
@@ -48,7 +67,33 @@ def package_segment_library_dir(package_path: Path) -> Path:
 
 
 def _manifest_path(package_path: Path) -> Path:
-    return package_segment_library_dir(package_path) / MANIFEST_NAME
+    """Resolved manifest file in package (yaml preferred, matches reference library)."""
+    lib_dir = package_segment_library_dir(package_path)
+    for name in (MANIFEST_YAML, MANIFEST_JSON):
+        path = lib_dir / name
+        if path.is_file():
+            return path
+    return lib_dir / MANIFEST_YAML
+
+
+def _read_manifest_file(path: Path) -> Dict[str, Any]:
+    if path.suffix.lower() in (".yaml", ".yml"):
+        return load_manifest(path)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"Invalid manifest: {path}")
+    return data
+
+
+def _write_manifest_file(path: Path, manifest: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.suffix.lower() in (".yaml", ".yml"):
+        path.write_text(
+            yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+    else:
+        path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
 
 def _default_manifest() -> Dict[str, Any]:
@@ -62,15 +107,15 @@ def _default_manifest() -> Dict[str, Any]:
 
 
 def load_package_segment_manifest(config_id: str) -> Dict[str, Any]:
-    """Load segment_library/manifest.json or empty defaults."""
+    """Load segment_library manifest or empty defaults."""
     cid = validate_config_id(config_id)
     package_path = resolve_config_package_path(cid)
     path = _manifest_path(package_path)
     if not path.is_file():
         return _default_manifest()
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = _read_manifest_file(path)
     if not isinstance(data, dict):
-        raise ValueError("segment library manifest must be a JSON object")
+        raise ValueError("segment library manifest must be an object")
     if "recipes" not in data:
         data["recipes"] = {eid: [] for eid in RECIPE_EVENT_IDS}
     if "chunks" not in data:
@@ -83,32 +128,104 @@ def save_package_segment_manifest(config_id: str, manifest: Dict[str, Any]) -> P
     package_path = resolve_config_package_path(cid)
     lib_dir = package_segment_library_dir(package_path)
     lib_dir.mkdir(parents=True, exist_ok=True)
-    path = _manifest_path(package_path)
+    path = package_segment_library_dir(package_path) / MANIFEST_YAML
     out = dict(manifest)
     if "recipes" not in out:
         out["recipes"] = {eid: [] for eid in RECIPE_EVENT_IDS}
     if "chunks" not in out:
         out["chunks"] = []
-    path.write_text(json.dumps(out, indent=2), encoding="utf-8")
+    _write_manifest_file(path, out)
     logger.info("Saved segment library manifest: %s", path)
     return path
 
 
+def _chunk_id_from_filename(filename: str) -> str:
+    """Derive chunk id from PlotARoute-style names (e.g. 01_start_friel.gpx -> 01)."""
+    stem = Path(filename).stem
+    if stem.startswith("00_"):
+        return ""
+    prefix = stem.split("_", 1)[0]
+    if prefix.isdigit():
+        return prefix
+    return stem[:24]
+
+
+def sync_manifest_chunks_from_gpx(
+    lib_dir: Path,
+    manifest: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Ensure manifest lists every chunk GPX in lib_dir (except 00_* combined routes).
+
+    New files get default metadata; existing entries keep seg_id, width, recipes, etc.
+    """
+    manifest = dict(manifest or _default_manifest())
+    existing_by_file = {
+        str(c.get("file", "")): c
+        for c in (manifest.get("chunks") or [])
+        if isinstance(c, dict) and c.get("file")
+    }
+    chunks: List[Dict[str, Any]] = []
+    for gpx_path in sorted(lib_dir.glob("*.gpx")):
+        name = gpx_path.name
+        if name.startswith("00_"):
+            continue
+        cid = _chunk_id_from_filename(name)
+        if not cid:
+            continue
+        prior = existing_by_file.get(name) or {}
+        if prior.get("id"):
+            cid = str(prior["id"])
+        try:
+            parsed = parse_chunk_gpx(gpx_path)
+        except ValueError:
+            continue
+        label = (
+            (prior.get("seg_label") or "").strip()
+            or (parsed.get("name") or "").strip()
+            or gpx_path.stem.replace("_", " ").title()
+        )
+        chunks.append(
+            {
+                "id": cid,
+                "file": name,
+                "seg_id": (prior.get("seg_id") or cid).strip(),
+                "seg_label": label,
+                "width_m": prior.get("width_m", 3),
+                "schema": prior.get("schema", "on_course_open"),
+                "direction": prior.get("direction", "uni"),
+                "description": (prior.get("description") or "").strip(),
+            }
+        )
+    manifest["chunks"] = chunks
+    return manifest
+
+
 def seed_reference_segment_library(config_id: str) -> Dict[str, Any]:
     """Copy cursor/plotaroute reference library into the config package."""
-    if not REFERENCE_LIBRARY_DIR.is_dir():
-        raise FileNotFoundError(f"Reference library not found: {REFERENCE_LIBRARY_DIR}")
-    ref_manifest = REFERENCE_LIBRARY_DIR / MANIFEST_NAME
+    ref_dir = _reference_library_dir()
+    if not ref_dir.is_dir():
+        raise FileNotFoundError(
+            f"Reference library not found at {ref_dir}. "
+            "Rebuild the dev container or mount cursor/plotaroute."
+        )
+    ref_manifest = ref_dir / MANIFEST_YAML
     if not ref_manifest.is_file():
-        raise FileNotFoundError(f"Reference manifest missing: {ref_manifest}")
+        ref_manifest = ref_dir / MANIFEST_JSON
+    if not ref_manifest.is_file():
+        raise FileNotFoundError(f"Reference manifest missing under {ref_dir}")
 
     cid = validate_config_id(config_id)
     package_path = resolve_config_package_path(cid)
     lib_dir = package_segment_library_dir(package_path)
     if lib_dir.exists():
         shutil.rmtree(lib_dir)
-    shutil.copytree(REFERENCE_LIBRARY_DIR, lib_dir, ignore=shutil.ignore_patterns("generated_segments.csv", "README.md"))
-    manifest = load_manifest(lib_dir / MANIFEST_NAME)
+    shutil.copytree(
+        ref_dir,
+        lib_dir,
+        ignore=shutil.ignore_patterns("generated_segments.csv", "README.md"),
+    )
+    manifest = _read_manifest_file(_manifest_path(package_path))
     manifest["label"] = manifest.get("label") or "Reference (PlotARoute)"
     save_package_segment_manifest(cid, manifest)
     return get_package_segment_library_state(cid)
@@ -318,4 +435,7 @@ def import_gpx_files_to_library(
         saved.append(safe)
     if not saved:
         raise ValueError("No .gpx files uploaded")
+    manifest = load_package_segment_manifest(config_id)
+    manifest = sync_manifest_chunks_from_gpx(lib_dir, manifest)
+    save_package_segment_manifest(config_id, manifest)
     return get_package_segment_library_state(config_id)

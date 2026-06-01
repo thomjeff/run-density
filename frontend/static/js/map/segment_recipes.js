@@ -29,6 +29,19 @@
         card.style.display = visible && isConfigPackageWorkspace() ? 'block' : 'none';
     }
 
+    function formatApiError(res, data) {
+        if (data && data.detail) {
+            if (typeof data.detail === 'string') return data.detail;
+            if (Array.isArray(data.detail)) {
+                return data.detail.map(function (d) { return d.msg || JSON.stringify(d); }).join('; ');
+            }
+        }
+        if (res && res.status === 404 && data && data.detail === 'Not Found') {
+            return 'Segment library API is unavailable. Restart the app (make stop && make dev) and try again.';
+        }
+        return (res && res.status ? 'HTTP ' + res.status + ': ' : '') + 'Request failed';
+    }
+
     function setStatus(msg, isError) {
         var el = document.getElementById('segment-recipes-status');
         if (!el) return;
@@ -165,9 +178,14 @@
         }
         showCard(true);
         return fetch(apiBase() + '/segment-library', { credentials: 'same-origin' })
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-                if (!data.ok) throw new Error(data.detail || 'Failed to load library');
+            .then(function (r) {
+                return r.json().then(function (data) { return { res: r, data: data }; });
+            })
+            .then(function (payload) {
+                var r = payload.res;
+                var data = payload.data;
+                if (!r.ok) throw new Error(formatApiError(r, data));
+                if (!data.ok) throw new Error(formatApiError(r, data));
                 libraryState = data;
                 orderGrid = data.order_grid || {};
                 renderTable();
@@ -186,15 +204,17 @@
             method: 'POST',
             credentials: 'same-origin'
         })
-            .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+            .then(function (r) { return r.json().then(function (d) { return { res: r, ok: r.ok, data: d }; }); })
             .then(function (res) {
-                if (!res.ok) throw new Error(res.data.detail || 'Seed failed');
-                libraryState = res.data;
-                orderGrid = res.data.order_grid || {};
+                if (!res.ok) throw new Error(formatApiError(res.res, res.data));
+                var data = res.data;
+                if (!data.ok) throw new Error(formatApiError(res.res, data));
+                libraryState = data;
+                orderGrid = data.order_grid || {};
                 renderTable();
-                renderTotals(res.data.recipe_lengths_km);
-                renderWarnings(res.data.stitch_warnings);
-                setStatus('Reference library loaded (' + (res.data.chunks || []).length + ' chunks).');
+                renderTotals(data.recipe_lengths_km);
+                renderWarnings(data.stitch_warnings);
+                setStatus('Reference library loaded (' + (data.chunks || []).length + ' chunks).');
             })
             .catch(function (err) {
                 setStatus(err.message || String(err), true);
@@ -213,15 +233,22 @@
             credentials: 'same-origin',
             body: fd
         })
-            .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+            .then(function (r) { return r.json().then(function (d) { return { res: r, ok: r.ok, data: d }; }); })
             .then(function (res) {
-                if (!res.ok) throw new Error(res.data.detail || 'Upload failed');
-                libraryState = res.data;
-                orderGrid = res.data.order_grid || {};
+                if (!res.ok) throw new Error(formatApiError(res.res, res.data));
+                var data = res.data;
+                if (!data.ok) throw new Error(formatApiError(res.res, data));
+                libraryState = data;
+                orderGrid = data.order_grid || {};
                 renderTable();
-                renderTotals(res.data.recipe_lengths_km);
-                renderWarnings(res.data.stitch_warnings);
-                setStatus('Uploaded GPX files.');
+                renderTotals(data.recipe_lengths_km);
+                renderWarnings(data.stitch_warnings);
+                var n = (data.chunks || []).length;
+                setStatus(
+                    n
+                        ? 'Imported ' + n + ' segment(s). Set order numbers, then Save recipes & export.'
+                        : 'GPX saved but no segments detected. Use Load reference library or name files like 01_start.gpx.'
+                );
             })
             .catch(function (err) {
                 setStatus(err.message || String(err), true);
@@ -236,10 +263,11 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ order_by_event: orderGrid, export_csv: true })
         })
-            .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+            .then(function (r) { return r.json().then(function (d) { return { res: r, ok: r.ok, data: d }; }); })
             .then(function (res) {
-                if (!res.ok) throw new Error(res.data.detail || 'Save failed');
+                if (!res.ok) throw new Error(formatApiError(res.res, res.data));
                 var data = res.data;
+                if (!data.ok) throw new Error(formatApiError(res.res, data));
                 if (data.library) {
                     libraryState = data.library;
                     orderGrid = data.library.order_grid || orderGrid;

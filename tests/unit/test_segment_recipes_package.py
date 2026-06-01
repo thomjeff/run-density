@@ -3,8 +3,10 @@
 import pytest
 
 from app.core.config_package.segment_recipes import (
+    _chunk_id_from_filename,
     order_grid_from_recipes,
     recipes_from_order_grid,
+    sync_manifest_chunks_from_gpx,
 )
 
 
@@ -19,6 +21,11 @@ def test_recipes_from_order_grid():
     assert recipes["full"] == ["01", "02"]
     assert recipes["half"] == ["01", "05"]
     assert recipes["10k"] == ["01", "02"]
+
+
+def test_chunk_id_from_filename():
+    assert _chunk_id_from_filename("01_start_friel.gpx") == "01"
+    assert _chunk_id_from_filename("00_full.gpx") == ""
 
 
 def test_order_grid_roundtrip():

@@ -74,9 +74,13 @@
 
     <section class="course-derived-section" id="segment-recipes-card" style="display: none;">
         <h4 class="course-derived-heading">Event recipes</h4>
-        <p class="course-derived-empty" style="margin-bottom: 0.5rem;">Build each event from reusable GPX segments. Enter <strong>order numbers</strong> (1, 2, 3…) per event; leave blank if a segment is not used. Save applies recipes and writes <code>segments.csv</code>.</p>
+        <p class="course-derived-empty" style="margin-bottom: 0.5rem;">
+            <strong>1.</strong> <em>Load reference library</em> (Fredericton chunks + default recipes) <em>or</em> <em>Import GPX chunks</em> (one file per segment, e.g. <code>01_start.gpx</code>).<br>
+            <strong>2.</strong> Enter <strong>order numbers</strong> (1, 2, 3…) for Full / Half / 10K; leave blank if unused.<br>
+            <strong>3.</strong> <em>Save recipes &amp; export</em> writes <code>segments.csv</code> for analysis.
+        </p>
         <div class="course-planner-toolbar" style="margin-bottom: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
-            <button type="button" id="btn-segment-library-seed" title="Load Fredericton reference chunks (PlotARoute library)">Load reference library</button>
+            <button type="button" id="btn-segment-library-seed" title="Copy built-in Fredericton PlotARoute chunks and default recipes into this package">Load reference library</button>
             <label class="segment-recipes-upload-label">
                 <span class="btn-like">Import GPX chunks</span>
                 <input type="file" id="segment-library-gpx-input" accept=".gpx" multiple style="display: none;" />
