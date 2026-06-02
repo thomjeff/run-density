@@ -17,12 +17,37 @@
 /* ============================================
    Table Sticky Header
    ============================================ */
+/* base.html sets table { overflow: hidden } which breaks sticky headers — reset in scroll areas */
+.scrollable-table-container .table-sticky-header {
+    border-collapse: separate;
+    border-spacing: 0;
+    overflow: visible;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+.scrollable-table-container .table-sticky-header thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.scrollable-table-container .table-sticky-header thead th,
 .table-sticky-header thead th {
     position: sticky;
     top: 0;
     background: #f8f9fa;
-    z-index: 10;
+    z-index: 11;
     box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* Sortable headers must stay sticky (do not override with position: relative) */
+.scrollable-table-container .table-sticky-header thead th.table-sortable,
+.scrollable-table-container .table-sticky-header thead th.sortable,
+.scrollable-table-container .table-sticky-header thead th.table-sortable:hover,
+.scrollable-table-container .table-sticky-header thead th.sortable:hover {
+    position: sticky;
+    top: 0;
 }
 
 /* ============================================
@@ -33,6 +58,11 @@
     width: 100%;
     border-collapse: collapse;
     background: white;
+}
+
+.scrollable-table-container table.table-sticky-header {
+    border-collapse: separate;
+    border-spacing: 0;
 }
 
 .scrollable-table-container table th,
@@ -61,7 +91,6 @@
 .table-sortable {
     cursor: pointer;
     user-select: none;
-    position: relative;
 }
 
 .table-sortable:hover {

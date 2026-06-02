@@ -750,6 +750,10 @@ def export_config_package_segments(config_id: str) -> Dict[str, Any]:
         shutil.copy2(locations_target, locations_backup_path)
     locations_target.write_text(locations_csv, encoding="utf-8")
 
+    from app.core.config_package.segment_recipes import export_package_flow_and_gpx_files
+
+    flow_gpx = export_package_flow_and_gpx_files(cid)
+
     logger.info(
         "Exported segments.csv (%s rows) and locations.csv (%s rows) for config package %s",
         len(segments),
@@ -765,5 +769,8 @@ def export_config_package_segments(config_id: str) -> Dict[str, Any]:
         "locations_path": str(locations_target),
         "locations_backup_path": str(locations_backup_path) if locations_backup_path else None,
         "location_count": len(locations),
-        "readiness": package_readiness(package_path),
+        "flow_gpx": flow_gpx,
+        "flow_path": flow_gpx.get("flow_path"),
+        "gpx_files": flow_gpx.get("gpx_files") or [],
+        "readiness": flow_gpx.get("readiness") or package_readiness(package_path),
     }

@@ -140,7 +140,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    function loadConfigPackageCourse() {
+    function loadConfigPackageCourse(options) {
+        options = options || {};
         var pkgId = resolveConfigPackageId();
         if (!pkgId) return Promise.resolve();
         return fetch(
@@ -152,7 +153,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     var c = blankCourse();
                     c.id = pkgId;
                     c.config_id = pkgId;
-                    setCourse(pkgId, c);
+                    setCourse(pkgId, c, options);
                     clearDirty();
                     return null;
                 }
@@ -166,7 +167,7 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(function (data) {
                 if (!data) return;
                 if (data.ok && data.course) {
-                    setCourse(pkgId, data.course);
+                    setCourse(pkgId, data.course, options);
                     if (window.PENDING_PACKAGE_META) {
                         var pending = window.PENDING_PACKAGE_META;
                         syncCourseHeaderFromPackageMeta(
@@ -649,7 +650,15 @@ document.addEventListener('DOMContentLoaded', function () {
         updateExportButton();
     }
 
-    function setCourse(id, course) {
+    function shouldSkipCourseMapRefresh() {
+        if (!usePackageLevelEditSave()) return false;
+        var legsPanel = document.getElementById('config-package-legs-panel');
+        return !!(legsPanel && legsPanel.style.display !== 'none');
+    }
+
+    function setCourse(id, course, options) {
+        options = options || {};
+        var skipMapRefresh = options.skipMapRefresh || shouldSkipCourseMapRefresh();
         currentCourseId = id;
         currentCourse = course;
         clearDirty();
@@ -683,15 +692,17 @@ document.addEventListener('DOMContentLoaded', function () {
         updateSameRouteBackButtons();
         updateExportButton();
         updateExtendHint();
-        renderCourseLine();
-        renderSegmentPins();
-        renderLocationPins();
         syncSegmentsFromBreaks();
         renderSegmentsList();
         renderLocationsList();
-        renderStartFinishIcons();
-        renderUturnIcons();
-        fitMapToCourse();
+        if (!skipMapRefresh) {
+            renderCourseLine();
+            renderSegmentPins();
+            renderLocationPins();
+            renderStartFinishIcons();
+            renderUturnIcons();
+            fitMapToCourse();
+        }
     }
 
     /** Drop deprecated loc_description; migrate into notes for one-pager export. */
@@ -3374,6 +3385,41 @@ document.addEventListener('DOMContentLoaded', function () {
         return t ? t.label : (locType || '').toString();
     }
 
+    function getLocationPinColor(locType) {
+        return LOCATION_PIN_COLORS[locType] || '#27ae60';
+    }
+
+    function formatLocationResourceSummary(loc) {
+        syncLocationResourceCounts(loc);
+        var parts = [];
+        getPackageResources().forEach(function (res) {
+            var code = res.code;
+            var n = loc.resources && loc.resources[code] != null
+                ? parseInt(loc.resources[code], 10)
+                : parseInt(loc[code + '_count'], 10);
+            if (!isNaN(n) && n > 0) {
+                parts.push((res.label || code.toUpperCase()) + ': ' + n);
+            }
+        });
+        return parts.length ? parts.join(', ') : '(none)';
+    }
+
+    /** Course / config map tooltips: ID, type, label, resources — no operational window. */
+    function buildConfigLocationTooltipHtml(loc, index) {
+        var locId = loc.id != null ? String(loc.id) : String((index != null ? index : 0) + 1);
+        return buildPopupRowsHtml([
+            { label: 'ID', value: locId },
+            { label: 'Type', value: getLocationTypeLabel(loc.loc_type) },
+            { label: 'Label', value: loc.loc_label || '(none)' },
+            { label: 'Resources', value: formatLocationResourceSummary(loc) }
+        ]);
+    }
+
+    function getCourseLocations() {
+        if (!currentCourse || !Array.isArray(currentCourse.locations)) return [];
+        return currentCourse.locations;
+    }
+
     function renderLocationPins() {
         if (!window.courseMappingMap) return;
         if (locationsLayer) {
@@ -3386,7 +3432,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var lat = typeof loc.lat === 'number' ? loc.lat : parseFloat(loc.lat);
             var lon = typeof loc.lon === 'number' ? loc.lon : parseFloat(loc.lon);
             if (isNaN(lat) || isNaN(lon)) return;
-            var fill = LOCATION_PIN_COLORS[loc.loc_type] || '#27ae60';
+            var fill = getLocationPinColor(loc.loc_type);
             var stroke = fill;
             var locIcon = L.divIcon({
                 className: 'location-pin-circle',
@@ -3396,12 +3442,10 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             var m = L.marker([lat, lon], { icon: locIcon, draggable: isEditMode });
             m._locationIndex = i;
-            var locId = loc.id != null ? String(loc.id) : (i + 1);
-            var tipHtml = buildPopupRowsHtml([
-                { label: 'ID', value: locId },
-                { label: 'Label', value: loc.loc_label || getLocationTypeLabel(loc.loc_type) || 'Location' },
-                { label: 'Type', value: getLocationTypeLabel(loc.loc_type) }
-            ]) + (isEditMode ? '<div class="popup-row" style="font-size:0.75rem;color:#7f8c8d;">(drag to move; edit details in Locations table)</div>' : '');
+            var tipHtml = buildConfigLocationTooltipHtml(loc, i) +
+                (isEditMode
+                    ? '<div class="popup-row" style="font-size:0.75rem;color:#7f8c8d;">(drag to move; edit details in Locations table)</div>'
+                    : '');
             m.bindTooltip(tipHtml, { permanent: false, direction: 'top', offset: [0, -10], className: 'course-map-tooltip' });
             m.on('dragend', function () {
                 var ll = m.getLatLng();
@@ -3517,7 +3561,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     );
                 }
                 if (payload.data && payload.data.course) {
-                    setCourse(pkgId, payload.data.course);
+                    setCourse(pkgId, payload.data.course, { skipMapRefresh: shouldSkipCourseMapRefresh() });
                 } else {
                     currentCourse.locations.splice(idx, 1);
                     renderLocationPins();
@@ -3631,6 +3675,9 @@ document.addEventListener('DOMContentLoaded', function () {
             totalTr.appendChild(document.createElement('td'));
         }
         tbody.appendChild(totalTr);
+        if (window.segmentRecipes && window.segmentRecipes.renderCoursePreviewLocations) {
+            window.segmentRecipes.renderCoursePreviewLocations();
+        }
     }
 
     function closestVertexIndex(latLng, coordinates) {
@@ -4496,6 +4543,15 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (!res.ok) throw new Error(data.detail || res.statusText);
                         var msg = 'Exported to config package: segments.csv';
                         if (data.location_count != null) msg += ', locations.csv (' + data.location_count + ' rows)';
+                        if (data.flow_path) msg += ', flow.csv';
+                        if (data.gpx_files && data.gpx_files.length) {
+                            msg += ', ' + data.gpx_files.length + ' event GPX file(s)';
+                        }
+                        if (data.readiness && data.readiness.analyze_ready) {
+                            msg += ' — package is analysis-ready';
+                        } else if (data.readiness && data.readiness.missing && data.readiness.missing.length) {
+                            msg += ' — still missing: ' + data.readiness.missing.join(', ');
+                        }
                         if (data.segments_backup_path) msg += ' (segments.csv backed up)';
                         if (data.locations_backup_path) msg += ' (locations.csv backed up)';
                         alert(msg);
@@ -4584,7 +4640,12 @@ document.addEventListener('DOMContentLoaded', function () {
                     currentCourse.segments.length > 0
                 );
             },
-            renderSegmentsList: renderSegmentsList
+            renderSegmentsList: renderSegmentsList,
+            getCourseLocations: getCourseLocations,
+            buildLocationTooltipHtml: buildConfigLocationTooltipHtml,
+            getLocationPinColor: getLocationPinColor,
+            getLocationTypeLabel: getLocationTypeLabel,
+            highlightLocationInTable: highlightLocationRow
         };
 
         document.addEventListener('segment-recipes-applied', function (ev) {
@@ -4592,6 +4653,7 @@ document.addEventListener('DOMContentLoaded', function () {
             currentCourse = ev.detail.course;
             updateCourseUI();
             renderSegmentsList();
+            renderLocationsList();
         });
 
         if (isConfigPackageMode()) {

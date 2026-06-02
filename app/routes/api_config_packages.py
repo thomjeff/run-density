@@ -10,7 +10,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from app.core.config_package import (
@@ -30,13 +30,16 @@ from app.core.config_package import (
 from app.core.config_package.legs import (
     create_package_leg,
     delete_package_leg,
+    export_package_leg_zip,
     get_leg_line_geojson,
+    reconcile_leg_locations_to_course,
     remove_leg_location_from_manifest,
     sync_leg_locations_if_applied,
     update_package_leg,
 )
 from app.core.config_package.segment_recipes import (
     apply_package_recipes,
+    get_event_route_preview,
     get_package_segment_library_state,
     import_gpx_files_to_library,
     save_package_recipes,
@@ -250,7 +253,7 @@ async def api_load_config_course(
     """Load draw-first course workspace (course.json) for a config package."""
     require_auth(request)
     try:
-        sync_leg_locations_if_applied(config_id)
+        reconcile_leg_locations_to_course(config_id)
         course = load_config_course(config_id)
         return JSONResponse(
             content={"ok": True, "config_id": config_id, "course": course}
@@ -271,6 +274,10 @@ async def api_save_config_course(
     require_auth(request)
     try:
         save_config_course(config_id, body.course)
+        from app.core.config_package.legs import sync_leg_location_metadata_from_course
+
+        sync_leg_location_metadata_from_course(config_id)
+        reconcile_leg_locations_to_course(config_id)
         course = load_config_course(config_id)
         return JSONResponse(
             content={"ok": True, "config_id": config_id, "course": course}
@@ -341,6 +348,27 @@ async def api_create_package_leg(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
+@router.get("/api/config/packages/{config_id}/segment-library/legs/{leg_id}/export")
+async def api_export_package_leg(
+    request: Request,
+    config_id: str,
+    leg_id: str,
+) -> Response:
+    """Download a zip with the leg GPX track and JSON metadata (including locations)."""
+    require_auth(request)
+    try:
+        zip_bytes, filename = export_package_leg_zip(config_id, leg_id)
+        return Response(
+            content=zip_bytes,
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
 @router.get("/api/config/packages/{config_id}/segment-library/legs/{leg_id}/geometry")
 async def api_get_package_leg_geometry(
     request: Request,
@@ -363,10 +391,13 @@ async def api_sync_leg_locations_to_course(
     request: Request,
     config_id: str,
 ) -> JSONResponse:
-    """Merge leg map placements into course.json (after recipes applied)."""
+    """Merge leg map placements into course.json."""
     require_auth(request)
     try:
-        synced = sync_leg_locations_if_applied(config_id)
+        from app.core.config_package.legs import merge_leg_locations_into_course
+
+        merge_leg_locations_into_course(config_id)
+        synced = True
         course = load_config_course(config_id)
         return JSONResponse(
             content={
@@ -392,7 +423,7 @@ async def api_remove_leg_location_from_manifest(
     require_auth(request)
     try:
         remove_leg_location_from_manifest(config_id, body.leg_loc_key)
-        sync_leg_locations_if_applied(config_id)
+        reconcile_leg_locations_to_course(config_id)
         course = load_config_course(config_id)
         state = get_package_segment_library_state(config_id)
         return JSONResponse(
@@ -496,7 +527,7 @@ async def api_upload_segment_library_gpx(
     config_id: str,
     files: List[UploadFile] = File(...),
 ) -> JSONResponse:
-    """Upload GPX chunk files into the package segment_library folder."""
+    """Upload GPX files and optional runflow leg export JSON (locations + metadata)."""
     require_auth(request)
     try:
         uploads = []
@@ -565,12 +596,35 @@ async def api_apply_segment_recipes(
         )
 
 
+@router.get("/api/config/packages/{config_id}/segment-library/events/{event_id}/preview")
+async def api_event_route_preview(
+    request: Request,
+    config_id: str,
+    event_id: str,
+) -> JSONResponse:
+    """Stitched GPX route for one event (Course tab map preview)."""
+    require_auth(request)
+    try:
+        preview = get_event_route_preview(config_id, event_id)
+        return JSONResponse(content={"ok": True, **preview})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to load event route preview")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load route preview: {e}",
+        )
+
+
 @router.post("/api/config/packages/{config_id}/export/segments")
 async def api_export_config_package_segments(
     request: Request,
     config_id: str,
 ) -> JSONResponse:
-    """Export segments.csv and locations.csv from package course.json."""
+    """Export segments.csv, locations.csv, flow.csv, and per-event GPX from package."""
     require_auth(request)
     try:
         result = export_config_package_segments(config_id)

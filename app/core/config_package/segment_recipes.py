@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -20,12 +21,16 @@ from app.core.config_package.storage import (
     export_config_package_segments,
     load_config_course,
     load_config_manifest,
+    package_readiness,
     resolve_config_package_path,
     save_config_course,
     validate_config_id,
 )
 from app.core.course.segment_library import (
     build_course_segments_from_library,
+    build_event_gpx_content,
+    build_flow_csv_from_segments,
+    concat_recipe_coordinates,
     export_library_to_course,
     load_chunk_library,
     load_manifest,
@@ -384,6 +389,128 @@ def get_package_segment_library_state(config_id: str) -> Dict[str, Any]:
     }
 
 
+def _backup_export_file(target: Path) -> Optional[Path]:
+    if not target.is_file():
+        return None
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    backup = target.parent / f"{target.name}.bak.{stamp}"
+    shutil.copy2(target, backup)
+    return backup
+
+
+def export_package_flow_and_gpx_files(config_id: str) -> Dict[str, Any]:
+    """
+    Write flow.csv and per-event GPX files into the config package folder.
+
+    Uses segment library recipes when manifest exists; otherwise builds flow.csv
+    from course.json segments only (no GPX).
+    """
+    cid = validate_config_id(config_id)
+    package_path = resolve_config_package_path(cid)
+    lib_dir = package_segment_library_dir(package_path)
+    manifest_path = _manifest_path(package_path)
+    event_ids = package_recipe_event_ids(cid)
+    course = load_config_course(cid)
+    segments = course.get("segments") or []
+
+    flow_backup: Optional[Path] = None
+    flow_path = package_path / "flow.csv"
+    gpx_exports: List[Dict[str, str]] = []
+
+    if manifest_path.is_file():
+        bundle = export_library_to_course(lib_dir, manifest_path, event_ids=event_ids)
+        flow_backup = _backup_export_file(flow_path)
+        flow_path.write_text(bundle["flow_csv"], encoding="utf-8")
+
+        manifest = bundle["manifest"]
+        chunks_by_id = load_chunk_library(lib_dir, manifest)
+        recipes = manifest.get("recipes") or {}
+        for eid in event_ids:
+            key = eid if eid in recipes else eid.lower()
+            if not (recipes.get(key) or recipes.get(eid)):
+                continue
+            try:
+                gpx_content = build_event_gpx_content(
+                    eid,
+                    manifest,
+                    chunks_by_id,
+                    course_name=str(course.get("name") or course.get("label") or cid),
+                )
+            except ValueError:
+                continue
+            gpx_path = package_path / f"{eid.lower()}.gpx"
+            _backup_export_file(gpx_path)
+            gpx_path.write_text(gpx_content, encoding="utf-8")
+            gpx_exports.append({"event_id": eid.lower(), "path": str(gpx_path)})
+    elif segments:
+        manifest_data = {}
+        flow_overrides = manifest_data.get("flow_overrides")
+        flow_csv = build_flow_csv_from_segments(
+            segments,
+            event_ids,
+            overrides=flow_overrides,
+        )
+        flow_backup = _backup_export_file(flow_path)
+        flow_path.write_text(flow_csv, encoding="utf-8")
+    else:
+        return {
+            "flow_exported": False,
+            "flow_path": None,
+            "flow_backup_path": None,
+            "gpx_files": [],
+        }
+
+    logger.info(
+        "Exported flow.csv and %s event GPX file(s) for config package %s",
+        len(gpx_exports),
+        cid,
+    )
+    return {
+        "flow_exported": True,
+        "flow_path": str(flow_path),
+        "flow_backup_path": str(flow_backup) if flow_backup else None,
+        "gpx_files": gpx_exports,
+        "readiness": package_readiness(package_path),
+    }
+
+
+def get_event_route_preview(config_id: str, event_id: str) -> Dict[str, Any]:
+    """Stitched route coordinates for one event recipe (map preview)."""
+    cid = validate_config_id(config_id)
+    eid = str(event_id or "").strip().lower()
+    if not eid:
+        raise ValueError("event_id is required")
+
+    package_path = resolve_config_package_path(cid)
+    lib_dir = package_segment_library_dir(package_path)
+    manifest_path = _manifest_path(package_path)
+    if not manifest_path.is_file():
+        raise ValueError("No segment library; import legs and save recipes first")
+
+    manifest = load_manifest(manifest_path)
+    chunks_by_id = load_chunk_library(lib_dir, manifest)
+    recipes = manifest.get("recipes") or {}
+    chunk_ids = recipes.get(eid) or recipes.get(event_id)
+    if not chunk_ids:
+        raise ValueError(f"No recipe for event: {eid}")
+
+    coords = concat_recipe_coordinates(chunk_ids, chunks_by_id)
+    if len(coords) < 2:
+        raise ValueError(f"Recipe for {eid} has insufficient route points")
+
+    length_km = round(
+        sum(float(chunks_by_id[c]["length_km"]) for c in chunk_ids if c in chunks_by_id),
+        2,
+    )
+    return {
+        "config_id": cid,
+        "event_id": eid,
+        "coordinates": coords,
+        "length_km": length_km,
+        "leg_count": len(chunk_ids),
+    }
+
+
 def save_package_recipes(
     config_id: str,
     recipes: Dict[str, List[str]],
@@ -440,8 +567,10 @@ def apply_package_recipes(
     merge_leg_locations_into_course(cid)
 
     export_result: Optional[Dict[str, Any]] = None
+    flow_gpx_result: Optional[Dict[str, Any]] = None
     if export_csv:
         export_result = export_config_package_segments(cid)
+        flow_gpx_result = export_result.get("flow_gpx") if export_result else None
 
     state = get_package_segment_library_state(cid)
     return {
@@ -450,6 +579,9 @@ def apply_package_recipes(
         "recipe_lengths_km": bundle["recipe_lengths_km"],
         "stitch_warnings": bundle["stitch_warnings"],
         "segments_csv_path": export_result.get("path") if export_result else None,
+        "flow_csv_path": (flow_gpx_result or {}).get("flow_path"),
+        "gpx_files": (flow_gpx_result or {}).get("gpx_files") or [],
+        "readiness": (export_result or {}).get("readiness") or package_readiness(package_path),
         "library": state,
     }
 
@@ -459,26 +591,50 @@ def import_gpx_files_to_library(
     uploads: Sequence[tuple],
 ) -> Dict[str, Any]:
     """
-    Save uploaded GPX files into segment_library/.
+    Save uploaded GPX and optional runflow leg export JSON into segment_library/.
 
     uploads: sequence of (filename, bytes).
+    Pair ``{leg_id}.gpx`` with ``{leg_id}.json`` from a leg export zip (same import).
     Filenames should match manifest chunk file names when updating an existing library.
     """
+    from app.core.config_package.legs import (
+        apply_leg_exports_to_manifest,
+        leg_id_from_export_filename,
+        parse_leg_export_json_bytes,
+    )
+
     cid = validate_config_id(config_id)
     package_path = resolve_config_package_path(cid)
     lib_dir = package_segment_library_dir(package_path)
     lib_dir.mkdir(parents=True, exist_ok=True)
-    saved: List[str] = []
+    saved_gpx: List[str] = []
+    exports_by_leg_id: Dict[str, Dict[str, Any]] = {}
     for name, data in uploads:
         safe = Path(name).name
-        if not safe.lower().endswith(".gpx"):
+        lower = safe.lower()
+        if lower.endswith(".json"):
+            leg_export = parse_leg_export_json_bytes(data)
+            if not leg_export:
+                continue
+            leg_id = (
+                str(leg_export.get("id") or "").strip()
+                or leg_id_from_export_filename(safe)
+                or ""
+            )
+            if leg_id:
+                exports_by_leg_id[leg_id] = leg_export
+            dest = lib_dir / safe
+            dest.write_bytes(data)
+            continue
+        if not lower.endswith(".gpx"):
             continue
         dest = lib_dir / safe
         dest.write_bytes(data)
-        saved.append(safe)
-    if not saved:
+        saved_gpx.append(safe)
+    if not saved_gpx:
         raise ValueError("No .gpx files uploaded")
     manifest = load_package_segment_manifest(config_id)
     manifest = sync_manifest_chunks_from_gpx(lib_dir, manifest)
+    manifest = apply_leg_exports_to_manifest(manifest, exports_by_leg_id)
     save_package_segment_manifest(config_id, manifest)
     return get_package_segment_library_state(config_id)

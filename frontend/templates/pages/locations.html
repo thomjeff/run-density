@@ -151,8 +151,8 @@
     </div>
     
     <!-- Scrollable table container (Issue #484) -->
-    <div id="locations-table-container" style="overflow-x: auto; overflow-y: auto; max-height: 50vh; border: 1px solid #e0e0e0; border-radius: 4px;">
-        <table id="locations-table">
+    <div id="locations-table-container" class="scrollable-table-container">
+        <table id="locations-table" class="table-sticky-header">
             <thead>
                 <tr>
                     <th class="sortable" data-sort="loc_id">ID <span class="sort-indicator"></span></th>
@@ -1240,7 +1240,8 @@
 <style>
     #locations-table {
         width: 100%;
-        border-collapse: collapse;
+        border-collapse: separate;
+        border-spacing: 0;
     }
     
     /* Match base template styling for consistency with Flow table */
@@ -1257,15 +1258,6 @@
         color: #2c3e50;
     }
     
-    /* Sticky header for scrollable table (Issue #484) */
-    #locations-table thead th {
-        position: sticky;
-        top: 0;
-        background: #f8f9fa;
-        z-index: 10;
-        box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
-    }
-    
     #locations-table tbody tr:hover {
         background: #f8f9fa;
     }
@@ -1274,7 +1266,6 @@
     #locations-table th.sortable {
         cursor: pointer;
         user-select: none;
-        position: relative;
     }
     
     #locations-table th.sortable:hover {

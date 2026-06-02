@@ -14,6 +14,12 @@
         '<line x1="10" y1="11" x2="10" y2="17"/>' +
         '<line x1="14" y1="11" x2="14" y2="17"/>' +
         '</svg>';
+    var EXPORT_ICON_SVG =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>' +
+        '<polyline points="7 10 12 15 17 10"/>' +
+        '<line x1="12" y1="15" x2="12" y2="3"/>' +
+        '</svg>';
 
     function createIconButton(kind, title, onClick) {
         var btn = document.createElement('button');
@@ -21,7 +27,9 @@
         btn.className = 'course-map-action-btn';
         btn.title = title;
         btn.setAttribute('aria-label', title);
-        btn.innerHTML = kind === 'delete' ? DELETE_ICON_SVG : EDIT_ICON_SVG;
+        if (kind === 'delete') btn.innerHTML = DELETE_ICON_SVG;
+        else if (kind === 'export') btn.innerHTML = EXPORT_ICON_SVG;
+        else btn.innerHTML = EDIT_ICON_SVG;
         if (onClick) {
             btn.addEventListener('click', onClick);
         }

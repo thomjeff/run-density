@@ -22,6 +22,7 @@ from app.utils.constants import (
     COURSE_EVENT_IDS,
     DAY_SHORT_CODES,
     LOCATION_TYPE_CHOICES,
+    OFF_COURSE_LOCATION_TYPES,
     SEGMENT_DIRECTION_CHOICES,
     SEGMENT_SCHEMA_CHOICES,
 )
@@ -404,6 +405,7 @@ async def course_mapping(request: Request):
             "segment_schema_choices": segment_schema_choices,
             "segment_direction_choices": segment_direction_choices,
             "day_short_codes": DAY_SHORT_CODES,
+            "off_course_location_types": list(OFF_COURSE_LOCATION_TYPES),
         },
     )
 
@@ -532,6 +534,7 @@ async def race_configuration_page(request: Request):
             "segment_schema_choices": segment_schema_choices,
             "segment_direction_choices": segment_direction_choices,
             "day_short_codes": DAY_SHORT_CODES,
+            "off_course_location_types": list(OFF_COURSE_LOCATION_TYPES),
         },
     )
 

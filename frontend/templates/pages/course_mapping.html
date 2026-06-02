@@ -46,6 +46,7 @@
 {% block extra_scripts %}
 <script>
     window.LOCATION_TYPES_FROM_SERVER = {{ location_types | tojson }};
+    window.OFF_COURSE_LOCATION_TYPES_FROM_SERVER = {{ (off_course_location_types | default(['traffic', 'extract'], true)) | tojson }};
     window.EVENT_CHOICES_FROM_SERVER = {{ event_choices | tojson }};
     window.SEGMENT_SCHEMA_CHOICES_FROM_SERVER = {{ (segment_schema_choices | default([])) | tojson }};
     window.SEGMENT_DIRECTION_CHOICES_FROM_SERVER = {{ (segment_direction_choices | default([])) | tojson }};

@@ -6,9 +6,13 @@ Issue #769 — in-runflow leg authoring (PlotARoute reference is optional bootst
 
 from __future__ import annotations
 
+import io
+import json
 import re
+import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from app.core.config_package.location_ids import (
     allocate_location_id,
@@ -30,7 +34,9 @@ from app.core.course.segment_library import parse_chunk_gpx
 from app.core.config_package.segment_recipes import package_recipe_event_ids
 from app.utils.constants import (
     COURSE_EVENT_IDS,
+    LOCATION_PLACEMENT_CHOICES,
     LOCATION_TYPE_CHOICES,
+    ON_COURSE_LOCATION_TYPES,
     SEGMENT_DIRECTION_CHOICES,
     SEGMENT_DIRECTION_VALUES,
     SEGMENT_SCHEMA_CHOICES,
@@ -38,6 +44,7 @@ from app.utils.constants import (
 )
 
 _LEG_LOC_PRESERVE_FIELDS = (
+    "loc_label",
     "notes",
     "buffer",
     "interval",
@@ -51,6 +58,7 @@ _LEG_LOC_PRESERVE_FIELDS = (
 )
 
 _LEG_ID_RE = re.compile(r"^\d{2,3}$")
+LEG_EXPORT_VERSION = 1
 
 
 def _normalize_segment_schema(schema: Any) -> str:
@@ -92,7 +100,7 @@ def _normalize_locations(raw: Any) -> List[Dict[str, Any]]:
         except (TypeError, ValueError):
             continue
         placement = str(item.get("placement") or "along").strip().lower()
-        if placement not in ("start", "end", "along"):
+        if placement not in LOCATION_PLACEMENT_CHOICES:
             placement = "along"
         out.append(
             {
@@ -290,8 +298,15 @@ def update_package_leg(
     chunks[idx] = entry
     manifest["chunks"] = chunks
     save_package_segment_manifest(cid, manifest)
-    label_fields = ("locations", "start_label", "end_label", "leg_label", "seg_label")
-    if any(key in fields for key in label_fields):
+    if "locations" in fields:
+        try:
+            merge_leg_locations_into_course(cid)
+        except FileNotFoundError:
+            pass
+    elif any(
+        key in fields
+        for key in ("start_label", "end_label", "leg_label", "seg_label")
+    ):
         try:
             sync_leg_locations_if_applied(cid)
         except FileNotFoundError:
@@ -325,6 +340,141 @@ def delete_package_leg(config_id: str, leg_id: str) -> Dict[str, Any]:
     from app.core.config_package.segment_recipes import get_package_segment_library_state
 
     return get_package_segment_library_state(cid)
+
+
+def parse_leg_export_json_bytes(data: bytes) -> Optional[Dict[str, Any]]:
+    """Parse a runflow leg export JSON file; return the ``leg`` object or None."""
+    try:
+        payload = json.loads(data.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    if not isinstance(payload, dict) or payload.get("export_kind") != "runflow_leg":
+        return None
+    leg = payload.get("leg")
+    return leg if isinstance(leg, dict) else None
+
+
+def leg_id_from_export_filename(filename: str) -> Optional[str]:
+    """Derive leg id from export sidecar name (e.g. 01.json -> 01)."""
+    stem = Path(filename).stem
+    if _LEG_ID_RE.match(stem):
+        return stem
+    return None
+
+
+def merge_leg_export_into_chunk(
+    entry: Dict[str, Any],
+    leg_export: Dict[str, Any],
+) -> None:
+    """Apply exported leg metadata and locations onto a manifest chunk entry."""
+    label = str(leg_export.get("leg_label") or leg_export.get("seg_label") or "").strip()
+    if label:
+        entry["seg_label"] = label
+    for key in ("start_label", "end_label", "description"):
+        if key in leg_export and leg_export[key] is not None:
+            entry[key] = str(leg_export[key] or "").strip()
+    if "width_m" in leg_export and leg_export["width_m"] is not None:
+        try:
+            entry["width_m"] = float(leg_export["width_m"])
+        except (TypeError, ValueError):
+            pass
+    if "schema" in leg_export and leg_export["schema"]:
+        try:
+            entry["schema"] = _normalize_segment_schema(leg_export["schema"])
+        except ValueError:
+            pass
+    if "direction" in leg_export and leg_export["direction"]:
+        try:
+            entry["direction"] = _normalize_segment_direction(leg_export["direction"])
+        except ValueError:
+            pass
+    if "locations" in leg_export:
+        entry["locations"] = _normalize_locations(leg_export.get("locations"))
+
+
+def apply_leg_exports_to_manifest(
+    manifest: Dict[str, Any],
+    exports_by_leg_id: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Merge runflow leg export JSON payloads into manifest chunks by leg id."""
+    if not exports_by_leg_id:
+        return manifest
+    chunks = manifest.get("chunks") or []
+    for entry in chunks:
+        if not isinstance(entry, dict):
+            continue
+        leg_id = str(entry.get("id", "")).strip()
+        leg_export = exports_by_leg_id.get(leg_id)
+        if leg_export:
+            merge_leg_export_into_chunk(entry, leg_export)
+    manifest["chunks"] = chunks
+    return manifest
+
+
+def export_package_leg_zip(config_id: str, leg_id: str) -> Tuple[bytes, str]:
+    """
+    Build a zip with the leg GPX track and JSON metadata (label, schema, locations, …).
+
+    Returns (zip_bytes, suggested_download_filename).
+    """
+    cid = validate_config_id(config_id)
+    leg_id = str(leg_id).strip()
+    package_path = resolve_config_package_path(cid)
+    lib_dir = package_segment_library_dir(package_path)
+    manifest = load_package_segment_manifest(cid)
+    chunks: List[Dict[str, Any]] = list(manifest.get("chunks") or [])
+    idx = _find_chunk_index(chunks, leg_id)
+    if idx < 0:
+        raise ValueError(f"Leg not found: {leg_id}")
+    entry = chunks[idx]
+    file_name = entry.get("file")
+    if not file_name:
+        raise ValueError(f"Leg {leg_id} has no GPX file")
+    gpx_path = lib_dir / str(file_name)
+    if not gpx_path.is_file():
+        raise FileNotFoundError(f"GPX not found: {file_name}")
+    parsed = parse_chunk_gpx(gpx_path)
+    row = leg_row_from_entry(entry, parsed)
+    payload: Dict[str, Any] = {
+        "export_version": LEG_EXPORT_VERSION,
+        "export_kind": "runflow_leg",
+        "exported_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        "config_id": cid,
+        "leg": {
+            "id": row["id"],
+            "leg_label": row["leg_label"],
+            "start_label": row["start_label"],
+            "end_label": row["end_label"],
+            "width_m": row["width_m"],
+            "schema": row["schema"],
+            "direction": row["direction"],
+            "description": row["description"],
+            "length_km": row["length_km"],
+            "gpx_file": str(file_name),
+            "locations": row["locations"],
+        },
+    }
+    gpx_arcname = f"{leg_id}.gpx"
+    json_arcname = f"{leg_id}.json"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(gpx_arcname, gpx_path.read_bytes())
+        zf.writestr(
+            json_arcname,
+            json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+        )
+        zf.writestr(
+            "README.txt",
+            (
+                f"Runflow leg export (v{LEG_EXPORT_VERSION})\n"
+                f"config_id: {cid}\n"
+                f"leg_id: {leg_id}\n\n"
+                f"  {gpx_arcname} — route polyline (GPX 1.1 track)\n"
+                f"  {json_arcname} — leg metadata and map locations\n"
+            ),
+        )
+    download_name = f"{cid}_leg_{leg_id}.zip"
+    return buf.getvalue(), download_name
 
 
 def get_leg_line_geojson(config_id: str, leg_id: str) -> Dict[str, Any]:
@@ -445,6 +595,7 @@ def merge_leg_locations_into_course(config_id: str) -> None:
         for i, loc in enumerate(_normalize_locations(entry.get("locations"))):
             key = leg_loc_key(leg_id, i)
             prev = existing_leg.get(key)
+            on_course = loc["loc_type"] in ON_COURSE_LOCATION_TYPES
             row: Dict[str, Any] = {
                 "loc_label": loc["loc_label"],
                 "loc_type": loc["loc_type"],
@@ -454,7 +605,7 @@ def merge_leg_locations_into_course(config_id: str) -> None:
                 "leg_loc_key": key,
                 "placement": loc.get("placement", "along"),
                 "source": "leg",
-                "seg_id": seg_id,
+                "seg_id": seg_id if on_course else "",
             }
             for ev, flag in event_flags.items():
                 row[ev] = flag
@@ -555,6 +706,83 @@ def sync_leg_segment_labels_into_course(config_id: str) -> bool:
     return updated
 
 
+def sync_leg_location_metadata_from_course(config_id: str) -> bool:
+    """
+    Push leg-sourced label/placement edits from course.json into the segment library.
+
+    Course tab is master for loc_label and related fields edited there; the manifest
+    is updated so Legs tab and subsequent merges stay consistent.
+    """
+    cid = validate_config_id(config_id)
+    course = load_config_course(cid)
+    manifest = load_package_segment_manifest(cid)
+    chunks: List[Dict[str, Any]] = list(manifest.get("chunks") or [])
+    chunk_index: Dict[str, int] = {}
+    for i, entry in enumerate(chunks):
+        if not isinstance(entry, dict):
+            continue
+        leg_id = str(entry.get("id", "")).strip()
+        if leg_id:
+            chunk_index[leg_id] = i
+
+    changed = False
+    for loc in course.get("locations") or []:
+        if not isinstance(loc, dict) or loc.get("source") != "leg":
+            continue
+        key = str(loc.get("leg_loc_key") or "").strip()
+        if ":" not in key:
+            continue
+        leg_id, _, idx_s = key.partition(":")
+        leg_id = leg_id.strip()
+        try:
+            idx = int(idx_s)
+        except ValueError:
+            continue
+        chunk_idx = chunk_index.get(leg_id)
+        if chunk_idx is None:
+            continue
+        entry = dict(chunks[chunk_idx])
+        locs = _normalize_locations(entry.get("locations"))
+        if idx < 0 or idx >= len(locs):
+            continue
+        updated = _normalize_locations(
+            [
+                {
+                    "loc_label": loc.get("loc_label"),
+                    "loc_type": loc.get("loc_type"),
+                    "lat": loc.get("lat"),
+                    "lon": loc.get("lon"),
+                    "placement": loc.get("placement"),
+                }
+            ]
+        )
+        if not updated:
+            continue
+        if locs[idx] != updated[0]:
+            locs[idx] = updated[0]
+            entry["locations"] = locs
+            chunks[chunk_idx] = entry
+            changed = True
+
+    if changed:
+        manifest["chunks"] = chunks
+        save_package_segment_manifest(cid, manifest)
+    return changed
+
+
+def reconcile_leg_locations_to_course(config_id: str) -> bool:
+    """Rebuild leg-sourced rows in course.json from the segment library manifest."""
+    cid = validate_config_id(config_id)
+    try:
+        manifest = load_package_segment_manifest(cid)
+    except FileNotFoundError:
+        return False
+    if not manifest.get("chunks"):
+        return False
+    merge_leg_locations_into_course(cid)
+    return True
+
+
 def sync_leg_locations_if_applied(config_id: str) -> bool:
     """Merge leg placements and labels into course.json when recipes have been applied."""
     course = load_config_course(config_id)
@@ -565,8 +793,13 @@ def sync_leg_locations_if_applied(config_id: str) -> bool:
     return True
 
 
-def remove_leg_location_from_manifest(config_id: str, leg_loc_key: str) -> None:
-    """Remove one leg placement from the library (e.g. after delete on Course tab)."""
+def remove_leg_location_from_manifest(config_id: str, leg_loc_key: str) -> bool:
+    """
+    Remove one leg placement from the library (e.g. after delete on the Course tab).
+
+    Returns True when a manifest row was removed. False when the key is stale
+    (already absent from the manifest); callers should reconcile course.json.
+    """
     cid = validate_config_id(config_id)
     key = str(leg_loc_key or "").strip()
     if ":" not in key:
@@ -587,9 +820,10 @@ def remove_leg_location_from_manifest(config_id: str, leg_loc_key: str) -> None:
     entry = dict(chunks[chunk_idx])
     locs = _normalize_locations(entry.get("locations"))
     if idx < 0 or idx >= len(locs):
-        raise ValueError(f"Location index out of range for leg {leg_id}")
+        return False
     locs.pop(idx)
     entry["locations"] = locs
     chunks[chunk_idx] = entry
     manifest["chunks"] = chunks
     save_package_segment_manifest(cid, manifest)
+    return True

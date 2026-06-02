@@ -201,6 +201,17 @@ LOCATION_TYPE_CHOICES = [
     "water",
 ]
 
+# Leg / course map placement (patterns from runflow/config/2026_final/locations.csv):
+# - traffic, extract: off-course pin, empty seg_id, proxy_loc_id for timing (Issue #751)
+# - course, water, official: on-course pin with seg_id
+# - aid: usually on-course; occasional proxy-only rows (e.g. Officers Square)
+OFF_COURSE_LOCATION_TYPES = ["traffic", "extract"]
+ON_COURSE_LOCATION_TYPES = [
+    t for t in LOCATION_TYPE_CHOICES if t not in OFF_COURSE_LOCATION_TYPES
+]
+
+LOCATION_PLACEMENT_CHOICES = ["along", "off", "start", "end"]
+
 # Course Mapping segment events (Issue #732) — used for segment annotation event selection
 COURSE_EVENT_IDS = ["full", "half", "10k", "elite", "open"]
 

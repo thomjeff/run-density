@@ -14,9 +14,15 @@
     var legLocationClickHandler = null;
     var selectedLegLatLngs = null;
     var legMapLayers = { line: null, start: null, end: null, locs: null };
+    var pendingLegLocations = [];
+    var legLocationPreviewLayer = null;
     /** Bumped on each leg selection / clear so stale geometry fetches do not draw extra lines. */
     var legGeometryRequestId = 0;
     var recipesModalDismissed = false;
+    var coursePreviewMap = null;
+    var coursePreviewLineLayer = null;
+    var coursePreviewLocationsLayer = null;
+    var coursePreviewSelectedEvent = null;
 
     function schemaLabelForValue(value) {
         var v = String(value || 'on_course_open');
@@ -177,6 +183,48 @@
         renderTotals(lengths);
     }
 
+    var LEG_LOCATION_PIN_COLORS = {
+        aid: '#e74c3c',
+        course: '#27ae60',
+        extract: '#9c27b0',
+        official: '#f1c40f',
+        traffic: '#95a5a6',
+        water: '#3498db'
+    };
+
+    function locationTypeSnapsToLegRoute(locType) {
+        var offCourse = window.OFF_COURSE_LOCATION_TYPES_FROM_SERVER || ['traffic', 'extract'];
+        return offCourse.indexOf(String(locType || 'course').toLowerCase()) < 0;
+    }
+
+    function legLocationPlacement(locType) {
+        return locationTypeSnapsToLegRoute(locType) ? 'along' : 'off';
+    }
+
+    function legLocationColor(locType) {
+        return LEG_LOCATION_PIN_COLORS[locType] || '#3498db';
+    }
+
+    function getSelectedLeg() {
+        return (libraryState && libraryState.chunks || []).find(function (c) {
+            return c.id === selectedLegId;
+        });
+    }
+
+    function updateAddLocationButtonLabel() {
+        var btn = document.getElementById('btn-leg-add-location');
+        if (!btn) return;
+        btn.textContent = addLocationOnMap ? 'Save' : 'Add Locations';
+    }
+
+    function clearLegLocationPreviewLayer() {
+        var map = window.courseMappingMap;
+        if (map && legLocationPreviewLayer) {
+            map.removeLayer(legLocationPreviewLayer);
+            legLocationPreviewLayer = null;
+        }
+    }
+
     function applyLibraryState(data) {
         libraryState = data;
         orderGrid = data.order_grid || {};
@@ -186,15 +234,17 @@
         renderWarnings(data.stitch_warnings);
         if (selectedLegId) {
             var still = (data.chunks || []).some(function (c) { return c.id === selectedLegId; });
-            if (still) selectLegById(selectedLegId);
-            else clearLegMap();
+            if (still) {
+                refreshSelectedLegMap({ preserveZoom: true });
+            } else {
+                clearLegMap();
+            }
         }
         if (
-            hasCombinedCourse() &&
             window.configPackageCourse &&
             window.configPackageCourse.reloadCourse
         ) {
-            window.configPackageCourse.reloadCourse();
+            window.configPackageCourse.reloadCourse({ skipMapRefresh: true });
         } else if (
             window.configPackageCourse &&
             typeof window.configPackageCourse.renderSegmentsList === 'function'
@@ -230,6 +280,7 @@
             map.removeLayer(legMapLayers.locs);
             legMapLayers.locs = null;
         }
+        clearLegLocationPreviewLayer();
         selectedLegLatLngs = null;
     }
 
@@ -267,6 +318,9 @@
     function stopLegLocationPinMode() {
         addLocationOnMap = false;
         window._legLocationPinModeActive = false;
+        pendingLegLocations = [];
+        clearLegLocationPreviewLayer();
+        updateAddLocationButtonLabel();
         var btn = document.getElementById('btn-leg-add-location');
         if (btn) btn.classList.remove('active');
         var map = window.courseMappingMap;
@@ -274,6 +328,451 @@
             map.off('click', legLocationClickHandler);
             legLocationClickHandler = null;
         }
+    }
+
+    function addLegLocationMarker(loc, group, opts) {
+        opts = opts || {};
+        if (loc.lat == null || loc.lon == null) return;
+        var isPending = !!opts.isPending;
+        var fill = legLocationColor(loc.loc_type || 'course');
+        var stroke = isPending ? '#2c3e50' : fill;
+        var marker = L.marker([loc.lat, loc.lon], {
+            icon: L.divIcon({
+                className: 'leg-location-pin' + (isPending ? ' leg-location-pin-pending' : ''),
+                html:
+                    '<div style="width:14px;height:14px;background:' +
+                    fill +
+                    ';border:2px solid ' +
+                    stroke +
+                    ';border-radius:50%;box-sizing:border-box;cursor:grab;"></div>',
+                iconSize: [14, 14],
+                iconAnchor: [7, 7]
+            }),
+            draggable: true,
+            autoPan: true
+        });
+        var suffix = isPending ? ' (unsaved)' : '';
+        if (loc.placement === 'off') suffix += ' (off-course)';
+        marker.bindTooltip(
+            (loc.loc_label || 'Location') +
+                ' (' +
+                (loc.loc_type || 'course') +
+                ')' +
+                suffix +
+                ' — drag to move; click to edit'
+        );
+        marker.on('click', function (e) {
+            L.DomEvent.stopPropagation(e);
+            if (isPending && opts.pendingIndex != null) {
+                openLegLocationPopup({
+                    mode: 'edit-pending',
+                    loc: loc,
+                    pendingIndex: opts.pendingIndex,
+                    latlng: marker.getLatLng()
+                });
+            } else if (!isPending && opts.locIndex != null) {
+                openLegLocationPopup({
+                    mode: 'edit-saved',
+                    loc: loc,
+                    locIndex: opts.locIndex,
+                    latlng: marker.getLatLng()
+                });
+            }
+        });
+        marker.on('mousedown', function (e) {
+            L.DomEvent.stopPropagation(e);
+        });
+        marker.on('dragstart', function () {
+            if (window.courseMappingMap) window.courseMappingMap.closePopup();
+        });
+        marker.on('dragend', function () {
+            var ll = marker.getLatLng();
+            var coords = finalizeLegLocationCoords(loc, ll.lat, ll.lng);
+            loc.lat = coords.lat;
+            loc.lon = coords.lon;
+            marker.setLatLng([loc.lat, loc.lon]);
+            if (isPending) {
+                setLegStatus(
+                    'Position updated. Drag pins to fine-tune, then click Save when finished.'
+                );
+                return;
+            }
+            if (opts.locIndex == null || !selectedLegId) return;
+            var leg = getSelectedLeg();
+            if (!leg) return;
+            var locations = (leg.locations || []).slice();
+            if (opts.locIndex < 0 || opts.locIndex >= locations.length) return;
+            locations[opts.locIndex] = Object.assign({}, locations[opts.locIndex], coords);
+            setLegStatus('Saving position…');
+            saveLegLocations(selectedLegId, locations)
+                .then(function () {
+                    setLegStatus('Location position saved.');
+                })
+                .catch(function (err) {
+                    setLegStatus(err.message || String(err), true);
+                });
+        });
+        marker.addTo(group);
+    }
+
+    function finalizeLegLocationCoords(loc, lat, lon) {
+        var placeLat = lat;
+        var placeLon = lon;
+        if (locationTypeSnapsToLegRoute(loc.loc_type) && selectedLegLatLngs) {
+            var snapped = snapClickToLegRoute(lat, lon, selectedLegLatLngs);
+            placeLat = snapped.lat;
+            placeLon = snapped.lon;
+        }
+        return {
+            lat: Math.round(placeLat * 1e6) / 1e6,
+            lon: Math.round(placeLon * 1e6) / 1e6
+        };
+    }
+
+    function applyLegLocationLabelType(loc, locLabel, locType) {
+        var updated = Object.assign({}, loc, {
+            loc_label: locLabel,
+            loc_type: locType,
+            placement: legLocationPlacement(locType)
+        });
+        if (updated.lat != null && updated.lon != null) {
+            var coords = finalizeLegLocationCoords(updated, updated.lat, updated.lon);
+            updated.lat = coords.lat;
+            updated.lon = coords.lon;
+        }
+        return updated;
+    }
+
+    function confirmRemoveLegLocation(label) {
+        var subject = (label || 'this location').trim() || 'this location';
+        var ta = window.TableActions;
+        if (ta && ta.doubleConfirmDelete) {
+            return ta.doubleConfirmDelete({
+                subject: subject,
+                detail: 'This removes the location from the leg and updates the combined course when recipes are applied.'
+            });
+        }
+        return window.confirm('Remove ' + subject + '?');
+    }
+
+    function openLegLocationPopup(opts) {
+        opts = opts || {};
+        var map = window.courseMappingMap;
+        if (!map) return;
+        var mode = opts.mode || 'add';
+        var latlng = opts.latlng;
+        if (!latlng) return;
+
+        var content = document.createElement('div');
+        content.className = 'course-map-popup';
+        content.style.minWidth = '200px';
+
+        var title = document.createElement('p');
+        title.style.cssText = 'font-weight:600;margin:0 0 0.65rem 0;color:#2c3e50;font-size:0.95rem;';
+        title.textContent =
+            mode === 'add'
+                ? 'Add location'
+                : mode === 'edit-pending'
+                  ? 'Edit location (unsaved)'
+                  : 'Edit location';
+        content.appendChild(title);
+
+        var lblType = document.createElement('label');
+        lblType.textContent = 'Type';
+        lblType.style.display = 'block';
+        lblType.style.marginBottom = '0.25rem';
+        content.appendChild(lblType);
+        var sel = document.createElement('select');
+        sel.style.display = 'block';
+        sel.style.width = '100%';
+        sel.style.marginBottom = '0.65rem';
+        sel.style.boxSizing = 'border-box';
+        var initialType = (opts.loc && opts.loc.loc_type) || 'course';
+        locationTypes().forEach(function (t) {
+            var opt = document.createElement('option');
+            opt.value = t.value;
+            opt.textContent = t.label;
+            if (t.value === initialType) opt.selected = true;
+            sel.appendChild(opt);
+        });
+        content.appendChild(sel);
+
+        var hint = document.createElement('p');
+        hint.style.cssText = 'font-size:0.8rem;color:#7f8c8d;margin:0 0 0.65rem 0;line-height:1.35;';
+        function updatePlacementHint() {
+            hint.textContent = locationTypeSnapsToLegRoute(sel.value)
+                ? 'Snaps to the purple route when saved. Set seg_id on the Course tab if needed.'
+                : 'Stays at your click (off-course). Set Proxy loc ID on the Course tab for timing.';
+        }
+        updatePlacementHint();
+        sel.addEventListener('change', updatePlacementHint);
+        content.appendChild(hint);
+
+        var lblLabel = document.createElement('label');
+        lblLabel.textContent = 'Label';
+        lblLabel.style.display = 'block';
+        lblLabel.style.marginBottom = '0.25rem';
+        content.appendChild(lblLabel);
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = 'e.g. Water station';
+        input.value = (opts.loc && opts.loc.loc_label) || '';
+        input.style.display = 'block';
+        input.style.width = '100%';
+        input.style.marginBottom = '0.65rem';
+        input.style.boxSizing = 'border-box';
+        content.appendChild(input);
+
+        var btnRow = document.createElement('div');
+        btnRow.style.display = 'flex';
+        btnRow.style.flexWrap = 'wrap';
+        btnRow.style.gap = '0.5rem';
+        btnRow.style.alignItems = 'center';
+
+        var btnPrimary = document.createElement('button');
+        btnPrimary.type = 'button';
+        btnPrimary.className = 'course-btn primary';
+        btnPrimary.textContent = mode === 'add' ? 'Add' : 'Save';
+
+        var btnCancel = document.createElement('button');
+        btnCancel.type = 'button';
+        btnCancel.className = 'course-btn';
+        btnCancel.textContent = 'Cancel';
+
+        var btnDelete = null;
+        if (mode === 'edit-saved' || mode === 'edit-pending') {
+            btnDelete = document.createElement('button');
+            btnDelete.type = 'button';
+            btnDelete.className = 'course-btn';
+            btnDelete.textContent = 'Delete';
+            btnDelete.style.marginRight = 'auto';
+            btnDelete.style.color = '#c0392b';
+            btnDelete.style.borderColor = '#e74c3c';
+        }
+
+        if (btnDelete) btnRow.appendChild(btnDelete);
+        btnRow.appendChild(btnPrimary);
+        btnRow.appendChild(btnCancel);
+        content.appendChild(btnRow);
+
+        var pop = L.popup({ maxWidth: 375, className: 'location-popup' })
+            .setContent(content)
+            .setLatLng(latlng)
+            .openOn(map);
+
+        btnCancel.onclick = function () {
+            map.closePopup();
+        };
+
+        function closeAndRedraw() {
+            map.closePopup();
+            redrawLegLocationMarkers(getSelectedLeg());
+        }
+
+        btnPrimary.onclick = function () {
+            var locLabel = (input.value && input.value.trim()) || 'Location';
+            var locType = sel.value || 'course';
+
+            if (mode === 'add') {
+                var clickLat = opts.clickLat;
+                var clickLon = opts.clickLon;
+                var placeLat = clickLat;
+                var placeLon = clickLon;
+                if (locationTypeSnapsToLegRoute(locType)) {
+                    var snapped = snapClickToLegRoute(clickLat, clickLon, selectedLegLatLngs);
+                    placeLat = snapped.lat;
+                    placeLon = snapped.lon;
+                }
+                pendingLegLocations.push({
+                    loc_label: locLabel,
+                    loc_type: locType,
+                    lat: Math.round(placeLat * 1e6) / 1e6,
+                    lon: Math.round(placeLon * 1e6) / 1e6,
+                    placement: legLocationPlacement(locType)
+                });
+                map.closePopup();
+                redrawLegLocationMarkers(getSelectedLeg());
+                setLegStatus(
+                    pendingLegLocations.length === 1
+                        ? 'Location added. Drag pins to adjust, add more, or click Save.'
+                        : pendingLegLocations.length +
+                              ' locations ready. Drag pins to adjust, then Save.'
+                );
+                return;
+            }
+
+            if (mode === 'edit-pending') {
+                var pIdx = opts.pendingIndex;
+                if (pIdx == null || pIdx < 0 || pIdx >= pendingLegLocations.length) return;
+                pendingLegLocations[pIdx] = applyLegLocationLabelType(
+                    pendingLegLocations[pIdx],
+                    locLabel,
+                    locType
+                );
+                closeAndRedraw();
+                setLegStatus('Unsaved location updated.');
+                return;
+            }
+
+            if (mode === 'edit-saved') {
+                var locIndex = opts.locIndex;
+                var leg = getSelectedLeg();
+                if (!leg || locIndex == null || !selectedLegId) return;
+                var locations = (leg.locations || []).slice();
+                if (locIndex < 0 || locIndex >= locations.length) return;
+                locations[locIndex] = applyLegLocationLabelType(
+                    locations[locIndex],
+                    locLabel,
+                    locType
+                );
+                setLegStatus('Saving location…');
+                saveLegLocations(selectedLegId, locations)
+                    .then(function () {
+                        closeAndRedraw();
+                        setLegStatus('Location updated.');
+                    })
+                    .catch(function (err) {
+                        setLegStatus(err.message || String(err), true);
+                    });
+            }
+        };
+
+        if (btnDelete) {
+            btnDelete.onclick = function () {
+                var locLabel = (input.value && input.value.trim()) || (opts.loc && opts.loc.loc_label) || 'Location';
+                if (!confirmRemoveLegLocation(locLabel)) return;
+                map.closePopup();
+
+                if (mode === 'edit-pending') {
+                    var pIdx = opts.pendingIndex;
+                    if (pIdx == null || pIdx < 0 || pIdx >= pendingLegLocations.length) return;
+                    pendingLegLocations.splice(pIdx, 1);
+                    redrawLegLocationMarkers(getSelectedLeg());
+                    setLegStatus(
+                        pendingLegLocations.length
+                            ? pendingLegLocations.length + ' unsaved location(s). Click Save when finished.'
+                            : 'Location removed. Click the map to add more, or exit Add Locations.'
+                    );
+                    return;
+                }
+
+                var locIndex = opts.locIndex;
+                var leg = getSelectedLeg();
+                if (!leg || locIndex == null || !selectedLegId) return;
+                var locations = (leg.locations || []).slice();
+                if (locIndex < 0 || locIndex >= locations.length) return;
+                locations.splice(locIndex, 1);
+                setLegStatus('Removing location…');
+                saveLegLocations(selectedLegId, locations)
+                    .then(function () {
+                        redrawLegLocationMarkers(getSelectedLeg());
+                        setLegStatus('Location removed.');
+                    })
+                    .catch(function (err) {
+                        setLegStatus(err.message || String(err), true);
+                    });
+            };
+        }
+    }
+
+    function redrawLegLocationMarkers(leg) {
+        var map = window.courseMappingMap;
+        if (!map || !leg) return;
+        if (legMapLayers.locs) {
+            map.removeLayer(legMapLayers.locs);
+            legMapLayers.locs = null;
+        }
+        clearLegLocationPreviewLayer();
+        var saved = Array.isArray(leg.locations) ? leg.locations : [];
+        if (saved.length || pendingLegLocations.length) {
+            var group = L.layerGroup();
+            saved.forEach(function (loc, idx) {
+                addLegLocationMarker(loc, group, { isPending: false, locIndex: idx });
+            });
+            legMapLayers.locs = group;
+            group.addTo(map);
+        }
+        if (pendingLegLocations.length) {
+            legLocationPreviewLayer = L.layerGroup();
+            pendingLegLocations.forEach(function (loc, idx) {
+                addLegLocationMarker(loc, legLocationPreviewLayer, {
+                    isPending: true,
+                    pendingIndex: idx
+                });
+            });
+            legLocationPreviewLayer.addTo(map);
+        }
+    }
+
+    function fitLegMapBounds(leg) {
+        var map = window.courseMappingMap;
+        if (!map) return;
+        var points = [];
+        if (selectedLegLatLngs && selectedLegLatLngs.length >= 2) {
+            points.push(selectedLegLatLngs[0]);
+            points.push(selectedLegLatLngs[selectedLegLatLngs.length - 1]);
+        }
+        if (leg) {
+            if (leg.start_lat != null && leg.start_lon != null) {
+                points.push([leg.start_lat, leg.start_lon]);
+            }
+            if (leg.end_lat != null && leg.end_lon != null) {
+                points.push([leg.end_lat, leg.end_lon]);
+            }
+            (leg.locations || []).forEach(function (loc) {
+                if (loc.lat != null && loc.lon != null) points.push([loc.lat, loc.lon]);
+            });
+        }
+        pendingLegLocations.forEach(function (loc) {
+            if (loc.lat != null && loc.lon != null) points.push([loc.lat, loc.lon]);
+        });
+        if (points.length === 0) return;
+        if (points.length === 1) {
+            map.setView(points[0], Math.max(map.getZoom(), 14));
+            return;
+        }
+        try {
+            map.fitBounds(L.latLngBounds(points), { padding: [48, 48] });
+        } catch (e) { /* empty */ }
+    }
+
+    function refreshSelectedLegMap(options) {
+        options = options || {};
+        if (!selectedLegId) return;
+        var leg = getSelectedLeg();
+        if (!leg) return;
+        if (selectedLegLatLngs && selectedLegLatLngs.length >= 2 && legMapLayers.line) {
+            redrawLegLocationMarkers(leg);
+            if (!options.preserveZoom) {
+                fitLegMapBounds(leg);
+            }
+            return;
+        }
+        selectLegById(selectedLegId, options);
+    }
+
+    function commitPendingLegLocations() {
+        if (!selectedLegId) return Promise.resolve();
+        var leg = getSelectedLeg();
+        if (!leg) return Promise.resolve();
+        if (!pendingLegLocations.length) {
+            stopLegLocationPinMode();
+            setLegStatus('');
+            return Promise.resolve();
+        }
+        var locations = (leg.locations || []).slice().concat(pendingLegLocations);
+        setLegStatus('Saving locations…');
+        return saveLegLocations(selectedLegId, locations)
+            .then(function () {
+                pendingLegLocations = [];
+                stopLegLocationPinMode();
+                refreshSelectedLegMap({ preserveZoom: true });
+                setLegStatus(
+                    'Locations saved on leg ' +
+                        selectedLegId +
+                        '. Open the Course tab to assign resources and segment details.'
+                );
+            });
     }
 
     function startLegLocationPinMode() {
@@ -287,7 +786,9 @@
         }
         stopLegLocationPinMode();
         addLocationOnMap = true;
+        pendingLegLocations = [];
         window._legLocationPinModeActive = true;
+        updateAddLocationButtonLabel();
         var btn = document.getElementById('btn-leg-add-location');
         if (btn) btn.classList.add('active');
         var map = window.courseMappingMap;
@@ -296,105 +797,18 @@
         legLocationClickHandler = function (e) {
             if (!addLocationOnMap || !selectedLegId) return;
             L.DomEvent.stopPropagation(e);
-            var leg = (libraryState.chunks || []).find(function (c) { return c.id === selectedLegId; });
-            if (!leg) return;
-
-            var snapped = snapClickToLegRoute(e.latlng.lat, e.latlng.lng, selectedLegLatLngs);
-            var placeLat = snapped.lat;
-            var placeLon = snapped.lon;
-
-            var content = document.createElement('div');
-            content.className = 'course-map-popup';
-            content.style.minWidth = '200px';
-            var lblType = document.createElement('label');
-            lblType.textContent = 'Type';
-            lblType.style.display = 'block';
-            lblType.style.marginBottom = '0.25rem';
-            content.appendChild(lblType);
-            var sel = document.createElement('select');
-            sel.style.display = 'block';
-            sel.style.width = '100%';
-            sel.style.marginBottom = '0.65rem';
-            sel.style.boxSizing = 'border-box';
-            locationTypes().forEach(function (t) {
-                var opt = document.createElement('option');
-                opt.value = t.value;
-                opt.textContent = t.label;
-                if (t.value === 'course') opt.selected = true;
-                sel.appendChild(opt);
+            openLegLocationPopup({
+                mode: 'add',
+                latlng: e.latlng,
+                clickLat: e.latlng.lat,
+                clickLon: e.latlng.lng
             });
-            content.appendChild(sel);
-            var lblLabel = document.createElement('label');
-            lblLabel.textContent = 'Label';
-            lblLabel.style.display = 'block';
-            lblLabel.style.marginBottom = '0.25rem';
-            content.appendChild(lblLabel);
-            var input = document.createElement('input');
-            input.type = 'text';
-            input.placeholder = 'e.g. Water station';
-            input.style.display = 'block';
-            input.style.width = '100%';
-            input.style.marginBottom = '0.65rem';
-            input.style.boxSizing = 'border-box';
-            content.appendChild(input);
-            var btnRow = document.createElement('div');
-            btnRow.style.display = 'flex';
-            btnRow.style.gap = '0.5rem';
-            var btnAdd = document.createElement('button');
-            btnAdd.type = 'button';
-            btnAdd.className = 'course-btn primary';
-            btnAdd.textContent = 'Add';
-            var btnCancel = document.createElement('button');
-            btnCancel.type = 'button';
-            btnCancel.className = 'course-btn';
-            btnCancel.textContent = 'Cancel';
-            btnRow.appendChild(btnAdd);
-            btnRow.appendChild(btnCancel);
-            content.appendChild(btnRow);
-
-            var pop = L.popup({ maxWidth: 375, className: 'location-popup' })
-                .setContent(content)
-                .setLatLng(e.latlng)
-                .openOn(map);
-
-            btnCancel.onclick = function () {
-                map.closePopup();
-            };
-            btnAdd.onclick = function () {
-                var locLabel = (input.value && input.value.trim()) || 'Location';
-                var locType = sel.value || 'course';
-                var locations = (leg.locations || []).slice();
-                locations.push({
-                    loc_label: locLabel,
-                    loc_type: locType,
-                    lat: Math.round(placeLat * 1e6) / 1e6,
-                    lon: Math.round(placeLon * 1e6) / 1e6,
-                    placement: 'along'
-                });
-                map.closePopup();
-                setLegStatus('Saving location…');
-                saveLegLocations(selectedLegId, locations)
-                    .then(function () {
-                        setLegStatus(
-                            'Location placed on leg ' +
-                                selectedLegId +
-                                '. Open the Course tab to assign resources and segment details.'
-                        );
-                        selectLegById(selectedLegId);
-                        if (
-                            window.configPackageCourse &&
-                            window.configPackageCourse.reloadCourse
-                        ) {
-                            return window.configPackageCourse.reloadCourse();
-                        }
-                    })
-                    .catch(function (err) {
-                        setLegStatus(err.message || String(err), true);
-                    });
-            };
         };
         map.on('click', legLocationClickHandler);
-        setLegStatus('Click the purple route to place a location (snaps to the leg track).');
+        setLegStatus(
+            'Click the map to add locations. Click a pin to edit label/type or delete. ' +
+                'Drag pins to move. Course/water/aid/official snap to the route; traffic and extract stay off-course.'
+        );
     }
 
     function clearLegMap() {
@@ -451,35 +865,20 @@
         return marker;
     }
 
-    function drawLegLocations(leg) {
-        var map = window.courseMappingMap;
-        if (!map || !leg || !leg.locations) return;
-        var group = L.layerGroup();
-        leg.locations.forEach(function (loc, idx) {
-            if (loc.lat == null || loc.lon == null) return;
-            var m = L.circleMarker([loc.lat, loc.lon], {
-                radius: 6,
-                color: '#2980b9',
-                fillColor: '#3498db',
-                fillOpacity: 0.85,
-                weight: 2
-            });
-            m.bindTooltip((loc.loc_label || 'Location') + ' (' + (loc.loc_type || 'course') + ')');
-            m.addTo(group);
+    function selectLegById(legId, options) {
+        options = options || {};
+        var leg = (libraryState && libraryState.chunks || []).find(function (c) {
+            return c.id === legId;
         });
-        group.addTo(map);
-        legMapLayers.locs = group;
-    }
-
-    function selectLegById(legId) {
-        var leg = (libraryState && libraryState.chunks || []).find(function (c) { return c.id === legId; });
         if (!leg) return;
         selectedLegId = legId;
         updateLegActionButtons();
         document.querySelectorAll('#course-legs-tbody tr').forEach(function (tr) {
             tr.classList.toggle('selected', tr.dataset.legId === legId);
         });
-        stopLegLocationPinMode();
+        if (!options.keepPinMode) {
+            stopLegLocationPinMode();
+        }
         legGeometryRequestId += 1;
         var requestId = legGeometryRequestId;
         clearLegMapLayers();
@@ -503,20 +902,23 @@
                 selectedLegLatLngs = latlngs;
                 legMapLayers.line = L.polyline(latlngs, { color: '#8e44ad', weight: 5, opacity: 0.85 }).addTo(map);
                 var props = feature.properties || {};
+                var currentLeg = getSelectedLeg() || leg;
                 legMapLayers.start = endpointMarker(
                     latlngs[0][0], latlngs[0][1],
-                    props.start_label || leg.start_label,
+                    props.start_label || currentLeg.start_label,
                     'start',
                     legId
                 );
                 legMapLayers.end = endpointMarker(
                     latlngs[latlngs.length - 1][0], latlngs[latlngs.length - 1][1],
-                    props.end_label || leg.end_label,
+                    props.end_label || currentLeg.end_label,
                     'end',
                     legId
                 );
-                drawLegLocations(leg);
-                try { map.fitBounds(legMapLayers.line.getBounds(), { padding: [40, 40] }); } catch (e) { /* empty */ }
+                redrawLegLocationMarkers(currentLeg);
+                if (!options.preserveZoom) {
+                    fitLegMapBounds(currentLeg);
+                }
             })
             .catch(function (err) { setLegStatus(err.message || String(err), true); });
     }
@@ -524,6 +926,46 @@
     function selectLeg(leg) {
         if (!leg) return;
         selectLegById(leg.id);
+    }
+
+    function exportLeg(legId) {
+        var leg = (libraryState && libraryState.chunks || []).find(function (c) {
+            return c.id === legId;
+        });
+        var label = (leg && leg.leg_label) || legId;
+        setLegStatus('Preparing export for leg ' + legId + '…');
+        fetch(
+            apiBase() + '/segment-library/legs/' + encodeURIComponent(legId) + '/export',
+            { credentials: 'same-origin' }
+        )
+            .then(function (r) {
+                if (!r.ok) {
+                    return r.json().then(function (d) {
+                        throw new Error(formatApiError(r, d));
+                    });
+                }
+                var disposition = r.headers.get('Content-Disposition') || '';
+                var match = /filename="?([^";]+)"?/i.exec(disposition);
+                var filename = (match && match[1]) || legId + '_leg_export.zip';
+                return r.blob().then(function (blob) {
+                    return { blob: blob, filename: filename };
+                });
+            })
+            .then(function (payload) {
+                var url = URL.createObjectURL(payload.blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = payload.filename;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                setLegStatus('Exported leg ' + legId + ' (' + label + ').');
+            })
+            .catch(function (err) {
+                setLegStatus(err.message || String(err), true);
+            });
     }
 
     function saveLegLocations(legId, locations) {
@@ -595,6 +1037,12 @@
                     ta.createIconButton('edit', 'Edit leg', function (ev) {
                         ev.stopPropagation();
                         openLegEditor(ch);
+                    })
+                );
+                actions.appendChild(
+                    ta.createIconButton('export', 'Export leg (GPX + metadata + locations)', function (ev) {
+                        ev.stopPropagation();
+                        exportLeg(ch.id);
                     })
                 );
                 actions.appendChild(
@@ -704,6 +1152,187 @@
         };
     }
 
+    function ensureCoursePreviewMap() {
+        if (coursePreviewMap) return coursePreviewMap;
+        var el = document.getElementById('course-preview-map');
+        if (!el || typeof L === 'undefined') return null;
+        coursePreviewMap = L.map('course-preview-map', { zoomControl: true }).setView([45.95, -66.64], 13);
+        L.tileLayer(
+            'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+            { attribution: '© OpenStreetMap contributors, © CARTO', maxZoom: 19 }
+        ).addTo(coursePreviewMap);
+        return coursePreviewMap;
+    }
+
+    function renderCoursePreviewToolbar() {
+        var toolbar = document.getElementById('course-preview-event-toolbar');
+        if (!toolbar) return;
+        toolbar.innerHTML = '';
+        packageEvents().forEach(function (eid) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'course-btn' + (coursePreviewSelectedEvent === eid ? ' active' : '');
+            btn.textContent = eventColumnLabel(eid);
+            btn.addEventListener('click', function () {
+                coursePreviewSelectedEvent = eid;
+                renderCoursePreviewToolbar();
+                loadCoursePreviewRoute(eid);
+            });
+            toolbar.appendChild(btn);
+        });
+    }
+
+    function clearCoursePreviewLocationsLayer(map) {
+        if (!map || !coursePreviewLocationsLayer) return;
+        map.removeLayer(coursePreviewLocationsLayer);
+        coursePreviewLocationsLayer = null;
+    }
+
+    function renderCoursePreviewLocations() {
+        var map = ensureCoursePreviewMap();
+        if (!map) return;
+        clearCoursePreviewLocationsLayer(map);
+        var pkg = window.configPackageCourse;
+        if (!pkg || !pkg.getCourseLocations) return;
+        var locs = pkg.getCourseLocations();
+        if (!locs.length) return;
+        var buildTip = pkg.buildLocationTooltipHtml;
+        var pinColor = pkg.getLocationPinColor;
+        coursePreviewLocationsLayer = L.featureGroup();
+        locs.forEach(function (loc, i) {
+            var lat = typeof loc.lat === 'number' ? loc.lat : parseFloat(loc.lat);
+            var lon = typeof loc.lon === 'number' ? loc.lon : parseFloat(loc.lon);
+            if (isNaN(lat) || isNaN(lon)) return;
+            var fill = pinColor ? pinColor(loc.loc_type) : '#27ae60';
+            var marker = L.marker([lat, lon], {
+                icon: L.divIcon({
+                    className: 'location-pin-circle',
+                    html:
+                        '<div style="width:14px;height:14px;background:' +
+                        fill +
+                        ';border:2px solid ' +
+                        fill +
+                        ';border-radius:50%;box-sizing:border-box;"></div>',
+                    iconSize: [14, 14],
+                    iconAnchor: [7, 7]
+                }),
+                interactive: true
+            });
+            marker._locationIndex = i;
+            if (buildTip) {
+                marker.bindTooltip(buildTip(loc, i), {
+                    permanent: false,
+                    direction: 'top',
+                    offset: [0, -10],
+                    className: 'course-map-tooltip'
+                });
+            }
+            marker.on('click', function (e) {
+                L.DomEvent.stopPropagation(e);
+                if (pkg.highlightLocationInTable) {
+                    pkg.highlightLocationInTable(i);
+                }
+                var rows = document.querySelectorAll('#locations-tbody tr:not(.locations-totals-row)');
+                if (rows[i]) {
+                    rows[i].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                }
+            });
+            coursePreviewLocationsLayer.addLayer(marker);
+        });
+        if (coursePreviewLocationsLayer.getLayers().length) {
+            coursePreviewLocationsLayer.addTo(map);
+        } else {
+            coursePreviewLocationsLayer = null;
+        }
+    }
+
+    function loadCoursePreviewRoute(eventId) {
+        var wrap = document.getElementById('course-preview-map-wrap');
+        var meta = document.getElementById('course-preview-meta');
+        var empty = document.getElementById('course-preview-empty');
+        if (!eventId || !hasCombinedCourse()) return;
+        fetch(
+            apiBase() + '/segment-library/events/' + encodeURIComponent(eventId) + '/preview',
+            { credentials: 'same-origin' }
+        )
+            .then(function (r) { return r.json().then(function (d) { return { res: r, data: d }; }); })
+            .then(function (payload) {
+                if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
+                var data = payload.data;
+                var map = ensureCoursePreviewMap();
+                if (!map) return;
+                if (coursePreviewLineLayer) {
+                    map.removeLayer(coursePreviewLineLayer);
+                    coursePreviewLineLayer = null;
+                }
+                clearCoursePreviewLocationsLayer(map);
+                var latlngs = (data.coordinates || []).map(function (c) { return [c[1], c[0]]; });
+                if (latlngs.length < 2) throw new Error('Route has too few points');
+                coursePreviewLineLayer = L.polyline(latlngs, {
+                    color: '#2563eb',
+                    weight: 5,
+                    opacity: 0.92
+                }).addTo(map);
+                renderCoursePreviewLocations();
+                var bounds = coursePreviewLineLayer.getBounds();
+                if (coursePreviewLocationsLayer) {
+                    bounds = bounds.extend(coursePreviewLocationsLayer.getBounds());
+                }
+                map.fitBounds(bounds, { padding: [28, 28], maxZoom: 15 });
+                if (wrap) wrap.style.display = 'block';
+                if (empty) empty.style.display = 'none';
+                if (meta) {
+                    meta.style.display = 'block';
+                    meta.textContent =
+                        eventColumnLabel(eventId) +
+                        ': ' +
+                        Number(data.length_km).toFixed(2) +
+                        ' km · ' +
+                        (data.leg_count || 0) +
+                        ' legs';
+                }
+                setTimeout(function () { map.invalidateSize(); }, 120);
+            })
+            .catch(function (err) {
+                var map = coursePreviewMap;
+                if (map) clearCoursePreviewLocationsLayer(map);
+                if (empty) {
+                    empty.style.display = 'block';
+                    empty.textContent = err.message || String(err);
+                }
+                if (wrap) wrap.style.display = 'none';
+                if (meta) meta.style.display = 'none';
+            });
+    }
+
+    function syncCoursePreviewUi() {
+        var section = document.getElementById('course-preview-section');
+        var empty = document.getElementById('course-preview-empty');
+        var wrap = document.getElementById('course-preview-map-wrap');
+        var meta = document.getElementById('course-preview-meta');
+        if (!section) return;
+        if (!hasCombinedCourse()) {
+            section.style.display = 'none';
+            return;
+        }
+        section.style.display = 'block';
+        if (empty) {
+            empty.style.display = 'block';
+            empty.textContent = 'Select an event to preview its stitched route.';
+        }
+        var events = packageEvents();
+        if (!coursePreviewSelectedEvent || events.indexOf(coursePreviewSelectedEvent) < 0) {
+            coursePreviewSelectedEvent = events.length ? events[0] : null;
+        }
+        renderCoursePreviewToolbar();
+        if (!coursePreviewSelectedEvent) {
+            if (wrap) wrap.style.display = 'none';
+            if (meta) meta.style.display = 'none';
+            return;
+        }
+        loadCoursePreviewRoute(coursePreviewSelectedEvent);
+    }
+
     function showRecipesModal() {
         var modal = document.getElementById('segment-recipes-modal');
         if (!modal) return;
@@ -727,6 +1356,7 @@
         if (editBtn) {
             editBtn.style.display = hasCourse ? '' : 'none';
         }
+        syncCoursePreviewUi();
         var hasLegs = libraryState && libraryState.chunks && libraryState.chunks.length;
         if (
             !hasCourse &&
@@ -768,6 +1398,7 @@
             .then(function () { return loadLibrary(); })
             .then(function () {
                 syncCoursePanelUi({ autoOpen: true });
+                syncCoursePreviewUi();
             });
     }
 
@@ -827,7 +1458,7 @@
         hint.style.cssText = 'font-size:0.85rem;color:#7f8c8d;margin:0 0 0.75rem 0;';
         hint.textContent = isNew
             ? 'Set names for this leg. Add locations on the map after saving.'
-            : 'Edit metadata here. Add or adjust locations on the map (select the leg, then Add location on map).';
+            : 'Edit metadata here. Add or adjust locations on the map (select the leg, then Add Locations).';
         body.appendChild(hint);
 
         function segmentSchemaChoices() {
@@ -1021,13 +1652,27 @@
         if (!files || !files.length) return;
         var fd = new FormData();
         for (var i = 0; i < files.length; i++) fd.append('files', files[i]);
-        setLegStatus('Importing GPX…');
+        var hasJson = false;
+        for (var j = 0; j < files.length; j++) {
+            var n = (files[j].name || '').toLowerCase();
+            if (n.endsWith('.json')) hasJson = true;
+        }
+        setLegStatus('Importing leg file' + (files.length > 1 ? 's' : '') + '…');
         fetch(apiBase() + '/segment-library/upload', { method: 'POST', credentials: 'same-origin', body: fd })
             .then(function (r) { return r.json().then(function (d) { return { res: r, data: d }; }); })
             .then(function (payload) {
                 if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
                 applyLibraryState(payload.data);
-                setLegStatus('Imported ' + (payload.data.chunks || []).length + ' leg(s). Select a leg to view on the map.');
+                var count = (payload.data.chunks || []).length;
+                var msg =
+                    'Imported ' +
+                    count +
+                    ' leg(s). Select a leg to view on the map.';
+                if (!hasJson) {
+                    msg +=
+                        ' Tip: include the .json from a leg export zip to restore locations and metadata.';
+                }
+                setLegStatus(msg);
             })
             .catch(function (err) { setLegStatus(err.message || String(err), true); });
     }
@@ -1046,7 +1691,11 @@
                 var data = payload.data;
                 if (data.library) applyLibraryState(data.library);
                 if (data.apply) {
-                    setRecipeStatus('Exported ' + (data.apply.segment_count || 0) + ' segments to segments.csv.');
+                    var status = 'Exported ' + (data.apply.segment_count || 0) + ' segments';
+                    if (data.apply.flow_csv_path) status += ', flow.csv';
+                    var gpxCount = (data.apply.gpx_files || []).length;
+                    if (gpxCount) status += ', ' + gpxCount + ' GPX file(s)';
+                    setRecipeStatus(status + '.');
                 }
                 if (data.course) {
                     document.dispatchEvent(new CustomEvent('segment-recipes-applied', {
@@ -1084,8 +1733,9 @@
                     return;
                 }
                 if (addLocationOnMap) {
-                    stopLegLocationPinMode();
-                    setLegStatus('');
+                    commitPendingLegLocations().catch(function (err) {
+                        setLegStatus(err.message || String(err), true);
+                    });
                     return;
                 }
                 setTimeout(function () {
@@ -1140,6 +1790,7 @@
 
     document.addEventListener('segment-recipes-applied', function () {
         syncCoursePanelUi({ autoOpen: false });
+        syncCoursePreviewUi();
     });
 
     window.segmentRecipes = {
@@ -1147,6 +1798,7 @@
         refresh: loadLibrary,
         onCourseTabShown: onCourseTabShown,
         syncCoursePanelUi: syncCoursePanelUi,
+        renderCoursePreviewLocations: renderCoursePreviewLocations,
         openRecipesModal: showRecipesModal,
         closeRecipesModal: closeRecipesModal,
         resolveLegLabelsForSegment: resolveLegLabelsForSegment,
