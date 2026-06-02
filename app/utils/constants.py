@@ -204,8 +204,10 @@ LOCATION_TYPE_CHOICES = [
 # Leg / course map placement (patterns from runflow/config/2026_final/locations.csv):
 # - traffic, extract: off-course pin, empty seg_id, proxy_loc_id for timing (Issue #751)
 # - course, water, official: on-course pin with seg_id
-# - aid: usually on-course; occasional proxy-only rows (e.g. Officers Square)
+# - aid: usually on-course in exports; leg map allows free placement (no route snap)
 OFF_COURSE_LOCATION_TYPES = ["traffic", "extract"]
+# Legs tab map: types that stay at click / drag position (no snap to purple route)
+LEG_MAP_NO_SNAP_LOCATION_TYPES = ["traffic", "extract", "aid"]
 ON_COURSE_LOCATION_TYPES = [
     t for t in LOCATION_TYPE_CHOICES if t not in OFF_COURSE_LOCATION_TYPES
 ]

@@ -23,6 +23,11 @@
     var coursePreviewLineLayer = null;
     var coursePreviewLocationsLayer = null;
     var coursePreviewSelectedEvent = null;
+    var legReshapeActive = false;
+    var legReshapeDraftLatLngs = null;
+    var legReshapeAnchorIndices = null;
+    var legReshapeAnchorLayer = null;
+    var legReshapeSavedLatLngs = null;
 
     function schemaLabelForValue(value) {
         var v = String(value || 'on_course_open');
@@ -193,8 +198,11 @@
     };
 
     function locationTypeSnapsToLegRoute(locType) {
-        var offCourse = window.OFF_COURSE_LOCATION_TYPES_FROM_SERVER || ['traffic', 'extract'];
-        return offCourse.indexOf(String(locType || 'course').toLowerCase()) < 0;
+        var noSnap =
+            window.LEG_MAP_NO_SNAP_LOCATION_TYPES_FROM_SERVER ||
+            window.OFF_COURSE_LOCATION_TYPES_FROM_SERVER ||
+            ['traffic', 'extract', 'aid'];
+        return noSnap.indexOf(String(locType || 'course').toLowerCase()) < 0;
     }
 
     function legLocationPlacement(locType) {
@@ -255,15 +263,311 @@
 
     function updateLegActionButtons() {
         var hasLeg = !!selectedLegId;
-        ['btn-leg-add-location'].forEach(function (id) {
-            var btn = document.getElementById(id);
-            if (btn) btn.disabled = !hasLeg;
+        var hasLine = !!(selectedLegLatLngs && selectedLegLatLngs.length >= 2);
+        var reshapeBtn = document.getElementById('btn-leg-reshape-route');
+        var addLocBtn = document.getElementById('btn-leg-add-location');
+        var reshapeActions = document.getElementById('leg-reshape-actions');
+        if (reshapeBtn) {
+            reshapeBtn.style.display = legReshapeActive ? 'none' : '';
+            reshapeBtn.disabled = !hasLeg || !hasLine;
+            reshapeBtn.title = !hasLeg
+                ? 'Select a leg in the table first'
+                : !hasLine
+                  ? 'Loading route on the map…'
+                  : 'Simplify the route and drag yellow anchors to nudge the track (e.g. off a sidewalk)';
+        }
+        if (reshapeActions) {
+            reshapeActions.style.display = legReshapeActive ? 'inline-flex' : 'none';
+        }
+        if (addLocBtn) {
+            addLocBtn.disabled = !hasLeg || legReshapeActive;
+        }
+    }
+
+    function copyLatLngs(latlngs) {
+        return (latlngs || []).map(function (ll) {
+            return [ll[0], ll[1]];
         });
+    }
+
+    /** Douglas–Peucker tolerance (m) when entering reshape — PlotARoute-style semantic vertices. */
+    var LEG_RESHAPE_SIMPLIFY_TOLERANCE_M = 5;
+    var LEG_RESHAPE_SIMPLIFY_MAX_VERTICES = 96;
+
+    function perpendicularDistanceMeters(point, lineStart, lineEnd) {
+        var midLat = (lineStart[0] + lineEnd[0]) / 2;
+        var metersPerDegLat = 111320;
+        var metersPerDegLon = 111320 * Math.cos((midLat * Math.PI) / 180);
+        var ax = (lineEnd[1] - lineStart[1]) * metersPerDegLon;
+        var ay = (lineEnd[0] - lineStart[0]) * metersPerDegLat;
+        var px = (point[1] - lineStart[1]) * metersPerDegLon;
+        var py = (point[0] - lineStart[0]) * metersPerDegLat;
+        var lenSq = ax * ax + ay * ay;
+        if (lenSq < 1e-6) {
+            return Math.sqrt(px * px + py * py);
+        }
+        var t = Math.max(0, Math.min(1, (px * ax + py * ay) / lenSq));
+        var dx = px - t * ax;
+        var dy = py - t * ay;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function douglasPeuckerKeepMask(latlngs, startIdx, endIdx, toleranceM, keep) {
+        if (endIdx <= startIdx + 1) {
+            return;
+        }
+        var maxDist = 0;
+        var maxIdx = startIdx;
+        var lineStart = latlngs[startIdx];
+        var lineEnd = latlngs[endIdx];
+        var i;
+        for (i = startIdx + 1; i < endIdx; i++) {
+            var dist = perpendicularDistanceMeters(latlngs[i], lineStart, lineEnd);
+            if (dist > maxDist) {
+                maxDist = dist;
+                maxIdx = i;
+            }
+        }
+        if (maxDist > toleranceM) {
+            keep[maxIdx] = true;
+            douglasPeuckerKeepMask(latlngs, startIdx, maxIdx, toleranceM, keep);
+            douglasPeuckerKeepMask(latlngs, maxIdx, endIdx, toleranceM, keep);
+        }
+    }
+
+    function douglasPeuckerSimplify(latlngs, toleranceM) {
+        if (!latlngs || latlngs.length < 2) {
+            return [];
+        }
+        if (latlngs.length === 2) {
+            return copyLatLngs(latlngs);
+        }
+        var keep = { 0: true };
+        keep[latlngs.length - 1] = true;
+        douglasPeuckerKeepMask(latlngs, 0, latlngs.length - 1, toleranceM, keep);
+        var out = [];
+        var idx;
+        for (idx = 0; idx < latlngs.length; idx++) {
+            if (keep[idx]) {
+                out.push([latlngs[idx][0], latlngs[idx][1]]);
+            }
+        }
+        return out;
+    }
+
+    /** Simplify dense GPX to editable corners; relax tolerance if still too many vertices. */
+    function simplifyLegRouteForReshape(latlngs) {
+        if (!latlngs || latlngs.length < 3) {
+            return { latlngs: copyLatLngs(latlngs || []), toleranceM: LEG_RESHAPE_SIMPLIFY_TOLERANCE_M };
+        }
+        var toleranceM = LEG_RESHAPE_SIMPLIFY_TOLERANCE_M;
+        var simplified = douglasPeuckerSimplify(latlngs, toleranceM);
+        var attempts = 0;
+        while (
+            simplified.length > LEG_RESHAPE_SIMPLIFY_MAX_VERTICES &&
+            toleranceM < 40 &&
+            attempts < 12
+        ) {
+            toleranceM = Math.round(toleranceM * 1.35 * 10) / 10;
+            simplified = douglasPeuckerSimplify(latlngs, toleranceM);
+            attempts += 1;
+        }
+        return { latlngs: simplified, toleranceM: toleranceM };
+    }
+
+    function allVertexAnchorIndices(vertexCount) {
+        var indices = [];
+        var i;
+        for (i = 0; i < vertexCount; i++) {
+            indices.push(i);
+        }
+        return indices;
+    }
+
+    function getActiveLegLatLngs() {
+        if (legReshapeActive && legReshapeDraftLatLngs) {
+            return legReshapeDraftLatLngs;
+        }
+        return selectedLegLatLngs;
+    }
+
+    function setLegRoutePolyline(latlngs) {
+        var map = window.courseMappingMap;
+        if (!map || !latlngs || latlngs.length < 2) {
+            return;
+        }
+        if (legMapLayers.line) {
+            map.removeLayer(legMapLayers.line);
+        }
+        legMapLayers.line = L.polyline(latlngs, {
+            color: '#8e44ad',
+            weight: 5,
+            opacity: 0.85
+        }).addTo(map);
+    }
+
+    function clearLegReshapeAnchorLayer() {
+        var map = window.courseMappingMap;
+        if (map && legReshapeAnchorLayer) {
+            map.removeLayer(legReshapeAnchorLayer);
+            legReshapeAnchorLayer = null;
+        }
+    }
+
+    function drawLegReshapeAnchors() {
+        var map = window.courseMappingMap;
+        var latlngs = legReshapeDraftLatLngs;
+        if (!map || !latlngs || !legReshapeAnchorIndices) {
+            return;
+        }
+        clearLegReshapeAnchorLayer();
+        legReshapeAnchorLayer = L.layerGroup();
+        legReshapeAnchorIndices.forEach(function (idx) {
+            if (idx < 0 || idx >= latlngs.length) {
+                return;
+            }
+            var ll = latlngs[idx];
+            var marker = L.marker([ll[0], ll[1]], {
+                icon: L.divIcon({
+                    className: 'leg-route-anchor-pin',
+                    html: '<div></div>',
+                    iconSize: [13, 13],
+                    iconAnchor: [6, 6]
+                }),
+                draggable: true,
+                autoPan: true,
+                zIndexOffset: 800
+            });
+            marker.on('drag', function () {
+                var pos = marker.getLatLng();
+                legReshapeDraftLatLngs[idx] = [
+                    Math.round(pos.lat * 1e6) / 1e6,
+                    Math.round(pos.lng * 1e6) / 1e6
+                ];
+                selectedLegLatLngs = legReshapeDraftLatLngs;
+                setLegRoutePolyline(legReshapeDraftLatLngs);
+            });
+            marker.on('click', function (e) {
+                L.DomEvent.stopPropagation(e);
+            });
+            marker.addTo(legReshapeAnchorLayer);
+        });
+        legReshapeAnchorLayer.addTo(map);
+    }
+
+    function stopLegReshapeRoute(discard) {
+        if (!legReshapeActive && !legReshapeDraftLatLngs) {
+            return;
+        }
+        legReshapeActive = false;
+        if (discard && legReshapeSavedLatLngs) {
+            selectedLegLatLngs = copyLatLngs(legReshapeSavedLatLngs);
+            setLegRoutePolyline(selectedLegLatLngs);
+        }
+        legReshapeDraftLatLngs = null;
+        legReshapeAnchorIndices = null;
+        legReshapeSavedLatLngs = null;
+        clearLegReshapeAnchorLayer();
+        updateLegActionButtons();
+        var reshapeBtn = document.getElementById('btn-leg-reshape-route');
+        if (reshapeBtn) {
+            reshapeBtn.classList.remove('active');
+        }
+    }
+
+    function startLegReshapeRoute() {
+        if (!selectedLegId) {
+            setLegStatus('Select a leg in the table first.', true);
+            return;
+        }
+        if (!selectedLegLatLngs || selectedLegLatLngs.length < 2) {
+            setLegStatus('Wait for the leg route to load on the map.', true);
+            return;
+        }
+        if (addLocationOnMap) {
+            if (!pendingLegLocations.length) {
+                stopLegLocationPinMode();
+            } else {
+                setLegStatus('Save or cancel pending locations before reshaping the route.', true);
+                return;
+            }
+        }
+        stopLegReshapeRoute(true);
+        var originalCount = selectedLegLatLngs.length;
+        legReshapeSavedLatLngs = copyLatLngs(selectedLegLatLngs);
+        var simplified = simplifyLegRouteForReshape(legReshapeSavedLatLngs);
+        legReshapeDraftLatLngs = simplified.latlngs;
+        legReshapeAnchorIndices = allVertexAnchorIndices(legReshapeDraftLatLngs.length);
+        legReshapeActive = true;
+        setLegRoutePolyline(legReshapeDraftLatLngs);
+        var reshapeBtn = document.getElementById('btn-leg-reshape-route');
+        if (reshapeBtn) {
+            reshapeBtn.classList.add('active');
+        }
+        updateLegActionButtons();
+        drawLegReshapeAnchors();
+        var anchorCount = legReshapeAnchorIndices.length;
+        var statusMsg =
+            'Route simplified to ' +
+            anchorCount +
+            ' anchor' +
+            (anchorCount === 1 ? '' : 's') +
+            ' (from ' +
+            originalCount +
+            ' track points). Drag yellow pins to nudge; Confirm saves this shape, Cancel restores the original.';
+        if (originalCount > anchorCount && simplified.toleranceM > LEG_RESHAPE_SIMPLIFY_TOLERANCE_M) {
+            statusMsg +=
+                ' (used ' + simplified.toleranceM + ' m simplify tolerance to keep the map usable).';
+        }
+        setLegStatus(statusMsg);
+    }
+
+    function confirmLegReshapeRoute() {
+        if (!legReshapeActive || !selectedLegId || !legReshapeDraftLatLngs) {
+            return;
+        }
+        var coordinates = legReshapeDraftLatLngs.map(function (ll) {
+            return [ll[1], ll[0]];
+        });
+        setLegStatus('Saving route…');
+        fetch(apiBase() + '/segment-library/legs/' + encodeURIComponent(selectedLegId) + '/geometry', {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ coordinates: coordinates })
+        })
+            .then(function (r) {
+                return r.json().then(function (d) {
+                    return { res: r, data: d };
+                });
+            })
+            .then(function (payload) {
+                if (!payload.res.ok) {
+                    throw new Error(formatApiError(payload.res, payload.data));
+                }
+                applyLibraryState(payload.data);
+                legReshapeActive = false;
+                legReshapeDraftLatLngs = null;
+                legReshapeAnchorIndices = null;
+                legReshapeSavedLatLngs = null;
+                clearLegReshapeAnchorLayer();
+                updateLegActionButtons();
+                var reshapeBtn = document.getElementById('btn-leg-reshape-route');
+                if (reshapeBtn) {
+                    reshapeBtn.classList.remove('active');
+                }
+                selectLegById(selectedLegId, { preserveZoom: true, keepPinMode: true });
+                setLegStatus('Route saved for leg ' + selectedLegId + '.');
+            })
+            .catch(function (err) {
+                setLegStatus(err.message || String(err), true);
+            });
     }
 
     function clearLegMapLayers() {
         var map = window.courseMappingMap;
         if (!map) return;
+        clearLegReshapeAnchorLayer();
         if (legMapLayers.line) {
             map.removeLayer(legMapLayers.line);
             legMapLayers.line = null;
@@ -281,7 +585,9 @@
             legMapLayers.locs = null;
         }
         clearLegLocationPreviewLayer();
-        selectedLegLatLngs = null;
+        if (!legReshapeActive) {
+            selectedLegLatLngs = null;
+        }
     }
 
     function invalidateLegGeometryRequests() {
@@ -290,6 +596,9 @@
 
     /** Nearest point on leg polyline ([[lat, lon], ...]) to a map click. */
     function snapClickToLegRoute(lat, lon, latlngs) {
+        if (!latlngs) {
+            latlngs = getActiveLegLatLngs();
+        }
         if (!latlngs || latlngs.length < 2) return { lat: lat, lon: lon };
         var bestLat = lat;
         var bestLon = lon;
@@ -743,6 +1052,7 @@
         if (!leg) return;
         if (selectedLegLatLngs && selectedLegLatLngs.length >= 2 && legMapLayers.line) {
             redrawLegLocationMarkers(leg);
+            updateLegActionButtons();
             if (!options.preserveZoom) {
                 fitLegMapBounds(leg);
             }
@@ -776,6 +1086,10 @@
     }
 
     function startLegLocationPinMode() {
+        if (legReshapeActive) {
+            setLegStatus('Confirm or cancel route reshape before adding locations.', true);
+            return;
+        }
         if (!selectedLegId) {
             setLegStatus('Select a leg in the table first.', true);
             return;
@@ -807,12 +1121,13 @@
         map.on('click', legLocationClickHandler);
         setLegStatus(
             'Click the map to add locations. Click a pin to edit label/type or delete. ' +
-                'Drag pins to move. Course/water/aid/official snap to the route; traffic and extract stay off-course.'
+                'Drag pins to move. Course, water, and official snap to the route; aid, traffic, and extract stay where you place them.'
         );
     }
 
     function clearLegMap() {
         stopLegLocationPinMode();
+        stopLegReshapeRoute(true);
         invalidateLegGeometryRequests();
         clearLegMapLayers();
         selectedLegId = null;
@@ -871,6 +1186,9 @@
             return c.id === legId;
         });
         if (!leg) return;
+        if (!options.keepReshape) {
+            stopLegReshapeRoute(true);
+        }
         selectedLegId = legId;
         updateLegActionButtons();
         document.querySelectorAll('#course-legs-tbody tr').forEach(function (tr) {
@@ -900,7 +1218,7 @@
                 var coords = feature.geometry.coordinates;
                 var latlngs = coords.map(function (c) { return [c[1], c[0]]; });
                 selectedLegLatLngs = latlngs;
-                legMapLayers.line = L.polyline(latlngs, { color: '#8e44ad', weight: 5, opacity: 0.85 }).addTo(map);
+                setLegRoutePolyline(latlngs);
                 var props = feature.properties || {};
                 var currentLeg = getSelectedLeg() || leg;
                 legMapLayers.start = endpointMarker(
@@ -916,11 +1234,15 @@
                     legId
                 );
                 redrawLegLocationMarkers(currentLeg);
+                updateLegActionButtons();
                 if (!options.preserveZoom) {
                     fitLegMapBounds(currentLeg);
                 }
             })
-            .catch(function (err) { setLegStatus(err.message || String(err), true); });
+            .catch(function (err) {
+                updateLegActionButtons();
+                setLegStatus(err.message || String(err), true);
+            });
     }
 
     function selectLeg(leg) {
@@ -1721,6 +2043,31 @@
             bulkInput.addEventListener('change', function () {
                 uploadGpxBulk(bulkInput.files);
                 bulkInput.value = '';
+            });
+        }
+        var reshapeBtn = document.getElementById('btn-leg-reshape-route');
+        if (reshapeBtn) {
+            reshapeBtn.addEventListener('click', function (ev) {
+                if (ev.stopPropagation) ev.stopPropagation();
+                if (legReshapeActive) {
+                    return;
+                }
+                startLegReshapeRoute();
+            });
+        }
+        var reshapeConfirm = document.getElementById('btn-leg-reshape-confirm');
+        if (reshapeConfirm) {
+            reshapeConfirm.addEventListener('click', function (ev) {
+                if (ev.stopPropagation) ev.stopPropagation();
+                confirmLegReshapeRoute();
+            });
+        }
+        var reshapeCancel = document.getElementById('btn-leg-reshape-cancel');
+        if (reshapeCancel) {
+            reshapeCancel.addEventListener('click', function (ev) {
+                if (ev.stopPropagation) ev.stopPropagation();
+                stopLegReshapeRoute(true);
+                setLegStatus('Route reshape cancelled.');
             });
         }
         var addLocBtn = document.getElementById('btn-leg-add-location');

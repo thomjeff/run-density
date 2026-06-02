@@ -36,6 +36,7 @@ from app.core.config_package.legs import (
     remove_leg_location_from_manifest,
     sync_leg_locations_if_applied,
     update_package_leg,
+    update_package_leg_geometry,
 )
 from app.core.config_package.segment_recipes import (
     apply_package_recipes,
@@ -102,6 +103,14 @@ class UpdateLegRequest(BaseModel):
     direction: Optional[str] = None
     description: Optional[str] = None
     locations: Optional[List[Dict[str, Any]]] = None
+
+
+class UpdateLegGeometryRequest(BaseModel):
+    coordinates: List[List[float]] = Field(
+        ...,
+        min_length=2,
+        description="Track vertices as [lon, lat] in order",
+    )
 
 
 class RemoveLegLocationRequest(BaseModel):
@@ -341,6 +350,24 @@ async def api_create_package_leg(
             direction=direction,
             description=description,
         )
+        return JSONResponse(content={"ok": True, **state})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.put("/api/config/packages/{config_id}/segment-library/legs/{leg_id}/geometry")
+async def api_update_package_leg_geometry(
+    request: Request,
+    config_id: str,
+    leg_id: str,
+    body: UpdateLegGeometryRequest,
+) -> JSONResponse:
+    """Save reshaped leg route (GPX track from edited coordinates)."""
+    require_auth(request)
+    try:
+        state = update_package_leg_geometry(config_id, leg_id, body.coordinates)
         return JSONResponse(content={"ok": True, **state})
     except FileNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

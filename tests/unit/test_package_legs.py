@@ -17,9 +17,10 @@ from app.core.config_package.legs import (
     sync_leg_location_metadata_from_course,
     sync_leg_segment_labels_into_course,
     update_package_leg,
+    update_package_leg_geometry,
     _normalize_locations,
 )
-from app.core.config_package.segment_recipes import import_gpx_files_to_library
+from app.core.config_package.segment_recipes import import_gpx_files_to_library, parse_chunk_gpx
 from app.core.config_package.location_ids import assign_unique_location_ids
 from app.core.config_package.storage import create_config_package, load_config_course
 
@@ -783,3 +784,55 @@ def test_parse_leg_export_json_bytes():
     )
     assert leg["id"] == "02"
     assert parse_leg_export_json_bytes(b"{}") is None
+
+
+def test_update_package_leg_geometry(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    result = create_config_package("Geom", "", event_day="sun", package_events=["full"])
+    config_id = result["config_id"]
+    package_path = tmp_path / config_id
+    lib_dir = package_path / "segment_library"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    import yaml
+
+    (lib_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "chunks": [
+                    {
+                        "id": "01",
+                        "seg_label": "Leg",
+                        "file": "01_leg.gpx",
+                        "locations": [],
+                    }
+                ],
+                "recipes": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (lib_dir / "01_leg.gpx").write_text(
+        """<?xml version="1.0"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><trkseg>
+    <trkpt lat="45.96" lon="-66.64"/>
+    <trkpt lat="45.965" lon="-66.635"/>
+    <trkpt lat="45.97" lon="-66.63"/>
+  </trkseg></trk>
+</gpx>""",
+        encoding="utf-8",
+    )
+    new_coords = [
+        [-66.64, 45.96],
+        [-66.638, 45.962],
+        [-66.63, 45.97],
+    ]
+    state = update_package_leg_geometry(config_id, "01", new_coords)
+    chunk = state["chunks"][0]
+    assert chunk["length_km"] > 0
+    parsed = parse_chunk_gpx(lib_dir / "01_leg.gpx")
+    assert len(parsed["coordinates"]) == 3
+    assert parsed["coordinates"][1][0] == -66.638

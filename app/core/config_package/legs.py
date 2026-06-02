@@ -30,6 +30,7 @@ from app.core.config_package.storage import (
     save_config_course,
     validate_config_id,
 )
+from app.core.course.export import build_gpx_line_coordinates
 from app.core.course.segment_library import parse_chunk_gpx
 from app.core.config_package.segment_recipes import package_recipe_event_ids
 from app.utils.constants import (
@@ -283,9 +284,10 @@ def update_package_leg(
         entry["locations"] = _normalize_locations(fields.get("locations"))
 
     if gpx_bytes:
-        file_name = entry.get("file") or f"{leg_id}_{_slugify(entry.get('seg_label', ''))}.gpx"
         if gpx_filename:
-            file_name = f"{leg_id}_{_slugify(Path(gpx_filename).stem)}.gpx"
+            file_name = Path(str(gpx_filename)).name
+        else:
+            file_name = entry.get("file") or f"{leg_id}_{_slugify(entry.get('seg_label', ''))}.gpx"
         dest = lib_dir / Path(file_name).name
         dest.write_bytes(gpx_bytes)
         entry["file"] = dest.name
@@ -475,6 +477,50 @@ def export_package_leg_zip(config_id: str, leg_id: str) -> Tuple[bytes, str]:
         )
     download_name = f"{cid}_leg_{leg_id}.zip"
     return buf.getvalue(), download_name
+
+
+def _normalize_line_coordinates(raw: Any) -> List[List[float]]:
+    if not isinstance(raw, list) or len(raw) < 2:
+        raise ValueError("coordinates must be a list of at least two [lon, lat] points")
+    out: List[List[float]] = []
+    for pt in raw:
+        if not isinstance(pt, (list, tuple)) or len(pt) < 2:
+            raise ValueError("each coordinate must be [lon, lat]")
+        try:
+            lon = round(float(pt[0]), 6)
+            lat = round(float(pt[1]), 6)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("invalid coordinate") from exc
+        if not (-180.0 <= lon <= 180.0 and -90.0 <= lat <= 90.0):
+            raise ValueError("coordinate out of range")
+        out.append([lon, lat])
+    return out
+
+
+def update_package_leg_geometry(
+    config_id: str,
+    leg_id: str,
+    coordinates: List[List[float]],
+) -> Dict[str, Any]:
+    """Replace leg GPX track from edited [lon, lat] vertices (reshape route)."""
+    coords = _normalize_line_coordinates(coordinates)
+    cid = validate_config_id(config_id)
+    leg_id = str(leg_id).strip()
+    manifest = load_package_segment_manifest(cid)
+    chunks: List[Dict[str, Any]] = list(manifest.get("chunks") or [])
+    idx = _find_chunk_index(chunks, leg_id)
+    if idx < 0:
+        raise ValueError(f"Leg not found: {leg_id}")
+    entry = chunks[idx]
+    label = (entry.get("seg_label") or leg_id).strip() or leg_id
+    gpx_content = build_gpx_line_coordinates(coords, track_name=label)
+    return update_package_leg(
+        config_id,
+        leg_id,
+        {},
+        gpx_bytes=gpx_content.encode("utf-8"),
+        gpx_filename=entry.get("file") or f"{leg_id}.gpx",
+    )
 
 
 def get_leg_line_geojson(config_id: str, leg_id: str) -> Dict[str, Any]:

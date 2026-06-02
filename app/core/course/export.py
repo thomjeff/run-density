@@ -8,7 +8,7 @@ import csv
 import io
 import json
 import zipfile
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 import xml.etree.ElementTree as ET
 
 from app.utils.constants import COURSE_EVENT_IDS
@@ -302,6 +302,27 @@ def build_locations_csv(
 
 def _gpx_tag(name: str) -> str:
     return f"{{{GPX_NS}}}{name}"
+
+
+def build_gpx_line_coordinates(
+    coordinates: Sequence[Sequence[float]],
+    track_name: str = "Leg",
+) -> str:
+    """Build GPX 1.1 with one track from [[lon, lat], ...] coordinates."""
+    root = ET.Element(_gpx_tag("gpx"), version="1.1", creator="Run-Density Course Mapping")
+    root.set("xmlns", GPX_NS)
+    if len(coordinates) < 2:
+        return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding="unicode")
+    trk = ET.SubElement(root, _gpx_tag("trk"))
+    name_el = ET.SubElement(trk, _gpx_tag("name"))
+    name_el.text = track_name or "Leg"
+    trkseg = ET.SubElement(trk, _gpx_tag("trkseg"))
+    for pt in coordinates:
+        if not isinstance(pt, (list, tuple)) or len(pt) < 2:
+            continue
+        lon, lat = float(pt[0]), float(pt[1])
+        ET.SubElement(trkseg, _gpx_tag("trkpt"), lat=str(lat), lon=str(lon))
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding="unicode")
 
 
 def build_gpx(course: Dict[str, Any], course_name: str = "") -> str:

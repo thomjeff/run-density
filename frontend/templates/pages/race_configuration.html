@@ -196,6 +196,7 @@
 <script>
     window.LOCATION_TYPES_FROM_SERVER = {{ (location_types | default([])) | tojson }};
     window.OFF_COURSE_LOCATION_TYPES_FROM_SERVER = {{ (off_course_location_types | default(['traffic', 'extract'], true)) | tojson }};
+    window.LEG_MAP_NO_SNAP_LOCATION_TYPES_FROM_SERVER = {{ (leg_map_no_snap_location_types | default(['traffic', 'extract', 'aid'], true)) | tojson }};
     window.EVENT_CHOICES_FROM_SERVER = {{ (event_choices | default([])) | tojson }};
     window.SEGMENT_SCHEMA_CHOICES_FROM_SERVER = {{ (segment_schema_choices | default([])) | tojson }};
     window.SEGMENT_DIRECTION_CHOICES_FROM_SERVER = {{ (segment_direction_choices | default([])) | tojson }};
@@ -205,7 +206,7 @@
 <script src="/static/js/map/base_map.js"></script>
 <script src="/static/js/table_actions.js?v=775b"></script>
 <script src="/static/js/map/course_mapping.js?v=774a"></script>
-<script src="/static/js/map/segment_recipes.js?v=776a"></script>
+<script src="/static/js/map/segment_recipes.js?v=777c"></script>
 <script src="/static/js/runners_baseline.js?v=756i"></script>
 <script src="/static/js/race_configuration.js?v=770i"></script>
 {% endblock %}
