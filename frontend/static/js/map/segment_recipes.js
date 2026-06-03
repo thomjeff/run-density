@@ -34,6 +34,9 @@
     var legTrimEndIdx = 0;
     var legTrimGhostLayer = null;
     var legTrimMarkerLayer = null;
+    var legBoundsCache = {};
+    var legsTableBoundsFilter = null;
+    var coursePreviewBoundsFilter = null;
 
     function schemaLabelForValue(value) {
         var v = String(value || 'on_course_open');
@@ -241,6 +244,219 @@
         });
     }
 
+    function updateLegsMapBoundsStatus(visible, total) {
+        var el = document.getElementById('leg-map-bounds-status');
+        if (!el) return;
+        if (!total) {
+            el.textContent = '';
+            return;
+        }
+        if (visible >= total) {
+            el.textContent = 'Showing all ' + total + ' legs';
+        } else {
+            el.textContent = 'Showing ' + visible + ' of ' + total + ' legs in map view';
+        }
+    }
+
+    function updateCoursePreviewBoundsStatus(segVisible, segTotal, locVisible, locTotal) {
+        var el = document.getElementById('course-preview-bounds-status');
+        if (!el) return;
+        if (!segTotal && !locTotal) {
+            el.textContent = '';
+            return;
+        }
+        var parts = [];
+        if (segTotal) {
+            parts.push(
+                segVisible >= segTotal
+                    ? 'All ' + segTotal + ' segments'
+                    : segVisible + ' of ' + segTotal + ' segments'
+            );
+        }
+        if (locTotal) {
+            parts.push(
+                locVisible >= locTotal
+                    ? 'all ' + locTotal + ' locations'
+                    : locVisible + ' of ' + locTotal + ' locations'
+            );
+        }
+        el.textContent = 'Map view: ' + parts.join(' · ');
+    }
+
+    function legIntersectsBounds(leg, bounds) {
+        if (!leg || !bounds || !bounds.isValid()) return false;
+        var cached = legBoundsCache[leg.id];
+        if (cached && cached.isValid && cached.isValid()) {
+            return bounds.intersects(cached);
+        }
+        function hasPt(lat, lon) {
+            var la = parseFloat(lat);
+            var lo = parseFloat(lon);
+            return !isNaN(la) && !isNaN(lo) && bounds.contains([la, lo]);
+        }
+        if (hasPt(leg.start_lat, leg.start_lon) || hasPt(leg.end_lat, leg.end_lon)) return true;
+        var locs = leg.locations || [];
+        for (var i = 0; i < locs.length; i++) {
+            if (hasPt(locs[i].lat, locs[i].lon)) return true;
+        }
+        return false;
+    }
+
+    function initLegsTableBoundsFilter() {
+        if (!window.MapBoundsTableFilter || legsTableBoundsFilter) return;
+        legsTableBoundsFilter = window.MapBoundsTableFilter.create({
+            getMap: function () { return window.courseMappingMap; },
+            isItemInBounds: function (leg, bounds) {
+                return legIntersectsBounds(leg, bounds);
+            },
+            onFilter: function (visible, stats) {
+                renderLegsTable(visible);
+                updateLegsMapBoundsStatus(stats.visible, stats.total);
+            }
+        });
+    }
+
+    function syncLegsTableBoundsFilterItems() {
+        initLegsTableBoundsFilter();
+        if (!legsTableBoundsFilter) return;
+        legsTableBoundsFilter.setAllItems((libraryState && libraryState.legs) || []);
+    }
+
+    function attachLegsTableBoundsFilter() {
+        initLegsTableBoundsFilter();
+        if (!legsTableBoundsFilter) return;
+        var map = window.courseMappingMap;
+        if (map) {
+            legsTableBoundsFilter.attach(map);
+            syncLegsTableBoundsFilterItems();
+        }
+    }
+
+    function fitLegMapToAllLegs() {
+        var map = window.courseMappingMap;
+        var legs = (libraryState && libraryState.legs) || [];
+        if (!map || !legs.length || selectedLegId) return;
+        var points = [];
+        legs.forEach(function (leg) {
+            if (leg.start_lat != null && leg.start_lon != null) {
+                points.push([leg.start_lat, leg.start_lon]);
+            }
+            if (leg.end_lat != null && leg.end_lon != null) {
+                points.push([leg.end_lat, leg.end_lon]);
+            }
+        });
+        if (points.length < 2) return;
+        function doFit() {
+            try {
+                map.fitBounds(L.latLngBounds(points), { padding: [48, 48], maxZoom: 14 });
+            } catch (e) { /* empty */ }
+        }
+        if (legsTableBoundsFilter) {
+            legsTableBoundsFilter.runProgrammatic(doFit);
+        } else {
+            doFit();
+        }
+    }
+
+    function segmentIntersectsBounds(seg, bounds) {
+        if (!seg || !bounds || !bounds.isValid()) return false;
+        if (seg.leg_id && libraryState && libraryState.legs) {
+            var leg = libraryState.legs.find(function (c) {
+                return c.id === seg.leg_id;
+            });
+            if (leg && legIntersectsBounds(leg, bounds)) return true;
+        }
+        if (coursePreviewLineLayer && seg.start_index != null && seg.end_index != null) {
+            var latlngs = coursePreviewLineLayer.getLatLngs();
+            var flat = latlngs;
+            if (latlngs.length && latlngs[0] && Array.isArray(latlngs[0])) {
+                flat = [];
+                latlngs.forEach(function (part) {
+                    part.forEach(function (ll) { flat.push(ll); });
+                });
+            }
+            var lo = Math.min(seg.start_index, seg.end_index);
+            var hi = Math.max(seg.start_index, seg.end_index);
+            for (var i = lo; i <= hi && i < flat.length; i++) {
+                if (bounds.contains(flat[i])) return true;
+            }
+        }
+        return false;
+    }
+
+    function buildCoursePreviewBoundsItems() {
+        var items = [];
+        var pkg = window.configPackageCourse;
+        if (!pkg || !pkg.getCourse) return items;
+        var course = pkg.getCourse();
+        if (!course) return items;
+        (course.segments || []).forEach(function (seg, i) {
+            items.push({ kind: 'segment', index: i, data: seg });
+        });
+        (course.locations || []).forEach(function (loc, i) {
+            items.push({ kind: 'location', index: i, data: loc });
+        });
+        return items;
+    }
+
+    function applyCoursePreviewBoundsToTables(visibleItems, stats) {
+        var segIndices = [];
+        var locIndices = [];
+        var segTotal = 0;
+        var locTotal = 0;
+        var pkg = window.configPackageCourse;
+        if (pkg && pkg.getCourse) {
+            var course = pkg.getCourse();
+            if (course) {
+                segTotal = (course.segments || []).length;
+                locTotal = (course.locations || []).length;
+            }
+        }
+        (visibleItems || []).forEach(function (item) {
+            if (item.kind === 'segment') segIndices.push(item.index);
+            else if (item.kind === 'location') locIndices.push(item.index);
+        });
+        if (pkg) {
+            if (pkg.renderSegmentsListFiltered) pkg.renderSegmentsListFiltered(segIndices);
+            if (pkg.renderLocationsListFiltered) pkg.renderLocationsListFiltered(locIndices);
+        }
+        updateCoursePreviewBoundsStatus(segIndices.length, segTotal, locIndices.length, locTotal);
+    }
+
+    function initCoursePreviewBoundsFilter() {
+        if (!window.MapBoundsTableFilter || coursePreviewBoundsFilter) return;
+        coursePreviewBoundsFilter = window.MapBoundsTableFilter.create({
+            getMap: function () { return coursePreviewMap; },
+            isItemInBounds: function (item, bounds) {
+                if (item.kind === 'location') {
+                    var lat = parseFloat(item.data.lat);
+                    var lon = parseFloat(item.data.lon);
+                    return !isNaN(lat) && !isNaN(lon) && bounds.contains([lat, lon]);
+                }
+                return segmentIntersectsBounds(item.data, bounds);
+            },
+            onFilter: function (visible, stats) {
+                applyCoursePreviewBoundsToTables(visible, stats);
+            }
+        });
+    }
+
+    function syncCoursePreviewBoundsFilterItems() {
+        initCoursePreviewBoundsFilter();
+        if (!coursePreviewBoundsFilter) return;
+        coursePreviewBoundsFilter.setAllItems(buildCoursePreviewBoundsItems());
+    }
+
+    function attachCoursePreviewBoundsFilter() {
+        initCoursePreviewBoundsFilter();
+        if (!coursePreviewBoundsFilter) return;
+        var map = ensureCoursePreviewMap();
+        if (map) {
+            coursePreviewBoundsFilter.attach(map);
+            syncCoursePreviewBoundsFilterItems();
+        }
+    }
+
     function updateAddLocationButtonLabel() {
         var btn = document.getElementById('btn-leg-add-location');
         if (!btn) return;
@@ -259,6 +475,7 @@
         libraryState = data;
         orderGrid = data.order_grid || {};
         renderLegsTable();
+        syncLegsTableBoundsFilterItems();
         renderRecipeTable();
         renderTotals(data.recipe_lengths_km);
         renderWarnings(data.stitch_warnings);
@@ -1431,33 +1648,40 @@
     function fitLegMapBounds(leg) {
         var map = window.courseMappingMap;
         if (!map) return;
-        var points = [];
-        if (selectedLegLatLngs && selectedLegLatLngs.length >= 2) {
-            points.push(selectedLegLatLngs[0]);
-            points.push(selectedLegLatLngs[selectedLegLatLngs.length - 1]);
-        }
-        if (leg) {
-            if (leg.start_lat != null && leg.start_lon != null) {
-                points.push([leg.start_lat, leg.start_lon]);
+        function doFit() {
+            var points = [];
+            if (selectedLegLatLngs && selectedLegLatLngs.length >= 2) {
+                points.push(selectedLegLatLngs[0]);
+                points.push(selectedLegLatLngs[selectedLegLatLngs.length - 1]);
             }
-            if (leg.end_lat != null && leg.end_lon != null) {
-                points.push([leg.end_lat, leg.end_lon]);
+            if (leg) {
+                if (leg.start_lat != null && leg.start_lon != null) {
+                    points.push([leg.start_lat, leg.start_lon]);
+                }
+                if (leg.end_lat != null && leg.end_lon != null) {
+                    points.push([leg.end_lat, leg.end_lon]);
+                }
+                (leg.locations || []).forEach(function (loc) {
+                    if (loc.lat != null && loc.lon != null) points.push([loc.lat, loc.lon]);
+                });
             }
-            (leg.locations || []).forEach(function (loc) {
+            pendingLegLocations.forEach(function (loc) {
                 if (loc.lat != null && loc.lon != null) points.push([loc.lat, loc.lon]);
             });
+            if (points.length === 0) return;
+            if (points.length === 1) {
+                map.setView(points[0], Math.max(map.getZoom(), 14));
+                return;
+            }
+            try {
+                map.fitBounds(L.latLngBounds(points), { padding: [48, 48] });
+            } catch (e) { /* empty */ }
         }
-        pendingLegLocations.forEach(function (loc) {
-            if (loc.lat != null && loc.lon != null) points.push([loc.lat, loc.lon]);
-        });
-        if (points.length === 0) return;
-        if (points.length === 1) {
-            map.setView(points[0], Math.max(map.getZoom(), 14));
-            return;
+        if (legsTableBoundsFilter) {
+            legsTableBoundsFilter.runProgrammatic(doFit);
+        } else {
+            doFit();
         }
-        try {
-            map.fitBounds(L.latLngBounds(points), { padding: [48, 48] });
-        } catch (e) { /* empty */ }
     }
 
     function refreshSelectedLegMap(options) {
@@ -1637,6 +1861,11 @@
                 var coords = feature.geometry.coordinates;
                 var latlngs = coords.map(function (c) { return [c[1], c[0]]; });
                 selectedLegLatLngs = latlngs;
+                try {
+                    legBoundsCache[legId] = L.latLngBounds(latlngs);
+                } catch (e) {
+                    delete legBoundsCache[legId];
+                }
                 setLegRoutePolyline(latlngs);
                 var props = feature.properties || {};
                 var currentLeg = getSelectedLeg() || leg;
@@ -1740,16 +1969,24 @@
         }
     }
 
-    function renderLegsTable() {
+    function renderLegsTable(legsSubset) {
         var tbody = document.getElementById('course-legs-tbody');
         var wrap = document.getElementById('course-legs-table-wrap');
         var empty = document.getElementById('course-legs-empty');
         if (!tbody) return;
-        var legs = (libraryState && libraryState.legs) || [];
-        if (!legs.length) {
+        var allLegs = (libraryState && libraryState.legs) || [];
+        var legs = legsSubset || allLegs;
+        if (!allLegs.length) {
             if (wrap) wrap.style.display = 'none';
             if (empty) empty.style.display = 'block';
             clearLegMap();
+            updateLegsMapBoundsStatus(0, 0);
+            return;
+        }
+        if (!legs.length) {
+            if (wrap) wrap.style.display = 'block';
+            if (empty) empty.style.display = 'none';
+            tbody.innerHTML = '';
             return;
         }
         if (empty) empty.style.display = 'none';
@@ -2022,20 +2259,32 @@
                 if (coursePreviewLocationsLayer) {
                     bounds = bounds.extend(coursePreviewLocationsLayer.getBounds());
                 }
-                map.fitBounds(bounds, { padding: [28, 28], maxZoom: 15 });
-                if (wrap) wrap.style.display = 'block';
-                if (empty) empty.style.display = 'none';
-                if (meta) {
-                    meta.style.display = 'block';
-                    meta.textContent =
-                        eventColumnLabel(eventId) +
-                        ': ' +
-                        Number(data.length_km).toFixed(2) +
-                        ' km · ' +
-                        (data.leg_count || 0) +
-                        ' legs';
+                function finishPreviewLoad() {
+                    if (wrap) wrap.style.display = 'block';
+                    if (empty) empty.style.display = 'none';
+                    if (meta) {
+                        meta.style.display = 'block';
+                        meta.textContent =
+                            eventColumnLabel(eventId) +
+                            ': ' +
+                            Number(data.length_km).toFixed(2) +
+                            ' km · ' +
+                            (data.leg_count || 0) +
+                            ' legs';
+                    }
+                    attachCoursePreviewBoundsFilter();
+                    syncCoursePreviewBoundsFilterItems();
+                    setTimeout(function () { map.invalidateSize(); }, 120);
                 }
-                setTimeout(function () { map.invalidateSize(); }, 120);
+                if (coursePreviewBoundsFilter) {
+                    coursePreviewBoundsFilter.runProgrammatic(function () {
+                        map.fitBounds(bounds, { padding: [28, 28], maxZoom: 15 });
+                        finishPreviewLoad();
+                    });
+                } else {
+                    map.fitBounds(bounds, { padding: [28, 28], maxZoom: 15 });
+                    finishPreviewLoad();
+                }
             })
             .catch(function (err) {
                 var map = coursePreviewMap;
@@ -2126,6 +2375,8 @@
                 setLegStatus('');
                 setRecipeStatus('');
                 bindLegMapControls();
+                attachLegsTableBoundsFilter();
+                fitLegMapToAllLegs();
             })
             .catch(function (err) {
                 setLegStatus(err.message || String(err), true);
@@ -2143,6 +2394,7 @@
             .then(function () {
                 syncCoursePanelUi({ autoOpen: true });
                 syncCoursePreviewUi();
+                attachCoursePreviewBoundsFilter();
             });
     }
 
@@ -2593,12 +2845,17 @@
         resolveLegLabelsForSegment: resolveLegLabelsForSegment,
         onLegsTabShown: function () {
             bindLegMapControls();
+            attachLegsTableBoundsFilter();
             if (window.courseMappingMap) {
                 setTimeout(function () {
                     window.courseMappingMap.invalidateSize();
                     bindLegMapControls();
+                    attachLegsTableBoundsFilter();
                 }, 100);
             }
-        }
+        },
+        attachLegsTableBoundsFilter: attachLegsTableBoundsFilter,
+        attachCoursePreviewBoundsFilter: attachCoursePreviewBoundsFilter,
+        syncCoursePreviewBoundsFilterItems: syncCoursePreviewBoundsFilterItems
     };
 })();

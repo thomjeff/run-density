@@ -74,13 +74,39 @@
     <div id="course-map-legacy-slot"></div>
 
     <div id="config-package-legs-panel" class="config-package-panel config-legs-layout" style="display: none;">
+        <section class="course-derived-section config-legs-map-section" aria-labelledby="config-legs-map-heading">
+            <h4 id="config-legs-map-heading" class="course-derived-heading">Leg map</h4>
+            <p class="course-derived-empty config-legs-map-lead">
+                Pan and zoom to filter the legs table below. Select a leg, then <strong>Add Locations</strong>.
+                <strong>Course, water, and official</strong> snap to the purple route;
+                <strong>aid</strong>, <strong>traffic</strong>, and <strong>extract</strong> stay at your click.
+            </p>
+            <div id="config-legs-map-slot" class="config-legs-map-slot">
+                <div id="course-map-container" class="config-legs-map-region">
+                <div id="course-mapping-map" aria-label="Leg and course map">
+                    <div class="map-loading">Loading map...</div>
+                    <div id="leg-map-bounds-status" class="config-map-bounds-status" aria-live="polite"></div>
+                    <div id="leg-map-toolbar" class="leg-map-toolbar">
+                        <button type="button" id="btn-leg-trim-route" class="course-btn" disabled title="Select a leg, then drag start or end along the route">Trim route</button>
+                        <button type="button" id="btn-leg-reshape-route" class="course-btn" disabled title="Select a leg, simplify the route, then drag yellow anchors to nudge it">Reshape route</button>
+                        <span id="leg-route-edit-actions" class="leg-route-edit-actions" style="display: none;">
+                            <button type="button" id="btn-leg-route-edit-confirm" class="course-btn primary">Confirm</button>
+                            <button type="button" id="btn-leg-route-edit-cancel" class="course-btn">Cancel</button>
+                        </span>
+                        <button type="button" id="btn-leg-add-location" class="course-btn" disabled title="Select a leg in the table first">Add Locations</button>
+                    </div>
+                    <div id="basemap-toggle" style="display: none;">
+                        <button type="button" id="btn-street" class="course-btn active">Street</button>
+                        <button type="button" id="btn-satellite" class="course-btn">Satellite</button>
+                    </div>
+                </div>
+                </div>
+            </div>
+        </section>
         <section class="course-derived-section" id="course-legs-card">
             <h4 class="course-derived-heading">Course legs</h4>
             <p class="course-derived-empty" style="margin-bottom: 0.5rem;">
                 Import GPX files, then select a leg in the table (use <strong>Edit</strong> on that row for leg details).
-                Use <strong>Add Locations</strong> to place pins.
-                <strong>Course, water, and official</strong> snap to the purple route;
-                <strong>aid</strong>, <strong>traffic</strong>, and <strong>extract</strong> stay where you click.
                 Set <strong>Proxy loc ID</strong> on the
                 <button type="button" id="btn-go-to-recipes" class="course-link-btn">Course</button> tab.
             </p>
@@ -113,36 +139,6 @@
             </div>
             <p id="course-legs-empty" class="course-derived-empty">No legs yet. Use <strong>Import GPX</strong> to add one or more route files.</p>
         </section>
-        <section class="course-derived-section config-legs-map-section" aria-labelledby="config-legs-map-heading">
-            <h4 id="config-legs-map-heading" class="course-derived-heading">Leg map</h4>
-            <p class="course-derived-empty config-legs-map-lead">
-                Select a leg, then <strong>Add Locations</strong>.
-                <strong>Course, water, and official</strong> snap to the purple route;
-                <strong>aid</strong>, <strong>traffic</strong>, and <strong>extract</strong> stay at your click.
-                Use <strong>Trim route</strong> to drag the green/red ends along the track and shorten the leg, or <strong>Reshape route</strong> to simplify and nudge corners.
-                <strong>Confirm</strong> saves edits. Click a location pin to edit label/type or delete.
-            </p>
-            <div id="config-legs-map-slot" class="config-legs-map-slot">
-                <div id="course-map-container" class="config-legs-map-region">
-                <div id="course-mapping-map" aria-label="Leg and course map">
-                    <div class="map-loading">Loading map...</div>
-                    <div id="leg-map-toolbar" class="leg-map-toolbar">
-                        <button type="button" id="btn-leg-trim-route" class="course-btn" disabled title="Select a leg, then drag start or end along the route">Trim route</button>
-                        <button type="button" id="btn-leg-reshape-route" class="course-btn" disabled title="Select a leg, simplify the route, then drag yellow anchors to nudge it">Reshape route</button>
-                        <span id="leg-route-edit-actions" class="leg-route-edit-actions" style="display: none;">
-                            <button type="button" id="btn-leg-route-edit-confirm" class="course-btn primary">Confirm</button>
-                            <button type="button" id="btn-leg-route-edit-cancel" class="course-btn">Cancel</button>
-                        </span>
-                        <button type="button" id="btn-leg-add-location" class="course-btn" disabled title="Select a leg in the table first">Add Locations</button>
-                    </div>
-                    <div id="basemap-toggle" style="display: none;">
-                        <button type="button" id="btn-street" class="course-btn active">Street</button>
-                        <button type="button" id="btn-satellite" class="course-btn">Satellite</button>
-                    </div>
-                </div>
-                </div>
-            </div>
-        </section>
     </div>
 
     <div id="config-package-course-panel" class="config-package-panel" style="display: none;">
@@ -154,7 +150,9 @@
             <p id="course-preview-empty" class="course-derived-empty">Save event recipes to preview each distance route.</p>
             <p id="course-preview-meta" class="course-derived-empty" style="display: none; margin-bottom: 0.5rem;"></p>
             <div id="course-preview-map-wrap" class="config-course-preview-map-wrap" style="display: none;">
-                <div id="course-preview-map" aria-label="Stitched event route preview"></div>
+                <div id="course-preview-map" aria-label="Stitched event route preview">
+                    <div id="course-preview-bounds-status" class="config-map-bounds-status" aria-live="polite"></div>
+                </div>
             </div>
         </section>
         <section class="course-derived-section" id="segments-card">
@@ -162,7 +160,7 @@
                 <h4 class="course-derived-heading">Segments (combined course)</h4>
                 <button type="button" id="btn-edit-event-recipes" class="course-map-action-text-btn" style="display: none;" title="Change leg order per event and re-export segments">Edit event recipes</button>
             </div>
-            <p id="segments-empty" class="course-derived-empty">Build the combined course from your legs using <strong>event recipes</strong> (set leg order per distance, then export).</p>
+            <p id="segments-empty" class="course-derived-empty">Build the combined course from your legs using <strong>event recipes</strong> (set leg order per distance, then export). Pan/zoom the preview map to filter segments and locations tables.</p>
             <div id="segments-table-wrap" style="display: none;">
                 <div class="scrollable-table-container course-derived-table-scroll">
                     <table id="segments-table" class="table-sticky-header" style="width: 100%; font-size: 0.875rem;">

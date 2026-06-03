@@ -51,13 +51,34 @@
         color: #2c3e50;
     }
     #config-package-legs-panel .config-legs-map-section {
-        margin-top: 0.25rem;
-        padding-top: 1.25rem;
-        border-top: 1px solid #ecf0f1;
+        margin-top: 0;
+        padding-top: 0;
+        border-top: none;
         flex: 1 1 auto;
         min-height: 0;
         display: flex;
         flex-direction: column;
+    }
+    #config-package-legs-panel #course-legs-card {
+        padding-top: 1.25rem;
+        margin-top: 0.25rem;
+        border-top: 1px solid #ecf0f1;
+        flex: 0 0 auto;
+    }
+    .config-map-bounds-status {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        z-index: 900;
+        max-width: min(280px, 90%);
+        padding: 0.4rem 0.6rem;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+        font-size: 0.8rem;
+        color: #495057;
+        line-height: 1.35;
+        pointer-events: none;
     }
     #config-package-legs-panel .config-legs-map-lead {
         margin: 0 0 0.65rem 0;
@@ -82,6 +103,7 @@
         margin-bottom: 0.75rem;
     }
     #course-preview-map {
+        position: relative;
         height: min(42vh, 380px);
         min-height: 220px;
         width: 100%;

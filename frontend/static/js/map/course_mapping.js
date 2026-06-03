@@ -3315,7 +3315,18 @@ document.addEventListener('DOMContentLoaded', function () {
         thead.appendChild(lenTh);
     }
 
-    function renderSegmentsList() {
+    function visibleIndexSet(visibleIndices) {
+        if (visibleIndices == null) return null;
+        if (visibleIndices instanceof Set) return visibleIndices;
+        var s = new Set();
+        (visibleIndices || []).forEach(function (i) {
+            s.add(i);
+        });
+        return s;
+    }
+
+    function renderSegmentsList(visibleIndices) {
+        var indexFilter = visibleIndexSet(visibleIndices);
         var card = document.getElementById('segments-card');
         var empty = document.getElementById('segments-empty');
         var wrap = document.getElementById('segments-table-wrap');
@@ -3337,6 +3348,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var eventIds = segmentsTableEventIds();
         var computedEventDistances = computeEventDistancesForSegments(currentCourse.segments, eventIds);
         currentCourse.segments.forEach(function (seg, segIdx) {
+            if (indexFilter && !indexFilter.has(segIdx)) return;
             var len = (seg.to_km - seg.from_km);
             var startIdx = seg.start_index != null ? seg.start_index : 0;
             var endIdx = seg.end_index != null ? seg.end_index : (coordsLen ? coordsLen - 1 : 0);
@@ -3460,6 +3472,10 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             tbody.appendChild(tr);
         });
+        if (!indexFilter && isConfigPackageMode() && window.segmentRecipes &&
+            window.segmentRecipes.syncCoursePreviewBoundsFilterItems) {
+            window.segmentRecipes.syncCoursePreviewBoundsFilterItems();
+        }
     }
 
     function getLocationTypeLabel(locType) {
@@ -3658,7 +3674,8 @@ document.addEventListener('DOMContentLoaded', function () {
             });
     }
 
-    function renderLocationsList() {
+    function renderLocationsList(visibleIndices) {
+        var indexFilter = visibleIndexSet(visibleIndices);
         var card = document.getElementById('locations-card');
         var empty = document.getElementById('locations-empty');
         var wrap = document.getElementById('locations-table-wrap');
@@ -3678,6 +3695,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var resourceTotals = {};
         getPackageResources().forEach(function (res) { resourceTotals[res.code] = 0; });
         currentCourse.locations.forEach(function (loc, i) {
+            if (indexFilter && !indexFilter.has(i)) return;
             syncLocationResourceCounts(loc);
             var tr = document.createElement('tr');
             var typeLabel = getLocationTypeLabel(loc.loc_type);
@@ -3772,6 +3790,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     currentCourse.locations.length > 0
                 )
             );
+        }
+        if (!indexFilter && isConfigPackageMode() && window.segmentRecipes &&
+            window.segmentRecipes.syncCoursePreviewBoundsFilterItems) {
+            window.segmentRecipes.syncCoursePreviewBoundsFilterItems();
         }
     }
 
@@ -4763,6 +4785,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 );
             },
             renderSegmentsList: renderSegmentsList,
+            renderSegmentsListFiltered: function (indices) {
+                renderSegmentsList(indices);
+            },
+            renderLocationsListFiltered: function (indices) {
+                renderLocationsList(indices);
+            },
+            getCourse: function () {
+                return currentCourse;
+            },
             getCourseLocations: getCourseLocations,
             buildLocationTooltipHtml: buildConfigLocationTooltipHtml,
             getLocationPinColor: getLocationPinColor,
