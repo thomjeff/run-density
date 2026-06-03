@@ -3764,6 +3764,15 @@ document.addEventListener('DOMContentLoaded', function () {
         if (window.segmentRecipes && window.segmentRecipes.renderCoursePreviewLocations) {
             window.segmentRecipes.renderCoursePreviewLocations();
         }
+        if (window.locationGridEditor) {
+            window.locationGridEditor.updateOpenButtonVisibility(
+                !!(
+                    isConfigPackageMode() &&
+                    canEditLocationsInWorkspace() &&
+                    currentCourse.locations.length > 0
+                )
+            );
+        }
     }
 
     function closestVertexIndex(latLng, coordinates) {
@@ -4703,6 +4712,35 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         var segmentEditorClose = document.getElementById('segment-editor-close');
         if (segmentEditorClose) segmentEditorClose.addEventListener('click', closeSegmentEditor);
+
+        if (window.locationGridEditor) {
+            window.locationGridEditor.init({
+                canEdit: canEditLocationsInWorkspace,
+                getLocations: function () {
+                    return (currentCourse && currentCourse.locations) || [];
+                },
+                applyLocations: function (locs) {
+                    if (!currentCourse) return;
+                    currentCourse.locations = locs;
+                    normalizeCourseLocations(currentCourse);
+                    currentCourse.locations.forEach(syncLocationResourceCounts);
+                    setDirty();
+                },
+                persist: persistConfigPackageCourse,
+                onSaved: function () {
+                    renderLocationsTableHeader();
+                    renderLocationsList();
+                    renderLocationPins();
+                    updateCourseUI();
+                },
+                getResources: getPackageResources,
+                getPackageEventDay: getPackageEventDay,
+                locationTypes: LOCATION_TYPES,
+                eventChoices: EVENT_CHOICES,
+                locationNumericId: locationNumericId,
+                offCourseUsesProxyTiming: offCourseUsesProxyTiming
+            });
+        }
 
         window.configPackageCourse = {
             enterEdit: function () {

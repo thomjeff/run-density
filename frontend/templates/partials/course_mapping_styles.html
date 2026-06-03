@@ -859,4 +859,109 @@
     #resources-new-code {
         text-transform: lowercase;
     }
+
+    .location-grid-modal-panel {
+        width: min(92vw, 1400px);
+        max-width: 92vw;
+        max-height: 90vh;
+        display: flex;
+        flex-direction: column;
+    }
+    .location-grid-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem 0.75rem;
+        padding: 0.5rem 1rem;
+        border-bottom: 1px solid #ecf0f1;
+        font-size: 0.85rem;
+    }
+    .location-grid-system-toggle {
+        margin-left: auto;
+        font-size: 0.8rem;
+        color: #7f8c8d;
+    }
+    .location-grid-dirty-label {
+        color: #c0392b;
+        font-weight: 600;
+    }
+    .location-grid-body {
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+    }
+    .location-grid-scroll {
+        max-height: calc(90vh - 200px);
+        overflow: auto;
+    }
+    .location-grid-table {
+        font-size: 0.78rem;
+        width: max-content;
+        min-width: 100%;
+    }
+    .location-grid-table th,
+    .location-grid-table td {
+        white-space: nowrap;
+        padding: 0.2rem 0.35rem;
+        vertical-align: middle;
+    }
+    .location-grid-table th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #f8f9fa;
+    }
+    .location-grid-table .grid-col-select {
+        width: 2rem;
+        text-align: center;
+    }
+    .location-grid-table .grid-cell-input,
+    .location-grid-table .grid-cell-select {
+        width: 100%;
+        min-width: 4.5rem;
+        max-width: 12rem;
+        font-size: 0.78rem;
+        padding: 0.15rem 0.25rem;
+        border: 1px solid #dfe6e9;
+        border-radius: 3px;
+    }
+    .location-grid-table .grid-cell-input.grid-cell-wide {
+        min-width: 8rem;
+        max-width: 16rem;
+    }
+    .location-grid-table .grid-cell-readonly {
+        color: #7f8c8d;
+        font-size: 0.75rem;
+    }
+    .location-grid-table tr.location-grid-row-selected td {
+        background: #ebf5fb;
+    }
+    .location-grid-table .location-grid-readonly {
+        color: #7f8c8d;
+        font-size: 0.75rem;
+    }
+    .location-grid-bulk-field {
+        margin-bottom: 0.75rem;
+    }
+    .location-grid-bulk-check {
+        display: block;
+        font-size: 0.85rem;
+        margin-bottom: 0.25rem;
+    }
+    .location-grid-footer {
+        gap: 0.5rem;
+    }
+    #location-grid-bulk-body .bulk-field-row {
+        margin-bottom: 0.75rem;
+    }
+    #location-grid-bulk-body .bulk-field-row label {
+        display: block;
+        font-size: 0.85rem;
+        margin-bottom: 0.25rem;
+    }
+    #location-grid-bulk-impact {
+        font-size: 0.8rem;
+        color: #7f8c8d;
+        margin-top: 0.5rem;
+    }
 </style>
