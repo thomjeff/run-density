@@ -44,6 +44,7 @@ from app.utils.constants import (
     COURSE_EVENT_IDS,
     LOCATION_PLACEMENT_CHOICES,
     LOCATION_TYPE_CHOICES,
+    OFF_COURSE_LOCATION_TYPES,
     ON_COURSE_LOCATION_TYPES,
     SEGMENT_DIRECTION_CHOICES,
     SEGMENT_DIRECTION_VALUES,
@@ -586,6 +587,196 @@ def _segment_for_leg(
     return None
 
 
+def _parse_location_seg_ids(seg_id_value: Any) -> List[str]:
+    """Parse comma-separated seg_id(s) on a location row."""
+    if seg_id_value is None:
+        return []
+    raw = str(seg_id_value).strip()
+    if not raw:
+        return []
+    return [s.strip() for s in raw.split(",") if s.strip()]
+
+
+def _valid_segment_ids(segments: Sequence[Dict[str, Any]]) -> set[str]:
+    return {
+        str(seg.get("seg_id", "")).strip()
+        for seg in segments
+        if isinstance(seg, dict) and str(seg.get("seg_id", "")).strip()
+    }
+
+
+def _leg_id_for_location(loc: Dict[str, Any]) -> str:
+    leg_id = str(loc.get("leg_id") or "").strip()
+    if leg_id:
+        return leg_id
+    key = str(loc.get("leg_loc_key") or "").strip()
+    if ":" in key:
+        return key.partition(":")[0].strip()
+    return ""
+
+
+def _proxy_loc_id_is_set(proxy_val: Any) -> bool:
+    if proxy_val is None:
+        return False
+    if isinstance(proxy_val, str) and not proxy_val.strip():
+        return False
+    return str(proxy_val).strip().lower() not in ("nan", "none")
+
+
+def refresh_location_seg_ids_from_segments(
+    locations: Sequence[Dict[str, Any]],
+    segments: Sequence[Dict[str, Any]],
+    *,
+    unmapped: Optional[List[Dict[str, Any]]] = None,
+) -> int:
+    """
+    Issue #774: Align on-course ``seg_id`` with current segments via ``leg_id``.
+
+    Off-course types (traffic, extract) get empty ``seg_id``. Returns count of
+    locations whose ``seg_id`` field changed.
+    """
+    valid_seg_ids = _valid_segment_ids(segments)
+    updated = 0
+    off_course = set(OFF_COURSE_LOCATION_TYPES)
+
+    for loc in locations:
+        if not isinstance(loc, dict):
+            continue
+        loc_type = str(loc.get("loc_type") or "").strip().lower()
+        old_seg = str(loc.get("seg_id") or "").strip()
+
+        if loc_type in off_course:
+            if old_seg:
+                loc["seg_id"] = ""
+                updated += 1
+            continue
+
+        if loc_type not in ON_COURSE_LOCATION_TYPES:
+            continue
+
+        leg_id = _leg_id_for_location(loc)
+        if leg_id:
+            seg = _segment_for_leg(segments, leg_id)
+            new_seg = str(seg.get("seg_id", "")).strip() if seg else ""
+            if new_seg != old_seg:
+                loc["seg_id"] = new_seg
+                updated += 1
+            if not new_seg and unmapped is not None:
+                unmapped.append(
+                    {
+                        "id": loc.get("id"),
+                        "loc_label": loc.get("loc_label"),
+                        "leg_id": leg_id,
+                        "reason": "no_segment_for_leg",
+                    }
+                )
+            continue
+
+        parsed = _parse_location_seg_ids(loc.get("seg_id"))
+        if not parsed:
+            continue
+        kept = [sid for sid in parsed if sid in valid_seg_ids]
+        new_val = ",".join(kept)
+        if new_val != old_seg:
+            loc["seg_id"] = new_val
+            updated += 1
+            if not kept and unmapped is not None:
+                unmapped.append(
+                    {
+                        "id": loc.get("id"),
+                        "loc_label": loc.get("loc_label"),
+                        "seg_id": old_seg,
+                        "reason": "stale_seg_id",
+                    }
+                )
+
+    return updated
+
+
+def validate_locations_for_export(course: Dict[str, Any]) -> List[str]:
+    """
+    Issue #774 / #775: Fail-fast checks before writing locations.csv.
+
+    Validates segment references and proxy_loc_id targets.
+    """
+    segments = [
+        s for s in (course.get("segments") or []) if isinstance(s, dict)
+    ]
+    valid_seg_ids = _valid_segment_ids(segments)
+    locations = [
+        loc for loc in (course.get("locations") or []) if isinstance(loc, dict)
+    ]
+    by_id: Dict[int, Dict[str, Any]] = {}
+    for loc in locations:
+        lid = parse_location_id(loc.get("id", loc.get("loc_id")))
+        if lid is not None and lid > 0:
+            by_id[lid] = loc
+
+    errors: List[str] = []
+    for loc in locations:
+        lid = parse_location_id(loc.get("id", loc.get("loc_id")))
+        label = str(loc.get("loc_label") or lid or "location").strip()
+        loc_type = str(loc.get("loc_type") or "").strip().lower()
+
+        for sid in _parse_location_seg_ids(loc.get("seg_id")):
+            if sid not in valid_seg_ids:
+                errors.append(
+                    f'Location "{label}" (id={lid}): seg_id "{sid}" not in segments.csv'
+                )
+
+        proxy_val = loc.get("proxy_loc_id")
+        if not _proxy_loc_id_is_set(proxy_val):
+            continue
+        try:
+            proxy_id = int(proxy_val)
+        except (TypeError, ValueError):
+            errors.append(
+                f'Location "{label}" (id={lid}): proxy_loc_id must be a numeric loc_id'
+            )
+            continue
+        if lid is not None and proxy_id == lid:
+            errors.append(
+                f'Location "{label}" (id={lid}): proxy_loc_id cannot reference itself'
+            )
+        elif proxy_id not in by_id:
+            errors.append(
+                f'Location "{label}" (id={lid}): proxy_loc_id {proxy_id} not found'
+            )
+        if _proxy_loc_id_is_set(proxy_val) and _parse_location_seg_ids(loc.get("seg_id")):
+            errors.append(
+                f'Location "{label}" (id={lid}): set only proxy_loc_id or seg_id, not both (Issue #751)'
+            )
+        if loc_type in OFF_COURSE_LOCATION_TYPES and _parse_location_seg_ids(
+            loc.get("seg_id")
+        ):
+            errors.append(
+                f'Location "{label}" (id={lid}): {loc_type} locations should have empty seg_id when using proxy timing'
+            )
+
+    return errors
+
+
+def refresh_course_location_seg_ids(config_id: str) -> Dict[str, Any]:
+    """Refresh all location seg_ids from course segments; persist course.json."""
+    cid = validate_config_id(config_id)
+    course = load_config_course(cid)
+    segments = [
+        s for s in (course.get("segments") or []) if isinstance(s, dict)
+    ]
+    locations = course.get("locations") or []
+    unmapped: List[Dict[str, Any]] = []
+    updated = refresh_location_seg_ids_from_segments(
+        locations, segments, unmapped=unmapped
+    )
+    if updated:
+        course["locations"] = locations
+        save_config_course(cid, course)
+    return {
+        "seg_id_refresh_count": updated,
+        "seg_id_unmapped": unmapped,
+    }
+
+
 def _event_flags_for_segment(
     seg: Optional[Dict[str, Any]], event_ids: Sequence[str]
 ) -> Dict[str, str]:
@@ -679,8 +870,6 @@ def merge_leg_locations_into_course(config_id: str) -> None:
                     used_ids.add(prev_id)
                 else:
                     row["id"] = allocate_location_id(used_ids)
-                if (prev.get("seg_id") or "").strip():
-                    row["seg_id"] = str(prev["seg_id"]).strip()
                 for field in _LEG_LOC_PRESERVE_FIELDS:
                     if field not in prev:
                         continue

@@ -562,9 +562,13 @@ def apply_package_recipes(
     course["segment_library_applied"] = True
     save_config_course(cid, course)
 
-    from app.core.config_package.legs import merge_leg_locations_into_course
+    from app.core.config_package.legs import (
+        merge_leg_locations_into_course,
+        refresh_course_location_seg_ids,
+    )
 
     merge_leg_locations_into_course(cid)
+    seg_refresh = refresh_course_location_seg_ids(cid)
 
     export_result: Optional[Dict[str, Any]] = None
     flow_gpx_result: Optional[Dict[str, Any]] = None
@@ -578,6 +582,8 @@ def apply_package_recipes(
         "segment_count": len(segments),
         "recipe_lengths_km": bundle["recipe_lengths_km"],
         "stitch_warnings": bundle["stitch_warnings"],
+        "seg_id_refresh_count": seg_refresh.get("seg_id_refresh_count", 0),
+        "seg_id_unmapped": seg_refresh.get("seg_id_unmapped") or [],
         "segments_csv_path": export_result.get("path") if export_result else None,
         "flow_csv_path": (flow_gpx_result or {}).get("flow_path"),
         "gpx_files": (flow_gpx_result or {}).get("gpx_files") or [],

@@ -1034,6 +1034,57 @@ document.addEventListener('DOMContentLoaded', function () {
             .catch(function (e) { alert('Failed to save resources: ' + (e.message || String(e))); });
     }
 
+    function offCourseUsesProxyTiming(locType) {
+        var t = (locType || '').toString().toLowerCase();
+        return t === 'traffic' || t === 'extract';
+    }
+
+    function locationNumericId(loc) {
+        if (!loc) return 0;
+        var raw = loc.id != null ? loc.id : loc.loc_id;
+        var n = parseInt(raw, 10);
+        return isNaN(n) ? 0 : n;
+    }
+
+    function buildProxyTimingSelect(loc, editable) {
+        var sel = document.createElement('select');
+        sel.disabled = !editable;
+        var none = document.createElement('option');
+        none.value = '';
+        none.textContent = '— None —';
+        sel.appendChild(none);
+        var selfId = locationNumericId(loc);
+        var others = getCourseLocations().slice();
+        others.sort(function (a, b) {
+            return locationNumericId(a) - locationNumericId(b);
+        });
+        others.forEach(function (other) {
+            var oid = locationNumericId(other);
+            if (!oid || (selfId && oid === selfId)) return;
+            var opt = document.createElement('option');
+            opt.value = String(oid);
+            var typeHint = other.loc_type ? ' (' + other.loc_type + ')' : '';
+            opt.textContent =
+                oid + ' — ' + (other.loc_label || 'Untitled') + typeHint;
+            sel.appendChild(opt);
+        });
+        var pv =
+            loc.proxy_loc_id != null && loc.proxy_loc_id !== ''
+                ? String(loc.proxy_loc_id).trim()
+                : '';
+        if (pv) {
+            sel.value = pv;
+            if (sel.value !== pv) {
+                var missing = document.createElement('option');
+                missing.value = pv;
+                missing.textContent = pv + ' — (location not found)';
+                sel.appendChild(missing);
+                sel.value = pv;
+            }
+        }
+        return sel;
+    }
+
     function openLocationEditorModal(idx, readOnly) {
         if (!currentCourse || !currentCourse.locations || idx < 0 || idx >= currentCourse.locations.length) return;
         destroyLocationEditorMap();
@@ -1173,11 +1224,8 @@ document.addEventListener('DOMContentLoaded', function () {
         inpInterval.value = loc.interval != null ? loc.interval : 5;
         inpInterval.disabled = !editable;
         addField(secTiming, 'Interval (min)', inpInterval);
-        var inpProxy = document.createElement('input');
-        inpProxy.type = 'text';
-        inpProxy.value = loc.proxy_loc_id != null ? String(loc.proxy_loc_id) : '';
-        inpProxy.disabled = !editable;
-        addField(secTiming, 'Proxy loc ID', inpProxy);
+        var selProxy = buildProxyTimingSelect(loc, editable);
+        addField(secTiming, 'Proxy timing source', selProxy);
 
         var secRes = addSection('Resources scheduled');
         var resGrid = document.createElement('div');
@@ -1259,7 +1307,33 @@ document.addEventListener('DOMContentLoaded', function () {
                 applySuggestedEventsToLocation(loc);
                 loc.buffer = parseInt(inpBuffer.value, 10) || 10;
                 loc.interval = parseInt(inpInterval.value, 10) || 5;
-                loc.proxy_loc_id = inpProxy.value.trim();
+                var proxyRaw = selProxy.value.trim();
+                if (proxyRaw) {
+                    var proxyNum = parseInt(proxyRaw, 10);
+                    if (isNaN(proxyNum)) {
+                        alert('Select a valid timing source location.');
+                        btnSave.disabled = false;
+                        return;
+                    }
+                    if (proxyNum === locationNumericId(loc)) {
+                        alert('A location cannot use itself as the proxy timing source.');
+                        btnSave.disabled = false;
+                        return;
+                    }
+                    loc.proxy_loc_id = proxyNum;
+                } else {
+                    loc.proxy_loc_id = '';
+                }
+                if (loc.proxy_loc_id && (loc.seg_id || '').trim()) {
+                    alert(
+                        'Use either Proxy timing source or Segment ID, not both (Issue #751).'
+                    );
+                    btnSave.disabled = false;
+                    return;
+                }
+                if (loc.proxy_loc_id && offCourseUsesProxyTiming(loc.loc_type)) {
+                    loc.seg_id = '';
+                }
                 loc.onepage = inpOnepage.checked ? 'y' : 'n';
                 loc.equipment = inpEquip.value.trim();
                 loc.contact = inpContact.value.trim();

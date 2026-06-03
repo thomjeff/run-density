@@ -727,6 +727,24 @@ def export_config_package_segments(config_id: str) -> Dict[str, Any]:
         raise ValueError("Course has no segments; add segment pins before export")
 
     enrich_segments_event_distances(segments, COURSE_EVENT_IDS)
+
+    from app.core.config_package.legs import (
+        refresh_location_seg_ids_from_segments,
+        validate_locations_for_export,
+    )
+
+    locations = course.get("locations") or []
+    if refresh_location_seg_ids_from_segments(locations, segments):
+        course["locations"] = locations
+        save_config_course(cid, course)
+
+    loc_errors = validate_locations_for_export(course)
+    if loc_errors:
+        detail = "; ".join(loc_errors[:8])
+        if len(loc_errors) > 8:
+            detail += f" (+{len(loc_errors) - 8} more)"
+        raise ValueError(f"Cannot export locations.csv: {detail}")
+
     csv_content = build_segments_csv(course, fmt="pipeline")
 
     target = package_path / "segments.csv"

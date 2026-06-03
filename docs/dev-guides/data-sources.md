@@ -402,8 +402,8 @@ runner_id,event,pace,distance,start_offset,day
 - `loc_id`: Location identifier
 - `loc_label`: Human-readable label
 - `loc_type`: Location category; allowed values are **`LOCATION_TYPE_CHOICES`** in `app/utils/constants.py` (SSOT for Course Mapping and Locations UI).
-- `seg_id`: Associated segment ID(s); may be empty for off-course or proxy-only timing rows
-- `proxy_loc_id`: Optional; when set with **empty** `seg_id`, the locations report copies **operational** timing (`loc_end`, `duration`) from that `loc_id` for **all** `loc_type` values (`timing_source` becomes `proxy:<id>` in output). Issue #751.
+- `seg_id`: Associated segment ID(s); may be empty for off-course or proxy-only timing rows. After leg recipe changes, re-apply recipes so segment IDs stay aligned with `segments.csv` (Issue #774).
+- `proxy_loc_id`: Optional **integer** `loc_id` of another location (timing source). In config package authoring (#775), operators pick the source from a dropdown; export writes the numeric id at snapshot time. When set with **empty** `seg_id`, the locations report copies **operational** timing (`loc_end`, `duration`) from that `loc_id` for **all** `loc_type` values (`timing_source` becomes `proxy:<id>` in output). Issue #751. Alphanumeric proxy values are not supported in the analysis pipeline.
 - `timing_source`: Optional advanced override (e.g. `proxy:n`) when present in input
 
 **Issue #751 — `proxy_loc_id` vs `seg_id` (locations report)**:
