@@ -836,3 +836,135 @@ def test_update_package_leg_geometry(tmp_path, monkeypatch):
     parsed = parse_leg_gpx(lib_dir / "01_leg.gpx")
     assert len(parsed["coordinates"]) == 3
     assert parsed["coordinates"][1][0] == -66.638
+
+
+def test_refresh_location_seg_ids_updates_stale_leg_seg_id():
+    from app.core.config_package.legs import refresh_location_seg_ids_from_segments
+
+    segments = [
+        {"seg_id": "S1", "leg_id": "01"},
+        {"seg_id": "S2", "leg_id": "02"},
+    ]
+    locations = [
+        {
+            "id": 1,
+            "loc_label": "Aid",
+            "loc_type": "course",
+            "leg_id": "01",
+            "seg_id": "S2",
+            "source": "leg",
+        }
+    ]
+    updated = refresh_location_seg_ids_from_segments(locations, segments)
+    assert updated == 1
+    assert locations[0]["seg_id"] == "S1"
+
+
+def test_refresh_location_seg_ids_clears_traffic_seg_id():
+    from app.core.config_package.legs import refresh_location_seg_ids_from_segments
+
+    segments = [{"seg_id": "S1", "leg_id": "01"}]
+    locations = [
+        {
+            "id": 2,
+            "loc_label": "Barricade",
+            "loc_type": "traffic",
+            "seg_id": "S1",
+            "proxy_loc_id": 1,
+        }
+    ]
+    updated = refresh_location_seg_ids_from_segments(locations, segments)
+    assert updated == 1
+    assert locations[0]["seg_id"] == ""
+
+
+def test_validate_locations_for_export_rejects_stale_seg_id():
+    from app.core.config_package.legs import validate_locations_for_export
+
+    course = {
+        "segments": [{"seg_id": "S1", "leg_id": "01"}],
+        "locations": [
+            {
+                "id": 1,
+                "loc_label": "Stale",
+                "loc_type": "course",
+                "seg_id": "S99",
+            }
+        ],
+    }
+    errors = validate_locations_for_export(course)
+    assert any("S99" in e for e in errors)
+
+
+def test_validate_locations_for_export_rejects_missing_proxy():
+    from app.core.config_package.legs import validate_locations_for_export
+
+    course = {
+        "segments": [{"seg_id": "S1", "leg_id": "01"}],
+        "locations": [
+            {
+                "id": 5,
+                "loc_label": "Traffic",
+                "loc_type": "traffic",
+                "seg_id": "",
+                "proxy_loc_id": 99,
+            }
+        ],
+    }
+    errors = validate_locations_for_export(course)
+    assert any("proxy_loc_id 99" in e for e in errors)
+
+
+def test_export_config_package_segments_fails_on_invalid_proxy(
+    tmp_path, monkeypatch
+):
+    from app.core.config_package.storage import (
+        export_config_package_segments,
+        save_config_course,
+    )
+
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    result = create_config_package(
+        "Export guard", "", event_day="sun", package_events=["full"]
+    )
+    config_id = result["config_id"]
+    course = load_config_course(config_id)
+    course["segments"] = [
+        {
+            "seg_id": "S1",
+            "seg_label": "Only",
+            "width_m": 3,
+            "schema": "on_course_open",
+            "direction": "uni",
+            "full": "y",
+            "full_from_km": 0,
+            "full_to_km": 1,
+        }
+    ]
+    course["locations"] = [
+        {
+            "id": 1,
+            "loc_label": "Aid",
+            "loc_type": "course",
+            "lat": 45.96,
+            "lon": -66.64,
+            "seg_id": "S1",
+            "full": "y",
+        },
+        {
+            "id": 2,
+            "loc_label": "Traffic",
+            "loc_type": "traffic",
+            "lat": 45.97,
+            "lon": -66.63,
+            "seg_id": "",
+            "proxy_loc_id": 42,
+            "full": "y",
+        },
+    ]
+    save_config_course(config_id, course)
+    with pytest.raises(ValueError, match="Cannot export locations.csv"):
+        export_config_package_segments(config_id)

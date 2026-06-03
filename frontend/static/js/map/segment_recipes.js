@@ -2439,6 +2439,17 @@
                     if (data.apply.flow_csv_path) status += ', flow.csv';
                     var gpxCount = (data.apply.gpx_files || []).length;
                     if (gpxCount) status += ', ' + gpxCount + ' GPX file(s)';
+                    var segRefresh = data.apply.seg_id_refresh_count || 0;
+                    if (segRefresh > 0) {
+                        status += '; segment IDs updated on ' + segRefresh + ' location(s)';
+                    }
+                    var unmapped = data.apply.seg_id_unmapped || [];
+                    if (unmapped.length) {
+                        status +=
+                            '; ' +
+                            unmapped.length +
+                            ' location(s) could not be mapped to a segment (Course tab)';
+                    }
                     setRecipeStatus(status + '.');
                 }
                 if (data.course) {
