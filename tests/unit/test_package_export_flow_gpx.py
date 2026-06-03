@@ -25,7 +25,7 @@ def _write_minimal_library(package: Path, config_id: str) -> None:
     lib.mkdir()
     shutil.copy2(_REFERENCE_GPX, lib / "01_start_friel.gpx")
     manifest = {
-        "chunks": [
+        "legs": [
             {
                 "id": "01",
                 "file": "01_start_friel.gpx",

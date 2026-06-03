@@ -161,30 +161,30 @@
         el.textContent = 'Stitch warnings: ' + warnings.join(' · ');
     }
 
-    function getOrder(chunkId, eventId) {
+    function getOrder(legId, eventId) {
         var row = orderGrid[eventId] || {};
-        var v = row[chunkId];
+        var v = row[legId];
         return v == null || v === '' ? '' : String(v);
     }
 
-    function setOrder(chunkId, eventId, value) {
+    function setOrder(legId, eventId, value) {
         if (!orderGrid[eventId]) orderGrid[eventId] = {};
         var trimmed = String(value || '').trim();
-        if (!trimmed) orderGrid[eventId][chunkId] = null;
+        if (!trimmed) orderGrid[eventId][legId] = null;
         else {
             var n = parseInt(trimmed, 10);
-            orderGrid[eventId][chunkId] = isNaN(n) || n < 1 ? null : n;
+            orderGrid[eventId][legId] = isNaN(n) || n < 1 ? null : n;
         }
         recomputeTotalsLocal();
     }
 
     function recomputeTotalsLocal() {
-        if (!libraryState || !libraryState.chunks) return;
+        if (!libraryState || !libraryState.legs) return;
         var lengths = {};
         packageEvents().forEach(function (ev) { lengths[ev] = 0; });
         packageEvents().forEach(function (ev) {
             var pairs = [];
-            libraryState.chunks.forEach(function (ch) {
+            libraryState.legs.forEach(function (ch) {
                 var o = getOrder(ch.id, ev);
                 if (o) pairs.push({ order: parseInt(o, 10), km: ch.length_km || 0 });
             });
@@ -236,7 +236,7 @@
     }
 
     function getSelectedLeg() {
-        return (libraryState && libraryState.chunks || []).find(function (c) {
+        return (libraryState && libraryState.legs || []).find(function (c) {
             return c.id === selectedLegId;
         });
     }
@@ -263,7 +263,7 @@
         renderTotals(data.recipe_lengths_km);
         renderWarnings(data.stitch_warnings);
         if (selectedLegId) {
-            var still = (data.chunks || []).some(function (c) { return c.id === selectedLegId; });
+            var still = (data.legs || []).some(function (c) { return c.id === selectedLegId; });
             if (still) {
                 refreshSelectedLegMap({ preserveZoom: true });
             } else {
@@ -1598,7 +1598,7 @@
 
     function selectLegById(legId, options) {
         options = options || {};
-        var leg = (libraryState && libraryState.chunks || []).find(function (c) {
+        var leg = (libraryState && libraryState.legs || []).find(function (c) {
             return c.id === legId;
         });
         if (!leg) return;
@@ -1672,7 +1672,7 @@
     }
 
     function exportLeg(legId) {
-        var leg = (libraryState && libraryState.chunks || []).find(function (c) {
+        var leg = (libraryState && libraryState.legs || []).find(function (c) {
             return c.id === legId;
         });
         var label = (leg && leg.leg_label) || legId;
@@ -1745,8 +1745,8 @@
         var wrap = document.getElementById('course-legs-table-wrap');
         var empty = document.getElementById('course-legs-empty');
         if (!tbody) return;
-        var chunks = (libraryState && libraryState.chunks) || [];
-        if (!chunks.length) {
+        var legs = (libraryState && libraryState.legs) || [];
+        if (!legs.length) {
             if (wrap) wrap.style.display = 'none';
             if (empty) empty.style.display = 'block';
             clearLegMap();
@@ -1755,7 +1755,7 @@
         if (empty) empty.style.display = 'none';
         if (wrap) wrap.style.display = 'block';
         tbody.innerHTML = '';
-        chunks.forEach(function (ch) {
+        legs.forEach(function (ch) {
             var tr = document.createElement('tr');
             tr.dataset.legId = ch.id;
             tr.style.cursor = 'pointer';
@@ -1819,7 +1819,7 @@
         var applyBtn = document.getElementById('btn-segment-recipes-apply');
         var events = packageEvents();
         if (!tbody) return;
-        if (!libraryState || !libraryState.has_library || !libraryState.chunks.length || !events.length) {
+        if (!libraryState || !libraryState.has_library || !libraryState.legs.length || !events.length) {
             if (wrap) wrap.style.display = 'none';
             if (empty) empty.style.display = 'block';
             if (applyBtn) applyBtn.disabled = true;
@@ -1837,7 +1837,7 @@
             });
         }
         tbody.innerHTML = '';
-        libraryState.chunks.forEach(function (ch) {
+        libraryState.legs.forEach(function (ch) {
             var tr = document.createElement('tr');
             [ch.id, (ch.leg_label || '').slice(0, 48), ch.length_km != null ? Number(ch.length_km).toFixed(2) : '—']
                 .forEach(function (text) {
@@ -1870,23 +1870,24 @@
 
     /** Live leg start/end/label for combined-course segment rows (package workspace). */
     function resolveLegLabelsForSegment(seg, segIdx) {
-        if (!libraryState || !libraryState.chunks || !libraryState.chunks.length) {
+        if (!libraryState || !libraryState.legs || !libraryState.legs.length) {
             return null;
         }
-        var legId = seg && seg.chunk_id != null ? String(seg.chunk_id).trim() : '';
+        var legId = seg && (seg.leg_id != null || seg.chunk_id != null)
+            ? String(seg.leg_id != null ? seg.leg_id : seg.chunk_id).trim() : '';
         if (!legId) {
             var segId = seg && seg.seg_id != null ? String(seg.seg_id) : '';
             var m = /^S(\d+)$/i.exec(segId);
             if (m) {
                 var ord = parseInt(m[1], 10) - 1;
-                if (ord >= 0 && ord < libraryState.chunks.length) {
-                    legId = libraryState.chunks[ord].id;
+                if (ord >= 0 && ord < libraryState.legs.length) {
+                    legId = libraryState.legs[ord].id;
                 }
-            } else if (segIdx >= 0 && segIdx < libraryState.chunks.length) {
-                legId = libraryState.chunks[segIdx].id;
+            } else if (segIdx >= 0 && segIdx < libraryState.legs.length) {
+                legId = libraryState.legs[segIdx].id;
             }
         }
-        var ch = libraryState.chunks.find(function (c) { return c.id === legId; });
+        var ch = libraryState.legs.find(function (c) { return c.id === legId; });
         if (!ch) return null;
         return {
             from: (ch.start_label || '').trim(),
@@ -2100,7 +2101,7 @@
             editBtn.style.display = hasCourse ? '' : 'none';
         }
         syncCoursePreviewUi();
-        var hasLegs = libraryState && libraryState.chunks && libraryState.chunks.length;
+        var hasLegs = libraryState && libraryState.legs && libraryState.legs.length;
         if (
             !hasCourse &&
             hasLegs &&
@@ -2406,7 +2407,7 @@
             .then(function (payload) {
                 if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
                 applyLibraryState(payload.data);
-                var count = (payload.data.chunks || []).length;
+                var count = (payload.data.legs || []).length;
                 var msg =
                     'Imported ' +
                     count +

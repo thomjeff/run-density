@@ -1,4 +1,4 @@
-# Segment library (PlotARoute GPX chunks) — developer import only.
+# Segment library (PlotARoute GPX legs) — developer import only.
 # End users will edit a recipe table in the app; this file backs import/tests until then.
 #
 # Full 2026 fix: routes 09/10 (out-and-back) replaced by 14 → 13 → 15 → 11 for Marysville.
@@ -6,7 +6,7 @@
 version: 2
 label: "Fredericton Marathon (PlotARoute library)"
 
-chunks:
+legs:
   - id: "01"
     file: "01_start_friel.gpx"
     seg_id: "A1"

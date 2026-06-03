@@ -120,7 +120,7 @@ class RemoveLegLocationRequest(BaseModel):
 class SaveSegmentRecipesRequest(BaseModel):
     order_by_event: Dict[str, Dict[str, Optional[int]]] = Field(
         default_factory=dict,
-        description="Per event, chunk id -> 1-based order (omit or null if unused)",
+        description="Per event, leg id -> 1-based order (omit or null if unused)",
     )
     export_csv: bool = Field(
         True,
@@ -308,7 +308,7 @@ async def api_get_segment_library(
     request: Request,
     config_id: str,
 ) -> JSONResponse:
-    """Load segment library chunks, recipes, and per-event km totals."""
+    """Load segment library legs, recipes, and per-event km totals."""
     require_auth(request)
     try:
         state = get_package_segment_library_state(config_id)

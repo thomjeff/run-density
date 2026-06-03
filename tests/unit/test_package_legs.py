@@ -20,14 +20,14 @@ from app.core.config_package.legs import (
     update_package_leg_geometry,
     _normalize_locations,
 )
-from app.core.config_package.segment_recipes import import_gpx_files_to_library, parse_chunk_gpx
+from app.core.config_package.segment_recipes import import_gpx_files_to_library, parse_leg_gpx
 from app.core.config_package.location_ids import assign_unique_location_ids
 from app.core.config_package.storage import create_config_package, load_config_course
 
 
 def test_allocate_next_leg_id():
-    chunks = [{"id": "01"}, {"id": "02"}, {"id": "15"}]
-    assert allocate_next_leg_id(chunks) == "16"
+    legs = [{"id": "01"}, {"id": "02"}, {"id": "15"}]
+    assert allocate_next_leg_id(legs) == "16"
     assert allocate_next_leg_id([]) == "01"
 
 
@@ -57,7 +57,7 @@ def test_course_loc_label_preserved_after_reconcile(tmp_path, monkeypatch):
     (lib_dir / "manifest.yaml").write_text(
         yaml.safe_dump(
             {
-                "chunks": [
+                "legs": [
                     {
                         "id": "01",
                         "seg_label": "Leg one",
@@ -92,7 +92,7 @@ def test_course_loc_label_preserved_after_reconcile(tmp_path, monkeypatch):
     course = load_config_course(config_id)
     course["segment_library_applied"] = True
     course["segments"] = [
-        {"seg_id": "S1", "chunk_id": "01", "events": ["full"]},
+        {"seg_id": "S1", "leg_id": "01", "events": ["full"]},
     ]
     merge_leg_locations_into_course(config_id)
     course = load_config_course(config_id)
@@ -105,7 +105,7 @@ def test_course_loc_label_preserved_after_reconcile(tmp_path, monkeypatch):
     assert merged["locations"][0]["loc_label"] == "Edited on Course tab"
 
     manifest = yaml.safe_load((lib_dir / "manifest.yaml").read_text())
-    assert manifest["chunks"][0]["locations"][0]["loc_label"] == "Edited on Course tab"
+    assert manifest["legs"][0]["locations"][0]["loc_label"] == "Edited on Course tab"
 
 
 def test_normalize_locations_off_course_placement():
@@ -139,7 +139,7 @@ def test_merge_traffic_location_has_empty_seg_id(tmp_path, monkeypatch):
     (lib_dir / "manifest.yaml").write_text(
         yaml.safe_dump(
             {
-                "chunks": [
+                "legs": [
                     {
                         "id": "01",
                         "seg_label": "Leg one",
@@ -166,7 +166,7 @@ def test_merge_traffic_location_has_empty_seg_id(tmp_path, monkeypatch):
     course["segments"] = [
         {
             "seg_id": "S1",
-            "chunk_id": "01",
+            "leg_id": "01",
             "events": ["full"],
             "from_km": 0,
             "to_km": 2.7,
@@ -199,7 +199,7 @@ def test_merge_water_location_gets_seg_id(tmp_path, monkeypatch):
     (lib_dir / "manifest.yaml").write_text(
         yaml.safe_dump(
             {
-                "chunks": [
+                "legs": [
                     {
                         "id": "01",
                         "seg_label": "Leg one",
@@ -224,7 +224,7 @@ def test_merge_water_location_gets_seg_id(tmp_path, monkeypatch):
     course = load_config_course(config_id)
     course["segment_library_applied"] = True
     course["segments"] = [
-        {"seg_id": "S1", "chunk_id": "01", "events": ["full"]},
+        {"seg_id": "S1", "leg_id": "01", "events": ["full"]},
     ]
     course_path.write_text(json.dumps(course, indent=2))
 
@@ -246,7 +246,7 @@ def test_assign_unique_location_ids_repairs_duplicates():
     assert ids == [1, 2, 3]
 
 
-def test_merge_leg_locations_sets_seg_id_from_chunk(tmp_path, monkeypatch):
+def test_merge_leg_locations_sets_seg_id_from_leg(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "app.core.config_package.storage.get_config_root",
         lambda: tmp_path,
@@ -259,7 +259,7 @@ def test_merge_leg_locations_sets_seg_id_from_chunk(tmp_path, monkeypatch):
     lib_dir = package_path / "segment_library"
     lib_dir.mkdir(parents=True, exist_ok=True)
     manifest = {
-        "chunks": [
+        "legs": [
             {
                 "id": "01",
                 "seg_label": "Leg one",
@@ -288,7 +288,7 @@ def test_merge_leg_locations_sets_seg_id_from_chunk(tmp_path, monkeypatch):
     course["segments"] = [
         {
             "seg_id": "S1",
-            "chunk_id": "01",
+            "leg_id": "01",
             "events": ["full"],
             "from_km": 0,
             "to_km": 2.7,
@@ -321,7 +321,7 @@ def test_merge_leg_locations_assigns_unique_ids(tmp_path, monkeypatch):
     import yaml
 
     manifest = {
-        "chunks": [
+        "legs": [
             {
                 "id": "01",
                 "seg_label": "Leg one",
@@ -358,8 +358,8 @@ def test_merge_leg_locations_assigns_unique_ids(tmp_path, monkeypatch):
     course = json.loads(course_path.read_text())
     course["segment_library_applied"] = True
     course["segments"] = [
-        {"seg_id": "S1", "chunk_id": "01", "events": ["full"]},
-        {"seg_id": "S2", "chunk_id": "02", "events": ["full"]},
+        {"seg_id": "S1", "leg_id": "01", "events": ["full"]},
+        {"seg_id": "S2", "leg_id": "02", "events": ["full"]},
     ]
     course_path.write_text(json.dumps(course, indent=2))
 
@@ -375,7 +375,7 @@ def test_leg_id_for_segment_falls_back_to_s_index():
 
     order = ["01", "02", "03"]
     assert _leg_id_for_segment({"seg_id": "S2"}, order) == "02"
-    assert _leg_id_for_segment({"seg_id": "S2", "chunk_id": "99"}, order) == "99"
+    assert _leg_id_for_segment({"seg_id": "S2", "leg_id": "99"}, order) == "99"
 
 
 def test_sync_leg_segment_labels_from_manifest(tmp_path, monkeypatch):
@@ -395,7 +395,7 @@ def test_sync_leg_segment_labels_from_manifest(tmp_path, monkeypatch):
     (lib_dir / "manifest.yaml").write_text(
         yaml.safe_dump(
             {
-                "chunks": [
+                "legs": [
                     {
                         "id": "01",
                         "seg_label": "Start to Friel",
@@ -415,7 +415,7 @@ def test_sync_leg_segment_labels_from_manifest(tmp_path, monkeypatch):
     course["segments"] = [
         {
             "seg_id": "S1",
-            "chunk_id": "01",
+            "leg_id": "01",
             "from_label": "Old start",
             "to_label": "Old end",
             "seg_label": "old_label",
@@ -449,7 +449,7 @@ def test_update_package_leg_merges_locations_before_recipes_applied(tmp_path, mo
     (lib_dir / "manifest.yaml").write_text(
         yaml.safe_dump(
             {
-                "chunks": [
+                "legs": [
                     {
                         "id": "01",
                         "seg_label": "Leg one",
@@ -513,7 +513,7 @@ def test_remove_stale_leg_loc_key_reconciles_course(tmp_path, monkeypatch):
     (lib_dir / "manifest.yaml").write_text(
         yaml.safe_dump(
             {
-                "chunks": [
+                "legs": [
                     {
                         "id": "01",
                         "seg_label": "Leg one",
@@ -594,7 +594,7 @@ def test_remove_leg_location_from_manifest(tmp_path, monkeypatch):
     (lib_dir / "manifest.yaml").write_text(
         yaml.safe_dump(
             {
-                "chunks": [
+                "legs": [
                     {
                         "id": "01",
                         "seg_label": "Leg one",
@@ -667,7 +667,7 @@ def test_export_package_leg_zip(tmp_path, monkeypatch):
     (lib_dir / "manifest.yaml").write_text(
         yaml.safe_dump(
             {
-                "chunks": [
+                "legs": [
                     {
                         "id": "01",
                         "seg_label": "River trail",
@@ -768,14 +768,14 @@ def test_import_gpx_with_leg_export_json(tmp_path, monkeypatch):
             ("01.json", json.dumps(export_json).encode("utf-8")),
         ],
     )
-    chunk = state["chunks"][0]
-    assert chunk["id"] == "01"
-    assert chunk["leg_label"] == "Imported label"
-    assert chunk["start_label"] == "Start X"
-    assert chunk["schema"] == "on_course_narrow"
-    assert chunk["direction"] == "bi"
-    assert len(chunk["locations"]) == 1
-    assert chunk["locations"][0]["loc_label"] == "Aid tent"
+    leg = state["legs"][0]
+    assert leg["id"] == "01"
+    assert leg["leg_label"] == "Imported label"
+    assert leg["start_label"] == "Start X"
+    assert leg["schema"] == "on_course_narrow"
+    assert leg["direction"] == "bi"
+    assert len(leg["locations"]) == 1
+    assert leg["locations"][0]["loc_label"] == "Aid tent"
 
 
 def test_parse_leg_export_json_bytes():
@@ -801,7 +801,7 @@ def test_update_package_leg_geometry(tmp_path, monkeypatch):
     (lib_dir / "manifest.yaml").write_text(
         yaml.safe_dump(
             {
-                "chunks": [
+                "legs": [
                     {
                         "id": "01",
                         "seg_label": "Leg",
@@ -831,8 +831,8 @@ def test_update_package_leg_geometry(tmp_path, monkeypatch):
         [-66.63, 45.97],
     ]
     state = update_package_leg_geometry(config_id, "01", new_coords)
-    chunk = state["chunks"][0]
-    assert chunk["length_km"] > 0
-    parsed = parse_chunk_gpx(lib_dir / "01_leg.gpx")
+    leg = state["legs"][0]
+    assert leg["length_km"] > 0
+    parsed = parse_leg_gpx(lib_dir / "01_leg.gpx")
     assert len(parsed["coordinates"]) == 3
     assert parsed["coordinates"][1][0] == -66.638

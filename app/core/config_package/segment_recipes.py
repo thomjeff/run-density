@@ -1,8 +1,8 @@
 """
 Config package segment library + event recipes (#755 / #769).
 
-GPX chunks live under runflow/config/{config_id}/segment_library/.
-Manifest (chunks metadata + recipes) is segment_library/manifest.json.
+GPX legs live under runflow/config/{config_id}/segment_library/.
+Manifest (legs metadata + recipes) is segment_library/manifest.json.
 Apply recipes rebuilds course.json segments[] for export.
 """
 
@@ -32,9 +32,12 @@ from app.core.course.segment_library import (
     build_flow_csv_from_segments,
     concat_recipe_coordinates,
     export_library_to_course,
-    load_chunk_library,
+    load_leg_library,
     load_manifest,
-    parse_chunk_gpx,
+    manifest_legs,
+    normalize_library_manifest,
+    parse_leg_gpx,
+    set_manifest_legs,
     validate_recipe_stitch,
 )
 from app.utils.constants import COURSE_EVENT_IDS
@@ -78,7 +81,7 @@ def _repo_root() -> Path:
 
 
 def _reference_library_dir() -> Path:
-    """Built-in PlotARoute reference chunks (image or repo cursor/plotaroute)."""
+    """Built-in PlotARoute reference legs (image or repo cursor/plotaroute)."""
     candidates = [
         _repo_root() / "cursor" / "plotaroute",
         Path("/app/cursor/plotaroute"),
@@ -131,7 +134,7 @@ def _default_manifest(event_ids: Optional[Sequence[str]] = None) -> Dict[str, An
     return {
         "version": 1,
         "label": "",
-        "chunks": [],
+        "legs": [],
         "recipes": {eid: [] for eid in eids},
         "flow_overrides": [],
     }
@@ -158,8 +161,7 @@ def load_package_segment_manifest(config_id: str) -> Dict[str, Any]:
     data = _read_manifest_file(path)
     if not isinstance(data, dict):
         raise ValueError("segment library manifest must be an object")
-    if "chunks" not in data:
-        data["chunks"] = []
+    data = normalize_library_manifest(data)
     event_ids = package_recipe_event_ids(cid)
     _ensure_recipe_keys(data, event_ids)
     return data
@@ -171,17 +173,15 @@ def save_package_segment_manifest(config_id: str, manifest: Dict[str, Any]) -> P
     lib_dir = package_segment_library_dir(package_path)
     lib_dir.mkdir(parents=True, exist_ok=True)
     path = package_segment_library_dir(package_path) / MANIFEST_YAML
-    out = dict(manifest)
-    if "chunks" not in out:
-        out["chunks"] = []
+    out = normalize_library_manifest(dict(manifest))
     _ensure_recipe_keys(out, package_recipe_event_ids(cid))
     _write_manifest_file(path, out)
     logger.info("Saved segment library manifest: %s", path)
     return path
 
 
-def _chunk_id_from_filename(filename: str) -> str:
-    """Derive chunk id from PlotARoute-style names (e.g. 01_start_friel.gpx -> 01)."""
+def _leg_id_from_filename(filename: str) -> str:
+    """Derive leg id from PlotARoute-style names (e.g. 01_start_friel.gpx -> 01)."""
     stem = Path(filename).stem
     if stem.startswith("00_"):
         return ""
@@ -191,34 +191,34 @@ def _chunk_id_from_filename(filename: str) -> str:
     return stem[:24]
 
 
-def sync_manifest_chunks_from_gpx(
+def sync_manifest_legs_from_gpx(
     lib_dir: Path,
     manifest: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    Ensure manifest lists every chunk GPX in lib_dir (except 00_* combined routes).
+    Ensure manifest lists every leg GPX in lib_dir (except 00_* combined routes).
 
     New files get default metadata; existing entries keep seg_id, width, recipes, etc.
     """
-    manifest = dict(manifest or _default_manifest())
+    manifest = normalize_library_manifest(dict(manifest or _default_manifest()))
     existing_by_file = {
         str(c.get("file", "")): c
-        for c in (manifest.get("chunks") or [])
+        for c in manifest_legs(manifest)
         if isinstance(c, dict) and c.get("file")
     }
-    chunks: List[Dict[str, Any]] = []
+    legs: List[Dict[str, Any]] = []
     for gpx_path in sorted(lib_dir.glob("*.gpx")):
         name = gpx_path.name
         if name.startswith("00_"):
             continue
-        cid = _chunk_id_from_filename(name)
+        cid = _leg_id_from_filename(name)
         if not cid:
             continue
         prior = existing_by_file.get(name) or {}
         if prior.get("id"):
             cid = str(prior["id"])
         try:
-            parsed = parse_chunk_gpx(gpx_path)
+            parsed = parse_leg_gpx(gpx_path)
         except ValueError:
             continue
         label = (
@@ -226,7 +226,7 @@ def sync_manifest_chunks_from_gpx(
             or (parsed.get("name") or "").strip()
             or gpx_path.stem.replace("_", " ").title()
         )
-        chunks.append(
+        legs.append(
             {
                 "id": cid,
                 "file": name,
@@ -240,7 +240,7 @@ def sync_manifest_chunks_from_gpx(
                 "locations": prior.get("locations") or [],
             }
         )
-    manifest["chunks"] = chunks
+    set_manifest_legs(manifest, legs)
     return manifest
 
 
@@ -275,23 +275,23 @@ def seed_reference_segment_library(config_id: str) -> Dict[str, Any]:
 
 
 def recipes_from_order_grid(
-    chunks: Sequence[Dict[str, Any]],
+    legs: Sequence[Dict[str, Any]],
     order_by_event: Dict[str, Dict[str, Optional[int]]],
     event_ids: Optional[Sequence[str]] = None,
 ) -> Dict[str, List[str]]:
     """
     Convert UI order grid to recipe lists.
 
-    order_by_event[event][chunk_id] = 1-based order or None if unused.
+    order_by_event[event][leg_id] = 1-based order or None if unused.
     """
     recipes: Dict[str, List[str]] = {}
-    chunk_ids = [str(c.get("id", "")).strip() for c in chunks if c.get("id")]
+    leg_ids = [str(c.get("id", "")).strip() for c in legs if c.get("id")]
     eids = list(event_ids) if event_ids is not None else []
     for eid in eids:
         key = eid if eid in order_by_event else eid.lower()
         orders = order_by_event.get(key) or order_by_event.get(eid) or {}
         pairs: List[tuple] = []
-        for cid in chunk_ids:
+        for cid in leg_ids:
             raw = orders.get(cid)
             if raw is None or raw == "":
                 continue
@@ -307,18 +307,18 @@ def recipes_from_order_grid(
 
 
 def order_grid_from_recipes(
-    chunks: Sequence[Dict[str, Any]],
+    legs: Sequence[Dict[str, Any]],
     recipes: Dict[str, Any],
     event_ids: Optional[Sequence[str]] = None,
 ) -> Dict[str, Dict[str, Optional[int]]]:
     """Inverse of recipes_from_order_grid for UI."""
-    chunk_ids = [str(c.get("id", "")).strip() for c in chunks if c.get("id")]
+    leg_ids = [str(c.get("id", "")).strip() for c in legs if c.get("id")]
     grid: Dict[str, Dict[str, Optional[int]]] = {}
     eids = list(event_ids) if event_ids is not None else []
     for eid in eids:
         key = eid if eid in recipes else eid.lower()
         seq = recipes.get(key) or []
-        row: Dict[str, Optional[int]] = {cid: None for cid in chunk_ids}
+        row: Dict[str, Optional[int]] = {cid: None for cid in leg_ids}
         for i, cid in enumerate(seq, start=1):
             if cid in row:
                 row[cid] = i
@@ -327,22 +327,22 @@ def order_grid_from_recipes(
 
 
 def get_package_segment_library_state(config_id: str) -> Dict[str, Any]:
-    """Full library state for API: chunks, recipes, lengths, warnings."""
+    """Full library state for API: legs, recipes, lengths, warnings."""
     cid = validate_config_id(config_id)
     package_path = resolve_config_package_path(cid)
     lib_dir = package_segment_library_dir(package_path)
     manifest = load_package_segment_manifest(cid)
-    chunks_meta = manifest.get("chunks") or []
+    legs_meta = manifest_legs(manifest)
     event_ids = package_recipe_event_ids(cid)
 
-    if not lib_dir.is_dir() or not chunks_meta:
+    if not lib_dir.is_dir() or not legs_meta:
         return {
             "config_id": cid,
             "library_dir": str(lib_dir),
             "has_library": False,
             "package_events": event_ids,
             "manifest": manifest,
-            "chunks": [],
+            "legs": [],
             "recipes": manifest.get("recipes") or {},
             "order_grid": order_grid_from_recipes(
                 [], manifest.get("recipes") or {}, event_ids
@@ -352,16 +352,16 @@ def get_package_segment_library_state(config_id: str) -> Dict[str, Any]:
         }
 
     manifest_path = _manifest_path(package_path)
-    chunks_by_id = load_chunk_library(lib_dir, manifest)
+    legs_by_id = load_leg_library(lib_dir, manifest)
     from app.core.config_package.legs import leg_row_from_entry
 
-    chunk_rows: List[Dict[str, Any]] = []
-    for entry in chunks_meta:
+    leg_rows: List[Dict[str, Any]] = []
+    for entry in legs_meta:
         if not isinstance(entry, dict):
             continue
-        cid_chunk = str(entry.get("id", "")).strip()
-        loaded = chunks_by_id.get(cid_chunk) or {}
-        chunk_rows.append(leg_row_from_entry(entry, loaded))
+        leg_id_key = str(entry.get("id", "")).strip()
+        loaded = legs_by_id.get(leg_id_key) or {}
+        leg_rows.append(leg_row_from_entry(entry, loaded))
 
     recipes = manifest.get("recipes") or {}
     stitch_warnings: List[str] = []
@@ -369,21 +369,21 @@ def get_package_segment_library_state(config_id: str) -> Dict[str, Any]:
     for eid in event_ids:
         key = eid if eid in recipes else eid.lower()
         seq = recipes.get(key) or []
-        stitch_warnings.extend(validate_recipe_stitch(lib_dir, seq, chunks_by_id))
+        stitch_warnings.extend(validate_recipe_stitch(lib_dir, seq, legs_by_id))
         recipe_lengths[eid] = round(
-            sum(float(chunks_by_id[c]["length_km"]) for c in seq if c in chunks_by_id),
+            sum(float(legs_by_id[c]["length_km"]) for c in seq if c in legs_by_id),
             2,
         )
 
     return {
         "config_id": cid,
         "library_dir": str(lib_dir),
-        "has_library": bool(chunk_rows),
+        "has_library": bool(leg_rows),
         "package_events": event_ids,
         "manifest": manifest,
-        "chunks": chunk_rows,
+        "legs": leg_rows,
         "recipes": recipes,
-        "order_grid": order_grid_from_recipes(chunk_rows, recipes, event_ids),
+        "order_grid": order_grid_from_recipes(leg_rows, recipes, event_ids),
         "recipe_lengths_km": recipe_lengths,
         "stitch_warnings": stitch_warnings,
     }
@@ -423,7 +423,7 @@ def export_package_flow_and_gpx_files(config_id: str) -> Dict[str, Any]:
         flow_path.write_text(bundle["flow_csv"], encoding="utf-8")
 
         manifest = bundle["manifest"]
-        chunks_by_id = load_chunk_library(lib_dir, manifest)
+        legs_by_id = load_leg_library(lib_dir, manifest)
         recipes = manifest.get("recipes") or {}
         for eid in event_ids:
             key = eid if eid in recipes else eid.lower()
@@ -433,7 +433,7 @@ def export_package_flow_and_gpx_files(config_id: str) -> Dict[str, Any]:
                 gpx_content = build_event_gpx_content(
                     eid,
                     manifest,
-                    chunks_by_id,
+                    legs_by_id,
                     course_name=str(course.get("name") or course.get("label") or cid),
                 )
             except ValueError:
@@ -488,18 +488,18 @@ def get_event_route_preview(config_id: str, event_id: str) -> Dict[str, Any]:
         raise ValueError("No segment library; import legs and save recipes first")
 
     manifest = load_manifest(manifest_path)
-    chunks_by_id = load_chunk_library(lib_dir, manifest)
+    legs_by_id = load_leg_library(lib_dir, manifest)
     recipes = manifest.get("recipes") or {}
-    chunk_ids = recipes.get(eid) or recipes.get(event_id)
-    if not chunk_ids:
+    leg_ids = recipes.get(eid) or recipes.get(event_id)
+    if not leg_ids:
         raise ValueError(f"No recipe for event: {eid}")
 
-    coords = concat_recipe_coordinates(chunk_ids, chunks_by_id)
+    coords = concat_recipe_coordinates(leg_ids, legs_by_id)
     if len(coords) < 2:
         raise ValueError(f"Recipe for {eid} has insufficient route points")
 
     length_km = round(
-        sum(float(chunks_by_id[c]["length_km"]) for c in chunk_ids if c in chunks_by_id),
+        sum(float(legs_by_id[c]["length_km"]) for c in leg_ids if c in legs_by_id),
         2,
     )
     return {
@@ -507,7 +507,7 @@ def get_event_route_preview(config_id: str, event_id: str) -> Dict[str, Any]:
         "event_id": eid,
         "coordinates": coords,
         "length_km": length_km,
-        "leg_count": len(chunk_ids),
+        "leg_count": len(leg_ids),
     }
 
 
@@ -522,7 +522,7 @@ def save_package_recipes(
     event_ids = package_recipe_event_ids(config_id)
     if order_by_event is not None:
         recipes = recipes_from_order_grid(
-            manifest.get("chunks") or [], order_by_event, event_ids
+            manifest_legs(manifest), order_by_event, event_ids
         )
     normalized: Dict[str, List[str]] = {}
     for eid in event_ids:
@@ -549,13 +549,13 @@ def apply_package_recipes(
     lib_dir = package_segment_library_dir(package_path)
     manifest_path = _manifest_path(package_path)
     if not manifest_path.is_file():
-        raise ValueError("No segment library; import or seed GPX chunks first")
+        raise ValueError("No segment library; import or seed GPX legs first")
 
     event_ids = package_recipe_event_ids(cid)
     bundle = export_library_to_course(lib_dir, manifest_path, event_ids=event_ids)
     segments = bundle["segments"]
     if not segments:
-        raise ValueError("Recipes produced no segments; check chunk GPX and recipe order")
+        raise ValueError("Recipes produced no segments; check leg GPX and recipe order")
 
     course = load_config_course(cid)
     course["segments"] = segments
@@ -595,7 +595,7 @@ def import_gpx_files_to_library(
 
     uploads: sequence of (filename, bytes).
     Pair ``{leg_id}.gpx`` with ``{leg_id}.json`` from a leg export zip (same import).
-    Filenames should match manifest chunk file names when updating an existing library.
+    Filenames should match manifest leg file names when updating an existing library.
     """
     from app.core.config_package.legs import (
         apply_leg_exports_to_manifest,
@@ -634,7 +634,7 @@ def import_gpx_files_to_library(
     if not saved_gpx:
         raise ValueError("No .gpx files uploaded")
     manifest = load_package_segment_manifest(config_id)
-    manifest = sync_manifest_chunks_from_gpx(lib_dir, manifest)
+    manifest = sync_manifest_legs_from_gpx(lib_dir, manifest)
     manifest = apply_leg_exports_to_manifest(manifest, exports_by_leg_id)
     save_package_segment_manifest(config_id, manifest)
     return get_package_segment_library_state(config_id)
