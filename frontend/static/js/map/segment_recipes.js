@@ -358,23 +358,118 @@
         }
     }
 
-    function segmentIntersectsBounds(seg, bounds) {
+    function resolveLegIdForSegment(seg, segIdx) {
+        if (!libraryState || !libraryState.legs || !libraryState.legs.length) return '';
+        var legId = seg && (seg.leg_id != null || seg.chunk_id != null)
+            ? String(seg.leg_id != null ? seg.leg_id : seg.chunk_id).trim()
+            : '';
+        if (!legId) {
+            var segId = seg && seg.seg_id != null ? String(seg.seg_id) : '';
+            var m = /^S(\d+)$/i.exec(segId);
+            if (m) {
+                var ord = parseInt(m[1], 10) - 1;
+                if (ord >= 0 && ord < libraryState.legs.length) {
+                    legId = libraryState.legs[ord].id;
+                }
+            } else if (segIdx >= 0 && segIdx < libraryState.legs.length) {
+                legId = libraryState.legs[segIdx].id;
+            }
+        }
+        return legId;
+    }
+
+    function activePreviewEventId() {
+        if (coursePreviewSelectedEvent) return coursePreviewSelectedEvent;
+        var evs = packageEvents();
+        return evs.length ? evs[0] : null;
+    }
+
+    function flattenPreviewLatLngs(layer) {
+        if (!layer) return [];
+        var latlngs = layer.getLatLngs();
+        if (!latlngs || !latlngs.length) return [];
+        if (latlngs[0] && latlngs[0].lat != null) return latlngs;
+        var flat = [];
+        latlngs.forEach(function (part) {
+            if (Array.isArray(part)) {
+                part.forEach(function (ll) {
+                    flat.push(ll);
+                });
+            }
+        });
+        return flat;
+    }
+
+    function haversineKm(a, b) {
+        var R = 6371;
+        var dLat = ((b.lat - a.lat) * Math.PI) / 180;
+        var dLon = ((b.lng - a.lng) * Math.PI) / 180;
+        var lat1 = (a.lat * Math.PI) / 180;
+        var lat2 = (b.lat * Math.PI) / 180;
+        var x =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+    }
+
+    function buildRouteKmTable(latlngs) {
+        var cum = [0];
+        for (var i = 1; i < latlngs.length; i++) {
+            cum.push(cum[i - 1] + haversineKm(latlngs[i - 1], latlngs[i]));
+        }
+        return cum;
+    }
+
+    function latLngAtRouteKm(latlngs, cum, km) {
+        if (!latlngs.length) return null;
+        if (km <= 0) return latlngs[0];
+        var total = cum[cum.length - 1];
+        if (km >= total) return latlngs[latlngs.length - 1];
+        for (var i = 1; i < cum.length; i++) {
+            if (cum[i] >= km) {
+                var segLen = cum[i] - cum[i - 1];
+                var t = segLen > 0 ? (km - cum[i - 1]) / segLen : 0;
+                var a = latlngs[i - 1];
+                var b = latlngs[i];
+                return L.latLng(a.lat + (b.lat - a.lat) * t, a.lng + (b.lng - a.lng) * t);
+            }
+        }
+        return latlngs[latlngs.length - 1];
+    }
+
+    function segmentIntersectsPreviewRoute(seg, bounds) {
+        if (!coursePreviewLineLayer || !seg || !bounds || !bounds.isValid()) return false;
+        var eventId = activePreviewEventId();
+        if (!eventId) return false;
+        var el = String(eventId).toLowerCase();
+        var fromKm = parseFloat(seg[el + '_from_km']);
+        var toKm = parseFloat(seg[el + '_to_km']);
+        if (isNaN(fromKm) || isNaN(toKm) || toKm <= fromKm) return false;
+        var latlngs = flattenPreviewLatLngs(coursePreviewLineLayer);
+        if (latlngs.length < 2) return false;
+        var cum = buildRouteKmTable(latlngs);
+        var span = toKm - fromKm;
+        var steps = Math.max(2, Math.min(20, Math.ceil(span * 5)));
+        for (var s = 0; s <= steps; s++) {
+            var km = fromKm + (span * s) / steps;
+            var ll = latLngAtRouteKm(latlngs, cum, km);
+            if (ll && bounds.contains(ll)) return true;
+        }
+        return false;
+    }
+
+    function segmentIntersectsBounds(seg, bounds, segIdx) {
         if (!seg || !bounds || !bounds.isValid()) return false;
-        if (seg.leg_id && libraryState && libraryState.legs) {
+        if (segmentIntersectsPreviewRoute(seg, bounds)) return true;
+        var legId = resolveLegIdForSegment(seg, segIdx != null ? segIdx : -1);
+        if (legId && libraryState && libraryState.legs) {
             var leg = libraryState.legs.find(function (c) {
-                return c.id === seg.leg_id;
+                return c.id === legId;
             });
             if (leg && legIntersectsBounds(leg, bounds)) return true;
         }
         if (coursePreviewLineLayer && seg.start_index != null && seg.end_index != null) {
-            var latlngs = coursePreviewLineLayer.getLatLngs();
-            var flat = latlngs;
-            if (latlngs.length && latlngs[0] && Array.isArray(latlngs[0])) {
-                flat = [];
-                latlngs.forEach(function (part) {
-                    part.forEach(function (ll) { flat.push(ll); });
-                });
-            }
+            var flat = flattenPreviewLatLngs(coursePreviewLineLayer);
             var lo = Math.min(seg.start_index, seg.end_index);
             var hi = Math.max(seg.start_index, seg.end_index);
             for (var i = lo; i <= hi && i < flat.length; i++) {
@@ -433,7 +528,7 @@
                     var lon = parseFloat(item.data.lon);
                     return !isNaN(lat) && !isNaN(lon) && bounds.contains([lat, lon]);
                 }
-                return segmentIntersectsBounds(item.data, bounds);
+                return segmentIntersectsBounds(item.data, bounds, item.index);
             },
             onFilter: function (visible, stats) {
                 applyCoursePreviewBoundsToTables(visible, stats);
@@ -2110,20 +2205,7 @@
         if (!libraryState || !libraryState.legs || !libraryState.legs.length) {
             return null;
         }
-        var legId = seg && (seg.leg_id != null || seg.chunk_id != null)
-            ? String(seg.leg_id != null ? seg.leg_id : seg.chunk_id).trim() : '';
-        if (!legId) {
-            var segId = seg && seg.seg_id != null ? String(seg.seg_id) : '';
-            var m = /^S(\d+)$/i.exec(segId);
-            if (m) {
-                var ord = parseInt(m[1], 10) - 1;
-                if (ord >= 0 && ord < libraryState.legs.length) {
-                    legId = libraryState.legs[ord].id;
-                }
-            } else if (segIdx >= 0 && segIdx < libraryState.legs.length) {
-                legId = libraryState.legs[segIdx].id;
-            }
-        }
+        var legId = resolveLegIdForSegment(seg, segIdx);
         var ch = libraryState.legs.find(function (c) { return c.id === legId; });
         if (!ch) return null;
         return {
@@ -2157,7 +2239,9 @@
             btn.addEventListener('click', function () {
                 coursePreviewSelectedEvent = eid;
                 renderCoursePreviewToolbar();
-                loadCoursePreviewRoute(eid);
+                loadCoursePreviewRoute(eid).then(function () {
+                    syncCoursePreviewBoundsFilterItems();
+                });
             });
             toolbar.appendChild(btn);
         });
@@ -2231,8 +2315,8 @@
         var wrap = document.getElementById('course-preview-map-wrap');
         var meta = document.getElementById('course-preview-meta');
         var empty = document.getElementById('course-preview-empty');
-        if (!eventId || !hasCombinedCourse()) return;
-        fetch(
+        if (!eventId || !hasCombinedCourse()) return Promise.resolve();
+        return fetch(
             apiBase() + '/segment-library/events/' + encodeURIComponent(eventId) + '/preview',
             { credentials: 'same-origin' }
         )
