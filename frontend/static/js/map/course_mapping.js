@@ -223,11 +223,20 @@ document.addEventListener('DOMContentLoaded', function () {
         return e ? e.charAt(0).toUpperCase() + e.slice(1) : '';
     }
 
+    function formatPackageIdDisplay(pkgId) {
+        var id = String(pkgId || '').trim();
+        if (id.length <= 16) return id;
+        return id.slice(0, 4) + '...' + id.slice(-4);
+    }
+
     /** Populate read-only package details card (does not require course.json loaded). */
     function syncConfigPackageDetailsCard(label, description, eventDay, packageEvents) {
         var pkgId = resolveConfigPackageId() || '';
         var idEl = document.getElementById('course-map-id');
-        if (idEl) idEl.textContent = pkgId;
+        if (idEl) {
+            idEl.textContent = formatPackageIdDisplay(pkgId);
+            idEl.title = pkgId;
+        }
         var nameText = document.getElementById('course-map-name-text');
         var descText = document.getElementById('course-map-description-text');
         var dayText = document.getElementById('course-map-event-day-text');
@@ -244,6 +253,8 @@ document.addEventListener('DOMContentLoaded', function () {
         if (nameText) nameText.textContent = nameVal || '(no name)';
         if (descText) descText.textContent = descVal || '(none)';
         if (dayText) dayText.textContent = dayVal || '(not set)';
+        var pageTitle = document.getElementById('race-config-page-title');
+        if (pageTitle && nameVal) pageTitle.textContent = nameVal;
         if (packageEvents != null) {
             window.CONFIG_PACKAGE_EVENTS = Array.isArray(packageEvents)
                 ? packageEvents.slice()
@@ -254,7 +265,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var eventsText = document.getElementById('course-map-package-events-text');
         if (eventsField && eventsText) {
             if (events.length) {
-                eventsField.style.display = '';
+                eventsField.style.display = 'flex';
                 eventsText.textContent = events.map(formatPackageEventLabel).join(', ');
             } else {
                 eventsField.style.display = 'none';
@@ -3315,7 +3326,18 @@ document.addEventListener('DOMContentLoaded', function () {
         thead.appendChild(lenTh);
     }
 
-    function renderSegmentsList() {
+    function visibleIndexSet(visibleIndices) {
+        if (visibleIndices == null) return null;
+        if (visibleIndices instanceof Set) return visibleIndices;
+        var s = new Set();
+        (visibleIndices || []).forEach(function (i) {
+            s.add(i);
+        });
+        return s;
+    }
+
+    function renderSegmentsList(visibleIndices) {
+        var indexFilter = visibleIndexSet(visibleIndices);
         var card = document.getElementById('segments-card');
         var empty = document.getElementById('segments-empty');
         var wrap = document.getElementById('segments-table-wrap');
@@ -3337,6 +3359,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var eventIds = segmentsTableEventIds();
         var computedEventDistances = computeEventDistancesForSegments(currentCourse.segments, eventIds);
         currentCourse.segments.forEach(function (seg, segIdx) {
+            if (indexFilter && !indexFilter.has(segIdx)) return;
             var len = (seg.to_km - seg.from_km);
             var startIdx = seg.start_index != null ? seg.start_index : 0;
             var endIdx = seg.end_index != null ? seg.end_index : (coordsLen ? coordsLen - 1 : 0);
@@ -3460,6 +3483,10 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             tbody.appendChild(tr);
         });
+        if (!indexFilter && isConfigPackageMode() && window.segmentRecipes &&
+            window.segmentRecipes.syncCoursePreviewBoundsFilterItems) {
+            window.segmentRecipes.syncCoursePreviewBoundsFilterItems();
+        }
     }
 
     function getLocationTypeLabel(locType) {
@@ -3658,7 +3685,8 @@ document.addEventListener('DOMContentLoaded', function () {
             });
     }
 
-    function renderLocationsList() {
+    function renderLocationsList(visibleIndices) {
+        var indexFilter = visibleIndexSet(visibleIndices);
         var card = document.getElementById('locations-card');
         var empty = document.getElementById('locations-empty');
         var wrap = document.getElementById('locations-table-wrap');
@@ -3678,6 +3706,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var resourceTotals = {};
         getPackageResources().forEach(function (res) { resourceTotals[res.code] = 0; });
         currentCourse.locations.forEach(function (loc, i) {
+            if (indexFilter && !indexFilter.has(i)) return;
             syncLocationResourceCounts(loc);
             var tr = document.createElement('tr');
             var typeLabel = getLocationTypeLabel(loc.loc_type);
@@ -3772,6 +3801,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     currentCourse.locations.length > 0
                 )
             );
+        }
+        if (!indexFilter && isConfigPackageMode() && window.segmentRecipes &&
+            window.segmentRecipes.syncCoursePreviewBoundsFilterItems) {
+            window.segmentRecipes.syncCoursePreviewBoundsFilterItems();
         }
     }
 
@@ -4763,6 +4796,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 );
             },
             renderSegmentsList: renderSegmentsList,
+            renderSegmentsListFiltered: function (indices) {
+                renderSegmentsList(indices);
+            },
+            renderLocationsListFiltered: function (indices) {
+                renderLocationsList(indices);
+            },
+            getCourse: function () {
+                return currentCourse;
+            },
             getCourseLocations: getCourseLocations,
             buildLocationTooltipHtml: buildConfigLocationTooltipHtml,
             getLocationPinColor: getLocationPinColor,
