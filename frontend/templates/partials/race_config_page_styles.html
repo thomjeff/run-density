@@ -1,0 +1,314 @@
+<style>
+    /* Race Configuration — scoped layout only (Issue #769 shell) */
+    .race-config-page .page-shell {
+        margin-bottom: 2rem;
+    }
+
+    .race-config-page .page-header {
+        margin: 28px 0 18px;
+        padding: 0;
+        background: transparent;
+        border: 0;
+        display: block;
+    }
+    .race-config-page .page-header h1,
+    .race-config-page .page-header h2 {
+        margin: 0;
+        color: #243746;
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+
+    .race-config-page .content-card {
+        background: #fff;
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+        padding: 1.25rem 1.5rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    }
+
+    .race-config-page .card-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.35rem;
+    }
+    .race-config-page .card-title {
+        margin: 0;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #2c3e50;
+    }
+    .race-config-page .card-help {
+        margin: 0 0 1rem 0;
+        font-size: 0.875rem;
+        color: #7f8c8d;
+        line-height: 1.45;
+    }
+    .race-config-page .card-header + .card-help {
+        margin-top: 0;
+    }
+    .race-config-page .card-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .race-config-page .card-actions button {
+        padding: 0.4rem 0.75rem;
+        border: 1px solid #bdc3c7;
+        border-radius: 4px;
+        background: #fff;
+        font-size: 0.875rem;
+        cursor: pointer;
+    }
+
+    /* Package header card: compact meta + tabs attached at bottom */
+    .race-config-page .package-header-card {
+        padding: 0;
+        overflow: hidden;
+        margin-bottom: 1rem;
+    }
+    .race-config-page .package-header-body {
+        padding: 0.85rem 1.25rem 0.5rem;
+    }
+    .race-config-page .context-name-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem 1rem;
+        margin-bottom: 0.35rem;
+    }
+    .race-config-page .package-name-heading {
+        flex: 1 1 200px;
+        min-width: 0;
+        margin: 0;
+        color: #243746;
+        font-size: 1.5rem;
+        font-weight: 700;
+        line-height: 1.25;
+    }
+    .race-config-page .context-name-row .config-package-input {
+        display: none;
+        flex: 1 1 100%;
+        max-width: 28rem;
+    }
+    .race-config-page .context-field {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.35rem 0.5rem;
+        margin-bottom: 0.3rem;
+        line-height: 1.4;
+    }
+    .race-config-page .context-field-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.5rem 2rem;
+        margin-bottom: 0;
+    }
+    .race-config-page .context-field--inline {
+        margin-bottom: 0;
+    }
+    .race-config-page .context-field .context-label {
+        font-weight: 600;
+        color: #5f6f7a;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+        flex: 0 0 auto;
+    }
+    .race-config-page .context-field .context-value {
+        color: #243746;
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+    .race-config-page .context-field .context-value--multiline {
+        white-space: pre-wrap;
+        font-weight: 400;
+    }
+    .race-config-page .context-field--package-id .context-value {
+        font-size: 0.85rem;
+        font-weight: 400;
+        color: #5d6d7e;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    .race-config-page .context-field .config-package-input {
+        display: none;
+        width: 100%;
+        max-width: 28rem;
+        padding: 0.4rem 0.55rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 1rem;
+        box-sizing: border-box;
+        font-family: inherit;
+        color: #2c3e50;
+    }
+    .race-config-page .context-field .config-package-textarea {
+        resize: vertical;
+        min-height: 2.5em;
+    }
+
+    .race-config-page .context-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        flex: 0 0 auto;
+    }
+    .race-config-page .context-actions button,
+    .race-config-page #race-config-workspace-actions button {
+        padding: 0.4rem 0.75rem;
+        border: 1px solid #bdc3c7;
+        border-radius: 4px;
+        background: #fff;
+        font-size: 0.875rem;
+        cursor: pointer;
+    }
+    .race-config-page .context-actions button.primary,
+    .race-config-page #race-config-workspace-actions button.primary,
+    .race-config-page #race-config-workspace-actions #btn-save-course {
+        background: #3498db;
+        color: #fff;
+        border-color: #2980b9;
+        font-weight: 600;
+    }
+
+    .race-config-page .package-header-card .subnav-tabs {
+        display: flex;
+        align-items: flex-end;
+        gap: 0;
+        margin: 0;
+        padding: 0 0.5rem;
+        background: transparent;
+        border: 0;
+        border-top: 1px solid #e8ecef;
+        border-bottom: 1px solid #d9e0e6;
+        list-style: none;
+    }
+    .race-config-page .package-header-card .subnav-tab {
+        padding: 10px 16px;
+        background: transparent;
+        border: 0;
+        border-bottom: 3px solid transparent;
+        margin-bottom: -1px;
+        color: #5f6f7a;
+        font-weight: 500;
+        font-size: 0.95rem;
+        cursor: pointer;
+        border-radius: 0;
+    }
+    .race-config-page .package-header-card .subnav-tab.active {
+        color: #243746;
+        font-weight: 700;
+        border-bottom-color: #2f9bd3;
+        background: transparent;
+    }
+    .race-config-page .package-header-card .subnav-tab:hover {
+        color: #243746;
+        background: #f5f8fa;
+    }
+
+    .race-config-page .config-package-events-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1rem;
+        margin-bottom: 1rem;
+    }
+    .race-config-page .config-package-events-grid label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.9rem;
+        cursor: pointer;
+    }
+
+    .race-config-page #race-config-list-table tbody tr.config-row {
+        cursor: pointer;
+    }
+    .race-config-page #race-config-list-table tbody tr.config-row.selected {
+        background: #e3f2fd;
+    }
+
+    .race-config-page .race-config-modal {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.4);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+    }
+    .race-config-page .race-config-modal.open {
+        display: flex;
+    }
+    .race-config-page .race-config-modal .modal-panel {
+        background: #fff;
+        border-radius: 6px;
+        padding: 1.5rem;
+        width: 100%;
+        max-width: 480px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    }
+
+    /* Tab content card below package header */
+    .race-config-page .tab-panel-card {
+        margin-top: 0;
+    }
+    .race-config-page .tab-panel-card #course-from-map-card {
+        border: none;
+        box-shadow: none;
+        padding: 0;
+        margin: 0;
+        background: transparent;
+    }
+    .race-config-page .tab-panel-card .course-map-meta-standalone,
+    .race-config-page .tab-panel-card .course-map-header-top {
+        display: none !important;
+    }
+    .race-config-page .tab-panel-card .content-card.course-derived-section {
+        background: #fff;
+        border: 1px solid #ecf0f1;
+        border-radius: 6px;
+        padding: 1.25rem 1.5rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+        margin: 0 0 1rem 0;
+    }
+    .race-config-page .tab-panel-card .content-card.course-derived-section:last-child {
+        margin-bottom: 0;
+    }
+    .race-config-page .tab-panel-card #config-package-legs-panel #course-legs-card {
+        margin-top: 0;
+        padding-top: 0;
+        border-top: none;
+    }
+    .race-config-page .tab-panel-card > .card {
+        border: none;
+        box-shadow: none;
+        padding: 0;
+        margin: 0;
+        background: transparent;
+    }
+    .race-config-page .tab-panel-card #error-banner.card {
+        margin-bottom: 1rem;
+        padding: 1rem;
+        border: 1px solid #f5c6cb;
+        border-radius: 6px;
+        background: #fee;
+    }
+    .race-config-page .tab-panel-card > .card:not(#error-banner) {
+        background: #fff;
+        border: 1px solid #ecf0f1;
+        border-radius: 6px;
+        padding: 1.25rem 1.5rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+        margin-bottom: 1rem;
+    }
+</style>

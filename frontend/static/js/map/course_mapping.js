@@ -223,11 +223,20 @@ document.addEventListener('DOMContentLoaded', function () {
         return e ? e.charAt(0).toUpperCase() + e.slice(1) : '';
     }
 
+    function formatPackageIdDisplay(pkgId) {
+        var id = String(pkgId || '').trim();
+        if (id.length <= 16) return id;
+        return id.slice(0, 4) + '...' + id.slice(-4);
+    }
+
     /** Populate read-only package details card (does not require course.json loaded). */
     function syncConfigPackageDetailsCard(label, description, eventDay, packageEvents) {
         var pkgId = resolveConfigPackageId() || '';
         var idEl = document.getElementById('course-map-id');
-        if (idEl) idEl.textContent = pkgId;
+        if (idEl) {
+            idEl.textContent = formatPackageIdDisplay(pkgId);
+            idEl.title = pkgId;
+        }
         var nameText = document.getElementById('course-map-name-text');
         var descText = document.getElementById('course-map-description-text');
         var dayText = document.getElementById('course-map-event-day-text');
@@ -244,6 +253,8 @@ document.addEventListener('DOMContentLoaded', function () {
         if (nameText) nameText.textContent = nameVal || '(no name)';
         if (descText) descText.textContent = descVal || '(none)';
         if (dayText) dayText.textContent = dayVal || '(not set)';
+        var pageTitle = document.getElementById('race-config-page-title');
+        if (pageTitle && nameVal) pageTitle.textContent = nameVal;
         if (packageEvents != null) {
             window.CONFIG_PACKAGE_EVENTS = Array.isArray(packageEvents)
                 ? packageEvents.slice()
@@ -254,7 +265,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var eventsText = document.getElementById('course-map-package-events-text');
         if (eventsField && eventsText) {
             if (events.length) {
-                eventsField.style.display = '';
+                eventsField.style.display = 'flex';
                 eventsText.textContent = events.map(formatPackageEventLabel).join(', ');
             } else {
                 eventsField.style.display = 'none';

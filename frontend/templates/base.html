@@ -425,11 +425,12 @@
                 const linkPath = href.split("?")[0];
                 let newHref = href.split("?")[0];
                 if (isConfigRoutePath(linkPath)) {
-                    const configId = localStorage.getItem("selected_config_id");
-                    if (configId) {
-                        newHref = setQueryParam(newHref, "config_id", configId);
-                        if (linkPath === "/config") {
-                            newHref = setQueryParam(newHref, "tab", "course");
+                    if (linkPath === "/config") {
+                        newHref = "/config";
+                    } else {
+                        const configId = localStorage.getItem("selected_config_id");
+                        if (configId) {
+                            newHref = setQueryParam(newHref, "config_id", configId);
                         }
                     }
                     newHref = setQueryParam(newHref, "run_id", null);

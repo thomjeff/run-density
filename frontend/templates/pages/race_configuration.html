@@ -4,190 +4,139 @@
 
 {% block extra_head %}
 {% include 'partials/course_mapping_styles.html' %}
-<style>
-    /* Map height for config legs layout is in course_mapping_styles (.config-legs-map-region) */
-    .config-package-events-grid {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem 1rem;
-        margin-bottom: 1rem;
-    }
-    .config-package-events-grid label {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-        font-size: 0.9rem;
-        cursor: pointer;
-    }
-    .race-config-workspace-nav {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.75rem;
-        margin-bottom: 1rem;
-    }
-    .race-config-workspace-actions {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    .race-config-workspace-actions button {
-        padding: 0.4rem 0.75rem;
-        border: 1px solid #bdc3c7;
-        border-radius: 4px;
-        background: #fff;
-        font-size: 0.875rem;
-        cursor: pointer;
-    }
-    .race-config-workspace-actions button.primary,
-    .race-config-workspace-actions #btn-save-course {
-        background: #3498db;
-        color: #fff;
-        border-color: #2980b9;
-        font-weight: 600;
-    }
-    .race-config-workspace-nav .race-config-tabs {
-        margin-bottom: 0;
-        border-bottom: none;
-        padding-bottom: 0;
-    }
-    .race-config-tabs {
-        display: flex;
-        gap: 0.5rem;
-        margin-bottom: 1rem;
-        border-bottom: 2px solid #ecf0f1;
-        padding-bottom: 0.5rem;
-    }
-    .race-config-tab {
-        padding: 0.5rem 1.25rem;
-        border: 1px solid #bdc3c7;
-        border-radius: 4px 4px 0 0;
-        background: #fff;
-        cursor: pointer;
-        font-size: 0.95rem;
-    }
-    .race-config-tab.active {
-        background: #3498db;
-        color: #fff;
-        border-color: #2980b9;
-    }
-    #race-config-list-table tbody tr.config-row { cursor: pointer; }
-    #race-config-list-table tbody tr.config-row.selected { background: #e3f2fd; }
-    .race-config-modal {
-        display: none;
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.4);
-        z-index: 1000;
-        align-items: center;
-        justify-content: center;
-    }
-    .race-config-modal.open { display: flex; }
-    .race-config-modal .modal-panel {
-        background: #fff;
-        border-radius: 6px;
-        padding: 1.5rem;
-        width: 100%;
-        max-width: 480px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-    }
-</style>
+{% include 'partials/race_config_page_styles.html' %}
 {% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h2>Race Configuration</h2>
-</div>
-
-<div id="race-config-entry" class="card" style="margin-bottom: 2rem;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-        <h3 style="margin: 0; color: #2c3e50;">Select a configuration</h3>
-        <button type="button" id="race-config-new-btn" style="padding: 0.4rem 0.75rem; border: 1px solid #bdc3c7; border-radius: 4px; background: #fff; cursor: pointer; font-size: 0.875rem;">New configuration</button>
+<div class="race-config-page">
+    <div class="page-header">
+        <h2 id="race-config-page-title">Race Configuration</h2>
     </div>
-    <div class="scrollable-table-container">
-        <table id="race-config-list-table" class="table-sticky-header">
-            <thead>
-                <tr>
-                    <th class="table-sortable" data-sort="label">Name <span class="table-sortable-indicator">↕</span></th>
-                    <th class="table-sortable" data-sort="description">Description <span class="table-sortable-indicator">↕</span></th>
-                    <th class="table-sortable" data-sort="updated">Saved On <span class="table-sortable-indicator">↕</span></th>
-                    <th class="course-map-action-cell" style="width: 5.5rem;">Actions</th>
-                </tr>
-            </thead>
-            <tbody id="race-config-list-tbody">
-                <tr><td colspan="4" class="placeholder">Loading configurations…</td></tr>
-            </tbody>
-        </table>
-    </div>
-    <p style="margin: 1rem 0 0 0; color: #7f8c8d; font-size: 0.875rem;">Click a row to open a package. Use the edit icon to change name, day, or description; the delete icon permanently removes a package (with confirmation). Packages live under <code>runflow/config/{config_id}/</code>.</p>
-</div>
 
-<div id="race-config-edit-package-modal" role="dialog" aria-labelledby="race-config-edit-package-title" aria-modal="true" class="race-config-modal">
-    <div class="modal-panel">
-        <h3 id="race-config-edit-package-title" style="margin: 0 0 1rem 0; color: #2c3e50;">Edit configuration</h3>
-        <label for="race-config-edit-label" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Name</label>
-        <input type="text" id="race-config-edit-label" maxlength="120" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box;">
-        <label for="race-config-edit-day" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Day</label>
-        <select id="race-config-edit-day" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box;">
-            <option value="">(not set)</option>
-            {% for day in day_short_codes | default(['fri', 'sat', 'sun', 'mon'], true) %}
-            <option value="{{ day }}">{{ day | upper }}</option>
-            {% endfor %}
-        </select>
-        <p id="race-config-edit-events-note" style="font-size: 0.875rem; color: #7f8c8d; margin: 0 0 1rem 0;"></p>
-        <label for="race-config-edit-description" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Description <span style="color: #95a5a6; font-weight: normal;">(optional)</span></label>
-        <textarea id="race-config-edit-description" maxlength="255" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1.25rem; box-sizing: border-box; resize: vertical; font-family: inherit;"></textarea>
-        <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
-            <button type="button" id="race-config-edit-cancel" class="course-btn">Cancel</button>
-            <button type="button" id="race-config-edit-save" class="course-btn" style="background: #27ae60; color: #fff; border-color: #219a52; font-weight: 600;">Save</button>
-        </div>
-    </div>
-</div>
-
-<div id="race-config-new-modal" role="dialog" aria-labelledby="race-config-new-title" aria-modal="true" class="race-config-modal">
-    <div class="modal-panel">
-        <h3 id="race-config-new-title" style="margin: 0 0 1rem 0; color: #2c3e50;">New configuration</h3>
-        <label for="race-config-new-label" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Name</label>
-        <input type="text" id="race-config-new-label" placeholder="FM 2027 Test" maxlength="120" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box;">
-        <label for="race-config-new-day" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Day</label>
-        <select id="race-config-new-day" required style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box;">
-            <option value="">Select day…</option>
-            {% for day in day_short_codes | default(['fri', 'sat', 'sun', 'mon'], true) %}
-            <option value="{{ day }}">{{ day | upper }}</option>
-            {% endfor %}
-        </select>
-        <span style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Events</span>
-        <div id="race-config-new-events" class="config-package-events-grid" role="group" aria-label="Events for this configuration"></div>
-        <label for="race-config-new-description" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Description <span style="color: #95a5a6; font-weight: normal;">(optional)</span></label>
-        <textarea id="race-config-new-description" placeholder="Optional notes for this configuration" maxlength="255" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1.25rem; box-sizing: border-box; resize: vertical; font-family: inherit;"></textarea>
-        <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
-            <button type="button" id="race-config-new-cancel" class="course-btn">Cancel</button>
-            <button type="button" id="race-config-create-btn" class="course-btn" style="background: #27ae60; color: #fff; border-color: #219a52; font-weight: 600;">Create &amp; open</button>
-        </div>
-    </div>
-</div>
-
-<div id="race-config-workspace" style="display: none;">
-    <div class="race-config-workspace-nav">
-        <div class="race-config-tabs" role="tablist">
-            <button type="button" class="race-config-tab active" data-tab="legs" role="tab" aria-selected="true">Legs</button>
-            <button type="button" class="race-config-tab" data-tab="course" role="tab" aria-selected="false">Course</button>
-            <button type="button" class="race-config-tab" data-tab="runners" role="tab" aria-selected="false">Runners</button>
-        </div>
-        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem;">
-            <div id="race-config-workspace-actions" class="race-config-workspace-actions"></div>
-            <button type="button" id="race-config-change-package" style="padding: 0.35rem 0.75rem; font-size: 0.875rem; cursor: pointer;">Change package</button>
+    <div id="race-config-entry" class="page-shell page-shell--entry">
+        <div class="content-card">
+            <div class="card-header">
+                <h3 class="card-title">Select a configuration</h3>
+                <div class="card-actions">
+                    <button type="button" id="race-config-new-btn">New configuration</button>
+                </div>
+            </div>
+            <div class="scrollable-table-container">
+                <table id="race-config-list-table" class="table-sticky-header">
+                    <thead>
+                        <tr>
+                            <th class="table-sortable" data-sort="label">Name <span class="table-sortable-indicator">↕</span></th>
+                            <th class="table-sortable" data-sort="description">Description <span class="table-sortable-indicator">↕</span></th>
+                            <th class="table-sortable" data-sort="updated">Saved On <span class="table-sortable-indicator">↕</span></th>
+                            <th class="course-map-action-cell" style="width: 5.5rem;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="race-config-list-tbody">
+                        <tr><td colspan="4" class="placeholder">Loading configurations…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="card-help" style="margin-bottom: 0;">Click a row to open a package. Use the edit icon to change name, day, or description; the delete icon permanently removes a package (with confirmation). Packages live under <code>runflow/config/{config_id}/</code>.</p>
         </div>
     </div>
 
-    <div id="race-config-tab-workspace" role="tabpanel">
-        {% include 'partials/course_mapping_workspace.html' %}
+    <div id="race-config-edit-package-modal" role="dialog" aria-labelledby="race-config-edit-package-title" aria-modal="true" class="race-config-modal">
+        <div class="modal-panel">
+            <h3 id="race-config-edit-package-title" style="margin: 0 0 1rem 0; color: #2c3e50;">Edit configuration</h3>
+            <label for="race-config-edit-label" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Name</label>
+            <input type="text" id="race-config-edit-label" maxlength="120" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box;">
+            <label for="race-config-edit-day" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Day</label>
+            <select id="race-config-edit-day" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box;">
+                <option value="">(not set)</option>
+                {% for day in day_short_codes | default(['fri', 'sat', 'sun', 'mon'], true) %}
+                <option value="{{ day }}">{{ day | upper }}</option>
+                {% endfor %}
+            </select>
+            <p id="race-config-edit-events-note" style="font-size: 0.875rem; color: #7f8c8d; margin: 0 0 1rem 0;"></p>
+            <label for="race-config-edit-description" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Description <span style="color: #95a5a6; font-weight: normal;">(optional)</span></label>
+            <textarea id="race-config-edit-description" maxlength="255" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1.25rem; box-sizing: border-box; resize: vertical; font-family: inherit;"></textarea>
+            <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <button type="button" id="race-config-edit-cancel" class="course-btn">Cancel</button>
+                <button type="button" id="race-config-edit-save" class="course-btn" style="background: #27ae60; color: #fff; border-color: #219a52; font-weight: 600;">Save</button>
+            </div>
+        </div>
     </div>
 
-    <div id="race-config-tab-runners" role="tabpanel" style="display: none;">
-        {% include 'partials/runners_baseline_body.html' %}
+    <div id="race-config-new-modal" role="dialog" aria-labelledby="race-config-new-title" aria-modal="true" class="race-config-modal">
+        <div class="modal-panel">
+            <h3 id="race-config-new-title" style="margin: 0 0 1rem 0; color: #2c3e50;">New configuration</h3>
+            <label for="race-config-new-label" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Name</label>
+            <input type="text" id="race-config-new-label" placeholder="FM 2027 Test" maxlength="120" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box;">
+            <label for="race-config-new-day" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Day</label>
+            <select id="race-config-new-day" required style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box;">
+                <option value="">Select day…</option>
+                {% for day in day_short_codes | default(['fri', 'sat', 'sun', 'mon'], true) %}
+                <option value="{{ day }}">{{ day | upper }}</option>
+                {% endfor %}
+            </select>
+            <span style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Events</span>
+            <div id="race-config-new-events" class="config-package-events-grid" role="group" aria-label="Events for this configuration"></div>
+            <label for="race-config-new-description" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Description <span style="color: #95a5a6; font-weight: normal;">(optional)</span></label>
+            <textarea id="race-config-new-description" placeholder="Optional notes for this configuration" maxlength="255" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1.25rem; box-sizing: border-box; resize: vertical; font-family: inherit;"></textarea>
+            <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <button type="button" id="race-config-new-cancel" class="course-btn">Cancel</button>
+                <button type="button" id="race-config-create-btn" class="course-btn" style="background: #27ae60; color: #fff; border-color: #219a52; font-weight: 600;">Create &amp; open</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="race-config-workspace" class="page-shell page-shell--authoring" style="display: none;">
+        <div class="package-header-card content-card" id="config-package-details-card" style="display: none;">
+            <div class="package-header-body">
+                <div class="context-name-row">
+                    <h2 id="course-map-name-text" class="package-name-heading"></h2>
+                    <input type="text" id="course-map-name" class="config-package-input" placeholder="Package name" maxlength="120" />
+                    <div class="context-actions" id="race-config-context-actions">
+                        <div id="race-config-workspace-actions"></div>
+                    </div>
+                </div>
+                <div class="context-field">
+                    <span class="context-label">DESCRIPTION:</span>
+                    <span id="course-map-description-text" class="context-value context-value--multiline"></span>
+                    <textarea id="course-map-description" class="config-package-input config-package-textarea" placeholder="Optional description" maxlength="255" rows="2"></textarea>
+                </div>
+                <div class="context-field context-field--package-id">
+                    <span class="context-label">PACKAGE ID:</span>
+                    <code id="course-map-id" class="context-value" title=""></code>
+                </div>
+                <div class="context-field-row">
+                    <div class="context-field context-field--inline">
+                        <span class="context-label">EVENT DAY:</span>
+                        <span id="course-map-event-day-text" class="context-value"></span>
+                        <select id="course-map-event-day" class="config-package-input">
+                            <option value="">(not set)</option>
+                            {% for day in day_short_codes | default(['fri', 'sat', 'sun', 'mon'], true) %}
+                            <option value="{{ day }}">{{ day }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="context-field context-field--inline" id="config-package-events-field" style="display: none;">
+                        <span class="context-label">EVENTS:</span>
+                        <span id="course-map-package-events-text" class="context-value"></span>
+                    </div>
+                </div>
+            </div>
+            <nav class="subnav-tabs" role="tablist" aria-label="Package authoring">
+                <button type="button" class="subnav-tab active" data-tab="legs" role="tab" aria-selected="true">Legs</button>
+                <button type="button" class="subnav-tab" data-tab="course" role="tab" aria-selected="false">Course</button>
+                <button type="button" class="subnav-tab" data-tab="runners" role="tab" aria-selected="false">Runners</button>
+            </nav>
+        </div>
+
+        <div class="tab-panel-card content-card">
+            <div id="race-config-tab-workspace" role="tabpanel">
+                {% include 'partials/course_mapping_workspace.html' %}
+            </div>
+
+            <div id="race-config-tab-runners" role="tabpanel" style="display: none;">
+                {% include 'partials/runners_baseline_body.html' %}
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -210,5 +159,5 @@
 <script src="/static/js/map/course_mapping.js?v=779a"></script>
 <script src="/static/js/map/segment_recipes.js?v=779b"></script>
 <script src="/static/js/runners_baseline.js?v=756i"></script>
-<script src="/static/js/race_configuration.js?v=771a"></script>
+<script src="/static/js/race_configuration.js?v=780b"></script>
 {% endblock %}

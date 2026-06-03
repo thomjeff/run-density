@@ -1,38 +1,5 @@
 <div id="course-mapping-root">
 
-<div class="card config-package-details-card" id="config-package-details-card" style="display: none; margin-bottom: 1rem;">
-    <div class="config-package-details-body">
-        <div class="config-package-field config-package-field-id">
-            <span class="config-package-label">Package ID</span>
-            <code id="course-map-id" class="config-package-id-value"></code>
-        </div>
-        <div class="config-package-field">
-            <span class="config-package-label">Name</span>
-            <span id="course-map-name-text" class="config-package-value"></span>
-            <input type="text" id="course-map-name" class="config-package-input" placeholder="Package name" maxlength="120" />
-        </div>
-        <div class="config-package-field">
-            <span class="config-package-label">Description</span>
-            <span id="course-map-description-text" class="config-package-value config-package-value-multiline"></span>
-            <textarea id="course-map-description" class="config-package-input config-package-textarea" placeholder="Optional description" maxlength="255" rows="2"></textarea>
-        </div>
-        <div class="config-package-field">
-            <span class="config-package-label">Event day</span>
-            <span id="course-map-event-day-text" class="config-package-value"></span>
-            <select id="course-map-event-day" class="config-package-input">
-                <option value="">(not set)</option>
-                {% for day in day_short_codes | default(['fri', 'sat', 'sun', 'mon'], true) %}
-                <option value="{{ day }}">{{ day }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="config-package-field" id="config-package-events-field" style="display: none;">
-            <span class="config-package-label">Events</span>
-            <span id="course-map-package-events-text" class="config-package-value"></span>
-        </div>
-    </div>
-</div>
-
 <div class="card" id="course-from-map-card">
     <div id="course-legacy-draw-header">
         <h3 class="course-from-map-title">Course (map)</h3>
@@ -46,7 +13,7 @@
                 </div>
                 <div id="course-map-header-buttons" class="course-map-header-buttons-standalone" style="display: flex; gap: 0.5rem; align-items: center;">
                     <button type="button" id="btn-edit-course" class="course-btn">Edit</button>
-                    <button type="button" id="btn-export" class="course-btn" disabled title="Write segments.csv, flow.csv, locations.csv, GPX to course folder">Export</button>
+                    <button type="button" id="btn-export" class="course-btn" disabled title="Write segments.csv, flow.csv, locations.csv, GPX to course folder">Export package</button>
                     <button type="button" id="btn-delete-course" class="course-btn" disabled title="Delete this course (cannot be undone)">Delete Course</button>
                     <button type="button" id="btn-save-course" class="course-btn primary" disabled style="display: none;">Save</button>
                 </div>
@@ -74,9 +41,11 @@
     <div id="course-map-legacy-slot"></div>
 
     <div id="config-package-legs-panel" class="config-package-panel config-legs-layout" style="display: none;">
-        <section class="course-derived-section config-legs-map-section" aria-labelledby="config-legs-map-heading">
-            <h4 id="config-legs-map-heading" class="course-derived-heading">Leg map</h4>
-            <p class="course-derived-empty config-legs-map-lead">
+        <section class="content-card course-derived-section config-legs-map-section" aria-labelledby="config-legs-map-heading">
+            <div class="card-header">
+                <h4 id="config-legs-map-heading" class="card-title">Leg map</h4>
+            </div>
+            <p class="card-help course-derived-empty config-legs-map-lead">
                 Pan and zoom to filter the legs table below. Select a leg, then <strong>Add Locations</strong>.
                 <strong>Course, water, and official</strong> snap to the purple route;
                 <strong>aid</strong>, <strong>traffic</strong>, and <strong>extract</strong> stay at your click.
@@ -103,18 +72,20 @@
                 </div>
             </div>
         </section>
-        <section class="course-derived-section" id="course-legs-card">
-            <h4 class="course-derived-heading">Course legs</h4>
-            <p class="course-derived-empty" style="margin-bottom: 0.5rem;">
+        <section class="content-card course-derived-section" id="course-legs-card">
+            <div class="card-header">
+                <h4 class="card-title">Course legs</h4>
+                <div class="card-actions course-planner-toolbar config-legs-table-toolbar">
+                <input type="file" id="segment-library-gpx-input" accept=".gpx,.json" multiple style="display: none;" />
+                <button type="button" id="btn-import-gpx" class="course-btn" title="Import GPX routes and optional leg export JSON (locations + metadata)">Import legs…</button>
+                <button type="button" id="btn-draw-leg-map" class="course-btn" disabled title="Coming soon: draw a new leg on the map">Draw leg on map</button>
+                </div>
+            </div>
+            <p class="card-help course-derived-empty">
                 Import GPX files, then select a leg in the table (use <strong>Edit</strong> on that row for leg details).
                 Set <strong>Proxy loc ID</strong> on the
                 <button type="button" id="btn-go-to-recipes" class="course-link-btn">Course</button> tab.
             </p>
-            <div class="course-planner-toolbar config-legs-table-toolbar">
-                <input type="file" id="segment-library-gpx-input" accept=".gpx,.json" multiple style="display: none;" />
-                <button type="button" id="btn-import-gpx" class="course-btn" title="Import GPX routes and optional leg export JSON (locations + metadata)">Import legs…</button>
-                <button type="button" id="btn-draw-leg-map" class="course-btn" disabled title="Coming soon: draw a new leg on the map">Draw leg on map</button>
-            </div>
             <p id="course-legs-status" class="course-derived-empty" style="display: none;"></p>
             <div id="course-legs-table-wrap" class="config-legs-table-region" style="display: none;">
                 <div class="scrollable-table-container config-legs-table-scroll">
@@ -142,12 +113,14 @@
     </div>
 
     <div id="config-package-course-panel" class="config-package-panel" style="display: none;">
-        <section class="course-derived-section" id="course-preview-section" style="display: none;">
-            <div class="course-derived-heading-row">
-                <h4 class="course-derived-heading">Course preview</h4>
-                <div id="course-preview-event-toolbar" class="course-preview-event-toolbar" role="group" aria-label="Event route"></div>
+        <section class="content-card course-derived-section" id="course-preview-section" style="display: none;">
+            <div class="card-header">
+                <h4 class="card-title">Course preview</h4>
+                <div class="card-actions">
+                    <div id="course-preview-event-toolbar" class="course-preview-event-toolbar" role="group" aria-label="Event route"></div>
+                </div>
             </div>
-            <p id="course-preview-empty" class="course-derived-empty">Save event recipes to preview each distance route.</p>
+            <p id="course-preview-empty" class="card-help course-derived-empty">Save event recipes to preview each distance route.</p>
             <p id="course-preview-meta" class="course-derived-empty" style="display: none; margin-bottom: 0.5rem;"></p>
             <div id="course-preview-map-wrap" class="config-course-preview-map-wrap" style="display: none;">
                 <div id="course-preview-map" aria-label="Stitched event route preview">
@@ -155,12 +128,14 @@
                 </div>
             </div>
         </section>
-        <section class="course-derived-section" id="segments-card">
-            <div class="course-derived-heading-row">
-                <h4 class="course-derived-heading">Segments (combined course)</h4>
-                <button type="button" id="btn-edit-event-recipes" class="course-map-action-text-btn" style="display: none;" title="Change leg order per event and re-export segments">Edit event recipes</button>
+        <section class="content-card course-derived-section" id="segments-card">
+            <div class="card-header">
+                <h4 class="card-title">Segments (combined course)</h4>
+                <div class="card-actions">
+                    <button type="button" id="btn-edit-event-recipes" class="course-map-action-text-btn" style="display: none;" title="Change leg order per event and re-export segments">Edit event recipes</button>
+                </div>
             </div>
-            <p id="segments-empty" class="course-derived-empty">Build the combined course from your legs using <strong>event recipes</strong> (set leg order per distance, then export). Pan/zoom the preview map to filter segments and locations tables.</p>
+            <p id="segments-empty" class="card-help course-derived-empty">Build the combined course from your legs using <strong>event recipes</strong> (set leg order per distance, then export). Pan/zoom the preview map to filter segments and locations tables.</p>
             <div id="segments-table-wrap" style="display: none;">
                 <div class="scrollable-table-container course-derived-table-scroll">
                     <table id="segments-table" class="table-sticky-header" style="width: 100%; font-size: 0.875rem;">
@@ -173,13 +148,15 @@
             </div>
         </section>
 
-        <section class="course-derived-section" id="locations-card">
-            <div class="course-derived-heading-row">
-                <h4 class="course-derived-heading">Locations (combined course)</h4>
-                <button type="button" id="btn-edit-locations-grid" class="course-map-action-text-btn" style="display: none;" title="Operational editor for zones, timing, resources, and notes">Edit operations…</button>
-                <button type="button" id="btn-manage-resources" class="course-map-action-text-btn" title="Define schedulable resources">Manage resources</button>
+        <section class="content-card course-derived-section" id="locations-card">
+            <div class="card-header">
+                <h4 class="card-title">Locations (combined course)</h4>
+                <div class="card-actions">
+                    <button type="button" id="btn-edit-locations-grid" class="course-map-action-text-btn" style="display: none;" title="Operational editor for zones, timing, resources, and notes">Edit operations…</button>
+                    <button type="button" id="btn-manage-resources" class="course-map-action-text-btn" title="Define schedulable resources">Manage resources</button>
+                </div>
             </div>
-            <p id="locations-empty" class="course-derived-empty">Locations appear here after you save event recipes. Placements from the Legs tab map sync when you open this tab. Edit resources, segment ID, and remove locations here.</p>
+            <p id="locations-empty" class="card-help course-derived-empty">Locations appear here after you save event recipes. Placements from the Legs tab map sync when you open this tab. Edit resources, segment ID, and remove locations here.</p>
             <div id="locations-table-wrap" style="display: none;">
                 <div class="scrollable-table-container course-derived-table-scroll">
                     <table id="locations-table" class="table-sticky-header" style="width: 100%; font-size: 0.875rem;">

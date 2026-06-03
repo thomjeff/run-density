@@ -121,13 +121,19 @@
         }
     }
 
+    function setPageTitle(text) {
+        const el = document.getElementById('race-config-page-title');
+        if (el) el.textContent = text || 'Race Configuration';
+    }
+
     function showEntryOnly() {
         const entry = document.getElementById('race-config-entry');
         const workspace = document.getElementById('race-config-workspace');
-        const pageHeader = document.querySelector('.page-header');
+        const pageHeader = document.querySelector('.race-config-page .page-header');
         if (entry) entry.style.display = 'block';
         if (workspace) workspace.style.display = 'none';
         if (pageHeader) pageHeader.style.display = '';
+        setPageTitle('Race Configuration');
     }
 
     function isPackageWorkspaceDirty() {
@@ -137,7 +143,7 @@
     function showWorkspace(manifest, configId) {
         const entry = document.getElementById('race-config-entry');
         const workspace = document.getElementById('race-config-workspace');
-        const pageHeader = document.querySelector('.page-header');
+        const pageHeader = document.querySelector('.race-config-page .page-header');
 
         currentConfigId = configId;
         if (entry) entry.style.display = 'none';
@@ -145,6 +151,7 @@
         if (pageHeader) pageHeader.style.display = 'none';
 
         const label = (manifest && manifest.label) || configId;
+        setPageTitle(label);
         const description = (manifest && manifest.description) || '';
         const eventDay = (manifest && manifest.event_day) || '';
 
@@ -181,7 +188,7 @@
     }
 
     function setActiveTab(tab) {
-        document.querySelectorAll('.race-config-tab').forEach(function (btn) {
+        document.querySelectorAll('.race-config-page .subnav-tab').forEach(function (btn) {
             const isActive = btn.getAttribute('data-tab') === tab;
             btn.classList.toggle('active', isActive);
             btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
@@ -627,26 +634,12 @@
             });
         }
 
-        const changePkg = document.getElementById('race-config-change-package');
-        if (changePkg) {
-            changePkg.addEventListener('click', function (e) {
-                if (
-                    isPackageWorkspaceDirty() &&
-                    !window.confirm('Discard unsaved changes to this package?')
-                ) {
-                    e.preventDefault();
-                    return;
-                }
-                window.location.href = CONFIG_PATH_PREFIX;
-            });
-        }
-
         function switchWorkspaceTab(tab, cid) {
             window.history.pushState({}, '', buildConfigUrl(cid, tab));
             setActiveTab(tab);
         }
 
-        document.querySelectorAll('.race-config-tab').forEach(function (btn) {
+        document.querySelectorAll('.race-config-page .subnav-tab').forEach(function (btn) {
             btn.addEventListener('click', function (e) {
                 const tab = btn.getAttribute('data-tab');
                 const cid = getConfigId();
