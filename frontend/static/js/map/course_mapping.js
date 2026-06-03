@@ -38,6 +38,11 @@ document.addEventListener('DOMContentLoaded', function () {
         return isConfigPackageMode() && !!document.getElementById('race-config-workspace');
     }
 
+    /** Config package Course tab: edit locations without global course draw Edit mode. */
+    function canEditLocationsInWorkspace() {
+        return usePackageLevelEditSave() || isEditMode;
+    }
+
     var POPUP_MAX_WIDTH = 375;
     var resourcesDirty = false;
 
@@ -51,15 +56,25 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!workspaceActionsHome) {
             workspaceActionsHome = courseHome;
         }
-        var ids = ['btn-edit-course', 'btn-export', 'btn-save-course', 'btn-delete-course'];
+        var ids = ['btn-export'];
         ids.forEach(function (id) {
             var el = document.getElementById(id);
             if (el && el.parentNode !== navHome) {
                 navHome.appendChild(el);
             }
         });
+        var editBtn = document.getElementById('btn-edit-course');
+        var saveBtn = document.getElementById('btn-save-course');
         var del = document.getElementById('btn-delete-course');
+        if (editBtn) editBtn.style.display = 'none';
+        if (saveBtn) saveBtn.style.display = 'none';
         if (del) del.style.display = 'none';
+        if (courseHome && editBtn && editBtn.parentNode !== courseHome) {
+            courseHome.appendChild(editBtn);
+        }
+        if (courseHome && saveBtn && saveBtn.parentNode !== courseHome) {
+            courseHome.appendChild(saveBtn);
+        }
     }
 
     function initPackageEventDaySelect() {
@@ -71,18 +86,46 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    function placeCourseMapContainer() {
+        var container = document.getElementById('course-map-container');
+        if (!container) return;
+        var packageSlot =
+            document.getElementById('config-legs-map-slot') ||
+            document.querySelector('#config-package-legs-panel .config-legs-map-region');
+        var legacySlot = document.getElementById('course-map-legacy-slot');
+        var parent = usePackageLevelEditSave() && packageSlot ? packageSlot : legacySlot;
+        if (parent && container.parentNode !== parent) {
+            parent.appendChild(container);
+        }
+    }
+
     function applyConfigPackageUIMode() {
         initPackageEventDaySelect();
         var listCard = document.getElementById('course-list-card');
         if (listCard) listCard.style.display = 'none';
         var btnNew = document.getElementById('btn-new-course');
         if (btnNew) btnNew.style.display = 'none';
+        var legacyHeader = document.getElementById('course-legacy-draw-header');
+        var legsPanel = document.getElementById('config-package-legs-panel');
+        var coursePanel = document.getElementById('config-package-course-panel');
         var pkgCard = document.getElementById('config-package-details-card');
         if (usePackageLevelEditSave()) {
+            if (legacyHeader) legacyHeader.style.display = 'none';
             if (pkgCard) pkgCard.style.display = 'block';
             moveWorkspaceActionButtons();
-        } else if (pkgCard) {
-            pkgCard.style.display = 'none';
+            if (legsPanel) legsPanel.style.display = 'block';
+            if (coursePanel) coursePanel.style.display = 'none';
+        } else {
+            if (legacyHeader) legacyHeader.style.display = '';
+            if (legsPanel) legsPanel.style.display = 'none';
+            if (coursePanel) coursePanel.style.display = 'none';
+            if (pkgCard) pkgCard.style.display = 'none';
+        }
+        placeCourseMapContainer();
+        if (window.courseMappingMap) {
+            setTimeout(function () {
+                window.courseMappingMap.invalidateSize();
+            }, 150);
         }
         var btnDelete = document.getElementById('btn-delete-course');
         if (btnDelete && !usePackageLevelEditSave()) {
@@ -97,7 +140,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    function loadConfigPackageCourse() {
+    function loadConfigPackageCourse(options) {
+        options = options || {};
         var pkgId = resolveConfigPackageId();
         if (!pkgId) return Promise.resolve();
         return fetch(
@@ -109,7 +153,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     var c = blankCourse();
                     c.id = pkgId;
                     c.config_id = pkgId;
-                    setCourse(pkgId, c);
+                    setCourse(pkgId, c, options);
                     clearDirty();
                     return null;
                 }
@@ -123,12 +167,14 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(function (data) {
                 if (!data) return;
                 if (data.ok && data.course) {
-                    setCourse(pkgId, data.course);
+                    setCourse(pkgId, data.course, options);
                     if (window.PENDING_PACKAGE_META) {
+                        var pending = window.PENDING_PACKAGE_META;
                         syncCourseHeaderFromPackageMeta(
-                            window.PENDING_PACKAGE_META.label,
-                            window.PENDING_PACKAGE_META.description,
-                            window.PENDING_PACKAGE_META.event_day || ''
+                            pending.label,
+                            pending.description,
+                            pending.event_day || '',
+                            pending.package_events
                         );
                         delete window.PENDING_PACKAGE_META;
                     }
@@ -171,14 +217,76 @@ document.addEventListener('DOMContentLoaded', function () {
         return d ? String(d).trim().toLowerCase() : '';
     }
 
-    function syncCourseHeaderFromPackageMeta(label, description, eventDay) {
-        if (!currentCourse) return;
-        if (label != null) currentCourse.name = String(label).trim();
-        if (description != null) currentCourse.description = String(description).trim();
+    function formatPackageEventLabel(eventId) {
+        var e = String(eventId || '').toLowerCase();
+        if (e === '10k') return '10K';
+        return e ? e.charAt(0).toUpperCase() + e.slice(1) : '';
+    }
+
+    /** Populate read-only package details card (does not require course.json loaded). */
+    function syncConfigPackageDetailsCard(label, description, eventDay, packageEvents) {
+        var pkgId = resolveConfigPackageId() || '';
+        var idEl = document.getElementById('course-map-id');
+        if (idEl) idEl.textContent = pkgId;
+        var nameText = document.getElementById('course-map-name-text');
+        var descText = document.getElementById('course-map-description-text');
+        var dayText = document.getElementById('course-map-event-day-text');
+        var nameVal =
+            label != null ? String(label).trim() : currentCourse ? currentCourse.name || '' : '';
+        var descVal =
+            description != null
+                ? String(description).trim()
+                : currentCourse
+                  ? currentCourse.description || ''
+                  : '';
+        var dayVal =
+            eventDay != null ? String(eventDay).trim().toLowerCase() : getPackageEventDay();
+        if (nameText) nameText.textContent = nameVal || '(no name)';
+        if (descText) descText.textContent = descVal || '(none)';
+        if (dayText) dayText.textContent = dayVal || '(not set)';
+        if (packageEvents != null) {
+            window.CONFIG_PACKAGE_EVENTS = Array.isArray(packageEvents)
+                ? packageEvents.slice()
+                : [];
+        }
+        var events = window.CONFIG_PACKAGE_EVENTS || [];
+        var eventsField = document.getElementById('config-package-events-field');
+        var eventsText = document.getElementById('course-map-package-events-text');
+        if (eventsField && eventsText) {
+            if (events.length) {
+                eventsField.style.display = '';
+                eventsText.textContent = events.map(formatPackageEventLabel).join(', ');
+            } else {
+                eventsField.style.display = 'none';
+                eventsText.textContent = '';
+            }
+        }
+        var nameInput = document.getElementById('course-map-name');
+        var descInput = document.getElementById('course-map-description');
+        var dayInput = document.getElementById('course-map-event-day');
+        if (nameInput && label != null) nameInput.value = nameVal;
+        if (descInput && description != null) descInput.value = descVal;
+        if (dayInput && eventDay != null) {
+            initPackageEventDaySelect();
+            dayInput.value = dayVal;
+        }
+    }
+
+    function syncCourseHeaderFromPackageMeta(label, description, eventDay, packageEvents) {
+        if (currentCourse) {
+            if (label != null) currentCourse.name = String(label).trim();
+            if (description != null) currentCourse.description = String(description).trim();
+        }
         if (eventDay != null) {
             window.CONFIG_PACKAGE_EVENT_DAY = String(eventDay).trim().toLowerCase();
         }
-        syncCourseToHeaderInputs();
+        if (packageEvents != null) {
+            window.CONFIG_PACKAGE_EVENTS = Array.isArray(packageEvents)
+                ? packageEvents.slice()
+                : [];
+        }
+        if (currentCourse) syncCourseToHeaderInputs();
+        syncConfigPackageDetailsCard(label, description, eventDay, packageEvents);
     }
 
     function applyPackageDayToLocation(loc) {
@@ -242,6 +350,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var toSave = buildCourseSavePayload(pkgId);
         currentCourse.id = pkgId;
         currentCourse.config_id = pkgId;
+        return persistConfigPackageResources().then(function () {
         return fetch('/api/config/packages/' + encodeURIComponent(pkgId) + '/course', {
             method: 'PUT',
             credentials: 'same-origin',
@@ -255,6 +364,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 clearDirty();
             });
+        });
         });
     }
 
@@ -280,10 +390,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 syncCourseHeaderFromPackageMeta(
                     m.label || pkgId,
                     m.description || '',
-                    m.event_day || ''
+                    m.event_day || '',
+                    m.package_events
                 );
             });
     }
+
+    window.syncConfigPackageDetailsCard = syncConfigPackageDetailsCard;
 
     function cancelConfigPackageEdit() {
         resourcesDirty = false;
@@ -365,19 +478,13 @@ document.addEventListener('DOMContentLoaded', function () {
     function updateManageResourcesButton() {
         var btn = document.getElementById('btn-manage-resources');
         if (!btn) return;
-        if (usePackageLevelEditSave()) {
-            btn.disabled = !isEditMode;
-            btn.title = isEditMode
-                ? 'Define schedulable resources (FPF, YSSR, AWP, VOL, …)'
-                : 'Click Edit to change resources';
-        } else {
-            btn.disabled = false;
-            btn.title = 'Define schedulable resources (FPF, YSSR, AWP, VOL, …)';
-        }
+        btn.disabled = false;
+        btn.title = 'Define schedulable resources (FPF, YSSR, AWP, VOL, …)';
     }
 
     function setEditMode(edit) {
         isEditMode = !!edit;
+        var packageMetaReadOnly = usePackageLevelEditSave();
         var nameText = document.getElementById('course-map-name-text');
         var nameInput = document.getElementById('course-map-name');
         var descText = document.getElementById('course-map-description-text');
@@ -393,13 +500,13 @@ document.addEventListener('DOMContentLoaded', function () {
         var editBtn = document.getElementById('btn-edit-course');
         var exportBtn = document.getElementById('btn-export');
         var delBtn = document.getElementById('btn-delete-course');
-        var showInput = isEditMode && currentCourse;
-        if (nameText) nameText.style.display = isEditMode ? 'none' : 'inline';
-        if (nameTextSt) nameTextSt.style.display = isEditMode ? 'none' : 'inline';
+        var showInput = isEditMode && currentCourse && !packageMetaReadOnly;
+        if (nameText) nameText.style.display = showInput ? 'none' : 'inline';
+        if (nameTextSt) nameTextSt.style.display = showInput ? 'none' : 'inline';
         if (nameInput) nameInput.style.display = showInput ? 'block' : 'none';
         if (nameInputSt) nameInputSt.style.display = showInput ? 'inline-block' : 'none';
-        if (descText) descText.style.display = isEditMode ? 'none' : 'inline';
-        if (descTextSt) descTextSt.style.display = isEditMode ? 'none' : 'inline';
+        if (descText) descText.style.display = showInput ? 'none' : 'inline';
+        if (descTextSt) descTextSt.style.display = showInput ? 'none' : 'inline';
         if (descInput) {
             descInput.style.display = showInput ? 'block' : 'none';
             if (showInput) resizeDescriptionTextarea();
@@ -408,10 +515,16 @@ document.addEventListener('DOMContentLoaded', function () {
             descInputSt.style.display = showInput ? 'block' : 'none';
             if (showInput) resizeDescriptionTextarea();
         }
-        if (dayText) dayText.style.display = isEditMode ? 'none' : 'inline';
+        if (dayText) dayText.style.display = showInput ? 'none' : 'inline';
         if (dayInput) dayInput.style.display = showInput ? 'block' : 'none';
-        if (saveBtn) saveBtn.style.display = isEditMode ? 'inline-block' : 'none';
-        if (editBtn) editBtn.textContent = isEditMode ? 'Cancel' : 'Edit';
+        if (saveBtn) {
+            saveBtn.style.display =
+                packageMetaReadOnly ? 'none' : isEditMode ? 'inline-block' : 'none';
+        }
+        if (editBtn) {
+            editBtn.style.display = packageMetaReadOnly ? 'none' : '';
+            editBtn.textContent = isEditMode ? 'Cancel' : 'Edit';
+        }
         if (editToolbar) editToolbar.style.display = (isEditMode && currentCourse) ? 'flex' : 'none';
         if (exportBtn) exportBtn.style.display = isEditMode ? 'none' : 'inline-block';
         if (delBtn) {
@@ -539,7 +652,15 @@ document.addEventListener('DOMContentLoaded', function () {
         updateExportButton();
     }
 
-    function setCourse(id, course) {
+    function shouldSkipCourseMapRefresh() {
+        if (!usePackageLevelEditSave()) return false;
+        var legsPanel = document.getElementById('config-package-legs-panel');
+        return !!(legsPanel && legsPanel.style.display !== 'none');
+    }
+
+    function setCourse(id, course, options) {
+        options = options || {};
+        var skipMapRefresh = options.skipMapRefresh || shouldSkipCourseMapRefresh();
         currentCourseId = id;
         currentCourse = course;
         clearDirty();
@@ -573,15 +694,17 @@ document.addEventListener('DOMContentLoaded', function () {
         updateSameRouteBackButtons();
         updateExportButton();
         updateExtendHint();
-        renderCourseLine();
-        renderSegmentPins();
-        renderLocationPins();
         syncSegmentsFromBreaks();
         renderSegmentsList();
         renderLocationsList();
-        renderStartFinishIcons();
-        renderUturnIcons();
-        fitMapToCourse();
+        if (!skipMapRefresh) {
+            renderCourseLine();
+            renderSegmentPins();
+            renderLocationPins();
+            renderStartFinishIcons();
+            renderUturnIcons();
+            fitMapToCourse();
+        }
     }
 
     /** Drop deprecated loc_description; migrate into notes for one-pager export. */
@@ -778,10 +901,6 @@ document.addEventListener('DOMContentLoaded', function () {
             alert('Open a config package to manage resources.');
             return;
         }
-        if (usePackageLevelEditSave() && !isEditMode) {
-            alert('Click Edit to change resources.');
-            return;
-        }
         resourcesEditorDraft = getPackageResources().map(function (r) {
             return { code: r.code, label: r.label || r.code.toUpperCase() };
         });
@@ -876,18 +995,24 @@ document.addEventListener('DOMContentLoaded', function () {
     function savePackageResources() {
         var pkgId = resolveConfigPackageId();
         if (!pkgId || !resourcesEditorDraft) return;
+        var normalized = resourcesEditorDraft.map(function (r) {
+            return { code: r.code, label: r.label || r.code.toUpperCase() };
+        });
         if (usePackageLevelEditSave()) {
-            window.CONFIG_PACKAGE_RESOURCES = resourcesEditorDraft.map(function (r) {
-                return { code: r.code, label: r.label || r.code.toUpperCase() };
-            });
+            window.CONFIG_PACKAGE_RESOURCES = normalized;
             resourcesDirty = true;
-            setDirty();
             hideModal(document.getElementById('resources-editor-modal'));
-            if (currentCourse && currentCourse.locations) {
-                currentCourse.locations.forEach(syncLocationResourceCounts);
-            }
-            renderLocationsTableHeader();
-            renderLocationsList();
+            persistConfigPackageResources()
+                .then(function () {
+                    if (currentCourse && currentCourse.locations) {
+                        currentCourse.locations.forEach(syncLocationResourceCounts);
+                    }
+                    renderLocationsTableHeader();
+                    renderLocationsList();
+                })
+                .catch(function (e) {
+                    alert('Failed to save resources: ' + (e.message || String(e)));
+                });
             return;
         }
         fetch('/api/config/packages/' + encodeURIComponent(pkgId) + '/resources', {
@@ -921,7 +1046,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var title = document.getElementById('location-editor-title');
         if (!modal || !body || !footer) return;
         var locId = loc.id != null ? String(loc.id) : String(idx + 1);
-        var editable = !readOnly;
+        var editable = canEditLocationsInWorkspace() && !readOnly;
         var labelDisplay = (loc.loc_label || '').trim() || '(no label)';
         if (title) title.textContent = locId + ': ' + labelDisplay;
         body.innerHTML = '';
@@ -1115,7 +1240,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var btnSave = document.createElement('button');
             btnSave.type = 'button';
             btnSave.className = 'primary';
-            btnSave.textContent = 'Save location';
+            btnSave.textContent = 'Save';
             btnSave.onclick = function () {
                 loc.loc_label = inpLabel.value.trim();
                 loc.loc_type = selType.value || 'course';
@@ -1145,13 +1270,26 @@ document.addEventListener('DOMContentLoaded', function () {
                     loc.resources[res.code] = isNaN(n) ? 0 : Math.max(0, n);
                     loc[res.code + '_count'] = loc.resources[res.code];
                 });
-                destroyLocationEditorMap();
-                hideModal(modal);
-                locationEditorIndex = null;
-                setDirty();
-                renderLocationPins();
-                renderLocationsList();
-                updateCourseUI();
+                btnSave.disabled = true;
+                function closeAfterSave() {
+                    destroyLocationEditorMap();
+                    hideModal(modal);
+                    locationEditorIndex = null;
+                    renderLocationPins();
+                    renderLocationsList();
+                    updateCourseUI();
+                }
+                if (usePackageLevelEditSave()) {
+                    persistConfigPackageCourse()
+                        .then(closeAfterSave)
+                        .catch(function (err) {
+                            btnSave.disabled = false;
+                            alert(err.message || String(err));
+                        });
+                } else {
+                    setDirty();
+                    closeAfterSave();
+                }
             };
             footer.insertBefore(btnSave, btnClose);
         }
@@ -1216,7 +1354,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var row = document.getElementById('locations-thead-row');
         if (!row) return;
         row.innerHTML = '';
-        ['ID', 'Type', 'Label'].forEach(function (text) {
+        ['ID', 'Type', 'Label', 'Zone'].forEach(function (text) {
             var th = document.createElement('th');
             th.textContent = text;
             row.appendChild(th);
@@ -1227,9 +1365,10 @@ document.addEventListener('DOMContentLoaded', function () {
             th.title = (res.label || res.code) + ' (' + res.code + '_count)';
             row.appendChild(th);
         });
-        if (isEditMode) {
+        if (canEditLocationsInWorkspace()) {
             var actionTh = document.createElement('th');
-            actionTh.textContent = '';
+            actionTh.className = 'course-map-action-cell';
+            actionTh.textContent = 'Actions';
             row.appendChild(actionTh);
         }
     }
@@ -1258,8 +1397,18 @@ document.addEventListener('DOMContentLoaded', function () {
     var SEGMENT_HIT_STYLE = { color: ROUTE_COLOR, weight: 22, opacity: 0, lineCap: 'round', lineJoin: 'round' };
     var START_MARKER = { bg: '#22c55e', border: '#15803d' };
     var FINISH_MARKER = { bg: '#ef4444', border: '#b91c1c' };
-    var SCHEMA_OPTIONS = [{ value: 'on_course_open', label: 'on_course_open' }, { value: 'on_course_narrow', label: 'on_course_narrow' }];
-    var DIRECTION_OPTIONS = [{ value: 'uni', label: 'uni' }, { value: 'bi', label: 'bi' }];
+    var SCHEMA_OPTIONS = (window.SEGMENT_SCHEMA_CHOICES_FROM_SERVER || []).slice();
+    if (!SCHEMA_OPTIONS.length) {
+        SCHEMA_OPTIONS = [
+            { value: 'on_course_narrow', label: 'Narrow' },
+            { value: 'on_course_open', label: 'Open' },
+            { value: 'start_corral', label: 'Corral' }
+        ];
+    }
+    var DIRECTION_OPTIONS = (window.SEGMENT_DIRECTION_CHOICES_FROM_SERVER || []).slice();
+    if (!DIRECTION_OPTIONS.length) {
+        DIRECTION_OPTIONS = [{ value: 'uni', label: 'Uni' }, { value: 'bi', label: 'Bi' }];
+    }
 
     let segmentLinesLayer = null;
     let segmentInfoIconsLayer = null;
@@ -1519,10 +1668,19 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    function canExportCurrentCourse() {
+        if (!currentCourseId || !currentCourse) return false;
+        if (usePackageLevelEditSave()) {
+            var segs = currentCourse.segments;
+            return Array.isArray(segs) && segs.length > 0;
+        }
+        var geom = currentCourse.geometry;
+        return !!(geom && geom.coordinates && geom.coordinates.length >= 2);
+    }
+
     function updateExportButton() {
         const btn = document.getElementById('btn-export');
-        const canExport = !!(currentCourseId && currentCourse && currentCourse.geometry && currentCourse.geometry.coordinates && currentCourse.geometry.coordinates.length >= 2);
-        if (btn) btn.disabled = !canExport;
+        if (btn) btn.disabled = !canExportCurrentCourse();
     }
 
     function updateExtendHint() {
@@ -1643,95 +1801,238 @@ document.addEventListener('DOMContentLoaded', function () {
         updateCourseUI();
     }
 
+    function eidLower(v) {
+        return String(v || '').toLowerCase();
+    }
+
     function eventsToDisplayList(events) {
         if (!events || !events.length) return '';
-        var eidLower = function (v) { return String(v || '').toLowerCase(); };
         return (events || []).map(function (eid) {
             var ev = (EVENT_CHOICES || []).find(function (x) { return eidLower(x.value || x) === eidLower(eid); });
             return ev && ev.label ? ev.label : (eid && String(eid).charAt(0).toUpperCase() + String(eid).slice(1));
         }).join(', ');
     }
 
-    function openSegmentEditInTile(segIdx) {
-        var s = currentCourse.segments[segIdx];
-        if (!s) return;
-        var segId = (s.seg_id != null && s.seg_id !== '') ? String(s.seg_id) : String(segIdx + 1);
-        var tile = document.getElementById('segment-edit-tile');
-        var titleEl = document.getElementById('segment-edit-tile-title');
-        var contentEl = document.getElementById('segment-edit-tile-content');
-        var saveBtn = document.getElementById('segment-edit-tile-save');
-        var cancelBtn = document.getElementById('segment-edit-tile-cancel');
-        if (!tile || !contentEl) return;
-        titleEl.textContent = 'Edit segment ' + segId;
-        contentEl.innerHTML = '';
-        function addLabel(text) { var l = document.createElement('label'); l.textContent = text; l.style.display = 'block'; l.style.marginTop = '8px'; l.style.marginBottom = '2px'; contentEl.appendChild(l); }
-        function addInput(attr, val) {
-            var el = document.createElement('input');
-            el.type = attr === 'number' ? 'number' : 'text';
-            el.style.display = 'block'; el.style.width = '100%'; el.style.marginBottom = '8px'; el.style.boxSizing = 'border-box';
-            if (attr === 'number') { el.min = 0; el.step = 0.5; }
-            el.value = val != null ? val : '';
-            contentEl.appendChild(el);
-            return el;
+    var segmentEditorSegIdx = null;
+
+    function closeSegmentEditor() {
+        segmentEditorSegIdx = null;
+        hideModal(document.getElementById('segment-editor-modal'));
+    }
+
+    function segmentEditorEventChoices() {
+        return segmentsTableEventIds().map(function (eid) {
+            var found = (EVENT_CHOICES || []).find(function (ev) {
+                return eidLower(ev.value || ev) === eidLower(eid);
+            });
+            if (found) return found;
+            return { value: eid, label: eventLabelForTableId(eid) };
+        });
+    }
+
+    function schemaChoicesWithCurrent(current) {
+        var choices = SCHEMA_OPTIONS.slice();
+        var value = current != null ? String(current).trim() : '';
+        if (value && !choices.some(function (c) { return c.value === value; })) {
+            choices.push({ value: value, label: value + ' (custom)' });
         }
-        addLabel('Segment label');
-        var inputLabel = addInput('text', s.seg_label || '');
-        addLabel('Width (m)');
-        var inputWidth = addInput('number', s.width_m != null ? s.width_m : 3);
-        addLabel('Schema');
-        var selSchema = document.createElement('select');
-        selSchema.style.display = 'block'; selSchema.style.width = '100%'; selSchema.style.marginBottom = '8px'; selSchema.style.boxSizing = 'border-box';
-        SCHEMA_OPTIONS.forEach(function (o) { var opt = document.createElement('option'); opt.value = o.value; opt.textContent = o.label; if (o.value === (s.schema || 'on_course_open')) opt.selected = true; selSchema.appendChild(opt); });
-        contentEl.appendChild(selSchema);
-        addLabel('Direction');
-        var selDirection = document.createElement('select');
-        selDirection.style.display = 'block'; selDirection.style.width = '100%'; selDirection.style.marginBottom = '8px'; selDirection.style.boxSizing = 'border-box';
-        DIRECTION_OPTIONS.forEach(function (o) { var opt = document.createElement('option'); opt.value = o.value; opt.textContent = o.label; if (o.value === (s.direction || 'uni')) opt.selected = true; selDirection.appendChild(opt); });
-        contentEl.appendChild(selDirection);
-        addLabel('Description');
+        return choices;
+    }
+
+    function directionChoicesWithCurrent(current) {
+        var choices = DIRECTION_OPTIONS.slice();
+        var value = current != null ? String(current).trim() : '';
+        if (value && !choices.some(function (c) { return c.value === value; })) {
+            choices.push({ value: value, label: value + ' (custom)' });
+        }
+        return choices;
+    }
+
+    function applySegmentEditorFields(s, segId, fields) {
+        s.seg_label = (fields.label && fields.label.trim()) ? fields.label.trim() : segId;
+        s.width_m = fields.width_m;
+        s.schema = fields.schema;
+        s.direction = fields.direction;
+        s.description = fields.description;
+        s.events = fields.events.slice();
+        if (s.events.length === 0) {
+            s.events = segmentEditorEventChoices().map(function (e) { return e.value || e; });
+        }
+    }
+
+    function afterSegmentEditorSave() {
+        syncSegmentsFromBreaks();
+        renderSegmentInfoIcons();
+        renderSegmentPins();
+        renderSegmentsList();
+        updateCourseUI();
+    }
+
+    function openSegmentEditInTile(segIdx) {
+        var s = currentCourse && currentCourse.segments && currentCourse.segments[segIdx];
+        if (!s) return;
+        var modal = document.getElementById('segment-editor-modal');
+        var body = document.getElementById('segment-editor-body');
+        var footer = document.getElementById('segment-editor-footer');
+        var titleEl = document.getElementById('segment-editor-title');
+        if (!modal || !body || !footer) return;
+
+        var segId = (s.seg_id != null && s.seg_id !== '') ? String(s.seg_id) : String(segIdx + 1);
+        var segLabel = (s.seg_label || '').trim();
+        segmentEditorSegIdx = segIdx;
+        if (titleEl) titleEl.textContent = segId + (segLabel ? ': ' + segLabel : '');
+
+        body.innerHTML = '';
+        function addField(label, id, value, type) {
+            var wrap = document.createElement('div');
+            wrap.style.marginBottom = '0.65rem';
+            var lab = document.createElement('label');
+            lab.textContent = label;
+            lab.style.display = 'block';
+            lab.style.fontWeight = '600';
+            lab.style.fontSize = '0.85rem';
+            var inp = document.createElement('input');
+            inp.id = id;
+            inp.type = type || 'text';
+            if (type === 'number') {
+                inp.min = '0';
+                inp.step = '0.5';
+            }
+            inp.value = value != null ? value : '';
+            inp.style.width = '100%';
+            inp.style.boxSizing = 'border-box';
+            wrap.appendChild(lab);
+            wrap.appendChild(inp);
+            body.appendChild(wrap);
+            return inp;
+        }
+        function addSelectField(label, id, value, choices) {
+            var wrap = document.createElement('div');
+            wrap.style.marginBottom = '0.65rem';
+            var lab = document.createElement('label');
+            lab.textContent = label;
+            lab.style.display = 'block';
+            lab.style.fontWeight = '600';
+            lab.style.fontSize = '0.85rem';
+            var sel = document.createElement('select');
+            sel.id = id;
+            sel.style.width = '100%';
+            sel.style.boxSizing = 'border-box';
+            var current = value != null ? String(value) : '';
+            choices.forEach(function (opt) {
+                var o = document.createElement('option');
+                o.value = opt.value;
+                o.textContent = opt.label != null ? opt.label : opt.value;
+                if (o.value === current) o.selected = true;
+                sel.appendChild(o);
+            });
+            wrap.appendChild(lab);
+            wrap.appendChild(sel);
+            body.appendChild(wrap);
+            return sel;
+        }
+
+        var inputLabel = addField('Segment label', 'segment-editor-label', s.seg_label || '');
+        var inputWidth = addField('Width (m)', 'segment-editor-width', s.width_m != null ? s.width_m : 3, 'number');
+        var selSchema = addSelectField(
+            'Schema',
+            'segment-editor-schema',
+            s.schema || 'on_course_open',
+            schemaChoicesWithCurrent(s.schema)
+        );
+        var selDirection = addSelectField(
+            'Direction',
+            'segment-editor-direction',
+            s.direction || 'uni',
+            directionChoicesWithCurrent(s.direction)
+        );
+        var descWrap = document.createElement('div');
+        descWrap.style.marginBottom = '0.65rem';
+        var descLab = document.createElement('label');
+        descLab.textContent = 'Description';
+        descLab.style.display = 'block';
+        descLab.style.fontWeight = '600';
+        descLab.style.fontSize = '0.85rem';
         var inputDesc = document.createElement('textarea');
-        inputDesc.rows = 2; inputDesc.style.display = 'block'; inputDesc.style.width = '100%'; inputDesc.style.marginBottom = '8px'; inputDesc.style.boxSizing = 'border-box';
+        inputDesc.id = 'segment-editor-description';
+        inputDesc.rows = 2;
         inputDesc.value = s.description || '';
-        contentEl.appendChild(inputDesc);
-        addLabel('Events using this segment');
+        inputDesc.style.width = '100%';
+        inputDesc.style.boxSizing = 'border-box';
+        descWrap.appendChild(descLab);
+        descWrap.appendChild(inputDesc);
+        body.appendChild(descWrap);
+
+        var eventsWrap = document.createElement('div');
+        eventsWrap.style.marginBottom = '0.65rem';
+        var eventsLab = document.createElement('label');
+        eventsLab.textContent = 'Events using this segment';
+        eventsLab.style.display = 'block';
+        eventsLab.style.fontWeight = '600';
+        eventsLab.style.fontSize = '0.85rem';
         var eventsDiv = document.createElement('div');
-        eventsDiv.style.marginBottom = '8px';
-        var selectedEvents = (s.events || []).slice();
-        (EVENT_CHOICES || []).forEach(function (ev) {
+        eventsDiv.id = 'segment-editor-events';
+        eventsDiv.style.marginTop = '0.35rem';
+        var selectedEvents = (s.events || []).map(function (e) { return eidLower(e); });
+        segmentEditorEventChoices().forEach(function (ev) {
+            var val = ev.value || ev;
+            var row = document.createElement('label');
+            row.className = 'course-modal-checkbox-option';
             var cb = document.createElement('input');
             cb.type = 'checkbox';
-            cb.value = ev.value || ev;
-            cb.checked = selectedEvents.indexOf(ev.value || ev) >= 0;
-            cb.style.marginRight = '4px';
-            var span = document.createElement('span');
-            span.textContent = ev.label || ev.value || ev;
-            span.style.marginRight = '10px';
-            eventsDiv.appendChild(cb);
-            eventsDiv.appendChild(span);
+            cb.value = val;
+            cb.checked = selectedEvents.indexOf(eidLower(val)) >= 0;
+            row.appendChild(cb);
+            row.appendChild(document.createTextNode(ev.label || val));
+            eventsDiv.appendChild(row);
         });
-        contentEl.appendChild(eventsDiv);
-        tile.style.display = 'block';
-        var onSave = function () {
-            s.seg_label = (inputLabel.value && inputLabel.value.trim()) ? inputLabel.value.trim() : segId;
-            s.width_m = parseFloat(inputWidth.value);
-            if (isNaN(s.width_m) || s.width_m < 0) s.width_m = 3;
-            s.schema = selSchema.value || 'on_course_open';
-            s.direction = selDirection.value || 'uni';
-            s.description = (inputDesc.value && inputDesc.value.trim()) ? inputDesc.value.trim() : '';
-            s.events = [];
-            eventsDiv.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { if (cb.checked) s.events.push(cb.value); });
-            if (s.events.length === 0) s.events = (EVENT_CHOICES || []).map(function (e) { return e.value || e; });
-            tile.style.display = 'none';
-            syncSegmentsFromBreaks();
-            renderSegmentInfoIcons();
-            renderSegmentPins();
-            renderSegmentsList();
-            setDirty();
-            updateCourseUI();
-        };
-        var onCancel = function () { tile.style.display = 'none'; };
-        saveBtn.onclick = onSave;
-        cancelBtn.onclick = onCancel;
+        eventsWrap.appendChild(eventsLab);
+        eventsWrap.appendChild(eventsDiv);
+        body.appendChild(eventsWrap);
+
+        footer.innerHTML = '';
+        var cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'course-btn';
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.addEventListener('click', closeSegmentEditor);
+        var saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.className = 'course-btn primary';
+        saveBtn.textContent = 'Save segment';
+        saveBtn.addEventListener('click', function () {
+            var idx = segmentEditorSegIdx;
+            if (idx == null || !currentCourse || !currentCourse.segments[idx]) return;
+            var seg = currentCourse.segments[idx];
+            var id = (seg.seg_id != null && seg.seg_id !== '') ? String(seg.seg_id) : String(idx + 1);
+            var width = parseFloat(inputWidth.value);
+            if (isNaN(width) || width < 0) width = 3;
+            var events = [];
+            eventsDiv.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
+                if (cb.checked) events.push(cb.value);
+            });
+            applySegmentEditorFields(seg, id, {
+                label: inputLabel.value,
+                width_m: width,
+                schema: (selSchema.value || 'on_course_open').trim(),
+                direction: (selDirection.value || 'uni').trim(),
+                description: (inputDesc.value && inputDesc.value.trim()) ? inputDesc.value.trim() : '',
+                events: events
+            });
+            closeSegmentEditor();
+            afterSegmentEditorSave();
+            if (isConfigPackageMode()) {
+                persistConfigPackageCourse().catch(function (err) {
+                    alert('Failed to save segment: ' + (err.message || String(err)));
+                    setDirty();
+                });
+            } else {
+                setDirty();
+            }
+        });
+        footer.appendChild(cancelBtn);
+        footer.appendChild(saveBtn);
+        showModal(modal);
     }
 
     function openSegmentAnnotationPopup(segIdx, latlng) {
@@ -1878,7 +2179,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             });
             m.on('click', function (e) {
-                if (locationPinMode) return;
+                if (locationPinMode || window._legLocationPinModeActive) return;
                 L.DomEvent.stopPropagation(e);
                 if (segmentPinMode) return;
                 var s = currentCourse.segments[m._segmentIndex];
@@ -2045,7 +2346,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     setTurnaroundFromClick(e.latlng);
                     return;
                 }
-                if (segmentPinMode || locationPinMode) return;
+                if (segmentPinMode || locationPinMode || window._legLocationPinModeActive) return;
                 if ((drawMode || (extendFromIndex != null && extendInsertEndIndex != null)) && mapClickHandler && e && e.latlng) {
                     L.DomEvent.stopPropagation(e);
                     mapClickHandler(e);
@@ -2896,12 +3197,57 @@ document.addEventListener('DOMContentLoaded', function () {
         return Number(val).toFixed(2);
     }
 
+    /** Event columns for segments table: package events in config workspace, else all choices. */
+    function segmentsTableEventIds() {
+        if (
+            usePackageLevelEditSave() &&
+            window.CONFIG_PACKAGE_EVENTS &&
+            window.CONFIG_PACKAGE_EVENTS.length
+        ) {
+            return window.CONFIG_PACKAGE_EVENTS.map(function (e) {
+                return String(e).toLowerCase();
+            });
+        }
+        return (EVENT_CHOICES || []).map(function (e) {
+            return String(e.value != null ? e.value : e).toLowerCase();
+        });
+    }
+
+    function eventLabelForTableId(eventId) {
+        var eid = String(eventId).toLowerCase();
+        var found = (EVENT_CHOICES || []).find(function (ev) {
+            return String(ev.value != null ? ev.value : ev).toLowerCase() === eid;
+        });
+        if (found && found.label) return found.label;
+        return eid === '10k' ? '10K' : eid.charAt(0).toUpperCase() + eid.slice(1);
+    }
+
+    function renderSegmentsTableHeader() {
+        var thead = document.getElementById('segments-thead-row');
+        if (!thead) return;
+        thead.innerHTML = '';
+        ['ID', 'Label', 'From', 'To', 'Events'].forEach(function (label) {
+            var th = document.createElement('th');
+            th.textContent = label;
+            thead.appendChild(th);
+        });
+        segmentsTableEventIds().forEach(function (eid) {
+            var th = document.createElement('th');
+            th.textContent = eventLabelForTableId(eid);
+            thead.appendChild(th);
+        });
+        var lenTh = document.createElement('th');
+        lenTh.textContent = 'Length';
+        thead.appendChild(lenTh);
+    }
+
     function renderSegmentsList() {
         var card = document.getElementById('segments-card');
         var empty = document.getElementById('segments-empty');
         var wrap = document.getElementById('segments-table-wrap');
         var tbody = document.getElementById('segments-tbody');
         if (!card || !tbody) return;
+        renderSegmentsTableHeader();
         if (!currentCourse || !currentCourse.segments || currentCourse.segments.length === 0) {
             card.style.display = currentCourse ? 'block' : 'none';
             if (empty) empty.style.display = 'block';
@@ -2914,16 +3260,39 @@ document.addEventListener('DOMContentLoaded', function () {
         tbody.innerHTML = '';
         var coords = (currentCourse.geometry && currentCourse.geometry.coordinates) || [];
         var coordsLen = coords.length;
-        var eventIds = (EVENT_CHOICES || []).map(function (e) { return String(e.value != null ? e.value : e).toLowerCase(); });
+        var eventIds = segmentsTableEventIds();
         var computedEventDistances = computeEventDistancesForSegments(currentCourse.segments, eventIds);
         currentCourse.segments.forEach(function (seg, segIdx) {
             var len = (seg.to_km - seg.from_km);
             var startIdx = seg.start_index != null ? seg.start_index : 0;
             var endIdx = seg.end_index != null ? seg.end_index : (coordsLen ? coordsLen - 1 : 0);
             var segId = (seg.seg_id != null && seg.seg_id !== '') ? String(seg.seg_id) : String(segIdx + 1);
-            var pinStart = getPinLabelForIndex(startIdx, coordsLen);
-            var pinEnd = getPinLabelForIndex(endIdx, coordsLen);
-            var displayLabel = (seg.seg_label && seg.seg_label.trim()) ? seg.seg_label : (pinEnd || '');
+            var legLive =
+                usePackageLevelEditSave() &&
+                window.segmentRecipes &&
+                window.segmentRecipes.resolveLegLabelsForSegment
+                    ? window.segmentRecipes.resolveLegLabelsForSegment(seg, segIdx)
+                    : null;
+            var pinStart = legLive && legLive.from
+                ? legLive.from
+                : (seg.from_label && String(seg.from_label).trim())
+                  ? String(seg.from_label).trim()
+                  : getPinLabelForIndex(startIdx, coordsLen);
+            var pinEnd = legLive && legLive.to
+                ? legLive.to
+                : (seg.to_label && String(seg.to_label).trim())
+                  ? String(seg.to_label).trim()
+                  : getPinLabelForIndex(endIdx, coordsLen);
+            var useLegLabels = !!(
+                legLive ||
+                (seg.from_label && String(seg.from_label).trim()) ||
+                (seg.to_label && String(seg.to_label).trim())
+            );
+            var displayLabel = legLive && legLive.seg_label
+                ? legLive.seg_label
+                : (seg.seg_label && seg.seg_label.trim())
+                  ? seg.seg_label
+                  : pinEnd || '';
             var tr = document.createElement('tr');
             var fromCell = document.createElement('td');
             var toCell = document.createElement('td');
@@ -2932,21 +3301,29 @@ document.addEventListener('DOMContentLoaded', function () {
             fromBtn.className = 'pin-link';
             fromBtn.textContent = pinStart || '—';
             fromBtn.title = 'Show pin on map: ' + (pinStart || 'From');
-            fromBtn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                openSegmentPinPopupForIndex(startIdx);
-            });
-            fromCell.appendChild(fromBtn);
+            if (useLegLabels) {
+                fromCell.textContent = pinStart || '—';
+            } else {
+                fromBtn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    openSegmentPinPopupForIndex(startIdx);
+                });
+                fromCell.appendChild(fromBtn);
+            }
             var toBtn = document.createElement('button');
             toBtn.type = 'button';
             toBtn.className = 'pin-link';
             toBtn.textContent = pinEnd || '—';
             toBtn.title = 'Show pin on map: ' + (pinEnd || 'To');
-            toBtn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                openSegmentPinPopupForIndex(endIdx);
-            });
-            toCell.appendChild(toBtn);
+            if (useLegLabels) {
+                toCell.textContent = pinEnd || '—';
+            } else {
+                toBtn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    openSegmentPinPopupForIndex(endIdx);
+                });
+                toCell.appendChild(toBtn);
+            }
             var segIdCell = document.createElement('td');
             var segIdBtn = document.createElement('button');
             segIdBtn.type = 'button';
@@ -2959,9 +3336,9 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             segIdCell.appendChild(segIdBtn);
             tr.appendChild(segIdCell);
+            tr.appendChild(document.createElement('td')).textContent = displayLabel || '';
             tr.appendChild(fromCell);
             tr.appendChild(toCell);
-            tr.appendChild(document.createElement('td')).textContent = displayLabel || '';
             var eventsCell = document.createElement('td');
             eventsCell.textContent = eventsToDisplayList(seg.events);
             tr.appendChild(eventsCell);
@@ -2982,9 +3359,18 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             tr.appendChild(document.createElement('td')).textContent = Math.round(len * 100) / 100;
             tr.style.cursor = 'pointer';
-            tr.title = 'Click row to zoom map to this segment';
+            tr.title = usePackageLevelEditSave()
+                ? 'Click row to edit segment'
+                : 'Click row to zoom map to this segment';
             tr.addEventListener('click', function () {
-                if (!currentCourse || !currentCourse.geometry || !currentCourse.geometry.coordinates) return;
+                if (usePackageLevelEditSave()) {
+                    openSegmentEditInTile(segIdx);
+                    return;
+                }
+                if (!currentCourse || !currentCourse.geometry || !currentCourse.geometry.coordinates) {
+                    openSegmentEditInTile(segIdx);
+                    return;
+                }
                 var coords = currentCourse.geometry.coordinates;
                 var lo = Math.min(startIdx, endIdx);
                 var hi = Math.max(startIdx, endIdx);
@@ -3007,6 +3393,42 @@ document.addEventListener('DOMContentLoaded', function () {
         return t ? t.label : (locType || '').toString();
     }
 
+    function getLocationPinColor(locType) {
+        return LOCATION_PIN_COLORS[locType] || '#27ae60';
+    }
+
+    function formatLocationResourceSummary(loc) {
+        syncLocationResourceCounts(loc);
+        var parts = [];
+        getPackageResources().forEach(function (res) {
+            var code = res.code;
+            var n = loc.resources && loc.resources[code] != null
+                ? parseInt(loc.resources[code], 10)
+                : parseInt(loc[code + '_count'], 10);
+            if (!isNaN(n) && n > 0) {
+                parts.push((res.label || code.toUpperCase()) + ': ' + n);
+            }
+        });
+        return parts.length ? parts.join(', ') : '(none)';
+    }
+
+    /** Course / config map tooltips: ID, type, label, resources — no operational window. */
+    function buildConfigLocationTooltipHtml(loc, index) {
+        var locId = loc.id != null ? String(loc.id) : String((index != null ? index : 0) + 1);
+        return buildPopupRowsHtml([
+            { label: 'ID', value: locId },
+            { label: 'Type', value: getLocationTypeLabel(loc.loc_type) },
+            { label: 'Label', value: loc.loc_label || '(none)' },
+            { label: 'Zone', value: loc.zone || '(none)' },
+            { label: 'Resources', value: formatLocationResourceSummary(loc) }
+        ]);
+    }
+
+    function getCourseLocations() {
+        if (!currentCourse || !Array.isArray(currentCourse.locations)) return [];
+        return currentCourse.locations;
+    }
+
     function renderLocationPins() {
         if (!window.courseMappingMap) return;
         if (locationsLayer) {
@@ -3019,7 +3441,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var lat = typeof loc.lat === 'number' ? loc.lat : parseFloat(loc.lat);
             var lon = typeof loc.lon === 'number' ? loc.lon : parseFloat(loc.lon);
             if (isNaN(lat) || isNaN(lon)) return;
-            var fill = LOCATION_PIN_COLORS[loc.loc_type] || '#27ae60';
+            var fill = getLocationPinColor(loc.loc_type);
             var stroke = fill;
             var locIcon = L.divIcon({
                 className: 'location-pin-circle',
@@ -3029,12 +3451,10 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             var m = L.marker([lat, lon], { icon: locIcon, draggable: isEditMode });
             m._locationIndex = i;
-            var locId = loc.id != null ? String(loc.id) : (i + 1);
-            var tipHtml = buildPopupRowsHtml([
-                { label: 'ID', value: locId },
-                { label: 'Label', value: loc.loc_label || getLocationTypeLabel(loc.loc_type) || 'Location' },
-                { label: 'Type', value: getLocationTypeLabel(loc.loc_type) }
-            ]) + (isEditMode ? '<div class="popup-row" style="font-size:0.75rem;color:#7f8c8d;">(drag to move; edit details in Locations table)</div>' : '');
+            var tipHtml = buildConfigLocationTooltipHtml(loc, i) +
+                (isEditMode
+                    ? '<div class="popup-row" style="font-size:0.75rem;color:#7f8c8d;">(drag to move; edit details in Locations table)</div>'
+                    : '');
             m.bindTooltip(tipHtml, { permanent: false, direction: 'top', offset: [0, -10], className: 'course-map-tooltip' });
             m.on('dragend', function () {
                 var ll = m.getLatLng();
@@ -3064,7 +3484,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 content.classList.add('course-map-popup-wrap');
                 var hint = document.createElement('p');
                 hint.style.cssText = 'font-size:0.8rem;color:#7f8c8d;margin:0.5rem 0 0 0;';
-                hint.textContent = 'Edit full details in the Locations table (click ID).';
+                hint.textContent =
+                    locEl.seg_id
+                        ? 'Segment ' +
+                          locEl.seg_id +
+                          '. Edit resources and full details in the Locations table (click ID).'
+                        : 'Edit resources and full details in the Locations table (click ID).';
                 content.appendChild(hint);
                 var btnWrap = document.createElement('div');
                 btnWrap.style.marginTop = '0.5rem';
@@ -3073,10 +3498,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 btnTable.textContent = 'Open in table';
                 btnTable.onclick = function () {
                     window.courseMappingMap.closePopup();
-                    openLocationEditorModal(idx, !isEditMode);
+                    openLocationEditorModal(idx, !canEditLocationsInWorkspace());
                 };
                 btnWrap.appendChild(btnTable);
-                if (isEditMode) {
+                if (canEditLocationsInWorkspace()) {
                     var btnDel = document.createElement('button');
                     btnDel.type = 'button';
                     btnDel.textContent = 'Delete';
@@ -3084,11 +3509,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     btnDel.onclick = function () {
                         if (!window.confirm('Remove this location? This cannot be undone.')) return;
                         window.courseMappingMap.closePopup();
-                        currentCourse.locations.splice(idx, 1);
-                        renderLocationPins();
-                        renderLocationsList();
-                        setDirty();
-                        updateCourseUI();
+                        removeCourseLocationAtIndex(idx).catch(function (err) {
+                            alert(err.message || String(err));
+                        });
                     };
                     btnWrap.appendChild(btnDel);
                 }
@@ -3099,6 +3522,66 @@ document.addEventListener('DOMContentLoaded', function () {
             locationsLayer.addLayer(m);
         });
         locationsLayer.addTo(window.courseMappingMap);
+    }
+
+    function removeCourseLocationAtIndex(idx) {
+        if (!currentCourse || !Array.isArray(currentCourse.locations)) {
+            return Promise.resolve();
+        }
+        if (idx < 0 || idx >= currentCourse.locations.length) {
+            return Promise.resolve();
+        }
+        var loc = currentCourse.locations[idx];
+        if (
+            !usePackageLevelEditSave() ||
+            !loc ||
+            loc.source !== 'leg' ||
+            !loc.leg_loc_key
+        ) {
+            currentCourse.locations.splice(idx, 1);
+            return Promise.resolve();
+        }
+        var pkgId = resolveConfigPackageId();
+        if (!pkgId) {
+            currentCourse.locations.splice(idx, 1);
+            return Promise.resolve();
+        }
+        return fetch(
+            '/api/config/packages/' +
+                encodeURIComponent(pkgId) +
+                '/segment-library/leg-locations/remove',
+            {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ leg_loc_key: String(loc.leg_loc_key) }),
+            }
+        )
+            .then(function (res) {
+                return res.json().then(function (data) {
+                    return { res: res, data: data };
+                });
+            })
+            .then(function (payload) {
+                if (!payload.res.ok) {
+                    throw new Error(
+                        (payload.data && payload.data.detail) ||
+                            'Failed to remove leg location'
+                    );
+                }
+                if (payload.data && payload.data.course) {
+                    setCourse(pkgId, payload.data.course, { skipMapRefresh: shouldSkipCourseMapRefresh() });
+                } else {
+                    currentCourse.locations.splice(idx, 1);
+                    renderLocationPins();
+                    renderLocationsList();
+                    setDirty();
+                    updateCourseUI();
+                }
+                if (window.segmentRecipes && window.segmentRecipes.refresh) {
+                    window.segmentRecipes.refresh();
+                }
+            });
     }
 
     function renderLocationsList() {
@@ -3130,14 +3613,18 @@ document.addEventListener('DOMContentLoaded', function () {
             idBtn.type = 'button';
             idBtn.className = 'loc-id-link';
             idBtn.textContent = locId;
-            idBtn.title = isEditMode ? 'Edit location details' : 'View location details';
+            idBtn.title = canEditLocationsInWorkspace()
+                ? 'Edit location details'
+                : 'View location details';
             idBtn.addEventListener('click', function () {
-                openLocationEditorModal(i, !isEditMode);
+                openLocationEditorModal(i, !canEditLocationsInWorkspace());
             });
             idCell.appendChild(idBtn);
             tr.appendChild(idCell);
             tr.appendChild(document.createElement('td')).textContent = typeLabel;
             tr.appendChild(document.createElement('td')).textContent = loc.loc_label || '';
+            tr.appendChild(document.createElement('td')).textContent =
+                loc.zone != null && String(loc.zone).trim() ? String(loc.zone).trim() : '—';
             getPackageResources().forEach(function (res) {
                 var code = res.code;
                 var count = (loc.resources && loc.resources[code] != null)
@@ -3148,15 +3635,40 @@ document.addEventListener('DOMContentLoaded', function () {
                 resourceTotals[code] += n;
                 tr.appendChild(document.createElement('td')).textContent = String(n);
             });
-            if (isEditMode) {
+            if (canEditLocationsInWorkspace()) {
                 var actionCell = document.createElement('td');
-                actionCell.style.whiteSpace = 'nowrap';
-                var removeBtn = document.createElement('button');
-                removeBtn.type = 'button';
-                removeBtn.className = 'btn-remove-loc';
-                removeBtn.setAttribute('data-index', String(i));
-                removeBtn.textContent = 'Remove';
-                actionCell.appendChild(removeBtn);
+                actionCell.className = 'course-map-action-cell';
+                var ta = window.TableActions;
+                if (ta) {
+                    actionCell.appendChild(
+                        ta.createIconButton('edit', 'Edit location', function (ev) {
+                            if (ev.stopPropagation) ev.stopPropagation();
+                            openLocationEditorModal(i, false);
+                        })
+                    );
+                    actionCell.appendChild(
+                        ta.createIconButton('delete', 'Delete location', function (ev) {
+                            if (ev.stopPropagation) ev.stopPropagation();
+                            var loc = currentCourse.locations[i];
+                            var label = (loc && loc.loc_label) || ('location ' + (i + 1));
+                            if (
+                                !ta.doubleConfirmDelete({
+                                    subject: label,
+                                    detail:
+                                        'This removes the location from the combined course' +
+                                        (loc && loc.source === 'leg'
+                                            ? ' and from the leg library.'
+                                            : '.'),
+                                })
+                            ) {
+                                return;
+                            }
+                            removeCourseLocationAtIndex(i).catch(function (err) {
+                                alert(err.message || String(err));
+                            });
+                        })
+                    );
+                }
                 tr.appendChild(actionCell);
             }
             tbody.appendChild(tr);
@@ -3166,26 +3678,18 @@ document.addEventListener('DOMContentLoaded', function () {
         totalTr.appendChild(document.createElement('td')).textContent = 'Total';
         totalTr.appendChild(document.createElement('td')).textContent = '';
         totalTr.appendChild(document.createElement('td')).textContent = '';
+        totalTr.appendChild(document.createElement('td')).textContent = '';
         getPackageResources().forEach(function (res) {
             totalTr.appendChild(document.createElement('td')).textContent =
                 String(resourceTotals[res.code] || 0);
         });
-        if (isEditMode) {
+        if (canEditLocationsInWorkspace()) {
             totalTr.appendChild(document.createElement('td'));
         }
         tbody.appendChild(totalTr);
-        tbody.querySelectorAll('.btn-remove-loc').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                var idx = parseInt(btn.getAttribute('data-index'), 10);
-                if (currentCourse && Array.isArray(currentCourse.locations) && idx >= 0 && idx < currentCourse.locations.length) {
-                    currentCourse.locations.splice(idx, 1);
-                    renderLocationPins();
-                    renderLocationsList();
-                    setDirty();
-                    updateCourseUI();
-                }
-            });
-        });
+        if (window.segmentRecipes && window.segmentRecipes.renderCoursePreviewLocations) {
+            window.segmentRecipes.renderCoursePreviewLocations();
+        }
     }
 
     function closestVertexIndex(latLng, coordinates) {
@@ -4036,12 +4540,12 @@ document.addEventListener('DOMContentLoaded', function () {
             btnExport.addEventListener('click', async function () {
                 if (!currentCourseId || !currentCourse) return;
                 if (isConfigPackageMode()) {
-                    if (!currentCourse.segments || currentCourse.segments.length === 0) {
-                        alert('Add segment pins on the course line before exporting segments.csv.');
+                    if (!canExportCurrentCourse()) {
+                        alert('Apply event recipes (or add segments) before exporting segments.csv.');
                         return;
                     }
-                    if (isDirty()) {
-                        alert('Save the course (Edit → Save) before exporting segments.csv.');
+                    if (isConfigPackageDirty()) {
+                        alert('Save pending course or location changes before exporting segments.csv.');
                         return;
                     }
                     try {
@@ -4051,6 +4555,15 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (!res.ok) throw new Error(data.detail || res.statusText);
                         var msg = 'Exported to config package: segments.csv';
                         if (data.location_count != null) msg += ', locations.csv (' + data.location_count + ' rows)';
+                        if (data.flow_path) msg += ', flow.csv';
+                        if (data.gpx_files && data.gpx_files.length) {
+                            msg += ', ' + data.gpx_files.length + ' event GPX file(s)';
+                        }
+                        if (data.readiness && data.readiness.analyze_ready) {
+                            msg += ' — package is analysis-ready';
+                        } else if (data.readiness && data.readiness.missing && data.readiness.missing.length) {
+                            msg += ' — still missing: ' + data.readiness.missing.join(', ');
+                        }
                         if (data.segments_backup_path) msg += ' (segments.csv backed up)';
                         if (data.locations_backup_path) msg += ' (locations.csv backed up)';
                         alert(msg);
@@ -4104,11 +4617,18 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         document.querySelectorAll('.course-location-modal-backdrop').forEach(function (el) {
             el.addEventListener('click', function () {
+                var modalEl = el.closest('.course-location-modal');
+                if (modalEl && modalEl.id === 'segment-editor-modal') {
+                    closeSegmentEditor();
+                    return;
+                }
                 destroyLocationEditorMap();
-                hideModal(el.closest('.course-location-modal'));
+                hideModal(modalEl);
                 locationEditorIndex = null;
             });
         });
+        var segmentEditorClose = document.getElementById('segment-editor-close');
+        if (segmentEditorClose) segmentEditorClose.addEventListener('click', closeSegmentEditor);
 
         window.configPackageCourse = {
             enterEdit: function () {
@@ -4123,7 +4643,21 @@ document.addEventListener('DOMContentLoaded', function () {
             isDirty: isConfigPackageDirty,
             cancelEdit: cancelConfigPackageEdit,
             saveAll: saveConfigPackageWorkspace,
-            syncHeaderFromMeta: syncCourseHeaderFromPackageMeta
+            syncHeaderFromMeta: syncCourseHeaderFromPackageMeta,
+            reloadCourse: loadConfigPackageCourse,
+            hasCombinedCourse: function () {
+                return !!(
+                    currentCourse &&
+                    currentCourse.segments &&
+                    currentCourse.segments.length > 0
+                );
+            },
+            renderSegmentsList: renderSegmentsList,
+            getCourseLocations: getCourseLocations,
+            buildLocationTooltipHtml: buildConfigLocationTooltipHtml,
+            getLocationPinColor: getLocationPinColor,
+            getLocationTypeLabel: getLocationTypeLabel,
+            highlightLocationInTable: highlightLocationRow
         };
 
         document.addEventListener('segment-recipes-applied', function (ev) {
@@ -4131,6 +4665,7 @@ document.addEventListener('DOMContentLoaded', function () {
             currentCourse = ev.detail.course;
             updateCourseUI();
             renderSegmentsList();
+            renderLocationsList();
         });
 
         if (isConfigPackageMode()) {

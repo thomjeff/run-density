@@ -1,23 +1,155 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
-    .segment-recipes-upload-label .btn-like {
-        display: inline-block;
+    .course-btn {
         padding: 0.4rem 0.75rem;
         border: 1px solid #bdc3c7;
         border-radius: 4px;
         background: #fff;
         font-size: 0.875rem;
         cursor: pointer;
+        font-family: inherit;
     }
-    .segment-recipes-upload-label .btn-like:hover {
-        background: #f8f9fa;
+    .course-btn:hover:not(:disabled) {
+        background: #ecf0f1;
     }
-    #segment-recipes-card .course-planner-toolbar button.primary,
-    #btn-segment-recipes-apply.primary {
+    .course-btn:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+    }
+    .course-btn.primary {
         background: #3498db;
         color: #fff;
         border-color: #2980b9;
         font-weight: 600;
+    }
+    .course-btn.primary:hover:not(:disabled) {
+        background: #2980b9;
+    }
+    .course-btn.active {
+        background: #3498db;
+        color: #fff;
+        border-color: #2980b9;
+    }
+    .course-planner-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+    #course-legs-tbody tr.selected {
+        background: #e8f4fc;
+    }
+    #config-package-legs-panel .course-derived-section,
+    #config-package-course-panel .course-derived-section {
+        display: block;
+    }
+    #config-package-legs-panel .course-derived-heading,
+    #config-package-course-panel .course-derived-heading {
+        margin: 0 0 0.5rem 0;
+        font-size: 1rem;
+        color: #2c3e50;
+    }
+    #config-package-legs-panel .config-legs-map-section {
+        margin-top: 0.25rem;
+        padding-top: 1.25rem;
+        border-top: 1px solid #ecf0f1;
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+    #config-package-legs-panel .config-legs-map-lead {
+        margin: 0 0 0.65rem 0;
+        font-size: 0.875rem;
+        color: #7f8c8d;
+    }
+    .course-preview-event-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        align-items: center;
+    }
+    .course-preview-event-toolbar .course-btn.active {
+        background: #3498db;
+        color: #fff;
+        border-color: #2980b9;
+    }
+    .config-course-preview-map-wrap {
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        overflow: hidden;
+        margin-bottom: 0.75rem;
+    }
+    #course-preview-map {
+        height: min(42vh, 380px);
+        min-height: 220px;
+        width: 100%;
+        background: #eef2f7;
+    }
+    #config-package-legs-panel .config-legs-map-slot {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .config-legs-layout {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        position: relative;
+        overflow: hidden;
+    }
+    .config-legs-table-region {
+        flex: 0 0 auto;
+        position: relative;
+        z-index: 5;
+        background: #fff;
+    }
+    .config-legs-table-scroll {
+        max-height: min(38vh, 320px);
+        overflow-y: auto;
+        overflow-x: auto;
+    }
+    .config-legs-table-scroll .table-sticky-header {
+        border-collapse: separate;
+        border-spacing: 0;
+        overflow: visible;
+        border-radius: 0;
+        box-shadow: none;
+    }
+    .config-legs-table-scroll .table-sticky-header thead th {
+        position: sticky;
+        top: 0;
+        z-index: 6;
+        background: #f8f9fa;
+        box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+    }
+    .config-legs-map-region {
+        flex: 1 1 auto;
+        position: relative;
+        z-index: 1;
+        min-height: 400px;
+        max-height: min(60vh, 650px);
+        margin-top: 0;
+        overflow: hidden;
+        border-radius: 4px;
+        border: 1px solid #e0e0e0;
+        isolation: isolate;
+    }
+    #race-config-workspace .config-legs-map-region #course-mapping-map,
+    #race-config-workspace #course-map-container.config-legs-map-region #course-mapping-map {
+        height: 100%;
+        min-height: 400px;
+        max-height: min(60vh, 650px);
+    }
+
+    #course-map-legacy-slot #course-map-container {
+        margin-top: 1rem;
+    }
+    #course-map-legacy-slot #course-mapping-map {
+        height: 750px;
     }
 
     #course-mapping-map {
@@ -26,6 +158,80 @@
         overflow: hidden;
         position: relative;
         background: transparent !important;
+    }
+
+    .course-link-btn {
+        border: none;
+        background: none;
+        padding: 0;
+        color: #2980b9;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: underline;
+        font-size: inherit;
+        font-family: inherit;
+    }
+    .course-link-btn:hover {
+        color: #1c5980;
+    }
+
+    .leg-map-toolbar {
+        position: absolute;
+        top: 10px;
+        left: 56px;
+        z-index: 10000;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        align-items: center;
+        background: rgba(255, 255, 255, 0.95);
+        padding: 0.4rem 0.6rem;
+        border-radius: 4px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+        max-width: calc(100% - 120px);
+    }
+    .leg-route-edit-actions {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        align-items: center;
+    }
+    .leg-trim-endpoint {
+        background: transparent !important;
+        border: none !important;
+    }
+    .leg-trim-endpoint > div {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        box-sizing: border-box;
+        cursor: grab;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+    }
+    .leg-trim-endpoint--start > div {
+        background: #2ecc71;
+        border: 3px solid #1e8449;
+    }
+    .leg-trim-endpoint--end > div {
+        background: #e74c3c;
+        border: 3px solid #922b21;
+    }
+    .leg-route-anchor-pin {
+        background: transparent !important;
+        border: none !important;
+    }
+    .leg-route-anchor-pin > div {
+        width: 13px;
+        height: 13px;
+        background: #f1c40f;
+        border: 2px solid #b7950b;
+        border-radius: 50%;
+        box-sizing: border-box;
+        cursor: grab;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    }
+    .config-legs-table-toolbar {
+        margin-bottom: 0.5rem;
     }
 
     .map-loading {
@@ -127,6 +333,21 @@
         padding: 0.35rem 0.5rem;
         text-align: left;
     }
+
+    /* Event recipe order inputs: match row height */
+    #segment-recipes-table td {
+        vertical-align: middle;
+    }
+    #segment-recipes-table .segment-recipe-order-input {
+        width: 3.25rem;
+        min-height: 2rem;
+        padding: 0.4rem 0.35rem;
+        font-size: 0.875rem;
+        line-height: 1.25;
+        border: 1px solid #bdc3c7;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
     .course-map-action-btn {
         display: inline-flex;
         align-items: center;
@@ -151,8 +372,19 @@
         height: 16px;
         pointer-events: none;
     }
-    #segments-table td.course-map-action-cell {
+    #segments-table td.course-map-action-cell,
+    #race-config-list-table th.course-map-action-cell,
+    #race-config-list-table td.course-map-action-cell,
+    #course-legs-table th.course-map-action-cell,
+    #course-legs-table td.course-map-action-cell,
+    #locations-table th.course-map-action-cell,
+    #locations-table td.course-map-action-cell {
+        text-align: center;
+        vertical-align: middle;
         white-space: nowrap;
+        width: 5.5rem;
+        padding-left: 0.35rem;
+        padding-right: 0.35rem;
     }
 
     .segment-pin-square { background: transparent !important; border: none !important; }
@@ -363,9 +595,27 @@
         border-radius: 4px;
         background: #fafafa;
     }
-    #locations-table-wrap {
-        overflow-x: auto;
+    /* Course / Legs workspace tables: scrollable body, sticky header (see common.css) */
+    #course-from-map-card .scrollable-table-container .table-sticky-header {
+        overflow: visible;
+        border-collapse: separate;
+        border-spacing: 0;
     }
+    #course-from-map-card .scrollable-table-container .table-sticky-header thead th {
+        position: sticky;
+        top: 0;
+        z-index: 11;
+        background: #f8f9fa;
+        box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+    }
+    .course-derived-table-scroll {
+        max-height: 25vh;
+    }
+    .course-derived-table-scroll--modal {
+        max-height: 40vh;
+    }
+    #config-package-course-panel .scrollable-table-container table th,
+    #config-package-course-panel .scrollable-table-container table td,
     #locations-table th,
     #locations-table td {
         padding: 0.35rem 0.5rem;
@@ -399,21 +649,57 @@
     }
     .course-location-modal-panel {
         position: relative;
+        display: flex;
+        flex-direction: column;
         background: #fff;
         border-radius: 8px;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
         max-width: 520px;
         width: 100%;
         max-height: 90vh;
-        overflow: auto;
-        padding: 1.25rem;
+        overflow: hidden;
+        padding: 0;
     }
     .course-location-modal-panel-narrow { max-width: 440px; }
+    .segment-recipes-modal-panel {
+        max-width: min(720px, 96vw);
+    }
     .course-location-modal-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 1rem;
+        flex-shrink: 0;
+        margin-bottom: 0;
+        padding: 1.25rem 1.25rem 0.75rem;
+    }
+    .course-location-modal-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 0 1.25rem 1rem;
+    }
+    .course-modal-lead {
+        font-size: 0.875rem;
+        color: #7f8c8d;
+        margin: 0 0 0.75rem 0;
+        line-height: 1.45;
+    }
+    .resources-editor-add-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+        margin-top: 0.75rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid #eee;
+    }
+    .resources-editor-add-row #resources-new-code {
+        width: 100px;
+        flex: 0 0 auto;
+    }
+    .resources-editor-add-row #resources-new-label {
+        flex: 1 1 120px;
+        min-width: 120px;
     }
     .course-location-modal-header h4 { margin: 0; font-size: 1.15rem; color: #2c3e50; }
     #location-editor-close, #resources-editor-close {
@@ -431,7 +717,7 @@
         margin-top: 0.65rem;
         color: #2c3e50;
     }
-    .course-location-modal-body input,
+    .course-location-modal-body input:not([type="checkbox"]):not([type="radio"]),
     .course-location-modal-body select,
     .course-location-modal-body textarea {
         width: 100%;
@@ -441,6 +727,28 @@
         font-size: 0.875rem;
         border: 1px solid #ddd;
         border-radius: 4px;
+    }
+    #segment-editor-events {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem 1.25rem;
+    }
+    #segment-editor-events .course-modal-checkbox-option {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        margin: 0;
+        font-weight: 400;
+        font-size: 0.875rem;
+        color: #2c3e50;
+        cursor: pointer;
+    }
+    .course-location-modal-body #segment-editor-events input[type="checkbox"] {
+        width: auto;
+        margin: 0;
+        padding: 0;
+        flex-shrink: 0;
     }
     .location-editor-section {
         margin-bottom: 1rem;
@@ -509,10 +817,13 @@
     .course-location-modal-footer {
         display: flex;
         flex-wrap: wrap;
+        justify-content: flex-end;
         gap: 0.5rem;
-        margin-top: 1rem;
-        padding-top: 0.75rem;
+        flex-shrink: 0;
+        margin-top: 0;
+        padding: 0.75rem 1.25rem 1.25rem;
         border-top: 1px solid #eee;
+        background: #fff;
     }
     .course-location-modal-footer button {
         padding: 0.45rem 0.85rem;

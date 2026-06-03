@@ -5,8 +5,19 @@
 {% block extra_head %}
 {% include 'partials/course_mapping_styles.html' %}
 <style>
-    #race-config-tab-course #course-mapping-map {
-        height: 750px;
+    /* Map height for config legs layout is in course_mapping_styles (.config-legs-map-region) */
+    .config-package-events-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1rem;
+        margin-bottom: 1rem;
+    }
+    .config-package-events-grid label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.9rem;
+        cursor: pointer;
     }
     .race-config-workspace-nav {
         display: flex;
@@ -64,7 +75,7 @@
     }
     #race-config-list-table tbody tr.config-row { cursor: pointer; }
     #race-config-list-table tbody tr.config-row.selected { background: #e3f2fd; }
-    #race-config-new-modal {
+    .race-config-modal {
         display: none;
         position: fixed;
         inset: 0;
@@ -73,8 +84,8 @@
         align-items: center;
         justify-content: center;
     }
-    #race-config-new-modal.open { display: flex; }
-    #race-config-new-modal .modal-panel {
+    .race-config-modal.open { display: flex; }
+    .race-config-modal .modal-panel {
         background: #fff;
         border-radius: 6px;
         padding: 1.5rem;
@@ -102,26 +113,58 @@
                     <th class="table-sortable" data-sort="label">Name <span class="table-sortable-indicator">↕</span></th>
                     <th class="table-sortable" data-sort="description">Description <span class="table-sortable-indicator">↕</span></th>
                     <th class="table-sortable" data-sort="updated">Saved On <span class="table-sortable-indicator">↕</span></th>
+                    <th class="course-map-action-cell" style="width: 5.5rem;">Actions</th>
                 </tr>
             </thead>
             <tbody id="race-config-list-tbody">
-                <tr><td colspan="3" class="placeholder">Loading configurations…</td></tr>
+                <tr><td colspan="4" class="placeholder">Loading configurations…</td></tr>
             </tbody>
         </table>
     </div>
-    <p style="margin: 1rem 0 0 0; color: #7f8c8d; font-size: 0.875rem;">Click a row to open. New packages are stored under <code>runflow/config/{config_id}/</code>.</p>
+    <p style="margin: 1rem 0 0 0; color: #7f8c8d; font-size: 0.875rem;">Click a row to open a package. Use the edit icon to change name, day, or description; the delete icon permanently removes a package (with confirmation). Packages live under <code>runflow/config/{config_id}/</code>.</p>
 </div>
 
-<div id="race-config-new-modal" role="dialog" aria-labelledby="race-config-new-title" aria-modal="true">
+<div id="race-config-edit-package-modal" role="dialog" aria-labelledby="race-config-edit-package-title" aria-modal="true" class="race-config-modal">
+    <div class="modal-panel">
+        <h3 id="race-config-edit-package-title" style="margin: 0 0 1rem 0; color: #2c3e50;">Edit configuration</h3>
+        <label for="race-config-edit-label" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Name</label>
+        <input type="text" id="race-config-edit-label" maxlength="120" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box;">
+        <label for="race-config-edit-day" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Day</label>
+        <select id="race-config-edit-day" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box;">
+            <option value="">(not set)</option>
+            {% for day in day_short_codes | default(['fri', 'sat', 'sun', 'mon'], true) %}
+            <option value="{{ day }}">{{ day | upper }}</option>
+            {% endfor %}
+        </select>
+        <p id="race-config-edit-events-note" style="font-size: 0.875rem; color: #7f8c8d; margin: 0 0 1rem 0;"></p>
+        <label for="race-config-edit-description" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Description <span style="color: #95a5a6; font-weight: normal;">(optional)</span></label>
+        <textarea id="race-config-edit-description" maxlength="255" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1.25rem; box-sizing: border-box; resize: vertical; font-family: inherit;"></textarea>
+        <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+            <button type="button" id="race-config-edit-cancel" class="course-btn">Cancel</button>
+            <button type="button" id="race-config-edit-save" class="course-btn" style="background: #27ae60; color: #fff; border-color: #219a52; font-weight: 600;">Save</button>
+        </div>
+    </div>
+</div>
+
+<div id="race-config-new-modal" role="dialog" aria-labelledby="race-config-new-title" aria-modal="true" class="race-config-modal">
     <div class="modal-panel">
         <h3 id="race-config-new-title" style="margin: 0 0 1rem 0; color: #2c3e50;">New configuration</h3>
         <label for="race-config-new-label" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Name</label>
         <input type="text" id="race-config-new-label" placeholder="FM 2027 Test" maxlength="120" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box;">
+        <label for="race-config-new-day" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Day</label>
+        <select id="race-config-new-day" required style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box;">
+            <option value="">Select day…</option>
+            {% for day in day_short_codes | default(['fri', 'sat', 'sun', 'mon'], true) %}
+            <option value="{{ day }}">{{ day | upper }}</option>
+            {% endfor %}
+        </select>
+        <span style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Events</span>
+        <div id="race-config-new-events" class="config-package-events-grid" role="group" aria-label="Events for this configuration"></div>
         <label for="race-config-new-description" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Description <span style="color: #95a5a6; font-weight: normal;">(optional)</span></label>
-        <textarea id="race-config-new-description" placeholder="e.g. Sunday full/half/10k draft" maxlength="255" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1.25rem; box-sizing: border-box; resize: vertical; font-family: inherit;"></textarea>
+        <textarea id="race-config-new-description" placeholder="Optional notes for this configuration" maxlength="255" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1.25rem; box-sizing: border-box; resize: vertical; font-family: inherit;"></textarea>
         <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
-            <button type="button" id="race-config-new-cancel" style="padding: 0.5rem 1.25rem; border: 1px solid #bdc3c7; border-radius: 4px; background: #fff; cursor: pointer;">Cancel</button>
-            <button type="button" id="race-config-create-btn" style="padding: 0.5rem 1.25rem; background: #27ae60; color: #fff; border: none; border-radius: 4px; font-weight: 600; cursor: pointer;">Create &amp; open</button>
+            <button type="button" id="race-config-new-cancel" class="course-btn">Cancel</button>
+            <button type="button" id="race-config-create-btn" class="course-btn" style="background: #27ae60; color: #fff; border-color: #219a52; font-weight: 600;">Create &amp; open</button>
         </div>
     </div>
 </div>
@@ -129,7 +172,8 @@
 <div id="race-config-workspace" style="display: none;">
     <div class="race-config-workspace-nav">
         <div class="race-config-tabs" role="tablist">
-            <button type="button" class="race-config-tab active" data-tab="course" role="tab" aria-selected="true">Course</button>
+            <button type="button" class="race-config-tab active" data-tab="legs" role="tab" aria-selected="true">Legs</button>
+            <button type="button" class="race-config-tab" data-tab="course" role="tab" aria-selected="false">Course</button>
             <button type="button" class="race-config-tab" data-tab="runners" role="tab" aria-selected="false">Runners</button>
         </div>
         <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem;">
@@ -138,7 +182,7 @@
         </div>
     </div>
 
-    <div id="race-config-tab-course" role="tabpanel">
+    <div id="race-config-tab-workspace" role="tabpanel">
         {% include 'partials/course_mapping_workspace.html' %}
     </div>
 
@@ -151,13 +195,18 @@
 {% block extra_scripts %}
 <script>
     window.LOCATION_TYPES_FROM_SERVER = {{ (location_types | default([])) | tojson }};
+    window.OFF_COURSE_LOCATION_TYPES_FROM_SERVER = {{ (off_course_location_types | default(['traffic', 'extract'], true)) | tojson }};
+    window.LEG_MAP_NO_SNAP_LOCATION_TYPES_FROM_SERVER = {{ (leg_map_no_snap_location_types | default(['traffic', 'extract', 'aid'], true)) | tojson }};
     window.EVENT_CHOICES_FROM_SERVER = {{ (event_choices | default([])) | tojson }};
+    window.SEGMENT_SCHEMA_CHOICES_FROM_SERVER = {{ (segment_schema_choices | default([])) | tojson }};
+    window.SEGMENT_DIRECTION_CHOICES_FROM_SERVER = {{ (segment_direction_choices | default([])) | tojson }};
     window.DAY_SHORT_CODES_FROM_SERVER = {{ (day_short_codes | default(['fri', 'sat', 'sun', 'mon'], true)) | tojson }};
 </script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/js/map/base_map.js"></script>
-<script src="/static/js/map/course_mapping.js?v=769a"></script>
-<script src="/static/js/map/segment_recipes.js?v=769c"></script>
+<script src="/static/js/table_actions.js?v=775b"></script>
+<script src="/static/js/map/course_mapping.js?v=775a"></script>
+<script src="/static/js/map/segment_recipes.js?v=778b"></script>
 <script src="/static/js/runners_baseline.js?v=756i"></script>
-<script src="/static/js/race_configuration.js?v=758a"></script>
+<script src="/static/js/race_configuration.js?v=771a"></script>
 {% endblock %}

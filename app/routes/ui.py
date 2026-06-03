@@ -22,6 +22,10 @@ from app.utils.constants import (
     COURSE_EVENT_IDS,
     DAY_SHORT_CODES,
     LOCATION_TYPE_CHOICES,
+    LEG_MAP_NO_SNAP_LOCATION_TYPES,
+    OFF_COURSE_LOCATION_TYPES,
+    SEGMENT_DIRECTION_CHOICES,
+    SEGMENT_SCHEMA_CHOICES,
 )
 from app.utils.auth import (
     validate_password,
@@ -389,6 +393,8 @@ async def course_mapping(request: Request):
     # Issue #732: Location types and course events from constants
     location_types = [{"value": t, "label": t.capitalize()} for t in LOCATION_TYPE_CHOICES]
     event_choices = [{"value": e, "label": e.upper() if e == "10k" else e.capitalize()} for e in COURSE_EVENT_IDS]
+    segment_schema_choices = list(SEGMENT_SCHEMA_CHOICES)
+    segment_direction_choices = list(SEGMENT_DIRECTION_CHOICES)
     return templates.TemplateResponse(
         request=request,
         name="pages/course_mapping.html",
@@ -397,7 +403,10 @@ async def course_mapping(request: Request):
             "meta": meta,
             "location_types": location_types,
             "event_choices": event_choices,
+            "segment_schema_choices": segment_schema_choices,
+            "segment_direction_choices": segment_direction_choices,
             "day_short_codes": DAY_SHORT_CODES,
+            "off_course_location_types": list(OFF_COURSE_LOCATION_TYPES),
         },
     )
 
@@ -513,6 +522,8 @@ async def race_configuration_page(request: Request):
         {"value": e, "label": e.upper() if e == "10k" else e.capitalize()}
         for e in COURSE_EVENT_IDS
     ]
+    segment_schema_choices = list(SEGMENT_SCHEMA_CHOICES)
+    segment_direction_choices = list(SEGMENT_DIRECTION_CHOICES)
     return templates.TemplateResponse(
         request=request,
         name="pages/race_configuration.html",
@@ -521,7 +532,11 @@ async def race_configuration_page(request: Request):
             "meta": meta,
             "location_types": location_types,
             "event_choices": event_choices,
+            "segment_schema_choices": segment_schema_choices,
+            "segment_direction_choices": segment_direction_choices,
             "day_short_codes": DAY_SHORT_CODES,
+            "off_course_location_types": list(OFF_COURSE_LOCATION_TYPES),
+            "leg_map_no_snap_location_types": list(LEG_MAP_NO_SNAP_LOCATION_TYPES),
         },
     )
 

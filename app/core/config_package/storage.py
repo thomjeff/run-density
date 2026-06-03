@@ -11,13 +11,14 @@ import logging
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from app.core.course.export import (
     build_locations_csv,
     build_segments_csv,
     enrich_segments_event_distances,
 )
+from app.core.config_package.location_ids import assign_unique_location_ids
 from app.core.locations.schema import (
     ensure_manifest_resources,
     normalize_location_record,
@@ -201,6 +202,7 @@ def _normalize_course_locations(
             normalized.append(
                 normalize_location_record(loc, resource_codes, index=i)
             )
+    assign_unique_location_ids(normalized)
     course_data["locations"] = normalized
 
 
@@ -434,13 +436,41 @@ def list_config_packages() -> List[Dict[str, Any]]:
     return result
 
 
-def create_config_package(label: str, description: str = "") -> Dict[str, Any]:
+def normalize_package_events(event_ids: Optional[Sequence[str]]) -> List[str]:
+    """Lowercase unique event ids for package configuration (must be non-empty when validating)."""
+    from app.utils.constants import COURSE_EVENT_IDS
+
+    allowed = {e.lower() for e in COURSE_EVENT_IDS}
+    out: List[str] = []
+    seen: set = set()
+    for raw in event_ids or []:
+        eid = str(raw).strip().lower()
+        if not eid or eid in seen:
+            continue
+        if eid not in allowed:
+            raise ValueError(
+                f"Unknown event '{eid}'; allowed: {', '.join(sorted(allowed))}"
+            )
+        seen.add(eid)
+        out.append(eid)
+    return out
+
+
+def create_config_package(
+    label: str,
+    description: str = "",
+    *,
+    event_day: str = "",
+    package_events: Optional[Sequence[str]] = None,
+) -> Dict[str, Any]:
     """
     Create a new config package with UUID config_id.
 
     Args:
         label: Human-readable package name
         description: Optional package description
+        event_day: Race day short code (fri/sat/sun/mon)
+        package_events: Event ids configured for this package (e.g. full, half, 10k)
 
     Returns:
         Dict with config_id, label, path, manifest
@@ -451,6 +481,17 @@ def create_config_package(label: str, description: str = "") -> Dict[str, Any]:
     clean_description = (description or "").strip()
     if len(clean_description) > 255:
         raise ValueError("description must be at most 255 characters")
+    clean_event_day = (event_day or "").strip().lower()
+    if clean_event_day:
+        from app.utils.constants import DAY_SHORT_CODES
+
+        if clean_event_day not in DAY_SHORT_CODES:
+            raise ValueError(
+                f"event_day must be one of: {', '.join(DAY_SHORT_CODES)}"
+            )
+    clean_events = normalize_package_events(package_events)
+    if not clean_events:
+        raise ValueError("Select at least one event for this configuration")
 
     config_id = generate_run_id()
     root = get_config_root()
@@ -464,6 +505,8 @@ def create_config_package(label: str, description: str = "") -> Dict[str, Any]:
         "config_id": config_id,
         "label": clean_label,
         "description": clean_description,
+        "event_day": clean_event_day,
+        "package_events": clean_events,
         "created": now,
         "updated": now,
         "legacy": False,
@@ -577,6 +620,30 @@ def update_config_package_metadata(
     }
 
 
+def delete_config_package(config_id: str) -> Dict[str, Any]:
+    """
+    Permanently remove a config package directory and its index entry.
+
+    Raises:
+        FileNotFoundError: Package directory missing
+        ValueError: Invalid config_id
+    """
+    package_path = resolve_config_package_path(config_id)
+    shutil.rmtree(package_path)
+
+    root = get_config_root()
+    if root.is_dir():
+        data = _load_index(root)
+        packages: List[Dict[str, Any]] = data["packages"]
+        data["packages"] = [
+            p for p in packages if p.get("config_id") != config_id
+        ]
+        _save_index(root, data)
+
+    logger.info("Deleted config package %s", config_id)
+    return {"config_id": config_id, "deleted": True}
+
+
 def import_runner_files_from_package(
     target_config_id: str,
     source_config_id: str,
@@ -683,6 +750,10 @@ def export_config_package_segments(config_id: str) -> Dict[str, Any]:
         shutil.copy2(locations_target, locations_backup_path)
     locations_target.write_text(locations_csv, encoding="utf-8")
 
+    from app.core.config_package.segment_recipes import export_package_flow_and_gpx_files
+
+    flow_gpx = export_package_flow_and_gpx_files(cid)
+
     logger.info(
         "Exported segments.csv (%s rows) and locations.csv (%s rows) for config package %s",
         len(segments),
@@ -698,5 +769,8 @@ def export_config_package_segments(config_id: str) -> Dict[str, Any]:
         "locations_path": str(locations_target),
         "locations_backup_path": str(locations_backup_path) if locations_backup_path else None,
         "location_count": len(locations),
-        "readiness": package_readiness(package_path),
+        "flow_gpx": flow_gpx,
+        "flow_path": flow_gpx.get("flow_path"),
+        "gpx_files": flow_gpx.get("gpx_files") or [],
+        "readiness": flow_gpx.get("readiness") or package_readiness(package_path),
     }

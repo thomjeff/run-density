@@ -201,8 +201,37 @@ LOCATION_TYPE_CHOICES = [
     "water",
 ]
 
+# Leg / course map placement (patterns from runflow/config/2026_final/locations.csv):
+# - traffic, extract: off-course pin, empty seg_id, proxy_loc_id for timing (Issue #751)
+# - course, water, official: on-course pin with seg_id
+# - aid: usually on-course in exports; leg map allows free placement (no route snap)
+OFF_COURSE_LOCATION_TYPES = ["traffic", "extract"]
+# Legs tab map: types that stay at click / drag position (no snap to purple route)
+LEG_MAP_NO_SNAP_LOCATION_TYPES = ["traffic", "extract", "aid"]
+ON_COURSE_LOCATION_TYPES = [
+    t for t in LOCATION_TYPE_CHOICES if t not in OFF_COURSE_LOCATION_TYPES
+]
+
+LOCATION_PLACEMENT_CHOICES = ["along", "off", "start", "end"]
+
 # Course Mapping segment events (Issue #732) — used for segment annotation event selection
 COURSE_EVENT_IDS = ["full", "half", "10k", "elite", "open"]
+
+# Segment schema keys (density rulebook + analysis pipeline; config/density_rulebook.yml schemas)
+SEGMENT_SCHEMA_CHOICES = [
+    {"value": "on_course_narrow", "label": "Narrow"},
+    {"value": "on_course_open", "label": "Open"},
+    {"value": "start_corral", "label": "Corral"},
+]
+
+# Segment travel direction (uni = one-way, bi = bidirectional counterflow)
+SEGMENT_DIRECTION_CHOICES = [
+    {"value": "uni", "label": "Uni"},
+    {"value": "bi", "label": "Bi"},
+]
+
+SEGMENT_SCHEMA_VALUES = [c["value"] for c in SEGMENT_SCHEMA_CHOICES]
+SEGMENT_DIRECTION_VALUES = [c["value"] for c in SEGMENT_DIRECTION_CHOICES]
 
 # RES (Runner Experience Score) thresholds and weights (Issue #573)
 RES_HIGH_DENSITY_THRESHOLD = 0.72  # LOS D threshold (p/m²) - configurable
