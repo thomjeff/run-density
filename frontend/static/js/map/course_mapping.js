@@ -350,6 +350,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var toSave = buildCourseSavePayload(pkgId);
         currentCourse.id = pkgId;
         currentCourse.config_id = pkgId;
+        return persistConfigPackageResources().then(function () {
         return fetch('/api/config/packages/' + encodeURIComponent(pkgId) + '/course', {
             method: 'PUT',
             credentials: 'same-origin',
@@ -363,6 +364,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 clearDirty();
             });
+        });
         });
     }
 
@@ -993,18 +995,24 @@ document.addEventListener('DOMContentLoaded', function () {
     function savePackageResources() {
         var pkgId = resolveConfigPackageId();
         if (!pkgId || !resourcesEditorDraft) return;
+        var normalized = resourcesEditorDraft.map(function (r) {
+            return { code: r.code, label: r.label || r.code.toUpperCase() };
+        });
         if (usePackageLevelEditSave()) {
-            window.CONFIG_PACKAGE_RESOURCES = resourcesEditorDraft.map(function (r) {
-                return { code: r.code, label: r.label || r.code.toUpperCase() };
-            });
+            window.CONFIG_PACKAGE_RESOURCES = normalized;
             resourcesDirty = true;
-            setDirty();
             hideModal(document.getElementById('resources-editor-modal'));
-            if (currentCourse && currentCourse.locations) {
-                currentCourse.locations.forEach(syncLocationResourceCounts);
-            }
-            renderLocationsTableHeader();
-            renderLocationsList();
+            persistConfigPackageResources()
+                .then(function () {
+                    if (currentCourse && currentCourse.locations) {
+                        currentCourse.locations.forEach(syncLocationResourceCounts);
+                    }
+                    renderLocationsTableHeader();
+                    renderLocationsList();
+                })
+                .catch(function (e) {
+                    alert('Failed to save resources: ' + (e.message || String(e)));
+                });
             return;
         }
         fetch('/api/config/packages/' + encodeURIComponent(pkgId) + '/resources', {
@@ -1346,7 +1354,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var row = document.getElementById('locations-thead-row');
         if (!row) return;
         row.innerHTML = '';
-        ['ID', 'Type', 'Label'].forEach(function (text) {
+        ['ID', 'Type', 'Label', 'Zone'].forEach(function (text) {
             var th = document.createElement('th');
             th.textContent = text;
             row.appendChild(th);
@@ -3411,6 +3419,7 @@ document.addEventListener('DOMContentLoaded', function () {
             { label: 'ID', value: locId },
             { label: 'Type', value: getLocationTypeLabel(loc.loc_type) },
             { label: 'Label', value: loc.loc_label || '(none)' },
+            { label: 'Zone', value: loc.zone || '(none)' },
             { label: 'Resources', value: formatLocationResourceSummary(loc) }
         ]);
     }
@@ -3614,6 +3623,8 @@ document.addEventListener('DOMContentLoaded', function () {
             tr.appendChild(idCell);
             tr.appendChild(document.createElement('td')).textContent = typeLabel;
             tr.appendChild(document.createElement('td')).textContent = loc.loc_label || '';
+            tr.appendChild(document.createElement('td')).textContent =
+                loc.zone != null && String(loc.zone).trim() ? String(loc.zone).trim() : '—';
             getPackageResources().forEach(function (res) {
                 var code = res.code;
                 var count = (loc.resources && loc.resources[code] != null)
@@ -3665,6 +3676,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var totalTr = document.createElement('tr');
         totalTr.className = 'locations-totals-row';
         totalTr.appendChild(document.createElement('td')).textContent = 'Total';
+        totalTr.appendChild(document.createElement('td')).textContent = '';
         totalTr.appendChild(document.createElement('td')).textContent = '';
         totalTr.appendChild(document.createElement('td')).textContent = '';
         getPackageResources().forEach(function (res) {

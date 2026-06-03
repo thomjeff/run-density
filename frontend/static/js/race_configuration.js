@@ -641,21 +641,40 @@
             });
         }
 
+        function switchWorkspaceTab(tab, cid) {
+            window.history.pushState({}, '', buildConfigUrl(cid, tab));
+            setActiveTab(tab);
+        }
+
         document.querySelectorAll('.race-config-tab').forEach(function (btn) {
             btn.addEventListener('click', function (e) {
                 const tab = btn.getAttribute('data-tab');
                 const cid = getConfigId();
                 if (!cid) return;
                 if (tab === getTab()) return;
-                if (
-                    isPackageWorkspaceDirty() &&
-                    !window.confirm('Discard unsaved changes to this package?')
-                ) {
-                    e.preventDefault();
+                e.preventDefault();
+                if (isPackageWorkspaceDirty() && window.configPackageCourse && window.configPackageCourse.saveAll) {
+                    window.configPackageCourse
+                        .saveAll()
+                        .then(function () {
+                            switchWorkspaceTab(tab, cid);
+                        })
+                        .catch(function (err) {
+                            alert(
+                                'Could not save changes before switching tabs: ' +
+                                    (err.message || String(err))
+                            );
+                        });
                     return;
                 }
-                window.location.href = buildConfigUrl(cid, tab);
+                switchWorkspaceTab(tab, cid);
             });
+        });
+
+        window.addEventListener('popstate', function () {
+            const cid = getConfigId();
+            if (!cid || !document.getElementById('race-config-workspace')) return;
+            setActiveTab(getTab());
         });
     });
 })();

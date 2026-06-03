@@ -34,6 +34,7 @@ from app.core.course.export import build_gpx_line_coordinates
 from app.core.course.segment_library import parse_chunk_gpx
 from app.core.config_package.segment_recipes import package_recipe_event_ids
 from app.utils.constants import (
+    LEG_MAP_NO_SNAP_LOCATION_TYPES,
     COURSE_EVENT_IDS,
     LOCATION_PLACEMENT_CHOICES,
     LOCATION_TYPE_CHOICES,
@@ -46,6 +47,10 @@ from app.utils.constants import (
 
 _LEG_LOC_PRESERVE_FIELDS = (
     "loc_label",
+    "loc_type",
+    "lat",
+    "lon",
+    "placement",
     "notes",
     "buffer",
     "interval",
@@ -100,9 +105,12 @@ def _normalize_locations(raw: Any) -> List[Dict[str, Any]]:
             lon = float(item.get("lon"))
         except (TypeError, ValueError):
             continue
-        placement = str(item.get("placement") or "along").strip().lower()
-        if placement not in LOCATION_PLACEMENT_CHOICES:
-            placement = "along"
+        if loc_type in LEG_MAP_NO_SNAP_LOCATION_TYPES:
+            placement = "off"
+        else:
+            placement = str(item.get("placement") or "along").strip().lower()
+            if placement not in LOCATION_PLACEMENT_CHOICES:
+                placement = "along"
         out.append(
             {
                 "loc_label": label,
@@ -668,8 +676,15 @@ def merge_leg_locations_into_course(config_id: str) -> None:
                 if (prev.get("seg_id") or "").strip():
                     row["seg_id"] = str(prev["seg_id"]).strip()
                 for field in _LEG_LOC_PRESERVE_FIELDS:
-                    if field in prev and prev[field] not in (None, ""):
-                        row[field] = prev[field]
+                    if field not in prev:
+                        continue
+                    val = prev[field]
+                    if field == "resources":
+                        if isinstance(val, dict):
+                            row[field] = val
+                        continue
+                    if val not in (None, ""):
+                        row[field] = val
             else:
                 row["id"] = allocate_location_id(used_ids)
             locations.append(row)
@@ -791,17 +806,26 @@ def sync_leg_location_metadata_from_course(config_id: str) -> bool:
         locs = _normalize_locations(entry.get("locations"))
         if idx < 0 or idx >= len(locs):
             continue
-        updated = _normalize_locations(
-            [
-                {
-                    "loc_label": loc.get("loc_label"),
-                    "loc_type": loc.get("loc_type"),
-                    "lat": loc.get("lat"),
-                    "lon": loc.get("lon"),
-                    "placement": loc.get("placement"),
-                }
-            ]
-        )
+        leg_payload: Dict[str, Any] = {
+            "loc_label": loc.get("loc_label"),
+            "loc_type": loc.get("loc_type"),
+            "lat": loc.get("lat"),
+            "lon": loc.get("lon"),
+            "placement": loc.get("placement"),
+        }
+        for field in _LEG_LOC_PRESERVE_FIELDS:
+            if field in leg_payload:
+                continue
+            if field not in loc:
+                continue
+            val = loc[field]
+            if field == "resources":
+                if isinstance(val, dict):
+                    leg_payload[field] = val
+                continue
+            if val not in (None, ""):
+                leg_payload[field] = val
+        updated = _normalize_locations([leg_payload])
         if not updated:
             continue
         if locs[idx] != updated[0]:

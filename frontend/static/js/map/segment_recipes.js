@@ -203,12 +203,28 @@
         water: '#3498db'
     };
 
-    function locationTypeSnapsToLegRoute(locType) {
+    function locationTypeSnapsToLegRoute(locType, placement) {
+        if (String(placement || '').toLowerCase() === 'off') {
+            return false;
+        }
         var noSnap =
             window.LEG_MAP_NO_SNAP_LOCATION_TYPES_FROM_SERVER ||
             window.OFF_COURSE_LOCATION_TYPES_FROM_SERVER ||
             ['traffic', 'extract', 'aid'];
         return noSnap.indexOf(String(locType || 'course').toLowerCase()) < 0;
+    }
+
+    function resolveLegLocationRecord(loc, opts, isPending) {
+        if (isPending && opts.pendingIndex != null && pendingLegLocations[opts.pendingIndex]) {
+            return pendingLegLocations[opts.pendingIndex];
+        }
+        if (opts.locIndex != null) {
+            var leg = getSelectedLeg();
+            if (leg && leg.locations && leg.locations[opts.locIndex]) {
+                return leg.locations[opts.locIndex];
+            }
+        }
+        return loc;
     }
 
     function legLocationPlacement(locType) {
@@ -809,7 +825,7 @@
             if (loc.lat == null || loc.lon == null) {
                 return true;
             }
-            if (!locationTypeSnapsToLegRoute(loc.loc_type)) {
+            if (!locationTypeSnapsToLegRoute(loc.loc_type, loc.placement)) {
                 return true;
             }
             var idx = closestVertexIndexOnRoute(
@@ -1083,10 +1099,11 @@
         });
         marker.on('dragend', function () {
             var ll = marker.getLatLng();
-            var coords = finalizeLegLocationCoords(loc, ll.lat, ll.lng);
-            loc.lat = coords.lat;
-            loc.lon = coords.lon;
-            marker.setLatLng([loc.lat, loc.lon]);
+            var currentLoc = resolveLegLocationRecord(loc, opts, isPending);
+            var coords = finalizeLegLocationCoords(currentLoc, ll.lat, ll.lng);
+            currentLoc.lat = coords.lat;
+            currentLoc.lon = coords.lon;
+            marker.setLatLng([currentLoc.lat, currentLoc.lon]);
             if (isPending) {
                 setLegStatus(
                     'Position updated. Drag pins to fine-tune, then click Save when finished.'
@@ -1098,7 +1115,9 @@
             if (!leg) return;
             var locations = (leg.locations || []).slice();
             if (opts.locIndex < 0 || opts.locIndex >= locations.length) return;
-            locations[opts.locIndex] = Object.assign({}, locations[opts.locIndex], coords);
+            locations[opts.locIndex] = Object.assign({}, locations[opts.locIndex], coords, {
+                placement: legLocationPlacement(locations[opts.locIndex].loc_type)
+            });
             setLegStatus('Saving position…');
             saveLegLocations(selectedLegId, locations)
                 .then(function () {
@@ -1114,7 +1133,7 @@
     function finalizeLegLocationCoords(loc, lat, lon) {
         var placeLat = lat;
         var placeLon = lon;
-        if (locationTypeSnapsToLegRoute(loc.loc_type) && selectedLegLatLngs) {
+        if (locationTypeSnapsToLegRoute(loc.loc_type, loc.placement) && selectedLegLatLngs) {
             var snapped = snapClickToLegRoute(lat, lon, selectedLegLatLngs);
             placeLat = snapped.lat;
             placeLon = snapped.lon;
@@ -1195,13 +1214,22 @@
 
         var hint = document.createElement('p');
         hint.style.cssText = 'font-size:0.8rem;color:#7f8c8d;margin:0 0 0.65rem 0;line-height:1.35;';
+        function syncPopupLocTypeFromSelect() {
+            var locType = sel.value || 'course';
+            var target = opts.loc;
+            if (target) {
+                target.loc_type = locType;
+                target.placement = legLocationPlacement(locType);
+            }
+            updatePlacementHint();
+        }
         function updatePlacementHint() {
             hint.textContent = locationTypeSnapsToLegRoute(sel.value)
                 ? 'Snaps to the purple route when saved. Set seg_id on the Course tab if needed.'
                 : 'Stays at your click (off-course). Set Proxy loc ID on the Course tab for timing.';
         }
-        updatePlacementHint();
-        sel.addEventListener('change', updatePlacementHint);
+        syncPopupLocTypeFromSelect();
+        sel.addEventListener('change', syncPopupLocTypeFromSelect);
         content.appendChild(hint);
 
         var lblLabel = document.createElement('label');
