@@ -178,6 +178,7 @@
         <section class="course-derived-section" id="locations-card">
             <div class="course-derived-heading-row">
                 <h4 class="course-derived-heading">Locations (combined course)</h4>
+                <button type="button" id="btn-edit-locations-grid" class="course-map-action-text-btn" style="display: none;" title="Operational editor for zones, timing, resources, and notes">Edit operations…</button>
                 <button type="button" id="btn-manage-resources" class="course-map-action-text-btn" title="Define schedulable resources">Manage resources</button>
             </div>
             <p id="locations-empty" class="course-derived-empty">Locations appear here after you save event recipes. Placements from the Legs tab map sync when you open this tab. Edit resources, segment ID, and remove locations here.</p>
@@ -268,6 +269,69 @@
         </div>
         <div id="location-editor-body" class="course-location-modal-body"></div>
         <div id="location-editor-footer" class="course-location-modal-footer"></div>
+    </div>
+</div>
+
+<div id="location-grid-modal" class="course-location-modal" hidden aria-hidden="true">
+    <div class="course-location-modal-backdrop"></div>
+    <div class="course-location-modal-panel location-grid-modal-panel" role="dialog" aria-labelledby="location-grid-title">
+        <div class="course-location-modal-header">
+            <h4 id="location-grid-title">Location operations</h4>
+            <button type="button" id="location-grid-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="location-grid-toolbar">
+            <span id="location-grid-selection-count"></span>
+            <button type="button" id="location-grid-bulk-edit" class="course-btn" disabled>Bulk edit…</button>
+            <button type="button" id="location-grid-clear-selection" class="course-btn">Clear selection</button>
+            <span id="location-grid-dirty-label" class="location-grid-dirty-label"></span>
+        </div>
+        <div class="course-location-modal-body location-grid-body">
+            <div class="scrollable-table-container location-grid-scroll">
+                <table id="location-grid-table" class="table-sticky-header location-grid-table">
+                    <thead>
+                        <tr id="location-grid-thead-row"></tr>
+                    </thead>
+                    <tbody id="location-grid-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="course-location-modal-footer location-grid-footer">
+            <button type="button" id="location-grid-discard" class="course-btn">Discard changes</button>
+            <button type="button" id="location-grid-save" class="course-btn primary">Save</button>
+            <button type="button" id="location-grid-save-close" class="course-btn primary">Save &amp; close</button>
+        </div>
+    </div>
+</div>
+
+<div id="location-grid-bulk-modal" class="course-location-modal" hidden aria-hidden="true">
+    <div class="course-location-modal-backdrop"></div>
+    <div class="course-location-modal-panel course-location-modal-panel-narrow" role="dialog" aria-labelledby="location-grid-bulk-title">
+        <div class="course-location-modal-header">
+            <h4 id="location-grid-bulk-title">Bulk edit locations</h4>
+            <button type="button" id="location-grid-bulk-cancel" aria-label="Close">&times;</button>
+        </div>
+        <div id="location-grid-bulk-body" class="course-location-modal-body"></div>
+        <div class="course-location-modal-footer">
+            <button type="button" id="location-grid-bulk-apply" class="course-btn primary">Apply to selection</button>
+            <button type="button" class="course-btn" id="location-grid-bulk-cancel-footer">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div id="location-grid-unsaved-modal" class="course-location-modal" hidden aria-hidden="true">
+    <div class="course-location-modal-backdrop"></div>
+    <div class="course-location-modal-panel course-location-modal-panel-narrow" role="dialog">
+        <div class="course-location-modal-header">
+            <h4>Unsaved changes</h4>
+        </div>
+        <div class="course-location-modal-body">
+            <p class="course-modal-lead">Unsaved changes to <span id="location-grid-unsaved-count">0</span> locations. Save before closing?</p>
+        </div>
+        <div class="course-location-modal-footer">
+            <button type="button" id="location-grid-unsaved-cancel" class="course-btn">Cancel</button>
+            <button type="button" id="location-grid-unsaved-discard" class="course-btn">Discard changes</button>
+            <button type="button" id="location-grid-unsaved-save-close" class="course-btn primary">Save &amp; close</button>
+        </div>
     </div>
 </div>
 
