@@ -1,6 +1,6 @@
 /**
- * Location grid editor (Issue #773) — spreadsheet power mode + in-grid bulk edit (#772).
- * Requires init from course_mapping.js with package course callbacks.
+ * Location grid editor (Issue #773) — compact operational table + expandable row detail.
+ * Identity/geometry read-only; bulk edit excludes proxy timing (#775 / #751).
  */
 (function () {
     'use strict';
@@ -9,8 +9,11 @@
     var snapshotJson = '';
     var workingLocations = [];
     var selectedRows = new Set();
-    var showSystemColumns = false;
+    var expandedRows = new Set();
     var dirty = false;
+    var rowMaps = {};
+
+    var COLLAPSED_COLS = 9;
 
     var BULK_FIELDS = [
         { key: 'zone', label: 'Zone', type: 'text' },
@@ -20,7 +23,7 @@
         { key: 'equipment', label: 'Equipment', type: 'text' },
         { key: 'contact', label: 'Contact', type: 'text' },
         { key: 'notes', label: 'Notes', type: 'textarea' },
-        { key: 'resources', label: 'Resources scheduled', type: 'resources' }
+        { key: 'resources', label: 'Resource counts', type: 'resources' }
     ];
 
     function $(id) {
@@ -38,6 +41,11 @@
         return isNaN(n) ? index + 1 : n;
     }
 
+    function typeLabel(locType) {
+        if (deps && deps.getLocationTypeLabel) return deps.getLocationTypeLabel(locType);
+        return (locType || '').toString();
+    }
+
     function offCourseType(t) {
         if (deps && deps.offCourseUsesProxyTiming) return deps.offCourseUsesProxyTiming(t);
         var x = (t || '').toLowerCase();
@@ -48,111 +56,48 @@
         return String(v || 'n').toLowerCase() === 'y' ? 'y' : 'n';
     }
 
-    function getCellValue(loc, col, rowIndex) {
-        var key = col.key;
-        if (key === 'id') return String(locationId(loc, rowIndex));
-        if (key === 'proxy_loc_id') {
-            var p = loc.proxy_loc_id;
-            return p != null && p !== '' ? String(p) : '';
+    function resourceCount(loc, code) {
+        if (loc.resources && loc.resources[code] != null) {
+            var n = parseInt(loc.resources[code], 10);
+            return isNaN(n) ? 0 : Math.max(0, n);
         }
-        if (col.resourceCode) {
-            var code = col.resourceCode;
-            if (loc.resources && loc.resources[code] != null) return String(loc.resources[code]);
-            return String(loc[code + '_count'] != null ? loc[code + '_count'] : 0);
-        }
-        if (key === 'onepage') return ynDisplay(loc.onepage);
-        var v = loc[key];
-        return v != null ? String(v) : '';
+        var c = loc[code + '_count'];
+        if (c == null || c === '') return 0;
+        var n2 = parseInt(c, 10);
+        return isNaN(n2) ? 0 : Math.max(0, n2);
     }
 
-    function setCellValue(loc, col, raw, rowIndex) {
-        var key = col.key;
-        if (col.readOnly) return;
-        if (key === 'proxy_loc_id') {
-            loc.proxy_loc_id = raw ? parseInt(raw, 10) : '';
-            if (raw && isNaN(loc.proxy_loc_id)) loc.proxy_loc_id = raw;
-            return;
-        }
-        if (col.resourceCode) {
-            var n = parseInt(raw, 10);
-            if (isNaN(n) || n < 0) n = 0;
-            if (!loc.resources) loc.resources = {};
-            loc.resources[col.resourceCode] = n;
-            loc[col.resourceCode + '_count'] = n;
-            return;
-        }
-        if (key === 'buffer' || key === 'interval') {
-            var iv = parseInt(raw, 10);
-            loc[key] = isNaN(iv) ? (key === 'buffer' ? 10 : 5) : iv;
-            return;
-        }
-        if (key === 'onepage') {
-            loc.onepage = raw === 'y' ? 'y' : 'n';
-            return;
-        }
-        if (key === 'lat' || key === 'lon') {
-            var f = parseFloat(raw);
-            if (!isNaN(f)) loc[key] = f;
-            return;
-        }
-        loc[key] = raw;
+    function setResourceCount(loc, code, raw) {
+        var n = parseInt(raw, 10);
+        if (isNaN(n) || n < 0) n = 0;
+        if (!loc.resources) loc.resources = {};
+        loc.resources[code] = n;
+        loc[code + '_count'] = n;
     }
 
-    function buildColumns() {
-        var cols = [
-            { key: '_select', label: '', bulk: true, width: 40 },
-            { key: 'id', label: 'ID', readOnly: true, width: 48 },
-            { key: 'loc_label', label: 'Label', type: 'text', width: 140 },
-            { key: 'loc_type', label: 'Type', type: 'select', width: 90 },
-            { key: 'lat', label: 'Lat', type: 'number', width: 88 },
-            { key: 'lon', label: 'Lon', type: 'number', width: 88 },
-            { key: 'proxy_loc_id', label: 'Proxy timing', type: 'proxy', width: 160 },
-            { key: 'seg_id', label: 'Seg ID', type: 'text', width: 72 },
-            { key: 'zone', label: 'Zone', type: 'text', width: 56 },
-            { key: 'buffer', label: 'Buffer', type: 'number', width: 64 },
-            { key: 'interval', label: 'Interval', type: 'number', width: 72 }
-        ];
-        var events = (deps && deps.eventChoices) || [];
-        events.forEach(function (ev) {
-            cols.push({
-                key: ev.value || ev,
-                label: (ev.label || ev.value || '').toString(),
-                readOnly: true,
-                width: 44
-            });
+    function formatResourcesSummary(loc) {
+        var parts = [];
+        (deps && deps.getResources ? deps.getResources() : []).forEach(function (res) {
+            var code = res.code;
+            var n = resourceCount(loc, code);
+            if (n > 0) parts.push(String(code).toUpperCase() + '-' + n);
         });
-        var resources = (deps && deps.getResources) ? deps.getResources() : [];
-        resources.forEach(function (res) {
-            cols.push({
-                key: res.code + '_count',
-                label: res.code,
-                type: 'number',
-                resourceCode: res.code,
-                width: 52
-            });
-        });
-        cols.push(
-            { key: 'onepage', label: '1-pg', type: 'yn', width: 48 },
-            { key: 'equipment', label: 'Equipment', type: 'text', width: 100 },
-            { key: 'contact', label: 'Contact', type: 'text', width: 100 },
-            { key: 'notes', label: 'Notes', type: 'text', width: 160 }
-        );
-        if (showSystemColumns) {
-            cols.push(
-                { key: 'source', label: 'Source', readOnly: true, width: 56 },
-                { key: 'leg_id', label: 'Leg', readOnly: true, width: 48 },
-                { key: 'placement', label: 'Placement', readOnly: true, width: 72 }
-            );
+        return parts.length ? parts.join('; ') : '—';
+    }
+
+    function proxyDisplay(loc) {
+        var p = loc.proxy_loc_id;
+        if (p == null || p === '' || String(p).trim() === '') return '—';
+        return String(p);
+    }
+
+    function latLonDisplay(loc) {
+        var lat = loc.lat;
+        var lon = loc.lon;
+        if (lat == null || lon == null || isNaN(parseFloat(lat)) || isNaN(parseFloat(lon))) {
+            return '—';
         }
-        var pkgDay = deps && deps.getPackageEventDay ? deps.getPackageEventDay() : '';
-        cols.splice(8, 0, {
-            key: 'day',
-            label: 'Day',
-            type: pkgDay ? 'readonly' : 'text',
-            readOnly: !!pkgDay,
-            width: 56
-        });
-        return cols;
+        return parseFloat(lat).toFixed(5) + ', ' + parseFloat(lon).toFixed(5);
     }
 
     function markDirty() {
@@ -175,11 +120,6 @@
         var errors = [];
         workingLocations.forEach(function (loc, i) {
             var label = (loc.loc_label || '').trim() || 'Row ' + (i + 1);
-            var lat = parseFloat(loc.lat);
-            var lon = parseFloat(loc.lon);
-            if (isNaN(lat) || isNaN(lon)) {
-                errors.push(label + ': invalid latitude/longitude');
-            }
             var seg = (loc.seg_id || '').trim();
             var proxy = loc.proxy_loc_id;
             var hasProxy = proxy != null && proxy !== '' && String(proxy).trim() !== '';
@@ -193,13 +133,101 @@
         return errors;
     }
 
+    function destroyAllRowMaps() {
+        Object.keys(rowMaps).forEach(function (key) {
+            try {
+                if (rowMaps[key]) rowMaps[key].remove();
+            } catch (e) { /* ignore teardown errors */ }
+            delete rowMaps[key];
+        });
+    }
+
+    function mountRowMap(rowIndex, loc) {
+        var el = document.getElementById('location-grid-map-' + rowIndex);
+        if (!el) return;
+        var lat = parseFloat(loc.lat);
+        var lon = parseFloat(loc.lon);
+        if (isNaN(lat) || isNaN(lon)) {
+            el.classList.add('location-grid-detail-map--empty');
+            el.textContent = '—';
+            return;
+        }
+        if (typeof L === 'undefined') {
+            el.classList.add('location-grid-detail-map--empty');
+            el.textContent = 'Map unavailable';
+            return;
+        }
+        if (rowMaps[rowIndex]) {
+            try {
+                rowMaps[rowIndex].remove();
+            } catch (e) { /* ignore */ }
+            delete rowMaps[rowIndex];
+        }
+        el.classList.remove('location-grid-detail-map--empty');
+        el.textContent = '';
+        var map = L.map(el, {
+            zoomControl: false,
+            attributionControl: false,
+            dragging: false,
+            scrollWheelZoom: false,
+            doubleClickZoom: false,
+            boxZoom: false,
+            keyboard: false,
+            touchZoom: false
+        });
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
+            subdomains: ['a', 'b', 'c', 'd'],
+            maxZoom: 19
+        }).addTo(map);
+        L.circleMarker([lat, lon], {
+            radius: 5,
+            color: '#2563eb',
+            fillColor: '#2563eb',
+            fillOpacity: 0.85,
+            weight: 2
+        }).addTo(map);
+        map.setView([lat, lon], 16);
+        rowMaps[rowIndex] = map;
+        setTimeout(function () {
+            if (rowMaps[rowIndex]) rowMaps[rowIndex].invalidateSize();
+        }, 80);
+    }
+
+    function scheduleRowMaps() {
+        expandedRows.forEach(function (rowIndex) {
+            var loc = workingLocations[rowIndex];
+            if (loc) mountRowMap(rowIndex, loc);
+        });
+    }
+
+    function buildOnepagerControl(loc, editable) {
+        var wrap = document.createElement('div');
+        wrap.className = 'location-grid-onepager-wrap';
+        var lbl = document.createElement('label');
+        lbl.className = 'location-onepager-inline';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = ynDisplay(loc.onepage) === 'y';
+        cb.disabled = !editable;
+        var span = document.createElement('span');
+        span.textContent = 'Create One-Pager';
+        lbl.appendChild(cb);
+        lbl.appendChild(span);
+        cb.addEventListener('change', function () {
+            loc.onepage = cb.checked ? 'y' : 'n';
+            markDirty();
+        });
+        wrap.appendChild(lbl);
+        return wrap;
+    }
+
     function buildProxySelect(loc, rowIndex, editable) {
         var sel = document.createElement('select');
-        sel.className = 'location-grid-cell-input';
+        sel.className = 'location-grid-detail-input';
         sel.disabled = !editable;
         var none = document.createElement('option');
         none.value = '';
-        none.textContent = '—';
+        none.textContent = '— None —';
         sel.appendChild(none);
         var selfId = locationId(loc, rowIndex);
         workingLocations.forEach(function (other, j) {
@@ -229,7 +257,12 @@
             }
         }
         sel.addEventListener('change', function () {
-            setCellValue(loc, { key: 'proxy_loc_id' }, sel.value, rowIndex);
+            if (sel.value) {
+                var pid = parseInt(sel.value, 10);
+                loc.proxy_loc_id = isNaN(pid) ? sel.value : pid;
+            } else {
+                loc.proxy_loc_id = '';
+            }
             if (sel.value && offCourseType(loc.loc_type)) {
                 loc.seg_id = '';
             }
@@ -239,103 +272,185 @@
         return sel;
     }
 
-    function createCellInput(loc, col, rowIndex, editable) {
-        if (col.readOnly || col.type === 'readonly') {
+    function addDetailField(parent, labelText, controlOrText, isReadOnlyText) {
+        var wrap = document.createElement('div');
+        wrap.className = 'location-grid-detail-field';
+        var lbl = document.createElement('label');
+        lbl.textContent = labelText;
+        wrap.appendChild(lbl);
+        if (isReadOnlyText) {
             var span = document.createElement('span');
-            span.className = 'location-grid-readonly';
-            span.textContent = getCellValue(loc, col, rowIndex);
-            return span;
+            span.className = 'location-grid-detail-readonly';
+            span.textContent = controlOrText;
+            wrap.appendChild(span);
+        } else {
+            wrap.appendChild(controlOrText);
         }
-        if (col.type === 'proxy') {
-            return buildProxySelect(loc, rowIndex, editable);
-        }
-        if (col.type === 'select' && col.key === 'loc_type') {
-            var sel = document.createElement('select');
-            sel.className = 'location-grid-cell-input';
-            sel.disabled = !editable;
-            (deps.locationTypes || []).forEach(function (t) {
-                var opt = document.createElement('option');
-                opt.value = t.value;
-                opt.textContent = t.label || t.value;
-                if ((loc.loc_type || 'course') === t.value) opt.selected = true;
-                sel.appendChild(opt);
-            });
-            sel.addEventListener('change', function () {
-                setCellValue(loc, col, sel.value, rowIndex);
-                markDirty();
-            });
-            return sel;
-        }
-        if (col.type === 'yn') {
-            var ysel = document.createElement('select');
-            ysel.className = 'location-grid-cell-input';
-            ysel.disabled = !editable;
-            ['n', 'y'].forEach(function (v) {
-                var o = document.createElement('option');
-                o.value = v;
-                o.textContent = v;
-                if (ynDisplay(loc.onepage) === v) o.selected = true;
-                ysel.appendChild(o);
-            });
-            ysel.addEventListener('change', function () {
-                setCellValue(loc, col, ysel.value, rowIndex);
-                markDirty();
-            });
-            return ysel;
-        }
-        var inp = document.createElement('input');
-        inp.className = 'location-grid-cell-input';
-        inp.type = col.type === 'number' ? 'number' : 'text';
-        inp.disabled = !editable;
-        inp.value = getCellValue(loc, col, rowIndex);
-        inp.addEventListener('change', function () {
-            setCellValue(loc, col, inp.value, rowIndex);
-            markDirty();
-        });
-        inp.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                inp.blur();
-                focusNextCell(rowIndex, col.key, 1);
-            }
-        });
-        return inp;
+        parent.appendChild(wrap);
+        return wrap;
     }
 
-    function focusNextCell(rowIndex, colKey, dir) {
-        var cols = buildColumns().filter(function (c) {
-            return c.key !== '_select' && !c.readOnly;
+    function buildDetailPanel(loc, rowIndex, editable) {
+        var panel = document.createElement('div');
+        panel.className = 'location-grid-detail-panel';
+
+        var banner = document.createElement('p');
+        banner.className = 'location-grid-detail-note location-grid-detail-note--banner';
+        banner.textContent =
+            'Identity, geometry, and segment placement are edited in the Legs / map authoring UI. These fields are not editable here.';
+        panel.appendChild(banner);
+
+        var columns = document.createElement('div');
+        columns.className = 'location-grid-detail-columns';
+
+        var col1 = document.createElement('div');
+        col1.className = 'location-grid-detail-col location-grid-detail-col--identity';
+        var col1Fields = document.createElement('div');
+        col1Fields.className = 'location-grid-detail-col-fields';
+        addDetailField(col1Fields, 'Label', (loc.loc_label || '').trim() || '—', true);
+        addDetailField(col1Fields, 'Type', typeLabel(loc.loc_type), true);
+        addDetailField(col1Fields, 'Seg ID', (loc.seg_id || '').trim() || '—', true);
+        addDetailField(col1Fields, 'Lat / Lon', latLonDisplay(loc), true);
+        col1.appendChild(col1Fields);
+        var mapWrap = document.createElement('div');
+        mapWrap.className = 'location-grid-detail-map-wrap';
+        var mapEl = document.createElement('div');
+        mapEl.id = 'location-grid-map-' + rowIndex;
+        mapEl.className = 'location-grid-detail-map';
+        mapWrap.appendChild(mapEl);
+        col1.appendChild(mapWrap);
+
+        var col2 = document.createElement('div');
+        col2.className = 'location-grid-detail-col';
+        var note2 = document.createElement('p');
+        note2.className = 'location-grid-detail-note';
+        note2.textContent = 'Set per location. Not available in bulk edit.';
+        col2.appendChild(note2);
+        addDetailField(col2, 'Proxy timing', buildProxySelect(loc, rowIndex, editable), false);
+
+        var zoneInp = document.createElement('input');
+        zoneInp.type = 'text';
+        zoneInp.className = 'location-grid-detail-input';
+        zoneInp.value = loc.zone != null ? String(loc.zone) : '';
+        zoneInp.disabled = !editable;
+        zoneInp.addEventListener('change', function () {
+            loc.zone = zoneInp.value;
+            markDirty();
+            renderGridBody();
         });
-        var idx = cols.findIndex(function (c) {
-            return c.key === colKey;
+        addDetailField(col2, 'Zone', zoneInp, false);
+
+        var bufInp = document.createElement('input');
+        bufInp.type = 'number';
+        bufInp.min = '0';
+        bufInp.className = 'location-grid-detail-input';
+        bufInp.value = loc.buffer != null ? String(loc.buffer) : '10';
+        bufInp.disabled = !editable;
+        bufInp.addEventListener('change', function () {
+            var iv = parseInt(bufInp.value, 10);
+            loc.buffer = isNaN(iv) ? 10 : iv;
+            markDirty();
         });
-        if (idx < 0) return;
-        idx += dir;
-        if (idx >= cols.length) {
-            rowIndex += 1;
-            idx = 0;
-        }
-        if (rowIndex >= workingLocations.length) return;
-        var tbody = $('location-grid-tbody');
-        if (!tbody) return;
-        var tr = tbody.children[rowIndex];
-        if (!tr) return;
-        var colIdx = buildColumns().findIndex(function (c) {
-            return c.key === cols[idx].key;
+        addDetailField(col2, 'Buffer (min)', bufInp, false);
+
+        var intInp = document.createElement('input');
+        intInp.type = 'number';
+        intInp.min = '0';
+        intInp.className = 'location-grid-detail-input';
+        intInp.value = loc.interval != null ? String(loc.interval) : '5';
+        intInp.disabled = !editable;
+        intInp.addEventListener('change', function () {
+            var iv = parseInt(intInp.value, 10);
+            loc.interval = isNaN(iv) ? 5 : iv;
+            markDirty();
         });
-        if (colIdx < 0) return;
-        var cell = tr.children[colIdx];
-        if (!cell) return;
-        var focusable = cell.querySelector('input, select, textarea');
-        if (focusable) focusable.focus();
+        addDetailField(col2, 'Interval (min)', intInp, false);
+
+        var resWrap = document.createElement('div');
+        resWrap.className = 'location-grid-resource-grid';
+        (deps && deps.getResources ? deps.getResources() : []).forEach(function (res) {
+            var code = res.code;
+            var cell = document.createElement('div');
+            cell.className = 'location-grid-resource-cell';
+            var rl = document.createElement('label');
+            rl.textContent = res.label || code;
+            var rin = document.createElement('input');
+            rin.type = 'number';
+            rin.min = '0';
+            rin.className = 'location-grid-detail-input';
+            rin.value = String(resourceCount(loc, code));
+            rin.disabled = !editable;
+            rin.addEventListener('change', function () {
+                setResourceCount(loc, code, rin.value);
+                markDirty();
+                renderGridBody();
+            });
+            cell.appendChild(rl);
+            cell.appendChild(rin);
+            resWrap.appendChild(cell);
+        });
+        addDetailField(col2, 'Resource counts', resWrap, false);
+
+        var col3 = document.createElement('div');
+        col3.className = 'location-grid-detail-col';
+        col3.appendChild(buildOnepagerControl(loc, editable));
+
+        var eqInp = document.createElement('input');
+        eqInp.type = 'text';
+        eqInp.className = 'location-grid-detail-input';
+        eqInp.value = loc.equipment != null ? String(loc.equipment) : '';
+        eqInp.disabled = !editable;
+        eqInp.addEventListener('change', function () {
+            loc.equipment = eqInp.value;
+            markDirty();
+        });
+        addDetailField(col3, 'Equipment', eqInp, false);
+
+        var ctInp = document.createElement('input');
+        ctInp.type = 'text';
+        ctInp.className = 'location-grid-detail-input';
+        ctInp.value = loc.contact != null ? String(loc.contact) : '';
+        ctInp.disabled = !editable;
+        ctInp.addEventListener('change', function () {
+            loc.contact = ctInp.value;
+            markDirty();
+        });
+        addDetailField(col3, 'Contact', ctInp, false);
+
+        var notesTa = document.createElement('textarea');
+        notesTa.className = 'location-grid-detail-textarea';
+        notesTa.rows = 4;
+        notesTa.value = loc.notes != null ? String(loc.notes) : '';
+        notesTa.disabled = !editable;
+        notesTa.addEventListener('change', function () {
+            loc.notes = notesTa.value;
+            markDirty();
+        });
+        addDetailField(col3, 'Notes', notesTa, false);
+
+        columns.appendChild(col1);
+        columns.appendChild(col2);
+        columns.appendChild(col3);
+        panel.appendChild(columns);
+        return panel;
     }
 
     function renderGridHead() {
         var head = $('location-grid-thead-row');
         if (!head) return;
         head.innerHTML = '';
-        var cols = buildColumns();
-        cols.forEach(function (col) {
+        var headers = [
+            { key: '_expand', label: '', width: 36 },
+            { key: '_select', label: '', width: 40 },
+            { key: 'id', label: 'ID', width: 48 },
+            { key: 'loc_label', label: 'Label', width: 140 },
+            { key: 'loc_type', label: 'Type', width: 88 },
+            { key: 'zone', label: 'Zone', width: 72 },
+            { key: 'seg_id', label: 'Seg ID', width: 64 },
+            { key: 'proxy_loc_id', label: 'Proxy ID', width: 72 },
+            { key: 'resources', label: 'Resources', width: 200 }
+        ];
+        headers.forEach(function (col) {
             var th = document.createElement('th');
             if (col.width) th.style.minWidth = col.width + 'px';
             if (col.key === '_select') {
@@ -366,32 +481,96 @@
     function renderGridBody() {
         var tbody = $('location-grid-tbody');
         if (!tbody) return;
+        destroyAllRowMaps();
         tbody.innerHTML = '';
-        var cols = buildColumns();
         var editable = deps && deps.canEdit && deps.canEdit();
+
         workingLocations.forEach(function (loc, rowIndex) {
             var tr = document.createElement('tr');
-            if (selectedRows.has(rowIndex)) tr.className = 'location-grid-row-selected';
-            cols.forEach(function (col) {
-                var td = document.createElement('td');
-                if (col.key === '_select') {
-                    var rowCb = document.createElement('input');
-                    rowCb.type = 'checkbox';
-                    rowCb.checked = selectedRows.has(rowIndex);
-                    rowCb.addEventListener('change', function () {
-                        if (rowCb.checked) selectedRows.add(rowIndex);
-                        else selectedRows.delete(rowIndex);
-                        updateSelectionToolbar();
-                        renderGridBody();
-                    });
-                    td.appendChild(rowCb);
-                } else {
-                    td.appendChild(createCellInput(loc, col, rowIndex, editable));
-                }
-                tr.appendChild(td);
+            tr.className = 'location-grid-summary-row';
+            if (selectedRows.has(rowIndex)) tr.classList.add('location-grid-row-selected');
+
+            var expandTd = document.createElement('td');
+            expandTd.className = 'location-grid-expand-cell';
+            var expandBtn = document.createElement('button');
+            expandBtn.type = 'button';
+            expandBtn.className = 'location-grid-expand-btn';
+            expandBtn.setAttribute('aria-expanded', expandedRows.has(rowIndex) ? 'true' : 'false');
+            expandBtn.title = expandedRows.has(rowIndex) ? 'Collapse' : 'Expand details';
+            expandBtn.textContent = expandedRows.has(rowIndex) ? '▼' : '▶';
+            expandBtn.addEventListener('click', function () {
+                if (expandedRows.has(rowIndex)) expandedRows.delete(rowIndex);
+                else expandedRows.add(rowIndex);
+                renderGridBody();
             });
+            expandTd.appendChild(expandBtn);
+            tr.appendChild(expandTd);
+
+            var selTd = document.createElement('td');
+            selTd.className = 'grid-col-select';
+            var rowCb = document.createElement('input');
+            rowCb.type = 'checkbox';
+            rowCb.checked = selectedRows.has(rowIndex);
+            rowCb.addEventListener('change', function () {
+                if (rowCb.checked) selectedRows.add(rowIndex);
+                else selectedRows.delete(rowIndex);
+                updateSelectionToolbar();
+                renderGridBody();
+            });
+            selTd.appendChild(rowCb);
+            tr.appendChild(selTd);
+
+            var idTd = document.createElement('td');
+            idTd.className = 'location-grid-readonly';
+            idTd.textContent = String(locationId(loc, rowIndex));
+            tr.appendChild(idTd);
+
+            var labelTd = document.createElement('td');
+            labelTd.className = 'location-grid-readonly';
+            labelTd.textContent = (loc.loc_label || '').trim() || '—';
+            tr.appendChild(labelTd);
+
+            var typeTd = document.createElement('td');
+            typeTd.className = 'location-grid-readonly';
+            typeTd.textContent = typeLabel(loc.loc_type);
+            tr.appendChild(typeTd);
+
+            var zoneTd = document.createElement('td');
+            zoneTd.className = 'location-grid-readonly';
+            var zoneVal = loc.zone != null ? String(loc.zone).trim() : '';
+            zoneTd.textContent = zoneVal !== '' ? zoneVal : '—';
+            tr.appendChild(zoneTd);
+
+            var segTd = document.createElement('td');
+            segTd.className = 'location-grid-readonly';
+            segTd.textContent = (loc.seg_id || '').trim() || '—';
+            tr.appendChild(segTd);
+
+            var proxyTd = document.createElement('td');
+            proxyTd.className = 'location-grid-readonly';
+            proxyTd.textContent = proxyDisplay(loc);
+            tr.appendChild(proxyTd);
+
+            var resTd = document.createElement('td');
+            resTd.className = 'location-grid-resources-summary';
+            resTd.textContent = formatResourcesSummary(loc);
+            resTd.title = resTd.textContent;
+            tr.appendChild(resTd);
+
             tbody.appendChild(tr);
+
+            if (expandedRows.has(rowIndex)) {
+                var detailTr = document.createElement('tr');
+                detailTr.className = 'location-grid-detail-row';
+                if (selectedRows.has(rowIndex)) detailTr.classList.add('location-grid-row-selected');
+                var detailTd = document.createElement('td');
+                detailTd.colSpan = COLLAPSED_COLS;
+                detailTd.appendChild(buildDetailPanel(loc, rowIndex, editable));
+                detailTr.appendChild(detailTd);
+                tbody.appendChild(detailTr);
+            }
         });
+        scheduleRowMaps();
     }
 
     function renderGrid() {
@@ -400,7 +579,7 @@
         var title = $('location-grid-title');
         if (title) {
             title.textContent =
-                'Location grid · ' + workingLocations.length + ' locations';
+                'Location operations · ' + workingLocations.length + ' locations';
         }
     }
 
@@ -448,12 +627,16 @@
 
     function closeGrid(force) {
         if (!force && isDirtyState()) {
+            var countEl = $('location-grid-unsaved-count');
+            if (countEl) countEl.textContent = String(workingLocations.length);
             showModal($('location-grid-unsaved-modal'));
             return;
         }
         hideModal($('location-grid-modal'));
+        destroyAllRowMaps();
         workingLocations = [];
         selectedRows.clear();
+        expandedRows.clear();
         dirty = false;
     }
 
@@ -465,9 +648,9 @@
         var lead = document.createElement('p');
         lead.className = 'course-modal-lead';
         lead.textContent =
-            'Apply shared values to ' +
+            'Apply shared operational values to ' +
             selectedRows.size +
-            ' selected location(s). Check each field to update.';
+            ' selected location(s). Proxy timing is not bulk-editable.';
         body.appendChild(lead);
 
         var fieldState = [];
@@ -478,18 +661,20 @@
             check.className = 'location-grid-bulk-check';
             var cb = document.createElement('input');
             cb.type = 'checkbox';
-            cb.dataset.field = field.key;
             check.appendChild(cb);
             check.appendChild(document.createTextNode(' Update ' + field.label));
             wrap.appendChild(check);
 
             var control = null;
+            var fs = { field: field, cb: cb, control: null, resInputs: null };
             if (field.type === 'resources') {
                 var grid = document.createElement('div');
-                grid.className = 'location-resource-grid';
+                grid.className = 'location-grid-resource-grid';
                 var resInputs = {};
                 (deps.getResources() || []).forEach(function (res) {
-                    var lbl = document.createElement('span');
+                    var cell = document.createElement('div');
+                    cell.className = 'location-grid-resource-cell';
+                    var lbl = document.createElement('label');
                     lbl.textContent = res.label || res.code;
                     var inp = document.createElement('input');
                     inp.type = 'number';
@@ -497,35 +682,37 @@
                     inp.value = '0';
                     inp.disabled = true;
                     resInputs[res.code] = inp;
-                    grid.appendChild(lbl);
-                    grid.appendChild(inp);
+                    cell.appendChild(lbl);
+                    cell.appendChild(inp);
+                    grid.appendChild(cell);
                 });
                 control = grid;
-                fieldState.push({ field: field, cb: cb, resInputs: resInputs });
+                fs.resInputs = resInputs;
+                fs.control = control;
             } else if (field.type === 'yn') {
                 control = document.createElement('select');
                 control.disabled = true;
                 ['n', 'y'].forEach(function (v) {
                     var o = document.createElement('option');
                     o.value = v;
-                    o.textContent = v;
+                    o.textContent = v === 'y' ? 'Yes' : 'No';
                     control.appendChild(o);
                 });
-                fieldState.push({ field: field, cb: cb, control: control });
+                fs.control = control;
             } else if (field.type === 'textarea') {
                 control = document.createElement('textarea');
-                control.rows = 2;
+                control.rows = 3;
                 control.disabled = true;
-                fieldState.push({ field: field, cb: cb, control: control });
+                fs.control = control;
             } else {
                 control = document.createElement('input');
                 control.type = field.type === 'int' ? 'number' : 'text';
                 control.disabled = true;
                 if (field.type === 'int') control.min = '0';
-                fieldState.push({ field: field, cb: cb, control: control });
+                fs.control = control;
             }
             cb.addEventListener('change', function () {
-                control.disabled = !cb.checked;
+                if (fs.control) fs.control.disabled = !cb.checked;
                 if (fs.resInputs) {
                     Object.keys(fs.resInputs).forEach(function (code) {
                         fs.resInputs[code].disabled = !cb.checked;
@@ -534,6 +721,7 @@
             });
             wrap.appendChild(control);
             body.appendChild(wrap);
+            fieldState.push(fs);
         });
 
         var impact = document.createElement('div');
@@ -546,23 +734,21 @@
             fieldState.forEach(function (fs) {
                 if (!fs.cb.checked) return;
                 var key = fs.field.key;
+                if (key === 'resources') return;
                 var withVal = 0;
                 selectedRows.forEach(function (ri) {
                     var loc = workingLocations[ri];
-                    if (key === 'resources') return;
                     var v = loc[key];
                     if (v != null && String(v).trim() !== '') withVal += 1;
                 });
-                if (key !== 'resources') {
-                    lines.push(
-                        fs.field.label +
-                            ': ' +
-                            withVal +
-                            ' of ' +
-                            selectedRows.size +
-                            ' already have a value (will overwrite).'
-                    );
-                }
+                lines.push(
+                    fs.field.label +
+                        ': ' +
+                        withVal +
+                        ' of ' +
+                        selectedRows.size +
+                        ' already have a value (will overwrite).'
+                );
             });
             impact.textContent = lines.join('\n');
         }
@@ -577,7 +763,7 @@
             fieldState.forEach(function (fs) {
                 if (!fs.cb.checked) return;
                 fields.push(fs.field.key);
-                if (fs.field.key === 'resources') {
+                if (fs.field.key === 'resources' && fs.resInputs) {
                     patch.resources = {};
                     Object.keys(fs.resInputs).forEach(function (code) {
                         var n = parseInt(fs.resInputs[code].value, 10);
@@ -585,6 +771,8 @@
                     });
                 } else if (fs.field.type === 'int') {
                     patch[fs.field.key] = parseInt(fs.control.value, 10) || 0;
+                } else if (fs.field.type === 'yn') {
+                    patch[fs.field.key] = fs.control.value === 'y' ? 'y' : 'n';
                 } else {
                     patch[fs.field.key] = fs.control.value;
                 }
@@ -608,10 +796,8 @@
             if (!loc) return;
             fields.forEach(function (f) {
                 if (f === 'resources' && patch.resources) {
-                    if (!loc.resources) loc.resources = {};
                     Object.keys(patch.resources).forEach(function (code) {
-                        loc.resources[code] = patch.resources[code];
-                        loc[code + '_count'] = patch.resources[code];
+                        setResourceCount(loc, code, patch.resources[code]);
                     });
                 } else if (patch[f] !== undefined) {
                     loc[f] = patch[f];
@@ -622,7 +808,7 @@
 
     function open() {
         if (!deps || !deps.canEdit || !deps.canEdit()) {
-            alert('Load a config package course with locations to use the grid editor.');
+            alert('Load a config package course with locations to use the location operations editor.');
             return;
         }
         var locs = deps.getLocations ? deps.getLocations() : [];
@@ -633,6 +819,7 @@
         workingLocations = deepCloneLocations(locs);
         snapshotJson = JSON.stringify(workingLocations);
         selectedRows.clear();
+        expandedRows.clear();
         dirty = false;
         updateDirtyLabel();
         updateSelectionToolbar();
@@ -673,13 +860,6 @@
                 selectedRows.clear();
                 updateSelectionToolbar();
                 renderGridBody();
-            });
-        }
-        var sysToggle = $('location-grid-show-system');
-        if (sysToggle) {
-            sysToggle.addEventListener('change', function () {
-                showSystemColumns = sysToggle.checked;
-                renderGrid();
             });
         }
         function closeBulkModal() {
@@ -736,5 +916,4 @@
         updateOpenButtonVisibility: updateOpenButtonVisibility,
         applyBulkLocationPatch: applyBulkLocationPatch
     };
-
 })();

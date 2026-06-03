@@ -710,6 +710,18 @@
         cursor: pointer;
         color: #7f8c8d;
     }
+    #location-grid-close {
+        border: none;
+        background: none;
+        font-size: 1.875rem;
+        line-height: 1;
+        cursor: pointer;
+        color: #7f8c8d;
+        padding: 0 0.15rem;
+    }
+    #location-grid-close:hover {
+        color: #2c3e50;
+    }
     .course-location-modal-body label {
         display: block;
         font-weight: 600;
@@ -861,7 +873,7 @@
     }
 
     .location-grid-modal-panel {
-        width: min(92vw, 1400px);
+        width: min(92vw, 1100px);
         max-width: 92vw;
         max-height: 90vh;
         display: flex;
@@ -876,13 +888,8 @@
         border-bottom: 1px solid #ecf0f1;
         font-size: 0.85rem;
     }
-    .location-grid-system-toggle {
-        margin-left: auto;
-        font-size: 0.8rem;
-        color: #7f8c8d;
-    }
     .location-grid-dirty-label {
-        color: #c0392b;
+        margin-left: auto;
         font-weight: 600;
     }
     .location-grid-body {
@@ -894,51 +901,201 @@
         max-height: calc(90vh - 200px);
         overflow: auto;
     }
-    .location-grid-table {
-        font-size: 0.78rem;
-        width: max-content;
-        min-width: 100%;
+    /* Match #locations-table (0.875rem, uppercase headers); override common.css table padding in scroll container */
+    #location-grid-table {
+        font-size: 0.875rem;
+        width: 100%;
+        table-layout: auto;
     }
-    .location-grid-table th,
-    .location-grid-table td {
-        white-space: nowrap;
-        padding: 0.2rem 0.35rem;
+    #location-grid-table th,
+    #location-grid-table td {
+        padding: 0.22rem 0.45rem;
         vertical-align: middle;
+        text-align: left;
+        white-space: nowrap;
+        color: #2c3e50;
     }
-    .location-grid-table th {
+    #location-grid-table th {
         position: sticky;
         top: 0;
         z-index: 2;
         background: #f8f9fa;
+        font-weight: 600;
+        font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
     }
-    .location-grid-table .grid-col-select {
-        width: 2rem;
+    #location-grid-table input[type="checkbox"] {
+        width: 1.1em;
+        height: 1.1em;
+        min-width: 1.1em;
+        min-height: 1.1em;
+        margin: 0;
+        vertical-align: middle;
+        cursor: pointer;
+    }
+    #location-grid-table .grid-col-select {
+        width: 2.25rem;
         text-align: center;
     }
-    .location-grid-table .grid-cell-input,
-    .location-grid-table .grid-cell-select {
+    .location-grid-expand-cell {
+        width: 2rem;
+        text-align: center;
+        padding: 0.12rem 0.2rem;
+    }
+    .location-grid-expand-btn {
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        font-size: 0.7rem;
+        color: #3498db;
+        padding: 0.15rem 0.35rem;
+    }
+    .location-grid-expand-btn:hover {
+        color: #2980b9;
+    }
+    .location-grid-inline-input {
         width: 100%;
-        min-width: 4.5rem;
-        max-width: 12rem;
-        font-size: 0.78rem;
-        padding: 0.15rem 0.25rem;
+        min-width: 3.5rem;
+        max-width: 6rem;
+        font-size: 0.875rem;
+        padding: 0.15rem 0.3rem;
         border: 1px solid #dfe6e9;
         border-radius: 3px;
+        color: #2c3e50;
     }
-    .location-grid-table .grid-cell-input.grid-cell-wide {
-        min-width: 8rem;
-        max-width: 16rem;
+    .location-grid-resources-summary {
+        font-size: 0.875rem;
+        color: #2c3e50;
+        max-width: 220px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
-    .location-grid-table .grid-cell-readonly {
-        color: #7f8c8d;
+    #location-grid-table tr.location-grid-row-selected td {
+        background: #e8f4fc;
+    }
+    #location-grid-table .location-grid-readonly {
+        color: #2c3e50;
+        font-size: 0.875rem;
+    }
+    .location-grid-detail-row td {
+        padding: 0;
+        background: #fafbfc;
+        border-bottom: 2px solid #dfe6e9;
+    }
+    .location-grid-detail-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+        padding: 0.75rem 1rem 1rem;
+    }
+    .location-grid-detail-note--banner {
+        width: 100%;
+        margin: 0;
+        flex: 0 0 auto;
+    }
+    .location-grid-detail-columns {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem 1.25rem;
+    }
+    @media (max-width: 900px) {
+        .location-grid-detail-columns {
+            grid-template-columns: 1fr;
+        }
+    }
+    .location-grid-detail-col {
+        min-width: 0;
+    }
+    .location-grid-detail-col--identity {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .location-grid-detail-col-fields {
+        flex: 0 0 auto;
+        min-width: 0;
+    }
+    .location-grid-detail-map-wrap {
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        margin-top: 0.5rem;
+        flex-shrink: 0;
+    }
+    .location-grid-detail-map {
+        width: 100%;
+        height: 100%;
+        border: 1px solid #dfe6e9;
+        border-radius: 4px;
+        background: #eef2f5;
+        overflow: hidden;
+        z-index: 0;
+    }
+    .location-grid-detail-map--empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.65rem;
+        color: #95a5a6;
+        text-align: center;
+    }
+    .location-grid-detail-map .leaflet-container {
+        width: 100% !important;
+        height: 100% !important;
+        background: #eef2f5;
+    }
+    .location-grid-onepager-wrap {
+        margin-top: 0.15rem;
+    }
+    .location-grid-onepager-wrap .location-onepager-inline {
+        margin-top: 0;
+    }
+    .location-grid-detail-note {
         font-size: 0.75rem;
-    }
-    .location-grid-table tr.location-grid-row-selected td {
-        background: #ebf5fb;
-    }
-    .location-grid-table .location-grid-readonly {
         color: #7f8c8d;
+        margin: 0 0 0.6rem;
+        line-height: 1.4;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+    .location-grid-detail-field {
+        margin-bottom: 0.55rem;
+    }
+    .location-grid-detail-field > label {
+        display: block;
         font-size: 0.75rem;
+        font-weight: 600;
+        color: #5d6d7e;
+        margin-bottom: 0.2rem;
+    }
+    .location-grid-detail-readonly {
+        font-size: 0.82rem;
+        color: #2c3e50;
+    }
+    .location-grid-detail-input,
+    .location-grid-detail-textarea {
+        width: 100%;
+        font-size: 0.82rem;
+        padding: 0.3rem 0.4rem;
+        border: 1px solid #dfe6e9;
+        border-radius: 3px;
+        box-sizing: border-box;
+    }
+    .location-grid-detail-textarea {
+        min-height: 5rem;
+        resize: vertical;
+    }
+    .location-grid-resource-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+        gap: 0.35rem 0.5rem;
+    }
+    .location-grid-resource-cell label {
+        display: block;
+        font-size: 0.72rem;
+        color: #7f8c8d;
     }
     .location-grid-bulk-field {
         margin-bottom: 0.75rem;

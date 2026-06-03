@@ -178,7 +178,7 @@
         <section class="course-derived-section" id="locations-card">
             <div class="course-derived-heading-row">
                 <h4 class="course-derived-heading">Locations (combined course)</h4>
-                <button type="button" id="btn-edit-locations-grid" class="course-map-action-text-btn" style="display: none;" title="Spreadsheet editor for all location fields">Edit in grid…</button>
+                <button type="button" id="btn-edit-locations-grid" class="course-map-action-text-btn" style="display: none;" title="Operational editor for zones, timing, resources, and notes">Edit operations…</button>
                 <button type="button" id="btn-manage-resources" class="course-map-action-text-btn" title="Define schedulable resources">Manage resources</button>
             </div>
             <p id="locations-empty" class="course-derived-empty">Locations appear here after you save event recipes. Placements from the Legs tab map sync when you open this tab. Edit resources, segment ID, and remove locations here.</p>
@@ -276,16 +276,13 @@
     <div class="course-location-modal-backdrop"></div>
     <div class="course-location-modal-panel location-grid-modal-panel" role="dialog" aria-labelledby="location-grid-title">
         <div class="course-location-modal-header">
-            <h4 id="location-grid-title">Location grid</h4>
+            <h4 id="location-grid-title">Location operations</h4>
             <button type="button" id="location-grid-close" aria-label="Close">&times;</button>
         </div>
         <div class="location-grid-toolbar">
             <span id="location-grid-selection-count"></span>
             <button type="button" id="location-grid-bulk-edit" class="course-btn" disabled>Bulk edit…</button>
             <button type="button" id="location-grid-clear-selection" class="course-btn">Clear selection</button>
-            <label class="location-grid-system-toggle">
-                <input type="checkbox" id="location-grid-show-system" /> Show system columns
-            </label>
             <span id="location-grid-dirty-label" class="location-grid-dirty-label"></span>
         </div>
         <div class="course-location-modal-body location-grid-body">
@@ -328,7 +325,7 @@
             <h4>Unsaved changes</h4>
         </div>
         <div class="course-location-modal-body">
-            <p class="course-modal-lead">You have unsaved edits in the location grid. Save before closing?</p>
+            <p class="course-modal-lead">Unsaved changes to <span id="location-grid-unsaved-count">0</span> locations. Save before closing?</p>
         </div>
         <div class="course-location-modal-footer">
             <button type="button" id="location-grid-unsaved-cancel" class="course-btn">Cancel</button>

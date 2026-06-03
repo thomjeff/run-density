@@ -4734,9 +4734,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     updateCourseUI();
                 },
                 getResources: getPackageResources,
-                getPackageEventDay: getPackageEventDay,
-                locationTypes: LOCATION_TYPES,
-                eventChoices: EVENT_CHOICES,
+                getLocationTypeLabel: getLocationTypeLabel,
                 locationNumericId: locationNumericId,
                 offCourseUsesProxyTiming: offCourseUsesProxyTiming
             });
