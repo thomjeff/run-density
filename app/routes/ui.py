@@ -21,6 +21,7 @@ from app.common.config import load_reporting
 from app.utils.constants import (
     COURSE_EVENT_IDS,
     DAY_SHORT_CODES,
+    FLOW_TYPE_CHOICES,
     LOCATION_TYPE_CHOICES,
     LEG_MAP_NO_SNAP_LOCATION_TYPES,
     OFF_COURSE_LOCATION_TYPES,
@@ -395,6 +396,7 @@ async def course_mapping(request: Request):
     event_choices = [{"value": e, "label": e.upper() if e == "10k" else e.capitalize()} for e in COURSE_EVENT_IDS]
     segment_schema_choices = list(SEGMENT_SCHEMA_CHOICES)
     segment_direction_choices = list(SEGMENT_DIRECTION_CHOICES)
+    flow_type_choices = list(FLOW_TYPE_CHOICES)
     return templates.TemplateResponse(
         request=request,
         name="pages/course_mapping.html",
@@ -405,6 +407,7 @@ async def course_mapping(request: Request):
             "event_choices": event_choices,
             "segment_schema_choices": segment_schema_choices,
             "segment_direction_choices": segment_direction_choices,
+            "flow_type_choices": flow_type_choices,
             "day_short_codes": DAY_SHORT_CODES,
             "off_course_location_types": list(OFF_COURSE_LOCATION_TYPES),
         },
@@ -524,6 +527,7 @@ async def race_configuration_page(request: Request):
     ]
     segment_schema_choices = list(SEGMENT_SCHEMA_CHOICES)
     segment_direction_choices = list(SEGMENT_DIRECTION_CHOICES)
+    flow_type_choices = list(FLOW_TYPE_CHOICES)
     return templates.TemplateResponse(
         request=request,
         name="pages/race_configuration.html",
@@ -534,6 +538,7 @@ async def race_configuration_page(request: Request):
             "event_choices": event_choices,
             "segment_schema_choices": segment_schema_choices,
             "segment_direction_choices": segment_direction_choices,
+            "flow_type_choices": flow_type_choices,
             "day_short_codes": DAY_SHORT_CODES,
             "off_course_location_types": list(OFF_COURSE_LOCATION_TYPES),
             "leg_map_no_snap_location_types": list(LEG_MAP_NO_SNAP_LOCATION_TYPES),

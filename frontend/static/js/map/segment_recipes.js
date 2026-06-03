@@ -54,6 +54,26 @@
         return v;
     }
 
+    function flowTypeLabelForValue(value) {
+        var v = String(value || 'none');
+        var raw = window.FLOW_TYPE_CHOICES_FROM_SERVER || [];
+        var found = raw.find(function (c) { return String(c.value) === v; });
+        if (found && found.label) return found.label;
+        return v;
+    }
+
+    function flowTypeChoices() {
+        var raw = window.FLOW_TYPE_CHOICES_FROM_SERVER || [];
+        if (raw.length) return raw.slice();
+        return [
+            { value: 'overtake', label: 'Overtake' },
+            { value: 'merge', label: 'Merge' },
+            { value: 'counterflow', label: 'Counterflow' },
+            { value: 'parallel', label: 'Parallel' },
+            { value: 'none', label: 'None' }
+        ];
+    }
+
     function formatLegWidth(width) {
         if (width == null || width === '') return '—';
         var n = Number(width);
@@ -2098,6 +2118,7 @@
                 formatLegWidth(ch.width_m),
                 schemaLabelForValue(ch.schema),
                 directionLabelForValue(ch.direction),
+                flowTypeLabelForValue(ch.flow_type),
                 String(ch.location_count != null ? ch.location_count : (ch.locations || []).length)
             ].forEach(function (text) {
                 var td = document.createElement('td');
@@ -2522,7 +2543,9 @@
             end_label: '',
             width_m: 3,
             schema: 'on_course_open',
-            direction: 'uni'
+            direction: 'uni',
+            flow_type: 'none',
+            flow_notes: ''
         };
 
         if (title) {
@@ -2618,6 +2641,28 @@
         addField('Width (m)', 'leg-width', leg.width_m, 'number');
         addSelectField('Schema', 'leg-schema', leg.schema || 'on_course_open', segmentSchemaChoices());
         addSelectField('Direction', 'leg-direction', leg.direction || 'uni', segmentDirectionChoices());
+        addSelectField('Flow type', 'leg-flow-type', leg.flow_type || 'none', flowTypeChoices());
+
+        var notesWrap = document.createElement('div');
+        notesWrap.style.marginBottom = '0.65rem';
+        var notesLab = document.createElement('label');
+        notesLab.textContent = 'Flow notes (optional)';
+        notesLab.style.display = 'block';
+        notesLab.style.fontWeight = '600';
+        notesLab.style.fontSize = '0.85rem';
+        var notesTa = document.createElement('textarea');
+        notesTa.id = 'leg-flow-notes';
+        notesTa.rows = 2;
+        notesTa.maxLength = 500;
+        notesTa.placeholder = 'Notes for flow.csv export';
+        notesTa.value = leg.flow_notes != null ? String(leg.flow_notes) : '';
+        notesTa.style.width = '100%';
+        notesTa.style.boxSizing = 'border-box';
+        notesTa.style.resize = 'vertical';
+        notesTa.style.fontFamily = 'inherit';
+        notesWrap.appendChild(notesLab);
+        notesWrap.appendChild(notesTa);
+        body.appendChild(notesWrap);
 
         footer.innerHTML = '';
         var cancelBtn = document.createElement('button');
@@ -2662,7 +2707,9 @@
             end_label: (document.getElementById('leg-end-label') || {}).value || '',
             width_m: parseFloat((document.getElementById('leg-width') || {}).value) || 3,
             schema: ((document.getElementById('leg-schema') || {}).value || 'on_course_open').trim(),
-            direction: ((document.getElementById('leg-direction') || {}).value || 'uni').trim()
+            direction: ((document.getElementById('leg-direction') || {}).value || 'uni').trim(),
+            flow_type: ((document.getElementById('leg-flow-type') || {}).value || 'none').trim(),
+            flow_notes: ((document.getElementById('leg-flow-notes') || {}).value || '').trim()
         };
     }
 
@@ -2681,6 +2728,8 @@
             fd.append('width_m', String(fields.width_m));
             fd.append('schema', fields.schema);
             fd.append('direction', fields.direction);
+            fd.append('flow_type', fields.flow_type);
+            fd.append('flow_notes', fields.flow_notes);
             setLegStatus('Saving leg…');
             fetch(apiBase() + '/segment-library/legs', { method: 'POST', credentials: 'same-origin', body: fd })
                 .then(function (r) { return r.json().then(function (d) { return { res: r, data: d }; }); })

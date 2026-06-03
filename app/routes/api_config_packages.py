@@ -101,6 +101,8 @@ class UpdateLegRequest(BaseModel):
     width_m: Optional[float] = None
     schema: Optional[str] = None
     direction: Optional[str] = None
+    flow_type: Optional[str] = None
+    flow_notes: Optional[str] = None
     description: Optional[str] = None
     locations: Optional[List[Dict[str, Any]]] = None
 
@@ -330,6 +332,8 @@ async def api_create_package_leg(
     width_m: float = Form(3.0),
     schema: str = Form("on_course_open"),
     direction: str = Form("uni"),
+    flow_type: str = Form("none"),
+    flow_notes: str = Form(""),
     description: str = Form(""),
 ) -> JSONResponse:
     """Create a course leg from an uploaded GPX file."""
@@ -348,6 +352,8 @@ async def api_create_package_leg(
             width_m=width_m,
             schema=schema,
             direction=direction,
+            flow_type=flow_type,
+            flow_notes=flow_notes,
             description=description,
         )
         return JSONResponse(content={"ok": True, **state})

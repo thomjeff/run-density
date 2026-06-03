@@ -248,6 +248,8 @@ def build_course_segments_from_library(
             "width_m": entry.get("width_m", 3),
             "schema": entry.get("schema", "on_course_open"),
             "direction": entry.get("direction", "uni"),
+            "flow_type": (entry.get("flow_type") or "none").strip().lower(),
+            "flow_notes": (entry.get("flow_notes") or "").strip(),
             "description": (entry.get("description") or "").strip(),
             "events": events,
             "leg_id": cid,

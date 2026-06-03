@@ -40,6 +40,8 @@ from app.core.course.segment_library import (
 )
 from app.core.config_package.segment_recipes import package_recipe_event_ids
 from app.utils.constants import (
+    DEFAULT_FLOW_TYPE,
+    FLOW_TYPE_VALUES,
     LEG_MAP_NO_SNAP_LOCATION_TYPES,
     COURSE_EVENT_IDS,
     LOCATION_PLACEMENT_CHOICES,
@@ -86,6 +88,17 @@ def _normalize_segment_direction(direction: Any) -> str:
     if value not in SEGMENT_DIRECTION_VALUES:
         raise ValueError(f"direction must be one of: {', '.join(SEGMENT_DIRECTION_VALUES)}")
     return value
+
+
+def _normalize_flow_type(flow_type: Any) -> str:
+    value = str(flow_type or DEFAULT_FLOW_TYPE).strip().lower()
+    if value not in FLOW_TYPE_VALUES:
+        raise ValueError(f"flow_type must be one of: {', '.join(FLOW_TYPE_VALUES)}")
+    return value
+
+
+def _normalize_flow_notes(notes: Any) -> str:
+    return str(notes or "").strip()[:500]
 
 
 def _slugify(text: str) -> str:
@@ -190,6 +203,8 @@ def leg_row_from_entry(
         "width_m": entry.get("width_m", 3),
         "schema": entry.get("schema", "on_course_open"),
         "direction": entry.get("direction", "uni"),
+        "flow_type": entry.get("flow_type", DEFAULT_FLOW_TYPE),
+        "flow_notes": (entry.get("flow_notes") or "").strip(),
         "description": (entry.get("description") or "").strip(),
         "locations": locations,
         "location_count": len(locations),
@@ -211,6 +226,8 @@ def create_package_leg(
     width_m: float = 3,
     schema: str = "on_course_open",
     direction: str = "uni",
+    flow_type: str = DEFAULT_FLOW_TYPE,
+    flow_notes: str = "",
     description: str = "",
     locations: Optional[List[Dict[str, Any]]] = None,
     leg_id: Optional[str] = None,
@@ -239,6 +256,8 @@ def create_package_leg(
     e_label = end_label.strip() or _default_endpoint_labels(label, parsed)[1]
     schema = _normalize_segment_schema(schema)
     direction = _normalize_segment_direction(direction)
+    flow_type_norm = _normalize_flow_type(flow_type)
+    flow_notes_norm = _normalize_flow_notes(flow_notes)
 
     entry = {
         "id": new_id,
@@ -249,6 +268,8 @@ def create_package_leg(
         "width_m": width_m,
         "schema": schema,
         "direction": direction,
+        "flow_type": flow_type_norm,
+        "flow_notes": flow_notes_norm,
         "description": (description or "").strip(),
         "locations": _normalize_locations(locations),
     }
@@ -295,6 +316,10 @@ def update_package_leg(
         entry["schema"] = _normalize_segment_schema(fields["schema"])
     if "direction" in fields:
         entry["direction"] = _normalize_segment_direction(fields["direction"])
+    if "flow_type" in fields:
+        entry["flow_type"] = _normalize_flow_type(fields["flow_type"])
+    if "flow_notes" in fields:
+        entry["flow_notes"] = _normalize_flow_notes(fields.get("flow_notes"))
     if "locations" in fields:
         entry["locations"] = _normalize_locations(fields.get("locations"))
 
@@ -405,6 +430,13 @@ def merge_leg_export_into_entry(
             entry["direction"] = _normalize_segment_direction(leg_export["direction"])
         except ValueError:
             pass
+    if "flow_type" in leg_export and leg_export["flow_type"]:
+        try:
+            entry["flow_type"] = _normalize_flow_type(leg_export["flow_type"])
+        except ValueError:
+            pass
+    if "flow_notes" in leg_export:
+        entry["flow_notes"] = _normalize_flow_notes(leg_export.get("flow_notes"))
     if "locations" in leg_export:
         entry["locations"] = _normalize_locations(leg_export.get("locations"))
 
@@ -465,6 +497,8 @@ def export_package_leg_zip(config_id: str, leg_id: str) -> Tuple[bytes, str]:
             "width_m": row["width_m"],
             "schema": row["schema"],
             "direction": row["direction"],
+            "flow_type": row["flow_type"],
+            "flow_notes": row["flow_notes"],
             "description": row["description"],
             "length_km": row["length_km"],
             "gpx_file": str(file_name),

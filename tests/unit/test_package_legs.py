@@ -18,7 +18,14 @@ from app.core.config_package.legs import (
     sync_leg_segment_labels_into_course,
     update_package_leg,
     update_package_leg_geometry,
+    _normalize_flow_notes,
+    _normalize_flow_type,
     _normalize_locations,
+)
+from app.core.course.segment_library import (
+    build_course_segments_from_library,
+    build_flow_csv_from_segments,
+    load_leg_library,
 )
 from app.core.config_package.segment_recipes import import_gpx_files_to_library, parse_leg_gpx
 from app.core.config_package.location_ids import assign_unique_location_ids
@@ -968,3 +975,117 @@ def test_export_config_package_segments_fails_on_invalid_proxy(
     save_config_course(config_id, course)
     with pytest.raises(ValueError, match="Cannot export locations.csv"):
         export_config_package_segments(config_id)
+
+
+def test_normalize_flow_type_rejects_invalid():
+    assert _normalize_flow_type("merge") == "merge"
+    assert _normalize_flow_notes("  note  ") == "note"
+    with pytest.raises(ValueError, match="flow_type"):
+        _normalize_flow_type("diverge")
+
+
+def test_leg_flow_type_persisted_and_exported(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    result = create_config_package(
+        "Flow meta", "", event_day="sun", package_events=["full", "half"]
+    )
+    config_id = result["config_id"]
+    package_path = tmp_path / config_id
+    lib_dir = package_path / "segment_library"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    import yaml
+
+    (lib_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "01",
+                        "seg_label": "Shared start",
+                        "file": "01.gpx",
+                        "schema": "on_course_open",
+                        "direction": "uni",
+                        "flow_type": "overtake",
+                        "flow_notes": "Initial note",
+                    }
+                ],
+                "recipes": {"full": ["01"], "half": ["01"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (lib_dir / "01.gpx").write_text(
+        """<?xml version="1.0"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>Shared start</name><trkseg>
+    <trkpt lat="45.96" lon="-66.64"/>
+    <trkpt lat="45.97" lon="-66.63"/>
+  </trkseg></trk>
+</gpx>""",
+        encoding="utf-8",
+    )
+
+    update_package_leg(
+        config_id,
+        "01",
+        {"flow_type": "merge", "flow_notes": "Keep right critical"},
+    )
+    manifest = yaml.safe_load((lib_dir / "manifest.yaml").read_text())
+    assert manifest["legs"][0]["flow_type"] == "merge"
+    assert manifest["legs"][0]["flow_notes"] == "Keep right critical"
+
+    row = leg_row_from_entry(manifest["legs"][0], parse_leg_gpx(lib_dir / "01.gpx"))
+    assert row["flow_type"] == "merge"
+    assert row["flow_notes"] == "Keep right critical"
+
+    zip_bytes, _ = export_package_leg_zip(config_id, "01")
+    with zipfile.ZipFile(BytesIO(zip_bytes)) as zf:
+        payload = json.loads(zf.read("01.json"))
+    assert payload["leg"]["flow_type"] == "merge"
+    assert payload["leg"]["flow_notes"] == "Keep right critical"
+
+
+def test_flow_type_propagates_to_segments_and_flow_csv(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    lib_dir = tmp_path / "pkg" / "segment_library"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    import yaml
+
+    manifest = {
+        "legs": [
+            {
+                "id": "01",
+                "seg_label": "Leg A",
+                "file": "01.gpx",
+                "flow_type": "counterflow",
+                "flow_notes": "Shared trail",
+            }
+        ],
+        "recipes": {"full": ["01"], "10k": ["01"]},
+    }
+    (lib_dir / "manifest.yaml").write_text(yaml.safe_dump(manifest), encoding="utf-8")
+    (lib_dir / "01.gpx").write_text(
+        """<?xml version="1.0"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><trkseg>
+    <trkpt lat="45.96" lon="-66.64"/>
+    <trkpt lat="45.97" lon="-66.63"/>
+  </trkseg></trk>
+</gpx>""",
+        encoding="utf-8",
+    )
+    legs_by_id = load_leg_library(lib_dir.parent, manifest)
+    segments = build_course_segments_from_library(
+        manifest, legs_by_id, event_ids=["full", "10k"]
+    )
+    assert segments[0]["flow_type"] == "counterflow"
+    assert segments[0]["flow_notes"] == "Shared trail"
+    csv_text = build_flow_csv_from_segments(segments, ["full", "10k"])
+    assert ",counterflow," in csv_text
+    assert "Shared trail" in csv_text

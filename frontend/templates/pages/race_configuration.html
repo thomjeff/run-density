@@ -149,6 +149,7 @@
     window.EVENT_CHOICES_FROM_SERVER = {{ (event_choices | default([])) | tojson }};
     window.SEGMENT_SCHEMA_CHOICES_FROM_SERVER = {{ (segment_schema_choices | default([])) | tojson }};
     window.SEGMENT_DIRECTION_CHOICES_FROM_SERVER = {{ (segment_direction_choices | default([])) | tojson }};
+    window.FLOW_TYPE_CHOICES_FROM_SERVER = {{ (flow_type_choices | default([])) | tojson }};
     window.DAY_SHORT_CODES_FROM_SERVER = {{ (day_short_codes | default(['fri', 'sat', 'sun', 'mon'], true)) | tojson }};
 </script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -157,7 +158,7 @@
 <script src="/static/js/table_actions.js?v=775b"></script>
 <script src="/static/js/map/location_grid_editor.js?v=773g"></script>
 <script src="/static/js/map/course_mapping.js?v=779a"></script>
-<script src="/static/js/map/segment_recipes.js?v=779b"></script>
+<script src="/static/js/map/segment_recipes.js?v=759a"></script>
 <script src="/static/js/runners_baseline.js?v=756i"></script>
 <script src="/static/js/race_configuration.js?v=780b"></script>
 {% endblock %}
