@@ -590,6 +590,7 @@
         libraryState = data;
         orderGrid = data.order_grid || {};
         renderLegsTable();
+        updateLegActionButtons();
         syncLegsTableBoundsFilterItems();
         renderRecipeTable();
         renderTotals(data.recipe_lengths_km);
@@ -636,6 +637,11 @@
     }
 
     function updateLegActionButtons() {
+        var hasLegs = !!(libraryState && libraryState.legs && libraryState.legs.length);
+        var exportAllBtn = document.getElementById('btn-export-all-legs');
+        if (exportAllBtn) {
+            exportAllBtn.disabled = !hasLegs;
+        }
         var hasLeg = !!selectedLegId;
         var hasLine = !!(selectedLegLatLngs && selectedLegLatLngs.length >= 2);
         var routeEditActive = isLegRouteEditActive();
@@ -2031,6 +2037,52 @@
         selectLegById(leg.id);
     }
 
+    function downloadLegExportBlob(blob, filename, statusMsg) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        setLegStatus(statusMsg);
+    }
+
+    function exportAllLegs() {
+        var legs = (libraryState && libraryState.legs) || [];
+        if (!legs.length) {
+            setLegStatus('No legs to export.', true);
+            return;
+        }
+        setLegStatus('Preparing export for ' + legs.length + ' leg' + (legs.length === 1 ? '' : 's') + '…');
+        fetch(apiBase() + '/segment-library/export-legs', { credentials: 'same-origin' })
+            .then(function (r) {
+                if (!r.ok) {
+                    return r.json().then(function (d) {
+                        throw new Error(formatApiError(r, d));
+                    });
+                }
+                var disposition = r.headers.get('Content-Disposition') || '';
+                var match = /filename="?([^";]+)"?/i.exec(disposition);
+                var filename = (match && match[1]) || 'legs_export.zip';
+                return r.blob().then(function (blob) {
+                    return { blob: blob, filename: filename };
+                });
+            })
+            .then(function (payload) {
+                downloadLegExportBlob(
+                    payload.blob,
+                    payload.filename,
+                    'Exported ' + legs.length + ' leg' + (legs.length === 1 ? '' : 's') + '.'
+                );
+            })
+            .catch(function (err) {
+                setLegStatus(err.message || String(err), true);
+            });
+    }
+
     function exportLeg(legId) {
         var leg = (libraryState && libraryState.legs || []).find(function (c) {
             return c.id === legId;
@@ -2055,16 +2107,11 @@
                 });
             })
             .then(function (payload) {
-                var url = URL.createObjectURL(payload.blob);
-                var a = document.createElement('a');
-                a.href = url;
-                a.download = payload.filename;
-                a.style.display = 'none';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                setLegStatus('Exported leg ' + legId + ' (' + label + ').');
+                downloadLegExportBlob(
+                    payload.blob,
+                    payload.filename,
+                    'Exported leg ' + legId + ' (' + label + ').'
+                );
             })
             .catch(function (err) {
                 setLegStatus(err.message || String(err), true);
@@ -2890,12 +2937,16 @@
 
     function bindUi() {
         var importBtn = document.getElementById('btn-import-gpx');
+        var exportAllBtn = document.getElementById('btn-export-all-legs');
         var bulkInput = document.getElementById('segment-library-gpx-input');
         if (importBtn && bulkInput) {
             importBtn.addEventListener('click', function () {
                 bulkInput.value = '';
                 bulkInput.click();
             });
+        }
+        if (exportAllBtn) {
+            exportAllBtn.addEventListener('click', exportAllLegs);
         }
         if (bulkInput) {
             bulkInput.addEventListener('change', function () {

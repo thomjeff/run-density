@@ -8,6 +8,7 @@ import pytest
 
 from app.core.config_package.legs import (
     allocate_next_leg_id,
+    export_all_package_legs_zip,
     export_package_leg_zip,
     leg_row_from_entry,
     merge_leg_locations_into_course,
@@ -988,6 +989,54 @@ def test_export_package_leg_zip(tmp_path, monkeypatch):
     assert leg["width_m"] == 4
     assert len(leg["locations"]) == 1
     assert leg["locations"][0]["loc_label"] == "Water stop"
+
+
+def test_export_all_package_legs_zip(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    result = create_config_package(
+        "Export all", "", event_day="sun", package_events=["full"]
+    )
+    config_id = result["config_id"]
+    package_path = tmp_path / config_id
+    lib_dir = package_path / "segment_library"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    import yaml
+
+    gpx_body = """<?xml version="1.0"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><trkseg>
+    <trkpt lat="45.96" lon="-66.64"/>
+    <trkpt lat="45.97" lon="-66.63"/>
+  </trkseg></trk>
+</gpx>"""
+    (lib_dir / "01_a.gpx").write_text(gpx_body, encoding="utf-8")
+    (lib_dir / "02_b.gpx").write_text(gpx_body, encoding="utf-8")
+    (lib_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {"id": "01", "seg_label": "Leg one", "file": "01_a.gpx"},
+                    {"id": "02", "seg_label": "Leg two", "file": "02_b.gpx"},
+                ],
+                "recipes": {"full": ["01", "02"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    zip_bytes, filename = export_all_package_legs_zip(config_id)
+    assert filename == f"{config_id}_legs_export.zip"
+    with zipfile.ZipFile(BytesIO(zip_bytes)) as zf:
+        names = set(zf.namelist())
+        assert "01.gpx" in names
+        assert "01.json" in names
+        assert "02.gpx" in names
+        assert "02.json" in names
+        meta = json.loads(zf.read("02.json").decode("utf-8"))
+    assert meta["leg"]["leg_label"] == "Leg two"
 
 
 def test_import_gpx_with_leg_export_json(tmp_path, monkeypatch):

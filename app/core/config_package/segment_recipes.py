@@ -26,6 +26,7 @@ from app.core.config_package.storage import (
     save_config_course,
     validate_config_id,
 )
+from app.core.course.flow_csv import validate_flow_csv_text
 from app.core.course.segment_library import (
     build_course_segments_from_library,
     build_event_gpx_content,
@@ -419,8 +420,14 @@ def export_package_flow_and_gpx_files(config_id: str) -> Dict[str, Any]:
 
     if manifest_path.is_file():
         bundle = export_library_to_course(lib_dir, manifest_path, event_ids=event_ids)
+        flow_csv = bundle["flow_csv"]
+        flow_validation = validate_flow_csv_text(flow_csv)
+        if not flow_validation.ok:
+            raise ValueError(
+                "flow.csv export failed validation: " + "; ".join(flow_validation.errors)
+            )
         flow_backup = _backup_export_file(flow_path)
-        flow_path.write_text(bundle["flow_csv"], encoding="utf-8")
+        flow_path.write_text(flow_csv, encoding="utf-8")
 
         manifest = bundle["manifest"]
         legs_by_id = load_leg_library(lib_dir, manifest)
@@ -450,6 +457,11 @@ def export_package_flow_and_gpx_files(config_id: str) -> Dict[str, Any]:
             event_ids,
             overrides=flow_overrides,
         )
+        flow_validation = validate_flow_csv_text(flow_csv)
+        if not flow_validation.ok:
+            raise ValueError(
+                "flow.csv export failed validation: " + "; ".join(flow_validation.errors)
+            )
         flow_backup = _backup_export_file(flow_path)
         flow_path.write_text(flow_csv, encoding="utf-8")
     else:

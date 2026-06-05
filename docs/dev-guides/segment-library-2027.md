@@ -62,10 +62,11 @@ Density (`get_shared_segments`, bins) uses these flags — **shared segments mus
 
 For each segment row where **2+ events** are active:
 
-- Emit rows for event pairs `(A, B)` (and same-event pairs where needed, e.g. 10k/10k on B3-style legs).
-- `from_km_a` / `to_km_a` = segment’s `{event_a}_from_km` / `{event_a}_to_km`.
-- `from_km_b` / `to_km_b` = same for event B.
-- Default `flow_type`: `overtake`; overrides in manifest `flow_overrides` or future UI.
+- Emit **cross-event** pairs only (`full/half`, `full/10k`, `half/10k`) with a unique `flow_id` per row.
+- Same-event rows (out/back, lap, slow/fast) come from manifest `flow_overrides` when A/B km windows differ.
+- Do **not** auto-generate `event_a == event_b` rows when A/B km ranges are identical.
+- `from_km_a` / `to_km_a` = segment’s `{event_a}_from_km` / `{event_a}_to_km`; same for event B.
+- Default `flow_type`: `overtake`; `none` supported via overrides. Bidirectional per-minute CSVs use `flow_id`.
 
 **Not** the old stub in `build_flow_csv()` (one row per segment, same event A/B).
 

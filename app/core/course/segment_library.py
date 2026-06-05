@@ -13,13 +13,13 @@ from __future__ import annotations
 import csv
 import io
 import math
-from itertools import combinations
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import yaml
 
 from app.core.course.export import build_segments_csv, enrich_segments_event_distances
+from app.core.course.flow_csv import build_flow_csv_from_segments
 from app.core.gpx.processor import parse_gpx_file
 from app.utils.constants import COURSE_EVENT_IDS
 
@@ -276,96 +276,6 @@ def build_course_segments_from_library(
 
     enrich_segments_event_distances(segments, event_ids)
     return segments
-
-
-def build_flow_csv_from_segments(
-    segments: Sequence[Dict[str, Any]],
-    event_ids: Optional[Sequence[str]] = None,
-    *,
-    overrides: Optional[Sequence[Dict[str, Any]]] = None,
-    include_same_event_pairs: bool = True,
-) -> str:
-    """
-    Generate 2026-style flow.csv from multi-event segment rows.
-
-    For each segment used by 2+ events, emit one row per event pair (A,B) with
-    from_km_a/to_km_a and from_km_b/to_km_b from segment per-event columns.
-    """
-    event_ids = [e.lower() for e in (event_ids or COURSE_EVENT_IDS)]
-    override_index = {
-        (str(o.get("seg_id", "")), str(o.get("event_a", "")), str(o.get("event_b", ""))): o
-        for o in (overrides or [])
-        if isinstance(o, dict)
-    }
-
-    out = io.StringIO()
-    w = csv.writer(out)
-    w.writerow(
-        [
-            "seg_id",
-            "seg_label",
-            "event_a",
-            "event_b",
-            "from_km_a",
-            "to_km_a",
-            "from_km_b",
-            "to_km_b",
-            "flow_type",
-            "direction",
-            "notes",
-        ]
-    )
-
-    for seg in segments:
-        seg_id = str(seg.get("seg_id", "")).strip()
-        seg_label = str(seg.get("seg_label", "")).strip()
-        direction = seg.get("direction", "uni")
-        active = []
-        for eid in event_ids:
-            if eid in (seg.get("events") or []):
-                active.append(eid)
-            elif str(seg.get(eid, "n")).lower() == "y":
-                active.append(eid)
-        if len(active) < 2 and not include_same_event_pairs:
-            continue
-        pairs: List[Tuple[str, str]] = []
-        if include_same_event_pairs:
-            pairs = [(a, b) for a, b in combinations(active, 2)]
-            for e in active:
-                pairs.append((e, e))
-        else:
-            pairs = [(a, b) for a, b in combinations(active, 2)]
-        for event_a, event_b in pairs:
-            from_a = float(seg.get(f"{event_a}_from_km") or 0)
-            to_a = float(seg.get(f"{event_a}_to_km") or 0)
-            from_b = float(seg.get(f"{event_b}_from_km") or 0)
-            to_b = float(seg.get(f"{event_b}_to_km") or 0)
-            if to_a <= from_a and to_b <= from_b:
-                continue
-            key = (seg_id, event_a, event_b)
-            ov = override_index.get(key, {})
-            flow_type = ov.get("flow_type") or seg.get("flow_type") or "overtake"
-            notes = (
-                ov.get("notes")
-                or str(seg.get("description") or "").strip()
-                or str(seg.get("flow_notes") or "").strip()
-            )
-            w.writerow(
-                [
-                    seg_id,
-                    seg_label,
-                    event_a,
-                    event_b,
-                    from_a,
-                    to_a,
-                    from_b,
-                    to_b,
-                    flow_type,
-                    direction,
-                    notes,
-                ]
-            )
-    return out.getvalue()
 
 
 def export_library_to_course(

@@ -88,9 +88,9 @@ def test_flow_pairs_on_shared_segment(manifest, legs_by_id):
     )
     csv_text = build_flow_csv_from_segments(segments, ["full", "half", "10k"])
     lines = [ln for ln in csv_text.strip().splitlines() if ln]
-    assert lines[0].startswith("seg_id,")
+    assert lines[0].startswith("flow_id,seg_id,")
     assert any(",10k,half," in ln or ",half,10k," in ln for ln in lines)
-    assert any(ln.startswith("S1,") for ln in lines[1:])
+    assert any(",S1," in ln for ln in lines[1:])
 
 
 def test_export_bundle_writes_csv():

@@ -520,22 +520,10 @@ def apply_leg_exports_to_manifest(
     return manifest
 
 
-def export_package_leg_zip(config_id: str, leg_id: str) -> Tuple[bytes, str]:
-    """
-    Build a zip with the leg GPX track and JSON metadata (label, schema, locations, …).
-
-    Returns (zip_bytes, suggested_download_filename).
-    """
-    cid = validate_config_id(config_id)
-    leg_id = str(leg_id).strip()
-    package_path = resolve_config_package_path(cid)
-    lib_dir = package_segment_library_dir(package_path)
-    manifest = load_package_segment_manifest(cid)
-    legs: List[Dict[str, Any]] = list(manifest_legs(manifest))
-    idx = _find_leg_index(legs, leg_id)
-    if idx < 0:
-        raise ValueError(f"Leg not found: {leg_id}")
-    entry = legs[idx]
+def _leg_export_files(
+    cid: str, leg_id: str, entry: Dict[str, Any], lib_dir: Path
+) -> Tuple[bytes, bytes]:
+    """Return (gpx_bytes, json_bytes) for one manifest leg entry."""
     file_name = entry.get("file")
     if not file_name:
         raise ValueError(f"Leg {leg_id} has no GPX file")
@@ -565,15 +553,33 @@ def export_package_leg_zip(config_id: str, leg_id: str) -> Tuple[bytes, str]:
             "locations": row["locations"],
         },
     }
+    json_bytes = (json.dumps(payload, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    return gpx_path.read_bytes(), json_bytes
+
+
+def export_package_leg_zip(config_id: str, leg_id: str) -> Tuple[bytes, str]:
+    """
+    Build a zip with the leg GPX track and JSON metadata (label, schema, locations, …).
+
+    Returns (zip_bytes, suggested_download_filename).
+    """
+    cid = validate_config_id(config_id)
+    leg_id = str(leg_id).strip()
+    package_path = resolve_config_package_path(cid)
+    lib_dir = package_segment_library_dir(package_path)
+    manifest = load_package_segment_manifest(cid)
+    legs: List[Dict[str, Any]] = list(manifest_legs(manifest))
+    idx = _find_leg_index(legs, leg_id)
+    if idx < 0:
+        raise ValueError(f"Leg not found: {leg_id}")
+    entry = legs[idx]
+    gpx_bytes, json_bytes = _leg_export_files(cid, leg_id, entry, lib_dir)
     gpx_arcname = f"{leg_id}.gpx"
     json_arcname = f"{leg_id}.json"
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(gpx_arcname, gpx_path.read_bytes())
-        zf.writestr(
-            json_arcname,
-            json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
-        )
+        zf.writestr(gpx_arcname, gpx_bytes)
+        zf.writestr(json_arcname, json_bytes)
         zf.writestr(
             "README.txt",
             (
@@ -585,6 +591,47 @@ def export_package_leg_zip(config_id: str, leg_id: str) -> Tuple[bytes, str]:
             ),
         )
     download_name = f"{cid}_leg_{leg_id}.zip"
+    return buf.getvalue(), download_name
+
+
+def export_all_package_legs_zip(config_id: str) -> Tuple[bytes, str]:
+    """
+    Build a zip with every leg's GPX + JSON export (flat layout for re-import).
+
+    Returns (zip_bytes, suggested_download_filename).
+    """
+    cid = validate_config_id(config_id)
+    package_path = resolve_config_package_path(cid)
+    lib_dir = package_segment_library_dir(package_path)
+    manifest = load_package_segment_manifest(cid)
+    legs: List[Dict[str, Any]] = [
+        entry
+        for entry in (manifest_legs(manifest) or [])
+        if isinstance(entry, dict) and str(entry.get("id", "")).strip()
+    ]
+    if not legs:
+        raise ValueError("No legs to export")
+
+    buf = io.BytesIO()
+    exported_ids: List[str] = []
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for entry in legs:
+            leg_id = str(entry.get("id", "")).strip()
+            gpx_bytes, json_bytes = _leg_export_files(cid, leg_id, entry, lib_dir)
+            zf.writestr(f"{leg_id}.gpx", gpx_bytes)
+            zf.writestr(f"{leg_id}.json", json_bytes)
+            exported_ids.append(leg_id)
+        zf.writestr(
+            "README.txt",
+            (
+                f"Runflow legs export (v{LEG_EXPORT_VERSION})\n"
+                f"config_id: {cid}\n"
+                f"leg_count: {len(exported_ids)}\n\n"
+                "Each leg is a paired {id}.gpx (route) and {id}.json (metadata + locations).\n"
+                "Re-import via Import legs on the Legs tab.\n"
+            ),
+        )
+    download_name = f"{cid}_legs_export.zip"
     return buf.getvalue(), download_name
 
 

@@ -30,6 +30,7 @@ from app.core.config_package import (
 from app.core.config_package.legs import (
     create_package_leg,
     delete_package_leg,
+    export_all_package_legs_zip,
     export_package_leg_zip,
     get_leg_line_geojson,
     reconcile_leg_locations_to_course,
@@ -379,6 +380,26 @@ async def api_update_package_leg_geometry(
     try:
         state = update_package_leg_geometry(config_id, leg_id, body.coordinates)
         return JSONResponse(content={"ok": True, **state})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/api/config/packages/{config_id}/segment-library/export-legs")
+async def api_export_all_package_legs(
+    request: Request,
+    config_id: str,
+) -> Response:
+    """Download a zip with every leg GPX track and JSON metadata."""
+    require_auth(request)
+    try:
+        zip_bytes, filename = export_all_package_legs_zip(config_id)
+        return Response(
+            content=zip_bytes,
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
     except FileNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValueError as e:
