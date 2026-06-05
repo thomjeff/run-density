@@ -237,9 +237,14 @@ def build_course_segments_from_library(
         ch = legs_by_id.get(cid)
         if not ch:
             continue
+        events = _events_for_leg(cid, recipes, event_ids)
+        if not events:
+            continue
         segment_index += 1
         length_km = float(ch["length_km"])
-        events = _events_for_leg(cid, recipes, event_ids)
+        leg_description = (
+            str(entry.get("description") or entry.get("flow_notes") or "").strip()
+        )
         seg: Dict[str, Any] = {
             "seg_id": f"S{segment_index}",
             "seg_label": (entry.get("seg_label") or ch.get("name") or cid).strip(),
@@ -249,8 +254,8 @@ def build_course_segments_from_library(
             "schema": entry.get("schema", "on_course_open"),
             "direction": entry.get("direction", "uni"),
             "flow_type": (entry.get("flow_type") or "none").strip().lower(),
-            "flow_notes": (entry.get("flow_notes") or "").strip(),
-            "description": (entry.get("description") or "").strip(),
+            "flow_notes": leg_description,
+            "description": leg_description,
             "events": events,
             "leg_id": cid,
             "length_km": length_km,
@@ -340,7 +345,11 @@ def build_flow_csv_from_segments(
             key = (seg_id, event_a, event_b)
             ov = override_index.get(key, {})
             flow_type = ov.get("flow_type") or seg.get("flow_type") or "overtake"
-            notes = ov.get("notes") or seg.get("flow_notes") or ""
+            notes = (
+                ov.get("notes")
+                or str(seg.get("description") or "").strip()
+                or str(seg.get("flow_notes") or "").strip()
+            )
             w.writerow(
                 [
                     seg_id,

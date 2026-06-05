@@ -34,6 +34,7 @@ from app.core.config_package.legs import (
     get_leg_line_geojson,
     reconcile_leg_locations_to_course,
     remove_leg_location_from_manifest,
+    sync_leg_metadata_into_course,
     sync_leg_locations_if_applied,
     update_package_leg,
     update_package_leg_geometry,
@@ -265,6 +266,7 @@ async def api_load_config_course(
     require_auth(request)
     try:
         reconcile_leg_locations_to_course(config_id)
+        sync_leg_metadata_into_course(config_id)
         course = load_config_course(config_id)
         return JSONResponse(
             content={"ok": True, "config_id": config_id, "course": course}
@@ -284,11 +286,13 @@ async def api_save_config_course(
     """Save course.json for a config package (validated workspace schema)."""
     require_auth(request)
     try:
-        save_config_course(config_id, body.course)
         from app.core.config_package.legs import sync_leg_location_metadata_from_course
 
+        save_config_course(config_id, body.course)
+        sync_leg_metadata_into_course(config_id)
         sync_leg_location_metadata_from_course(config_id)
         reconcile_leg_locations_to_course(config_id)
+        sync_leg_metadata_into_course(config_id)
         course = load_config_course(config_id)
         return JSONResponse(
             content={"ok": True, "config_id": config_id, "course": course}

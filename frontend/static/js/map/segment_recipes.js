@@ -602,16 +602,32 @@
                 clearLegMap();
             }
         }
+        var reloadPromise = null;
         if (
             window.configPackageCourse &&
             window.configPackageCourse.reloadCourse
         ) {
-            window.configPackageCourse.reloadCourse({ skipMapRefresh: true });
+            reloadPromise = window.configPackageCourse.reloadCourse({ skipMapRefresh: true });
         } else if (
             window.configPackageCourse &&
             typeof window.configPackageCourse.renderSegmentsList === 'function'
         ) {
             window.configPackageCourse.renderSegmentsList();
+        }
+        if (reloadPromise && typeof reloadPromise.then === 'function') {
+            reloadPromise.then(function () {
+                if (
+                    window.configPackageCourse &&
+                    window.configPackageCourse.enrichCourseSegmentsFromLegLibrary
+                ) {
+                    window.configPackageCourse.enrichCourseSegmentsFromLegLibrary();
+                }
+            });
+        } else if (
+            window.configPackageCourse &&
+            window.configPackageCourse.enrichCourseSegmentsFromLegLibrary
+        ) {
+            window.configPackageCourse.enrichCourseSegmentsFromLegLibrary();
         }
     }
 
@@ -2229,10 +2245,14 @@
         var legId = resolveLegIdForSegment(seg, segIdx);
         var ch = libraryState.legs.find(function (c) { return c.id === legId; });
         if (!ch) return null;
+        var description = (ch.description != null && String(ch.description).trim())
+            ? String(ch.description).trim()
+            : (ch.flow_notes != null ? String(ch.flow_notes).trim() : '');
         return {
             from: (ch.start_label || '').trim(),
             to: (ch.end_label || '').trim(),
-            seg_label: (ch.leg_label || '').trim()
+            seg_label: (ch.leg_label || '').trim(),
+            description: description
         };
     }
 
@@ -2545,7 +2565,7 @@
             schema: 'on_course_open',
             direction: 'uni',
             flow_type: 'none',
-            flow_notes: ''
+            description: ''
         };
 
         if (title) {
@@ -2646,16 +2666,18 @@
         var notesWrap = document.createElement('div');
         notesWrap.style.marginBottom = '0.65rem';
         var notesLab = document.createElement('label');
-        notesLab.textContent = 'Flow notes (optional)';
+        notesLab.textContent = 'Description';
         notesLab.style.display = 'block';
         notesLab.style.fontWeight = '600';
         notesLab.style.fontSize = '0.85rem';
         var notesTa = document.createElement('textarea');
-        notesTa.id = 'leg-flow-notes';
+        notesTa.id = 'leg-description';
         notesTa.rows = 2;
         notesTa.maxLength = 500;
-        notesTa.placeholder = 'Notes for flow.csv export';
-        notesTa.value = leg.flow_notes != null ? String(leg.flow_notes) : '';
+        notesTa.placeholder = 'Segment description (syncs to Course tab)';
+        notesTa.value = leg.description != null && String(leg.description).trim()
+            ? String(leg.description)
+            : (leg.flow_notes != null ? String(leg.flow_notes) : '');
         notesTa.style.width = '100%';
         notesTa.style.boxSizing = 'border-box';
         notesTa.style.resize = 'vertical';
@@ -2709,12 +2731,30 @@
             schema: ((document.getElementById('leg-schema') || {}).value || 'on_course_open').trim(),
             direction: ((document.getElementById('leg-direction') || {}).value || 'uni').trim(),
             flow_type: ((document.getElementById('leg-flow-type') || {}).value || 'none').trim(),
-            flow_notes: ((document.getElementById('leg-flow-notes') || {}).value || '').trim()
+            description: ((document.getElementById('leg-description') || {}).value || '').trim()
         };
+    }
+
+    function validateLegFields(fields) {
+        var missing = [];
+        if (!String(fields.leg_label || '').trim()) missing.push('Leg label');
+        if (!String(fields.start_label || '').trim()) missing.push('Start place');
+        if (!String(fields.end_label || '').trim()) missing.push('End place');
+        if (!String(fields.description || '').trim()) missing.push('Description');
+        if (!(fields.width_m > 0)) missing.push('Width (m)');
+        if (missing.length) {
+            return 'Required: ' + missing.join(', ') + '.';
+        }
+        return '';
     }
 
     function saveLegEditor() {
         var fields = collectLegFields();
+        var validationError = validateLegFields(fields);
+        if (validationError) {
+            setLegStatus(validationError, true);
+            return;
+        }
         if (legEditorMode === 'create') {
             if (!pendingGpxFile) {
                 setLegStatus('Choose a GPX file first.', true);
@@ -2729,7 +2769,7 @@
             fd.append('schema', fields.schema);
             fd.append('direction', fields.direction);
             fd.append('flow_type', fields.flow_type);
-            fd.append('flow_notes', fields.flow_notes);
+            fd.append('description', fields.description);
             setLegStatus('Saving leg…');
             fetch(apiBase() + '/segment-library/legs', { method: 'POST', credentials: 'same-origin', body: fd })
                 .then(function (r) { return r.json().then(function (d) { return { res: r, data: d }; }); })

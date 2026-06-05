@@ -97,6 +97,39 @@ def _normalize_flow_type(flow_type: Any) -> str:
     return value
 
 
+def _leg_description(entry: Dict[str, Any]) -> str:
+    """Unified segment description from manifest leg (description preferred over legacy flow_notes)."""
+    return (
+        str(entry.get("description") or entry.get("flow_notes") or "").strip()
+    )
+
+
+def _normalize_leg_description(description: Any) -> str:
+    text = str(description or "").strip()
+    if not text:
+        raise ValueError("description is required")
+    if len(text) > 500:
+        raise ValueError("description must be at most 500 characters")
+    return text
+
+
+def _validate_leg_entry(entry: Dict[str, Any]) -> None:
+    """Fail-fast checks for leg metadata required by the authoring UI and exports."""
+    if not str(entry.get("seg_label") or "").strip():
+        raise ValueError("leg_label is required")
+    if not str(entry.get("start_label") or "").strip():
+        raise ValueError("start_label is required")
+    if not str(entry.get("end_label") or "").strip():
+        raise ValueError("end_label is required")
+    _normalize_leg_description(_leg_description(entry))
+    try:
+        width_m = float(entry.get("width_m", 3))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("width_m must be a positive number") from exc
+    if width_m <= 0:
+        raise ValueError("width_m must be greater than 0")
+
+
 def _normalize_flow_notes(notes: Any) -> str:
     return str(notes or "").strip()[:500]
 
@@ -205,7 +238,7 @@ def leg_row_from_entry(
         "direction": entry.get("direction", "uni"),
         "flow_type": entry.get("flow_type", DEFAULT_FLOW_TYPE),
         "flow_notes": (entry.get("flow_notes") or "").strip(),
-        "description": (entry.get("description") or "").strip(),
+        "description": _leg_description(entry),
         "locations": locations,
         "location_count": len(locations),
         "start_lat": start_lat,
@@ -258,6 +291,9 @@ def create_package_leg(
     direction = _normalize_segment_direction(direction)
     flow_type_norm = _normalize_flow_type(flow_type)
     flow_notes_norm = _normalize_flow_notes(flow_notes)
+    description_norm = _normalize_leg_description(
+        (description or "").strip() or flow_notes_norm
+    )
 
     entry = {
         "id": new_id,
@@ -270,12 +306,17 @@ def create_package_leg(
         "direction": direction,
         "flow_type": flow_type_norm,
         "flow_notes": flow_notes_norm,
-        "description": (description or "").strip(),
+        "description": description_norm,
         "locations": _normalize_locations(locations),
     }
+    _validate_leg_entry(entry)
     legs.append(entry)
     set_manifest_legs(manifest, legs)
     save_package_segment_manifest(cid, manifest)
+    try:
+        sync_leg_metadata_if_applied(cid)
+    except FileNotFoundError:
+        pass
     from app.core.config_package.segment_recipes import get_package_segment_library_state
 
     return get_package_segment_library_state(cid)
@@ -309,9 +350,10 @@ def update_package_leg(
         entry["start_label"] = str(fields.get("start_label") or "").strip()
     if "end_label" in fields:
         entry["end_label"] = str(fields.get("end_label") or "").strip()
-    for key in ("width_m", "description"):
-        if key in fields:
-            entry[key] = fields[key]
+    if "width_m" in fields:
+        entry["width_m"] = fields["width_m"]
+    if "description" in fields:
+        entry["description"] = _normalize_leg_description(fields.get("description"))
     if "schema" in fields:
         entry["schema"] = _normalize_segment_schema(fields["schema"])
     if "direction" in fields:
@@ -337,9 +379,27 @@ def update_package_leg(
         if not entry.get("end_label"):
             entry["end_label"] = _default_endpoint_labels(entry.get("seg_label", ""), parsed)[1]
 
+    authoring_keys = (
+        "leg_label",
+        "seg_label",
+        "start_label",
+        "end_label",
+        "description",
+        "width_m",
+        "schema",
+        "direction",
+        "flow_type",
+        "flow_notes",
+    )
+    if any(key in fields for key in authoring_keys):
+        _validate_leg_entry(entry)
     legs[idx] = entry
     set_manifest_legs(manifest, legs)
     save_package_segment_manifest(cid, manifest)
+    try:
+        sync_leg_metadata_if_applied(cid)
+    except FileNotFoundError:
+        pass
     if "locations" in fields:
         try:
             merge_leg_locations_into_course(cid)
@@ -350,7 +410,7 @@ def update_package_leg(
         for key in ("start_label", "end_label", "leg_label", "seg_label")
     ):
         try:
-            sync_leg_locations_if_applied(cid)
+            merge_leg_locations_into_course(cid)
         except FileNotFoundError:
             pass
     from app.core.config_package.segment_recipes import get_package_segment_library_state
@@ -923,6 +983,70 @@ def merge_leg_locations_into_course(config_id: str) -> None:
     save_config_course(cid, course)
 
 
+def _should_sync_leg_metadata_to_course(
+    course: Dict[str, Any], manifest: Dict[str, Any]
+) -> bool:
+    """
+    True when combined-course segments should track manifest leg metadata.
+
+    Requires segment_library_applied (post-apply) or existing library-linked
+    segments (leg_id / legacy chunk_id on a recipe leg).
+    """
+    if course.get("segment_library_applied"):
+        return True
+    allowed = recipe_leg_ids(manifest)
+    if not allowed:
+        return False
+    for seg in course.get("segments") or []:
+        if not isinstance(seg, dict):
+            continue
+        leg_id = segment_leg_id(seg)
+        if leg_id and leg_id in allowed:
+            return True
+    return False
+
+
+def recipe_leg_ids(manifest: Dict[str, Any]) -> set:
+    """Leg ids assigned to at least one event recipe (non-empty order grid cell)."""
+    ids: set = set()
+    recipes = manifest.get("recipes") or {}
+    for seq in recipes.values():
+        if not isinstance(seq, list):
+            continue
+        for cid in seq:
+            leg_id = str(cid or "").strip()
+            if leg_id:
+                ids.add(leg_id)
+    return ids
+
+
+def prune_course_segments_not_in_recipes(config_id: str) -> bool:
+    """Drop combined-course segments whose leg is not used in any event recipe."""
+    cid = validate_config_id(config_id)
+    course = load_config_course(cid)
+    manifest = load_package_segment_manifest(cid)
+    if not _should_sync_leg_metadata_to_course(course, manifest):
+        return False
+    allowed = recipe_leg_ids(manifest)
+    if not allowed:
+        return False
+    leg_order = _manifest_leg_order(manifest)
+    kept: List[Dict[str, Any]] = []
+    removed = False
+    for seg in course.get("segments") or []:
+        if not isinstance(seg, dict):
+            continue
+        leg_id = _leg_id_for_segment(seg, leg_order)
+        if leg_id and leg_id in allowed:
+            kept.append(seg)
+        else:
+            removed = True
+    if removed:
+        course["segments"] = kept
+        save_config_course(cid, course)
+    return removed
+
+
 def _manifest_leg_order(manifest: Dict[str, Any]) -> List[str]:
     order: List[str] = []
     for entry in manifest_legs(manifest) or []:
@@ -946,17 +1070,19 @@ def _leg_id_for_segment(seg: Dict[str, Any], leg_order: Sequence[str]) -> str:
     return ""
 
 
-def sync_leg_segment_labels_into_course(config_id: str) -> bool:
+def sync_leg_metadata_into_course(config_id: str) -> bool:
     """
-    Refresh segment from/to/label fields from leg library metadata.
+    Refresh combined-course segment fields from segment-library leg metadata.
 
-    Called after leg renames without re-running full recipe export.
+    Matches segments to manifest legs by ``leg_id`` (or ``S{n}`` order fallback).
+    Does not recompute per-event km or recipe order — use ``apply_package_recipes`` for that.
     """
     cid = validate_config_id(config_id)
     course = load_config_course(cid)
-    if not course.get("segment_library_applied"):
-        return False
     manifest = load_package_segment_manifest(cid)
+    if not _should_sync_leg_metadata_to_course(course, manifest):
+        return False
+    allowed_legs = recipe_leg_ids(manifest)
     leg_order = _manifest_leg_order(manifest)
     leg_by_id: Dict[str, Dict[str, Any]] = {}
     for entry in manifest_legs(manifest):
@@ -967,33 +1093,78 @@ def sync_leg_segment_labels_into_course(config_id: str) -> bool:
             leg_by_id[leg_id] = entry
 
     updated = False
+    kept_segments: List[Dict[str, Any]] = []
     for seg in course.get("segments") or []:
         if not isinstance(seg, dict):
             continue
         leg_id = _leg_id_for_segment(seg, leg_order)
-        entry = leg_by_id.get(leg_id) if leg_id else None
-        if not entry:
+        if not leg_id or leg_id not in allowed_legs:
+            updated = True
             continue
-        if leg_id and segment_leg_id(seg) != leg_id:
+        entry = leg_by_id.get(leg_id)
+        if not entry:
+            updated = True
+            continue
+        if leg_id and (
+            str(seg.get("leg_id") or "").strip() != leg_id or seg.get("chunk_id")
+        ):
             set_segment_leg_id(seg, leg_id)
             updated = True
         row = leg_row_from_entry(entry)
-        start = row["start_label"]
-        end = row["end_label"]
-        label = row["leg_label"]
-        if start != str(seg.get("from_label") or "").strip():
-            seg["from_label"] = start
+        if str(seg.get("from_label") or "").strip() != row["start_label"]:
+            seg["from_label"] = row["start_label"]
             updated = True
-        if end != str(seg.get("to_label") or "").strip():
-            seg["to_label"] = end
+        if str(seg.get("to_label") or "").strip() != row["end_label"]:
+            seg["to_label"] = row["end_label"]
             updated = True
-        if label != str(seg.get("seg_label") or "").strip():
-            seg["seg_label"] = label
+        if str(seg.get("seg_label") or "").strip() != row["leg_label"]:
+            seg["seg_label"] = row["leg_label"]
             updated = True
+        if str(seg.get("description") or "").strip() != row["description"]:
+            seg["description"] = row["description"]
+            updated = True
+        if str(seg.get("schema") or "on_course_open").strip() != str(
+            row["schema"] or "on_course_open"
+        ).strip():
+            seg["schema"] = row["schema"]
+            updated = True
+        if str(seg.get("direction") or "uni").strip() != str(
+            row["direction"] or "uni"
+        ).strip():
+            seg["direction"] = row["direction"]
+            updated = True
+        if str(seg.get("flow_type") or DEFAULT_FLOW_TYPE).strip().lower() != str(
+            row["flow_type"] or DEFAULT_FLOW_TYPE
+        ).strip().lower():
+            seg["flow_type"] = row["flow_type"]
+            updated = True
+        try:
+            width_new = float(row["width_m"])
+        except (TypeError, ValueError):
+            width_new = 3.0
+        try:
+            width_old = float(seg.get("width_m", 3))
+        except (TypeError, ValueError):
+            width_old = 3.0
+        if width_old != width_new:
+            seg["width_m"] = width_new
+            updated = True
+        kept_segments.append(seg)
 
     if updated:
+        course["segments"] = kept_segments
         save_config_course(cid, course)
     return updated
+
+
+def sync_leg_segment_labels_into_course(config_id: str) -> bool:
+    """Backward-compatible alias for label + metadata sync from legs."""
+    return sync_leg_metadata_into_course(config_id)
+
+
+def sync_leg_metadata_if_applied(config_id: str) -> bool:
+    """Sync leg library metadata onto course segments when recipes have been applied."""
+    return sync_leg_metadata_into_course(config_id)
 
 
 def sync_leg_location_metadata_from_course(config_id: str) -> bool:
@@ -1083,12 +1254,17 @@ def reconcile_leg_locations_to_course(config_id: str) -> bool:
 
 
 def sync_leg_locations_if_applied(config_id: str) -> bool:
-    """Merge leg placements and labels into course.json when recipes have been applied."""
-    course = load_config_course(config_id)
-    if not course.get("segment_library_applied"):
+    """Merge leg placements and segment metadata into course.json when recipes applied."""
+    cid = validate_config_id(config_id)
+    course = load_config_course(cid)
+    try:
+        manifest = load_package_segment_manifest(cid)
+    except FileNotFoundError:
         return False
-    merge_leg_locations_into_course(config_id)
-    sync_leg_segment_labels_into_course(config_id)
+    if not _should_sync_leg_metadata_to_course(course, manifest):
+        return False
+    merge_leg_locations_into_course(cid)
+    sync_leg_metadata_into_course(cid)
     return True
 
 

@@ -48,7 +48,12 @@ def test_multi_event_segment_rows(manifest, legs_by_id):
     segments = build_course_segments_from_library(
         manifest, legs_by_id, event_ids=["full", "half", "10k"]
     )
-    assert len(segments) == len(manifest_legs(manifest))
+    recipe_ids = set()
+    for seq in (manifest.get("recipes") or {}).values():
+        recipe_ids.update(seq)
+    assert len(segments) == len(recipe_ids)
+    assert "09" not in {s["leg_id"] for s in segments}
+    assert "10" not in {s["leg_id"] for s in segments}
     assert segments[0]["leg_id"] == "01"
     s1 = next(s for s in segments if s["seg_id"] == "S1")
     assert set(s1["events"]) == {"full", "half", "10k"}
@@ -64,6 +69,17 @@ def test_multi_event_segment_rows(manifest, legs_by_id):
 def test_10k_recipe_length(manifest, legs_by_id):
     bundle = export_library_to_course(LIBRARY_DIR, MANIFEST, event_ids=["10k"])
     assert bundle["recipe_lengths_km"]["10k"] == pytest.approx(10.02, abs=0.2)
+
+
+def test_build_course_segments_skips_unassigned_legs(manifest, legs_by_id):
+    segments = build_course_segments_from_library(
+        manifest, legs_by_id, event_ids=["full", "half", "10k"]
+    )
+    leg_ids = {s["leg_id"] for s in segments}
+    assert "09" not in leg_ids
+    assert "10" not in leg_ids
+    for seg in segments:
+        assert seg.get("events")
 
 
 def test_flow_pairs_on_shared_segment(manifest, legs_by_id):

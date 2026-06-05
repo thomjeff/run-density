@@ -15,6 +15,7 @@ from app.core.config_package.legs import (
     reconcile_leg_locations_to_course,
     remove_leg_location_from_manifest,
     sync_leg_location_metadata_from_course,
+    sync_leg_metadata_into_course,
     sync_leg_segment_labels_into_course,
     update_package_leg,
     update_package_leg_geometry,
@@ -437,6 +438,266 @@ def test_sync_leg_segment_labels_from_manifest(tmp_path, monkeypatch):
     assert seg["from_label"] == "Start"
     assert seg["to_label"] == "Trail at Friel"
     assert seg["seg_label"] == "Start to Friel"
+
+
+def test_sync_leg_flow_type_to_segment(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    result = create_config_package(
+        "Flow sync", "", event_day="sun", package_events=["full"]
+    )
+    config_id = result["config_id"]
+    package_path = tmp_path / config_id
+    lib_dir = package_path / "segment_library"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    import yaml
+
+    (lib_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "01",
+                        "seg_label": "Start to Friel",
+                        "file": "01.gpx",
+                        "flow_type": "merge",
+                        "flow_notes": "Keep right",
+                    }
+                ],
+                "recipes": {"full": ["01"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    course_path = package_path / "course.json"
+    course = json.loads(course_path.read_text())
+    course["segment_library_applied"] = True
+    course["segments"] = [
+        {
+            "seg_id": "S1",
+            "leg_id": "01",
+            "seg_label": "Start to Friel",
+            "flow_type": "overtake",
+            "flow_notes": "",
+            "events": ["full"],
+        }
+    ]
+    course_path.write_text(json.dumps(course, indent=2))
+
+    assert sync_leg_metadata_into_course(config_id) is True
+    merged = load_config_course(config_id)
+    seg = merged["segments"][0]
+    assert seg["flow_type"] == "merge"
+    assert seg["description"] == "Keep right"
+
+
+def test_sync_leg_description_with_chunk_id_without_applied_flag(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    result = create_config_package(
+        "Chunk sync", "", event_day="sun", package_events=["full"]
+    )
+    config_id = result["config_id"]
+    package_path = tmp_path / config_id
+    lib_dir = package_path / "segment_library"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    import yaml
+
+    (lib_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "01",
+                        "seg_label": "Start to Friel",
+                        "start_label": "Start",
+                        "end_label": "Friel",
+                        "description": "From manifest legs",
+                        "file": "01.gpx",
+                    }
+                ],
+                "recipes": {"full": ["01"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    course_path = package_path / "course.json"
+    course = json.loads(course_path.read_text())
+    course["segments"] = [
+        {
+            "seg_id": "S1",
+            "chunk_id": "01",
+            "seg_label": "01_start_friel",
+            "description": "",
+            "events": ["full"],
+        }
+    ]
+    course_path.write_text(json.dumps(course, indent=2))
+
+    assert sync_leg_metadata_into_course(config_id) is True
+    merged = load_config_course(config_id)
+    assert merged["segments"][0]["description"] == "From manifest legs"
+    assert merged["segments"][0].get("leg_id") == "01"
+    assert "chunk_id" not in merged["segments"][0]
+
+
+def test_sync_leg_description_to_segment(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    result = create_config_package(
+        "Desc sync", "", event_day="sun", package_events=["full"]
+    )
+    config_id = result["config_id"]
+    package_path = tmp_path / config_id
+    lib_dir = package_path / "segment_library"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    import yaml
+
+    (lib_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "01",
+                        "seg_label": "Start to Friel",
+                        "file": "01.gpx",
+                        "description": "Shared start corridor",
+                    }
+                ],
+                "recipes": {"full": ["01"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    course_path = package_path / "course.json"
+    course = json.loads(course_path.read_text())
+    course["segment_library_applied"] = True
+    course["segments"] = [
+        {
+            "seg_id": "S1",
+            "leg_id": "01",
+            "seg_label": "Start to Friel",
+            "description": "",
+            "events": ["full"],
+        }
+    ]
+    course_path.write_text(json.dumps(course, indent=2))
+
+    assert sync_leg_metadata_into_course(config_id) is True
+    merged = load_config_course(config_id)
+    assert merged["segments"][0]["description"] == "Shared start corridor"
+
+
+def test_prune_segments_not_in_recipes_on_sync(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    result = create_config_package(
+        "Prune sync", "", event_day="sun", package_events=["full"]
+    )
+    config_id = result["config_id"]
+    package_path = tmp_path / config_id
+    lib_dir = package_path / "segment_library"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    import yaml
+
+    (lib_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {"id": "01", "seg_label": "Used", "file": "01.gpx"},
+                    {"id": "09", "seg_label": "Unused", "file": "09.gpx"},
+                ],
+                "recipes": {"full": ["01"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    course_path = package_path / "course.json"
+    course = json.loads(course_path.read_text())
+    course["segment_library_applied"] = True
+    course["segments"] = [
+        {"seg_id": "S1", "leg_id": "01", "events": ["full"]},
+        {"seg_id": "S9", "leg_id": "09", "events": []},
+    ]
+    course_path.write_text(json.dumps(course, indent=2))
+
+    assert sync_leg_metadata_into_course(config_id) is True
+    merged = load_config_course(config_id)
+    assert [s["leg_id"] for s in merged["segments"]] == ["01"]
+
+
+def test_update_package_leg_syncs_flow_type_without_recipe_apply(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    result = create_config_package(
+        "Flow update", "", event_day="sun", package_events=["full"]
+    )
+    config_id = result["config_id"]
+    package_path = tmp_path / config_id
+    lib_dir = package_path / "segment_library"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    import yaml
+
+    (lib_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "01",
+                        "seg_label": "Leg one",
+                        "start_label": "Start",
+                        "end_label": "End",
+                        "description": "Leg one segment",
+                        "file": "01.gpx",
+                        "flow_type": "none",
+                    }
+                ],
+                "recipes": {"full": ["01"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    course_path = package_path / "course.json"
+    course = json.loads(course_path.read_text())
+    course["segment_library_applied"] = True
+    course["segments"] = [
+        {
+            "seg_id": "S1",
+            "leg_id": "01",
+            "flow_type": "overtake",
+            "events": ["full"],
+        }
+    ]
+    course_path.write_text(json.dumps(course, indent=2))
+    (lib_dir / "01.gpx").write_text(
+        """<?xml version="1.0"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><trkseg>
+    <trkpt lat="45.96" lon="-66.64"/>
+    <trkpt lat="45.97" lon="-66.63"/>
+  </trkseg></trk>
+</gpx>""",
+        encoding="utf-8",
+    )
+
+    update_package_leg(
+        config_id,
+        "01",
+        {"flow_type": "counterflow", "description": "Bi traffic"},
+    )
+    merged = load_config_course(config_id)
+    assert merged["segments"][0]["flow_type"] == "counterflow"
+    assert merged["segments"][0]["description"] == "Bi traffic"
 
 
 def test_update_package_leg_merges_locations_before_recipes_applied(tmp_path, monkeypatch):
@@ -977,6 +1238,53 @@ def test_export_config_package_segments_fails_on_invalid_proxy(
         export_config_package_segments(config_id)
 
 
+def test_update_package_leg_requires_description(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    result = create_config_package(
+        "Desc required", "", event_day="sun", package_events=["full"]
+    )
+    config_id = result["config_id"]
+    package_path = tmp_path / config_id
+    lib_dir = package_path / "segment_library"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    import yaml
+
+    (lib_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "01",
+                        "seg_label": "Leg one",
+                        "start_label": "Start",
+                        "end_label": "End",
+                        "description": "Initial",
+                        "file": "01.gpx",
+                    }
+                ],
+                "recipes": {"full": ["01"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (lib_dir / "01.gpx").write_text(
+        """<?xml version="1.0"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><trkseg>
+    <trkpt lat="45.96" lon="-66.64"/>
+    <trkpt lat="45.97" lon="-66.63"/>
+  </trkseg></trk>
+</gpx>""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="description is required"):
+        update_package_leg(config_id, "01", {"description": "   "})
+
+
 def test_normalize_flow_type_rejects_invalid():
     assert _normalize_flow_type("merge") == "merge"
     assert _normalize_flow_notes("  note  ") == "note"
@@ -1005,11 +1313,13 @@ def test_leg_flow_type_persisted_and_exported(tmp_path, monkeypatch):
                     {
                         "id": "01",
                         "seg_label": "Shared start",
+                        "start_label": "Start",
+                        "end_label": "End",
+                        "description": "Initial note",
                         "file": "01.gpx",
                         "schema": "on_course_open",
                         "direction": "uni",
                         "flow_type": "overtake",
-                        "flow_notes": "Initial note",
                     }
                 ],
                 "recipes": {"full": ["01"], "half": ["01"]},
@@ -1031,21 +1341,21 @@ def test_leg_flow_type_persisted_and_exported(tmp_path, monkeypatch):
     update_package_leg(
         config_id,
         "01",
-        {"flow_type": "merge", "flow_notes": "Keep right critical"},
+        {"flow_type": "merge", "description": "Keep right critical"},
     )
     manifest = yaml.safe_load((lib_dir / "manifest.yaml").read_text())
     assert manifest["legs"][0]["flow_type"] == "merge"
-    assert manifest["legs"][0]["flow_notes"] == "Keep right critical"
+    assert manifest["legs"][0]["description"] == "Keep right critical"
 
     row = leg_row_from_entry(manifest["legs"][0], parse_leg_gpx(lib_dir / "01.gpx"))
     assert row["flow_type"] == "merge"
-    assert row["flow_notes"] == "Keep right critical"
+    assert row["description"] == "Keep right critical"
 
     zip_bytes, _ = export_package_leg_zip(config_id, "01")
     with zipfile.ZipFile(BytesIO(zip_bytes)) as zf:
         payload = json.loads(zf.read("01.json"))
     assert payload["leg"]["flow_type"] == "merge"
-    assert payload["leg"]["flow_notes"] == "Keep right critical"
+    assert payload["leg"]["description"] == "Keep right critical"
 
 
 def test_flow_type_propagates_to_segments_and_flow_csv(tmp_path, monkeypatch):
@@ -1080,12 +1390,12 @@ def test_flow_type_propagates_to_segments_and_flow_csv(tmp_path, monkeypatch):
 </gpx>""",
         encoding="utf-8",
     )
-    legs_by_id = load_leg_library(lib_dir.parent, manifest)
+    legs_by_id = load_leg_library(lib_dir, manifest)
     segments = build_course_segments_from_library(
         manifest, legs_by_id, event_ids=["full", "10k"]
     )
     assert segments[0]["flow_type"] == "counterflow"
-    assert segments[0]["flow_notes"] == "Shared trail"
+    assert segments[0]["description"] == "Shared trail"
     csv_text = build_flow_csv_from_segments(segments, ["full", "10k"])
     assert ",counterflow," in csv_text
     assert "Shared trail" in csv_text

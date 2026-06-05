@@ -721,6 +721,9 @@ def export_config_package_segments(config_id: str) -> Dict[str, Any]:
     """
     cid = validate_config_id(config_id)
     package_path = resolve_config_package_path(cid)
+    from app.core.config_package.legs import sync_leg_metadata_into_course
+
+    sync_leg_metadata_into_course(cid)
     course = load_config_course(cid)
     segments = course.get("segments") or []
     if not segments:
