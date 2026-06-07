@@ -15,14 +15,14 @@ from app.core.course.segment_library import (
     validate_recipe_stitch,
 )
 
-LIBRARY_DIR = Path(__file__).resolve().parents[2] / "cursor" / "plotaroute"
+LIBRARY_DIR = Path(__file__).resolve().parents[2] / "cursor" / "reference-legs"
 MANIFEST = LIBRARY_DIR / "manifest.yaml"
 
 
 @pytest.fixture(scope="module")
 def manifest():
     if not MANIFEST.is_file():
-        pytest.skip("cursor/plotaroute/manifest.yaml not present")
+        pytest.skip("cursor/reference-legs/manifest.yaml not present")
     return load_manifest(MANIFEST)
 
 
@@ -31,7 +31,7 @@ def legs_by_id(manifest):
     return load_leg_library(LIBRARY_DIR, manifest)
 
 
-def test_plotaroute_legs_load(manifest, legs_by_id):
+def test_reference_legs_load(manifest, legs_by_id):
     assert len(legs_by_id) >= 10
     assert legs_by_id["01"]["length_km"] == pytest.approx(2.71, abs=0.05)
     assert legs_by_id["02"]["length_km"] == pytest.approx(1.59, abs=0.05)
@@ -95,7 +95,7 @@ def test_flow_pairs_on_shared_segment(manifest, legs_by_id):
 
 def test_export_bundle_writes_csv():
     if not MANIFEST.is_file():
-        pytest.skip("plotaroute library missing")
+        pytest.skip("reference leg library missing")
     bundle = export_library_to_course(LIBRARY_DIR, MANIFEST)
     assert "full,half,10k" in bundle["segments_csv"].splitlines()[0]
     assert "event_a" in bundle["flow_csv"]

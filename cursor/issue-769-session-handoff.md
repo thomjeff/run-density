@@ -16,7 +16,7 @@ Config package **Race Configuration** — **Legs** + **Course** tabs for in-runf
 
 | Area | Summary |
 |------|---------|
-| **Segment library** | Per-package `segment_library/` + `manifest.yaml` (`legs`, `recipes`); reference seed from `cursor/plotaroute/` |
+| **Segment library** | Per-package `segment_library/` + `manifest.yaml` (`legs`, `recipes`); reference seed from `cursor/reference-legs/` |
 | **Legs tab** | Recipe grid (order per event), leg CRUD, GPX import/export zip, leg map (place locations, reshape route, trim route) |
 | **Course tab** | Combined locations table, course map, resources, traffic proxy field (text today), tab auto-save |
 | **Apply recipes** | Rebuilds `course.json` `segments[]`, merges leg locations, exports `segments.csv`, `flow.csv`, per-event GPX |

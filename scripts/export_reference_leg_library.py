@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export segments.csv + flow.csv (+ per-event GPX) from cursor/plotaroute manifest."""
+"""Export segments.csv + flow.csv (+ per-event GPX) from a reference leg library manifest."""
 
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ def main() -> int:
     parser.add_argument(
         "--library",
         type=Path,
-        default=Path("cursor/plotaroute"),
-        help="Directory with chunk GPX files and manifest.yaml",
+        default=Path("cursor/reference-legs"),
+        help="Directory with leg GPX files and manifest.yaml",
     )
     parser.add_argument(
         "--out",
@@ -28,24 +28,18 @@ def main() -> int:
     )
     args = parser.parse_args()
     lib = args.library.resolve()
-    manifest = lib / "manifest.yaml"
-    if not manifest.is_file():
-        print(f"Missing {manifest}", file=sys.stderr)
+    if not (lib / "manifest.yaml").is_file():
+        print(f"manifest.yaml not found under {lib}", file=sys.stderr)
         return 1
-
-    bundle = export_library_to_course(lib, manifest)
-    print("Recipe lengths (km):", bundle["recipe_lengths_km"])
+    bundle = export_library_to_course(lib, lib / "manifest.yaml")
+    print(f"Segments: {len(bundle['segments'])}")
+    print(f"Stitch warnings: {len(bundle['stitch_warnings'])}")
     if bundle["stitch_warnings"]:
-        print("Stitch warnings:")
         for w in bundle["stitch_warnings"]:
-            print(" ", w)
-    print("Segments:", len(bundle["segments"]))
-    print("Flow CSV lines:", bundle["flow_csv"].count("\n"))
-
+            print(f"  - {w}")
     if args.out:
-        write_package_exports(args.out.resolve(), lib, manifest)
-        print("Wrote:", args.out)
-
+        write_package_exports(args.out.resolve(), lib)
+        print(f"Wrote exports to {args.out}")
     return 0
 
 

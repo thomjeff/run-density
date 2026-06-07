@@ -13,14 +13,14 @@ from app.core.config_package.segment_recipes import (
 from app.core.config_package.storage import export_config_package_segments
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_REFERENCE_GPX = _REPO_ROOT / "cursor" / "plotaroute" / "01_start_friel.gpx"
+_REFERENCE_GPX = _REPO_ROOT / "cursor" / "reference-legs" / "01_start_friel.gpx"
 
 
 def _write_minimal_library(package: Path, config_id: str) -> None:
     if not _REFERENCE_GPX.is_file():
         import pytest
 
-        pytest.skip("cursor/plotaroute/01_start_friel.gpx not present")
+        pytest.skip("cursor/reference-legs/01_start_friel.gpx not present")
     lib = package / "segment_library"
     lib.mkdir()
     shutil.copy2(_REFERENCE_GPX, lib / "01_start_friel.gpx")

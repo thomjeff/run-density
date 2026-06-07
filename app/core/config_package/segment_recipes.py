@@ -82,10 +82,10 @@ def _repo_root() -> Path:
 
 
 def _reference_library_dir() -> Path:
-    """Built-in PlotARoute reference legs (image or repo cursor/plotaroute)."""
+    """Built-in reference leg library (repo cursor/reference-legs or Docker mount)."""
     candidates = [
-        _repo_root() / "cursor" / "plotaroute",
-        Path("/app/cursor/plotaroute"),
+        _repo_root() / "cursor" / "reference-legs",
+        Path("/app/cursor/reference-legs"),
     ]
     for path in candidates:
         if (path / MANIFEST_YAML).is_file() or (path / MANIFEST_JSON).is_file():
@@ -182,7 +182,7 @@ def save_package_segment_manifest(config_id: str, manifest: Dict[str, Any]) -> P
 
 
 def _leg_id_from_filename(filename: str) -> str:
-    """Derive leg id from PlotARoute-style names (e.g. 01_start_friel.gpx -> 01)."""
+    """Derive leg id from numeric filename prefix (e.g. 01_start_friel.gpx -> 01)."""
     stem = Path(filename).stem
     if stem.startswith("00_"):
         return ""
@@ -246,12 +246,12 @@ def sync_manifest_legs_from_gpx(
 
 
 def seed_reference_segment_library(config_id: str) -> Dict[str, Any]:
-    """Copy cursor/plotaroute reference library into the config package."""
+    """Copy cursor/reference-legs sample library into the config package."""
     ref_dir = _reference_library_dir()
     if not ref_dir.is_dir():
         raise FileNotFoundError(
             f"Reference library not found at {ref_dir}. "
-            "Rebuild the dev container or mount cursor/plotaroute."
+            "Rebuild the dev container or mount cursor/reference-legs."
         )
     ref_manifest = ref_dir / MANIFEST_YAML
     if not ref_manifest.is_file():
@@ -270,7 +270,7 @@ def seed_reference_segment_library(config_id: str) -> Dict[str, Any]:
         ignore=shutil.ignore_patterns("generated_segments.csv", "README.md"),
     )
     manifest = _read_manifest_file(_manifest_path(package_path))
-    manifest["label"] = manifest.get("label") or "Reference (PlotARoute)"
+    manifest["label"] = manifest.get("label") or "Reference leg library"
     save_package_segment_manifest(cid, manifest)
     return get_package_segment_library_state(cid)
 

@@ -22,7 +22,7 @@ services:
       - ./config:/app/config
       # Issue #694: Mount docs directory for AI analysis templates
       - ./docs:/app/docs
-      # Segment library reference GPX (PlotARoute chunks for recipe UI)
+      # Reference leg GPX library for recipe UI bootstrap
       - ./cursor:/app/cursor
       # Issue #470: Legacy artifacts/ and reports/ mounts removed - using runflow/ structure exclusively
       # Issue #465: GCS keys mount disabled during Phase 0 (local-only mode)

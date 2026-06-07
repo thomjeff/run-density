@@ -1,12 +1,12 @@
-# PlotARoute segment library (reference)
+# Reference leg library
 
-GPX **routes** in this folder are reusable course **segments**. Event courses are built by **combining** routes in order (PlotARoute “Combine Route”), or—in the app—by assigning **order numbers** per event in a table.
+GPX **routes** in this folder are reusable course **legs**. Event courses are built by **combining** legs in order (external route tools or Runflow recipes).
 
 ## Files
 
 | Prefix | Meaning |
 |--------|---------|
-| `01`–`15` | Individual segments |
+| `01`–`15` | Individual legs |
 | `00_full_new.gpx` | Combined **Full** (authoritative check for full recipe) |
 | `00_half.gpx`, `00_10k.gpx` | Combined Half / 10K |
 
@@ -51,26 +51,16 @@ Matches `00_full_new.gpx` (~41.9 km).
 | 15 | `15_halfturn_to_bridgemill.gpx` | 2.58 | 6 |
 | 11 | `11_bridgemill_finish.gpx` | 5.22 | 7 |
 
-No route **10**, **12**, or **13** on Half.
-
 ## 10K
 
-Unchanged (~**10.00 km** vs `00_10k.gpx` 10.02 km):
+`01 → 02 → 04 → 05 → 12` (~10.0 km). See `manifest.yaml` `recipes.10k`.
 
-`01 → 02 → 04 → 05 → 12`
+## Stitch notes
 
-| Id | File | ~km | 10k order |
-|----|------|-----|-----------|
-| 01 | `01_start_friel.gpx` | 2.71 | 1 |
-| 02 | `02_friel_10kturn.gpx` | 1.59 | 2 |
-| 04 | `04_10kturn_friel.gpx` | 1.59 | 3 |
-| 05 | `05_friel_station.gpx` | 2.24 | 4 |
-| 12 | `12_station_finish.gpx` | 1.87 | 5 |
+Small endpoint gaps (&lt;10 m) are normal. ~105 m between `06` and `07` may need a connector leg in a future edit.
 
-## Stitch gaps
+## Export
 
-Small endpoint gaps (&lt;10 m) are normal. ~105 m between `06` and `07` exists in PlotARoute too—fix in PlotARoute or add a connector segment later if needed.
-
-## App direction
-
-Organizers will **not** edit this YAML. Phase 1 UI: import GPX → recipe table (order per event) → **Save** → `segments.csv`.
+```bash
+python scripts/export_reference_leg_library.py --library cursor/reference-legs --out /path/to/package
+```

@@ -681,7 +681,7 @@
         });
     }
 
-    /** Douglas–Peucker tolerance (m) when entering reshape — PlotARoute-style semantic vertices. */
+    /** Douglas–Peucker tolerance (m) when entering reshape — simplify to semantic vertices. */
     var LEG_RESHAPE_SIMPLIFY_TOLERANCE_M = 5;
     var LEG_RESHAPE_SIMPLIFY_MAX_VERTICES = 96;
 

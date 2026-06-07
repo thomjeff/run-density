@@ -1,7 +1,7 @@
 """
 Config package course legs: create, edit, delete GPX legs and leg-scoped locations.
 
-Issue #769 — in-runflow leg authoring (PlotARoute reference is optional bootstrap only).
+Issue #769 — in-runflow leg authoring (reference GPX import is optional bootstrap only).
 """
 
 from __future__ import annotations

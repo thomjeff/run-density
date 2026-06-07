@@ -1,5 +1,5 @@
 """
-Segment library + event recipes (PlotARoute / 2027 planning).
+Segment library + event recipes (reusable GPX legs and per-event recipes).
 
 A segment library is a set of reusable GPX legs. Event recipes list leg ids in order.
 From that we build:
@@ -85,7 +85,7 @@ def load_manifest(path: Path) -> Dict[str, Any]:
 
 
 def parse_leg_gpx(path: Path) -> Dict[str, Any]:
-    """Parse a PlotARoute leg GPX into coordinates and length."""
+    """Parse a leg GPX file into coordinates and length."""
     course = parse_gpx_file(str(path))
     coords = [[p.lon, p.lat] for p in course.points]
     if len(coords) < 2:
