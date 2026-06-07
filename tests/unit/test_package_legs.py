@@ -1448,3 +1448,133 @@ def test_flow_type_propagates_to_segments_and_flow_csv(tmp_path, monkeypatch):
     csv_text = build_flow_csv_from_segments(segments, ["full", "10k"])
     assert ",counterflow," in csv_text
     assert "Shared trail" in csv_text
+
+
+def test_merge_preserves_loc_id_via_location_key(tmp_path, monkeypatch):
+    """Re-merge keeps loc_id when location_key matches (#780)."""
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    result = create_config_package("Loc key", "", event_day="sun", package_events=["full"])
+    config_id = result["config_id"]
+    package_path = tmp_path / config_id
+    lib_dir = package_path / "segment_library"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    import yaml
+
+    (lib_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "01",
+                        "seg_label": "Leg",
+                        "file": "01.gpx",
+                        "locations": [
+                            {
+                                "loc_label": "Water",
+                                "loc_type": "water",
+                                "lat": 45.961,
+                                "lon": -66.642,
+                                "placement": "along",
+                                "location_key": "WATER",
+                                "notes": "North side",
+                            }
+                        ],
+                    }
+                ],
+                "recipes": {"full": ["01"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (lib_dir / "01.gpx").write_text(
+        """<?xml version="1.0"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><trkseg>
+    <trkpt lat="45.96" lon="-66.64"/>
+    <trkpt lat="45.97" lon="-66.63"/>
+  </trkseg></trk>
+</gpx>""",
+        encoding="utf-8",
+    )
+    course_path = package_path / "course.json"
+    course = load_config_course(config_id)
+    course["segment_library_applied"] = True
+    course["segments"] = [{"seg_id": "S1", "leg_id": "01", "events": ["full"]}]
+    course_path.write_text(json.dumps(course, indent=2))
+
+    merge_leg_locations_into_course(config_id)
+    first = load_config_course(config_id)["locations"][0]
+    first_id = first["id"]
+    assert first.get("location_key") == "WATER"
+    assert first.get("notes") == "North side"
+
+    merge_leg_locations_into_course(config_id)
+    second = load_config_course(config_id)["locations"][0]
+    assert second["id"] == first_id
+    assert second.get("location_key") == "WATER"
+
+
+def test_leg_export_v2_includes_full_location_fields(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    result = create_config_package("Export v2", "", event_day="sun", package_events=["full"])
+    config_id = result["config_id"]
+    package_path = tmp_path / config_id
+    lib_dir = package_path / "segment_library"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    import yaml
+
+    (lib_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "01",
+                        "seg_label": "Trail",
+                        "file": "01.gpx",
+                        "schema": "on_course_narrow",
+                        "direction": "bi",
+                        "width_m": 4,
+                        "locations": [
+                            {
+                                "loc_label": "Aid",
+                                "loc_type": "aid",
+                                "lat": 45.961,
+                                "lon": -66.642,
+                                "placement": "along",
+                                "notes": "Tent A",
+                                "buffer": 15,
+                                "zone": "A",
+                            }
+                        ],
+                    }
+                ],
+                "recipes": {"full": ["01"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (lib_dir / "01.gpx").write_text(
+        """<?xml version="1.0"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><trkseg>
+    <trkpt lat="45.96" lon="-66.64"/>
+    <trkpt lat="45.97" lon="-66.63"/>
+  </trkseg></trk>
+</gpx>""",
+        encoding="utf-8",
+    )
+
+    zip_bytes, _ = export_package_leg_zip(config_id, "01")
+    with zipfile.ZipFile(BytesIO(zip_bytes)) as zf:
+        meta = json.loads(zf.read("01.json").decode("utf-8"))
+    assert meta["export_version"] == 2
+    loc = meta["leg"]["locations"][0]
+    assert loc["notes"] == "Tent A"
+    assert loc["buffer"] == 15
+    assert loc.get("location_key")

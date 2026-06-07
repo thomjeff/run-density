@@ -199,7 +199,21 @@ def normalize_location_record(
         except (TypeError, ValueError):
             out[key] = defaults[key]
 
-    for key in ("proxy_loc_id", "seg_id", "day", "zone", "equipment", "contact", "notes", "loc_label"):
+    for key in (
+        "proxy_loc_id",
+        "seg_id",
+        "day",
+        "zone",
+        "equipment",
+        "contact",
+        "notes",
+        "loc_label",
+        "location_key",
+        "leg_loc_key",
+        "leg_id",
+        "placement",
+        "source",
+    ):
         if out.get(key) is None:
             out[key] = ""
         else:

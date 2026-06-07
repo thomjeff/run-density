@@ -192,6 +192,22 @@ def _leg_id_from_filename(filename: str) -> str:
     return stem[:24]
 
 
+def _remediate_duplicate_leg_ids(legs: List[Dict[str, Any]]) -> None:
+    """Reassign duplicate leg ids so each manifest row has a unique id (#780)."""
+    from app.core.config_package.legs import allocate_next_leg_id
+
+    seen: set[str] = set()
+    for entry in legs:
+        if not isinstance(entry, dict):
+            continue
+        lid = str(entry.get("id", "")).strip()
+        if lid and lid not in seen:
+            seen.add(lid)
+            continue
+        entry["id"] = allocate_next_leg_id(legs)
+        seen.add(str(entry["id"]))
+
+
 def sync_manifest_legs_from_gpx(
     lib_dir: Path,
     manifest: Optional[Dict[str, Any]] = None,
@@ -199,8 +215,11 @@ def sync_manifest_legs_from_gpx(
     """
     Ensure manifest lists every leg GPX in lib_dir (except 00_* combined routes).
 
-    New files get default metadata; existing entries keep seg_id, width, recipes, etc.
+    Existing legs match by ``file`` name and keep their id. New GPX files receive
+    the next system-assigned id (not the numeric filename prefix).
     """
+    from app.core.config_package.legs import allocate_next_leg_id
+
     manifest = normalize_library_manifest(dict(manifest or _default_manifest()))
     existing_by_file = {
         str(c.get("file", "")): c
@@ -212,12 +231,13 @@ def sync_manifest_legs_from_gpx(
         name = gpx_path.name
         if name.startswith("00_"):
             continue
-        cid = _leg_id_from_filename(name)
-        if not cid:
-            continue
         prior = existing_by_file.get(name) or {}
         if prior.get("id"):
-            cid = str(prior["id"])
+            cid = str(prior["id"]).strip()
+        else:
+            cid = allocate_next_leg_id(legs)
+        if not cid:
+            continue
         try:
             parsed = parse_leg_gpx(gpx_path)
         except ValueError:
@@ -241,6 +261,7 @@ def sync_manifest_legs_from_gpx(
                 "locations": prior.get("locations") or [],
             }
         )
+    _remediate_duplicate_leg_ids(legs)
     set_manifest_legs(manifest, legs)
     return manifest
 
@@ -627,6 +648,7 @@ def import_gpx_files_to_library(
     lib_dir.mkdir(parents=True, exist_ok=True)
     saved_gpx: List[str] = []
     exports_by_leg_id: Dict[str, Dict[str, Any]] = {}
+    exports_by_gpx_file: Dict[str, Dict[str, Any]] = {}
     for name, data in uploads:
         safe = Path(name).name
         lower = safe.lower()
@@ -641,6 +663,9 @@ def import_gpx_files_to_library(
             )
             if leg_id:
                 exports_by_leg_id[leg_id] = leg_export
+            gpx_file = str(leg_export.get("gpx_file") or "").strip()
+            if gpx_file:
+                exports_by_gpx_file[gpx_file] = leg_export
             dest = lib_dir / safe
             dest.write_bytes(data)
             continue
@@ -653,6 +678,8 @@ def import_gpx_files_to_library(
         raise ValueError("No .gpx files uploaded")
     manifest = load_package_segment_manifest(config_id)
     manifest = sync_manifest_legs_from_gpx(lib_dir, manifest)
-    manifest = apply_leg_exports_to_manifest(manifest, exports_by_leg_id)
+    manifest = apply_leg_exports_to_manifest(
+        manifest, exports_by_leg_id, exports_by_gpx_file=exports_by_gpx_file
+    )
     save_package_segment_manifest(config_id, manifest)
     return get_package_segment_library_state(config_id)
