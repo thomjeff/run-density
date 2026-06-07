@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import yaml
 
-from app.core.course.export import build_segments_csv, enrich_segments_event_distances
+from app.core.course.export import build_segments_csv
 from app.core.course.flow_csv import build_flow_csv_from_segments
 from app.core.gpx.processor import parse_gpx_file
 from app.utils.constants import COURSE_EVENT_IDS
@@ -200,6 +200,29 @@ def _events_for_leg(
     return out
 
 
+def _recipe_leg_order(
+    manifest: Dict[str, Any],
+    legs_by_id: Dict[str, Dict[str, Any]],
+    event_ids: Sequence[str],
+    recipes: Dict[str, Any],
+) -> List[str]:
+    """Leg ids in recipe traversal order (union across events, first-seen wins)."""
+    ordered: List[str] = []
+    seen: set[str] = set()
+    for eid in event_ids:
+        key = eid if eid in recipes else eid.lower()
+        for raw_id in recipes.get(key) or []:
+            cid = str(raw_id).strip()
+            if not cid or cid in seen or cid not in legs_by_id:
+                continue
+            events = _events_for_leg(cid, recipes, event_ids)
+            if not events:
+                continue
+            seen.add(cid)
+            ordered.append(cid)
+    return ordered
+
+
 def build_course_segments_from_library(
     manifest: Dict[str, Any],
     legs_by_id: Dict[str, Dict[str, Any]],
@@ -227,13 +250,16 @@ def build_course_segments_from_library(
             cum += float(ch["length_km"])
             event_cum_at_leg[eid.lower()][cid] = round(cum, 2)
 
+    entries_by_id: Dict[str, Dict[str, Any]] = {
+        str(entry.get("id", "")).strip(): entry
+        for entry in manifest_legs(manifest)
+        if isinstance(entry, dict) and entry.get("id")
+    }
+
     segments: List[Dict[str, Any]] = []
-    leg_order = manifest_legs(manifest)
     segment_index = 0
-    for entry in leg_order:
-        if not isinstance(entry, dict):
-            continue
-        cid = str(entry.get("id", "")).strip()
+    for cid in _recipe_leg_order(manifest, legs_by_id, event_ids, recipes):
+        entry = entries_by_id.get(cid) or {}
         ch = legs_by_id.get(cid)
         if not ch:
             continue
@@ -274,7 +300,6 @@ def build_course_segments_from_library(
             seg[f"{el}_to_km"] = to_km
         segments.append(seg)
 
-    enrich_segments_event_distances(segments, event_ids)
     return segments
 
 

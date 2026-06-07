@@ -99,3 +99,33 @@ def test_export_bundle_writes_csv():
     bundle = export_library_to_course(LIBRARY_DIR, MANIFEST)
     assert "full,half,10k" in bundle["segments_csv"].splitlines()[0]
     assert "event_a" in bundle["flow_csv"]
+
+
+def test_build_course_segments_follows_recipe_order_not_manifest_order(manifest, legs_by_id):
+    """Leg ids after 15 in manifest must not push recipe-middle legs to the end."""
+    recipes = {
+        "full": ["01", "02", "03", "16", "04"],
+        "half": [],
+        "10k": [],
+    }
+    manifest = dict(manifest)
+    manifest["recipes"] = recipes
+    legs = dict(legs_by_id)
+    legs["03"] = {**legs["03"], "length_km": 5.57}
+    legs["16"] = {
+        **legs["03"],
+        "id": "16",
+        "length_km": 5.57,
+        "file": "16_stub.gpx",
+    }
+    segments = build_course_segments_from_library(
+        manifest, legs, event_ids=["full", "half", "10k"]
+    )
+    full_leg_order = [s["leg_id"] for s in segments if "full" in s.get("events", [])]
+    assert full_leg_order == ["01", "02", "03", "16", "04"]
+    leg16 = next(s for s in segments if s["leg_id"] == "16")
+    assert leg16["seg_id"] == "S4"
+    assert leg16["full_from_km"] == pytest.approx(9.87, abs=0.05)
+    assert leg16["full_to_km"] == pytest.approx(15.44, abs=0.05)
+    leg04 = next(s for s in segments if s["leg_id"] == "04")
+    assert leg04["full_from_km"] == pytest.approx(15.44, abs=0.05)
