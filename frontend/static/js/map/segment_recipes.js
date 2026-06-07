@@ -54,6 +54,26 @@
         return v;
     }
 
+    function flowTypeLabelForValue(value) {
+        var v = String(value || 'none');
+        var raw = window.FLOW_TYPE_CHOICES_FROM_SERVER || [];
+        var found = raw.find(function (c) { return String(c.value) === v; });
+        if (found && found.label) return found.label;
+        return v;
+    }
+
+    function flowTypeChoices() {
+        var raw = window.FLOW_TYPE_CHOICES_FROM_SERVER || [];
+        if (raw.length) return raw.slice();
+        return [
+            { value: 'overtake', label: 'Overtake' },
+            { value: 'merge', label: 'Merge' },
+            { value: 'counterflow', label: 'Counterflow' },
+            { value: 'parallel', label: 'Parallel' },
+            { value: 'none', label: 'None' }
+        ];
+    }
+
     function formatLegWidth(width) {
         if (width == null || width === '') return '—';
         var n = Number(width);
@@ -570,6 +590,7 @@
         libraryState = data;
         orderGrid = data.order_grid || {};
         renderLegsTable();
+        updateLegActionButtons();
         syncLegsTableBoundsFilterItems();
         renderRecipeTable();
         renderTotals(data.recipe_lengths_km);
@@ -582,16 +603,32 @@
                 clearLegMap();
             }
         }
+        var reloadPromise = null;
         if (
             window.configPackageCourse &&
             window.configPackageCourse.reloadCourse
         ) {
-            window.configPackageCourse.reloadCourse({ skipMapRefresh: true });
+            reloadPromise = window.configPackageCourse.reloadCourse({ skipMapRefresh: true });
         } else if (
             window.configPackageCourse &&
             typeof window.configPackageCourse.renderSegmentsList === 'function'
         ) {
             window.configPackageCourse.renderSegmentsList();
+        }
+        if (reloadPromise && typeof reloadPromise.then === 'function') {
+            reloadPromise.then(function () {
+                if (
+                    window.configPackageCourse &&
+                    window.configPackageCourse.enrichCourseSegmentsFromLegLibrary
+                ) {
+                    window.configPackageCourse.enrichCourseSegmentsFromLegLibrary();
+                }
+            });
+        } else if (
+            window.configPackageCourse &&
+            window.configPackageCourse.enrichCourseSegmentsFromLegLibrary
+        ) {
+            window.configPackageCourse.enrichCourseSegmentsFromLegLibrary();
         }
     }
 
@@ -600,6 +637,11 @@
     }
 
     function updateLegActionButtons() {
+        var hasLegs = !!(libraryState && libraryState.legs && libraryState.legs.length);
+        var exportAllBtn = document.getElementById('btn-export-all-legs');
+        if (exportAllBtn) {
+            exportAllBtn.disabled = !hasLegs;
+        }
         var hasLeg = !!selectedLegId;
         var hasLine = !!(selectedLegLatLngs && selectedLegLatLngs.length >= 2);
         var routeEditActive = isLegRouteEditActive();
@@ -1995,6 +2037,52 @@
         selectLegById(leg.id);
     }
 
+    function downloadLegExportBlob(blob, filename, statusMsg) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        setLegStatus(statusMsg);
+    }
+
+    function exportAllLegs() {
+        var legs = (libraryState && libraryState.legs) || [];
+        if (!legs.length) {
+            setLegStatus('No legs to export.', true);
+            return;
+        }
+        setLegStatus('Preparing export for ' + legs.length + ' leg' + (legs.length === 1 ? '' : 's') + '…');
+        fetch(apiBase() + '/segment-library/export-legs', { credentials: 'same-origin' })
+            .then(function (r) {
+                if (!r.ok) {
+                    return r.json().then(function (d) {
+                        throw new Error(formatApiError(r, d));
+                    });
+                }
+                var disposition = r.headers.get('Content-Disposition') || '';
+                var match = /filename="?([^";]+)"?/i.exec(disposition);
+                var filename = (match && match[1]) || 'legs_export.zip';
+                return r.blob().then(function (blob) {
+                    return { blob: blob, filename: filename };
+                });
+            })
+            .then(function (payload) {
+                downloadLegExportBlob(
+                    payload.blob,
+                    payload.filename,
+                    'Exported ' + legs.length + ' leg' + (legs.length === 1 ? '' : 's') + '.'
+                );
+            })
+            .catch(function (err) {
+                setLegStatus(err.message || String(err), true);
+            });
+    }
+
     function exportLeg(legId) {
         var leg = (libraryState && libraryState.legs || []).find(function (c) {
             return c.id === legId;
@@ -2019,16 +2107,11 @@
                 });
             })
             .then(function (payload) {
-                var url = URL.createObjectURL(payload.blob);
-                var a = document.createElement('a');
-                a.href = url;
-                a.download = payload.filename;
-                a.style.display = 'none';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                setLegStatus('Exported leg ' + legId + ' (' + label + ').');
+                downloadLegExportBlob(
+                    payload.blob,
+                    payload.filename,
+                    'Exported leg ' + legId + ' (' + label + ').'
+                );
             })
             .catch(function (err) {
                 setLegStatus(err.message || String(err), true);
@@ -2098,6 +2181,7 @@
                 formatLegWidth(ch.width_m),
                 schemaLabelForValue(ch.schema),
                 directionLabelForValue(ch.direction),
+                flowTypeLabelForValue(ch.flow_type),
                 String(ch.location_count != null ? ch.location_count : (ch.locations || []).length)
             ].forEach(function (text) {
                 var td = document.createElement('td');
@@ -2208,10 +2292,14 @@
         var legId = resolveLegIdForSegment(seg, segIdx);
         var ch = libraryState.legs.find(function (c) { return c.id === legId; });
         if (!ch) return null;
+        var description = (ch.description != null && String(ch.description).trim())
+            ? String(ch.description).trim()
+            : (ch.flow_notes != null ? String(ch.flow_notes).trim() : '');
         return {
             from: (ch.start_label || '').trim(),
             to: (ch.end_label || '').trim(),
-            seg_label: (ch.leg_label || '').trim()
+            seg_label: (ch.leg_label || '').trim(),
+            description: description
         };
     }
 
@@ -2522,7 +2610,9 @@
             end_label: '',
             width_m: 3,
             schema: 'on_course_open',
-            direction: 'uni'
+            direction: 'uni',
+            flow_type: 'none',
+            description: ''
         };
 
         if (title) {
@@ -2618,6 +2708,30 @@
         addField('Width (m)', 'leg-width', leg.width_m, 'number');
         addSelectField('Schema', 'leg-schema', leg.schema || 'on_course_open', segmentSchemaChoices());
         addSelectField('Direction', 'leg-direction', leg.direction || 'uni', segmentDirectionChoices());
+        addSelectField('Flow type', 'leg-flow-type', leg.flow_type || 'none', flowTypeChoices());
+
+        var notesWrap = document.createElement('div');
+        notesWrap.style.marginBottom = '0.65rem';
+        var notesLab = document.createElement('label');
+        notesLab.textContent = 'Description';
+        notesLab.style.display = 'block';
+        notesLab.style.fontWeight = '600';
+        notesLab.style.fontSize = '0.85rem';
+        var notesTa = document.createElement('textarea');
+        notesTa.id = 'leg-description';
+        notesTa.rows = 2;
+        notesTa.maxLength = 500;
+        notesTa.placeholder = 'Segment description (syncs to Course tab)';
+        notesTa.value = leg.description != null && String(leg.description).trim()
+            ? String(leg.description)
+            : (leg.flow_notes != null ? String(leg.flow_notes) : '');
+        notesTa.style.width = '100%';
+        notesTa.style.boxSizing = 'border-box';
+        notesTa.style.resize = 'vertical';
+        notesTa.style.fontFamily = 'inherit';
+        notesWrap.appendChild(notesLab);
+        notesWrap.appendChild(notesTa);
+        body.appendChild(notesWrap);
 
         footer.innerHTML = '';
         var cancelBtn = document.createElement('button');
@@ -2662,12 +2776,32 @@
             end_label: (document.getElementById('leg-end-label') || {}).value || '',
             width_m: parseFloat((document.getElementById('leg-width') || {}).value) || 3,
             schema: ((document.getElementById('leg-schema') || {}).value || 'on_course_open').trim(),
-            direction: ((document.getElementById('leg-direction') || {}).value || 'uni').trim()
+            direction: ((document.getElementById('leg-direction') || {}).value || 'uni').trim(),
+            flow_type: ((document.getElementById('leg-flow-type') || {}).value || 'none').trim(),
+            description: ((document.getElementById('leg-description') || {}).value || '').trim()
         };
+    }
+
+    function validateLegFields(fields) {
+        var missing = [];
+        if (!String(fields.leg_label || '').trim()) missing.push('Leg label');
+        if (!String(fields.start_label || '').trim()) missing.push('Start place');
+        if (!String(fields.end_label || '').trim()) missing.push('End place');
+        if (!String(fields.description || '').trim()) missing.push('Description');
+        if (!(fields.width_m > 0)) missing.push('Width (m)');
+        if (missing.length) {
+            return 'Required: ' + missing.join(', ') + '.';
+        }
+        return '';
     }
 
     function saveLegEditor() {
         var fields = collectLegFields();
+        var validationError = validateLegFields(fields);
+        if (validationError) {
+            setLegStatus(validationError, true);
+            return;
+        }
         if (legEditorMode === 'create') {
             if (!pendingGpxFile) {
                 setLegStatus('Choose a GPX file first.', true);
@@ -2681,6 +2815,8 @@
             fd.append('width_m', String(fields.width_m));
             fd.append('schema', fields.schema);
             fd.append('direction', fields.direction);
+            fd.append('flow_type', fields.flow_type);
+            fd.append('description', fields.description);
             setLegStatus('Saving leg…');
             fetch(apiBase() + '/segment-library/legs', { method: 'POST', credentials: 'same-origin', body: fd })
                 .then(function (r) { return r.json().then(function (d) { return { res: r, data: d }; }); })
@@ -2801,12 +2937,16 @@
 
     function bindUi() {
         var importBtn = document.getElementById('btn-import-gpx');
+        var exportAllBtn = document.getElementById('btn-export-all-legs');
         var bulkInput = document.getElementById('segment-library-gpx-input');
         if (importBtn && bulkInput) {
             importBtn.addEventListener('click', function () {
                 bulkInput.value = '';
                 bulkInput.click();
             });
+        }
+        if (exportAllBtn) {
+            exportAllBtn.addEventListener('click', exportAllLegs);
         }
         if (bulkInput) {
             bulkInput.addEventListener('change', function () {

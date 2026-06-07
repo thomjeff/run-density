@@ -488,8 +488,9 @@
             row.dataset.segId = segment.seg_id;
             row.dataset.eventA = segment.event_a;
             row.dataset.eventB = segment.event_b;
+            row.dataset.flowId = segment.flow_id || '';
             row.innerHTML = `
-                <td>${segment.seg_id || "—"}</td>
+                <td>${segment.flow_id || segment.seg_id || "—"}</td>
                 <td>${segment.seg_label || "—"}</td>
                 <td>${segment.event_a || "—"} / ${segment.event_b || "—"}</td>
                 <td>${segment.overlap_start || "—"}–${segment.overlap_end || "—"}</td>
@@ -520,7 +521,10 @@
             return;
         }
 
-        const apiUrl = `/api/bidirectional/segment/${encodeURIComponent(segment.seg_id)}?run_id=${encodeURIComponent(run_id)}&day=${encodeURIComponent(day)}&event_a=${encodeURIComponent(segment.event_a)}&event_b=${encodeURIComponent(segment.event_b)}`;
+        let apiUrl = `/api/bidirectional/segment/${encodeURIComponent(segment.seg_id)}?run_id=${encodeURIComponent(run_id)}&day=${encodeURIComponent(day)}&event_a=${encodeURIComponent(segment.event_a)}&event_b=${encodeURIComponent(segment.event_b)}`;
+        if (segment.flow_id) {
+            apiUrl += `&flow_id=${encodeURIComponent(segment.flow_id)}`;
+        }
         fetch(apiUrl, { cache: 'no-store' })
             .then(response => {
                 if (!response.ok) {

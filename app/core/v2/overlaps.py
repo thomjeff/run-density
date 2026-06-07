@@ -17,6 +17,7 @@ import math
 import numpy as np
 import pandas as pd
 
+from app.core.course.flow_csv import flow_output_id, validate_flow_csv
 from app.core.v2.models import Day, Event
 from app.utils.constants import (
     REPORTS_OVERLAPS_DIRNAME,
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class OverlapSummary:
+    flow_id: str
     seg_id: str
     seg_label: str
     event_a: str
@@ -113,9 +115,7 @@ def _minute_series(
 
 def _write_overlap_csv(
     output_dir: Path,
-    seg_id: str,
-    event_a: str,
-    event_b: str,
+    output_id: str,
     event_a_label: str,
     event_b_label: str,
     minute_starts: List[float],
@@ -123,7 +123,7 @@ def _write_overlap_csv(
     metrics_b: List[Dict[str, int]],
 ) -> str:
     output_dir.mkdir(parents=True, exist_ok=True)
-    csv_filename = f"{seg_id}_per_minute.csv"
+    csv_filename = f"{output_id}_per_minute.csv"
     csv_path = output_dir / csv_filename
 
     headers = [
@@ -193,6 +193,30 @@ def generate_bidirectional_overlap_reports(
         & (flow_df["direction_norm"] == "bi")
     ].copy()
 
+    bi_rows = [
+        {
+            "flow_id": str(row.get("flow_id") or "").strip(),
+            "seg_id": str(row.get("seg_id") or "").strip(),
+            "event_a": str(row.get("event_a_norm") or ""),
+            "event_b": str(row.get("event_b_norm") or ""),
+            "direction": "bi",
+            "from_km_a": row.get("from_km_a"),
+            "to_km_a": row.get("to_km_a"),
+            "from_km_b": row.get("from_km_b"),
+            "to_km_b": row.get("to_km_b"),
+            "flow_type": row.get("flow_type"),
+            "notes": row.get("notes"),
+            "auto_generated": False,
+        }
+        for _, row in eligible.iterrows()
+    ]
+    validation = validate_flow_csv(bi_rows, strict_auto_same_event=False)
+    if not validation.ok:
+        raise ValueError(
+            "Invalid bidirectional flow.csv rows for overlap reports: "
+            + "; ".join(validation.errors)
+        )
+
     analyzed_count = int(len(eligible))
     overlap_count = 0
     summaries: List[OverlapSummary] = []
@@ -201,9 +225,18 @@ def generate_bidirectional_overlap_reports(
     overlaps_dir = reports_dir / REPORTS_OVERLAPS_DIRNAME
 
     for _, row in eligible.iterrows():
+        flow_id = str(row.get("flow_id") or "").strip()
         seg_id = str(row["seg_id"])
         event_a = str(row["event_a_norm"])
         event_b = str(row["event_b_norm"])
+        output_id = flow_output_id(
+            {
+                "flow_id": flow_id,
+                "seg_id": seg_id,
+                "event_a": event_a,
+                "event_b": event_b,
+            }
+        )
         event_a_label = event_a
         event_b_label = event_b
         if event_a == event_b:
@@ -242,9 +275,7 @@ def generate_bidirectional_overlap_reports(
 
         csv_filename = _write_overlap_csv(
             overlaps_dir,
-            seg_id,
-            event_a,
-            event_b,
+            output_id,
             event_a_label,
             event_b_label,
             minute_starts,
@@ -260,6 +291,7 @@ def generate_bidirectional_overlap_reports(
 
         summaries.append(
             OverlapSummary(
+                flow_id=output_id,
                 seg_id=seg_id,
                 seg_label=seg_label,
                 event_a=event_a,

@@ -168,6 +168,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (!data) return;
                 if (data.ok && data.course) {
                     setCourse(pkgId, data.course, options);
+                    enrichCourseSegmentsFromLegLibrary();
                     if (window.PENDING_PACKAGE_META) {
                         var pending = window.PENDING_PACKAGE_META;
                         syncCourseHeaderFromPackageMeta(
@@ -667,6 +668,35 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!usePackageLevelEditSave()) return false;
         var legsPanel = document.getElementById('config-package-legs-panel');
         return !!(legsPanel && legsPanel.style.display !== 'none');
+    }
+
+    function legMetadataForSegment(seg, segIdx) {
+        if (
+            !usePackageLevelEditSave() ||
+            !window.segmentRecipes ||
+            !window.segmentRecipes.resolveLegLabelsForSegment
+        ) {
+            return null;
+        }
+        return window.segmentRecipes.resolveLegLabelsForSegment(seg, segIdx);
+    }
+
+    /** Fill empty combined-course segment descriptions from manifest legs (Legs tab). */
+    function enrichCourseSegmentsFromLegLibrary() {
+        if (!usePackageLevelEditSave() || !currentCourse || !currentCourse.segments) return;
+        var changed = false;
+        currentCourse.segments.forEach(function (seg, segIdx) {
+            var meta = legMetadataForSegment(seg, segIdx);
+            if (!meta) return;
+            if (!(seg.description || '').trim() && (meta.description || '').trim()) {
+                seg.description = meta.description.trim();
+                changed = true;
+            }
+        });
+        if (changed) {
+            renderSegmentsList();
+            renderSegmentInfoIcons();
+        }
     }
 
     function setCourse(id, course, options) {
@@ -2038,10 +2068,12 @@ document.addEventListener('DOMContentLoaded', function () {
         descLab.style.display = 'block';
         descLab.style.fontWeight = '600';
         descLab.style.fontSize = '0.85rem';
+        var legMeta = legMetadataForSegment(s, segIdx);
         var inputDesc = document.createElement('textarea');
         inputDesc.id = 'segment-editor-description';
         inputDesc.rows = 2;
-        inputDesc.value = s.description || '';
+        inputDesc.value = (s.description || '').trim()
+            || (legMeta && legMeta.description ? legMeta.description : '');
         inputDesc.style.width = '100%';
         inputDesc.style.boxSizing = 'border-box';
         descWrap.appendChild(descLab);
@@ -4788,6 +4820,7 @@ document.addEventListener('DOMContentLoaded', function () {
             saveAll: saveConfigPackageWorkspace,
             syncHeaderFromMeta: syncCourseHeaderFromPackageMeta,
             reloadCourse: loadConfigPackageCourse,
+            enrichCourseSegmentsFromLegLibrary: enrichCourseSegmentsFromLegLibrary,
             hasCombinedCourse: function () {
                 return !!(
                     currentCourse &&

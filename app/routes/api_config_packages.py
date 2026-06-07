@@ -30,10 +30,12 @@ from app.core.config_package import (
 from app.core.config_package.legs import (
     create_package_leg,
     delete_package_leg,
+    export_all_package_legs_zip,
     export_package_leg_zip,
     get_leg_line_geojson,
     reconcile_leg_locations_to_course,
     remove_leg_location_from_manifest,
+    sync_leg_metadata_into_course,
     sync_leg_locations_if_applied,
     update_package_leg,
     update_package_leg_geometry,
@@ -101,6 +103,8 @@ class UpdateLegRequest(BaseModel):
     width_m: Optional[float] = None
     schema: Optional[str] = None
     direction: Optional[str] = None
+    flow_type: Optional[str] = None
+    flow_notes: Optional[str] = None
     description: Optional[str] = None
     locations: Optional[List[Dict[str, Any]]] = None
 
@@ -263,6 +267,7 @@ async def api_load_config_course(
     require_auth(request)
     try:
         reconcile_leg_locations_to_course(config_id)
+        sync_leg_metadata_into_course(config_id)
         course = load_config_course(config_id)
         return JSONResponse(
             content={"ok": True, "config_id": config_id, "course": course}
@@ -282,11 +287,13 @@ async def api_save_config_course(
     """Save course.json for a config package (validated workspace schema)."""
     require_auth(request)
     try:
-        save_config_course(config_id, body.course)
         from app.core.config_package.legs import sync_leg_location_metadata_from_course
 
+        save_config_course(config_id, body.course)
+        sync_leg_metadata_into_course(config_id)
         sync_leg_location_metadata_from_course(config_id)
         reconcile_leg_locations_to_course(config_id)
+        sync_leg_metadata_into_course(config_id)
         course = load_config_course(config_id)
         return JSONResponse(
             content={"ok": True, "config_id": config_id, "course": course}
@@ -330,6 +337,8 @@ async def api_create_package_leg(
     width_m: float = Form(3.0),
     schema: str = Form("on_course_open"),
     direction: str = Form("uni"),
+    flow_type: str = Form("none"),
+    flow_notes: str = Form(""),
     description: str = Form(""),
 ) -> JSONResponse:
     """Create a course leg from an uploaded GPX file."""
@@ -348,6 +357,8 @@ async def api_create_package_leg(
             width_m=width_m,
             schema=schema,
             direction=direction,
+            flow_type=flow_type,
+            flow_notes=flow_notes,
             description=description,
         )
         return JSONResponse(content={"ok": True, **state})
@@ -369,6 +380,26 @@ async def api_update_package_leg_geometry(
     try:
         state = update_package_leg_geometry(config_id, leg_id, body.coordinates)
         return JSONResponse(content={"ok": True, **state})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/api/config/packages/{config_id}/segment-library/export-legs")
+async def api_export_all_package_legs(
+    request: Request,
+    config_id: str,
+) -> Response:
+    """Download a zip with every leg GPX track and JSON metadata."""
+    require_auth(request)
+    try:
+        zip_bytes, filename = export_all_package_legs_zip(config_id)
+        return Response(
+            content=zip_bytes,
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
     except FileNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValueError as e:

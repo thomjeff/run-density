@@ -965,7 +965,10 @@ def generate_segments_geojson(reports_dir: Path, analysis_context: Optional[Any]
             props["events"] = [event for event in ["Full", "Half", "10K"] 
                               if dims.get(event.lower() if event != "10K" else "10K", "") == "y"]
             props["schema"] = schema_key
-            props["description"] = dims.get("description", "No description available")
+            desc_val = dims.get("description", "")
+            if desc_val is None or (isinstance(desc_val, float) and pd.isna(desc_val)):
+                desc_val = ""
+            props["description"] = str(desc_val).strip()
     
     return geojson
 

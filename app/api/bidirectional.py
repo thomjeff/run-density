@@ -81,6 +81,7 @@ async def get_bidirectional_segment_detail(
     day: Optional[str] = Query(None, description="Day code (fri|sat|sun|mon)"),
     event_a: Optional[str] = Query(None, description="Event A name"),
     event_b: Optional[str] = Query(None, description="Event B name"),
+    flow_id: Optional[str] = Query(None, description="Unique flow row id"),
 ):
     try:
         from app.utils.run_id import get_latest_run_id, resolve_selected_day
@@ -95,15 +96,22 @@ async def get_bidirectional_segment_detail(
             raise HTTPException(status_code=404, detail="No overlap summary available")
 
         segments = summary.get("segments", [])
-        seg_matches = [
-            seg for seg in segments
-            if str(seg.get("seg_id")) == str(seg_id)
-            and (event_a is None or str(seg.get("event_a")) == str(event_a))
-            and (event_b is None or str(seg.get("event_b")) == str(event_b))
-        ]
+        if flow_id:
+            seg_matches = [
+                seg for seg in segments
+                if str(seg.get("flow_id") or "") == str(flow_id)
+            ]
+        else:
+            seg_matches = [
+                seg for seg in segments
+                if str(seg.get("seg_id")) == str(seg_id)
+                and (event_a is None or str(seg.get("event_a")) == str(event_a))
+                and (event_b is None or str(seg.get("event_b")) == str(event_b))
+            ]
         if not seg_matches:
-            raise HTTPException(status_code=404, detail=f"Segment {seg_id} not found in overlap summary")
-        if len(seg_matches) > 1 and (event_a is None or event_b is None):
+            detail = f"Flow row {flow_id} not found" if flow_id else f"Segment {seg_id} not found in overlap summary"
+            raise HTTPException(status_code=404, detail=detail)
+        if len(seg_matches) > 1 and not flow_id and (event_a is None or event_b is None):
             raise HTTPException(status_code=400, detail="event_a and event_b are required for this segment")
 
         segment = seg_matches[0]

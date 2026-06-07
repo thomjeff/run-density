@@ -78,6 +78,7 @@
                 <div class="card-actions course-planner-toolbar config-legs-table-toolbar">
                 <input type="file" id="segment-library-gpx-input" accept=".gpx,.json" multiple style="display: none;" />
                 <button type="button" id="btn-import-gpx" class="course-btn" title="Import GPX routes and optional leg export JSON (locations + metadata)">Import legs…</button>
+                <button type="button" id="btn-export-all-legs" class="course-btn" disabled title="Download all legs (GPX + metadata + locations per leg)">Export legs…</button>
                 <button type="button" id="btn-draw-leg-map" class="course-btn" disabled title="Coming soon: draw a new leg on the map">Draw leg on map</button>
                 </div>
             </div>
@@ -100,6 +101,7 @@
                                 <th>Width</th>
                                 <th>Schema</th>
                                 <th>Dir</th>
+                                <th>Flow</th>
                                 <th>Locs</th>
                                 <th class="course-map-action-cell">Actions</th>
                             </tr>

@@ -152,6 +152,16 @@ DEFAULT_SEGMENT_WIDTH_M = 5.0
 DEFAULT_FLOW_TYPE = "none"
 DEFAULT_ZONE = "green"
 
+# Flow types for legs / flow.csv (Issue #759; must match preflight flow.csv validation)
+FLOW_TYPE_CHOICES = [
+    {"value": "overtake", "label": "Overtake"},
+    {"value": "merge", "label": "Merge"},
+    {"value": "counterflow", "label": "Counterflow"},
+    {"value": "parallel", "label": "Parallel"},
+    {"value": "none", "label": "None"},
+]
+FLOW_TYPE_VALUES = [c["value"] for c in FLOW_TYPE_CHOICES]
+
 # Map density thresholds for zone determination (frontend)
 MAP_DENSITY_THRESHOLDS = {
     "green": 0.36,

@@ -48,7 +48,12 @@ def test_multi_event_segment_rows(manifest, legs_by_id):
     segments = build_course_segments_from_library(
         manifest, legs_by_id, event_ids=["full", "half", "10k"]
     )
-    assert len(segments) == len(manifest_legs(manifest))
+    recipe_ids = set()
+    for seq in (manifest.get("recipes") or {}).values():
+        recipe_ids.update(seq)
+    assert len(segments) == len(recipe_ids)
+    assert "09" not in {s["leg_id"] for s in segments}
+    assert "10" not in {s["leg_id"] for s in segments}
     assert segments[0]["leg_id"] == "01"
     s1 = next(s for s in segments if s["seg_id"] == "S1")
     assert set(s1["events"]) == {"full", "half", "10k"}
@@ -66,15 +71,26 @@ def test_10k_recipe_length(manifest, legs_by_id):
     assert bundle["recipe_lengths_km"]["10k"] == pytest.approx(10.02, abs=0.2)
 
 
+def test_build_course_segments_skips_unassigned_legs(manifest, legs_by_id):
+    segments = build_course_segments_from_library(
+        manifest, legs_by_id, event_ids=["full", "half", "10k"]
+    )
+    leg_ids = {s["leg_id"] for s in segments}
+    assert "09" not in leg_ids
+    assert "10" not in leg_ids
+    for seg in segments:
+        assert seg.get("events")
+
+
 def test_flow_pairs_on_shared_segment(manifest, legs_by_id):
     segments = build_course_segments_from_library(
         manifest, legs_by_id, event_ids=["full", "half", "10k"]
     )
     csv_text = build_flow_csv_from_segments(segments, ["full", "half", "10k"])
     lines = [ln for ln in csv_text.strip().splitlines() if ln]
-    assert lines[0].startswith("seg_id,")
+    assert lines[0].startswith("flow_id,seg_id,")
     assert any(",10k,half," in ln or ",half,10k," in ln for ln in lines)
-    assert any(ln.startswith("S1,") for ln in lines[1:])
+    assert any(",S1," in ln for ln in lines[1:])
 
 
 def test_export_bundle_writes_csv():
@@ -83,3 +99,33 @@ def test_export_bundle_writes_csv():
     bundle = export_library_to_course(LIBRARY_DIR, MANIFEST)
     assert "full,half,10k" in bundle["segments_csv"].splitlines()[0]
     assert "event_a" in bundle["flow_csv"]
+
+
+def test_build_course_segments_follows_recipe_order_not_manifest_order(manifest, legs_by_id):
+    """Leg ids after 15 in manifest must not push recipe-middle legs to the end."""
+    recipes = {
+        "full": ["01", "02", "03", "16", "04"],
+        "half": [],
+        "10k": [],
+    }
+    manifest = dict(manifest)
+    manifest["recipes"] = recipes
+    legs = dict(legs_by_id)
+    legs["03"] = {**legs["03"], "length_km": 5.57}
+    legs["16"] = {
+        **legs["03"],
+        "id": "16",
+        "length_km": 5.57,
+        "file": "16_stub.gpx",
+    }
+    segments = build_course_segments_from_library(
+        manifest, legs, event_ids=["full", "half", "10k"]
+    )
+    full_leg_order = [s["leg_id"] for s in segments if "full" in s.get("events", [])]
+    assert full_leg_order == ["01", "02", "03", "16", "04"]
+    leg16 = next(s for s in segments if s["leg_id"] == "16")
+    assert leg16["seg_id"] == "S4"
+    assert leg16["full_from_km"] == pytest.approx(9.87, abs=0.05)
+    assert leg16["full_to_km"] == pytest.approx(15.44, abs=0.05)
+    leg04 = next(s for s in segments if s["leg_id"] == "04")
+    assert leg04["full_from_km"] == pytest.approx(15.44, abs=0.05)
