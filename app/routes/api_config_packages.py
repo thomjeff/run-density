@@ -568,7 +568,7 @@ async def api_seed_reference_segment_library(
     request: Request,
     config_id: str,
 ) -> JSONResponse:
-    """Copy built-in PlotARoute reference library into the package (dev / bootstrap)."""
+    """Copy built-in reference leg library into the package (dev / bootstrap)."""
     require_auth(request)
     try:
         state = seed_reference_segment_library(config_id)
@@ -591,7 +591,7 @@ async def api_upload_segment_library_gpx(
         uploads = []
         for uf in files:
             data = await uf.read()
-            uploads.append((uf.filename or "chunk.gpx", data))
+            uploads.append((uf.filename or "leg.gpx", data))
         state = import_gpx_files_to_library(config_id, uploads)
         return JSONResponse(content={"ok": True, **state})
     except FileNotFoundError as e:

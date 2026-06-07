@@ -1,7 +1,7 @@
 # Segment library & event recipes (2027 planning)
 
 **Status:** Prototype in `app/core/course/segment_library.py`  
-**Reference data:** `cursor/plotaroute/` (PlotARoute chunks + combined `00_*.gpx`)  
+**Reference data:** `cursor/reference-legs/` (sample GPX legs + combined `00_*.gpx`)  
 **Epic:** #755 · Related: #767 (planner), #759 (flow review)
 
 ---
@@ -12,24 +12,24 @@ Use a **map/GPX workflow** to produce analysis-ready config **without hand-editi
 
 | Output | Role in analysis |
 |--------|------------------|
-| **segments.csv** | **Multi-event rows** — one row per *shared* course chunk; `full`/`half`/`10k` flags; per-event `*_from_km` / `*_to_km` for density |
-| **flow.csv** | **Event pairs** on shared chunks; uses *each event’s* km on that chunk (can differ on same `seg_id` in advanced cases) |
+| **segments.csv** | **Multi-event rows** — one row per *shared* course leg; `full`/`half`/`10k` flags; per-event `*_from_km` / `*_to_km` for density |
+| **flow.csv** | **Event pairs** on shared legs; uses *each event’s* km on that leg (can differ on same `seg_id` in advanced cases) |
 | **locations.csv** | Points with **per-event** flags and km; first/last runner times pool arrivals across all flagged events |
 | **`{event}.gpx`** | Per-event geometry for GPX projection and location distance |
 
 ---
 
-## Model (PlotARoute-aligned)
+## Model (leg library)
 
 ### 1. Segment library
 
-- Each file `01_start_friel.gpx`, `02_friel_10kturn.gpx`, … is one **chunk**.
-- Chunks stitch end-to-end (endpoint tolerance ~80 m).
-- Metadata in `cursor/plotaroute/manifest.yaml`: `seg_id`, `seg_label`, width, schema, direction.
+- Each file `01_start_friel.gpx`, `02_friel_10kturn.gpx`, … is one **leg**.
+- Legs stitch end-to-end (endpoint tolerance ~80 m).
+- Metadata in `cursor/reference-legs/manifest.yaml`: `seg_label`, width, schema, direction.
 
 ### 2. Event recipes
 
-Ordered list of chunk ids per event:
+Ordered list of leg ids per event:
 
 ```yaml
 recipes:
@@ -38,19 +38,19 @@ recipes:
   full: [01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12]
 ```
 
-- **Combine** = concatenate chunk GPX (same idea as PlotARoute “Combine Route”).
+- **Combine** = concatenate leg GPX in recipe order.
 - Verify `recipe_lengths_km` against `00_{event}.gpx` after edits.
 
 ### 3. Export `segments.csv` (multi-event — required)
 
-**One row per chunk**, not per event:
+**One row per leg**, not per event:
 
 | Column | Source |
 |--------|--------|
-| `seg_id`, `seg_label`, … | Chunk metadata |
-| `full`, `half`, `10k`, … | `y` if chunk appears in that event’s recipe |
+| `seg_id`, `seg_label`, … | Leg metadata |
+| `full`, `half`, `10k`, … | `y` if leg appears in that event’s recipe |
 | `full_from_km`, `full_to_km`, … | Cumulative distance along **that event’s recipe only** |
-| `0` / `n` | Events that skip the chunk |
+| `0` / `n` | Events that skip the leg |
 
 This matches **2026_final** (e.g. A1 used by Full+Half+10K with aligned early km; B1 Full+10K only with `half` = n).
 
@@ -109,10 +109,10 @@ Locations are **like segments + flow**: multi-event, analysis uses **all** eligi
 python3 -c "
 from pathlib import Path
 from app.core.course.segment_library import export_library_to_course, write_package_exports
-b = export_library_to_course(Path('cursor/plotaroute'))
+b = export_library_to_course(Path('cursor/reference-legs'))
 print('10k km', b['recipe_lengths_km'])
 print('flow rows', b['flow_csv'].count(chr(10)))
-write_package_exports(Path('/tmp/fm_plotaroute_test'), Path('cursor/plotaroute'))
+write_package_exports(Path('/tmp/fm_reference_legs_test'), Path('cursor/reference-legs'))
 "
 ```
 
@@ -122,7 +122,7 @@ pytest tests/unit/test_segment_library.py -q
 
 Files:
 
-- `cursor/plotaroute/manifest.yaml` — chunks + recipes (edit recipes here)
+- `cursor/reference-legs/manifest.yaml` — legs + recipes (edit recipes here)
 - `app/core/course/segment_library.py` — load, stitch, segments, flow, package write
 - `tests/unit/test_segment_library.py`
 
@@ -132,8 +132,8 @@ Files:
 
 | Tab | Purpose |
 |-----|---------|
-| **Library** | Import GPX chunks; endpoint validation |
-| **Recipes** | Order chunks per event; length vs `00_*` check |
+| **Library** | Import GPX legs; endpoint validation |
+| **Recipes** | Order legs per event; length vs `00_*` check |
 | **Segments & flow** | Preview tables; export |
 | **Locations** | Pins + auto km + event flags |
 | **Publish** | Write package + `analyze_ready` |
@@ -147,7 +147,7 @@ Deprecate single-line-only planner as **primary** 2027 path; keep for simple rac
 1. **Full recipe tuning** — manifest `full` recipe ~40–44 km; validate against `00_full.gpx` (41.76 km).
 2. **Flow exceptions** — `B1a`-style rows need override UI or manifest entries.
 3. **Package API** — `POST /api/config/packages/{id}/import-library` (not wired yet).
-4. **#767** — Align waypoint planner with chunk ids instead of vertex indices.
+4. **#767** — Align waypoint planner with leg ids instead of vertex indices.
 
 ---
 
