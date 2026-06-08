@@ -307,13 +307,15 @@ def export_library_to_course(
     library_dir: Path,
     manifest_path: Optional[Path] = None,
     *,
+    manifest: Optional[Dict[str, Any]] = None,
     event_ids: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
     """
     Load library + manifest and return export bundle (segments, flow csv, validation).
     """
-    manifest_path = manifest_path or (library_dir / "manifest.yaml")
-    manifest = load_manifest(manifest_path)
+    if manifest is None:
+        manifest_path = manifest_path or (library_dir / "manifest.yaml")
+        manifest = load_manifest(manifest_path)
     legs_by_id = load_leg_library(library_dir, manifest)
     event_ids = list(event_ids or COURSE_EVENT_IDS)
 

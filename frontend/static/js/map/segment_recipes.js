@@ -95,6 +95,51 @@
         return '/api/config/packages/' + encodeURIComponent(resolveConfigPackageId());
     }
 
+    function usesOrgLegLibrary() {
+        if (!libraryState) return true;
+        return libraryState.leg_source === 'org';
+    }
+
+    function legGeometryUrl(legId) {
+        if (usesOrgLegLibrary()) {
+            return '/api/org/legs/' + encodeURIComponent(legId) + '/geometry';
+        }
+        return apiBase() + '/segment-library/legs/' + encodeURIComponent(legId) + '/geometry';
+    }
+
+    function legDetailUrl(legId) {
+        if (usesOrgLegLibrary()) {
+            return '/api/org/legs/' + encodeURIComponent(legId);
+        }
+        return apiBase() + '/segment-library/legs/' + encodeURIComponent(legId);
+    }
+
+    function legUploadUrl() {
+        if (usesOrgLegLibrary()) {
+            return '/api/org/legs/upload';
+        }
+        return apiBase() + '/segment-library/upload';
+    }
+
+    function legCreateUrl() {
+        if (usesOrgLegLibrary()) {
+            return '/api/org/legs';
+        }
+        return apiBase() + '/segment-library/legs';
+    }
+
+    function getPackageResources() {
+        return (window.CONFIG_PACKAGE_RESOURCES || []).slice();
+    }
+
+    function afterLegLibraryMutation(data) {
+        if (usesOrgLegLibrary() || (data && data.leg_source === 'org' && !data.recipes)) {
+            return loadLibrary();
+        }
+        applyLibraryState(data);
+        return Promise.resolve();
+    }
+
     function packageEvents() {
         if (libraryState && libraryState.package_events && libraryState.package_events.length) {
             return libraryState.package_events.slice();
@@ -925,7 +970,7 @@
             return [ll[1], ll[0]];
         });
         setLegStatus('Saving route…');
-        fetch(apiBase() + '/segment-library/legs/' + encodeURIComponent(selectedLegId) + '/geometry', {
+        fetch(legGeometryUrl(selectedLegId), {
             method: 'PUT',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
@@ -1251,7 +1296,7 @@
         );
         var removedLocCount = priorLocations.length - filteredLocations.length;
         setLegStatus('Saving trimmed route…');
-        fetch(apiBase() + '/segment-library/legs/' + encodeURIComponent(selectedLegId) + '/geometry', {
+        fetch(legGeometryUrl(selectedLegId), {
             method: 'PUT',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
@@ -1601,6 +1646,72 @@
         input.style.boxSizing = 'border-box';
         content.appendChild(input);
 
+        var zoneLab = document.createElement('label');
+        zoneLab.textContent = 'Zone';
+        zoneLab.style.display = 'block';
+        zoneLab.style.marginBottom = '0.25rem';
+        content.appendChild(zoneLab);
+        var zoneInput = document.createElement('input');
+        zoneInput.type = 'text';
+        zoneInput.value = (opts.loc && opts.loc.zone) || '';
+        zoneInput.style.cssText = 'display:block;width:100%;margin-bottom:0.65rem;box-sizing:border-box;';
+        content.appendChild(zoneInput);
+
+        var bufferLab = document.createElement('label');
+        bufferLab.textContent = 'Buffer (min)';
+        bufferLab.style.display = 'block';
+        bufferLab.style.marginBottom = '0.25rem';
+        content.appendChild(bufferLab);
+        var bufferInput = document.createElement('input');
+        bufferInput.type = 'number';
+        bufferInput.min = '0';
+        bufferInput.value = (opts.loc && opts.loc.buffer != null) ? String(opts.loc.buffer) : '10';
+        bufferInput.style.cssText = 'display:block;width:100%;margin-bottom:0.65rem;box-sizing:border-box;';
+        content.appendChild(bufferInput);
+
+        var notesLab = document.createElement('label');
+        notesLab.textContent = 'Notes';
+        notesLab.style.display = 'block';
+        notesLab.style.marginBottom = '0.25rem';
+        content.appendChild(notesLab);
+        var notesInput = document.createElement('textarea');
+        notesInput.rows = 2;
+        notesInput.value = (opts.loc && opts.loc.notes) || '';
+        notesInput.style.cssText = 'display:block;width:100%;margin-bottom:0.65rem;box-sizing:border-box;resize:vertical;';
+        content.appendChild(notesInput);
+
+        var resourceInputs = {};
+        getPackageResources().forEach(function (res) {
+            var rLab = document.createElement('label');
+            rLab.textContent = (res.label || res.code) + ' count';
+            rLab.style.display = 'block';
+            rLab.style.marginBottom = '0.25rem';
+            content.appendChild(rLab);
+            var rInp = document.createElement('input');
+            rInp.type = 'number';
+            rInp.min = '0';
+            var existing = 0;
+            if (opts.loc && opts.loc.resources && opts.loc.resources[res.code] != null) {
+                existing = parseInt(opts.loc.resources[res.code], 10) || 0;
+            }
+            rInp.value = String(existing);
+            rInp.style.cssText = 'display:block;width:100%;margin-bottom:0.65rem;box-sizing:border-box;';
+            resourceInputs[res.code] = rInp;
+            content.appendChild(rInp);
+        });
+
+        function applyOpsFields(target) {
+            target.zone = zoneInput.value.trim();
+            var buf = parseInt(bufferInput.value, 10);
+            target.buffer = isNaN(buf) ? 10 : Math.max(0, buf);
+            target.notes = notesInput.value.trim();
+            target.resources = {};
+            Object.keys(resourceInputs).forEach(function (code) {
+                var n = parseInt(resourceInputs[code].value, 10);
+                target.resources[code] = isNaN(n) || n < 0 ? 0 : n;
+            });
+        }
+
         var btnRow = document.createElement('div');
         btnRow.style.display = 'flex';
         btnRow.style.flexWrap = 'wrap';
@@ -1661,13 +1772,15 @@
                     placeLat = snapped.lat;
                     placeLon = snapped.lon;
                 }
-                pendingLegLocations.push({
+                var newLoc = {
                     loc_label: locLabel,
                     loc_type: locType,
                     lat: Math.round(placeLat * 1e6) / 1e6,
                     lon: Math.round(placeLon * 1e6) / 1e6,
                     placement: legLocationPlacement(locType)
-                });
+                };
+                applyOpsFields(newLoc);
+                pendingLegLocations.push(newLoc);
                 map.closePopup();
                 redrawLegLocationMarkers(getSelectedLeg());
                 setLegStatus(
@@ -1682,11 +1795,13 @@
             if (mode === 'edit-pending') {
                 var pIdx = opts.pendingIndex;
                 if (pIdx == null || pIdx < 0 || pIdx >= pendingLegLocations.length) return;
-                pendingLegLocations[pIdx] = applyLegLocationLabelType(
+                var pendingLoc = applyLegLocationLabelType(
                     pendingLegLocations[pIdx],
                     locLabel,
                     locType
                 );
+                applyOpsFields(pendingLoc);
+                pendingLegLocations[pIdx] = pendingLoc;
                 closeAndRedraw();
                 setLegStatus('Unsaved location updated.');
                 return;
@@ -1698,11 +1813,13 @@
                 if (!leg || locIndex == null || !selectedLegId) return;
                 var locations = (leg.locations || []).slice();
                 if (locIndex < 0 || locIndex >= locations.length) return;
-                locations[locIndex] = applyLegLocationLabelType(
+                var savedLoc = applyLegLocationLabelType(
                     locations[locIndex],
                     locLabel,
                     locType
                 );
+                applyOpsFields(savedLoc);
+                locations[locIndex] = savedLoc;
                 setLegStatus('Saving location…');
                 saveLegLocations(selectedLegId, locations)
                     .then(function () {
@@ -1856,7 +1973,7 @@
                 setLegStatus(
                     'Locations saved on leg ' +
                         selectedLegId +
-                        '. Open the Course tab to assign resources and segment details.'
+                        '. Apply recipes to sync locations (with resources) to the Course tab.'
                 );
             });
     }
@@ -1912,7 +2029,7 @@
     }
 
     function saveLegEndpoints(legId, startLabel, endLabel) {
-        return fetch(apiBase() + '/segment-library/legs/' + encodeURIComponent(legId), {
+        return fetch(legDetailUrl(legId), {
             method: 'PUT',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
@@ -1921,7 +2038,7 @@
             .then(function (r) { return r.json().then(function (d) { return { res: r, data: d }; }); })
             .then(function (payload) {
                 if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
-                applyLibraryState(payload.data);
+                return afterLegLibraryMutation(payload.data);
             });
     }
 
@@ -1940,7 +2057,7 @@
             var next = window.prompt('Place name:', label || '');
             if (next == null) return;
             var fields = role === 'start' ? { start_label: next } : { end_label: next };
-            fetch(apiBase() + '/segment-library/legs/' + encodeURIComponent(legId), {
+            fetch(legDetailUrl(legId), {
                 method: 'PUT',
                 credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
@@ -1949,7 +2066,7 @@
                 .then(function (r) { return r.json().then(function (d) { return { res: r, data: d }; }); })
                 .then(function (payload) {
                     if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
-                    applyLibraryState(payload.data);
+                    return afterLegLibraryMutation(payload.data);
                 })
                 .catch(function (err) { setLegStatus(err.message || String(err), true); });
         });
@@ -1981,7 +2098,7 @@
         var requestId = legGeometryRequestId;
         clearLegMapLayers();
         updateLegActionButtons();
-        fetch(apiBase() + '/segment-library/legs/' + encodeURIComponent(legId) + '/geometry', { credentials: 'same-origin' })
+        fetch(legGeometryUrl(legId), { credentials: 'same-origin' })
             .then(function (r) { return r.json().then(function (d) { return { res: r, data: d }; }); })
             .then(function (payload) {
                 if (requestId !== legGeometryRequestId || selectedLegId !== legId) {
@@ -2112,21 +2229,6 @@
         refreshOrgLibraryModal();
     }
 
-    function refreshOrgLibraryPublishSelect() {
-        var sel = document.getElementById('org-leg-publish-select');
-        if (!sel) return;
-        var legs = (libraryState && libraryState.legs) || [];
-        sel.innerHTML = '';
-        legs.forEach(function (leg) {
-            var opt = document.createElement('option');
-            opt.value = leg.id;
-            opt.textContent = leg.id + ' — ' + ((leg.leg_label || '').trim() || 'Leg');
-            sel.appendChild(opt);
-        });
-        var pubBtn = document.getElementById('btn-org-leg-publish');
-        if (pubBtn) pubBtn.disabled = !legs.length;
-    }
-
     function renderOrgLibraryTable(orgLegs) {
         var empty = document.getElementById('org-leg-library-empty');
         var wrap = document.getElementById('org-leg-library-table-wrap');
@@ -2153,22 +2255,11 @@
                 td.textContent = text;
                 tr.appendChild(td);
             });
-            var actionTd = document.createElement('td');
-            var btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'course-btn';
-            btn.textContent = 'Add to package';
-            btn.addEventListener('click', function () {
-                importOrgLegToPackage(orgId);
-            });
-            actionTd.appendChild(btn);
-            tr.appendChild(actionTd);
             tbody.appendChild(tr);
         });
     }
 
     function refreshOrgLibraryModal() {
-        refreshOrgLibraryPublishSelect();
         setOrgLibraryStatus('Loading org library…');
         fetch('/api/org/legs', { credentials: 'same-origin' })
             .then(function (r) {
@@ -2180,63 +2271,6 @@
             .then(function (data) {
                 renderOrgLibraryTable(data.legs || []);
                 setOrgLibraryStatus('');
-            })
-            .catch(function (err) {
-                setOrgLibraryStatus(err.message || String(err), true);
-            });
-    }
-
-    function importOrgLegToPackage(orgLegId) {
-        setOrgLibraryStatus('Adding org leg ' + orgLegId + '…');
-        fetch(
-            apiBase() + '/segment-library/import-org-leg/' + encodeURIComponent(orgLegId),
-            { method: 'POST', credentials: 'same-origin' }
-        )
-            .then(function (r) {
-                return r.json().then(function (d) {
-                    if (!r.ok) throw new Error(formatApiError(r, d));
-                    return d;
-                });
-            })
-            .then(function (data) {
-                libraryState = data;
-                renderLegsTable();
-                renderRecipeTable();
-                setOrgLibraryStatus(
-                    'Added org leg ' + orgLegId + ' as package leg ' +
-                        (data.imported_package_leg_id || '') + '.'
-                );
-                setLegStatus('Imported org leg ' + orgLegId + '.');
-            })
-            .catch(function (err) {
-                setOrgLibraryStatus(err.message || String(err), true);
-            });
-    }
-
-    function publishLegToOrgLibrary() {
-        var sel = document.getElementById('org-leg-publish-select');
-        var legId = sel && sel.value;
-        if (!legId) {
-            setOrgLibraryStatus('Select a package leg to publish.', true);
-            return;
-        }
-        setOrgLibraryStatus('Publishing leg ' + legId + '…');
-        fetch(
-            apiBase() + '/segment-library/legs/' + encodeURIComponent(legId) + '/publish-to-org',
-            { method: 'POST', credentials: 'same-origin' }
-        )
-            .then(function (r) {
-                return r.json().then(function (d) {
-                    if (!r.ok) throw new Error(formatApiError(r, d));
-                    return d;
-                });
-            })
-            .then(function (data) {
-                setOrgLibraryStatus(
-                    'Published as org leg ' + (data.org_leg_id || '') +
-                        ' (' + (data.leg_label || '') + ').'
-                );
-                refreshOrgLibraryModal();
             })
             .catch(function (err) {
                 setOrgLibraryStatus(err.message || String(err), true);
@@ -2279,7 +2313,7 @@
     }
 
     function saveLegLocations(legId, locations) {
-        return fetch(apiBase() + '/segment-library/legs/' + encodeURIComponent(legId), {
+        return fetch(legDetailUrl(legId), {
             method: 'PUT',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
@@ -2288,7 +2322,7 @@
             .then(function (r) { return r.json().then(function (d) { return { res: r, data: d }; }); })
             .then(function (payload) {
                 if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
-                applyLibraryState(payload.data);
+                return afterLegLibraryMutation(payload.data);
             });
     }
 
@@ -2732,7 +2766,7 @@
 
     function deleteLeg(legId) {
         setLegStatus('Deleting leg…');
-        fetch(apiBase() + '/segment-library/legs/' + encodeURIComponent(legId), {
+        fetch(legDetailUrl(legId), {
             method: 'DELETE',
             credentials: 'same-origin'
         })
@@ -2740,9 +2774,9 @@
             .then(function (payload) {
                 if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
                 if (selectedLegId === legId) clearLegMap();
-                applyLibraryState(payload.data);
-                setLegStatus('Leg deleted.');
+                return afterLegLibraryMutation(payload.data);
             })
+            .then(function () { setLegStatus('Leg deleted.'); })
             .catch(function (err) { setLegStatus(err.message || String(err), true); });
     }
 
@@ -2978,19 +3012,21 @@
             fd.append('flow_type', fields.flow_type);
             fd.append('description', fields.description);
             setLegStatus('Saving leg…');
-            fetch(apiBase() + '/segment-library/legs', { method: 'POST', credentials: 'same-origin', body: fd })
+            fetch(legCreateUrl(), { method: 'POST', credentials: 'same-origin', body: fd })
                 .then(function (r) { return r.json().then(function (d) { return { res: r, data: d }; }); })
                 .then(function (payload) {
                     if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
-                    applyLibraryState(payload.data);
+                    return afterLegLibraryMutation(payload.data);
+                })
+                .then(function () {
                     closeLegEditor();
-                    setLegStatus('Leg added. Select it in the table to view on the map.');
+                    setLegStatus('Leg added to the organization library. Select it in the table to view on the map.');
                 })
                 .catch(function (err) { setLegStatus(err.message || String(err), true); });
             return;
         }
         setLegStatus('Saving leg…');
-        fetch(apiBase() + '/segment-library/legs/' + encodeURIComponent(legEditorLegId), {
+        fetch(legDetailUrl(legEditorLegId), {
             method: 'PUT',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
@@ -2999,7 +3035,9 @@
             .then(function (r) { return r.json().then(function (d) { return { res: r, data: d }; }); })
             .then(function (payload) {
                 if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
-                applyLibraryState(payload.data);
+                return afterLegLibraryMutation(payload.data);
+            })
+            .then(function () {
                 closeLegEditor();
                 setLegStatus('Leg saved.');
             })
@@ -3010,7 +3048,10 @@
         var fd = new FormData();
         fd.append('file', file);
         setLegStatus('Updating GPX…');
-        fetch(apiBase() + '/segment-library/legs/' + encodeURIComponent(legId) + '/gpx', {
+        var gpxUrl = usesOrgLegLibrary()
+            ? '/api/org/legs/' + encodeURIComponent(legId) + '/gpx'
+            : apiBase() + '/segment-library/legs/' + encodeURIComponent(legId) + '/gpx';
+        fetch(gpxUrl, {
             method: 'PUT',
             credentials: 'same-origin',
             body: fd
@@ -3018,9 +3059,9 @@
             .then(function (r) { return r.json().then(function (d) { return { res: r, data: d }; }); })
             .then(function (payload) {
                 if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
-                applyLibraryState(payload.data);
-                setLegStatus('GPX updated.');
+                return afterLegLibraryMutation(payload.data);
             })
+            .then(function () { setLegStatus('GPX updated.'); })
             .catch(function (err) { setLegStatus(err.message || String(err), true); });
     }
 
@@ -3034,16 +3075,20 @@
             if (n.endsWith('.json')) hasJson = true;
         }
         setLegStatus('Importing leg file' + (files.length > 1 ? 's' : '') + '…');
-        fetch(apiBase() + '/segment-library/upload', { method: 'POST', credentials: 'same-origin', body: fd })
+        fetch(legUploadUrl(), { method: 'POST', credentials: 'same-origin', body: fd })
             .then(function (r) { return r.json().then(function (d) { return { res: r, data: d }; }); })
             .then(function (payload) {
                 if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
-                applyLibraryState(payload.data);
-                var count = (payload.data.legs || []).length;
+                return afterLegLibraryMutation(payload.data).then(function () {
+                    return payload.data;
+                });
+            })
+            .then(function (data) {
+                var count = (data.legs || []).length;
                 var msg =
                     'Imported ' +
                     count +
-                    ' leg(s). Select a leg to view on the map.';
+                    ' leg(s) to the organization library. Select a leg to view on the map.';
                 if (!hasJson) {
                     msg +=
                         ' Tip: include the .json from a leg export zip to restore locations and metadata.';
@@ -3118,8 +3163,6 @@
         if (orgLibDone) orgLibDone.addEventListener('click', closeOrgLibraryModal);
         var orgLibBackdrop = document.querySelector('#org-leg-library-modal .course-location-modal-backdrop');
         if (orgLibBackdrop) orgLibBackdrop.addEventListener('click', closeOrgLibraryModal);
-        var orgPublishBtn = document.getElementById('btn-org-leg-publish');
-        if (orgPublishBtn) orgPublishBtn.addEventListener('click', publishLegToOrgLibrary);
         if (bulkInput) {
             bulkInput.addEventListener('change', function () {
                 uploadGpxBulk(bulkInput.files);

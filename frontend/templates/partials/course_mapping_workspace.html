@@ -74,19 +74,19 @@
         </section>
         <section class="content-card course-derived-section" id="course-legs-card">
             <div class="card-header">
-                <h4 class="card-title">Course legs</h4>
+                <h4 class="card-title">Organization leg library</h4>
                 <div class="card-actions course-planner-toolbar config-legs-table-toolbar">
                 <input type="file" id="segment-library-gpx-input" accept=".gpx,.json" multiple style="display: none;" />
-                <button type="button" id="btn-import-gpx" class="course-btn" title="Import GPX routes and optional leg export JSON (locations + metadata)">Import legs…</button>
-                <button type="button" id="btn-org-leg-library" class="course-btn" title="Add legs from your organization library or publish legs for reuse">Org library…</button>
+                <button type="button" id="btn-import-gpx" class="course-btn" title="Import third-party GPX (+ optional leg export JSON) into the organization leg library">Import legs…</button>
+                <button type="button" id="btn-org-leg-library" class="course-btn" title="View legs stored outside this package (runflow/org/legs)">Leg library…</button>
                 <button type="button" id="btn-export-all-legs" class="course-btn" disabled title="Download all legs (GPX + metadata + locations per leg)">Export legs…</button>
                 <button type="button" id="btn-draw-leg-map" class="course-btn" disabled title="Coming soon: draw a new leg on the map">Draw leg on map</button>
                 </div>
             </div>
             <p class="card-help course-derived-empty">
-                <strong>Import legs…</strong> uploads GPX (+ optional JSON). <strong>Org library…</strong> reuses legs shared across races.
-                Select a leg in the table (<strong>Edit</strong> for details). After <strong>Apply recipes</strong>, locations sync to the
-                <button type="button" id="btn-go-to-recipes" class="course-link-btn">Course</button> tab — <strong>ID</strong> stays stable; <strong>Key</strong> is the internal anchor.
+                Legs live in the <strong>organization library</strong> (outside this package). <strong>Import legs…</strong> adds GPX from a third-party tool.
+                Place locations (with resources) on each leg, then assign legs to events via <strong>Event recipes</strong>.
+                <strong>Apply recipes</strong> builds the course on the <button type="button" id="btn-go-to-recipes" class="course-link-btn">Course</button> tab.
             </p>
             <p id="course-legs-status" class="course-derived-empty" style="display: none;"></p>
             <div id="course-legs-table-wrap" class="config-legs-table-region" style="display: none;">
@@ -345,12 +345,12 @@
         </div>
         <div class="course-location-modal-body">
             <p class="course-derived-empty" style="margin: 0 0 0.75rem 0;">
-                Shared legs live outside this package. <strong>Add to package</strong> copies a leg here with a new package ID.
-                <strong>Publish to org</strong> saves the selected package leg for other races.
+                Legs are stored at <code>runflow/org/legs/</code> and shared across all config packages.
+                Use <strong>Import legs…</strong> on the Legs tab to add GPX files here.
             </p>
             <p id="org-leg-library-status" class="course-derived-empty" style="display: none;"></p>
             <h5 class="course-derived-heading" style="margin: 0.5rem 0;">Org legs</h5>
-            <div id="org-leg-library-empty" class="card-help course-derived-empty">No org legs yet. Publish a leg from this package below.</div>
+            <div id="org-leg-library-empty" class="card-help course-derived-empty">No org legs yet. Use <strong>Import legs…</strong> on the Legs tab to add GPX files.</div>
             <div id="org-leg-library-table-wrap" class="scrollable-table-container course-derived-table-scroll" style="display: none; max-height: 220px;">
                 <table class="table-sticky-header course-planner-table" style="width: 100%; font-size: 0.875rem;">
                     <thead>
@@ -359,17 +359,10 @@
                             <th>Label</th>
                             <th>km</th>
                             <th>Locs</th>
-                            <th></th>
                         </tr>
                     </thead>
                     <tbody id="org-leg-library-tbody"></tbody>
                 </table>
-            </div>
-            <h5 class="course-derived-heading" style="margin: 1rem 0 0.5rem 0;">Publish from this package</h5>
-            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
-                <label for="org-leg-publish-select" style="font-size: 0.875rem;">Package leg</label>
-                <select id="org-leg-publish-select" class="course-input" style="min-width: 12rem;"></select>
-                <button type="button" id="btn-org-leg-publish" class="course-btn">Publish to org library</button>
             </div>
         </div>
         <div class="course-location-modal-footer">

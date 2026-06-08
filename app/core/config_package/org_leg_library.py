@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Sequence
 
 from app.core.config_package.legs import allocate_next_leg_id, leg_row_from_entry
 from app.core.config_package.segment_recipes import (
@@ -223,4 +223,260 @@ def publish_package_leg_to_org_library(config_id: str, leg_id: str) -> Dict[str,
         "file": dest_name,
         "leg_label": entry.get("seg_label"),
         "location_count": len(entry.get("locations") or []),
+    }
+
+
+def create_org_leg(
+    gpx_bytes: bytes,
+    filename: str,
+    *,
+    leg_label: str = "",
+    start_label: str = "",
+    end_label: str = "",
+    width_m: float = 3,
+    schema: str = "on_course_open",
+    direction: str = "uni",
+    flow_type: str = "none",
+    flow_notes: str = "",
+    description: str = "",
+    locations: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Create a new leg in the org library from GPX."""
+    from app.utils.constants import DEFAULT_FLOW_TYPE
+    from app.core.config_package.legs import (
+        _LEG_ID_RE,
+        _default_endpoint_labels,
+        _find_leg_index,
+        _normalize_flow_notes,
+        _normalize_flow_type,
+        _normalize_leg_description,
+        _normalize_locations,
+        _normalize_segment_direction,
+        _normalize_segment_schema,
+        _slugify,
+        _validate_leg_entry,
+    )
+
+    org_dir = get_org_legs_dir()
+    org_dir.mkdir(parents=True, exist_ok=True)
+    manifest = load_org_leg_manifest()
+    legs: List[Dict[str, Any]] = list(manifest_legs(manifest))
+    new_id = allocate_next_leg_id(legs)
+    if not _LEG_ID_RE.match(new_id):
+        raise ValueError("leg_id must be two or three digits (e.g. 01, 12)")
+    if _find_leg_index(legs, new_id) >= 0:
+        raise ValueError(f"Leg id already exists: {new_id}")
+
+    label = (leg_label or Path(filename).stem.replace("_", " ")).strip() or f"Leg {new_id}"
+    safe_name = f"{new_id}_{_slugify(label)}.gpx"
+    dest = org_dir / safe_name
+    dest.write_bytes(gpx_bytes)
+    parsed = parse_leg_gpx(dest)
+
+    s_label = start_label.strip() or _default_endpoint_labels(label, parsed)[0]
+    e_label = end_label.strip() or _default_endpoint_labels(label, parsed)[1]
+    entry = {
+        "id": new_id,
+        "file": safe_name,
+        "seg_label": label,
+        "start_label": s_label,
+        "end_label": e_label,
+        "width_m": width_m,
+        "schema": _normalize_segment_schema(schema),
+        "direction": _normalize_segment_direction(direction),
+        "flow_type": _normalize_flow_type(flow_type or DEFAULT_FLOW_TYPE),
+        "flow_notes": _normalize_flow_notes(flow_notes),
+        "description": _normalize_leg_description(
+            (description or "").strip() or _normalize_flow_notes(flow_notes)
+        ),
+        "locations": _normalize_locations(locations),
+    }
+    _validate_leg_entry(entry)
+    legs.append(entry)
+    set_manifest_legs(manifest, legs)
+    save_org_leg_manifest(manifest)
+    return get_org_leg_library_state()
+
+
+def get_org_leg_library_state() -> Dict[str, Any]:
+    """API state for org leg library management UI."""
+    legs = list_org_legs()
+    return {
+        "leg_source": "org",
+        "library_dir": str(get_org_legs_dir()),
+        "has_library": bool(legs),
+        "legs": legs,
+    }
+
+
+def import_gpx_files_to_org_library(uploads: Sequence[tuple]) -> Dict[str, Any]:
+    """Import GPX (+ optional leg export JSON) into the org leg library."""
+    from app.core.config_package.legs import (
+        apply_leg_exports_to_manifest,
+        leg_id_from_export_filename,
+        parse_leg_export_json_bytes,
+    )
+    from app.core.config_package.segment_recipes import sync_manifest_legs_from_gpx
+
+    org_dir = get_org_legs_dir()
+    org_dir.mkdir(parents=True, exist_ok=True)
+    saved_gpx: List[str] = []
+    exports_by_leg_id: Dict[str, Dict[str, Any]] = {}
+    exports_by_gpx_file: Dict[str, Dict[str, Any]] = {}
+    for name, data in uploads:
+        safe = Path(name).name
+        lower = safe.lower()
+        if lower.endswith(".json"):
+            leg_export = parse_leg_export_json_bytes(data)
+            if not leg_export:
+                continue
+            leg_id = (
+                str(leg_export.get("id") or "").strip()
+                or leg_id_from_export_filename(safe)
+                or ""
+            )
+            if leg_id:
+                exports_by_leg_id[leg_id] = leg_export
+            gpx_file = str(leg_export.get("gpx_file") or "").strip()
+            if gpx_file:
+                exports_by_gpx_file[gpx_file] = leg_export
+            (org_dir / safe).write_bytes(data)
+            continue
+        if not lower.endswith(".gpx"):
+            continue
+        (org_dir / safe).write_bytes(data)
+        saved_gpx.append(safe)
+    if not saved_gpx:
+        raise ValueError("No .gpx files uploaded")
+    manifest = load_org_leg_manifest()
+    manifest = sync_manifest_legs_from_gpx(org_dir, manifest)
+    manifest = apply_leg_exports_to_manifest(
+        manifest, exports_by_leg_id, exports_by_gpx_file=exports_by_gpx_file
+    )
+    save_org_leg_manifest(manifest)
+    return get_org_leg_library_state()
+
+
+def update_org_leg(
+    leg_id: str,
+    fields: Dict[str, Any],
+    *,
+    gpx_bytes: Optional[bytes] = None,
+    gpx_filename: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Update org leg metadata, locations, and optional GPX."""
+    from app.core.config_package.legs import (
+        _default_endpoint_labels,
+        _find_leg_index,
+        _normalize_flow_notes,
+        _normalize_flow_type,
+        _normalize_leg_description,
+        _normalize_locations,
+        _normalize_segment_direction,
+        _normalize_segment_schema,
+        _slugify,
+    )
+
+    leg_id = str(leg_id).strip()
+    org_dir = get_org_legs_dir()
+    manifest = load_org_leg_manifest()
+    legs: List[Dict[str, Any]] = list(manifest_legs(manifest))
+    idx = _find_leg_index(legs, leg_id)
+    if idx < 0:
+        raise ValueError(f"Leg not found: {leg_id}")
+
+    entry = dict(legs[idx])
+    if "leg_label" in fields or "seg_label" in fields:
+        entry["seg_label"] = str(
+            fields.get("leg_label") or fields.get("seg_label") or entry.get("seg_label") or ""
+        ).strip()
+    for key in ("start_label", "end_label", "width_m"):
+        if key in fields:
+            entry[key] = fields[key]
+    if "description" in fields:
+        entry["description"] = _normalize_leg_description(fields.get("description"))
+    if "schema" in fields:
+        entry["schema"] = _normalize_segment_schema(fields["schema"])
+    if "direction" in fields:
+        entry["direction"] = _normalize_segment_direction(fields["direction"])
+    if "flow_type" in fields:
+        entry["flow_type"] = _normalize_flow_type(fields["flow_type"])
+    if "flow_notes" in fields:
+        entry["flow_notes"] = _normalize_flow_notes(fields.get("flow_notes"))
+    if "locations" in fields:
+        entry["locations"] = _normalize_locations(fields.get("locations"))
+
+    if gpx_bytes:
+        if gpx_filename:
+            file_name = Path(str(gpx_filename)).name
+        else:
+            file_name = entry.get("file") or f"{leg_id}_{_slugify(entry.get('seg_label', ''))}.gpx"
+        dest = org_dir / Path(file_name).name
+        dest.write_bytes(gpx_bytes)
+        entry["file"] = dest.name
+        parsed = parse_leg_gpx(dest)
+        if not entry.get("start_label"):
+            entry["start_label"] = _default_endpoint_labels(entry.get("seg_label", ""), parsed)[0]
+        if not entry.get("end_label"):
+            entry["end_label"] = _default_endpoint_labels(entry.get("seg_label", ""), parsed)[1]
+
+    legs[idx] = entry
+    set_manifest_legs(manifest, legs)
+    save_org_leg_manifest(manifest)
+    return get_org_leg_library_state()
+
+
+def delete_org_leg(leg_id: str) -> Dict[str, Any]:
+    """Remove one leg from the org library."""
+    from app.core.config_package.legs import _find_leg_index
+
+    leg_id = str(leg_id).strip()
+    org_dir = get_org_legs_dir()
+    manifest = load_org_leg_manifest()
+    legs: List[Dict[str, Any]] = list(manifest_legs(manifest))
+    idx = _find_leg_index(legs, leg_id)
+    if idx < 0:
+        raise ValueError(f"Leg not found: {leg_id}")
+    entry = legs.pop(idx)
+    file_name = entry.get("file")
+    if file_name:
+        gpx_path = org_dir / str(file_name)
+        if gpx_path.is_file():
+            gpx_path.unlink()
+    set_manifest_legs(manifest, legs)
+    save_org_leg_manifest(manifest)
+    return get_org_leg_library_state()
+
+
+def get_org_leg_line_geojson(leg_id: str) -> Dict[str, Any]:
+    """GeoJSON LineString for one org leg."""
+    leg_id = str(leg_id).strip()
+    org_dir = get_org_legs_dir()
+    manifest = load_org_leg_manifest()
+    legs: List[Dict[str, Any]] = list(manifest_legs(manifest))
+    from app.core.config_package.legs import _find_leg_index
+
+    idx = _find_leg_index(legs, leg_id)
+    if idx < 0:
+        raise ValueError(f"Leg not found: {leg_id}")
+    entry = legs[idx]
+    file_name = entry.get("file")
+    if not file_name:
+        raise ValueError(f"Leg {leg_id} has no GPX file")
+    gpx_path = org_dir / str(file_name)
+    if not gpx_path.is_file():
+        raise FileNotFoundError(f"GPX not found: {file_name}")
+    parsed = parse_leg_gpx(gpx_path)
+    coords = parsed.get("coordinates") or []
+    if len(coords) < 2:
+        raise ValueError(f"Leg {leg_id} GPX has insufficient points")
+    return {
+        "type": "Feature",
+        "properties": {
+            "leg_id": leg_id,
+            "leg_label": (entry.get("seg_label") or "").strip(),
+            "start_label": (entry.get("start_label") or "").strip(),
+            "end_label": (entry.get("end_label") or "").strip(),
+        },
+        "geometry": {"type": "LineString", "coordinates": coords},
     }

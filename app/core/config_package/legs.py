@@ -973,8 +973,14 @@ def merge_leg_locations_into_course(config_id: str) -> None:
   notes, etc.) matched by ``leg_loc_key``. Sets ``seg_id`` from the combined
     segment whose ``leg_id`` matches the leg.
     """
+    from app.core.config_package.leg_library_resolver import (
+        recipe_leg_ids_from_package,
+        resolve_leg_library,
+    )
+
     cid = validate_config_id(config_id)
-    manifest = load_package_segment_manifest(cid)
+    _lib_dir, manifest, _leg_source, _pkg_manifest = resolve_leg_library(cid)
+    recipe_ids = recipe_leg_ids_from_package(cid)
     course = load_config_course(cid)
     segments = [
         s for s in (course.get("segments") or []) if isinstance(s, dict)
@@ -1013,6 +1019,8 @@ def merge_leg_locations_into_course(config_id: str) -> None:
             continue
         leg_id = str(entry.get("id", "")).strip()
         if not leg_id:
+            continue
+        if recipe_ids and leg_id not in recipe_ids:
             continue
         seg = _segment_for_leg(segments, leg_id)
         seg_id = str(seg.get("seg_id", "")).strip() if seg else ""

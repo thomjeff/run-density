@@ -533,6 +533,13 @@ def create_config_package(
         }
     )
 
+    from app.core.config_package.segment_recipes import (
+        _default_manifest,
+        save_package_segment_manifest,
+    )
+
+    save_package_segment_manifest(config_id, _default_manifest(clean_events))
+
     logger.info("Created config package %s (%s)", config_id, clean_label)
     return {
         "config_id": config_id,
