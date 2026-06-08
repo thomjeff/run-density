@@ -78,14 +78,15 @@
                 <div class="card-actions course-planner-toolbar config-legs-table-toolbar">
                 <input type="file" id="segment-library-gpx-input" accept=".gpx,.json" multiple style="display: none;" />
                 <button type="button" id="btn-import-gpx" class="course-btn" title="Import GPX routes and optional leg export JSON (locations + metadata)">Import legs…</button>
+                <button type="button" id="btn-org-leg-library" class="course-btn" title="Add legs from your organization library or publish legs for reuse">Org library…</button>
                 <button type="button" id="btn-export-all-legs" class="course-btn" disabled title="Download all legs (GPX + metadata + locations per leg)">Export legs…</button>
                 <button type="button" id="btn-draw-leg-map" class="course-btn" disabled title="Coming soon: draw a new leg on the map">Draw leg on map</button>
                 </div>
             </div>
             <p class="card-help course-derived-empty">
-                Import GPX files, then select a leg in the table (use <strong>Edit</strong> on that row for leg details).
-                Set <strong>Proxy loc ID</strong> on the
-                <button type="button" id="btn-go-to-recipes" class="course-link-btn">Course</button> tab.
+                <strong>Import legs…</strong> uploads GPX (+ optional JSON). <strong>Org library…</strong> reuses legs shared across races.
+                Select a leg in the table (<strong>Edit</strong> for details). After <strong>Apply recipes</strong>, locations sync to the
+                <button type="button" id="btn-go-to-recipes" class="course-link-btn">Course</button> tab — <strong>ID</strong> stays stable; <strong>Key</strong> is the internal anchor.
             </p>
             <p id="course-legs-status" class="course-derived-empty" style="display: none;"></p>
             <div id="course-legs-table-wrap" class="config-legs-table-region" style="display: none;">
@@ -158,12 +159,12 @@
                     <button type="button" id="btn-manage-resources" class="course-map-action-text-btn" title="Define schedulable resources">Manage resources</button>
                 </div>
             </div>
-            <p id="locations-empty" class="card-help course-derived-empty">Locations appear here after you save event recipes. Placements from the Legs tab map sync when you open this tab. Edit resources, segment ID, and remove locations here.</p>
+            <p id="locations-empty" class="card-help course-derived-empty">Locations appear here after you apply event recipes. Leg placements sync from the Legs tab. <strong>ID</strong> is the crew-facing <code>loc_id</code> in exports; <strong>Key</strong> is a stable internal reference that keeps the same ID when you re-apply recipes.</p>
             <div id="locations-table-wrap" style="display: none;">
                 <div class="scrollable-table-container course-derived-table-scroll">
                     <table id="locations-table" class="table-sticky-header" style="width: 100%; font-size: 0.875rem;">
                         <thead>
-                            <tr id="locations-thead-row"><th>ID</th><th>Type</th><th>Label</th><th>Zone</th><th></th></tr>
+                            <tr id="locations-thead-row"><th>ID</th><th title="Stable authoring key (internal)">Key</th><th>Type</th><th>Label</th><th>Zone</th><th></th></tr>
                         </thead>
                         <tbody id="locations-tbody"></tbody>
                     </table>
@@ -331,6 +332,48 @@
         <div class="course-location-modal-footer">
             <button type="button" id="resources-editor-save" class="course-btn primary">Save resources</button>
             <button type="button" id="resources-editor-cancel" class="course-btn">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div id="org-leg-library-modal" class="course-location-modal" hidden aria-hidden="true">
+    <div class="course-location-modal-backdrop"></div>
+    <div class="course-location-modal-panel segment-recipes-modal-panel" role="dialog" aria-labelledby="org-leg-library-title">
+        <div class="course-location-modal-header">
+            <h4 id="org-leg-library-title" class="course-derived-heading" style="margin: 0;">Organization leg library</h4>
+            <button type="button" id="org-leg-library-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="course-location-modal-body">
+            <p class="course-derived-empty" style="margin: 0 0 0.75rem 0;">
+                Shared legs live outside this package. <strong>Add to package</strong> copies a leg here with a new package ID.
+                <strong>Publish to org</strong> saves the selected package leg for other races.
+            </p>
+            <p id="org-leg-library-status" class="course-derived-empty" style="display: none;"></p>
+            <h5 class="course-derived-heading" style="margin: 0.5rem 0;">Org legs</h5>
+            <div id="org-leg-library-empty" class="card-help course-derived-empty">No org legs yet. Publish a leg from this package below.</div>
+            <div id="org-leg-library-table-wrap" class="scrollable-table-container course-derived-table-scroll" style="display: none; max-height: 220px;">
+                <table class="table-sticky-header course-planner-table" style="width: 100%; font-size: 0.875rem;">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Label</th>
+                            <th>km</th>
+                            <th>Locs</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="org-leg-library-tbody"></tbody>
+                </table>
+            </div>
+            <h5 class="course-derived-heading" style="margin: 1rem 0 0.5rem 0;">Publish from this package</h5>
+            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
+                <label for="org-leg-publish-select" style="font-size: 0.875rem;">Package leg</label>
+                <select id="org-leg-publish-select" class="course-input" style="min-width: 12rem;"></select>
+                <button type="button" id="btn-org-leg-publish" class="course-btn">Publish to org library</button>
+            </div>
+        </div>
+        <div class="course-location-modal-footer">
+            <button type="button" id="org-leg-library-done" class="course-btn primary">Done</button>
         </div>
     </div>
 </div>

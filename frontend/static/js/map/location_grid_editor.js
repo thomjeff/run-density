@@ -13,7 +13,7 @@
     var dirty = false;
     var rowMaps = {};
 
-    var COLLAPSED_COLS = 9;
+    var COLLAPSED_COLS = 10;
 
     var BULK_FIELDS = [
         { key: 'zone', label: 'Zone', type: 'text' },
@@ -443,6 +443,7 @@
             { key: '_expand', label: '', width: 36 },
             { key: '_select', label: '', width: 40 },
             { key: 'id', label: 'ID', width: 48 },
+            { key: 'location_key', label: 'Key', width: 56 },
             { key: 'loc_label', label: 'Label', width: 140 },
             { key: 'loc_type', label: 'Type', width: 88 },
             { key: 'zone', label: 'Zone', width: 72 },
@@ -524,6 +525,13 @@
             idTd.className = 'location-grid-readonly';
             idTd.textContent = String(locationId(loc, rowIndex));
             tr.appendChild(idTd);
+
+            var keyTd = document.createElement('td');
+            keyTd.className = 'location-grid-readonly';
+            keyTd.textContent = (loc.location_key && String(loc.location_key).trim())
+                ? String(loc.location_key).trim()
+                : '—';
+            tr.appendChild(keyTd);
 
             var labelTd = document.createElement('td');
             labelTd.className = 'location-grid-readonly';

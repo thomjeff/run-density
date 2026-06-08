@@ -40,7 +40,11 @@ from app.core.config_package.legs import (
     update_package_leg,
     update_package_leg_geometry,
 )
-from app.core.config_package.org_leg_library import import_org_leg_to_package, list_org_legs
+from app.core.config_package.org_leg_library import (
+    import_org_leg_to_package,
+    list_org_legs,
+    publish_package_leg_to_org_library,
+)
 from app.core.config_package.segment_recipes import (
     apply_package_recipes,
     get_event_route_preview,
@@ -571,6 +575,23 @@ async def api_list_org_legs(request: Request) -> JSONResponse:
     try:
         legs = list_org_legs()
         return JSONResponse(content={"ok": True, "legs": legs})
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/api/config/packages/{config_id}/segment-library/legs/{leg_id}/publish-to-org")
+async def api_publish_leg_to_org_library(
+    request: Request,
+    config_id: str,
+    leg_id: str,
+) -> JSONResponse:
+    """Publish one package leg to the org-level leg library."""
+    require_auth(request)
+    try:
+        result = publish_package_leg_to_org_library(config_id, leg_id)
+        return JSONResponse(content={"ok": True, **result})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
