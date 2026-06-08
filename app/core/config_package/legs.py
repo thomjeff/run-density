@@ -19,6 +19,7 @@ from app.core.config_package.location_ids import (
     assign_unique_location_ids,
     parse_location_id,
 )
+from app.core.config_package.location_keys import ensure_location_key
 from app.core.config_package.segment_recipes import (
     load_package_segment_manifest,
     package_segment_library_dir,
@@ -60,6 +61,7 @@ _LEG_LOC_PRESERVE_FIELDS = (
     "lat",
     "lon",
     "placement",
+    "location_key",
     "notes",
     "buffer",
     "interval",
@@ -72,8 +74,10 @@ _LEG_LOC_PRESERVE_FIELDS = (
     "resources",
 )
 
+_LEG_LOC_EXPORT_FIELDS = _LEG_LOC_PRESERVE_FIELDS
+
 _LEG_ID_RE = re.compile(r"^\d{2,3}$")
-LEG_EXPORT_VERSION = 1
+LEG_EXPORT_VERSION = 2
 
 
 def _normalize_segment_schema(schema: Any) -> str:
@@ -139,10 +143,16 @@ def _slugify(text: str) -> str:
     return slug[:48] or "leg"
 
 
-def _normalize_locations(raw: Any) -> List[Dict[str, Any]]:
+def _normalize_locations(
+    raw: Any,
+    *,
+    assign_keys: bool = True,
+    used_location_keys: Optional[set[str]] = None,
+) -> List[Dict[str, Any]]:
     if not isinstance(raw, list):
         return []
     allowed_types = set(LOCATION_TYPE_CHOICES)
+    used_keys: set[str] = set(used_location_keys or set())
     out: List[Dict[str, Any]] = []
     for item in raw:
         if not isinstance(item, dict):
@@ -164,15 +174,29 @@ def _normalize_locations(raw: Any) -> List[Dict[str, Any]]:
             placement = str(item.get("placement") or "along").strip().lower()
             if placement not in LOCATION_PLACEMENT_CHOICES:
                 placement = "along"
-        out.append(
-            {
-                "loc_label": label,
-                "loc_type": loc_type,
-                "lat": round(lat, 6),
-                "lon": round(lon, 6),
-                "placement": placement,
-            }
-        )
+        row: Dict[str, Any] = {
+            "loc_label": label,
+            "loc_type": loc_type,
+            "lat": round(lat, 6),
+            "lon": round(lon, 6),
+            "placement": placement,
+        }
+        for field in _LEG_LOC_EXPORT_FIELDS:
+            if field in row:
+                continue
+            if field not in item:
+                continue
+            val = item[field]
+            if field == "resources":
+                if isinstance(val, dict):
+                    row[field] = val
+                continue
+            if val in (None, ""):
+                continue
+            row[field] = val
+        if assign_keys:
+            ensure_location_key(row, used_keys)
+        out.append(row)
     return out
 
 
@@ -504,16 +528,22 @@ def merge_leg_export_into_entry(
 def apply_leg_exports_to_manifest(
     manifest: Dict[str, Any],
     exports_by_leg_id: Dict[str, Dict[str, Any]],
+    *,
+    exports_by_gpx_file: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    """Merge runflow leg export JSON payloads into manifest legs by leg id."""
-    if not exports_by_leg_id:
+    """Merge runflow leg export JSON payloads into manifest legs by id or GPX file."""
+    if not exports_by_leg_id and not exports_by_gpx_file:
         return manifest
+    by_file = exports_by_gpx_file or {}
     legs = list(manifest_legs(manifest))
     for entry in legs:
         if not isinstance(entry, dict):
             continue
         leg_id = str(entry.get("id", "")).strip()
-        leg_export = exports_by_leg_id.get(leg_id)
+        file_name = str(entry.get("file") or "").strip()
+        leg_export = exports_by_leg_id.get(leg_id) or (
+            by_file.get(file_name) if file_name else None
+        )
         if leg_export:
             merge_leg_export_into_entry(entry, leg_export)
     set_manifest_legs(manifest, legs)
@@ -955,13 +985,17 @@ def merge_leg_locations_into_course(config_id: str) -> None:
         package_events = list(COURSE_EVENT_IDS)
     event_ids = package_events or list(COURSE_EVENT_IDS)
 
-    existing_leg: Dict[str, Dict[str, Any]] = {}
+    existing_by_loc_key: Dict[str, Dict[str, Any]] = {}
+    existing_by_leg_loc_key: Dict[str, Dict[str, Any]] = {}
     for loc in course.get("locations") or []:
         if not isinstance(loc, dict) or loc.get("source") != "leg":
             continue
-        key = str(loc.get("leg_loc_key") or "").strip()
-        if key:
-            existing_leg[key] = loc
+        loc_key = str(loc.get("location_key") or "").strip()
+        if loc_key:
+            existing_by_loc_key[loc_key] = loc
+        leg_key = str(loc.get("leg_loc_key") or "").strip()
+        if leg_key:
+            existing_by_leg_loc_key[leg_key] = loc
 
     locations: List[Dict[str, Any]] = [
         loc
@@ -984,9 +1018,18 @@ def merge_leg_locations_into_course(config_id: str) -> None:
         seg_id = str(seg.get("seg_id", "")).strip() if seg else ""
         event_flags = _event_flags_for_segment(seg, event_ids)
 
-        for i, loc in enumerate(_normalize_locations(entry.get("locations"))):
+        used_loc_keys: set[str] = set(existing_by_loc_key.keys())
+        for i, loc in enumerate(
+            _normalize_locations(
+                entry.get("locations"),
+                used_location_keys=used_loc_keys,
+            )
+        ):
             key = leg_loc_key(leg_id, i)
-            prev = existing_leg.get(key)
+            loc_key = str(loc.get("location_key") or "").strip()
+            prev = existing_by_loc_key.get(loc_key) if loc_key else None
+            if prev is None:
+                prev = existing_by_leg_loc_key.get(key)
             on_course = loc["loc_type"] in ON_COURSE_LOCATION_TYPES
             row: Dict[str, Any] = {
                 "loc_label": loc["loc_label"],
@@ -995,14 +1038,28 @@ def merge_leg_locations_into_course(config_id: str) -> None:
                 "lon": loc["lon"],
                 "leg_id": leg_id,
                 "leg_loc_key": key,
+                "location_key": loc_key or (prev.get("location_key") if prev else ""),
                 "placement": loc.get("placement", "along"),
                 "source": "leg",
                 "seg_id": seg_id if on_course else "",
             }
+            if not row["location_key"]:
+                ensure_location_key(row, used_loc_keys)
             for ev, flag in event_flags.items():
                 row[ev] = flag
             for ev in COURSE_EVENT_IDS:
                 row.setdefault(ev, "n")
+
+            for field in _LEG_LOC_PRESERVE_FIELDS:
+                if field in row and row[field] not in (None, ""):
+                    continue
+                val = loc.get(field)
+                if field == "resources":
+                    if isinstance(val, dict):
+                        row[field] = val
+                    continue
+                if val not in (None, ""):
+                    row[field] = val
 
             if prev:
                 prev_id = parse_location_id(prev.get("id", prev.get("loc_id")))
@@ -1259,6 +1316,7 @@ def sync_leg_location_metadata_from_course(config_id: str) -> bool:
             "lat": loc.get("lat"),
             "lon": loc.get("lon"),
             "placement": loc.get("placement"),
+            "location_key": loc.get("location_key"),
         }
         for field in _LEG_LOC_PRESERVE_FIELDS:
             if field in leg_payload:

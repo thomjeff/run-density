@@ -1469,9 +1469,17 @@ document.addEventListener('DOMContentLoaded', function () {
         var row = document.getElementById('locations-thead-row');
         if (!row) return;
         row.innerHTML = '';
-        ['ID', 'Type', 'Label', 'Zone'].forEach(function (text) {
+        [
+            { text: 'ID', title: 'Crew-facing loc_id (stable across re-apply)' },
+            { text: 'Key', title: 'Stable internal location_key' },
+            'Type',
+            'Label',
+            'Zone'
+        ].forEach(function (col) {
             var th = document.createElement('th');
+            var text = typeof col === 'string' ? col : col.text;
             th.textContent = text;
+            if (typeof col === 'object' && col.title) th.title = col.title;
             row.appendChild(th);
         });
         getPackageResources().forEach(function (res) {
@@ -3756,6 +3764,12 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             idCell.appendChild(idBtn);
             tr.appendChild(idCell);
+            var keyTd = document.createElement('td');
+            keyTd.textContent = (loc.location_key && String(loc.location_key).trim())
+                ? String(loc.location_key).trim()
+                : '—';
+            keyTd.title = 'Stable authoring key (internal)';
+            tr.appendChild(keyTd);
             tr.appendChild(document.createElement('td')).textContent = typeLabel;
             tr.appendChild(document.createElement('td')).textContent = loc.loc_label || '';
             tr.appendChild(document.createElement('td')).textContent =
@@ -3811,6 +3825,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var totalTr = document.createElement('tr');
         totalTr.className = 'locations-totals-row';
         totalTr.appendChild(document.createElement('td')).textContent = 'Total';
+        totalTr.appendChild(document.createElement('td')).textContent = '';
         totalTr.appendChild(document.createElement('td')).textContent = '';
         totalTr.appendChild(document.createElement('td')).textContent = '';
         totalTr.appendChild(document.createElement('td')).textContent = '';

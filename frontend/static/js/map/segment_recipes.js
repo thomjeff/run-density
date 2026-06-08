@@ -2083,6 +2083,166 @@
             });
     }
 
+    function setOrgLibraryStatus(msg, isError) {
+        var el = document.getElementById('org-leg-library-status');
+        if (!el) return;
+        if (!msg) {
+            el.style.display = 'none';
+            el.textContent = '';
+            return;
+        }
+        el.style.display = 'block';
+        el.textContent = msg;
+        el.style.color = isError ? '#c0392b' : '';
+    }
+
+    function closeOrgLibraryModal() {
+        var modal = document.getElementById('org-leg-library-modal');
+        if (!modal) return;
+        modal.hidden = true;
+        modal.setAttribute('aria-hidden', 'true');
+        setOrgLibraryStatus('');
+    }
+
+    function openOrgLibraryModal() {
+        var modal = document.getElementById('org-leg-library-modal');
+        if (!modal) return;
+        modal.hidden = false;
+        modal.setAttribute('aria-hidden', 'false');
+        refreshOrgLibraryModal();
+    }
+
+    function refreshOrgLibraryPublishSelect() {
+        var sel = document.getElementById('org-leg-publish-select');
+        if (!sel) return;
+        var legs = (libraryState && libraryState.legs) || [];
+        sel.innerHTML = '';
+        legs.forEach(function (leg) {
+            var opt = document.createElement('option');
+            opt.value = leg.id;
+            opt.textContent = leg.id + ' — ' + ((leg.leg_label || '').trim() || 'Leg');
+            sel.appendChild(opt);
+        });
+        var pubBtn = document.getElementById('btn-org-leg-publish');
+        if (pubBtn) pubBtn.disabled = !legs.length;
+    }
+
+    function renderOrgLibraryTable(orgLegs) {
+        var empty = document.getElementById('org-leg-library-empty');
+        var wrap = document.getElementById('org-leg-library-table-wrap');
+        var tbody = document.getElementById('org-leg-library-tbody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        if (!orgLegs || !orgLegs.length) {
+            if (empty) empty.style.display = 'block';
+            if (wrap) wrap.style.display = 'none';
+            return;
+        }
+        if (empty) empty.style.display = 'none';
+        if (wrap) wrap.style.display = 'block';
+        orgLegs.forEach(function (leg) {
+            var tr = document.createElement('tr');
+            var orgId = leg.org_leg_id || leg.id;
+            [
+                orgId,
+                (leg.leg_label || '').slice(0, 48),
+                leg.length_km != null ? Number(leg.length_km).toFixed(2) : '—',
+                String(leg.location_count != null ? leg.location_count : (leg.locations || []).length)
+            ].forEach(function (text) {
+                var td = document.createElement('td');
+                td.textContent = text;
+                tr.appendChild(td);
+            });
+            var actionTd = document.createElement('td');
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'course-btn';
+            btn.textContent = 'Add to package';
+            btn.addEventListener('click', function () {
+                importOrgLegToPackage(orgId);
+            });
+            actionTd.appendChild(btn);
+            tr.appendChild(actionTd);
+            tbody.appendChild(tr);
+        });
+    }
+
+    function refreshOrgLibraryModal() {
+        refreshOrgLibraryPublishSelect();
+        setOrgLibraryStatus('Loading org library…');
+        fetch('/api/org/legs', { credentials: 'same-origin' })
+            .then(function (r) {
+                return r.json().then(function (d) {
+                    if (!r.ok) throw new Error(formatApiError(r, d));
+                    return d;
+                });
+            })
+            .then(function (data) {
+                renderOrgLibraryTable(data.legs || []);
+                setOrgLibraryStatus('');
+            })
+            .catch(function (err) {
+                setOrgLibraryStatus(err.message || String(err), true);
+            });
+    }
+
+    function importOrgLegToPackage(orgLegId) {
+        setOrgLibraryStatus('Adding org leg ' + orgLegId + '…');
+        fetch(
+            apiBase() + '/segment-library/import-org-leg/' + encodeURIComponent(orgLegId),
+            { method: 'POST', credentials: 'same-origin' }
+        )
+            .then(function (r) {
+                return r.json().then(function (d) {
+                    if (!r.ok) throw new Error(formatApiError(r, d));
+                    return d;
+                });
+            })
+            .then(function (data) {
+                libraryState = data;
+                renderLegsTable();
+                renderRecipeTable();
+                setOrgLibraryStatus(
+                    'Added org leg ' + orgLegId + ' as package leg ' +
+                        (data.imported_package_leg_id || '') + '.'
+                );
+                setLegStatus('Imported org leg ' + orgLegId + '.');
+            })
+            .catch(function (err) {
+                setOrgLibraryStatus(err.message || String(err), true);
+            });
+    }
+
+    function publishLegToOrgLibrary() {
+        var sel = document.getElementById('org-leg-publish-select');
+        var legId = sel && sel.value;
+        if (!legId) {
+            setOrgLibraryStatus('Select a package leg to publish.', true);
+            return;
+        }
+        setOrgLibraryStatus('Publishing leg ' + legId + '…');
+        fetch(
+            apiBase() + '/segment-library/legs/' + encodeURIComponent(legId) + '/publish-to-org',
+            { method: 'POST', credentials: 'same-origin' }
+        )
+            .then(function (r) {
+                return r.json().then(function (d) {
+                    if (!r.ok) throw new Error(formatApiError(r, d));
+                    return d;
+                });
+            })
+            .then(function (data) {
+                setOrgLibraryStatus(
+                    'Published as org leg ' + (data.org_leg_id || '') +
+                        ' (' + (data.leg_label || '') + ').'
+                );
+                refreshOrgLibraryModal();
+            })
+            .catch(function (err) {
+                setOrgLibraryStatus(err.message || String(err), true);
+            });
+    }
+
     function exportLeg(legId) {
         var leg = (libraryState && libraryState.legs || []).find(function (c) {
             return c.id === legId;
@@ -2948,6 +3108,18 @@
         if (exportAllBtn) {
             exportAllBtn.addEventListener('click', exportAllLegs);
         }
+        var orgLibBtn = document.getElementById('btn-org-leg-library');
+        if (orgLibBtn) {
+            orgLibBtn.addEventListener('click', openOrgLibraryModal);
+        }
+        var orgLibClose = document.getElementById('org-leg-library-close');
+        if (orgLibClose) orgLibClose.addEventListener('click', closeOrgLibraryModal);
+        var orgLibDone = document.getElementById('org-leg-library-done');
+        if (orgLibDone) orgLibDone.addEventListener('click', closeOrgLibraryModal);
+        var orgLibBackdrop = document.querySelector('#org-leg-library-modal .course-location-modal-backdrop');
+        if (orgLibBackdrop) orgLibBackdrop.addEventListener('click', closeOrgLibraryModal);
+        var orgPublishBtn = document.getElementById('btn-org-leg-publish');
+        if (orgPublishBtn) orgPublishBtn.addEventListener('click', publishLegToOrgLibrary);
         if (bulkInput) {
             bulkInput.addEventListener('change', function () {
                 uploadGpxBulk(bulkInput.files);

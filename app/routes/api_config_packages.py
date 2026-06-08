@@ -40,6 +40,11 @@ from app.core.config_package.legs import (
     update_package_leg,
     update_package_leg_geometry,
 )
+from app.core.config_package.org_leg_library import (
+    import_org_leg_to_package,
+    list_org_legs,
+    publish_package_leg_to_org_library,
+)
 from app.core.config_package.segment_recipes import (
     apply_package_recipes,
     get_event_route_preview,
@@ -556,6 +561,51 @@ async def api_delete_package_leg(
     require_auth(request)
     try:
         state = delete_package_leg(config_id, leg_id)
+        return JSONResponse(content={"ok": True, **state})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/api/org/legs")
+async def api_list_org_legs(request: Request) -> JSONResponse:
+    """List legs in the org-level library (runflow/org/legs/)."""
+    require_auth(request)
+    try:
+        legs = list_org_legs()
+        return JSONResponse(content={"ok": True, "legs": legs})
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/api/config/packages/{config_id}/segment-library/legs/{leg_id}/publish-to-org")
+async def api_publish_leg_to_org_library(
+    request: Request,
+    config_id: str,
+    leg_id: str,
+) -> JSONResponse:
+    """Publish one package leg to the org-level leg library."""
+    require_auth(request)
+    try:
+        result = publish_package_leg_to_org_library(config_id, leg_id)
+        return JSONResponse(content={"ok": True, **result})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/api/config/packages/{config_id}/segment-library/import-org-leg/{org_leg_id}")
+async def api_import_org_leg(
+    request: Request,
+    config_id: str,
+    org_leg_id: str,
+) -> JSONResponse:
+    """Copy one org-library leg into the package segment library."""
+    require_auth(request)
+    try:
+        state = import_org_leg_to_package(config_id, org_leg_id)
         return JSONResponse(content={"ok": True, **state})
     except FileNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
