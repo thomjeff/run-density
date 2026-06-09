@@ -101,6 +101,34 @@ def test_export_bundle_writes_csv():
     assert "event_a" in bundle["flow_csv"]
 
 
+def test_build_course_segments_leg_reuse(manifest, legs_by_id):
+    """Same library leg twice in one event recipe → two segment rows."""
+    recipes = {
+        "full": ["01", "05", "02", "05"],
+        "half": ["01", "05"],
+        "10k": ["01", "05"],
+    }
+    manifest = dict(manifest)
+    manifest["recipes"] = recipes
+    legs = dict(legs_by_id)
+    if "05" not in legs:
+        legs["05"] = {**legs["02"], "id": "05", "length_km": 1.59}
+    segments = build_course_segments_from_library(
+        manifest, legs, event_ids=["full", "half", "10k"]
+    )
+    leg05 = [s for s in segments if s["leg_id"] == "05"]
+    assert len(leg05) == 2
+    assert leg05[0]["leg_occurrence"] == 1
+    assert leg05[1]["leg_occurrence"] == 2
+    assert set(leg05[0]["events"]) == {"full", "half", "10k"}
+    assert leg05[1]["events"] == ["full"]
+    assert leg05[0]["full_to_km"] < leg05[1]["full_from_km"]
+    length = float(leg05[0]["length_km"])
+    assert leg05[0]["half_to_km"] == pytest.approx(leg05[0]["half_from_km"] + length, abs=0.05)
+    assert leg05[1]["half_from_km"] == 0.0
+    assert leg05[1]["half_to_km"] == 0.0
+
+
 def test_build_course_segments_follows_recipe_order_not_manifest_order(manifest, legs_by_id):
     """Leg ids after 15 in manifest must not push recipe-middle legs to the end."""
     recipes = {

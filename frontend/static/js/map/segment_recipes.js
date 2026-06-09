@@ -229,6 +229,22 @@
         el.textContent = 'Stitch warnings: ' + warnings.join(' · ');
     }
 
+    function parseOrderValues(raw) {
+        if (raw == null || raw === '') return [];
+        var parts = String(raw).split(',');
+        var values = [];
+        parts.forEach(function (part) {
+            var n = parseInt(String(part).trim(), 10);
+            if (!isNaN(n) && n >= 1 && values.indexOf(n) < 0) values.push(n);
+        });
+        return values.sort(function (a, b) { return a - b; });
+    }
+
+    function formatOrderValues(values) {
+        if (!values || !values.length) return '';
+        return values.slice().sort(function (a, b) { return a - b; }).join(',');
+    }
+
     function getOrder(legId, eventId) {
         var row = orderGrid[eventId] || {};
         var v = row[legId];
@@ -238,10 +254,11 @@
     function setOrder(legId, eventId, value) {
         if (!orderGrid[eventId]) orderGrid[eventId] = {};
         var trimmed = String(value || '').trim();
-        if (!trimmed) orderGrid[eventId][legId] = null;
-        else {
-            var n = parseInt(trimmed, 10);
-            orderGrid[eventId][legId] = isNaN(n) || n < 1 ? null : n;
+        if (!trimmed) {
+            orderGrid[eventId][legId] = null;
+        } else {
+            var values = parseOrderValues(trimmed);
+            orderGrid[eventId][legId] = values.length ? formatOrderValues(values) : null;
         }
         recomputeTotalsLocal();
     }
@@ -253,10 +270,13 @@
         packageEvents().forEach(function (ev) {
             var pairs = [];
             libraryState.legs.forEach(function (ch) {
-                var o = getOrder(ch.id, ev);
-                if (o) pairs.push({ order: parseInt(o, 10), km: ch.length_km || 0 });
+                parseOrderValues(getOrder(ch.id, ev)).forEach(function (order) {
+                    pairs.push({ order: order, km: ch.length_km || 0 });
+                });
             });
-            pairs.sort(function (a, b) { return a.order - b.order; });
+            pairs.sort(function (a, b) {
+                return a.order - b.order || 0;
+            });
             lengths[ev] = Math.round(pairs.reduce(function (s, p) { return s + p.km; }, 0) * 100) / 100;
         });
         renderTotals(lengths);
@@ -2458,10 +2478,12 @@
             events.forEach(function (ev) {
                 var td = document.createElement('td');
                 var inp = document.createElement('input');
-                inp.type = 'number';
-                inp.min = '1';
-                inp.max = '99';
+                inp.type = 'text';
+                inp.inputMode = 'numeric';
+                inp.pattern = '[0-9, ]*';
                 inp.className = 'segment-recipe-order-input';
+                inp.title = 'Order slot(s), e.g. 7 or 7,16 to reuse this leg';
+                inp.placeholder = '—';
                 inp.value = getOrder(ch.id, ev);
                 inp.addEventListener('input', function () { setOrder(ch.id, ev, inp.value); });
                 td.appendChild(inp);

@@ -758,6 +758,42 @@ def _segment_for_leg(
     return None
 
 
+def _segments_for_leg(
+    segments: Sequence[Dict[str, Any]], leg_id: str
+) -> List[Dict[str, Any]]:
+    leg_id = str(leg_id).strip()
+    return [
+        seg
+        for seg in segments
+        if isinstance(seg, dict) and segment_leg_id(seg) == leg_id
+    ]
+
+
+def _seg_ids_for_leg(segments: Sequence[Dict[str, Any]], leg_id: str) -> str:
+    return ",".join(
+        str(seg.get("seg_id", "")).strip()
+        for seg in _segments_for_leg(segments, leg_id)
+        if str(seg.get("seg_id", "")).strip()
+    )
+
+
+def _event_flags_for_leg(
+    segments: Sequence[Dict[str, Any]],
+    leg_id: str,
+    event_ids: Sequence[str],
+) -> Dict[str, str]:
+    """Union event flags across all segment rows sharing a library leg."""
+    on_seg: set[str] = set()
+    for seg in _segments_for_leg(segments, leg_id):
+        for eid in seg.get("events") or []:
+            on_seg.add(str(eid).strip().lower())
+    flags: Dict[str, str] = {}
+    for eid in event_ids:
+        el = str(eid).strip().lower()
+        flags[el] = "y" if el in on_seg else "n"
+    return flags
+
+
 def _parse_location_seg_ids(seg_id_value: Any) -> List[str]:
     """Parse comma-separated seg_id(s) on a location row."""
     if seg_id_value is None:
@@ -827,8 +863,7 @@ def refresh_location_seg_ids_from_segments(
 
         leg_id = _leg_id_for_location(loc)
         if leg_id:
-            seg = _segment_for_leg(segments, leg_id)
-            new_seg = str(seg.get("seg_id", "")).strip() if seg else ""
+            new_seg = _seg_ids_for_leg(segments, leg_id)
             if new_seg != old_seg:
                 loc["seg_id"] = new_seg
                 updated += 1
@@ -1022,9 +1057,8 @@ def merge_leg_locations_into_course(config_id: str) -> None:
             continue
         if recipe_ids and leg_id not in recipe_ids:
             continue
-        seg = _segment_for_leg(segments, leg_id)
-        seg_id = str(seg.get("seg_id", "")).strip() if seg else ""
-        event_flags = _event_flags_for_segment(seg, event_ids)
+        seg_id = _seg_ids_for_leg(segments, leg_id)
+        event_flags = _event_flags_for_leg(segments, leg_id, event_ids)
 
         used_loc_keys: set[str] = set(existing_by_loc_key.keys())
         for i, loc in enumerate(

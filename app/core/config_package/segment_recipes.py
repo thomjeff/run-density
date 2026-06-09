@@ -297,15 +297,39 @@ def seed_reference_segment_library(config_id: str) -> Dict[str, Any]:
     return get_package_segment_library_state(cid)
 
 
+def parse_recipe_order_values(raw: Any) -> List[int]:
+    """
+    Parse UI order cell: single integer or comma-separated slots (e.g. ``7,16``).
+
+    Returns sorted unique positive integers.
+    """
+    if raw is None or raw == "":
+        return []
+    if isinstance(raw, (list, tuple)):
+        parts = [str(x).strip() for x in raw if str(x).strip()]
+    else:
+        parts = [p.strip() for p in str(raw).split(",") if p.strip()]
+    values: List[int] = []
+    for part in parts:
+        try:
+            n = int(part)
+        except (TypeError, ValueError):
+            continue
+        if n > 0 and n not in values:
+            values.append(n)
+    return sorted(values)
+
+
 def recipes_from_order_grid(
     legs: Sequence[Dict[str, Any]],
-    order_by_event: Dict[str, Dict[str, Optional[int]]],
+    order_by_event: Dict[str, Dict[str, Any]],
     event_ids: Optional[Sequence[str]] = None,
 ) -> Dict[str, List[str]]:
     """
     Convert UI order grid to recipe lists.
 
-    order_by_event[event][leg_id] = 1-based order or None if unused.
+    order_by_event[event][leg_id] = 1-based order, comma-separated orders
+    (``7,16``), or None if unused. The same leg id may appear multiple times.
     """
     recipes: Dict[str, List[str]] = {}
     leg_ids = [str(c.get("id", "")).strip() for c in legs if c.get("id")]
@@ -315,16 +339,9 @@ def recipes_from_order_grid(
         orders = order_by_event.get(key) or order_by_event.get(eid) or {}
         pairs: List[tuple] = []
         for cid in leg_ids:
-            raw = orders.get(cid)
-            if raw is None or raw == "":
-                continue
-            try:
-                n = int(raw)
-            except (TypeError, ValueError):
-                continue
-            if n > 0:
+            for n in parse_recipe_order_values(orders.get(cid)):
                 pairs.append((n, cid))
-        pairs.sort(key=lambda x: x[0])
+        pairs.sort(key=lambda x: (x[0], x[1]))
         recipes[eid] = [cid for _, cid in pairs]
     return recipes
 
@@ -333,18 +350,23 @@ def order_grid_from_recipes(
     legs: Sequence[Dict[str, Any]],
     recipes: Dict[str, Any],
     event_ids: Optional[Sequence[str]] = None,
-) -> Dict[str, Dict[str, Optional[int]]]:
+) -> Dict[str, Dict[str, Optional[str]]]:
     """Inverse of recipes_from_order_grid for UI."""
     leg_ids = [str(c.get("id", "")).strip() for c in legs if c.get("id")]
-    grid: Dict[str, Dict[str, Optional[int]]] = {}
+    grid: Dict[str, Dict[str, Optional[str]]] = {}
     eids = list(event_ids) if event_ids is not None else []
     for eid in eids:
         key = eid if eid in recipes else eid.lower()
         seq = recipes.get(key) or []
-        row: Dict[str, Optional[int]] = {cid: None for cid in leg_ids}
-        for i, cid in enumerate(seq, start=1):
-            if cid in row:
-                row[cid] = i
+        positions: Dict[str, List[int]] = {cid: [] for cid in leg_ids}
+        for i, raw_cid in enumerate(seq, start=1):
+            cid = str(raw_cid).strip()
+            if cid in positions:
+                positions[cid].append(i)
+        row: Dict[str, Optional[str]] = {}
+        for cid in leg_ids:
+            pos = positions.get(cid) or []
+            row[cid] = ",".join(str(p) for p in pos) if pos else None
         grid[eid] = row
     return grid
 
