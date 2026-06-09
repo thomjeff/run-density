@@ -70,7 +70,12 @@ def export_segment_map_pngs(
 
         metrics = segment_metrics.get(seg_id)
         if not metrics or "worst_los" not in metrics:
-            raise ValueError(f"Missing worst_los for segment {seg_id} in segment_metrics.")
+            # Short or connector segments may be in geojson but skipped by density (no bins).
+            logger.warning(
+                "Skipping segment map for %s: no density metrics (missing worst_los).",
+                seg_id,
+            )
+            continue
 
         los_grade = str(metrics.get("worst_los"))
         color = los_colors.get(los_grade)

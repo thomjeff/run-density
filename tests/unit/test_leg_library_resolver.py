@@ -302,3 +302,36 @@ def test_export_after_apply_org_primary_keeps_segments(tmp_path, monkeypatch):
     assert exported["segment_count"] >= 1
     course = load_config_course(config_id)
     assert len(course.get("segments") or []) >= 1
+
+
+def test_export_org_primary_writes_flow_and_gpx(tmp_path, monkeypatch):
+    """Org-primary packages must export flow.csv + GPX from org legs, not empty package library."""
+    _patch_roots(tmp_path, monkeypatch)
+    _seed_org_leg(tmp_path)
+
+    result = create_config_package(
+        "Pkg", "", event_day="sun", package_events=["full", "half"]
+    )
+    config_id = result["config_id"]
+    package_path = tmp_path / "config" / config_id
+    save_package_segment_manifest(
+        config_id,
+        {
+            "version": 1,
+            "leg_source": "org",
+            "legs": [],
+            "recipes": {"full": ["05"], "half": ["05"]},
+            "flow_overrides": [],
+        },
+    )
+
+    applied = apply_package_recipes(config_id, export_csv=True)
+    flow_path = package_path / "flow.csv"
+    assert flow_path.is_file()
+    flow_lines = flow_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(flow_lines) >= 2, "shared-leg cross-event flow rows expected"
+    assert "full" in flow_lines[1] and "half" in flow_lines[1]
+    assert (package_path / "full.gpx").is_file()
+    assert (package_path / "half.gpx").is_file()
+    assert applied["flow_csv_path"] == str(flow_path)
+    assert {g["event_id"] for g in applied.get("gpx_files") or []} == {"full", "half"}

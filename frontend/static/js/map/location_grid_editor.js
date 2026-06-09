@@ -52,6 +52,23 @@
         return x === 'traffic' || x === 'extract';
     }
 
+    function proxyLocIdIsSet(loc) {
+        if (deps && deps.proxyLocIdIsSet) return deps.proxyLocIdIsSet(loc);
+        var p = loc && loc.proxy_loc_id;
+        if (p == null || p === '') return false;
+        var s = String(p).trim();
+        return s !== '' && s.toLowerCase() !== 'nan';
+    }
+
+    function isEligibleProxyTimingSource(other, selfId) {
+        if (deps && deps.isEligibleProxyTimingSource) {
+            return deps.isEligibleProxyTimingSource(other, selfId);
+        }
+        var oid = locationId(other, 0);
+        if (!oid || (selfId && oid === selfId)) return false;
+        return !proxyLocIdIsSet(other);
+    }
+
     function ynDisplay(v) {
         return String(v || 'n').toLowerCase() === 'y' ? 'y' : 'n';
     }
@@ -128,6 +145,20 @@
             }
             if (hasProxy && locationId(loc, i) === parseInt(proxy, 10)) {
                 errors.push(label + ': proxy cannot reference itself');
+            }
+            if (hasProxy) {
+                var proxyNum = parseInt(proxy, 10);
+                if (!isNaN(proxyNum)) {
+                    var proxyTarget = workingLocations.find(function (other, j) {
+                        return locationId(other, j) === proxyNum;
+                    });
+                    if (proxyTarget && proxyLocIdIsSet(proxyTarget)) {
+                        errors.push(
+                            label +
+                                ': proxy timing source cannot be another proxied location (use a direct source)'
+                        );
+                    }
+                }
             }
         });
         return errors;
@@ -231,8 +262,8 @@
         sel.appendChild(none);
         var selfId = locationId(loc, rowIndex);
         workingLocations.forEach(function (other, j) {
+            if (!isEligibleProxyTimingSource(other, selfId)) return;
             var oid = locationId(other, j);
-            if (!oid || oid === selfId) return;
             var opt = document.createElement('option');
             opt.value = String(oid);
             opt.textContent =
@@ -249,10 +280,21 @@
         if (pv) {
             sel.value = pv;
             if (sel.value !== pv) {
-                var miss = document.createElement('option');
-                miss.value = pv;
-                miss.textContent = pv + ' (missing)';
-                sel.appendChild(miss);
+                var stale = document.createElement('option');
+                stale.value = pv;
+                var staleTarget = workingLocations.find(function (other, j) {
+                    return String(locationId(other, j)) === pv;
+                });
+                if (staleTarget && proxyLocIdIsSet(staleTarget)) {
+                    stale.textContent =
+                        pv +
+                        ' — ' +
+                        (staleTarget.loc_label || 'Untitled') +
+                        ' (chained proxy)';
+                } else {
+                    stale.textContent = pv + ' (missing)';
+                }
+                sel.appendChild(stale);
                 sel.value = pv;
             }
         }

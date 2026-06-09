@@ -1329,9 +1329,15 @@ def sync_leg_location_metadata_from_course(config_id: str) -> bool:
     Course tab is master for loc_label and related fields edited there; the manifest
     is updated so Legs tab and subsequent merges stay consistent.
     """
+    from app.core.config_package.leg_library_resolver import (
+        LEG_SOURCE_ORG,
+        resolve_leg_library,
+    )
+    from app.core.config_package.org_leg_library import save_org_leg_manifest
+
     cid = validate_config_id(config_id)
     course = load_config_course(cid)
-    manifest = load_package_segment_manifest(cid)
+    _lib_dir, manifest, leg_source, _pkg_manifest = resolve_leg_library(cid)
     legs: List[Dict[str, Any]] = list(manifest_legs(manifest))
     leg_index: Dict[str, int] = {}
     for i, entry in enumerate(legs):
@@ -1392,7 +1398,10 @@ def sync_leg_location_metadata_from_course(config_id: str) -> bool:
 
     if changed:
         set_manifest_legs(manifest, legs)
-        save_package_segment_manifest(cid, manifest)
+        if leg_source == LEG_SOURCE_ORG:
+            save_org_leg_manifest(manifest)
+        else:
+            save_package_segment_manifest(cid, manifest)
     return changed
 
 

@@ -446,13 +446,13 @@ def export_package_flow_and_gpx_files(config_id: str) -> Dict[str, Any]:
     """
     Write flow.csv and per-event GPX files into the config package folder.
 
-    Uses segment library recipes when manifest exists; otherwise builds flow.csv
-    from course.json segments only (no GPX).
+    Uses combined org/package leg library + recipes when available; otherwise
+    builds flow.csv from course.json segments only (no GPX).
     """
+    from app.core.config_package.leg_library_resolver import combined_manifest_for_apply
+
     cid = validate_config_id(config_id)
     package_path = resolve_config_package_path(cid)
-    lib_dir = package_segment_library_dir(package_path)
-    manifest_path = _manifest_path(package_path)
     event_ids = package_recipe_event_ids(cid)
     course = load_config_course(cid)
     segments = course.get("segments") or []
@@ -461,9 +461,20 @@ def export_package_flow_and_gpx_files(config_id: str) -> Dict[str, Any]:
     flow_path = package_path / "flow.csv"
     gpx_exports: List[Dict[str, str]] = []
 
-    if manifest_path.is_file():
-        bundle = export_library_to_course(lib_dir, manifest_path, event_ids=event_ids)
-        flow_csv = bundle["flow_csv"]
+    library_bundle: Optional[Dict[str, Any]] = None
+    library_dir: Optional[Path] = None
+    try:
+        lib_dir, combined = combined_manifest_for_apply(cid)
+        if manifest_legs(combined):
+            library_dir = lib_dir
+            library_bundle = export_library_to_course(
+                lib_dir, manifest=combined, event_ids=event_ids
+            )
+    except FileNotFoundError:
+        library_bundle = None
+
+    if library_bundle and library_dir is not None:
+        flow_csv = library_bundle["flow_csv"]
         flow_validation = validate_flow_csv_text(flow_csv)
         if not flow_validation.ok:
             raise ValueError(
@@ -472,8 +483,8 @@ def export_package_flow_and_gpx_files(config_id: str) -> Dict[str, Any]:
         flow_backup = _backup_export_file(flow_path)
         flow_path.write_text(flow_csv, encoding="utf-8")
 
-        manifest = bundle["manifest"]
-        legs_by_id = load_leg_library(lib_dir, manifest)
+        manifest = library_bundle["manifest"]
+        legs_by_id = load_leg_library(library_dir, manifest)
         recipes = manifest.get("recipes") or {}
         for eid in event_ids:
             key = eid if eid in recipes else eid.lower()

@@ -114,10 +114,36 @@ def _format_km(value: float) -> str:
     return format(round(float(value), 2), ".2f")
 
 
+def _stored_event_kms(
+    segments: List[Dict], eid: str, event_ids_lower: List[str]
+) -> Optional[List[tuple]]:
+    """
+    Stored {eid}_from_km/{eid}_to_km for recipe-built (leg_id) segments.
+
+    Recipe-built courses compute per-event kms in recipe traversal order, which
+    can differ from the segment list order (the list follows the first event's
+    recipe; another event may visit shared legs at a different point in its
+    course). Returns None unless every segment bearing the event is recipe-built
+    with stored kms — in that case list-order accumulation would corrupt them.
+    """
+    vals: List[tuple] = []
+    for seg in segments:
+        if eid not in _segment_events_set(seg, event_ids_lower):
+            vals.append((0.0, 0.0))
+            continue
+        from_key, to_key = f"{eid}_from_km", f"{eid}_to_km"
+        if not seg.get("leg_id") or from_key not in seg or to_key not in seg:
+            return None
+        vals.append((float(seg[from_key] or 0), float(seg[to_key] or 0)))
+    return vals
+
+
 def _event_cumulative_distances(segments: List[Dict], event_ids: List[str]) -> List[Dict[str, tuple]]:
     """
     For each event, compute per-segment from_km/to_km as cumulative distance along
     only the segments that include that event (so half skips segments 2/3, etc.).
+    Recipe-built segments keep their stored per-event kms (recipe traversal order);
+    other segments accumulate in list order.
     Returns list of dicts: result[i][eid] = (from_km, to_km) for segment i and event eid.
     Accumulated values are rounded to 2 decimal places to avoid float drift.
     """
@@ -125,6 +151,11 @@ def _event_cumulative_distances(segments: List[Dict], event_ids: List[str]) -> L
     result = [{} for _ in range(n)]
     event_ids_lower = [e.lower() for e in event_ids]
     for ei, eid in enumerate(event_ids_lower):
+        stored = _stored_event_kms(segments, eid, event_ids_lower)
+        if stored is not None:
+            for i, pair in enumerate(stored):
+                result[i][eid] = pair
+            continue
         accumulated = 0.0
         for i, seg in enumerate(segments):
             seg_events = _segment_events_set(seg, event_ids_lower)
