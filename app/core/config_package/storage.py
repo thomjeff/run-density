@@ -252,7 +252,8 @@ def save_config_course(config_id: str, course_data: Dict[str, Any]) -> Path:
     data.pop("data_dir", None)
 
     segments = data.get("segments") or []
-    if segments:
+    # Recipe-built courses already have per-event km from library apply order.
+    if segments and not data.get("segment_library_applied"):
         enrich_segments_event_distances(segments, COURSE_EVENT_IDS)
 
     course_path = package_path / COURSE_WORKSPACE_NAME
@@ -736,7 +737,8 @@ def export_config_package_segments(config_id: str) -> Dict[str, Any]:
     if not segments:
         raise ValueError("Course has no segments; add segment pins before export")
 
-    enrich_segments_event_distances(segments, COURSE_EVENT_IDS)
+    if not course.get("segment_library_applied"):
+        enrich_segments_event_distances(segments, COURSE_EVENT_IDS)
 
     from app.core.config_package.legs import (
         refresh_location_seg_ids_from_segments,

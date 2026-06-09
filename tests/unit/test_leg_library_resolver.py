@@ -1,5 +1,6 @@
 """Tests for org-primary leg library resolution (Issue #780)."""
 
+import pytest
 import yaml
 
 from app.core.config_package.leg_library_resolver import (
@@ -227,6 +228,55 @@ def test_merge_org_leg_locations_carry_resources(tmp_path, monkeypatch):
     _lib_dir, combined = combined_manifest_for_apply(config_id)
     assert combined["recipes"]["full"] == ["05"]
     assert {leg["id"] for leg in combined["legs"]} == {"05", "06"}
+
+
+def test_apply_preserves_half_recipe_km_order(tmp_path, monkeypatch):
+    """Half-only legs must not inherit cumulative km from global segment row order."""
+    _patch_roots(tmp_path, monkeypatch)
+    org_dir = tmp_path / "org" / "legs"
+    org_dir.mkdir(parents=True)
+    gpx = _GPX
+    legs_spec = [
+        ("12", "start.gpx", 2.71),
+        ("06", "mid.gpx", 2.32),
+        ("13", "connector.gpx", 0.03),
+        ("09", "long.gpx", 5.77),
+        ("14", "finish.gpx", 0.2),
+    ]
+    manifest_legs_list = []
+    for leg_id, fname, _km in legs_spec:
+        (org_dir / fname).write_text(gpx, encoding="utf-8")
+        manifest_legs_list.append(
+            {"id": leg_id, "file": fname, "seg_label": f"Leg {leg_id}"}
+        )
+    (org_dir / "manifest.yaml").write_text(
+        yaml.safe_dump({"legs": manifest_legs_list}),
+        encoding="utf-8",
+    )
+
+    result = create_config_package("Pkg", "", event_day="sun", package_events=["half"])
+    config_id = result["config_id"]
+    save_package_segment_manifest(
+        config_id,
+        {
+            "version": 1,
+            "leg_source": "org",
+            "legs": [],
+            "recipes": {"half": ["12", "06", "13", "09", "14"]},
+            "flow_overrides": [],
+        },
+    )
+
+    apply_package_recipes(config_id, export_csv=True)
+    course = load_config_course(config_id)
+    assert course.get("segment_library_applied") is True
+    by_leg = {s["leg_id"]: s for s in course["segments"]}
+    # Leg 13 is 3rd in half recipe (after 12, 06), not after finish leg 14.
+    assert by_leg["06"]["half_from_km"] < by_leg["13"]["half_from_km"]
+    assert by_leg["13"]["half_to_km"] < by_leg["14"]["half_from_km"]
+    assert by_leg["14"]["half_to_km"] == max(
+        s["half_to_km"] for s in course["segments"] if s.get("half_to_km")
+    )
 
 
 def test_export_after_apply_org_primary_keeps_segments(tmp_path, monkeypatch):
