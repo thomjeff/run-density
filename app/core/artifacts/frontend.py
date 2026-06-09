@@ -585,6 +585,25 @@ def _load_schema_keys(reports_dir):
     return schema_keys
 
 
+def _resolve_schema_key(seg_id: str, schema_keys: dict, dims: dict) -> str:
+    """
+    Resolve operational schema for a segment.
+
+    Prefer bins.parquet schema_key; fall back to segments.csv ``schema`` column
+    for segments skipped by density (e.g. short connectors with no bins).
+    """
+    from_bins = schema_keys.get(seg_id)
+    if from_bins is not None and str(from_bins).strip():
+        return str(from_bins).strip()
+    for field in ("schema_key", "schema"):
+        val = dims.get(field)
+        if val is not None and str(val).strip():
+            return str(val).strip()
+    raise ValueError(
+        f"Segment {seg_id} missing schema in bins metadata and segments.csv."
+    )
+
+
 def _create_segment_feature(seg_id, segment_dims, schema_keys):
     """Create a GeoJSON feature for a segment."""
     dims = segment_dims.get(seg_id, {})
@@ -597,9 +616,7 @@ def _create_segment_feature(seg_id, segment_dims, schema_keys):
     direction = dims.get("direction")
     if not direction:
         raise ValueError(f"Segment {seg_id} missing direction in segments metadata.")
-    schema_key = schema_keys.get(seg_id)
-    if not schema_key:
-        raise ValueError(f"Segment {seg_id} missing schema_key in bins metadata.")
+    schema_key = _resolve_schema_key(seg_id, schema_keys, dims)
     
     # Issue #655: Calculate length_km from event-specific fields
     length_km = None
@@ -671,9 +688,7 @@ def _build_segment_feature_properties(seg_id, segment_dims, schema_keys):
     direction = dims.get("direction")
     if not direction:
         raise ValueError(f"Segment {seg_id} missing direction in segments metadata.")
-    schema_key = schema_keys.get(seg_id)
-    if not schema_key:
-        raise ValueError(f"Segment {seg_id} missing schema_key in bins metadata.")
+    schema_key = _resolve_schema_key(seg_id, schema_keys, dims)
     
     # Issue #655: Calculate length_km from event-specific fields
     length_km = None
@@ -920,13 +935,7 @@ def generate_segments_geojson(reports_dir: Path, analysis_context: Optional[Any]
             direction = dims.get("direction")
             if not direction:
                 raise ValueError(f"Segment {seg_id} missing direction in segments metadata.")
-            # Issue #655: Make schema_key optional - if not found in bins, try to get from segments_df or use default
-            schema_key = schema_keys.get(seg_id) or dims.get("schema_key")
-            if not schema_key:
-                raise ValueError(
-                    f"Segment {seg_id} missing schema_key in bins metadata and segments.csv. "
-                    "This is a data validation error - fail-fast."
-                )
+            schema_key = _resolve_schema_key(seg_id, schema_keys, dims)
             # Update properties with dimensions
             props["label"] = seg_label
             

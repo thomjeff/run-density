@@ -135,6 +135,7 @@ def _default_manifest(event_ids: Optional[Sequence[str]] = None) -> Dict[str, An
     return {
         "version": 1,
         "label": "",
+        "leg_source": "org",
         "legs": [],
         "recipes": {eid: [] for eid in eids},
         "flow_overrides": [],
@@ -296,15 +297,39 @@ def seed_reference_segment_library(config_id: str) -> Dict[str, Any]:
     return get_package_segment_library_state(cid)
 
 
+def parse_recipe_order_values(raw: Any) -> List[int]:
+    """
+    Parse UI order cell: single integer or comma-separated slots (e.g. ``7,16``).
+
+    Returns sorted unique positive integers.
+    """
+    if raw is None or raw == "":
+        return []
+    if isinstance(raw, (list, tuple)):
+        parts = [str(x).strip() for x in raw if str(x).strip()]
+    else:
+        parts = [p.strip() for p in str(raw).split(",") if p.strip()]
+    values: List[int] = []
+    for part in parts:
+        try:
+            n = int(part)
+        except (TypeError, ValueError):
+            continue
+        if n > 0 and n not in values:
+            values.append(n)
+    return sorted(values)
+
+
 def recipes_from_order_grid(
     legs: Sequence[Dict[str, Any]],
-    order_by_event: Dict[str, Dict[str, Optional[int]]],
+    order_by_event: Dict[str, Dict[str, Any]],
     event_ids: Optional[Sequence[str]] = None,
 ) -> Dict[str, List[str]]:
     """
     Convert UI order grid to recipe lists.
 
-    order_by_event[event][leg_id] = 1-based order or None if unused.
+    order_by_event[event][leg_id] = 1-based order, comma-separated orders
+    (``7,16``), or None if unused. The same leg id may appear multiple times.
     """
     recipes: Dict[str, List[str]] = {}
     leg_ids = [str(c.get("id", "")).strip() for c in legs if c.get("id")]
@@ -314,16 +339,9 @@ def recipes_from_order_grid(
         orders = order_by_event.get(key) or order_by_event.get(eid) or {}
         pairs: List[tuple] = []
         for cid in leg_ids:
-            raw = orders.get(cid)
-            if raw is None or raw == "":
-                continue
-            try:
-                n = int(raw)
-            except (TypeError, ValueError):
-                continue
-            if n > 0:
+            for n in parse_recipe_order_values(orders.get(cid)):
                 pairs.append((n, cid))
-        pairs.sort(key=lambda x: x[0])
+        pairs.sort(key=lambda x: (x[0], x[1]))
         recipes[eid] = [cid for _, cid in pairs]
     return recipes
 
@@ -332,49 +350,53 @@ def order_grid_from_recipes(
     legs: Sequence[Dict[str, Any]],
     recipes: Dict[str, Any],
     event_ids: Optional[Sequence[str]] = None,
-) -> Dict[str, Dict[str, Optional[int]]]:
+) -> Dict[str, Dict[str, Optional[str]]]:
     """Inverse of recipes_from_order_grid for UI."""
     leg_ids = [str(c.get("id", "")).strip() for c in legs if c.get("id")]
-    grid: Dict[str, Dict[str, Optional[int]]] = {}
+    grid: Dict[str, Dict[str, Optional[str]]] = {}
     eids = list(event_ids) if event_ids is not None else []
     for eid in eids:
         key = eid if eid in recipes else eid.lower()
         seq = recipes.get(key) or []
-        row: Dict[str, Optional[int]] = {cid: None for cid in leg_ids}
-        for i, cid in enumerate(seq, start=1):
-            if cid in row:
-                row[cid] = i
+        positions: Dict[str, List[int]] = {cid: [] for cid in leg_ids}
+        for i, raw_cid in enumerate(seq, start=1):
+            cid = str(raw_cid).strip()
+            if cid in positions:
+                positions[cid].append(i)
+        row: Dict[str, Optional[str]] = {}
+        for cid in leg_ids:
+            pos = positions.get(cid) or []
+            row[cid] = ",".join(str(p) for p in pos) if pos else None
         grid[eid] = row
     return grid
 
 
 def get_package_segment_library_state(config_id: str) -> Dict[str, Any]:
-    """Full library state for API: legs, recipes, lengths, warnings."""
-    cid = validate_config_id(config_id)
-    package_path = resolve_config_package_path(cid)
-    lib_dir = package_segment_library_dir(package_path)
-    manifest = load_package_segment_manifest(cid)
-    legs_meta = manifest_legs(manifest)
-    event_ids = package_recipe_event_ids(cid)
+    """Full library state for API: org or package legs, package recipes, warnings."""
+    from app.core.config_package.leg_library_resolver import resolve_leg_library
 
-    if not lib_dir.is_dir() or not legs_meta:
+    cid = validate_config_id(config_id)
+    lib_dir, leg_manifest, leg_source, pkg_manifest = resolve_leg_library(cid)
+    legs_meta = manifest_legs(leg_manifest)
+    event_ids = package_recipe_event_ids(cid)
+    recipes = pkg_manifest.get("recipes") or {}
+
+    if not legs_meta:
         return {
             "config_id": cid,
             "library_dir": str(lib_dir),
+            "leg_source": leg_source,
             "has_library": False,
             "package_events": event_ids,
-            "manifest": manifest,
+            "manifest": pkg_manifest,
             "legs": [],
-            "recipes": manifest.get("recipes") or {},
-            "order_grid": order_grid_from_recipes(
-                [], manifest.get("recipes") or {}, event_ids
-            ),
+            "recipes": recipes,
+            "order_grid": order_grid_from_recipes([], recipes, event_ids),
             "recipe_lengths_km": {eid: 0.0 for eid in event_ids},
             "stitch_warnings": [],
         }
 
-    manifest_path = _manifest_path(package_path)
-    legs_by_id = load_leg_library(lib_dir, manifest)
+    legs_by_id = load_leg_library(lib_dir, leg_manifest)
     from app.core.config_package.legs import leg_row_from_entry
 
     leg_rows: List[Dict[str, Any]] = []
@@ -385,7 +407,6 @@ def get_package_segment_library_state(config_id: str) -> Dict[str, Any]:
         loaded = legs_by_id.get(leg_id_key) or {}
         leg_rows.append(leg_row_from_entry(entry, loaded))
 
-    recipes = manifest.get("recipes") or {}
     stitch_warnings: List[str] = []
     recipe_lengths: Dict[str, float] = {}
     for eid in event_ids:
@@ -400,9 +421,10 @@ def get_package_segment_library_state(config_id: str) -> Dict[str, Any]:
     return {
         "config_id": cid,
         "library_dir": str(lib_dir),
+        "leg_source": leg_source,
         "has_library": bool(leg_rows),
         "package_events": event_ids,
-        "manifest": manifest,
+        "manifest": pkg_manifest,
         "legs": leg_rows,
         "recipes": recipes,
         "order_grid": order_grid_from_recipes(leg_rows, recipes, event_ids),
@@ -424,13 +446,13 @@ def export_package_flow_and_gpx_files(config_id: str) -> Dict[str, Any]:
     """
     Write flow.csv and per-event GPX files into the config package folder.
 
-    Uses segment library recipes when manifest exists; otherwise builds flow.csv
-    from course.json segments only (no GPX).
+    Uses combined org/package leg library + recipes when available; otherwise
+    builds flow.csv from course.json segments only (no GPX).
     """
+    from app.core.config_package.leg_library_resolver import combined_manifest_for_apply
+
     cid = validate_config_id(config_id)
     package_path = resolve_config_package_path(cid)
-    lib_dir = package_segment_library_dir(package_path)
-    manifest_path = _manifest_path(package_path)
     event_ids = package_recipe_event_ids(cid)
     course = load_config_course(cid)
     segments = course.get("segments") or []
@@ -439,9 +461,20 @@ def export_package_flow_and_gpx_files(config_id: str) -> Dict[str, Any]:
     flow_path = package_path / "flow.csv"
     gpx_exports: List[Dict[str, str]] = []
 
-    if manifest_path.is_file():
-        bundle = export_library_to_course(lib_dir, manifest_path, event_ids=event_ids)
-        flow_csv = bundle["flow_csv"]
+    library_bundle: Optional[Dict[str, Any]] = None
+    library_dir: Optional[Path] = None
+    try:
+        lib_dir, combined = combined_manifest_for_apply(cid)
+        if manifest_legs(combined):
+            library_dir = lib_dir
+            library_bundle = export_library_to_course(
+                lib_dir, manifest=combined, event_ids=event_ids
+            )
+    except FileNotFoundError:
+        library_bundle = None
+
+    if library_bundle and library_dir is not None:
+        flow_csv = library_bundle["flow_csv"]
         flow_validation = validate_flow_csv_text(flow_csv)
         if not flow_validation.ok:
             raise ValueError(
@@ -450,8 +483,8 @@ def export_package_flow_and_gpx_files(config_id: str) -> Dict[str, Any]:
         flow_backup = _backup_export_file(flow_path)
         flow_path.write_text(flow_csv, encoding="utf-8")
 
-        manifest = bundle["manifest"]
-        legs_by_id = load_leg_library(lib_dir, manifest)
+        manifest = library_bundle["manifest"]
+        legs_by_id = load_leg_library(library_dir, manifest)
         recipes = manifest.get("recipes") or {}
         for eid in event_ids:
             key = eid if eid in recipes else eid.lower()
@@ -514,15 +547,18 @@ def get_event_route_preview(config_id: str, event_id: str) -> Dict[str, Any]:
     if not eid:
         raise ValueError("event_id is required")
 
-    package_path = resolve_config_package_path(cid)
-    lib_dir = package_segment_library_dir(package_path)
-    manifest_path = _manifest_path(package_path)
-    if not manifest_path.is_file():
-        raise ValueError("No segment library; import legs and save recipes first")
+    from app.core.config_package.leg_library_resolver import (
+        combined_manifest_for_apply,
+        resolve_leg_library,
+    )
 
-    manifest = load_manifest(manifest_path)
-    legs_by_id = load_leg_library(lib_dir, manifest)
-    recipes = manifest.get("recipes") or {}
+    _lib_dir, combined = combined_manifest_for_apply(cid)
+    _lib_dir2, _leg_manifest, leg_source, pkg_manifest = resolve_leg_library(cid)
+    if not manifest_legs(combined):
+        raise ValueError("No legs in library; import GPX legs to the org library first")
+
+    legs_by_id = load_leg_library(_lib_dir, combined)
+    recipes = pkg_manifest.get("recipes") or {}
     leg_ids = recipes.get(eid) or recipes.get(event_id)
     if not leg_ids:
         raise ValueError(f"No recipe for event: {eid}")
@@ -548,14 +584,17 @@ def save_package_recipes(
     config_id: str,
     recipes: Dict[str, List[str]],
     *,
-    order_by_event: Optional[Dict[str, Dict[str, Optional[int]]]] = None,
+    order_by_event: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Persist recipe lists to package manifest."""
+    from app.core.config_package.leg_library_resolver import resolve_leg_library
+
     manifest = load_package_segment_manifest(config_id)
     event_ids = package_recipe_event_ids(config_id)
     if order_by_event is not None:
+        _lib_dir, leg_manifest, _source, _pkg = resolve_leg_library(config_id)
         recipes = recipes_from_order_grid(
-            manifest_legs(manifest), order_by_event, event_ids
+            manifest_legs(leg_manifest), order_by_event, event_ids
         )
     normalized: Dict[str, List[str]] = {}
     for eid in event_ids:
@@ -577,15 +616,18 @@ def apply_package_recipes(
 
     Optionally writes segments.csv via export_config_package_segments.
     """
+    from app.core.config_package.leg_library_resolver import combined_manifest_for_apply
+
     cid = validate_config_id(config_id)
     package_path = resolve_config_package_path(cid)
-    lib_dir = package_segment_library_dir(package_path)
-    manifest_path = _manifest_path(package_path)
-    if not manifest_path.is_file():
-        raise ValueError("No segment library; import or seed GPX legs first")
+    lib_dir, combined = combined_manifest_for_apply(cid)
+    if not manifest_legs(combined):
+        raise ValueError("No legs in library; import GPX legs to the org library first")
 
     event_ids = package_recipe_event_ids(cid)
-    bundle = export_library_to_course(lib_dir, manifest_path, event_ids=event_ids)
+    bundle = export_library_to_course(
+        lib_dir, manifest=combined, event_ids=event_ids
+    )
     segments = bundle["segments"]
     if not segments:
         raise ValueError("Recipes produced no segments; check leg GPX and recipe order")
@@ -630,12 +672,19 @@ def import_gpx_files_to_library(
     uploads: Sequence[tuple],
 ) -> Dict[str, Any]:
     """
-    Save uploaded GPX and optional runflow leg export JSON into segment_library/.
+    Save uploaded GPX and optional runflow leg export JSON.
+
+    Org-primary packages import into ``runflow/org/legs/``; legacy packages write
+    into ``segment_library/``.
 
     uploads: sequence of (filename, bytes).
     Pair ``{leg_id}.gpx`` with ``{leg_id}.json`` from a leg export zip (same import).
     Filenames should match manifest leg file names when updating an existing library.
     """
+    from app.core.config_package.leg_library_resolver import (
+        LEG_SOURCE_ORG,
+        effective_leg_source,
+    )
     from app.core.config_package.legs import (
         apply_leg_exports_to_manifest,
         leg_id_from_export_filename,
@@ -643,6 +692,12 @@ def import_gpx_files_to_library(
     )
 
     cid = validate_config_id(config_id)
+    pkg_manifest = load_package_segment_manifest(cid)
+    if effective_leg_source(pkg_manifest) == LEG_SOURCE_ORG:
+        from app.core.config_package.org_leg_library import import_gpx_files_to_org_library
+
+        import_gpx_files_to_org_library(uploads)
+        return get_package_segment_library_state(cid)
     package_path = resolve_config_package_path(cid)
     lib_dir = package_segment_library_dir(package_path)
     lib_dir.mkdir(parents=True, exist_ok=True)

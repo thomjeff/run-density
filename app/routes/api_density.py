@@ -15,6 +15,7 @@ import logging
 import pandas as pd
 from pathlib import Path
 import json
+import re
 
 # Issue #466 Step 2: Storage consolidated to app.storage
 
@@ -26,6 +27,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Issue #466 Step 2: Removed legacy storage singleton (not needed)
+
+
+def _natural_seg_id_key(seg_id: str) -> tuple:
+    """Sort key so S2 < S10 (split into text/number parts, compare numbers numerically)."""
+    parts = re.split(r"(\d+)", str(seg_id))
+    return tuple(int(p) if p.isdigit() else p.lower() for p in parts)
 
 
 def _format_time_value(value: Any) -> Optional[str]:
@@ -433,8 +440,8 @@ async def get_density_segments(
             )
             segments_list.append(segment_record)
         
-        # Sort by seg_id
-        segments_list.sort(key=lambda x: x["seg_id"])
+        # Sort by seg_id (natural order: S1, S2, ... S10 — not lexicographic)
+        segments_list.sort(key=lambda x: _natural_seg_id_key(x["seg_id"]))
         
         response = JSONResponse(content={
             "selected_day": selected_day,

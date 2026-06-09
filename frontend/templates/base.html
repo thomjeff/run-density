@@ -300,7 +300,7 @@
             {% if cloud_mode %}
             <li><a href="/dashboard" {% if request.url and request.url.path == "/dashboard" %}class="active"{% endif %}>Dashboard</a></li>
             <li><a href="/locations" {% if request.url and request.url.path == "/locations" %}class="active"{% endif %}>Locations</a></li>
-            <li><a href="/locsheets" {% if request.url and request.url.path == "/locsheets" %}class="active"{% endif %}>Loc Sheets</a></li>
+            {# Loc Sheets (/locsheets) hidden from nav; one-pagers linked from Locations UI — route kept for now #}
             <li><a href="/logout" style="color: #e74c3c;">Logout</a></li>
             {% else %}
             <li><a href="/dashboard" {% if request.url and request.url.path == "/dashboard" %}class="active"{% endif %}>Dashboard</a></li>
@@ -308,7 +308,7 @@
             <li><a href="/density" {% if request.url and request.url.path == "/density" %}class="active"{% endif %}>Density</a></li>
             <li><a href="/flow" {% if request.url and request.url.path == "/flow" %}class="active"{% endif %}>Flow</a></li>
             <li><a href="/locations" {% if request.url and request.url.path == "/locations" %}class="active"{% endif %}>Locations</a></li>
-            <li><a href="/locsheets" {% if request.url and request.url.path == "/locsheets" %}class="active"{% endif %}>Loc Sheets</a></li>
+            {# Loc Sheets (/locsheets) hidden from nav; one-pagers linked from Locations UI — route kept for now #}
             <li><a href="/reports" {% if request.url and request.url.path == "/reports" %}class="active"{% endif %}>Reports</a></li>
             <li><a href="/analysis" {% if request.url and request.url.path == "/analysis" %}class="active"{% endif %}>Analysis</a></li>
             <li><a href="/config" {% if request.url and request.url.path == "/config" %}class="active"{% endif %}>Race Configuration</a></li>

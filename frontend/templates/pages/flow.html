@@ -192,8 +192,8 @@
         if (currentSort.column) {
             sortedSegments = sortSegments(segments, currentSort.column, currentSort.direction);
         } else {
-            // Default sort by seg_id
-            sortedSegments = [...segments].sort((a, b) => (a.seg_id || '').localeCompare(b.seg_id || ''));
+            // Default sort by seg_id (numeric-aware: S2 before S10)
+            sortedSegments = [...segments].sort((a, b) => (a.seg_id || '').localeCompare(b.seg_id || '', undefined, { numeric: true }));
         }
         
         sortedSegments.forEach(segment => {

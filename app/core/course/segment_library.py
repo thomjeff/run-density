@@ -4,7 +4,7 @@ Segment library + event recipes (reusable GPX legs and per-event recipes).
 A segment library is a set of reusable GPX legs. Event recipes list leg ids in order.
 From that we build:
   - per-event combined GPX
-  - multi-event segments.csv (one row per leg, 2026-style)
+  - multi-event segments.csv (one row per recipe occurrence, 2026-style)
   - flow.csv rows for event pairs on shared legs (#759 baseline)
 """
 
@@ -186,18 +186,91 @@ def build_event_gpx_content(
     return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding="unicode")
 
 
+LegOccurrence = Tuple[str, int]
+
+
 def _events_for_leg(
     leg_id: str,
     recipes: Dict[str, Any],
     event_ids: Sequence[str],
 ) -> List[str]:
+    """Events whose recipe includes leg_id at least once (first occurrence)."""
+    return _events_for_leg_occurrence(leg_id, 1, recipes, event_ids)
+
+
+def _events_for_leg_occurrence(
+    leg_id: str,
+    occurrence: int,
+    recipes: Dict[str, Any],
+    event_ids: Sequence[str],
+) -> List[str]:
+    """Events whose recipe includes leg_id at least ``occurrence`` times."""
     out: List[str] = []
+    leg_id = str(leg_id).strip()
+    if not leg_id or occurrence < 1:
+        return out
     for eid in event_ids:
         key = eid if eid in recipes else eid.lower()
         seq = recipes.get(key) or []
-        if leg_id in seq:
+        count = sum(1 for raw in seq if str(raw).strip() == leg_id)
+        if count >= occurrence:
             out.append(eid.lower())
     return out
+
+
+def _build_event_occurrence_km(
+    recipes: Dict[str, Any],
+    legs_by_id: Dict[str, Dict[str, Any]],
+    event_ids: Sequence[str],
+) -> Dict[str, Dict[LegOccurrence, Tuple[float, float]]]:
+    """Per-event km window for each (leg_id, 1-based occurrence) in that recipe."""
+    result: Dict[str, Dict[LegOccurrence, Tuple[float, float]]] = {}
+    for eid in event_ids:
+        key = eid if eid in recipes else eid.lower()
+        seq = recipes.get(key) or []
+        occ_counts: Dict[str, int] = {}
+        cum = 0.0
+        event_map: Dict[LegOccurrence, Tuple[float, float]] = {}
+        for raw_id in seq:
+            cid = str(raw_id).strip()
+            ch = legs_by_id.get(cid)
+            if not ch:
+                continue
+            length = float(ch["length_km"])
+            occ_counts[cid] = occ_counts.get(cid, 0) + 1
+            occ = occ_counts[cid]
+            cum += length
+            event_map[(cid, occ)] = (round(cum - length, 2), round(cum, 2))
+        result[eid.lower()] = event_map
+    return result
+
+
+def _recipe_occurrence_order(
+    legs_by_id: Dict[str, Dict[str, Any]],
+    event_ids: Sequence[str],
+    recipes: Dict[str, Any],
+) -> List[LegOccurrence]:
+    """(leg_id, occurrence) pairs in recipe traversal order (first-seen wins)."""
+    ordered: List[LegOccurrence] = []
+    seen: set[LegOccurrence] = set()
+    for eid in event_ids:
+        key = eid if eid in recipes else eid.lower()
+        occ_in_pass: Dict[str, int] = {}
+        for raw_id in recipes.get(key) or []:
+            cid = str(raw_id).strip()
+            if not cid or cid not in legs_by_id:
+                continue
+            occ_in_pass[cid] = occ_in_pass.get(cid, 0) + 1
+            occ = occ_in_pass[cid]
+            token = (cid, occ)
+            if token in seen:
+                continue
+            events = _events_for_leg_occurrence(cid, occ, recipes, event_ids)
+            if not events:
+                continue
+            seen.add(token)
+            ordered.append(token)
+    return ordered
 
 
 def _recipe_leg_order(
@@ -207,20 +280,8 @@ def _recipe_leg_order(
     recipes: Dict[str, Any],
 ) -> List[str]:
     """Leg ids in recipe traversal order (union across events, first-seen wins)."""
-    ordered: List[str] = []
-    seen: set[str] = set()
-    for eid in event_ids:
-        key = eid if eid in recipes else eid.lower()
-        for raw_id in recipes.get(key) or []:
-            cid = str(raw_id).strip()
-            if not cid or cid in seen or cid not in legs_by_id:
-                continue
-            events = _events_for_leg(cid, recipes, event_ids)
-            if not events:
-                continue
-            seen.add(cid)
-            ordered.append(cid)
-    return ordered
+    del manifest  # kept for call-site compatibility
+    return [cid for cid, _occ in _recipe_occurrence_order(legs_by_id, event_ids, recipes)]
 
 
 def build_course_segments_from_library(
@@ -229,26 +290,16 @@ def build_course_segments_from_library(
     event_ids: Optional[Sequence[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Build course['segments'] list: one dict per library leg (multi-event row).
+    Build course['segments'] list: one row per recipe occurrence of a leg.
 
-    Each segment has geometry length (leg length) and per-event from/to km from
-    cumulative distance along each event's recipe (2026 segments.csv model).
+    The same library leg may appear multiple times in one event's recipe (e.g.
+    out-and-back). Each passage becomes its own segment row with distinct
+    per-event km windows. Leg metadata is shared; ``leg_occurrence`` marks the
+    nth use of ``leg_id`` in the combined ordering.
     """
     event_ids = list(event_ids or COURSE_EVENT_IDS)
     recipes = manifest.get("recipes") or {}
-
-    # Per-event cumulative at each leg end (only legs in that recipe)
-    event_cum_at_leg: Dict[str, Dict[str, float]] = {e: {} for e in event_ids}
-    for eid in event_ids:
-        key = eid if eid in recipes else eid.lower()
-        seq = recipes.get(key) or []
-        cum = 0.0
-        for cid in seq:
-            ch = legs_by_id.get(cid)
-            if not ch:
-                continue
-            cum += float(ch["length_km"])
-            event_cum_at_leg[eid.lower()][cid] = round(cum, 2)
+    event_km = _build_event_occurrence_km(recipes, legs_by_id, event_ids)
 
     entries_by_id: Dict[str, Dict[str, Any]] = {
         str(entry.get("id", "")).strip(): entry
@@ -257,23 +308,26 @@ def build_course_segments_from_library(
     }
 
     segments: List[Dict[str, Any]] = []
-    segment_index = 0
-    for cid in _recipe_leg_order(manifest, legs_by_id, event_ids, recipes):
+    for segment_index, (cid, occ) in enumerate(
+        _recipe_occurrence_order(legs_by_id, event_ids, recipes), start=1
+    ):
         entry = entries_by_id.get(cid) or {}
         ch = legs_by_id.get(cid)
         if not ch:
             continue
-        events = _events_for_leg(cid, recipes, event_ids)
+        events = _events_for_leg_occurrence(cid, occ, recipes, event_ids)
         if not events:
             continue
-        segment_index += 1
         length_km = float(ch["length_km"])
         leg_description = (
             str(entry.get("description") or entry.get("flow_notes") or "").strip()
         )
+        seg_label = (entry.get("seg_label") or ch.get("name") or cid).strip()
+        if occ > 1:
+            seg_label = f"{seg_label} ({occ})"
         seg: Dict[str, Any] = {
             "seg_id": f"S{segment_index}",
-            "seg_label": (entry.get("seg_label") or ch.get("name") or cid).strip(),
+            "seg_label": seg_label,
             "from_label": (entry.get("start_label") or "").strip(),
             "to_label": (entry.get("end_label") or "").strip(),
             "width_m": entry.get("width_m", 3),
@@ -284,6 +338,7 @@ def build_course_segments_from_library(
             "description": leg_description,
             "events": events,
             "leg_id": cid,
+            "leg_occurrence": occ,
             "length_km": length_km,
             "from_km": 0.0,
             "to_km": length_km,
@@ -294,8 +349,7 @@ def build_course_segments_from_library(
                 seg[f"{el}_from_km"] = 0.0
                 seg[f"{el}_to_km"] = 0.0
                 continue
-            to_km = event_cum_at_leg[el].get(cid, 0.0)
-            from_km = round(to_km - length_km, 2)
+            from_km, to_km = event_km.get(el, {}).get((cid, occ), (0.0, 0.0))
             seg[f"{el}_from_km"] = max(0.0, from_km)
             seg[f"{el}_to_km"] = to_km
         segments.append(seg)
@@ -307,13 +361,15 @@ def export_library_to_course(
     library_dir: Path,
     manifest_path: Optional[Path] = None,
     *,
+    manifest: Optional[Dict[str, Any]] = None,
     event_ids: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
     """
     Load library + manifest and return export bundle (segments, flow csv, validation).
     """
-    manifest_path = manifest_path or (library_dir / "manifest.yaml")
-    manifest = load_manifest(manifest_path)
+    if manifest is None:
+        manifest_path = manifest_path or (library_dir / "manifest.yaml")
+        manifest = load_manifest(manifest_path)
     legs_by_id = load_leg_library(library_dir, manifest)
     event_ids = list(event_ids or COURSE_EVENT_IDS)
 

@@ -5,6 +5,7 @@ import pytest
 from app.core.config_package.segment_recipes import (
     _leg_id_from_filename,
     order_grid_from_recipes,
+    parse_recipe_order_values,
     recipes_from_order_grid,
     sync_manifest_legs_from_gpx,
 )
@@ -71,14 +72,45 @@ def test_sync_manifest_legs_preserves_id_by_filename(tmp_path):
     assert legs[0]["file"] == "16_return.gpx"
 
 
+def test_parse_recipe_order_values():
+    assert parse_recipe_order_values("7,16") == [7, 16]
+    assert parse_recipe_order_values(" 8 ") == [8]
+    assert parse_recipe_order_values("") == []
+    assert parse_recipe_order_values("7,7,16") == [7, 16]
+
+
+def test_recipes_from_order_grid_leg_reuse():
+    legs = [{"id": "05"}, {"id": "02"}, {"id": "01"}]
+    grid = {
+        "full": {"01": 1, "05": "7,16", "02": 8},
+        "half": {"01": 1, "05": 8},
+        "10k": {"01": 1, "05": 5},
+    }
+    recipes = recipes_from_order_grid(legs, grid, ["full", "half", "10k"])
+    assert recipes["full"] == ["01", "05", "02", "05"]
+    assert recipes["half"] == ["01", "05"]
+    assert recipes["10k"] == ["01", "05"]
+
+
+def test_order_grid_roundtrip_with_reuse():
+    legs = [{"id": "a"}, {"id": "b"}]
+    recipes = {"full": ["a", "b", "a"], "half": ["a"], "10k": []}
+    events = ["full", "half", "10k"]
+    grid = order_grid_from_recipes(legs, recipes, events)
+    assert grid["full"]["a"] == "1,3"
+    assert grid["full"]["b"] == "2"
+    back = recipes_from_order_grid(legs, grid, events)
+    assert back == recipes
+
+
 def test_order_grid_roundtrip():
     legs = [{"id": "a"}, {"id": "b"}, {"id": "c"}]
     recipes = {"full": ["a", "c"], "half": ["b"], "10k": ["a", "b", "c"]}
     events = ["full", "half", "10k"]
     grid = order_grid_from_recipes(legs, recipes, events)
-    assert grid["full"]["a"] == 1
-    assert grid["full"]["c"] == 2
+    assert grid["full"]["a"] == "1"
+    assert grid["full"]["c"] == "2"
     assert grid["full"]["b"] is None
-    assert grid["half"]["b"] == 1
+    assert grid["half"]["b"] == "1"
     back = recipes_from_order_grid(legs, grid, events)
     assert back == recipes

@@ -1080,6 +1080,21 @@ document.addEventListener('DOMContentLoaded', function () {
         return t === 'traffic' || t === 'extract';
     }
 
+    function proxyLocIdIsSet(loc) {
+        var p = loc && loc.proxy_loc_id;
+        if (p == null || p === '') return false;
+        var s = String(p).trim();
+        return s !== '' && s.toLowerCase() !== 'nan';
+    }
+
+    /** Direct timing sources only — exclude self and locations that proxy elsewhere. */
+    function isEligibleProxyTimingSource(other, selfId) {
+        var oid = locationNumericId(other);
+        if (!oid || (selfId && oid === selfId)) return false;
+        if (proxyLocIdIsSet(other)) return false;
+        return true;
+    }
+
     function locationNumericId(loc) {
         if (!loc) return 0;
         var raw = loc.id != null ? loc.id : loc.loc_id;
@@ -1100,8 +1115,8 @@ document.addEventListener('DOMContentLoaded', function () {
             return locationNumericId(a) - locationNumericId(b);
         });
         others.forEach(function (other) {
+            if (!isEligibleProxyTimingSource(other, selfId)) return;
             var oid = locationNumericId(other);
-            if (!oid || (selfId && oid === selfId)) return;
             var opt = document.createElement('option');
             opt.value = String(oid);
             var typeHint = other.loc_type ? ' (' + other.loc_type + ')' : '';
@@ -1116,10 +1131,21 @@ document.addEventListener('DOMContentLoaded', function () {
         if (pv) {
             sel.value = pv;
             if (sel.value !== pv) {
-                var missing = document.createElement('option');
-                missing.value = pv;
-                missing.textContent = pv + ' — (location not found)';
-                sel.appendChild(missing);
+                var stale = document.createElement('option');
+                stale.value = pv;
+                var staleTarget = others.find(function (other) {
+                    return String(locationNumericId(other)) === pv;
+                });
+                if (staleTarget && proxyLocIdIsSet(staleTarget)) {
+                    stale.textContent =
+                        pv +
+                        ' — ' +
+                        (staleTarget.loc_label || 'Untitled') +
+                        ' (chained proxy — pick a direct source)';
+                } else {
+                    stale.textContent = pv + ' — (location not found)';
+                }
+                sel.appendChild(stale);
                 sel.value = pv;
             }
         }
@@ -1358,6 +1384,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                     if (proxyNum === locationNumericId(loc)) {
                         alert('A location cannot use itself as the proxy timing source.');
+                        btnSave.disabled = false;
+                        return;
+                    }
+                    var proxyTarget = getCourseLocations().find(function (other) {
+                        return locationNumericId(other) === proxyNum;
+                    });
+                    if (proxyTarget && proxyLocIdIsSet(proxyTarget)) {
+                        alert(
+                            'Proxy timing source must be a direct timing source (not another proxied location). ' +
+                                'Choose a course/official location with a segment, or clear proxy on the target first.'
+                        );
                         btnSave.disabled = false;
                         return;
                     }
@@ -4816,7 +4853,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 getResources: getPackageResources,
                 getLocationTypeLabel: getLocationTypeLabel,
                 locationNumericId: locationNumericId,
-                offCourseUsesProxyTiming: offCourseUsesProxyTiming
+                offCourseUsesProxyTiming: offCourseUsesProxyTiming,
+                proxyLocIdIsSet: proxyLocIdIsSet,
+                isEligibleProxyTimingSource: isEligibleProxyTimingSource
             });
         }
 

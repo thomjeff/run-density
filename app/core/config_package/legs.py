@@ -758,6 +758,42 @@ def _segment_for_leg(
     return None
 
 
+def _segments_for_leg(
+    segments: Sequence[Dict[str, Any]], leg_id: str
+) -> List[Dict[str, Any]]:
+    leg_id = str(leg_id).strip()
+    return [
+        seg
+        for seg in segments
+        if isinstance(seg, dict) and segment_leg_id(seg) == leg_id
+    ]
+
+
+def _seg_ids_for_leg(segments: Sequence[Dict[str, Any]], leg_id: str) -> str:
+    return ",".join(
+        str(seg.get("seg_id", "")).strip()
+        for seg in _segments_for_leg(segments, leg_id)
+        if str(seg.get("seg_id", "")).strip()
+    )
+
+
+def _event_flags_for_leg(
+    segments: Sequence[Dict[str, Any]],
+    leg_id: str,
+    event_ids: Sequence[str],
+) -> Dict[str, str]:
+    """Union event flags across all segment rows sharing a library leg."""
+    on_seg: set[str] = set()
+    for seg in _segments_for_leg(segments, leg_id):
+        for eid in seg.get("events") or []:
+            on_seg.add(str(eid).strip().lower())
+    flags: Dict[str, str] = {}
+    for eid in event_ids:
+        el = str(eid).strip().lower()
+        flags[el] = "y" if el in on_seg else "n"
+    return flags
+
+
 def _parse_location_seg_ids(seg_id_value: Any) -> List[str]:
     """Parse comma-separated seg_id(s) on a location row."""
     if seg_id_value is None:
@@ -827,8 +863,7 @@ def refresh_location_seg_ids_from_segments(
 
         leg_id = _leg_id_for_location(loc)
         if leg_id:
-            seg = _segment_for_leg(segments, leg_id)
-            new_seg = str(seg.get("seg_id", "")).strip() if seg else ""
+            new_seg = _seg_ids_for_leg(segments, leg_id)
             if new_seg != old_seg:
                 loc["seg_id"] = new_seg
                 updated += 1
@@ -973,8 +1008,14 @@ def merge_leg_locations_into_course(config_id: str) -> None:
   notes, etc.) matched by ``leg_loc_key``. Sets ``seg_id`` from the combined
     segment whose ``leg_id`` matches the leg.
     """
+    from app.core.config_package.leg_library_resolver import (
+        recipe_leg_ids_from_package,
+        resolve_leg_library,
+    )
+
     cid = validate_config_id(config_id)
-    manifest = load_package_segment_manifest(cid)
+    _lib_dir, manifest, _leg_source, _pkg_manifest = resolve_leg_library(cid)
+    recipe_ids = recipe_leg_ids_from_package(cid)
     course = load_config_course(cid)
     segments = [
         s for s in (course.get("segments") or []) if isinstance(s, dict)
@@ -1014,9 +1055,10 @@ def merge_leg_locations_into_course(config_id: str) -> None:
         leg_id = str(entry.get("id", "")).strip()
         if not leg_id:
             continue
-        seg = _segment_for_leg(segments, leg_id)
-        seg_id = str(seg.get("seg_id", "")).strip() if seg else ""
-        event_flags = _event_flags_for_segment(seg, event_ids)
+        if recipe_ids and leg_id not in recipe_ids:
+            continue
+        seg_id = _seg_ids_for_leg(segments, leg_id)
+        event_flags = _event_flags_for_leg(segments, leg_id, event_ids)
 
         used_loc_keys: set[str] = set(existing_by_loc_key.keys())
         for i, loc in enumerate(
@@ -1181,15 +1223,17 @@ def sync_leg_metadata_into_course(config_id: str) -> bool:
     Matches segments to manifest legs by ``leg_id`` (or ``S{n}`` order fallback).
     Does not recompute per-event km or recipe order — use ``apply_package_recipes`` for that.
     """
+    from app.core.config_package.leg_library_resolver import resolve_leg_library
+
     cid = validate_config_id(config_id)
     course = load_config_course(cid)
-    manifest = load_package_segment_manifest(cid)
-    if not _should_sync_leg_metadata_to_course(course, manifest):
+    _lib_dir, leg_manifest, _leg_source, pkg_manifest = resolve_leg_library(cid)
+    if not _should_sync_leg_metadata_to_course(course, pkg_manifest):
         return False
-    allowed_legs = recipe_leg_ids(manifest)
-    leg_order = _manifest_leg_order(manifest)
+    allowed_legs = recipe_leg_ids(pkg_manifest)
+    leg_order = _manifest_leg_order(leg_manifest)
     leg_by_id: Dict[str, Dict[str, Any]] = {}
-    for entry in manifest_legs(manifest):
+    for entry in manifest_legs(leg_manifest):
         if not isinstance(entry, dict):
             continue
         leg_id = str(entry.get("id", "")).strip()
@@ -1221,8 +1265,15 @@ def sync_leg_metadata_into_course(config_id: str) -> bool:
         if str(seg.get("to_label") or "").strip() != row["end_label"]:
             seg["to_label"] = row["end_label"]
             updated = True
-        if str(seg.get("seg_label") or "").strip() != row["leg_label"]:
-            seg["seg_label"] = row["leg_label"]
+        seg_label = row["leg_label"]
+        try:
+            occ = int(seg.get("leg_occurrence") or 1)
+        except (TypeError, ValueError):
+            occ = 1
+        if occ > 1:
+            seg_label = f"{seg_label} ({occ})"
+        if str(seg.get("seg_label") or "").strip() != seg_label:
+            seg["seg_label"] = seg_label
             updated = True
         if str(seg.get("description") or "").strip() != row["description"]:
             seg["description"] = row["description"]
@@ -1278,9 +1329,15 @@ def sync_leg_location_metadata_from_course(config_id: str) -> bool:
     Course tab is master for loc_label and related fields edited there; the manifest
     is updated so Legs tab and subsequent merges stay consistent.
     """
+    from app.core.config_package.leg_library_resolver import (
+        LEG_SOURCE_ORG,
+        resolve_leg_library,
+    )
+    from app.core.config_package.org_leg_library import save_org_leg_manifest
+
     cid = validate_config_id(config_id)
     course = load_config_course(cid)
-    manifest = load_package_segment_manifest(cid)
+    _lib_dir, manifest, leg_source, _pkg_manifest = resolve_leg_library(cid)
     legs: List[Dict[str, Any]] = list(manifest_legs(manifest))
     leg_index: Dict[str, int] = {}
     for i, entry in enumerate(legs):
@@ -1341,7 +1398,10 @@ def sync_leg_location_metadata_from_course(config_id: str) -> bool:
 
     if changed:
         set_manifest_legs(manifest, legs)
-        save_package_segment_manifest(cid, manifest)
+        if leg_source == LEG_SOURCE_ORG:
+            save_org_leg_manifest(manifest)
+        else:
+            save_package_segment_manifest(cid, manifest)
     return changed
 
 

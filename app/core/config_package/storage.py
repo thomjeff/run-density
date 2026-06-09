@@ -230,6 +230,42 @@ def load_config_course(config_id: str) -> Dict[str, Any]:
     return data
 
 
+def _preserve_recipe_segment_kms(
+    data: Dict[str, Any], existing: Dict[str, Any]
+) -> None:
+    """
+    Recipe-applied segment kms are server-owned.
+
+    A browser tab that loaded the course before a recipe apply can save a stale
+    snapshot (old per-event kms, no segment_library_applied flag), silently
+    reverting apply results. When the on-disk course is recipe-applied, keep the
+    flag and carry over km fields from disk segments matched by seg_id.
+    """
+    if not existing.get("segment_library_applied"):
+        return
+    data["segment_library_applied"] = True
+    km_keys = ["from_km", "to_km"]
+    for eid in COURSE_EVENT_IDS:
+        eid_l = eid.lower()
+        km_keys.extend([f"{eid_l}_from_km", f"{eid_l}_to_km"])
+    by_seg_id = {
+        str(seg["seg_id"]): seg
+        for seg in existing.get("segments") or []
+        if isinstance(seg, dict) and seg.get("seg_id")
+    }
+    for seg in data.get("segments") or []:
+        if not isinstance(seg, dict):
+            continue
+        src = by_seg_id.get(str(seg.get("seg_id", "")))
+        if not src:
+            continue
+        for key in km_keys:
+            if key in src:
+                seg[key] = src[key]
+        if src.get("leg_id") and not seg.get("leg_id"):
+            seg["leg_id"] = src["leg_id"]
+
+
 def save_config_course(config_id: str, course_data: Dict[str, Any]) -> Path:
     """
     Save course workspace to runflow/config/{config_id}/course.json.
@@ -251,8 +287,16 @@ def save_config_course(config_id: str, course_data: Dict[str, Any]) -> Path:
     data.pop("events", None)
     data.pop("data_dir", None)
 
+    try:
+        existing = load_config_course(cid)
+    except (FileNotFoundError, ValueError):
+        existing = None
+    if existing:
+        _preserve_recipe_segment_kms(data, existing)
+
     segments = data.get("segments") or []
-    if segments:
+    # Recipe-built courses already have per-event km from library apply order.
+    if segments and not data.get("segment_library_applied"):
         enrich_segments_event_distances(segments, COURSE_EVENT_IDS)
 
     course_path = package_path / COURSE_WORKSPACE_NAME
@@ -533,6 +577,13 @@ def create_config_package(
         }
     )
 
+    from app.core.config_package.segment_recipes import (
+        _default_manifest,
+        save_package_segment_manifest,
+    )
+
+    save_package_segment_manifest(config_id, _default_manifest(clean_events))
+
     logger.info("Created config package %s (%s)", config_id, clean_label)
     return {
         "config_id": config_id,
@@ -729,7 +780,8 @@ def export_config_package_segments(config_id: str) -> Dict[str, Any]:
     if not segments:
         raise ValueError("Course has no segments; add segment pins before export")
 
-    enrich_segments_event_distances(segments, COURSE_EVENT_IDS)
+    if not course.get("segment_library_applied"):
+        enrich_segments_event_distances(segments, COURSE_EVENT_IDS)
 
     from app.core.config_package.legs import (
         refresh_location_seg_ids_from_segments,

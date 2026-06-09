@@ -1044,6 +1044,10 @@ def test_import_gpx_with_leg_export_json(tmp_path, monkeypatch):
         "app.core.config_package.storage.get_config_root",
         lambda: tmp_path,
     )
+    monkeypatch.setattr(
+        "app.core.config_package.org_leg_library.get_runflow_root",
+        lambda: tmp_path,
+    )
     result = create_config_package("Import JSON", "", event_day="sun", package_events=["full"])
     config_id = result["config_id"]
     gpx_body = """<?xml version="1.0"?>

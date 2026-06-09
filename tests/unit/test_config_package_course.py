@@ -19,7 +19,7 @@ def test_load_config_course_missing_file(tmp_path, monkeypatch):
         "app.core.config_package.storage.get_config_root",
         lambda: tmp_path,
     )
-    result = create_config_package("Pkg", "")
+    result = create_config_package("Pkg", "", package_events=["full"])
     config_id = result["config_id"]
     (tmp_path / config_id / "course.json").unlink()
 
@@ -41,7 +41,7 @@ def test_save_load_round_trip(tmp_path, monkeypatch):
         "app.core.config_package.storage.get_config_root",
         lambda: tmp_path,
     )
-    result = create_config_package("Course RT", "round trip")
+    result = create_config_package("Course RT", "round trip", package_events=["full"])
     config_id = result["config_id"]
 
     course = load_config_course(config_id)
@@ -75,6 +75,50 @@ def test_save_load_round_trip(tmp_path, monkeypatch):
     )
     assert on_disk["config_id"] == config_id
     assert "events" not in on_disk
+
+
+def test_save_preserves_recipe_kms_from_stale_client(tmp_path, monkeypatch):
+    """A stale client save must not revert recipe-applied per-event kms or drop the flag."""
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    result = create_config_package("Recipe Pkg", "", package_events=["full", "half"])
+    config_id = result["config_id"]
+
+    # Simulate recipe apply: course on disk has flag + correct per-event kms.
+    course = load_config_course(config_id)
+    course["segment_library_applied"] = True
+    course["segments"] = [
+        {
+            "seg_id": "S10",
+            "label": "Gibson",
+            "leg_id": "09",
+            "from_km": 23.9,
+            "to_km": 29.67,
+            "events": ["full", "half"],
+            "full_from_km": 23.9,
+            "full_to_km": 29.67,
+            "half_from_km": 5.06,
+            "half_to_km": 10.83,
+        }
+    ]
+    save_config_course(config_id, course)
+
+    # Stale browser snapshot: no flag, old corrupted kms, but a new label edit.
+    stale = load_config_course(config_id)
+    stale.pop("segment_library_applied", None)
+    stale["segments"][0].update(
+        {"half_from_km": 6.62, "half_to_km": 12.39, "label": "Gibson (edited)"}
+    )
+    save_config_course(config_id, stale)
+
+    reloaded = load_config_course(config_id)
+    seg = reloaded["segments"][0]
+    assert reloaded["segment_library_applied"] is True
+    assert seg["half_from_km"] == 5.06
+    assert seg["half_to_km"] == 10.83
+    assert seg["label"] == "Gibson (edited)"
 
 
 def test_validate_config_course_rejects_id_mismatch():

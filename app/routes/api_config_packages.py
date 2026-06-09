@@ -7,7 +7,7 @@ Issue #758: Export segments.csv from course.json into config package.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import JSONResponse, Response
@@ -41,9 +41,14 @@ from app.core.config_package.legs import (
     update_package_leg_geometry,
 )
 from app.core.config_package.org_leg_library import (
+    create_org_leg,
+    delete_org_leg,
+    get_org_leg_line_geojson,
+    import_gpx_files_to_org_library,
     import_org_leg_to_package,
     list_org_legs,
     publish_package_leg_to_org_library,
+    update_org_leg,
 )
 from app.core.config_package.segment_recipes import (
     apply_package_recipes,
@@ -127,9 +132,12 @@ class RemoveLegLocationRequest(BaseModel):
 
 
 class SaveSegmentRecipesRequest(BaseModel):
-    order_by_event: Dict[str, Dict[str, Optional[int]]] = Field(
+    order_by_event: Dict[str, Dict[str, Optional[Union[int, str]]]] = Field(
         default_factory=dict,
-        description="Per event, leg id -> 1-based order (omit or null if unused)",
+        description=(
+            "Per event, leg id -> 1-based order slot or comma-separated slots "
+            "(e.g. 7,16) to reuse a leg; omit or null if unused"
+        ),
     )
     export_csv: bool = Field(
         True,
@@ -441,7 +449,16 @@ async def api_get_package_leg_geometry(
     """GeoJSON LineString for one leg (map display)."""
     require_auth(request)
     try:
-        feature = get_leg_line_geojson(config_id, leg_id)
+        from app.core.config_package.leg_library_resolver import (
+            LEG_SOURCE_ORG,
+            effective_leg_source,
+        )
+        from app.core.config_package.segment_recipes import load_package_segment_manifest
+
+        if effective_leg_source(load_package_segment_manifest(config_id)) == LEG_SOURCE_ORG:
+            feature = get_org_leg_line_geojson(leg_id)
+        else:
+            feature = get_leg_line_geojson(config_id, leg_id)
         return JSONResponse(content={"ok": True, "feature": feature})
     except FileNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
@@ -574,7 +591,128 @@ async def api_list_org_legs(request: Request) -> JSONResponse:
     require_auth(request)
     try:
         legs = list_org_legs()
-        return JSONResponse(content={"ok": True, "legs": legs})
+        return JSONResponse(content={"ok": True, "legs": legs, "leg_source": "org"})
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/api/org/legs/upload")
+async def api_upload_org_legs(
+    request: Request,
+    files: List[UploadFile] = File(...),
+) -> JSONResponse:
+    """Import GPX (+ optional leg export JSON) into the org leg library."""
+    require_auth(request)
+    try:
+        uploads = []
+        for f in files:
+            data = await f.read()
+            if data:
+                uploads.append((f.filename or "leg.gpx", data))
+        state = import_gpx_files_to_org_library(uploads)
+        return JSONResponse(content={"ok": True, **state})
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/api/org/legs")
+async def api_create_org_leg(
+    request: Request,
+    file: UploadFile = File(...),
+    leg_label: str = Form(""),
+    start_label: str = Form(""),
+    end_label: str = Form(""),
+    width_m: float = Form(3.0),
+    schema: str = Form("on_course_open"),
+    direction: str = Form("uni"),
+    flow_type: str = Form("none"),
+    flow_notes: str = Form(""),
+    description: str = Form(""),
+) -> JSONResponse:
+    """Create an org library leg from uploaded GPX."""
+    require_auth(request)
+    try:
+        data = await file.read()
+        if not data:
+            raise ValueError("GPX file is empty")
+        state = create_org_leg(
+            data,
+            file.filename or "leg.gpx",
+            leg_label=leg_label,
+            start_label=start_label,
+            end_label=end_label,
+            width_m=width_m,
+            schema=schema,
+            direction=direction,
+            flow_type=flow_type,
+            flow_notes=flow_notes,
+            description=description,
+        )
+        return JSONResponse(content={"ok": True, **state})
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.put("/api/org/legs/{leg_id}")
+async def api_update_org_leg(
+    request: Request,
+    leg_id: str,
+    body: UpdateLegRequest,
+) -> JSONResponse:
+    """Update org leg metadata and locations."""
+    require_auth(request)
+    try:
+        fields = body.model_dump(exclude_unset=True)
+        if "leg_label" in fields and fields["leg_label"] is not None:
+            fields["seg_label"] = fields.pop("leg_label")
+        state = update_org_leg(leg_id, fields)
+        return JSONResponse(content={"ok": True, **state})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.delete("/api/org/legs/{leg_id}")
+async def api_delete_org_leg(request: Request, leg_id: str) -> JSONResponse:
+    """Delete one leg from the org library."""
+    require_auth(request)
+    try:
+        state = delete_org_leg(leg_id)
+        return JSONResponse(content={"ok": True, **state})
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.put("/api/org/legs/{leg_id}/gpx")
+async def api_replace_org_leg_gpx(
+    request: Request,
+    leg_id: str,
+    file: UploadFile = File(...),
+) -> JSONResponse:
+    """Replace GPX geometry for an org library leg."""
+    require_auth(request)
+    try:
+        data = await file.read()
+        if not data:
+            raise ValueError("GPX file is empty")
+        state = update_org_leg(leg_id, {}, gpx_bytes=data, gpx_filename=file.filename or "leg.gpx")
+        return JSONResponse(content={"ok": True, **state})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/api/org/legs/{leg_id}/geometry")
+async def api_org_leg_geometry(request: Request, leg_id: str) -> JSONResponse:
+    """GeoJSON LineString for one org leg."""
+    require_auth(request)
+    try:
+        feature = get_org_leg_line_geojson(leg_id)
+        return JSONResponse(content={"ok": True, "feature": feature})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
