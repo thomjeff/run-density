@@ -1223,15 +1223,17 @@ def sync_leg_metadata_into_course(config_id: str) -> bool:
     Matches segments to manifest legs by ``leg_id`` (or ``S{n}`` order fallback).
     Does not recompute per-event km or recipe order — use ``apply_package_recipes`` for that.
     """
+    from app.core.config_package.leg_library_resolver import resolve_leg_library
+
     cid = validate_config_id(config_id)
     course = load_config_course(cid)
-    manifest = load_package_segment_manifest(cid)
-    if not _should_sync_leg_metadata_to_course(course, manifest):
+    _lib_dir, leg_manifest, _leg_source, pkg_manifest = resolve_leg_library(cid)
+    if not _should_sync_leg_metadata_to_course(course, pkg_manifest):
         return False
-    allowed_legs = recipe_leg_ids(manifest)
-    leg_order = _manifest_leg_order(manifest)
+    allowed_legs = recipe_leg_ids(pkg_manifest)
+    leg_order = _manifest_leg_order(leg_manifest)
     leg_by_id: Dict[str, Dict[str, Any]] = {}
-    for entry in manifest_legs(manifest):
+    for entry in manifest_legs(leg_manifest):
         if not isinstance(entry, dict):
             continue
         leg_id = str(entry.get("id", "")).strip()
@@ -1263,8 +1265,15 @@ def sync_leg_metadata_into_course(config_id: str) -> bool:
         if str(seg.get("to_label") or "").strip() != row["end_label"]:
             seg["to_label"] = row["end_label"]
             updated = True
-        if str(seg.get("seg_label") or "").strip() != row["leg_label"]:
-            seg["seg_label"] = row["leg_label"]
+        seg_label = row["leg_label"]
+        try:
+            occ = int(seg.get("leg_occurrence") or 1)
+        except (TypeError, ValueError):
+            occ = 1
+        if occ > 1:
+            seg_label = f"{seg_label} ({occ})"
+        if str(seg.get("seg_label") or "").strip() != seg_label:
+            seg["seg_label"] = seg_label
             updated = True
         if str(seg.get("description") or "").strip() != row["description"]:
             seg["description"] = row["description"]

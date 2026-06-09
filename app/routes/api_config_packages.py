@@ -7,7 +7,7 @@ Issue #758: Export segments.csv from course.json into config package.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import JSONResponse, Response
@@ -132,9 +132,12 @@ class RemoveLegLocationRequest(BaseModel):
 
 
 class SaveSegmentRecipesRequest(BaseModel):
-    order_by_event: Dict[str, Dict[str, Optional[int]]] = Field(
+    order_by_event: Dict[str, Dict[str, Optional[Union[int, str]]]] = Field(
         default_factory=dict,
-        description="Per event, leg id -> 1-based order (omit or null if unused)",
+        description=(
+            "Per event, leg id -> 1-based order slot or comma-separated slots "
+            "(e.g. 7,16) to reuse a leg; omit or null if unused"
+        ),
     )
     export_csv: bool = Field(
         True,

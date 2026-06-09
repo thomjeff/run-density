@@ -16,7 +16,11 @@ from app.core.config_package.segment_recipes import (
     get_package_segment_library_state,
     save_package_segment_manifest,
 )
-from app.core.config_package.storage import create_config_package, load_config_course
+from app.core.config_package.storage import (
+    create_config_package,
+    export_config_package_segments,
+    load_config_course,
+)
 
 _GPX = """<?xml version="1.0"?>
 <gpx xmlns="http://www.topografix.com/GPX/1/1">
@@ -223,3 +227,28 @@ def test_merge_org_leg_locations_carry_resources(tmp_path, monkeypatch):
     _lib_dir, combined = combined_manifest_for_apply(config_id)
     assert combined["recipes"]["full"] == ["05"]
     assert {leg["id"] for leg in combined["legs"]} == {"05", "06"}
+
+
+def test_export_after_apply_org_primary_keeps_segments(tmp_path, monkeypatch):
+    """Regression: export must not drop segments when legs live in org library."""
+    _patch_roots(tmp_path, monkeypatch)
+    _seed_org_leg(tmp_path)
+
+    result = create_config_package("Pkg", "", event_day="sun", package_events=["full"])
+    config_id = result["config_id"]
+    save_package_segment_manifest(
+        config_id,
+        {
+            "version": 1,
+            "leg_source": "org",
+            "legs": [],
+            "recipes": {"full": ["05"]},
+            "flow_overrides": [],
+        },
+    )
+
+    apply_package_recipes(config_id, export_csv=False)
+    exported = export_config_package_segments(config_id)
+    assert exported["segment_count"] >= 1
+    course = load_config_course(config_id)
+    assert len(course.get("segments") or []) >= 1

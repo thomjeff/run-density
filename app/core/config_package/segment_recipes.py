@@ -573,7 +573,7 @@ def save_package_recipes(
     config_id: str,
     recipes: Dict[str, List[str]],
     *,
-    order_by_event: Optional[Dict[str, Dict[str, Optional[int]]]] = None,
+    order_by_event: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Persist recipe lists to package manifest."""
     from app.core.config_package.leg_library_resolver import resolve_leg_library
