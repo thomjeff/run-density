@@ -318,6 +318,47 @@ def create_org_leg(
     return get_org_leg_library_state()
 
 
+def create_org_leg_from_coordinates(
+    coordinates: Sequence[Sequence[float]],
+    *,
+    leg_label: str = "",
+    start_label: str = "",
+    end_label: str = "",
+    width_m: float = 3,
+    schema: str = "on_course_open",
+    direction: str = "uni",
+    flow_type: str = "none",
+    flow_notes: str = "",
+    description: str = "",
+) -> Dict[str, Any]:
+    """
+    Create an org library leg from drawn [lon, lat] vertices (Issue #789 Create Leg).
+
+    Builds a GPX track from the coordinates and reuses create_org_leg so the
+    drawn leg is indistinguishable from an imported one.
+    """
+    from app.core.config_package.legs import _normalize_line_coordinates, _slugify
+    from app.core.course.export import build_gpx_line_coordinates
+
+    coords = _normalize_line_coordinates(coordinates)
+    label = (leg_label or "").strip() or "Drawn leg"
+    gpx_content = build_gpx_line_coordinates(coords, track_name=label)
+    filename = f"{_slugify(label) or 'drawn-leg'}.gpx"
+    return create_org_leg(
+        gpx_content.encode("utf-8"),
+        filename,
+        leg_label=label,
+        start_label=start_label,
+        end_label=end_label,
+        width_m=width_m,
+        schema=schema,
+        direction=direction,
+        flow_type=flow_type,
+        flow_notes=flow_notes,
+        description=description,
+    )
+
+
 def get_org_leg_library_state() -> Dict[str, Any]:
     """API state for org leg library management UI."""
     legs = list_org_legs()
@@ -507,18 +548,13 @@ def delete_org_leg(leg_id: str) -> Dict[str, Any]:
     return get_org_leg_library_state()
 
 
-def get_org_leg_line_geojson(leg_id: str) -> Dict[str, Any]:
-    """GeoJSON LineString for one org leg."""
+def _org_leg_line_geojson_from_entry(
+    org_dir: Path,
+    leg_id: str,
+    entry: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Build GeoJSON for one org leg from a manifest entry (no manifest reload)."""
     leg_id = str(leg_id).strip()
-    org_dir = get_org_legs_dir()
-    manifest = load_org_leg_manifest()
-    legs: List[Dict[str, Any]] = list(manifest_legs(manifest))
-    from app.core.config_package.legs import _find_leg_index
-
-    idx = _find_leg_index(legs, leg_id)
-    if idx < 0:
-        raise ValueError(f"Leg not found: {leg_id}")
-    entry = legs[idx]
     file_name = entry.get("file")
     if not file_name:
         raise ValueError(f"Leg {leg_id} has no GPX file")
@@ -539,3 +575,35 @@ def get_org_leg_line_geojson(leg_id: str) -> Dict[str, Any]:
         },
         "geometry": {"type": "LineString", "coordinates": coords},
     }
+
+
+def get_all_org_leg_line_geojson() -> List[Dict[str, Any]]:
+    """GeoJSON features for every org leg (single manifest read)."""
+    org_dir = get_org_legs_dir()
+    manifest = load_org_leg_manifest()
+    features: List[Dict[str, Any]] = []
+    for entry in manifest_legs(manifest):
+        if not isinstance(entry, dict):
+            continue
+        leg_id = str(entry.get("id") or "").strip()
+        if not leg_id:
+            continue
+        try:
+            features.append(_org_leg_line_geojson_from_entry(org_dir, leg_id, entry))
+        except (FileNotFoundError, ValueError):
+            continue
+    return features
+
+
+def get_org_leg_line_geojson(leg_id: str) -> Dict[str, Any]:
+    """GeoJSON LineString for one org leg."""
+    leg_id = str(leg_id).strip()
+    org_dir = get_org_legs_dir()
+    manifest = load_org_leg_manifest()
+    legs: List[Dict[str, Any]] = list(manifest_legs(manifest))
+    from app.core.config_package.legs import _find_leg_index
+
+    idx = _find_leg_index(legs, leg_id)
+    if idx < 0:
+        raise ValueError(f"Leg not found: {leg_id}")
+    return _org_leg_line_geojson_from_entry(org_dir, leg_id, legs[idx])

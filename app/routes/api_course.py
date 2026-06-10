@@ -6,6 +6,7 @@ Snap-to-road: proxy to OSRM (public or configurable) to avoid CORS.
 """
 
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -16,8 +17,31 @@ from pydantic import BaseModel
 
 from app.core.course.export import export_course_zip
 
-# OSRM public demo (driving). Override with OSRM_ROUTE_URL env for self-hosted.
-OSRM_BASE = "https://router.project-osrm.org/route/v1/driving"
+# Snap-to-route OSRM bases per profile (Issue #789: foot/bike for leg drawing).
+# Override per profile with OSRM_ROUTE_URL_FOOT / _BIKE / _CAR; legacy
+# OSRM_ROUTE_URL still overrides the car profile.
+OSRM_PROFILE_BASES = {
+    "car": "https://router.project-osrm.org/route/v1/driving",
+    "foot": "https://routing.openstreetmap.de/routed-foot/route/v1/foot",
+    "bike": "https://routing.openstreetmap.de/routed-bike/route/v1/bike",
+}
+
+
+def _routing_base_for_profile(profile: str) -> str:
+    key = (profile or "car").strip().lower()
+    if key not in OSRM_PROFILE_BASES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown routing profile: {profile} (expected foot, bike, or car)",
+        )
+    override = os.environ.get(f"OSRM_ROUTE_URL_{key.upper()}", "").strip()
+    if override:
+        return override.rstrip("/")
+    if key == "car":
+        legacy = os.environ.get("OSRM_ROUTE_URL", "").strip()
+        if legacy:
+            return legacy.rstrip("/")
+    return OSRM_PROFILE_BASES[key]
 
 from app.core.course.storage import (
     create_course_directory,
@@ -148,10 +172,11 @@ async def api_create_course(request: CreateCourseRequest) -> JSONResponse:
 async def api_route_segment(
     from_ll: str = Query(..., description="lon,lat of start"),
     to_ll: str = Query(..., description="lon,lat of end"),
+    profile: str = Query("car", description="Routing profile: foot, bike, or car"),
 ) -> JSONResponse:
     """
-    Snap-to-road: return road geometry between two points (OSRM driving profile).
-    Returns GeoJSON coordinates [[lon, lat], ...] or error. Issue #732.
+    Snap-to-route: return routed geometry between two points (OSRM).
+    Returns GeoJSON coordinates [[lon, lat], ...] or error. Issues #732, #789.
     """
     try:
         parts_from = [x.strip() for x in from_ll.split(",") if x.strip()]
@@ -163,7 +188,8 @@ async def api_route_segment(
             )
         lon1, lat1 = float(parts_from[0]), float(parts_from[1])
         lon2, lat2 = float(parts_to[0]), float(parts_to[1])
-        url = f"{OSRM_BASE}/{lon1},{lat1};{lon2},{lat2}?overview=full&geometries=geojson"
+        base = _routing_base_for_profile(profile)
+        url = f"{base}/{lon1},{lat1};{lon2},{lat2}?overview=full&geometries=geojson"
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(url)
         data = resp.json()
