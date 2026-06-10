@@ -152,8 +152,8 @@
         flex: 1 1 auto;
         position: relative;
         z-index: 1;
-        min-height: 400px;
-        max-height: min(60vh, 650px);
+        min-height: 600px;
+        max-height: min(90vh, 975px);
         margin-top: 0;
         overflow: hidden;
         border-radius: 4px;
@@ -163,8 +163,8 @@
     #race-config-workspace .config-legs-map-region #course-mapping-map,
     #race-config-workspace #course-map-container.config-legs-map-region #course-mapping-map {
         height: 100%;
-        min-height: 400px;
-        max-height: min(60vh, 650px);
+        min-height: 600px;
+        max-height: min(90vh, 975px);
     }
 
     #course-map-legacy-slot #course-map-container {
@@ -224,6 +224,24 @@
         color: #2c3e50;
         white-space: nowrap;
         padding: 0 0.25rem;
+    }
+    .leg-draw-trace-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #2c3e50;
+        cursor: pointer;
+        user-select: none;
+        padding: 0.35rem 0.5rem;
+        border-radius: 4px;
+        border: 1px solid #d0d7de;
+        background: #fff;
+    }
+    .leg-draw-trace-label:has(input:checked) {
+        background: #eef2ff;
+        border-color: #9b8ec4;
     }
     #course-mapping-map.leg-draw-mode {
         cursor: crosshair;

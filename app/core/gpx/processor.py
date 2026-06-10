@@ -199,13 +199,7 @@ def parse_gpx_file(filepath: str) -> GPXCourse:
             )
             total_distance += segment_distance
             curr_point.distance_km = total_distance
-            
-            # Debug: log every 100th point
-            if i % 100 == 0:
-                print(f"  Point {i}: {total_distance:.3f} km")
-        
-        print(f"  Final distance: {total_distance:.3f} km")
-        
+
         return GPXCourse(
             name=track_name,
             points=points,

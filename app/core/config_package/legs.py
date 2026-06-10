@@ -770,18 +770,13 @@ def update_package_leg_geometry(
     )
 
 
-def get_leg_line_geojson(config_id: str, leg_id: str) -> Dict[str, Any]:
-    """GeoJSON LineString for map display of one leg."""
-    cid = validate_config_id(config_id)
+def _leg_line_geojson_from_entry(
+    lib_dir: Path,
+    leg_id: str,
+    entry: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Build GeoJSON for one package leg from a manifest entry (no manifest reload)."""
     leg_id = str(leg_id).strip()
-    package_path = resolve_config_package_path(cid)
-    lib_dir = package_segment_library_dir(package_path)
-    manifest = load_package_segment_manifest(cid)
-    legs: List[Dict[str, Any]] = list(manifest_legs(manifest))
-    idx = _find_leg_index(legs, leg_id)
-    if idx < 0:
-        raise ValueError(f"Leg not found: {leg_id}")
-    entry = legs[idx]
     file_name = entry.get("file")
     if not file_name:
         raise ValueError(f"Leg {leg_id} has no GPX file")
@@ -802,6 +797,40 @@ def get_leg_line_geojson(config_id: str, leg_id: str) -> Dict[str, Any]:
         },
         "geometry": {"type": "LineString", "coordinates": coords},
     }
+
+
+def get_all_package_leg_line_geojson(config_id: str) -> List[Dict[str, Any]]:
+    """GeoJSON features for every package leg (single manifest read)."""
+    cid = validate_config_id(config_id)
+    package_path = resolve_config_package_path(cid)
+    lib_dir = package_segment_library_dir(package_path)
+    manifest = load_package_segment_manifest(cid)
+    features: List[Dict[str, Any]] = []
+    for entry in manifest_legs(manifest):
+        if not isinstance(entry, dict):
+            continue
+        leg_id = str(entry.get("id") or "").strip()
+        if not leg_id:
+            continue
+        try:
+            features.append(_leg_line_geojson_from_entry(lib_dir, leg_id, entry))
+        except (FileNotFoundError, ValueError):
+            continue
+    return features
+
+
+def get_leg_line_geojson(config_id: str, leg_id: str) -> Dict[str, Any]:
+    """GeoJSON LineString for map display of one leg."""
+    cid = validate_config_id(config_id)
+    leg_id = str(leg_id).strip()
+    package_path = resolve_config_package_path(cid)
+    lib_dir = package_segment_library_dir(package_path)
+    manifest = load_package_segment_manifest(cid)
+    legs: List[Dict[str, Any]] = list(manifest_legs(manifest))
+    idx = _find_leg_index(legs, leg_id)
+    if idx < 0:
+        raise ValueError(f"Leg not found: {leg_id}")
+    return _leg_line_geojson_from_entry(lib_dir, leg_id, legs[idx])
 
 
 def leg_loc_key(leg_id: str, index: int) -> str:

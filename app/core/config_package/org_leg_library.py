@@ -548,18 +548,13 @@ def delete_org_leg(leg_id: str) -> Dict[str, Any]:
     return get_org_leg_library_state()
 
 
-def get_org_leg_line_geojson(leg_id: str) -> Dict[str, Any]:
-    """GeoJSON LineString for one org leg."""
+def _org_leg_line_geojson_from_entry(
+    org_dir: Path,
+    leg_id: str,
+    entry: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Build GeoJSON for one org leg from a manifest entry (no manifest reload)."""
     leg_id = str(leg_id).strip()
-    org_dir = get_org_legs_dir()
-    manifest = load_org_leg_manifest()
-    legs: List[Dict[str, Any]] = list(manifest_legs(manifest))
-    from app.core.config_package.legs import _find_leg_index
-
-    idx = _find_leg_index(legs, leg_id)
-    if idx < 0:
-        raise ValueError(f"Leg not found: {leg_id}")
-    entry = legs[idx]
     file_name = entry.get("file")
     if not file_name:
         raise ValueError(f"Leg {leg_id} has no GPX file")
@@ -580,3 +575,35 @@ def get_org_leg_line_geojson(leg_id: str) -> Dict[str, Any]:
         },
         "geometry": {"type": "LineString", "coordinates": coords},
     }
+
+
+def get_all_org_leg_line_geojson() -> List[Dict[str, Any]]:
+    """GeoJSON features for every org leg (single manifest read)."""
+    org_dir = get_org_legs_dir()
+    manifest = load_org_leg_manifest()
+    features: List[Dict[str, Any]] = []
+    for entry in manifest_legs(manifest):
+        if not isinstance(entry, dict):
+            continue
+        leg_id = str(entry.get("id") or "").strip()
+        if not leg_id:
+            continue
+        try:
+            features.append(_org_leg_line_geojson_from_entry(org_dir, leg_id, entry))
+        except (FileNotFoundError, ValueError):
+            continue
+    return features
+
+
+def get_org_leg_line_geojson(leg_id: str) -> Dict[str, Any]:
+    """GeoJSON LineString for one org leg."""
+    leg_id = str(leg_id).strip()
+    org_dir = get_org_legs_dir()
+    manifest = load_org_leg_manifest()
+    legs: List[Dict[str, Any]] = list(manifest_legs(manifest))
+    from app.core.config_package.legs import _find_leg_index
+
+    idx = _find_leg_index(legs, leg_id)
+    if idx < 0:
+        raise ValueError(f"Leg not found: {leg_id}")
+    return _org_leg_line_geojson_from_entry(org_dir, leg_id, legs[idx])

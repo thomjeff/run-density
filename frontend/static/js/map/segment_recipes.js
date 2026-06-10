@@ -48,6 +48,8 @@
     var legDrawLayer = null;
     var legDrawClickHandler = null;
     var legDrawRoutingBusy = false;
+    /** When false during draw mode, existing leg routes are hidden (Trace off). */
+    var legDrawTraceEnabled = true;
     /** Coordinates handed to the Add-leg editor by Finish. */
     var pendingDrawCoordinates = null;
 
@@ -880,10 +882,28 @@
         allLegRoutesLayer = null;
     }
 
+    function shouldShowLegRoutesWhileDrawing() {
+        return !legDrawActive || legDrawTraceEnabled;
+    }
+
+    function applyLegDrawTraceVisibility() {
+        if (!shouldShowLegRoutesWhileDrawing()) {
+            removeAllLegRoutesLayer();
+            return;
+        }
+        if (!allLegRoutesLayer) {
+            renderAllLegRoutes();
+        }
+    }
+
     /** Draw every leg route as a muted background line so the full network is visible without a selection. */
     function renderAllLegRoutes() {
         var map = window.courseMappingMap;
         if (!map || !isConfigPackageWorkspace()) return;
+        if (!shouldShowLegRoutesWhileDrawing()) {
+            removeAllLegRoutesLayer();
+            return;
+        }
         var legs = (libraryState && libraryState.legs) || [];
         if (!legs.length) {
             removeAllLegRoutesLayer();
@@ -895,6 +915,7 @@
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (data) {
                 if (seq !== allLegRoutesFetchSeq || !data) return;
+                if (!shouldShowLegRoutesWhileDrawing()) return;
                 var mapNow = window.courseMappingMap;
                 if (!mapNow) return;
                 ensureAllLegRoutesPane(mapNow);
@@ -1098,8 +1119,15 @@
         if (container) container.classList.add('leg-draw-mode');
         legDrawClickHandler = onLegDrawClick;
         map.on('click', legDrawClickHandler);
+        var traceInput = document.getElementById('leg-draw-trace');
+        legDrawTraceEnabled = traceInput ? !!traceInput.checked : false;
+        applyLegDrawTraceVisibility();
         renderLegDraw();
-        setLegStatus('Drawing leg — click along the route. Clicks snap to roads/trails (change with the Snap menu).');
+        setTimeout(function () {
+            if (map && legDrawActive) map.invalidateSize();
+        }, 120);
+        setLegStatus('Drawing leg — click along the route. Clicks snap to roads/trails (change with the Snap menu).'
+            + (legDrawTraceEnabled ? ' Trace is on: existing legs shown for reference.' : ' Check Trace to show existing legs underneath.'));
     }
 
     function stopLegDrawMode() {
@@ -1123,6 +1151,10 @@
         var container = document.getElementById('course-mapping-map');
         if (container) container.classList.remove('leg-draw-mode');
         updateLegDrawButtons();
+        renderAllLegRoutes();
+        if (map) {
+            setTimeout(function () { map.invalidateSize(); }, 120);
+        }
     }
 
     function finishLegDraw() {
@@ -3536,6 +3568,13 @@
             drawCancelBtn.addEventListener('click', function () {
                 stopLegDrawMode();
                 setLegStatus('');
+            });
+        }
+        var drawTraceInput = document.getElementById('leg-draw-trace');
+        if (drawTraceInput) {
+            drawTraceInput.addEventListener('change', function () {
+                legDrawTraceEnabled = !!drawTraceInput.checked;
+                applyLegDrawTraceVisibility();
             });
         }
         var importBtn = document.getElementById('btn-import-gpx');

@@ -32,6 +32,7 @@ from app.core.config_package.legs import (
     delete_package_leg,
     export_all_package_legs_zip,
     export_package_leg_zip,
+    get_all_package_leg_line_geojson,
     get_leg_line_geojson,
     reconcile_leg_locations_to_course,
     remove_leg_location_from_manifest,
@@ -44,6 +45,7 @@ from app.core.config_package.org_leg_library import (
     create_org_leg,
     create_org_leg_from_coordinates,
     delete_org_leg,
+    get_all_org_leg_line_geojson,
     get_org_leg_line_geojson,
     import_gpx_files_to_org_library,
     import_org_leg_to_package,
@@ -480,33 +482,15 @@ async def api_get_package_leg_geometries(
             LEG_SOURCE_ORG,
             effective_leg_source,
         )
-        from app.core.config_package.org_leg_library import load_org_leg_manifest
         from app.core.config_package.segment_recipes import (
             load_package_segment_manifest,
         )
-        from app.core.course.segment_library import manifest_legs
 
         manifest = load_package_segment_manifest(config_id)
         if effective_leg_source(manifest) == LEG_SOURCE_ORG:
-            legs = manifest_legs(load_org_leg_manifest())
-
-            def geom_for(leg_id: str):
-                return get_org_leg_line_geojson(leg_id)
+            features = get_all_org_leg_line_geojson()
         else:
-            legs = manifest_legs(manifest)
-
-            def geom_for(leg_id: str):
-                return get_leg_line_geojson(config_id, leg_id)
-
-        features = []
-        for entry in legs:
-            leg_id = str(entry.get("id") or "").strip()
-            if not leg_id:
-                continue
-            try:
-                features.append(geom_for(leg_id))
-            except (FileNotFoundError, ValueError):
-                continue
+            features = get_all_package_leg_line_geojson(config_id)
         return JSONResponse(
             content={"ok": True, "type": "FeatureCollection", "features": features}
         )

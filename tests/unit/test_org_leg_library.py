@@ -156,3 +156,47 @@ def test_create_org_leg_from_coordinates(tmp_path, monkeypatch):
 
     with pytest.raises(ValueError):
         create_org_leg_from_coordinates([[-66.64, 45.96]], leg_label="Too short")
+
+
+def test_get_all_org_leg_line_geojson_single_manifest_read(tmp_path, monkeypatch):
+    """Bulk leg geometries load manifest once, not per leg."""
+    import yaml
+
+    from app.core.config_package.org_leg_library import (
+        get_all_org_leg_line_geojson,
+        get_org_leg_line_geojson,
+    )
+
+    monkeypatch.setattr(
+        "app.core.config_package.org_leg_library.get_runflow_root",
+        lambda: tmp_path,
+    )
+    org_dir = tmp_path / "org" / "legs"
+    org_dir.mkdir(parents=True)
+    (org_dir / "01_trail.gpx").write_text(_GPX, encoding="utf-8")
+    (org_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "01",
+                        "file": "01_trail.gpx",
+                        "seg_label": "Org trail",
+                        "start_label": "Start",
+                        "end_label": "End",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    features = get_all_org_leg_line_geojson()
+    assert len(features) == 1
+    assert features[0]["geometry"]["type"] == "LineString"
+    assert len(features[0]["geometry"]["coordinates"]) == 2
+    assert features[0]["properties"]["leg_id"] == "01"
+
+    single = get_org_leg_line_geojson("01")
+    assert single["properties"]["leg_id"] == "01"
+    assert single["geometry"]["coordinates"] == features[0]["geometry"]["coordinates"]
