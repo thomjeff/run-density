@@ -96,6 +96,61 @@ def _segment_km_window(seg: Dict[str, Any], event_id: str) -> Tuple[float, float
     return from_km, to_km
 
 
+def _corridor_pairs(
+    segments: Sequence[Dict[str, Any]],
+) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
+    """
+    Segment pairs that traverse the same physical corridor in opposite
+    directions (Issue #785).
+
+    Two sources:
+    - Explicit leg pairing: leg metadata ``paired_with`` links two directional
+      legs (out vs back over one trail).
+    - Self-pairing: the same leg appears more than once in a recipe
+      (``leg_occurrence`` 1, 2, ...) — implicitly its own paired pass.
+
+    Returns ordered (first, second) pairs deduped by seg_id.
+    """
+    seg_list = [s for s in segments if str(s.get("seg_id", "")).strip()]
+    by_leg: Dict[str, List[Dict[str, Any]]] = {}
+    for seg in seg_list:
+        leg = str(seg.get("leg_id") or "").strip()
+        if leg:
+            by_leg.setdefault(leg, []).append(seg)
+
+    pairs: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
+    seen: set = set()
+
+    def add_pair(a: Dict[str, Any], b: Dict[str, Any]) -> None:
+        key = tuple(sorted([str(a["seg_id"]), str(b["seg_id"])]))
+        if key in seen or key[0] == key[1]:
+            return
+        seen.add(key)
+        pairs.append((a, b))
+
+    for seg in seg_list:
+        mate_leg = str(seg.get("paired_with") or "").strip()
+        if not mate_leg:
+            continue
+        for mate in by_leg.get(mate_leg, []):
+            add_pair(seg, mate)
+
+    for segs in by_leg.values():
+        if len(segs) >= 2:
+            ordered = sorted(segs, key=lambda s: int(s.get("leg_occurrence") or 1))
+            for a, b in combinations(ordered, 2):
+                add_pair(a, b)
+
+    return pairs
+
+
+def corridor_flow_id(
+    seg_id_a: str, seg_id_b: str, event_a: str, event_b: str
+) -> str:
+    """Stable flow_id for generated opposing-pass corridor rows."""
+    return f"{seg_id_a}_{seg_id_b}_{event_a}_{event_b}"
+
+
 def _normalize_override(override: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not isinstance(override, dict):
         return None
@@ -260,6 +315,49 @@ def build_flow_csv_from_segments(
                     "auto_generated": True,
                 }
             )
+
+    # Issue #785: opposing-pass rows for corridor pairs (paired legs and
+    # repeated-leg out-and-backs). Each event window on one pass is compared
+    # against each event window on the opposing pass — including same-event
+    # out/back interactions, which have distinct km windows by construction.
+    for seg_x, seg_y in _corridor_pairs(segments):
+        x_id = str(seg_x["seg_id"]).strip()
+        y_id = str(seg_y["seg_id"]).strip()
+        x_label = str(seg_x.get("seg_label", "")).strip()
+        y_label = str(seg_y.get("seg_label", "")).strip()
+        pair_label = f"{x_label} / {y_label}" if x_label != y_label else x_label
+        active_x = _segment_active_events(seg_x, event_ids)
+        active_y = _segment_active_events(seg_y, event_ids)
+        for event_a in active_x:
+            for event_b in active_y:
+                from_a, to_a = _segment_km_window(seg_x, event_a)
+                from_b, to_b = _segment_km_window(seg_y, event_b)
+                if to_a <= from_a or to_b <= from_b:
+                    continue
+                if event_a == event_b and _km_ranges_identical(
+                    from_a, to_a, from_b, to_b
+                ):
+                    continue
+                append_row(
+                    {
+                        "flow_id": corridor_flow_id(x_id, y_id, event_a, event_b),
+                        "seg_id": x_id,
+                        "seg_label": pair_label,
+                        "event_a": event_a,
+                        "event_b": event_b,
+                        "from_km_a": from_a,
+                        "to_km_a": to_a,
+                        "from_km_b": from_b,
+                        "to_km_b": to_b,
+                        "flow_type": "counterflow",
+                        "direction": "bi",
+                        "notes": (
+                            f"Opposing passes on shared corridor "
+                            f"({x_id} vs {y_id})."
+                        ),
+                        "auto_generated": True,
+                    }
+                )
 
     out = io.StringIO()
     writer = csv.writer(out)

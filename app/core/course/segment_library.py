@@ -125,6 +125,69 @@ def validate_recipe_stitch(
     return warnings
 
 
+def validate_corridor_pairings(
+    legs_by_id: Dict[str, Dict[str, Any]],
+    recipes: Dict[str, Any],
+    *,
+    tolerance_m: float = STITCH_TOLERANCE_M,
+) -> List[str]:
+    """
+    Warnings for corridor pairings (Issue #785): dangling or asymmetric
+    ``paired_with`` references, pairs whose legs don't look like reverses of
+    each other, and pairs inert because a leg is unused in every recipe.
+    """
+    warnings: List[str] = []
+    used_legs: set = set()
+    for seq in (recipes or {}).values():
+        if isinstance(seq, list):
+            used_legs.update(str(x).strip() for x in seq if str(x or "").strip())
+
+    checked: set = set()
+    for leg_id, leg in legs_by_id.items():
+        mate_id = str(leg.get("paired_with") or "").strip()
+        if not mate_id:
+            continue
+        mate = legs_by_id.get(mate_id)
+        if mate is None:
+            warnings.append(
+                f"Leg {leg_id} is paired with unknown leg {mate_id}"
+            )
+            continue
+        mate_pair = str(mate.get("paired_with") or "").strip()
+        if mate_pair != leg_id:
+            warnings.append(
+                f"Asymmetric pairing: leg {leg_id} pairs with {mate_id}, "
+                f"but {mate_id} pairs with {mate_pair or 'nothing'}"
+            )
+        key = tuple(sorted([leg_id, mate_id]))
+        if key in checked:
+            continue
+        checked.add(key)
+        if leg_id not in used_legs or mate_id not in used_legs:
+            unused = [x for x in key if x not in used_legs]
+            warnings.append(
+                f"Corridor pairing {key[0]}/{key[1]} is inactive: "
+                f"leg(s) {', '.join(unused)} not used in any event recipe"
+            )
+        # Paired legs should be approximate reverses: A start ≈ B end, A end ≈ B start.
+        try:
+            gap_se = _haversine_m(
+                leg["start"][0], leg["start"][1], mate["end"][0], mate["end"][1]
+            )
+            gap_es = _haversine_m(
+                leg["end"][0], leg["end"][1], mate["start"][0], mate["start"][1]
+            )
+        except (KeyError, IndexError, TypeError):
+            continue
+        if gap_se > tolerance_m or gap_es > tolerance_m:
+            warnings.append(
+                f"Corridor pairing {key[0]}/{key[1]}: leg endpoints are not "
+                f"reverses of each other "
+                f"(start↔end gaps {gap_se:.0f}m / {gap_es:.0f}m)"
+            )
+    return warnings
+
+
 def load_leg_library(library_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     """Load all legs from manifest into memory."""
     out: Dict[str, Dict[str, Any]] = {}
@@ -334,6 +397,7 @@ def build_course_segments_from_library(
             "schema": entry.get("schema", "on_course_open"),
             "direction": entry.get("direction", "uni"),
             "flow_type": (entry.get("flow_type") or "none").strip().lower(),
+            "paired_with": str(entry.get("paired_with") or "").strip(),
             "flow_notes": leg_description,
             "description": leg_description,
             "events": events,
@@ -381,6 +445,7 @@ def export_library_to_course(
         stitch_warnings.extend(
             validate_recipe_stitch(library_dir, seq, legs_by_id)
         )
+    stitch_warnings.extend(validate_corridor_pairings(legs_by_id, recipes))
 
     segments = build_course_segments_from_library(manifest, legs_by_id, event_ids)
     course = {"segments": segments, "name": manifest.get("label", "")}
