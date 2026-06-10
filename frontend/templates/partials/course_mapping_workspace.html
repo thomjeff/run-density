@@ -56,6 +56,21 @@
                     <div class="map-loading">Loading map...</div>
                     <div id="leg-map-bounds-status" class="config-map-bounds-status" aria-live="polite"></div>
                     <div id="leg-map-toolbar" class="leg-map-toolbar">
+                        <button type="button" id="btn-leg-draw" class="course-btn" title="Draw a new leg by clicking along roads and trails (snap to route)">Draw leg</button>
+                        <span id="leg-draw-actions" class="leg-route-edit-actions" style="display: none;">
+                            <select id="leg-draw-profile" class="course-btn" title="Snap clicks to roads/trails using this travel mode">
+                                <option value="foot" selected>Snap: Foot</option>
+                                <option value="bike">Snap: Bike</option>
+                                <option value="car">Snap: Car</option>
+                                <option value="off">Snap: Off</option>
+                            </select>
+                            <button type="button" id="btn-leg-draw-undo" class="course-btn" disabled title="Remove the last click (back to the previous point)">Undo</button>
+                            <button type="button" id="btn-leg-draw-outback" class="course-btn" disabled title="Mirror the drawn route back to the start (out-and-back)">Out &amp; back</button>
+                            <button type="button" id="btn-leg-draw-clear" class="course-btn" disabled title="Remove all drawn points">Clear</button>
+                            <button type="button" id="btn-leg-draw-finish" class="course-btn primary" disabled title="Name the leg and save it to the organization library">Finish…</button>
+                            <button type="button" id="btn-leg-draw-cancel" class="course-btn" title="Discard the drawn route">Cancel</button>
+                            <span id="leg-draw-distance" class="leg-draw-distance" aria-live="polite"></span>
+                        </span>
                         <button type="button" id="btn-leg-trim-route" class="course-btn" disabled title="Select a leg, then drag start or end along the route">Trim route</button>
                         <button type="button" id="btn-leg-reshape-route" class="course-btn" disabled title="Select a leg, simplify the route, then drag yellow anchors to nudge it">Reshape route</button>
                         <span id="leg-route-edit-actions" class="leg-route-edit-actions" style="display: none;">
@@ -80,7 +95,7 @@
                 <button type="button" id="btn-import-gpx" class="course-btn" title="Import third-party GPX (+ optional leg export JSON) into the organization leg library">Import legs…</button>
                 <button type="button" id="btn-org-leg-library" class="course-btn" title="View legs stored outside this package (runflow/org/legs)">Leg library…</button>
                 <button type="button" id="btn-export-all-legs" class="course-btn" disabled title="Download all legs (GPX + metadata + locations per leg)">Export legs…</button>
-                <button type="button" id="btn-draw-leg-map" class="course-btn" disabled title="Coming soon: draw a new leg on the map">Draw leg on map</button>
+                <button type="button" id="btn-draw-leg-map" class="course-btn" title="Draw a new leg on the map by clicking along roads and trails">Draw leg on map</button>
                 </div>
             </div>
             <p class="card-help course-derived-empty">

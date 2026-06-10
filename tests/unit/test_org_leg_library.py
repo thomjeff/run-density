@@ -111,3 +111,48 @@ def test_publish_package_leg_to_org_library(tmp_path, monkeypatch):
     assert len(rows) == 1
     assert rows[0]["leg_label"] == "Package trail"
     assert rows[0]["location_count"] == 1
+
+
+def test_create_org_leg_from_coordinates(tmp_path, monkeypatch):
+    """Issue #789: drawn coordinates become a normal org library leg."""
+    import pytest
+
+    from app.core.config_package.org_leg_library import (
+        create_org_leg_from_coordinates,
+        get_org_legs_dir,
+    )
+
+    monkeypatch.setattr(
+        "app.core.config_package.org_leg_library.get_runflow_root",
+        lambda: tmp_path,
+    )
+
+    coords = [[-66.64, 45.96], [-66.635, 45.965], [-66.63, 45.97]]
+    state = create_org_leg_from_coordinates(
+        coords,
+        leg_label="Drawn Trail",
+        start_label="A",
+        end_label="B",
+        width_m=4.5,
+        direction="bi",
+        description="Drawn on the map",
+    )
+    assert state["leg_source"] == "org"
+    legs = state["legs"]
+    assert len(legs) == 1
+    leg = legs[0]
+    assert leg["leg_label"] == "Drawn Trail"
+    assert leg["start_label"] == "A"
+    assert leg["end_label"] == "B"
+    assert leg["width_m"] == 4.5
+    assert leg["direction"] == "bi"
+    assert leg["length_km"] > 0
+
+    gpx_files = list(get_org_legs_dir().glob("*.gpx"))
+    assert len(gpx_files) == 1
+    content = gpx_files[0].read_text(encoding="utf-8")
+    assert 'lat="45.96"' in content
+    assert 'lon="-66.63"' in content
+
+    with pytest.raises(ValueError):
+        create_org_leg_from_coordinates([[-66.64, 45.96]], leg_label="Too short")

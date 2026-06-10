@@ -42,6 +42,7 @@ from app.core.config_package.legs import (
 )
 from app.core.config_package.org_leg_library import (
     create_org_leg,
+    create_org_leg_from_coordinates,
     delete_org_leg,
     get_org_leg_line_geojson,
     import_gpx_files_to_org_library,
@@ -694,6 +695,50 @@ async def api_create_org_leg(
             flow_type=flow_type,
             flow_notes=flow_notes,
             description=description,
+        )
+        return JSONResponse(content={"ok": True, **state})
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+class CreateDrawnLegRequest(BaseModel):
+    """Issue #789: create a leg from coordinates drawn on the map."""
+
+    coordinates: List[List[float]] = Field(
+        ...,
+        min_length=2,
+        description="Drawn vertices as [lon, lat] in order",
+    )
+    leg_label: str = ""
+    start_label: str = ""
+    end_label: str = ""
+    width_m: float = 3.0
+    schema: str = "on_course_open"
+    direction: str = "uni"
+    flow_type: str = "none"
+    flow_notes: str = ""
+    description: str = ""
+
+
+@router.post("/api/org/legs/draw")
+async def api_create_org_leg_from_draw(
+    request: Request,
+    body: CreateDrawnLegRequest,
+) -> JSONResponse:
+    """Create an org library leg from a route drawn on the map (Issue #789)."""
+    require_auth(request)
+    try:
+        state = create_org_leg_from_coordinates(
+            body.coordinates,
+            leg_label=body.leg_label,
+            start_label=body.start_label,
+            end_label=body.end_label,
+            width_m=body.width_m,
+            schema=body.schema,
+            direction=body.direction,
+            flow_type=body.flow_type,
+            flow_notes=body.flow_notes,
+            description=body.description,
         )
         return JSONResponse(content={"ok": True, **state})
     except ValueError as e:

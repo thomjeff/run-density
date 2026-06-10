@@ -41,6 +41,15 @@
     var allLegRoutesLayer = null;
     var allLegRoutesFetchSeq = 0;
     var ALL_LEG_ROUTES_PANE = 'all-leg-routes';
+    /** Draw-a-leg mode state (Issue #789 Create Leg). */
+    var legDrawActive = false;
+    var legDrawCoords = [];        // [[lon, lat], ...] full drawn polyline
+    var legDrawClickCounts = [];   // points appended per click — undo stack
+    var legDrawLayer = null;
+    var legDrawClickHandler = null;
+    var legDrawRoutingBusy = false;
+    /** Coordinates handed to the Add-leg editor by Finish. */
+    var pendingDrawCoordinates = null;
 
     function schemaLabelForValue(value) {
         var v = String(value || 'on_course_open');
@@ -916,13 +925,215 @@
                         line.bindTooltip(label, { sticky: true });
                     }
                     if (legId) {
-                        line.on('click', function () { selectLegById(legId); });
+                        line.on('click', function () {
+                            if (legDrawActive) return; // drawing: let the click add a point instead
+                            selectLegById(legId);
+                        });
                     }
                     group.addLayer(line);
                 });
                 allLegRoutesLayer = group.addTo(mapNow);
             })
             .catch(function () { /* background layer is best-effort */ });
+    }
+
+    // ——— Draw a new leg (Issue #789) ———
+
+    function legDrawHaversineKm(coords) {
+        var total = 0;
+        for (var i = 1; i < coords.length; i++) {
+            var lon1 = coords[i - 1][0], lat1 = coords[i - 1][1];
+            var lon2 = coords[i][0], lat2 = coords[i][1];
+            var dLat = (lat2 - lat1) * Math.PI / 180;
+            var dLon = (lon2 - lon1) * Math.PI / 180;
+            var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            total += 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+        return total;
+    }
+
+    function legDrawProfile() {
+        var sel = document.getElementById('leg-draw-profile');
+        return sel ? sel.value : 'foot';
+    }
+
+    /** Anchor positions (clicked points) derived from the undo stack. */
+    function legDrawAnchorIndices() {
+        var idxs = [];
+        var pos = -1;
+        legDrawClickCounts.forEach(function (count) {
+            pos += count;
+            idxs.push(pos);
+        });
+        return idxs;
+    }
+
+    function updateLegDrawButtons() {
+        var has = legDrawCoords.length > 0;
+        var canFinish = legDrawCoords.length >= 2;
+        var undoBtn = document.getElementById('btn-leg-draw-undo');
+        var outbackBtn = document.getElementById('btn-leg-draw-outback');
+        var clearBtn = document.getElementById('btn-leg-draw-clear');
+        var finishBtn = document.getElementById('btn-leg-draw-finish');
+        if (undoBtn) undoBtn.disabled = !legDrawClickCounts.length;
+        if (outbackBtn) outbackBtn.disabled = !canFinish;
+        if (clearBtn) clearBtn.disabled = !has;
+        if (finishBtn) finishBtn.disabled = !canFinish;
+        var distEl = document.getElementById('leg-draw-distance');
+        if (distEl) {
+            distEl.textContent = canFinish ? legDrawHaversineKm(legDrawCoords).toFixed(2) + ' km' : '';
+        }
+    }
+
+    function renderLegDraw() {
+        var map = window.courseMappingMap;
+        if (!map) return;
+        if (legDrawLayer) {
+            map.removeLayer(legDrawLayer);
+            legDrawLayer = null;
+        }
+        if (legDrawCoords.length) {
+            var group = L.layerGroup();
+            var latlngs = legDrawCoords.map(function (c) { return [c[1], c[0]]; });
+            if (latlngs.length >= 2) {
+                group.addLayer(L.polyline(latlngs, { color: '#e67e22', weight: 5, opacity: 0.9 }));
+            }
+            // Start marker + small anchors at each clicked point
+            group.addLayer(L.circleMarker(latlngs[0], {
+                radius: 7, color: '#27ae60', fillColor: '#27ae60', fillOpacity: 0.9, weight: 2
+            }));
+            legDrawAnchorIndices().forEach(function (idx) {
+                if (idx <= 0 || idx >= latlngs.length) return;
+                group.addLayer(L.circleMarker(latlngs[idx], {
+                    radius: 4, color: '#e67e22', fillColor: '#fff', fillOpacity: 1, weight: 2
+                }));
+            });
+            legDrawLayer = group.addTo(map);
+        }
+        updateLegDrawButtons();
+    }
+
+    function legDrawAppend(points) {
+        if (!points.length) return;
+        points.forEach(function (p) { legDrawCoords.push([p[0], p[1]]); });
+        legDrawClickCounts.push(points.length);
+        renderLegDraw();
+    }
+
+    function onLegDrawClick(e) {
+        if (legDrawRoutingBusy) return;
+        var toPoint = [e.latlng.lng, e.latlng.lat];
+        var profile = legDrawProfile();
+        var fromPoint = legDrawCoords.length ? legDrawCoords[legDrawCoords.length - 1] : null;
+        if (!fromPoint || profile === 'off') {
+            legDrawAppend([toPoint]);
+            return;
+        }
+        legDrawRoutingBusy = true;
+        setLegStatus('Routing…');
+        var url = '/api/courses/route/segment?from_ll=' + encodeURIComponent(fromPoint[0] + ',' + fromPoint[1]) +
+            '&to_ll=' + encodeURIComponent(toPoint[0] + ',' + toPoint[1]) +
+            '&profile=' + encodeURIComponent(profile);
+        fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                legDrawRoutingBusy = false;
+                if (!legDrawActive) return;
+                if (data.ok && data.coordinates && data.coordinates.length > 1) {
+                    legDrawAppend(data.coordinates.slice(1));
+                    setLegStatus('Drawing leg — click to extend, Undo steps back one click.');
+                } else {
+                    legDrawAppend([toPoint]);
+                    setLegStatus('No snapped route found; added a straight line instead.', true);
+                }
+            })
+            .catch(function () {
+                legDrawRoutingBusy = false;
+                if (!legDrawActive) return;
+                legDrawAppend([toPoint]);
+                setLegStatus('Routing unavailable; added a straight line instead.', true);
+            });
+    }
+
+    function legDrawUndo() {
+        if (!legDrawClickCounts.length) return;
+        var count = legDrawClickCounts.pop();
+        legDrawCoords.length = Math.max(0, legDrawCoords.length - count);
+        renderLegDraw();
+    }
+
+    function legDrawOutAndBack() {
+        if (legDrawCoords.length < 2) return;
+        var back = legDrawCoords.slice(0, -1).reverse();
+        legDrawAppend(back);
+        setLegStatus('Out & back added — route now returns to the start (one Undo removes it).');
+    }
+
+    function legDrawClear() {
+        legDrawCoords = [];
+        legDrawClickCounts = [];
+        renderLegDraw();
+        setLegStatus('Drawing cleared — click the map to start again.');
+    }
+
+    function startLegDrawMode() {
+        var map = window.courseMappingMap;
+        if (!map || legDrawActive) return;
+        if (!usesOrgLegLibrary()) {
+            setLegStatus('Drawing a new leg requires the organization leg library.', true);
+            return;
+        }
+        clearLegMap();
+        legDrawActive = true;
+        legDrawCoords = [];
+        legDrawClickCounts = [];
+        pendingDrawCoordinates = null;
+        var drawBtn = document.getElementById('btn-leg-draw');
+        if (drawBtn) drawBtn.classList.add('active');
+        var actions = document.getElementById('leg-draw-actions');
+        if (actions) actions.style.display = 'inline-flex';
+        var container = document.getElementById('course-mapping-map');
+        if (container) container.classList.add('leg-draw-mode');
+        legDrawClickHandler = onLegDrawClick;
+        map.on('click', legDrawClickHandler);
+        renderLegDraw();
+        setLegStatus('Drawing leg — click along the route. Clicks snap to roads/trails (change with the Snap menu).');
+    }
+
+    function stopLegDrawMode() {
+        var map = window.courseMappingMap;
+        legDrawActive = false;
+        legDrawRoutingBusy = false;
+        if (map && legDrawClickHandler) {
+            map.off('click', legDrawClickHandler);
+        }
+        legDrawClickHandler = null;
+        if (map && legDrawLayer) {
+            map.removeLayer(legDrawLayer);
+        }
+        legDrawLayer = null;
+        legDrawCoords = [];
+        legDrawClickCounts = [];
+        var drawBtn = document.getElementById('btn-leg-draw');
+        if (drawBtn) drawBtn.classList.remove('active');
+        var actions = document.getElementById('leg-draw-actions');
+        if (actions) actions.style.display = 'none';
+        var container = document.getElementById('course-mapping-map');
+        if (container) container.classList.remove('leg-draw-mode');
+        updateLegDrawButtons();
+    }
+
+    function finishLegDraw() {
+        if (legDrawCoords.length < 2) {
+            setLegStatus('Draw at least two points before finishing.', true);
+            return;
+        }
+        pendingDrawCoordinates = legDrawCoords.slice();
+        stopLegDrawMode();
+        setLegStatus('');
+        openLegEditor(null);
     }
 
     function setLegRoutePolyline(latlngs) {
@@ -2171,6 +2382,7 @@
 
     function selectLegById(legId, options) {
         options = options || {};
+        if (legDrawActive) stopLegDrawMode();
         var leg = (libraryState && libraryState.legs || []).find(function (c) {
             return c.id === legId;
         });
@@ -2848,6 +3060,7 @@
     }
 
     function onCourseTabShown() {
+        if (legDrawActive) stopLegDrawMode();
         recipesModalDismissed = false;
         var chain = Promise.resolve();
         if (window.configPackageCourse && window.configPackageCourse.reloadCourse) {
@@ -2884,6 +3097,7 @@
         legEditorMode = null;
         legEditorLegId = null;
         pendingGpxFile = null;
+        pendingDrawCoordinates = null;
     }
 
     function openLegEditor(legOrNull) {
@@ -2918,9 +3132,15 @@
         body.innerHTML = '';
         var hint = document.createElement('p');
         hint.style.cssText = 'font-size:0.85rem;color:#7f8c8d;margin:0 0 0.75rem 0;';
-        hint.textContent = isNew
-            ? 'Set names for this leg. Add locations on the map after saving.'
-            : 'Edit metadata here. Add or adjust locations on the map (select the leg, then Add Locations).';
+        if (isNew && pendingDrawCoordinates) {
+            hint.textContent = 'Route drawn on map: '
+                + legDrawHaversineKm(pendingDrawCoordinates).toFixed(2)
+                + ' km. Set names for this leg. Add locations on the map after saving.';
+        } else {
+            hint.textContent = isNew
+                ? 'Set names for this leg. Add locations on the map after saving.'
+                : 'Edit metadata here. Add or adjust locations on the map (select the leg, then Add Locations).';
+        }
         body.appendChild(hint);
 
         function segmentSchemaChoices() {
@@ -3123,6 +3343,28 @@
             setLegStatus(validationError, true);
             return;
         }
+        if (legEditorMode === 'create' && pendingDrawCoordinates) {
+            var drawBody = Object.assign({ coordinates: pendingDrawCoordinates }, fields);
+            delete drawBody.paired_with; // not supported at create time
+            setLegStatus('Saving drawn leg…');
+            fetch('/api/org/legs/draw', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(drawBody)
+            })
+                .then(function (r) { return r.json().then(function (d) { return { res: r, data: d }; }); })
+                .then(function (payload) {
+                    if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
+                    return afterLegLibraryMutation(payload.data);
+                })
+                .then(function () {
+                    closeLegEditor();
+                    setLegStatus('Drawn leg added to the organization library. Select it in the table to view on the map.');
+                })
+                .catch(function (err) { setLegStatus(err.message || String(err), true); });
+            return;
+        }
         if (legEditorMode === 'create') {
             if (!pendingGpxFile) {
                 setLegStatus('Choose a GPX file first.', true);
@@ -3268,6 +3510,34 @@
     }
 
     function bindUi() {
+        var drawToolbarBtn = document.getElementById('btn-leg-draw');
+        if (drawToolbarBtn) {
+            drawToolbarBtn.addEventListener('click', function () {
+                if (legDrawActive) { stopLegDrawMode(); setLegStatus(''); return; }
+                startLegDrawMode();
+            });
+        }
+        var drawCardBtn = document.getElementById('btn-draw-leg-map');
+        if (drawCardBtn) {
+            drawCardBtn.addEventListener('click', function () {
+                if (!legDrawActive) startLegDrawMode();
+            });
+        }
+        var drawUndoBtn = document.getElementById('btn-leg-draw-undo');
+        if (drawUndoBtn) drawUndoBtn.addEventListener('click', legDrawUndo);
+        var drawOutbackBtn = document.getElementById('btn-leg-draw-outback');
+        if (drawOutbackBtn) drawOutbackBtn.addEventListener('click', legDrawOutAndBack);
+        var drawClearBtn = document.getElementById('btn-leg-draw-clear');
+        if (drawClearBtn) drawClearBtn.addEventListener('click', legDrawClear);
+        var drawFinishBtn = document.getElementById('btn-leg-draw-finish');
+        if (drawFinishBtn) drawFinishBtn.addEventListener('click', finishLegDraw);
+        var drawCancelBtn = document.getElementById('btn-leg-draw-cancel');
+        if (drawCancelBtn) {
+            drawCancelBtn.addEventListener('click', function () {
+                stopLegDrawMode();
+                setLegStatus('');
+            });
+        }
         var importBtn = document.getElementById('btn-import-gpx');
         var exportAllBtn = document.getElementById('btn-export-all-legs');
         var bulkInput = document.getElementById('segment-library-gpx-input');
