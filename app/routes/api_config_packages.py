@@ -467,6 +467,52 @@ async def api_get_package_leg_geometry(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
+@router.get("/api/config/packages/{config_id}/segment-library/leg-geometries")
+async def api_get_package_leg_geometries(
+    request: Request,
+    config_id: str,
+) -> JSONResponse:
+    """GeoJSON FeatureCollection of all leg routes (legs map background layer)."""
+    require_auth(request)
+    try:
+        from app.core.config_package.leg_library_resolver import (
+            LEG_SOURCE_ORG,
+            effective_leg_source,
+        )
+        from app.core.config_package.org_leg_library import load_org_leg_manifest
+        from app.core.config_package.segment_recipes import (
+            load_package_segment_manifest,
+        )
+        from app.core.course.segment_library import manifest_legs
+
+        manifest = load_package_segment_manifest(config_id)
+        if effective_leg_source(manifest) == LEG_SOURCE_ORG:
+            legs = manifest_legs(load_org_leg_manifest())
+
+            def geom_for(leg_id: str):
+                return get_org_leg_line_geojson(leg_id)
+        else:
+            legs = manifest_legs(manifest)
+
+            def geom_for(leg_id: str):
+                return get_leg_line_geojson(config_id, leg_id)
+
+        features = []
+        for entry in legs:
+            leg_id = str(entry.get("id") or "").strip()
+            if not leg_id:
+                continue
+            try:
+                features.append(geom_for(leg_id))
+            except (FileNotFoundError, ValueError):
+                continue
+        return JSONResponse(
+            content={"ok": True, "type": "FeatureCollection", "features": features}
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
 @router.post("/api/config/packages/{config_id}/segment-library/sync-leg-locations")
 async def api_sync_leg_locations_to_course(
     request: Request,

@@ -1,7 +1,9 @@
 # Course Mapping User Guide
 
 **Audience:** Race organizers, course mappers, and operational staff  
-**Last updated:** 2026-02
+**Last updated:** 2026-06
+
+> **Recommended workflow:** Most courses are now built from reusable GPX **legs** with event recipes on the **Race Configuration** page — see the [Race Configuration User Guide](race-configuration.md). The draw-the-line workflow below remains supported for simple races and legacy courses.
 
 ---
 

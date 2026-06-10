@@ -1,0 +1,42 @@
+{#
+  Run Context Partial
+
+  Shows the selected run's ID, description, and date under the page heading
+  on report pages (Segments, Density, Flow, Locations).
+
+  Resolves the run client-side (URL ?run_id= → window.runflowDay → localStorage)
+  and looks up description/date from /api/runs/list.
+
+  Usage in templates (place right after the .page-header div):
+    {% include "partials/run_context.html" %}
+#}
+<div id="run-context" style="display: none; margin: -1rem 0 1.5rem; color: #555; font-size: 0.9rem; line-height: 1.5;">
+    <div><strong>ID:</strong> <span id="run-context-id"></span></div>
+    <div><strong>Description:</strong> <span id="run-context-desc"></span></div>
+    <div><strong>Date:</strong> <span id="run-context-date"></span></div>
+</div>
+<script>
+(function () {
+    function resolveRunContextRunId() {
+        var params = new URLSearchParams(window.location.search);
+        var fromUrl = (params.get('run_id') || '').trim();
+        if (fromUrl) return fromUrl;
+        if (window.runflowDay && window.runflowDay.run_id) return window.runflowDay.run_id;
+        return (localStorage.getItem('selected_run_id') || '').trim();
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+        var runId = resolveRunContextRunId();
+        if (!runId) return;
+        fetch('/api/runs/list', { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                var run = data && (data.runs || []).find(function (x) { return x.run_id === runId; });
+                document.getElementById('run-context-id').textContent = runId;
+                document.getElementById('run-context-desc').textContent = (run && run.description) || '—';
+                document.getElementById('run-context-date').textContent = (run && (run.formatted_date || run.created_at)) || '—';
+                document.getElementById('run-context').style.display = 'block';
+            })
+            .catch(function () { /* context line is best-effort */ });
+    });
+})();
+</script>

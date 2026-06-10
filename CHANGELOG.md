@@ -1,5 +1,58 @@
 # Changelog
 
+## [v2.0.8] - 2026-06-10
+
+### Summary
+- **Leg-based race configuration is now the primary authoring workflow**: organization leg library, event recipes, locations on legs (Issues #755, #769, #780)
+- **Issue #785 Complete**: Corridor pairing — paired directional legs generate opposing-pass counterflow flow rows
+- Leg → course location sync fixes, recipe km protection, and location projection hardening
+- Dashboard run history management (edit/delete runs), all-legs map overview, and run context on report pages
+
+### New Features
+
+#### Organization Leg Library & Event Recipes (Issues #755, #769, #780, PRs #776–#784)
+- **Race Configuration workspace**: Legs / Course / Runners tabs per config package
+- **Org-primary leg library**: legs live in `runflow/org/legs/` and are shared across packages; new packages default to `leg_source: org`
+- **Leg authoring**: import third-party GPX, trim/reshape routes, edit metadata (width, schema, direction, flow type), export legs with metadata and locations
+- **Event recipes**: ordered leg lists per event; the same leg can appear in multiple recipes and multiple times in one recipe (out-and-back)
+- **Apply recipes**: builds combined course with per-event `from_km`/`to_km`, stitched per-event GPX, generated `flow.csv`, and synced locations
+- **Locations on legs**: pins placed on legs (course/water/official snap to route; aid/traffic/extract free), synced into the combined course with stable crew-facing `loc_id` and `location_key`
+- **Locations operations grid**: zones, resources, timing, notes edited at course level and preserved across re-applies
+
+#### Corridor Pairing (Issue #785, PR #787)
+- **`paired_with` on legs**: declare that two directional legs share the same physical corridor in opposite directions; symmetric save via UI dropdown with a Pair column in the legs table
+- **Opposing-pass flow rows**: generated `flow.csv` emits `counterflow,bi` rows for all event combinations across paired passes — including same-event out/back overlaps (restores hand-crafted 2026-style corridor insight)
+- **Self-pairing**: a leg appearing twice in one recipe is treated as an implicit corridor pair
+- **Apply-time validation**: warnings for dangling, asymmetric, unused, or non-reversed-geometry pairings
+
+#### Dashboard Run History Management
+- **Actions column** on the Run History table with edit/delete icon buttons (same pattern as Race Configuration)
+- **Edit**: change a run's description in place; updates both `runflow/analysis/index.json` and the run's `analysis.json`
+- **Delete**: remove any individual run (folder + index entry) with double confirmation — unlike `prune_runs --keep N`, runs in the middle of history can be removed; the run referenced by `latest.json` is protected
+- **API**: new `PATCH /api/runs/{run_id}` and `DELETE /api/runs/{run_id}` endpoints
+
+#### Legs Map Overview
+- **All leg routes drawn by default**: the Legs map shows every leg as a muted background line (new bulk `GET .../segment-library/leg-geometries` endpoint), with hover labels; clicking a route selects that leg
+- Previously the map appeared empty until a leg was selected (what looked like an all-legs view before was leaked course-level pins, removed by the duplicate-pin fix)
+
+#### Run Context on Report Pages
+- Segments, Density, Flow, and Locations pages show the selected run's **ID / Description / Date** under the page heading (shared `partials/run_context.html`)
+
+### Bug Fixes
+- **Leg → course location sync (PR #787)**: org leg edits now propagate into `course.json` for all org-sourced packages; pin moves on the Legs tab no longer require a recipe re-apply. Merges treat `lat`/`lon`/`placement` as leg-owned, and the Legs tab no longer renders duplicate course-level pins
+- **Recipe km protection (PR #784)**: recipe-applied per-event segment kilometres are server-owned; stale browser saves can no longer corrupt `course.json`
+- **Per-event km export (PR #784)**: recipe-built segments use stored per-event `from_km`/`to_km` instead of recomputing (fixes course gaps in Locations UI)
+- **Location projection clamp (PR #787)**: boundary pins (turnarounds, junctions) projecting within `LOCATION_SEGMENT_CLAMP_M` (50 m, configurable in `app/utils/constants.py`) of a segment end are clamped into bounds instead of falling back to midpoint timing
+- **Proxy chain guardrails (PR #784)**: proxy location dropdowns exclude locations that are themselves proxied
+- **Natural segment ordering (PR #784)**: density/flow tables sort S2 before S10
+- **UI artifact resilience (PR #784)**: segment map PNG generation skips segments without density metrics instead of failing the run
+
+### UI Changes
+- **Loc Sheets removed from navigation**: one-pagers are linked from the Locations UI (route kept)
+
+### Known Issues
+- **#786**: segment km bookkeeping drifts from stitched course geometry (~100 m mid-course), which can still fail centerline projection for pins at turn points
+
 ## [v2.0.6] - 2026-01-12
 
 ### Summary

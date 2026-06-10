@@ -8,15 +8,19 @@ Epic: RF-FE-002 | Issue: #279 | Step: 6
 Architecture: Option 3 - Hybrid Approach
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 import json
 import logging
+import re
+import shutil
 from datetime import datetime
 
 from app.common.config import load_rulebook, load_reporting
+from app.utils.auth import require_auth
 from app.utils.run_id import get_latest_run_id, resolve_selected_day
 from app.storage import create_runflow_storage
 from app.utils.metadata import get_run_index
@@ -618,3 +622,145 @@ async def get_run_summary(run_id: str):
     except Exception as e:
         logger.error(f"Error getting run summary for {run_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Error loading run summary: {str(e)}")
+
+
+# ---------------------------------------------------------------------------
+# Run history management (Dashboard Actions column)
+# ---------------------------------------------------------------------------
+
+_RUN_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+class UpdateRunRequest(BaseModel):
+    description: Optional[str] = None
+
+
+def _validated_run_id(run_id: str) -> str:
+    run_id = str(run_id or "").strip()
+    if not run_id or not _RUN_ID_RE.match(run_id):
+        raise HTTPException(status_code=400, detail=f"Invalid run_id: {run_id}")
+    return run_id
+
+
+def _analysis_index_path() -> Path:
+    from app.utils.run_id import get_runflow_root
+
+    return get_runflow_root() / "analysis" / "index.json"
+
+
+def _load_analysis_index() -> List[Dict[str, Any]]:
+    index_path = _analysis_index_path()
+    if not index_path.exists():
+        raise HTTPException(status_code=404, detail="index.json not found")
+    entries = json.loads(index_path.read_text(encoding="utf-8"))
+    if not isinstance(entries, list):
+        raise HTTPException(status_code=500, detail="index.json is not a JSON array")
+    return entries
+
+
+def _write_analysis_index(entries: List[Dict[str, Any]]) -> None:
+    index_path = _analysis_index_path()
+    temp_path = index_path.with_suffix(".json.tmp")
+    temp_path.write_text(
+        json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    temp_path.replace(index_path)
+
+
+def _latest_run_id() -> Optional[str]:
+    from app.utils.run_id import get_runflow_root
+
+    latest_path = get_runflow_root() / "analysis" / "latest.json"
+    if not latest_path.exists():
+        return None
+    try:
+        return json.loads(latest_path.read_text(encoding="utf-8")).get("run_id")
+    except Exception:
+        return None
+
+
+@router.patch("/api/runs/{run_id}")
+async def update_run_metadata(request: Request, run_id: str, payload: UpdateRunRequest):
+    """
+    Update editable run history fields (description).
+
+    Writes to both runflow/analysis/index.json and the run's analysis.json,
+    since the Dashboard run list prefers the description in analysis.json.
+    """
+    require_auth(request)
+    run_id = _validated_run_id(run_id)
+    if payload.description is None:
+        raise HTTPException(status_code=400, detail="No editable fields provided")
+    description = str(payload.description).strip()
+    if not description:
+        raise HTTPException(status_code=400, detail="Description cannot be empty")
+
+    entries = _load_analysis_index()
+    entry = next((e for e in entries if e.get("run_id") == run_id), None)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found in index")
+    entry["description"] = description
+    _write_analysis_index(entries)
+
+    from app.utils.run_id import get_run_directory
+
+    analysis_path = get_run_directory(run_id) / "analysis.json"
+    if analysis_path.exists():
+        try:
+            data = json.loads(analysis_path.read_text(encoding="utf-8"))
+            data["description"] = description
+            temp_path = analysis_path.with_suffix(".json.tmp")
+            temp_path.write_text(
+                json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+            temp_path.replace(analysis_path)
+        except Exception as e:
+            logger.warning(f"Could not update analysis.json for {run_id}: {e}")
+
+    logger.info(f"Updated run {run_id} description to: {description!r}")
+    return JSONResponse(content={"ok": True, "run_id": run_id, "description": description})
+
+
+@router.delete("/api/runs/{run_id}")
+async def delete_run(request: Request, run_id: str):
+    """
+    Delete one run from history: removes the run folder and its index.json entry.
+
+    The run referenced by latest.json cannot be deleted (mirrors prune_runs guard).
+    """
+    require_auth(request)
+    run_id = _validated_run_id(run_id)
+
+    latest = _latest_run_id()
+    if latest and latest == run_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete the latest run (latest.json points to it). Run a newer analysis first.",
+        )
+
+    entries = _load_analysis_index()
+    remaining = [e for e in entries if e.get("run_id") != run_id]
+    in_index = len(remaining) != len(entries)
+
+    from app.utils.run_id import get_run_directory
+
+    run_dir = get_run_directory(run_id)
+    folder_deleted = False
+    if run_dir.exists():
+        try:
+            shutil.rmtree(run_dir)
+            folder_deleted = True
+        except Exception as e:
+            logger.error(f"Failed to delete run folder {run_dir}: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to delete run folder: {e}")
+
+    if not in_index and not folder_deleted:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+
+    if in_index:
+        _write_analysis_index(remaining)
+
+    logger.info(f"Deleted run {run_id} (folder_deleted={folder_deleted}, index_updated={in_index})")
+    return JSONResponse(
+        content={"ok": True, "run_id": run_id, "folder_deleted": folder_deleted}
+    )

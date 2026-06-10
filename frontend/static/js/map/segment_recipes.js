@@ -37,6 +37,10 @@
     var legBoundsCache = {};
     var legsTableBoundsFilter = null;
     var coursePreviewBoundsFilter = null;
+    /** Background layer showing every leg route on the legs map. */
+    var allLegRoutesLayer = null;
+    var allLegRoutesFetchSeq = 0;
+    var ALL_LEG_ROUTES_PANE = 'all-leg-routes';
 
     function schemaLabelForValue(value) {
         var v = String(value || 'on_course_open');
@@ -657,6 +661,7 @@
         renderLegsTable();
         updateLegActionButtons();
         syncLegsTableBoundsFilterItems();
+        renderAllLegRoutes();
         renderRecipeTable();
         renderTotals(data.recipe_lengths_km);
         renderWarnings(data.stitch_warnings);
@@ -848,6 +853,76 @@
             return legReshapeDraftLatLngs;
         }
         return selectedLegLatLngs;
+    }
+
+    function ensureAllLegRoutesPane(map) {
+        if (!map.getPane(ALL_LEG_ROUTES_PANE)) {
+            var pane = map.createPane(ALL_LEG_ROUTES_PANE);
+            // Below the default overlay pane (400) so the selected leg always draws on top.
+            pane.style.zIndex = 380;
+        }
+    }
+
+    function removeAllLegRoutesLayer() {
+        var map = window.courseMappingMap;
+        if (map && allLegRoutesLayer) {
+            map.removeLayer(allLegRoutesLayer);
+        }
+        allLegRoutesLayer = null;
+    }
+
+    /** Draw every leg route as a muted background line so the full network is visible without a selection. */
+    function renderAllLegRoutes() {
+        var map = window.courseMappingMap;
+        if (!map || !isConfigPackageWorkspace()) return;
+        var legs = (libraryState && libraryState.legs) || [];
+        if (!legs.length) {
+            removeAllLegRoutesLayer();
+            return;
+        }
+        allLegRoutesFetchSeq += 1;
+        var seq = allLegRoutesFetchSeq;
+        fetch(apiBase() + '/segment-library/leg-geometries', { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                if (seq !== allLegRoutesFetchSeq || !data) return;
+                var mapNow = window.courseMappingMap;
+                if (!mapNow) return;
+                ensureAllLegRoutesPane(mapNow);
+                removeAllLegRoutesLayer();
+                var features = data.features || [];
+                if (!features.length) return;
+                var group = L.layerGroup();
+                features.forEach(function (feature) {
+                    var geom = feature.geometry || {};
+                    var coords = geom.coordinates || [];
+                    if (geom.type !== 'LineString' || coords.length < 2) return;
+                    var latlngs = coords.map(function (c) { return [c[1], c[0]]; });
+                    var props = feature.properties || {};
+                    var legId = props.leg_id;
+                    if (legId) {
+                        try {
+                            legBoundsCache[legId] = L.latLngBounds(latlngs);
+                        } catch (e) { /* ignore */ }
+                    }
+                    var line = L.polyline(latlngs, {
+                        pane: ALL_LEG_ROUTES_PANE,
+                        color: '#9b8ec4',
+                        weight: 3,
+                        opacity: 0.7
+                    });
+                    var label = String(props.leg_label || legId || '');
+                    if (label) {
+                        line.bindTooltip(label, { sticky: true });
+                    }
+                    if (legId) {
+                        line.on('click', function () { selectLegById(legId); });
+                    }
+                    group.addLayer(line);
+                });
+                allLegRoutesLayer = group.addTo(mapNow);
+            })
+            .catch(function () { /* background layer is best-effort */ });
     }
 
     function setLegRoutePolyline(latlngs) {
@@ -3342,6 +3417,7 @@
             }
             bindLegMapControls();
             attachLegsTableBoundsFilter();
+            if (!allLegRoutesLayer) renderAllLegRoutes();
             if (window.courseMappingMap) {
                 setTimeout(function () {
                     window.courseMappingMap.invalidateSize();

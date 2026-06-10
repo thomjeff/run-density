@@ -1,7 +1,7 @@
 # Run-Density Documentation
 
-**Version:** v2.0.2+  
-**Last Updated:** 2025-12-26  
+**Version:** v2.0.8  
+**Last Updated:** 2026-06-10  
 **Architecture:** Local-only, UUID-based runflow structure, API-driven configuration where all analysis parameters are provided via API. 
 
 This documentation is organized by audience and topic for easy navigation.
@@ -12,16 +12,18 @@ This documentation is organized by audience and topic for easy navigation.
 
 ### 👥 For Users (Race Organizers, Operational Planners)
 
-**Focus:** Using the API to request analyses and understand results
+**Focus:** Building race configuration, requesting analyses, and understanding results
 
 | Document | Purpose |
 |----------|---------|
-| [API User Guide](user-guide/api-user-guide.md) | **START HERE** - Complete API usage guide |
+| [Race Configuration Guide](user-guide/race-configuration.md) | **START HERE** - Leg-based course authoring (leg library, event recipes, corridor pairing, locations) |
+| [API User Guide](user-guide/api-user-guide.md) | Complete API usage guide |
+| [Course Mapping Guide](user-guide/course-mapping.md) | Legacy draw-the-line course authoring (simple races) |
 | [Cloud Container Guide](user-guide/cloud-container.md) | Skinny cloud Locations UI (read-only) |
 
 **Quick Start:**
-1. Read [API User Guide](user-guide/api-user-guide.md) for complete API usage
-2. Review example requests and common use cases
+1. Build your config package with the [Race Configuration Guide](user-guide/race-configuration.md)
+2. Read [API User Guide](user-guide/api-user-guide.md) for running analyses
 3. Understand error handling and validation
 
 ---
@@ -34,6 +36,7 @@ This documentation is organized by audience and topic for easy navigation.
 |----------|---------|
 | [Developer Guide](dev-guides/developer-guide.md) | **START HERE** - Complete v2 developer guide |
 | [Docker Development](dev-guides/docker-dev.md) | Docker development workflow |
+| [Leg Library & Corridor Pairing](dev-guides/segment-library-2027.md) | Leg platform internals (org library, recipes, pairing, sync) |
 | [Quick Reference](reference/quick-reference.md) | Variable names, terminology, standards (v2.0.2+) |
 | [Data Sources](dev-guides/data-sources.md) | Data source specifications (v2.0.2+) |
 | [Testing Guide](testing/testing-guide.md) | Comprehensive testing guide |
@@ -75,13 +78,16 @@ docs/
 ├── README.md (this file)              # Documentation index
 │
 ├── user-guide/                        # User Documentation
-│   └── api-user-guide.md              # Complete API usage guide
+│   ├── race-configuration.md          # Leg-based course authoring (recommended)
+│   ├── course-mapping.md              # Legacy draw-the-line authoring
+│   ├── api-user-guide.md              # Complete API usage guide
 │   └── cloud-container.md             # Cloud (skinny) Locations UI
 │
 ├── dev-guides/                        # Developer Documentation
 │   ├── ai-developer-guide.md          # AI assistant onboarding and rules
 │   ├── developer-guide.md             # Complete developer guide
 │   ├── docker-dev.md                  # Docker development workflow
+│   ├── segment-library-2027.md        # Leg library, recipes & corridor pairing internals
 │   └── data-sources.md                # Data source specifications
 │
 ├── testing/                           # Testing Documentation
@@ -139,6 +145,20 @@ Covers:
 - Configuration and environment variables
 - File structure and volume mounts
 - Troubleshooting guides
+
+---
+
+#### [Race Configuration Guide](user-guide/race-configuration.md)
+**Audience:** Users (Race Organizers, Course Mappers)  
+**Purpose:** Leg-based course authoring workflow  
+**Updated:** 2026-06
+
+Covers:
+- Organization leg library (import, edit, export GPX legs)
+- Event recipes and applying them to build the combined course
+- Corridor pairing for opposing-pass flow analysis
+- Locations on legs, proxy timing, and operations editing
+- direction/flow type selection guidance
 
 ---
 
@@ -227,19 +247,27 @@ Covers:
 ## 🆘 Getting Help
 
 **Questions about:**
+- **Building a course/config package?** → See [Race Configuration Guide](user-guide/race-configuration.md)
 - **API usage?** → See [API User Guide](user-guide/api-user-guide.md)
 - **Development workflow?** → See [Docker Development](dev-guides/docker-dev.md)
 - **Code standards?** → See [AI Developer Guide](dev-guides/ai-developer-guide.md)
-- **Field names?** → See [Quick Reference](reference/QUICK_REFERENCE.md)
-- **Architecture?** → See [Developer Guide v2](dev-guides/developer-guide-v2.md)
+- **Field names?** → See [Quick Reference](reference/quick-reference.md)
+- **Architecture?** → See [Developer Guide](dev-guides/developer-guide.md)
+- **Leg library internals?** → See [Leg Library & Corridor Pairing](dev-guides/segment-library-2027.md)
 - **Testing?** → See [Testing Guide](testing/testing-guide.md)
 
 ---
 
 ## 🔄 Document Lifecycle
 
-### Recently Updated (v2.0.2+ - December 2025)
-- ✅ `dev-guides/ai-developer-guide.md` - NEW consolidated AI assistant guide
+### Recently Updated (June 2026 — leg platform & corridor pairing)
+- ✅ `user-guide/race-configuration.md` - NEW leg-based course authoring guide
+- ✅ `dev-guides/segment-library-2027.md` - Rewritten for implemented leg platform (org library, pairing, sync)
+- ✅ `user-guide/course-mapping.md` - Marked as legacy workflow; points to Race Configuration
+- ✅ `CHANGELOG.md` - Unreleased section for leg platform, corridor pairing (#785), and sync fixes
+
+### Previously Updated (v2.0.2+ - December 2025)
+- ✅ `dev-guides/ai-developer-guide.md` - Consolidated AI assistant guide
 - ✅ `user-guide/api-user-guide.md` - Complete API usage guide
 - ✅ `dev-guides/developer-guide.md` - Complete developer guide
 - ✅ `dev-guides/docker-dev.md` - Version 3.1
@@ -253,5 +281,5 @@ Covers:
 
 ---
 
-**Last Updated:** 2025-12-26  
+**Last Updated:** 2026-06-10  
 **Maintained By:** Development Team

@@ -42,14 +42,27 @@
                     <th class="table-sortable" data-sort="total_elapsed_minutes" style="text-align: center;">
                         Run Time <span class="table-sortable-indicator">↕</span>
                     </th>
+                    <th style="text-align: center;">Actions</th>
                 </tr>
             </thead>
             <tbody id="run-history-tbody">
                 <tr>
-                    <td colspan="6" class="placeholder">Loading runs...</td>
+                    <td colspan="7" class="placeholder">Loading runs...</td>
                 </tr>
             </tbody>
         </table>
+    </div>
+
+    <!-- Edit run (description only; Run ID is immutable) -->
+    <div id="run-edit-card" style="display: none; margin-top: 1rem; padding: 1rem; border: 1px solid #dee2e6; border-radius: 6px; background: #f8f9fa;">
+        <h4 style="margin: 0 0 0.75rem; color: #2c3e50;">Edit run <span id="run-edit-id" style="font-family: monospace; font-size: 0.875rem; color: #6c757d;"></span></h4>
+        <label for="run-edit-description" style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;">Description</label>
+        <input type="text" id="run-edit-description" class="filter-input" style="width: 100%; max-width: 480px;" maxlength="200">
+        <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem;">
+            <button type="button" id="run-edit-save" style="padding: 0.5rem 1.25rem; background: #27ae60; color: #fff; border: 1px solid #219a52; border-radius: 4px; font-weight: 600; cursor: pointer;">Save</button>
+            <button type="button" id="run-edit-cancel" style="padding: 0.5rem 1.25rem; background: #fff; color: #2c3e50; border: 1px solid #bdc3c7; border-radius: 4px; cursor: pointer;">Cancel</button>
+        </div>
+        <div id="run-edit-status" style="margin-top: 0.5rem; font-size: 0.875rem; color: #e74c3c;"></div>
     </div>
 </div>
 
@@ -142,10 +155,44 @@
         border-color: #3498db;
         box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
     }
+
+    /* Actions column icon buttons (same look as Race Configuration table) */
+    .course-map-action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        margin: 0 2px;
+        border: 1px solid #bdc3c7;
+        border-radius: 4px;
+        background: #fff;
+        cursor: pointer;
+        font-size: 0;
+    }
+    .course-map-action-btn:hover {
+        background: #ecf0f1;
+        border-color: #95a5a6;
+    }
+    .course-map-action-btn svg {
+        width: 16px;
+        height: 16px;
+        pointer-events: none;
+    }
+    .course-map-action-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+    #run-history-table td.course-map-action-cell {
+        text-align: center;
+        white-space: nowrap;
+    }
 </style>
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="/static/js/table_actions.js?v=775b"></script>
 <script>
     // Issue #565: Enhanced Dashboard
     let runsList = [];
@@ -205,6 +252,18 @@
         
         // Setup table sorting
         setupTableSorting();
+
+        // Edit run card buttons
+        const editSave = document.getElementById('run-edit-save');
+        if (editSave) editSave.addEventListener('click', saveRunEdit);
+        const editCancel = document.getElementById('run-edit-cancel');
+        if (editCancel) editCancel.addEventListener('click', closeRunEdit);
+        const editDesc = document.getElementById('run-edit-description');
+        if (editDesc) {
+            editDesc.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') saveRunEdit();
+            });
+        }
     });
     
     // Issue #565: Run History Table functions
@@ -223,7 +282,7 @@
             .catch(error => {
                 console.error('Error loading runs list:', error);
                 document.getElementById('run-history-tbody').innerHTML = 
-                    '<tr><td colspan="6" style="padding: 2rem; text-align: center; color: #e74c3c;">Error loading runs</td></tr>';
+                    '<tr><td colspan="7" style="padding: 2rem; text-align: center; color: #e74c3c;">Error loading runs</td></tr>';
             });
     }
     
@@ -232,7 +291,7 @@
         if (!tbody) return;
         
         if (filteredRuns.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="padding: 2rem; text-align: center; color: #6c757d;">No runs found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="padding: 2rem; text-align: center; color: #6c757d;">No runs found</td></tr>';
             return;
         }
         
@@ -280,9 +339,137 @@
                     <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6; text-align: center;">${days}</td>
                     <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6; text-align: center;">${events}</td>
                     <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6; text-align: center;">${runTime}</td>
+                    <td class="course-map-action-cell" style="padding: 0.5rem 0.75rem; border-bottom: 1px solid #dee2e6;"></td>
                 </tr>
             `;
         }).join('');
+
+        attachRunRowActions();
+    }
+
+    // Edit/delete icon buttons in the Actions column (mirrors Race Configuration table)
+    function attachRunRowActions() {
+        const ta = window.TableActions;
+        if (!ta) return;
+        document.querySelectorAll('#run-history-tbody tr[data-run-id]').forEach(tr => {
+            const runId = tr.dataset.runId;
+            const cell = tr.querySelector('.course-map-action-cell');
+            if (!cell) return;
+            cell.appendChild(
+                ta.createIconButton('edit', 'Edit run description', function (e) {
+                    e.stopPropagation();
+                    openRunEdit(runId);
+                })
+            );
+            cell.appendChild(
+                ta.createIconButton('delete', 'Delete this run from history', function (e) {
+                    e.stopPropagation();
+                    deleteRun(runId);
+                })
+            );
+        });
+    }
+
+    function openRunEdit(runId) {
+        const run = runsList.find(r => r.run_id === runId);
+        if (!run) return;
+        const card = document.getElementById('run-edit-card');
+        const idEl = document.getElementById('run-edit-id');
+        const descEl = document.getElementById('run-edit-description');
+        const statusEl = document.getElementById('run-edit-status');
+        if (!card || !descEl) return;
+        card.dataset.runId = runId;
+        if (idEl) idEl.textContent = runId;
+        descEl.value = run.description || '';
+        if (statusEl) statusEl.textContent = '';
+        card.style.display = 'block';
+        descEl.focus();
+    }
+
+    function closeRunEdit() {
+        const card = document.getElementById('run-edit-card');
+        if (card) {
+            card.style.display = 'none';
+            delete card.dataset.runId;
+        }
+    }
+
+    function saveRunEdit() {
+        const card = document.getElementById('run-edit-card');
+        const descEl = document.getElementById('run-edit-description');
+        const statusEl = document.getElementById('run-edit-status');
+        if (!card || !card.dataset.runId || !descEl) return;
+        const runId = card.dataset.runId;
+        const description = descEl.value.trim();
+        if (!description) {
+            if (statusEl) statusEl.textContent = 'Description cannot be empty.';
+            return;
+        }
+        if (statusEl) statusEl.textContent = '';
+        fetch(`/api/runs/${encodeURIComponent(runId)}`, {
+            method: 'PATCH',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ description: description })
+        })
+            .then(response => response.json().then(data => ({ response, data })))
+            .then(({ response, data }) => {
+                if (!response.ok) {
+                    throw new Error(data.detail || ('HTTP ' + response.status));
+                }
+                const run = runsList.find(r => r.run_id === runId);
+                if (run) run.description = description;
+                const filtered = filteredRuns.find(r => r.run_id === runId);
+                if (filtered) filtered.description = description;
+                renderRunHistoryTable();
+                closeRunEdit();
+                if (runId === selectedRunId) {
+                    loadRunDetail(runId);
+                }
+            })
+            .catch(error => {
+                console.error('Error saving run description:', error);
+                if (statusEl) statusEl.textContent = 'Save failed: ' + error.message;
+            });
+    }
+
+    function deleteRun(runId) {
+        const ta = window.TableActions;
+        const run = runsList.find(r => r.run_id === runId);
+        const label = run && run.description ? `run “${run.description}” (${runId})` : `run ${runId}`;
+        const confirmed = ta
+            ? ta.doubleConfirmDelete({
+                subject: label,
+                detail: 'The run folder under runflow/analysis/' + runId + '/ and its index entry will be removed.'
+            })
+            : window.confirm('Delete ' + label + '? This cannot be undone.');
+        if (!confirmed) return;
+        fetch(`/api/runs/${encodeURIComponent(runId)}`, {
+            method: 'DELETE',
+            credentials: 'same-origin'
+        })
+            .then(response => response.json().then(data => ({ response, data })))
+            .then(({ response, data }) => {
+                if (!response.ok) {
+                    throw new Error(data.detail || ('HTTP ' + response.status));
+                }
+                runsList = runsList.filter(r => r.run_id !== runId);
+                filteredRuns = filteredRuns.filter(r => r.run_id !== runId);
+                const card = document.getElementById('run-edit-card');
+                if (card && card.dataset.runId === runId) closeRunEdit();
+                renderRunHistoryTable();
+                if (runId === selectedRunId) {
+                    selectedRunId = null;
+                    localStorage.removeItem('selected_run_id');
+                    if (runsList.length > 0) {
+                        selectRun(runsList[0].run_id);
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting run:', error);
+                alert('Delete failed: ' + error.message);
+            });
     }
     
     function handleSearch(event) {
