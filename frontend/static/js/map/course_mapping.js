@@ -3613,6 +3613,9 @@ document.addEventListener('DOMContentLoaded', function () {
             window.courseMappingMap.removeLayer(locationsLayer);
             locationsLayer = null;
         }
+        // Legs tab shows its own (editable) leg pins; course-level copies of the
+        // same locations would render as confusing duplicates on the shared map.
+        if (shouldSkipCourseMapRefresh()) return;
         if (!currentCourse || !Array.isArray(currentCourse.locations) || currentCourse.locations.length === 0) return;
         locationsLayer = L.layerGroup();
         currentCourse.locations.forEach(function (loc, i) {
@@ -4874,6 +4877,12 @@ document.addEventListener('DOMContentLoaded', function () {
             saveAll: saveConfigPackageWorkspace,
             syncHeaderFromMeta: syncCourseHeaderFromPackageMeta,
             reloadCourse: loadConfigPackageCourse,
+            removeLocationPins: function () {
+                if (locationsLayer && window.courseMappingMap) {
+                    window.courseMappingMap.removeLayer(locationsLayer);
+                    locationsLayer = null;
+                }
+            },
             enrichCourseSegmentsFromLegLibrary: enrichCourseSegmentsFromLegLibrary,
             hasCombinedCourse: function () {
                 return !!(

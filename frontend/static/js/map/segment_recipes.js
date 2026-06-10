@@ -2396,6 +2396,7 @@
                 schemaLabelForValue(ch.schema),
                 directionLabelForValue(ch.direction),
                 flowTypeLabelForValue(ch.flow_type),
+                (ch.paired_with || '—'),
                 String(ch.location_count != null ? ch.location_count : (ch.locations || []).length)
             ].forEach(function (text) {
                 var td = document.createElement('td');
@@ -2918,6 +2919,20 @@
             return sel;
         }
 
+        /** Other legs eligible as a corridor pair: not self, not already paired elsewhere. */
+        function pairedLegChoices(selfId, currentValue) {
+            var current = String(currentValue || '').trim();
+            var choices = [{ value: '', label: 'None' }];
+            ((libraryState && libraryState.legs) || []).forEach(function (other) {
+                var oid = String(other.id || '').trim();
+                if (!oid || oid === String(selfId)) return;
+                var otherPair = String(other.paired_with || '').trim();
+                if (otherPair && otherPair !== String(selfId) && oid !== current) return;
+                choices.push({ value: oid, label: oid + ' — ' + (other.leg_label || oid) });
+            });
+            return choices;
+        }
+
         addField('Leg label', 'leg-label', leg.leg_label);
         addField('Start place', 'leg-start-label', leg.start_label);
         addField('End place', 'leg-end-label', leg.end_label);
@@ -2925,6 +2940,16 @@
         addSelectField('Schema', 'leg-schema', leg.schema || 'on_course_open', segmentSchemaChoices());
         addSelectField('Direction', 'leg-direction', leg.direction || 'uni', segmentDirectionChoices());
         addSelectField('Flow type', 'leg-flow-type', leg.flow_type || 'none', flowTypeChoices());
+        if (!isNew) {
+            var pairSel = addSelectField(
+                'Paired leg (same corridor, opposite direction)',
+                'leg-paired-with',
+                leg.paired_with || '',
+                pairedLegChoices(leg.id, leg.paired_with)
+            );
+            pairSel.title = 'Marks two directional legs as one physical corridor. '
+                + 'Generates opposing-pass (counterflow) flow rows on apply.';
+        }
 
         var notesWrap = document.createElement('div');
         notesWrap.style.marginBottom = '0.65rem';
@@ -2986,7 +3011,7 @@
     }
 
     function collectLegFields() {
-        return {
+        var fields = {
             leg_label: (document.getElementById('leg-label') || {}).value || '',
             start_label: (document.getElementById('leg-start-label') || {}).value || '',
             end_label: (document.getElementById('leg-end-label') || {}).value || '',
@@ -2996,6 +3021,11 @@
             flow_type: ((document.getElementById('leg-flow-type') || {}).value || 'none').trim(),
             description: ((document.getElementById('leg-description') || {}).value || '').trim()
         };
+        var pairedSel = document.getElementById('leg-paired-with');
+        if (pairedSel) {
+            fields.paired_with = (pairedSel.value || '').trim();
+        }
+        return fields;
     }
 
     function validateLegFields(fields) {
@@ -3305,6 +3335,11 @@
         closeRecipesModal: closeRecipesModal,
         resolveLegLabelsForSegment: resolveLegLabelsForSegment,
         onLegsTabShown: function () {
+            // Drop course-level location pins left over from the Course tab;
+            // the Legs tab draws its own editable pins for the same locations.
+            if (window.configPackageCourse && window.configPackageCourse.removeLocationPins) {
+                window.configPackageCourse.removeLocationPins();
+            }
             bindLegMapControls();
             attachLegsTableBoundsFilter();
             if (window.courseMappingMap) {

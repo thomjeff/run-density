@@ -20,7 +20,11 @@ from app.location_report import project_point_to_course
 from shapely.geometry import LineString, Point
 from pyproj import Transformer
 
-from app.utils.constants import LOCATION_SNAP_THRESHOLD_M, METERS_PER_KM
+from app.utils.constants import (
+    LOCATION_SEGMENT_CLAMP_M,
+    LOCATION_SNAP_THRESHOLD_M,
+    METERS_PER_KM,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +167,10 @@ def validate_location_projections(
                         seg_distance_relative_km = seg_distance_m / METERS_PER_KM
                         absolute_distance_km = from_km + seg_distance_relative_km
                         
-                        if from_km <= absolute_distance_km <= to_km:
+                        # Match location_report: clamp boundary-pin projections
+                        # within LOCATION_SEGMENT_CLAMP_M of a segment end.
+                        clamp_km = LOCATION_SEGMENT_CLAMP_M / METERS_PER_KM
+                        if (from_km - clamp_km) <= absolute_distance_km <= (to_km + clamp_km):
                             projection_success = True
                         else:
                             projection_error_km = abs(absolute_distance_km - (from_km + to_km) / 2.0)

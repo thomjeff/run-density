@@ -7,6 +7,7 @@ package ``segment_library/``. Packages import copies with freshly allocated ids.
 
 from __future__ import annotations
 
+import logging
 import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -25,8 +26,27 @@ from app.core.course.segment_library import (
 )
 from app.utils.run_id import get_runflow_root
 
+logger = logging.getLogger(__name__)
+
 ORG_LEGS_DIRNAME = "legs"
 MANIFEST_YAML = "manifest.yaml"
+
+# Org leg fields whose edits must be reflected in each package's course.json
+# (locations/labels re-merge leg placements; metadata re-syncs segments).
+_PACKAGE_SYNC_FIELDS = (
+    "locations",
+    "start_label",
+    "end_label",
+    "leg_label",
+    "seg_label",
+    "description",
+    "width_m",
+    "schema",
+    "direction",
+    "flow_type",
+    "flow_notes",
+    "paired_with",
+)
 
 
 def get_org_legs_dir() -> Path:
@@ -375,6 +395,7 @@ def update_org_leg(
         _normalize_segment_direction,
         _normalize_segment_schema,
         _slugify,
+        apply_leg_pairing,
     )
 
     leg_id = str(leg_id).strip()
@@ -421,9 +442,47 @@ def update_org_leg(
             entry["end_label"] = _default_endpoint_labels(entry.get("seg_label", ""), parsed)[1]
 
     legs[idx] = entry
+    if "paired_with" in fields:
+        apply_leg_pairing(legs, leg_id, fields.get("paired_with"))
     set_manifest_legs(manifest, legs)
     save_org_leg_manifest(manifest)
+    if any(key in fields for key in _PACKAGE_SYNC_FIELDS):
+        sync_org_leg_changes_into_packages()
     return get_org_leg_library_state()
+
+
+def sync_org_leg_changes_into_packages() -> None:
+    """
+    Propagate org leg edits into course.json for org-sourced packages.
+
+    The Legs tab saves to the org manifest only; without this, a moved
+    location pin (or label/metadata change) stays stale in each package's
+    combined course until the next recipe apply. Packages without applied
+    recipes are skipped by ``sync_leg_locations_if_applied``.
+    """
+    from app.core.config_package.leg_library_resolver import (
+        LEG_SOURCE_ORG,
+        effective_leg_source,
+    )
+    from app.core.config_package.legs import sync_leg_locations_if_applied
+    from app.core.config_package.storage import list_config_packages
+
+    for pkg in list_config_packages():
+        cid = str(pkg.get("config_id") or "").strip()
+        if not cid:
+            continue
+        try:
+            pkg_manifest = load_package_segment_manifest(cid)
+        except (FileNotFoundError, ValueError):
+            continue
+        if effective_leg_source(pkg_manifest) != LEG_SOURCE_ORG:
+            continue
+        try:
+            sync_leg_locations_if_applied(cid)
+        except Exception:
+            logger.warning(
+                "Failed to sync org leg change into package %s", cid, exc_info=True
+            )
 
 
 def delete_org_leg(leg_id: str) -> Dict[str, Any]:

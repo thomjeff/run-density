@@ -200,6 +200,11 @@ RUN_ID_MIN_LENGTH = 10
 # Location Report Configuration (Issue #277)
 LOCATION_SNAP_THRESHOLD_M = 50.0  # Maximum distance for snapping location to segment
 LOCATION_SETUP_BUFFER_MINUTES = 45  # Minutes before earliest runner start for loc_start
+# Issue #785 follow-up: locations pinned at segment boundaries (turnarounds,
+# corridor junctions) project a few metres past the segment's km range and were
+# falling back to the segment midpoint. Projections within this distance of a
+# segment end are clamped to the boundary and accepted.
+LOCATION_SEGMENT_CLAMP_M = 50.0
 
 # Course Mapping location types (Issue #732 / #747) — alphabetical for UI dropdown
 LOCATION_TYPE_CHOICES = [

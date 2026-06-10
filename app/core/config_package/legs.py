@@ -74,6 +74,11 @@ _LEG_LOC_PRESERVE_FIELDS = (
     "resources",
 )
 
+# Physical placement is authored on the Legs tab; merges must take these from
+# the leg manifest, never preserve stale course.json copies (pin moves were
+# silently ignored otherwise).
+_LEG_OWNED_PLACEMENT_FIELDS = ("lat", "lon", "placement")
+
 _LEG_LOC_EXPORT_FIELDS = _LEG_LOC_PRESERVE_FIELDS
 
 _LEG_ID_RE = re.compile(r"^\d{2,3}$")
@@ -136,6 +141,59 @@ def _validate_leg_entry(entry: Dict[str, Any]) -> None:
 
 def _normalize_flow_notes(notes: Any) -> str:
     return str(notes or "").strip()[:500]
+
+
+def apply_leg_pairing(
+    legs: List[Dict[str, Any]], leg_id: str, target_id: Any
+) -> bool:
+    """
+    Set or clear the symmetric corridor pairing between two legs (Issue #785).
+
+    ``paired_with`` marks two directional legs as the same physical corridor
+    traversed in opposite directions. The relationship is 1:1 and symmetric:
+    setting it on one leg writes the reciprocal on the target, and clearing
+    either side clears both. Mutates ``legs`` entries in place.
+
+    Returns True when any entry changed.
+    """
+    leg_id = str(leg_id).strip()
+    new_id = str(target_id or "").strip()
+    by_id: Dict[str, Dict[str, Any]] = {}
+    for entry in legs:
+        if isinstance(entry, dict) and str(entry.get("id", "")).strip():
+            by_id[str(entry["id"]).strip()] = entry
+    entry = by_id.get(leg_id)
+    if entry is None:
+        raise ValueError(f"Leg not found: {leg_id}")
+    old_id = str(entry.get("paired_with") or "").strip()
+    if new_id == old_id:
+        return False
+    if new_id:
+        if new_id == leg_id:
+            raise ValueError("A leg cannot be paired with itself")
+        target = by_id.get(new_id)
+        if target is None:
+            raise ValueError(f"Paired leg not found: {new_id}")
+        target_pair = str(target.get("paired_with") or "").strip()
+        if target_pair and target_pair != leg_id:
+            raise ValueError(
+                f"Leg {new_id} is already paired with leg {target_pair}; "
+                "clear that pairing first"
+            )
+    # Clear the old reciprocal before re-pairing.
+    if old_id:
+        old_target = by_id.get(old_id)
+        if (
+            old_target is not None
+            and str(old_target.get("paired_with") or "").strip() == leg_id
+        ):
+            old_target.pop("paired_with", None)
+    if new_id:
+        entry["paired_with"] = new_id
+        by_id[new_id]["paired_with"] = leg_id
+    else:
+        entry.pop("paired_with", None)
+    return True
 
 
 def _slugify(text: str) -> str:
@@ -262,6 +320,7 @@ def leg_row_from_entry(
         "direction": entry.get("direction", "uni"),
         "flow_type": entry.get("flow_type", DEFAULT_FLOW_TYPE),
         "flow_notes": (entry.get("flow_notes") or "").strip(),
+        "paired_with": str(entry.get("paired_with") or "").strip(),
         "description": _leg_description(entry),
         "locations": locations,
         "location_count": len(locations),
@@ -418,6 +477,8 @@ def update_package_leg(
     if any(key in fields for key in authoring_keys):
         _validate_leg_entry(entry)
     legs[idx] = entry
+    if "paired_with" in fields:
+        apply_leg_pairing(legs, leg_id, fields.get("paired_with"))
     set_manifest_legs(manifest, legs)
     save_package_segment_manifest(cid, manifest)
     try:
@@ -1111,6 +1172,8 @@ def merge_leg_locations_into_course(config_id: str) -> None:
                 else:
                     row["id"] = allocate_location_id(used_ids)
                 for field in _LEG_LOC_PRESERVE_FIELDS:
+                    if field in _LEG_OWNED_PLACEMENT_FIELDS:
+                        continue
                     if field not in prev:
                         continue
                     val = prev[field]

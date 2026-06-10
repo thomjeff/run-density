@@ -12,6 +12,7 @@ from app.core.config_package.leg_library_resolver import (
     resolve_leg_library,
 )
 from app.core.config_package.legs import merge_leg_locations_into_course
+from app.core.config_package.org_leg_library import update_org_leg
 from app.core.config_package.segment_recipes import (
     apply_package_recipes,
     get_package_segment_library_state,
@@ -335,3 +336,59 @@ def test_export_org_primary_writes_flow_and_gpx(tmp_path, monkeypatch):
     assert (package_path / "half.gpx").is_file()
     assert applied["flow_csv_path"] == str(flow_path)
     assert {g["event_id"] for g in applied.get("gpx_files") or []} == {"full", "half"}
+
+
+def test_update_org_leg_location_syncs_into_applied_packages(tmp_path, monkeypatch):
+    """A leg pin move on the Legs tab must land in course.json without a re-apply."""
+    _patch_roots(tmp_path, monkeypatch)
+    _seed_org_leg(tmp_path)
+
+    result = create_config_package("Pkg", "", event_day="sun", package_events=["full"])
+    config_id = result["config_id"]
+    save_package_segment_manifest(
+        config_id,
+        {
+            "version": 1,
+            "leg_source": "org",
+            "legs": [],
+            "recipes": {"full": ["05"]},
+            "flow_overrides": [],
+        },
+    )
+    apply_package_recipes(config_id, export_csv=False)
+
+    # A second package that never applied recipes must be left untouched.
+    untouched = create_config_package(
+        "No recipes", "", event_day="sun", package_events=["full"]
+    )
+
+    course = load_config_course(config_id)
+    water = next(
+        loc for loc in course["locations"] if loc.get("loc_type") == "water"
+    )
+    assert water["lat"] == pytest.approx(45.961)
+
+    update_org_leg(
+        "05",
+        {
+            "locations": [
+                {
+                    "loc_label": "Water",
+                    "loc_type": "water",
+                    "lat": 45.9655,
+                    "lon": -66.6355,
+                    "placement": "along",
+                }
+            ]
+        },
+    )
+
+    course = load_config_course(config_id)
+    water = next(
+        loc for loc in course["locations"] if loc.get("loc_type") == "water"
+    )
+    assert water["lat"] == pytest.approx(45.9655)
+    assert water["lon"] == pytest.approx(-66.6355)
+
+    untouched_course = load_config_course(untouched["config_id"])
+    assert not untouched_course.get("locations")

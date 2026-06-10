@@ -25,6 +25,7 @@ from app.io.loader import load_locations, load_runners, load_segments
 from app.core.gpx.processor import load_all_courses, GPXCourse
 from app.utils.constants import (
     LOCATION_SNAP_THRESHOLD_M,
+    LOCATION_SEGMENT_CLAMP_M,
     LOCATION_SETUP_BUFFER_MINUTES,
     SECONDS_PER_MINUTE,
     METERS_PER_KM,
@@ -615,11 +616,14 @@ def calculate_arrival_times_for_location(
                         # Convert to absolute course distance: from_km + distance_along_segment
                         absolute_distance_km = from_km + seg_distance_relative_km
                         
-                        # Verify it's within segment bounds
-                        if from_km <= absolute_distance_km <= to_km:
-                            seg_distance_km = absolute_distance_km
+                        # Verify it's within segment bounds. Boundary pins (turnarounds,
+                        # corridor junctions) can land metres past an end — clamp within
+                        # LOCATION_SEGMENT_CLAMP_M instead of failing to midpoint fallback.
+                        clamp_km = LOCATION_SEGMENT_CLAMP_M / METERS_PER_KM
+                        if (from_km - clamp_km) <= absolute_distance_km <= (to_km + clamp_km):
+                            seg_distance_km = max(from_km, min(absolute_distance_km, to_km))
                             logger.info(
-                                f"Location {location.get('loc_id')} ({event}): Projected onto segment {seg_id} centerline: {absolute_distance_km:.3f}km (from_km={from_km:.3f} + seg_dist={seg_distance_relative_km:.3f}km)"
+                                f"Location {location.get('loc_id')} ({event}): Projected onto segment {seg_id} centerline: {seg_distance_km:.3f}km (from_km={from_km:.3f} + seg_dist={seg_distance_relative_km:.3f}km)"
                             )
                         else:
                             logger.debug(

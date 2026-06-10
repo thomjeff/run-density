@@ -115,6 +115,7 @@ class UpdateLegRequest(BaseModel):
     direction: Optional[str] = None
     flow_type: Optional[str] = None
     flow_notes: Optional[str] = None
+    paired_with: Optional[str] = None
     description: Optional[str] = None
     locations: Optional[List[Dict[str, Any]]] = None
 
