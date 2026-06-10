@@ -1,161 +1,128 @@
-# Segment library & event recipes (2027 planning)
+# Leg library, event recipes & corridor pairing (developer guide)
 
-**Status:** Prototype in `app/core/course/segment_library.py`  
-**Reference data:** `cursor/reference-legs/` (sample GPX legs + combined `00_*.gpx`)  
-**Epic:** #755 · Related: #767 (planner), #759 (flow review)
+**Status:** Implemented (org-primary since #780/#783; corridor pairing since #785)
+**Last updated:** 2026-06
+**Epics/issues:** #755 (library), #780 (org-primary), #785 (corridor pairing), #786 (km drift — open)
+**User guide:** [Race Configuration](../user-guide/race-configuration.md)
 
 ---
 
 ## Goal
 
-Use a **map/GPX workflow** to produce analysis-ready config **without hand-editing** `segments.csv`, `flow.csv`, or `locations.csv` for each new year (e.g. 2027).
+Use a **map/GPX workflow** to produce analysis-ready config **without hand-editing** `segments.csv`, `flow.csv`, or `locations.csv` for each new year.
 
 | Output | Role in analysis |
 |--------|------------------|
-| **segments.csv** | **Multi-event rows** — one row per *shared* course leg; `full`/`half`/`10k` flags; per-event `*_from_km` / `*_to_km` for density |
-| **flow.csv** | **Event pairs** on shared legs; uses *each event’s* km on that leg (can differ on same `seg_id` in advanced cases) |
-| **locations.csv** | Points with **per-event** flags and km; first/last runner times pool arrivals across all flagged events |
-| **`{event}.gpx`** | Per-event geometry for GPX projection and location distance |
+| **segments.csv** | Multi-event rows — one row per leg occurrence; `full`/`half`/`10k` flags; per-event `*_from_km` / `*_to_km` for density |
+| **flow.csv** | Event pairs on shared legs + corridor opposing-pass rows; uses *each event's* km windows |
+| **locations.csv** | Points with per-event flags, `seg_id`, zones, resources, proxy timing |
+| **`{event}.gpx`** | Per-event geometry stitched from recipe order |
 
 ---
 
-## Model (leg library)
+## Data model
 
-### 1. Segment library
+### Org leg library (primary)
 
-- Each file `01_start_friel.gpx`, `02_friel_10kturn.gpx`, … is one **leg**.
-- Legs stitch end-to-end (endpoint tolerance ~80 m).
-- Metadata in `cursor/reference-legs/manifest.yaml`: `seg_label`, width, schema, direction.
+- Legs live in `runflow/org/legs/` — one GPX per leg + `manifest.yaml` (id, file, `seg_label`, `start_label`/`end_label`, `width_m`, `schema`, `direction`, `flow_type`, `flow_notes`, `paired_with`, `locations[]`).
+- New packages default to `leg_source: org` (`effective_leg_source` in `leg_library_resolver.py`); legacy packages with local legs stay package-scoped.
+- Package manifests (`{package}/segment_library/manifest.yaml`) hold **recipes** and `flow_overrides`; legs come from the org manifest via `resolve_leg_library()` / `combined_manifest_for_apply()`.
 
-### 2. Event recipes
+### Event recipes
 
-Ordered list of leg ids per event:
+Ordered list of leg ids per event, stored in the **package** manifest:
 
 ```yaml
 recipes:
-  10k: [01, 02, 04, 05, 06, 12]
-  half: [01, 05, 08, 10, 11, 12]
-  full: [01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12]
+  10k: ["01", "02", "04", "05", "06", "12"]
+  half: ["01", "05", "08", "10", "11", "12"]
+  full: ["01", "02", ..., "12"]
 ```
 
-- **Combine** = concatenate leg GPX in recipe order.
-- Verify `recipe_lengths_km` against `00_{event}.gpx` after edits.
+- The same leg may appear in multiple recipes (shared segments) and **multiple times in one recipe** (out-and-back over one leg → distinct `seg_id` per occurrence).
+- Apply = stitch leg GPX in recipe order (endpoint tolerance `STITCH_TOLERANCE_M`), compute per-event cumulative kms, build `course.json` segments + locations, generate flow.
 
-### 3. Export `segments.csv` (multi-event — required)
+### Corridor pairing (#785)
 
-**One row per leg**, not per event:
+`paired_with` on a leg declares that another leg covers the **same physical corridor in the opposite direction**.
 
-| Column | Source |
-|--------|--------|
-| `seg_id`, `seg_label`, … | Leg metadata |
-| `full`, `half`, `10k`, … | `y` if leg appears in that event’s recipe |
-| `full_from_km`, `full_to_km`, … | Cumulative distance along **that event’s recipe only** |
-| `0` / `n` | Events that skip the leg |
+- **Symmetric by construction:** `apply_leg_pairing()` (`app/core/config_package/legs.py`) sets/clears both sides and clears stale reciprocals. Wired into `update_package_leg` and `update_org_leg` when `paired_with` is in the update fields.
+- **Self-pairing is implicit:** the same leg appearing twice in one recipe is treated as a corridor pair between the two occurrences (`leg_occurrence` in `flow_csv.py`).
+- **Validation:** `validate_corridor_pairings()` (`app/core/course/segment_library.py`) emits warnings (dangling, asymmetric, unused-in-recipes, geometry-not-reversed) appended to stitch warnings at apply time.
 
-This matches **2026_final** (e.g. A1 used by Full+Half+10K with aligned early km; B1 Full+10K only with `half` = n).
+---
 
-Density (`get_shared_segments`, bins) uses these flags — **shared segments must stay on one row**.
+## Flow generation
 
-### 4. Export `flow.csv` (re-planned)
+**Generator:** `build_flow_csv_from_segments()` in `app/core/course/flow_csv.py`.
 
-**Generator:** `build_flow_csv_from_segments()` in `segment_library.py`.
-
-For each segment row where **2+ events** are active:
-
-- Emit **cross-event** pairs only (`full/half`, `full/10k`, `half/10k`) with a unique `flow_id` per row.
-- Same-event rows (out/back, lap, slow/fast) come from manifest `flow_overrides` when A/B km windows differ.
-- Do **not** auto-generate `event_a == event_b` rows when A/B km ranges are identical.
-- `from_km_a` / `to_km_a` = segment’s `{event_a}_from_km` / `{event_a}_to_km`; same for event B.
-- Default `flow_type`: `overtake`; `none` supported via overrides. Bidirectional per-minute CSVs use `flow_id`.
-
-**Not** the old stub in `build_flow_csv()` (one row per segment, same event A/B).
+1. **Cross-event pairs** on each shared segment (2+ events active): `overtake` rows with each event's own km window; unique `flow_id` per row.
+2. **Corridor pairs** (`_corridor_pairs()`): for explicitly paired legs and self-paired occurrences, emit `counterflow,bi` rows for **all** event combinations across the two passes — including same-event (e.g. full outbound vs full return). Events not present on a pass are skipped.
+3. Same-event rows with identical A/B km windows are never auto-generated; `flow_overrides` in the manifest still supported for exceptions.
 
 **Pipeline:** `app/core/v2/flow.py` — `flow.csv` is authoritative; pairs must exist for requested events or analysis fails (#553).
 
-**Follow-up (#759):** Review grid for exceptions (e.g. 2026 `B1a` — same `seg_label`, different km windows for late overlaps). Auto-generate baseline; human adds override rows.
+---
 
-### 5. Locations (re-planned)
+## Leg ↔ course synchronization
 
-Locations are **like segments + flow**: multi-event, analysis uses **all** eligible events at a point.
+Two copies of leg data exist: the leg manifest (authoring) and the package `course.json` (combined course, feeds exports). Sync rules:
 
-**Current analysis** (`app/location_report.py`):
+| Direction | Mechanism | Triggers |
+|-----------|-----------|----------|
+| Leg → course | `merge_leg_locations_into_course()` + `sync_leg_metadata_into_course()` (`legs.py`) | Apply recipes; any package-leg update; **any org-leg update** fans out via `sync_org_leg_changes_into_packages()` (`org_leg_library.py`) to every org-sourced package with applied recipes |
+| Course → leg | `sync_leg_location_metadata_from_course()` | Locations grid (operations editor) saves |
 
-1. Read `locations.csv` flags (`full`, `half`, `10k`, …).
-2. For each eligible event, compute arrival times from:
-   - Listed `seg_id`(s) on the location, **or**
-   - Nearest segment + GPX projection using `{event}.gpx`.
-3. Uses `{event}_from_km` / distance on segment for `pace × distance + start`.
-4. **`first_runner` / `last_runner`** = min/max over **combined** arrival list across events (cross-event staffing window).
+**Field ownership** during leg → course merge:
 
-**Planned authoring (no hand km):**
+- **Leg-owned:** `lat`, `lon`, `placement` (`_LEG_OWNED_PLACEMENT_FIELDS`) — pin moves on the Legs tab always win; stale course copies never override them.
+- **Course-owned (preserved):** crew-facing `id` (`loc_id`), resources, zone, notes, buffer, interval, contact, proxy settings, etc. (`_LEG_LOC_PRESERVE_FIELDS` minus placement). Identity is matched by `location_key` / `leg_loc_key`.
 
-| Step | Action |
-|------|--------|
-| 1 | Place location on map (or import lat/lon). |
-| 2 | System projects point onto each **recipe-built** `{event}.gpx` → event km at location. |
-| 3 | Set event flags from segment membership (suggest API exists: `suggest_location_events`). |
-| 4 | Export `locations.csv` with `full_from_km`, `half_from_km`, `10k_from_km`, … |
+**Server-owned recipe kms:** `_preserve_recipe_segment_kms()` (`storage.py::save_config_course`) prevents stale client saves from overwriting recipe-applied per-event `from_km`/`to_km` and the `segment_library_applied` flag.
 
-**Dependency:** Per-event GPX from recipes must exist before location export (same as analysis).
-
-**Not** tied to single `course.json` LineString.
+**UI note:** the Legs and Course tabs share one Leaflet map. Course-level location pins are removed while the Legs tab is active (`removeLocationPins` in `course_mapping.js`, called from `onLegsTabShown`) to avoid duplicate-pin confusion.
 
 ---
 
-## What’s implemented now
+## Location projection tolerances
 
-```bash
-# In repo root (Docker or venv with app deps):
-python3 -c "
-from pathlib import Path
-from app.core.course.segment_library import export_library_to_course, write_package_exports
-b = export_library_to_course(Path('cursor/reference-legs'))
-print('10k km', b['recipe_lengths_km'])
-print('flow rows', b['flow_csv'].count(chr(10)))
-write_package_exports(Path('/tmp/fm_reference_legs_test'), Path('cursor/reference-legs'))
-"
-```
+`app/utils/constants.py`:
 
-```bash
-pytest tests/unit/test_segment_library.py -q
-```
+| Constant | Default | Use |
+|----------|---------|-----|
+| `LOCATION_SNAP_THRESHOLD_M` | 50 | Max pin → segment-centerline distance for projection and for `find_nearest_segment` discovery |
+| `LOCATION_SEGMENT_CLAMP_M` | 50 | Boundary pins projecting metres past a segment end are clamped into bounds instead of falling back to midpoint |
 
-Files:
-
-- `cursor/reference-legs/manifest.yaml` — legs + recipes (edit recipes here)
-- `app/core/course/segment_library.py` — load, stitch, segments, flow, package write
-- `tests/unit/test_segment_library.py`
+Known limitation: recipe-bookkept kms vs stitched-GPX traced distance drift up to ~110 m mid-course, which can still fail projection for pins at turn points — see **#786** for the planned reconciliation (record traced kms at export).
 
 ---
 
-## UI roadmap (after library API stable)
-
-| Tab | Purpose |
-|-----|---------|
-| **Library** | Import GPX legs; endpoint validation |
-| **Recipes** | Order legs per event; length vs `00_*` check |
-| **Segments & flow** | Preview tables; export |
-| **Locations** | Pins + auto km + event flags |
-| **Publish** | Write package + `analyze_ready` |
-
-Deprecate single-line-only planner as **primary** 2027 path; keep for simple races.
-
----
-
-## Open issues
-
-1. **Full recipe tuning** — manifest `full` recipe ~40–44 km; validate against `00_full.gpx` (41.76 km).
-2. **Flow exceptions** — `B1a`-style rows need override UI or manifest entries.
-3. **Package API** — `POST /api/config/packages/{id}/import-library` (not wired yet).
-4. **#767** — Align waypoint planner with leg ids instead of vertex indices.
-
----
-
-## Related code
+## Key modules
 
 | Module | Use |
 |--------|-----|
-| `app/core/course/export.py` | `build_segments_csv`, `_event_cumulative_distances` |
-| `app/core/v2/flow.py` | Consumes `flow.csv` + `segments.csv` |
-| `app/location_report.py` | Consumes `locations.csv` + GPX + segments |
-| `app/core/config_package/storage.py` | `package_readiness` needs all three CSVs |
+| `app/core/course/segment_library.py` | Load/stitch legs, build segments, corridor pairing validation, package export |
+| `app/core/course/flow_csv.py` | Flow generation incl. corridor opposing-pass rows |
+| `app/core/course/export.py` | `build_segments_csv`, per-event cumulative kms (uses stored recipe kms) |
+| `app/core/config_package/legs.py` | Package leg CRUD, pairing, leg↔course sync, location merge |
+| `app/core/config_package/org_leg_library.py` | Org leg CRUD, import/export, package fan-out sync |
+| `app/core/config_package/leg_library_resolver.py` | Org vs package leg source resolution |
+| `app/core/config_package/segment_recipes.py` | Recipe persistence, apply |
+| `app/routes/api_config_packages.py` | REST endpoints (`/api/org/legs/*`, `/api/config/packages/{id}/segment-library/*`) |
+| `frontend/static/js/map/segment_recipes.js` | Legs tab UI (leg editor, pairing dropdown, locations) |
+| `frontend/static/js/map/course_mapping.js` | Course tab UI (recipes, segments/locations tables, pins) |
+
+## Tests
+
+```bash
+pytest tests/unit/test_segment_library.py tests/unit/test_corridor_pairing.py \
+       tests/unit/test_flow_csv.py tests/unit/test_leg_library_resolver.py \
+       tests/unit/test_package_legs.py tests/unit/test_org_leg_library.py -q
+```
+
+Notable regression coverage:
+
+- `test_corridor_pairing.py` — symmetric pairing, validation warnings
+- `test_flow_csv.py` — paired/self-paired opposing-pass rows; unpaired output unchanged
+- `test_leg_library_resolver.py` — org-primary resolution; org leg edits sync into applied packages without re-apply
+- `test_config_package_course.py` — recipe kms protected from stale client saves
