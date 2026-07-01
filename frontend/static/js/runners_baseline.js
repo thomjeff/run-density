@@ -69,6 +69,301 @@
     }
 
     let listenersBound = false;
+    let runnerInstallListenersBound = false;
+
+    function setRunnerInstallStatus(el, message, isError) {
+        if (!el) return;
+        if (!message) {
+            el.style.display = 'none';
+            el.textContent = '';
+            return;
+        }
+        el.style.display = 'block';
+        el.style.color = isError ? '#c0392b' : '#27ae60';
+        el.textContent = message;
+    }
+
+    function showRunnerInstallCard(show) {
+        const card = document.getElementById('runner-files-install-card');
+        if (card) card.style.display = show ? 'block' : 'none';
+    }
+
+    async function loadRunnerImportSources() {
+        const select = document.getElementById('runner-import-source');
+        if (!select) return;
+        await loadPackagesWithRunners(
+            select,
+            getTargetConfigId(),
+            'Select a package with runner files…'
+        );
+    }
+
+    function renderRunnerImportFileList(files) {
+        const wrap = document.getElementById('runner-import-file-list');
+        const importBtn = document.getElementById('runner-import-btn');
+        if (!wrap) return;
+        wrap.innerHTML = '';
+        if (!files || !files.length) {
+            wrap.style.display = 'none';
+            if (importBtn) importBtn.disabled = true;
+            return;
+        }
+        wrap.style.display = 'block';
+        const label = document.createElement('div');
+        label.textContent = 'Files to import';
+        label.style.cssText = 'font-weight:600;color:#2c3e50;margin-bottom:0.35rem;font-size:0.9rem;';
+        wrap.appendChild(label);
+        const grid = document.createElement('div');
+        grid.style.cssText =
+            'display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0.5rem;';
+        files.forEach(function (file) {
+            const row = document.createElement('label');
+            row.style.cssText = 'display:flex;align-items:center;gap:0.5rem;cursor:pointer;';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.value = file;
+            cb.checked = true;
+            cb.addEventListener('change', updateRunnerImportButton);
+            const span = document.createElement('span');
+            span.textContent = file;
+            row.appendChild(cb);
+            row.appendChild(span);
+            grid.appendChild(row);
+        });
+        wrap.appendChild(grid);
+        updateRunnerImportButton();
+    }
+
+    function updateRunnerImportButton() {
+        const importBtn = document.getElementById('runner-import-btn');
+        const select = document.getElementById('runner-import-source');
+        const checked = document.querySelectorAll(
+            '#runner-import-file-list input[type="checkbox"]:checked'
+        );
+        if (importBtn) {
+            importBtn.disabled = !(select && select.value && checked.length > 0);
+        }
+    }
+
+    async function handleRunnerImportSourceChange() {
+        const select = document.getElementById('runner-import-source');
+        const sourceId = select && select.value ? select.value.trim() : '';
+        setRunnerInstallStatus(document.getElementById('runner-import-status'), '', false);
+        if (!sourceId) {
+            renderRunnerImportFileList([]);
+            return;
+        }
+        const files = await fetchPackageRunnerFiles(sourceId);
+        renderRunnerImportFileList(files);
+    }
+
+    async function refreshRunnerInstallAfterSuccess(message) {
+        setRunnerInstallStatus(document.getElementById('runner-import-status'), message, false);
+        setRunnerInstallStatus(document.getElementById('runner-upload-status'), message, false);
+        const uploadInput = document.getElementById('runner-upload-input');
+        if (uploadInput) uploadInput.value = '';
+        renderRunnerUploadFileList([]);
+        const uploadBtn = document.getElementById('runner-upload-btn');
+        if (uploadBtn) uploadBtn.disabled = true;
+        await loadRunnerImportSources();
+        renderRunnerImportFileList([]);
+        const importSelect = document.getElementById('runner-import-source');
+        if (importSelect) importSelect.value = '';
+        updateRunnerImportButton();
+        baselineState.runnerSourceId = null;
+        await initializeRunnerSource();
+    }
+
+    async function importRunnerFilesFromPackage() {
+        const targetId = getTargetConfigId();
+        const select = document.getElementById('runner-import-source');
+        const statusEl = document.getElementById('runner-import-status');
+        const importBtn = document.getElementById('runner-import-btn');
+        const sourceId = select && select.value ? select.value.trim() : '';
+        const files = Array.from(
+            document.querySelectorAll('#runner-import-file-list input[type="checkbox"]:checked')
+        ).map(function (cb) {
+            return cb.value;
+        });
+        if (!targetId || !sourceId || !files.length) return;
+
+        if (importBtn) importBtn.disabled = true;
+        setRunnerInstallStatus(statusEl, 'Importing runner files…', false);
+        try {
+            const resp = await fetch(
+                '/api/config/packages/' + encodeURIComponent(targetId) + '/import-runners',
+                {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        source_config_id: sourceId,
+                        files: files
+                    })
+                }
+            );
+            const data = await resp.json().catch(function () {
+                return {};
+            });
+            if (!resp.ok) {
+                throw new Error(data.detail || resp.statusText || 'Import failed');
+            }
+            const copied = (data.copied_files || []).join(', ');
+            await refreshRunnerInstallAfterSuccess(
+                'Imported ' + (data.copied_files || []).length + ' file(s): ' + copied
+            );
+        } catch (err) {
+            setRunnerInstallStatus(statusEl, err.message || String(err), true);
+            updateRunnerImportButton();
+        }
+    }
+
+    function formatRunnerUploadFileSize(bytes) {
+        const n = Number(bytes);
+        if (!n || n < 0) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let size = n;
+        let unit = 0;
+        while (size >= 1024 && unit < units.length - 1) {
+            size /= 1024;
+            unit += 1;
+        }
+        return (unit === 0 ? size.toFixed(0) : size.toFixed(size >= 10 ? 1 : 2)) + ' ' + units[unit];
+    }
+
+    function formatRunnerUploadFileDate(lastModified) {
+        const ts = Number(lastModified);
+        if (!ts) return '—';
+        return new Date(ts).toLocaleString(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit'
+        });
+    }
+
+    function renderRunnerUploadFileList(files) {
+        const wrap = document.getElementById('runner-upload-file-list');
+        if (!wrap) return;
+        if (!files || !files.length) {
+            wrap.style.display = 'none';
+            wrap.innerHTML = '';
+            return;
+        }
+        wrap.style.display = 'block';
+        const table = document.createElement('table');
+        table.style.cssText =
+            'width:100%;max-width:720px;border-collapse:collapse;font-size:0.875rem;';
+        table.innerHTML =
+            '<thead><tr style="background:#f8f9fa;text-align:left;">' +
+            '<th style="padding:0.5rem 0.75rem;border-bottom:1px solid #ddd;">File name</th>' +
+            '<th style="padding:0.5rem 0.75rem;border-bottom:1px solid #ddd;">Size</th>' +
+            '<th style="padding:0.5rem 0.75rem;border-bottom:1px solid #ddd;">Date modified</th>' +
+            '</tr></thead>';
+        const tbody = document.createElement('tbody');
+        files.forEach(function (file) {
+            const tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td style="padding:0.5rem 0.75rem;border-bottom:1px solid #ecf0f1;font-family:monospace;">' +
+                (file.name || '(unnamed)') +
+                '</td>' +
+                '<td style="padding:0.5rem 0.75rem;border-bottom:1px solid #ecf0f1;">' +
+                formatRunnerUploadFileSize(file.size) +
+                '</td>' +
+                '<td style="padding:0.5rem 0.75rem;border-bottom:1px solid #ecf0f1;">' +
+                formatRunnerUploadFileDate(file.lastModified) +
+                '</td>';
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        wrap.innerHTML = '';
+        wrap.appendChild(table);
+    }
+
+    function handleRunnerUploadInputChange() {
+        const input = document.getElementById('runner-upload-input');
+        const uploadBtn = document.getElementById('runner-upload-btn');
+        const files = input && input.files ? Array.from(input.files) : [];
+        renderRunnerUploadFileList(files);
+        if (uploadBtn) uploadBtn.disabled = files.length === 0;
+        setRunnerInstallStatus(document.getElementById('runner-upload-status'), '', false);
+    }
+
+    async function uploadRunnerFiles() {
+        const targetId = getTargetConfigId();
+        const input = document.getElementById('runner-upload-input');
+        const statusEl = document.getElementById('runner-upload-status');
+        const uploadBtn = document.getElementById('runner-upload-btn');
+        const files = input && input.files ? Array.from(input.files) : [];
+        if (!targetId || !files.length) return;
+
+        const invalid = files.filter(function (f) {
+            return !/_runners\.csv$/i.test(f.name || '');
+        });
+        if (invalid.length) {
+            setRunnerInstallStatus(
+                statusEl,
+                'Each file must be named like 10k_runners.csv (invalid: ' +
+                    invalid.map(function (f) { return f.name; }).join(', ') +
+                    ')',
+                true
+            );
+            return;
+        }
+
+        const fd = new FormData();
+        files.forEach(function (file) {
+            fd.append('files', file, file.name);
+        });
+
+        if (uploadBtn) uploadBtn.disabled = true;
+        setRunnerInstallStatus(statusEl, 'Uploading runner files…', false);
+        try {
+            const resp = await fetch(
+                '/api/config/packages/' + encodeURIComponent(targetId) + '/upload-runners',
+                {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    body: fd
+                }
+            );
+            const data = await resp.json().catch(function () {
+                return {};
+            });
+            if (!resp.ok) {
+                throw new Error(data.detail || resp.statusText || 'Upload failed');
+            }
+            const saved = (data.saved_files || []).join(', ');
+            await refreshRunnerInstallAfterSuccess(
+                'Uploaded ' + (data.saved_files || []).length + ' file(s): ' + saved
+            );
+        } catch (err) {
+            setRunnerInstallStatus(statusEl, err.message || String(err), true);
+            handleRunnerUploadInputChange();
+        }
+    }
+
+    async function initRunnerFileInstall() {
+        if (!getTargetConfigId()) {
+            showRunnerInstallCard(false);
+            return;
+        }
+        showRunnerInstallCard(true);
+        await loadRunnerImportSources();
+        renderRunnerImportFileList([]);
+
+        if (runnerInstallListenersBound) return;
+        const importSelect = document.getElementById('runner-import-source');
+        const importBtn = document.getElementById('runner-import-btn');
+        const uploadInput = document.getElementById('runner-upload-input');
+        const uploadBtn = document.getElementById('runner-upload-btn');
+        if (importSelect) importSelect.addEventListener('change', handleRunnerImportSourceChange);
+        if (importBtn) importBtn.addEventListener('click', importRunnerFilesFromPackage);
+        if (uploadInput) uploadInput.addEventListener('change', handleRunnerUploadInputChange);
+        if (uploadBtn) uploadBtn.addEventListener('click', uploadRunnerFiles);
+        runnerInstallListenersBound = true;
+    }
 
     function setSourcePickerVisible(show) {
         const el = document.getElementById('baseline-config-selection');
@@ -981,6 +1276,7 @@
             baselineState.targetConfigId = urlConfigId;
         }
 
+        await initRunnerFileInstall();
         await initializeRunnerSource();
 
         renderControlVariablesReference();

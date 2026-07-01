@@ -23,6 +23,9 @@
     var coursePreviewLineLayer = null;
     var coursePreviewLocationsLayer = null;
     var coursePreviewSelectedEvent = null;
+    /** Toolbar sentinel: show every event route and every location. */
+    var COURSE_PREVIEW_ALL = '__all__';
+    var COURSE_PREVIEW_ROUTE_COLORS = ['#2563eb', '#dc2626', '#16a34a', '#9333ea', '#ea580c', '#0891b2'];
     var legReshapeActive = false;
     var legReshapeDraftLatLngs = null;
     var legReshapeAnchorIndices = null;
@@ -481,13 +484,49 @@
     }
 
     function activePreviewEventId() {
+        if (coursePreviewSelectedEvent === COURSE_PREVIEW_ALL) return null;
         if (coursePreviewSelectedEvent) return coursePreviewSelectedEvent;
         var evs = packageEvents();
         return evs.length ? evs[0] : null;
     }
 
+    function coursePreviewShowsAllEvents() {
+        return coursePreviewSelectedEvent === COURSE_PREVIEW_ALL;
+    }
+
+    function normalizePreviewEventId(eventId) {
+        return String(eventId || '').trim().toLowerCase();
+    }
+
+    function locationMatchesCoursePreviewEvent(loc) {
+        if (!loc || coursePreviewShowsAllEvents()) return true;
+        var eid = normalizePreviewEventId(coursePreviewSelectedEvent);
+        if (!eid) return true;
+        var flag = loc[eid];
+        if (flag == null && coursePreviewSelectedEvent) {
+            flag = loc[coursePreviewSelectedEvent];
+        }
+        return String(flag || '').toLowerCase() === 'y';
+    }
+
+    function segmentMatchesCoursePreviewEvent(seg) {
+        if (!seg || coursePreviewShowsAllEvents()) return true;
+        var eid = normalizePreviewEventId(coursePreviewSelectedEvent);
+        if (!eid) return true;
+        return (seg.events || []).some(function (ev) {
+            return normalizePreviewEventId(ev) === eid;
+        });
+    }
+
     function flattenPreviewLatLngs(layer) {
         if (!layer) return [];
+        if (typeof layer.eachLayer === 'function') {
+            var grouped = [];
+            layer.eachLayer(function (sub) {
+                grouped = grouped.concat(flattenPreviewLatLngs(sub));
+            });
+            return grouped;
+        }
         var latlngs = layer.getLatLngs();
         if (!latlngs || !latlngs.length) return [];
         if (latlngs[0] && latlngs[0].lat != null) return latlngs;
@@ -588,27 +627,56 @@
         var course = pkg.getCourse();
         if (!course) return items;
         (course.segments || []).forEach(function (seg, i) {
+            if (!segmentMatchesCoursePreviewEvent(seg)) return;
             items.push({ kind: 'segment', index: i, data: seg });
         });
         (course.locations || []).forEach(function (loc, i) {
+            if (!locationMatchesCoursePreviewEvent(loc)) return;
             items.push({ kind: 'location', index: i, data: loc });
         });
         return items;
     }
 
+    function countCoursePreviewSegmentsForSelection() {
+        var pkg = window.configPackageCourse;
+        if (!pkg || !pkg.getCourse) return 0;
+        var course = pkg.getCourse();
+        return (course.segments || []).filter(segmentMatchesCoursePreviewEvent).length;
+    }
+
+    function countCoursePreviewLocationsForSelection() {
+        var pkg = window.configPackageCourse;
+        if (!pkg || !pkg.getCourseLocations) return 0;
+        return pkg.getCourseLocations().filter(locationMatchesCoursePreviewEvent).length;
+    }
+
+    function applyCoursePreviewEventFilterToTables() {
+        var pkg = window.configPackageCourse;
+        if (!pkg || !pkg.getCourse) return;
+        var course = pkg.getCourse();
+        if (!course) return;
+        var segIndices = [];
+        var locIndices = [];
+        (course.segments || []).forEach(function (seg, i) {
+            if (segmentMatchesCoursePreviewEvent(seg)) segIndices.push(i);
+        });
+        (course.locations || []).forEach(function (loc, i) {
+            if (locationMatchesCoursePreviewEvent(loc)) locIndices.push(i);
+        });
+        if (pkg.renderSegmentsListFiltered) pkg.renderSegmentsListFiltered(segIndices);
+        if (pkg.renderLocationsListFiltered) pkg.renderLocationsListFiltered(locIndices);
+        updateCoursePreviewBoundsStatus(
+            segIndices.length,
+            countCoursePreviewSegmentsForSelection(),
+            locIndices.length,
+            countCoursePreviewLocationsForSelection()
+        );
+    }
+
     function applyCoursePreviewBoundsToTables(visibleItems, stats) {
         var segIndices = [];
         var locIndices = [];
-        var segTotal = 0;
-        var locTotal = 0;
         var pkg = window.configPackageCourse;
-        if (pkg && pkg.getCourse) {
-            var course = pkg.getCourse();
-            if (course) {
-                segTotal = (course.segments || []).length;
-                locTotal = (course.locations || []).length;
-            }
-        }
         (visibleItems || []).forEach(function (item) {
             if (item.kind === 'segment') segIndices.push(item.index);
             else if (item.kind === 'location') locIndices.push(item.index);
@@ -617,7 +685,12 @@
             if (pkg.renderSegmentsListFiltered) pkg.renderSegmentsListFiltered(segIndices);
             if (pkg.renderLocationsListFiltered) pkg.renderLocationsListFiltered(locIndices);
         }
-        updateCoursePreviewBoundsStatus(segIndices.length, segTotal, locIndices.length, locTotal);
+        updateCoursePreviewBoundsStatus(
+            segIndices.length,
+            countCoursePreviewSegmentsForSelection(),
+            locIndices.length,
+            countCoursePreviewLocationsForSelection()
+        );
     }
 
     function initCoursePreviewBoundsFilter() {
@@ -2939,23 +3012,51 @@
         return coursePreviewMap;
     }
 
+    function clearCoursePreviewLineLayer(map) {
+        if (!map || !coursePreviewLineLayer) return;
+        map.removeLayer(coursePreviewLineLayer);
+        coursePreviewLineLayer = null;
+    }
+
     function renderCoursePreviewToolbar() {
         var toolbar = document.getElementById('course-preview-event-toolbar');
         if (!toolbar) return;
         toolbar.innerHTML = '';
-        packageEvents().forEach(function (eid) {
+        var events = packageEvents();
+
+        var allBtn = document.createElement('button');
+        allBtn.type = 'button';
+        allBtn.className =
+            'course-btn' + (coursePreviewSelectedEvent === COURSE_PREVIEW_ALL ? ' active' : '');
+        allBtn.textContent = 'All';
+        allBtn.title = 'Show all event routes and all locations';
+        allBtn.addEventListener('click', function () {
+            selectCoursePreviewEvent(COURSE_PREVIEW_ALL);
+        });
+        toolbar.appendChild(allBtn);
+
+        events.forEach(function (eid) {
             var btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'course-btn' + (coursePreviewSelectedEvent === eid ? ' active' : '');
             btn.textContent = eventColumnLabel(eid);
+            btn.title = 'Show ' + eventColumnLabel(eid) + ' route and its locations';
             btn.addEventListener('click', function () {
-                coursePreviewSelectedEvent = eid;
-                renderCoursePreviewToolbar();
-                loadCoursePreviewRoute(eid).then(function () {
-                    syncCoursePreviewBoundsFilterItems();
-                });
+                selectCoursePreviewEvent(eid);
             });
             toolbar.appendChild(btn);
+        });
+    }
+
+    function selectCoursePreviewEvent(eventId) {
+        coursePreviewSelectedEvent = eventId;
+        renderCoursePreviewToolbar();
+        var loadPromise =
+            eventId === COURSE_PREVIEW_ALL
+                ? loadAllCoursePreviewRoutes()
+                : loadCoursePreviewRoute(eventId);
+        loadPromise.then(function () {
+            syncCoursePreviewBoundsFilterItems();
         });
     }
 
@@ -2977,6 +3078,7 @@
         var pinColor = pkg.getLocationPinColor;
         coursePreviewLocationsLayer = L.featureGroup();
         locs.forEach(function (loc, i) {
+            if (!locationMatchesCoursePreviewEvent(loc)) return;
             var lat = typeof loc.lat === 'number' ? loc.lat : parseFloat(loc.lat);
             var lon = typeof loc.lon === 'number' ? loc.lon : parseFloat(loc.lon);
             if (isNaN(lat) || isNaN(lon)) return;
@@ -3023,11 +3125,130 @@
         }
     }
 
+    function finishCoursePreviewLoad(map, bounds, metaText) {
+        var wrap = document.getElementById('course-preview-map-wrap');
+        var empty = document.getElementById('course-preview-empty');
+        var meta = document.getElementById('course-preview-meta');
+
+        function finishPreviewLoad() {
+            if (wrap) wrap.style.display = 'block';
+            if (empty) empty.style.display = 'none';
+            if (meta) {
+                meta.style.display = 'block';
+                meta.textContent = metaText;
+            }
+            applyCoursePreviewEventFilterToTables();
+            attachCoursePreviewBoundsFilter();
+            syncCoursePreviewBoundsFilterItems();
+            setTimeout(function () { map.invalidateSize(); }, 120);
+        }
+
+        if (coursePreviewBoundsFilter) {
+            coursePreviewBoundsFilter.runProgrammatic(function () {
+                map.fitBounds(bounds, { padding: [28, 28], maxZoom: 15 });
+                finishPreviewLoad();
+            });
+        } else {
+            map.fitBounds(bounds, { padding: [28, 28], maxZoom: 15 });
+            finishPreviewLoad();
+        }
+    }
+
+    function loadAllCoursePreviewRoutes() {
+        var empty = document.getElementById('course-preview-empty');
+        var wrap = document.getElementById('course-preview-map-wrap');
+        var meta = document.getElementById('course-preview-meta');
+        var events = packageEvents();
+        if (!events.length || !hasCombinedCourse()) return Promise.resolve();
+
+        return Promise.all(
+            events.map(function (eid) {
+                return fetch(
+                    apiBase() + '/segment-library/events/' + encodeURIComponent(eid) + '/preview',
+                    { credentials: 'same-origin' }
+                ).then(function (r) {
+                    return r.json().then(function (d) {
+                        return { res: r, data: d, eventId: eid };
+                    });
+                });
+            })
+        )
+            .then(function (payloads) {
+                payloads.forEach(function (payload) {
+                    if (!payload.res.ok) {
+                        throw new Error(formatApiError(payload.res, payload.data));
+                    }
+                });
+                var map = ensureCoursePreviewMap();
+                if (!map) return;
+                clearCoursePreviewLineLayer(map);
+                clearCoursePreviewLocationsLayer(map);
+
+                coursePreviewLineLayer = L.featureGroup();
+                var bounds = null;
+                var metaParts = [];
+                payloads.forEach(function (payload, idx) {
+                    var data = payload.data;
+                    var latlngs = (data.coordinates || []).map(function (c) {
+                        return [c[1], c[0]];
+                    });
+                    if (latlngs.length < 2) return;
+                    var line = L.polyline(latlngs, {
+                        color: COURSE_PREVIEW_ROUTE_COLORS[idx % COURSE_PREVIEW_ROUTE_COLORS.length],
+                        weight: 5,
+                        opacity: 0.92
+                    });
+                    coursePreviewLineLayer.addLayer(line);
+                    var lineBounds = line.getBounds();
+                    bounds = bounds ? bounds.extend(lineBounds) : lineBounds;
+                    metaParts.push(
+                        eventColumnLabel(payload.eventId) +
+                            ' ' +
+                            Number(data.length_km).toFixed(2) +
+                            ' km'
+                    );
+                });
+                if (!coursePreviewLineLayer.getLayers().length) {
+                    throw new Error('No event routes could be loaded');
+                }
+                coursePreviewLineLayer.addTo(map);
+                renderCoursePreviewLocations();
+                if (coursePreviewLocationsLayer) {
+                    bounds = bounds.extend(coursePreviewLocationsLayer.getBounds());
+                }
+                var locCount = countCoursePreviewLocationsForSelection();
+                finishCoursePreviewLoad(
+                    map,
+                    bounds,
+                    'All events · ' +
+                        metaParts.join(' · ') +
+                        ' · ' +
+                        locCount +
+                        ' locations'
+                );
+            })
+            .catch(function (err) {
+                var map = coursePreviewMap;
+                if (map) {
+                    clearCoursePreviewLineLayer(map);
+                    clearCoursePreviewLocationsLayer(map);
+                }
+                if (empty) {
+                    empty.style.display = 'block';
+                    empty.textContent = err.message || String(err);
+                }
+                if (wrap) wrap.style.display = 'none';
+                if (meta) meta.style.display = 'none';
+            });
+    }
+
     function loadCoursePreviewRoute(eventId) {
         var wrap = document.getElementById('course-preview-map-wrap');
         var meta = document.getElementById('course-preview-meta');
         var empty = document.getElementById('course-preview-empty');
-        if (!eventId || !hasCombinedCourse()) return Promise.resolve();
+        if (!eventId || eventId === COURSE_PREVIEW_ALL || !hasCombinedCourse()) {
+            return Promise.resolve();
+        }
         return fetch(
             apiBase() + '/segment-library/events/' + encodeURIComponent(eventId) + '/preview',
             { credentials: 'same-origin' }
@@ -3038,10 +3259,7 @@
                 var data = payload.data;
                 var map = ensureCoursePreviewMap();
                 if (!map) return;
-                if (coursePreviewLineLayer) {
-                    map.removeLayer(coursePreviewLineLayer);
-                    coursePreviewLineLayer = null;
-                }
+                clearCoursePreviewLineLayer(map);
                 clearCoursePreviewLocationsLayer(map);
                 var latlngs = (data.coordinates || []).map(function (c) { return [c[1], c[0]]; });
                 if (latlngs.length < 2) throw new Error('Route has too few points');
@@ -3055,36 +3273,26 @@
                 if (coursePreviewLocationsLayer) {
                     bounds = bounds.extend(coursePreviewLocationsLayer.getBounds());
                 }
-                function finishPreviewLoad() {
-                    if (wrap) wrap.style.display = 'block';
-                    if (empty) empty.style.display = 'none';
-                    if (meta) {
-                        meta.style.display = 'block';
-                        meta.textContent =
-                            eventColumnLabel(eventId) +
-                            ': ' +
-                            Number(data.length_km).toFixed(2) +
-                            ' km · ' +
-                            (data.leg_count || 0) +
-                            ' legs';
-                    }
-                    attachCoursePreviewBoundsFilter();
-                    syncCoursePreviewBoundsFilterItems();
-                    setTimeout(function () { map.invalidateSize(); }, 120);
-                }
-                if (coursePreviewBoundsFilter) {
-                    coursePreviewBoundsFilter.runProgrammatic(function () {
-                        map.fitBounds(bounds, { padding: [28, 28], maxZoom: 15 });
-                        finishPreviewLoad();
-                    });
-                } else {
-                    map.fitBounds(bounds, { padding: [28, 28], maxZoom: 15 });
-                    finishPreviewLoad();
-                }
+                var locCount = countCoursePreviewLocationsForSelection();
+                finishCoursePreviewLoad(
+                    map,
+                    bounds,
+                    eventColumnLabel(eventId) +
+                        ': ' +
+                        Number(data.length_km).toFixed(2) +
+                        ' km · ' +
+                        (data.leg_count || 0) +
+                        ' legs · ' +
+                        locCount +
+                        ' locations'
+                );
             })
             .catch(function (err) {
                 var map = coursePreviewMap;
-                if (map) clearCoursePreviewLocationsLayer(map);
+                if (map) {
+                    clearCoursePreviewLineLayer(map);
+                    clearCoursePreviewLocationsLayer(map);
+                }
                 if (empty) {
                     empty.style.display = 'block';
                     empty.textContent = err.message || String(err);
@@ -3110,7 +3318,11 @@
             empty.textContent = 'Select an event to preview its stitched route.';
         }
         var events = packageEvents();
-        if (!coursePreviewSelectedEvent || events.indexOf(coursePreviewSelectedEvent) < 0) {
+        if (
+            !coursePreviewSelectedEvent ||
+            (coursePreviewSelectedEvent !== COURSE_PREVIEW_ALL &&
+                events.indexOf(coursePreviewSelectedEvent) < 0)
+        ) {
             coursePreviewSelectedEvent = events.length ? events[0] : null;
         }
         renderCoursePreviewToolbar();
@@ -3119,7 +3331,11 @@
             if (meta) meta.style.display = 'none';
             return;
         }
-        loadCoursePreviewRoute(coursePreviewSelectedEvent);
+        if (coursePreviewSelectedEvent === COURSE_PREVIEW_ALL) {
+            loadAllCoursePreviewRoutes();
+        } else {
+            loadCoursePreviewRoute(coursePreviewSelectedEvent);
+        }
     }
 
     function showRecipesModal() {

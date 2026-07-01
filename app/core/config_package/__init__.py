@@ -23,6 +23,7 @@ from app.core.config_package.storage import (
     save_config_manifest,
     save_config_package_resources,
     update_config_package_metadata,
+    upload_runner_files_to_package,
     validate_config_course_data,
     validate_config_id,
 )
@@ -44,6 +45,7 @@ __all__ = [
     "save_config_manifest",
     "save_config_package_resources",
     "update_config_package_metadata",
+    "upload_runner_files_to_package",
     "validate_config_course_data",
     "validate_config_id",
 ]

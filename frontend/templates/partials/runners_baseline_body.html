@@ -4,6 +4,56 @@
     <p id="error-message" style="color: #c0392b; margin: 0;"></p>
 </div>
 
+<div class="card" id="runner-files-install-card" style="display: none; margin-bottom: 2rem;">
+    <h3 style="margin-bottom: 0.75rem;">Install runner files</h3>
+    <p style="margin-bottom: 1.25rem; color: #666; font-size: 0.9rem;">
+        Copy actual race results into this config package. Files must be named
+        <code>{event}_runners.csv</code> (e.g. <code>10k_runners.csv</code>) with columns
+        <code>event</code>, <code>runner_id</code>, <code>pace</code>, <code>distance</code>, and optional
+        <code>start_offset</code>.
+    </p>
+
+    <div style="margin-bottom: 1.5rem; padding-bottom: 1.25rem; border-bottom: 1px solid #ecf0f1;">
+        <h4 style="margin: 0 0 0.75rem 0; color: #2c3e50; font-size: 1rem;">Import from another package</h4>
+        <label for="runner-import-source" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #2c3e50;">
+            Source package
+        </label>
+        <select
+            id="runner-import-source"
+            style="width: 100%; max-width: 480px; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"
+        >
+            <option value="">Select a package with runner files…</option>
+        </select>
+        <div id="runner-import-file-list" style="margin-top: 0.75rem; display: none;"></div>
+        <button
+            type="button"
+            id="runner-import-btn"
+            style="margin-top: 0.75rem; padding: 0.65rem 1.25rem; background: #3498db; color: white; border: none; border-radius: 4px; font-size: 0.95rem; font-weight: 600; cursor: pointer;"
+            disabled
+        >Import selected files</button>
+        <p id="runner-import-status" style="display: none; margin: 0.75rem 0 0 0; font-size: 0.9rem;"></p>
+    </div>
+
+    <div>
+        <h4 style="margin: 0 0 0.75rem 0; color: #2c3e50; font-size: 1rem;">Upload CSV files</h4>
+        <input
+            type="file"
+            id="runner-upload-input"
+            accept=".csv,text/csv"
+            multiple
+            style="display: block; margin-bottom: 0.75rem; max-width: 100%;"
+        />
+        <div id="runner-upload-file-list" style="display: none; margin-bottom: 0.75rem;"></div>
+        <button
+            type="button"
+            id="runner-upload-btn"
+            style="padding: 0.65rem 1.25rem; background: #2ecc71; color: white; border: none; border-radius: 4px; font-size: 0.95rem; font-weight: 600; cursor: pointer;"
+            disabled
+        >Upload files</button>
+        <p id="runner-upload-status" style="display: none; margin: 0.75rem 0 0 0; font-size: 0.9rem;"></p>
+    </div>
+</div>
+
 <div class="card" style="margin-bottom: 2rem;">
     <h3 style="margin-bottom: 1rem;">Runner Files</h3>
     <p style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">

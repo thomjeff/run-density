@@ -6,12 +6,54 @@ Validates runner CSV files and control variables.
 Issue: #676 - Utility to create new runner files
 """
 
+from __future__ import annotations
+
+from io import BytesIO
 from pathlib import Path
 from typing import Dict, Any
+
 import pandas as pd
 import logging
 
 logger = logging.getLogger(__name__)
+
+_RUNNER_FILENAME_SUFFIX = "_runners.csv"
+_REQUIRED_RUNNER_COLUMNS = {"event", "runner_id", "pace", "distance"}
+
+
+def _validate_runner_dataframe(df: pd.DataFrame, label: str) -> None:
+    missing = _REQUIRED_RUNNER_COLUMNS - set(df.columns)
+    if missing:
+        raise ValueError(f"{label}: missing required columns: {sorted(missing)}")
+
+    if df["pace"].min() <= 0:
+        raise ValueError(f"{label}: pace values must be positive")
+
+    if df["pace"].max() > 30:
+        raise ValueError(f"{label}: pace values exceed reasonable maximum (30 min/km)")
+
+    if df["runner_id"].duplicated().any():
+        raise ValueError(f"{label}: duplicate runner_id values found")
+
+    if df["distance"].nunique() > 1:
+        raise ValueError(f"{label}: distance must be the same for all runners")
+
+
+def validate_runner_csv_bytes(content: bytes, filename: str = "runners.csv") -> None:
+    """Validate runner CSV bytes before saving into a config package."""
+    safe = Path(str(filename or "runners.csv")).name
+    if not safe.lower().endswith(_RUNNER_FILENAME_SUFFIX):
+        raise ValueError(
+            f"Runner file must be named {{event}}{_RUNNER_FILENAME_SUFFIX} (got {safe})"
+        )
+    if not content or not content.strip():
+        raise ValueError(f"{safe}: file is empty")
+    try:
+        df = pd.read_csv(BytesIO(content), dtype={"runner_id": "string"})
+    except Exception as exc:
+        raise ValueError(f"{safe}: failed to read CSV: {exc}") from exc
+    _validate_runner_dataframe(df, safe)
+    logger.info("Validated runner upload %s (%s runners)", safe, len(df))
 
 
 def validate_runner_file(file_path: Path) -> None:
@@ -35,28 +77,8 @@ def validate_runner_file(file_path: Path) -> None:
         df = pd.read_csv(file_path, dtype={"runner_id": "string"})
     except Exception as e:
         raise ValueError(f"Failed to read CSV file {file_path}: {e}")
-    
-    # Check required columns
-    required = {"event", "runner_id", "pace", "distance"}
-    missing = required - set(df.columns)
-    if missing:
-        raise ValueError(f"Missing required columns: {missing}")
-    
-    # Validate data types and ranges
-    if df["pace"].min() <= 0:
-        raise ValueError("Pace values must be positive")
-    
-    if df["pace"].max() > 30:  # Reasonable upper bound
-        raise ValueError("Pace values exceed reasonable maximum (30 min/km)")
-    
-    # Check for duplicates
-    if df["runner_id"].duplicated().any():
-        raise ValueError("Duplicate runner_id values found")
-    
-    # Validate distance is consistent
-    if df["distance"].nunique() > 1:
-        raise ValueError("Distance must be the same for all runners")
-    
+
+    _validate_runner_dataframe(df, str(file_path))
     logger.info(f"Validated runner file: {file_path} ({len(df)} runners)")
 
 

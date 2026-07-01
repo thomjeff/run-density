@@ -8,12 +8,14 @@ import pytest
 from app.core.config_package.storage import (
     create_config_package,
     delete_config_package,
+    import_runner_files_from_package,
     list_config_packages,
     load_config_manifest,
     normalize_package_events,
     package_readiness,
     resolve_config_package_path,
     update_config_package_metadata,
+    upload_runner_files_to_package,
     validate_config_id,
 )
 
@@ -140,3 +142,53 @@ def test_package_readiness_detects_missing_files(tmp_path):
     readiness = package_readiness(pkg)
     assert "flow.csv" in readiness["missing"]
     assert readiness["analyze_ready"] is False
+
+
+_RUNNERS_CSV = """event,runner_id,pace,distance,start_offset
+10k,1001,5.5,10,0
+10k,1002,6.0,10,12
+"""
+
+
+def test_import_runner_files_from_package_copies_selected_files(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    source = create_config_package(
+        "Source", "", event_day="sun", package_events=["10k", "full"]
+    )["config_id"]
+    target = create_config_package(
+        "Target", "", event_day="sun", package_events=["10k", "full"]
+    )["config_id"]
+    source_path = tmp_path / source
+    (source_path / "10k_runners.csv").write_text(_RUNNERS_CSV, encoding="utf-8")
+    (source_path / "full_runners.csv").write_text(
+        "event,runner_id,pace,distance,start_offset\nfull,9,4.5,42.2,0\n",
+        encoding="utf-8",
+    )
+
+    copied = import_runner_files_from_package(target, source, ["10k_runners.csv"])
+    assert copied == ["10k_runners.csv"]
+    assert (tmp_path / target / "10k_runners.csv").is_file()
+    assert not (tmp_path / target / "full_runners.csv").exists()
+
+
+def test_upload_runner_files_to_package_validates_and_saves(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    target = create_config_package(
+        "Target", "", event_day="sun", package_events=["10k"]
+    )["config_id"]
+
+    saved = upload_runner_files_to_package(
+        target,
+        [("10k_runners.csv", _RUNNERS_CSV.encode("utf-8"))],
+    )
+    assert saved == ["10k_runners.csv"]
+    assert "1001" in (tmp_path / target / "10k_runners.csv").read_text(encoding="utf-8")
+
+    with pytest.raises(ValueError, match="_runners.csv"):
+        upload_runner_files_to_package(target, [("bad.csv", _RUNNERS_CSV.encode("utf-8"))])

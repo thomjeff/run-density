@@ -26,6 +26,7 @@ from app.core.config_package import (
     save_config_course,
     save_config_package_resources,
     update_config_package_metadata,
+    upload_runner_files_to_package,
 )
 from app.core.config_package.legs import (
     create_package_leg,
@@ -91,6 +92,10 @@ class UpdateConfigPackageRequest(BaseModel):
 
 class ImportRunnersRequest(BaseModel):
     source_config_id: str = Field(..., min_length=1)
+    files: List[str] = Field(
+        default_factory=list,
+        description="Optional runner filenames to copy; empty copies all *_runners.csv",
+    )
 
 
 class SaveConfigCourseRequest(BaseModel):
@@ -1107,7 +1112,11 @@ async def api_import_runners(
     """Copy *_runners.csv files from another config package into this package."""
     require_auth(request)
     try:
-        copied = import_runner_files_from_package(config_id, body.source_config_id)
+        copied = import_runner_files_from_package(
+            config_id,
+            body.source_config_id,
+            body.files or None,
+        )
         package_path = resolve_config_package_path(config_id)
         return JSONResponse(
             content={
@@ -1127,4 +1136,41 @@ async def api_import_runners(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to import runner files: {e}",
+        )
+
+
+@router.post("/api/config/packages/{config_id}/upload-runners")
+async def api_upload_runners(
+    request: Request,
+    config_id: str,
+    files: List[UploadFile] = File(...),
+) -> JSONResponse:
+    """Upload validated ``*_runners.csv`` files into this config package."""
+    require_auth(request)
+    try:
+        uploads = []
+        for upload in files:
+            data = await upload.read()
+            if not data:
+                continue
+            uploads.append((upload.filename or "runners.csv", data))
+        saved = upload_runner_files_to_package(config_id, uploads)
+        package_path = resolve_config_package_path(config_id)
+        return JSONResponse(
+            content={
+                "ok": True,
+                "config_id": config_id,
+                "saved_files": saved,
+                "readiness": package_readiness(package_path),
+            }
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to upload runner files")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload runner files: {e}",
         )

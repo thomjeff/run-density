@@ -698,9 +698,12 @@ def delete_config_package(config_id: str) -> Dict[str, Any]:
 def import_runner_files_from_package(
     target_config_id: str,
     source_config_id: str,
+    filenames: Optional[Sequence[str]] = None,
 ) -> List[str]:
     """
-    Copy all *_runners.csv files from source package into target package.
+    Copy ``*_runners.csv`` files from source package into target package.
+
+    When ``filenames`` is provided, only those files are copied (must exist in source).
 
     Raises:
         ValueError: Same package or no runner files in source
@@ -714,13 +717,28 @@ def import_runner_files_from_package(
     target_path = resolve_config_package_path(target_id)
     source_path = resolve_config_package_path(source_id)
 
+    allowed_names: Optional[set[str]] = None
+    if filenames:
+        allowed_names = {Path(str(name)).name for name in filenames if str(name).strip()}
+        if not allowed_names:
+            raise ValueError("At least one runner filename is required")
+
     copied: List[str] = []
     for src in sorted(source_path.glob("*_runners.csv")):
         if not src.is_file():
             continue
+        if allowed_names is not None and src.name not in allowed_names:
+            continue
         dest = target_path / src.name
         shutil.copy2(src, dest)
         copied.append(src.name)
+
+    if allowed_names is not None:
+        missing = sorted(allowed_names - set(copied))
+        if missing:
+            raise ValueError(
+                f"Runner file(s) not found in source package '{source_id}': {', '.join(missing)}"
+            )
 
     if not copied:
         raise ValueError(
@@ -734,6 +752,36 @@ def import_runner_files_from_package(
         target_id,
     )
     return copied
+
+
+def upload_runner_files_to_package(
+    config_id: str,
+    uploads: Sequence[tuple],
+) -> List[str]:
+    """
+    Save uploaded ``*_runners.csv`` files into a config package (validated).
+
+    uploads: sequence of (filename, bytes).
+    """
+    from app.core.baseline.validation import validate_runner_csv_bytes
+
+    cid = validate_config_id(config_id)
+    package_path = resolve_config_package_path(cid)
+    saved: List[str] = []
+    for name, data in uploads:
+        safe = Path(str(name or "")).name
+        if not safe:
+            raise ValueError("Upload filename is required")
+        validate_runner_csv_bytes(data, safe)
+        dest = package_path / safe
+        dest.write_bytes(data)
+        saved.append(safe)
+
+    if not saved:
+        raise ValueError("No runner files uploaded")
+
+    logger.info("Uploaded %s runner file(s) to %s", len(saved), cid)
+    return saved
 
 
 def _validate_exported_segments_file(segments_path: Path) -> None:
