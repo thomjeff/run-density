@@ -27,7 +27,49 @@ Open **Race Configuration** from the main menu and select (or create) a config p
 |-----|---------|
 | **Legs** | Manage the organization leg library, edit leg metadata, place locations on legs |
 | **Course** | Event recipes, combined course preview, segments and locations tables, apply + export |
-| **Runners** | Runner files for the package events |
+| **Runners** | Install actual race-result runner files; baseline scenario generation |
+
+---
+
+## Runners tab — actual race results
+
+After a race, import **chip-timed** finisher data as `{event}_runners.csv` files for analysis (post-race review, calibration, etc.). This is separate from **Calculate Baseline → Create New Files**, which generates synthetic scenario files.
+
+### Recommended workflow
+
+1. Export results from Race Roster as an Excel workbook (one sheet per event).
+2. Run the conversion script (once per results file). From the repo root, either use a local Python env with `requirements.txt` installed, or the dev container (`make dev`):
+
+   ```bash
+   python scripts/build_raceroster_runner_csvs.py \
+     --xlsx "/path/to/FM2026 Results.xlsx" \
+     --out-dir /tmp/fm2026-runners \
+     --events 10k,half,full
+   ```
+
+   ```bash
+   docker exec run-density-dev python scripts/build_raceroster_runner_csvs.py \
+     --xlsx "/app/cursor/FM2026 Results.xlsx" \
+     --out-dir /app/cursor \
+     --events 10k,half,full
+   ```
+
+   Omit `--events` to export all default sheets (5K Elite, 5K Open, 10K, Half, Full). Use `--list-sheets` to see mappings.
+
+3. Open **Race Configuration** for your package → **Runners** tab → **Install runner files** → **Upload CSV files**. Select the generated `*_runners.csv` files.
+
+### Chip-only rule
+
+Only finishers with both **Gun Time** and **Chip Time** are included. Rows with no chip time are skipped (pace and start_offset cannot be computed from gun time alone).
+
+| Output column | Source |
+|---------------|--------|
+| `runner_id` | Bib number (`No.`) |
+| `pace` | Chip finish time ÷ distance (min/km) |
+| `start_offset` | Gun time − chip time (seconds), minimum 0 |
+| `distance` | Fixed per event (5, 10, 21.1, or 42.2 km) |
+
+Requires `openpyxl` (`pip install openpyxl` or use the project `requirements.txt`).
 
 ---
 

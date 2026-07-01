@@ -13,6 +13,8 @@ services:
       - ./app/sitecustomize.py:/app/sitecustomize.py
       # Bind mount tests directory for v2 testing
       - ./tests:/app/tests
+      # Race Roster → runner CSV conversion CLI
+      - ./scripts:/app/scripts
       # Bind mount templates for UI pages
       - ./frontend/templates:/app/frontend/templates
       # Bind mount static files for hot reload
