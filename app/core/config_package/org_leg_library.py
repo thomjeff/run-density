@@ -359,6 +359,139 @@ def create_org_leg_from_coordinates(
     )
 
 
+def _copy_leg_label(label: str) -> str:
+    """Default label for a duplicated leg."""
+    base = (label or "Leg").strip()
+    suffix = " (copy)"
+    if base.endswith(suffix):
+        return base
+    return base + suffix
+
+
+def _reverse_leg_label(label: str) -> str:
+    """Default label for a leg duplicated with reversed start/finish."""
+    base = (label or "Leg").strip()
+    suffix = " (reverse)"
+    if base.endswith(suffix):
+        return base
+    return base + suffix
+
+
+def _clone_leg_locations(raw: Any) -> List[Dict[str, Any]]:
+    """Deep-copy leg manifest locations for a new leg (fresh keys, same pins/metadata)."""
+    import copy
+
+    from app.core.config_package.legs import _normalize_locations
+
+    if not isinstance(raw, list):
+        return []
+    clones: List[Dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        row = copy.deepcopy(item)
+        row.pop("leg_loc_key", None)
+        row.pop("id", None)
+        row.pop("loc_id", None)
+        clones.append(row)
+    return _normalize_locations(clones)
+
+
+def copy_org_leg(
+    leg_id: str,
+    *,
+    leg_label: str = "",
+    reverse: bool = False,
+) -> Dict[str, Any]:
+    """
+    Duplicate an org library leg: new id + GPX file, copied metadata and locations.
+
+    When ``reverse`` is true, the GPX track runs from the source finish to the source
+    start and ``start_label`` / ``end_label`` are swapped on the new leg.
+
+    Does not copy ``paired_with`` (the copy starts unpaired). Use Trim route on the
+    copy to shorten geometry while keeping location pins.
+    """
+    from app.core.config_package.legs import _find_leg_index
+    from app.core.course.export import build_gpx_line_coordinates
+    from app.core.course.segment_library import parse_leg_gpx
+
+    leg_id = str(leg_id).strip()
+    org_dir = get_org_legs_dir()
+    manifest = load_org_leg_manifest()
+    legs: List[Dict[str, Any]] = list(manifest_legs(manifest))
+    idx = _find_leg_index(legs, leg_id)
+    if idx < 0:
+        raise ValueError(f"Leg not found: {leg_id}")
+    source = legs[idx]
+    file_name = source.get("file")
+    if not file_name:
+        raise ValueError(f"Leg {leg_id} has no GPX file")
+    gpx_path = org_dir / str(file_name)
+    if not gpx_path.is_file():
+        raise FileNotFoundError(f"GPX not found: {file_name}")
+
+    before_ids = {
+        str(entry.get("id") or "").strip()
+        for entry in legs
+        if isinstance(entry, dict) and str(entry.get("id") or "").strip()
+    }
+    source_label = str(source.get("seg_label") or "").strip()
+    source_start = str(source.get("start_label") or "")
+    source_end = str(source.get("end_label") or "")
+    if reverse:
+        new_label = (leg_label or "").strip() or _reverse_leg_label(source_label)
+        parsed = parse_leg_gpx(gpx_path)
+        reversed_coords = list(reversed(parsed["coordinates"]))
+        gpx_bytes = build_gpx_line_coordinates(
+            reversed_coords,
+            track_name=new_label,
+        ).encode("utf-8")
+        start_label = source_end
+        end_label = source_start
+    else:
+        new_label = (leg_label or "").strip() or _copy_leg_label(source_label)
+        gpx_bytes = gpx_path.read_bytes()
+        start_label = source_start
+        end_label = source_end
+    source_description = str(source.get("description") or source.get("flow_notes") or "").strip()
+    if not source_description:
+        source_description = new_label
+
+    state = create_org_leg(
+        gpx_bytes,
+        gpx_path.name,
+        leg_label=new_label,
+        start_label=start_label,
+        end_label=end_label,
+        width_m=float(source.get("width_m") or 3),
+        schema=str(source.get("schema") or "on_course_open"),
+        direction=str(source.get("direction") or "uni"),
+        flow_type=str(source.get("flow_type") or "none"),
+        flow_notes=str(source.get("flow_notes") or ""),
+        description=source_description,
+        locations=_clone_leg_locations(source.get("locations")),
+    )
+
+    copied_leg_id = ""
+    for entry in state.get("legs") or []:
+        if not isinstance(entry, dict):
+            continue
+        lid = str(entry.get("id") or "").strip()
+        if lid and lid not in before_ids:
+            copied_leg_id = lid
+            break
+    if not copied_leg_id:
+        raise ValueError("Copy succeeded but new leg id could not be determined")
+
+    return {
+        **state,
+        "copied_leg_id": copied_leg_id,
+        "source_leg_id": leg_id,
+        "reversed": bool(reverse),
+    }
+
+
 def get_org_leg_library_state() -> Dict[str, Any]:
     """API state for org leg library management UI."""
     legs = list_org_legs()
@@ -490,6 +623,32 @@ def update_org_leg(
     if any(key in fields for key in _PACKAGE_SYNC_FIELDS):
         sync_org_leg_changes_into_packages()
     return get_org_leg_library_state()
+
+
+def update_org_leg_geometry(
+    leg_id: str,
+    coordinates: Sequence[Sequence[float]],
+) -> Dict[str, Any]:
+    """Replace org leg GPX track from edited [lon, lat] vertices (trim/reshape)."""
+    from app.core.config_package.legs import _find_leg_index, _normalize_line_coordinates
+    from app.core.course.export import build_gpx_line_coordinates
+
+    coords = _normalize_line_coordinates(coordinates)
+    leg_id = str(leg_id).strip()
+    manifest = load_org_leg_manifest()
+    legs: List[Dict[str, Any]] = list(manifest_legs(manifest))
+    idx = _find_leg_index(legs, leg_id)
+    if idx < 0:
+        raise ValueError(f"Leg not found: {leg_id}")
+    entry = legs[idx]
+    label = (entry.get("seg_label") or leg_id).strip() or leg_id
+    gpx_content = build_gpx_line_coordinates(coords, track_name=label)
+    return update_org_leg(
+        leg_id,
+        {},
+        gpx_bytes=gpx_content.encode("utf-8"),
+        gpx_filename=entry.get("file") or f"{leg_id}.gpx",
+    )
 
 
 def sync_org_leg_changes_into_packages() -> None:

@@ -34,6 +34,8 @@
     var legTrimEndIdx = 0;
     var legTrimGhostLayer = null;
     var legTrimMarkerLayer = null;
+    var legTrimStartMarker = null;
+    var legTrimEndMarker = null;
     var legBoundsCache = {};
     var legsTableBoundsFilter = null;
     var coursePreviewBoundsFilter = null;
@@ -1300,6 +1302,14 @@
         setLegStatus(statusMsg);
     }
 
+    function refreshLibraryAfterGeometrySave(data) {
+        if (usesOrgLegLibrary()) {
+            return afterLegLibraryMutation(data);
+        }
+        applyLibraryState(data);
+        return Promise.resolve();
+    }
+
     function confirmLegReshapeRoute() {
         if (!legReshapeActive || !selectedLegId || !legReshapeDraftLatLngs) {
             return;
@@ -1323,7 +1333,9 @@
                 if (!payload.res.ok) {
                     throw new Error(formatApiError(payload.res, payload.data));
                 }
-                applyLibraryState(payload.data);
+                return refreshLibraryAfterGeometrySave(payload.data);
+            })
+            .then(function () {
                 legReshapeActive = false;
                 legReshapeDraftLatLngs = null;
                 legReshapeAnchorIndices = null;
@@ -1388,6 +1400,8 @@
             map.removeLayer(legTrimMarkerLayer);
             legTrimMarkerLayer = null;
         }
+        legTrimStartMarker = null;
+        legTrimEndMarker = null;
     }
 
     function clearLegTrimEndpointMarkers() {
@@ -1447,7 +1461,7 @@
                         base.length - 1
                     );
                 }
-                updateLegTrimDisplay();
+                updateLegTrimDisplay({ refreshMarkers: false });
             };
         }
 
@@ -1465,6 +1479,7 @@
         });
         startMarker.bindTooltip('Start — drag along route', { permanent: false });
         startMarker.addTo(legTrimMarkerLayer);
+        legTrimStartMarker = startMarker;
 
         var endMarker = L.marker([endLl[0], endLl[1]], {
             icon: trimEndpointIcon('end'),
@@ -1478,11 +1493,22 @@
         });
         endMarker.bindTooltip('End — drag along route', { permanent: false });
         endMarker.addTo(legTrimMarkerLayer);
+        legTrimEndMarker = endMarker;
 
         legTrimMarkerLayer.addTo(map);
     }
 
-    function updateLegTrimDisplay() {
+    function positionLegTrimEndpointMarkers() {
+        var base = legTrimSavedLatLngs;
+        if (!base || !legTrimStartMarker || !legTrimEndMarker) {
+            return;
+        }
+        legTrimStartMarker.setLatLng([base[legTrimStartIdx][0], base[legTrimStartIdx][1]]);
+        legTrimEndMarker.setLatLng([base[legTrimEndIdx][0], base[legTrimEndIdx][1]]);
+    }
+
+    function updateLegTrimDisplay(opts) {
+        opts = opts || {};
         var map = window.courseMappingMap;
         if (!map || !legTrimSavedLatLngs || !legTrimActive) {
             return;
@@ -1511,7 +1537,11 @@
             }
             legTrimGhostLayer.addTo(map);
         }
-        drawLegTrimEndpointMarkers();
+        if (opts.refreshMarkers === false) {
+            positionLegTrimEndpointMarkers();
+        } else {
+            drawLegTrimEndpointMarkers();
+        }
     }
 
     function stopLegTrimRoute(discard) {
@@ -1649,13 +1679,11 @@
                 if (!payload.res.ok) {
                     throw new Error(formatApiError(payload.res, payload.data));
                 }
-                applyLibraryState(payload.data);
-                if (removedLocCount > 0) {
-                    return saveLegLocations(selectedLegId, filteredLocations).then(function () {
-                        return payload;
-                    });
-                }
-                return payload;
+                return refreshLibraryAfterGeometrySave(payload.data).then(function () {
+                    if (removedLocCount > 0) {
+                        return saveLegLocations(selectedLegId, filteredLocations);
+                    }
+                });
             })
             .then(function () {
                 legTrimActive = false;
@@ -2616,6 +2644,48 @@
             });
     }
 
+    function copyLeg(legId, options) {
+        options = options || {};
+        var reverse = !!options.reverse;
+        if (!usesOrgLegLibrary()) {
+            setLegStatus('Copy leg is only available for the organization leg library.', true);
+            return;
+        }
+        var leg = (libraryState && libraryState.legs || []).find(function (c) {
+            return c.id === legId;
+        });
+        var label = (leg && leg.leg_label) || legId;
+        setLegStatus((reverse ? 'Copying leg ' + legId + ' in reverse…' : 'Copying leg ' + legId + '…'));
+        fetch('/api/org/legs/' + encodeURIComponent(legId) + '/copy', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reverse: reverse })
+        })
+            .then(function (r) { return r.json().then(function (d) { return { res: r, data: d }; }); })
+            .then(function (payload) {
+                if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
+                var newId = payload.data.copied_leg_id;
+                return afterLegLibraryMutation(payload.data).then(function () {
+                    if (newId) {
+                        selectLegById(newId);
+                    }
+                    if (reverse) {
+                        setLegStatus(
+                            'Created reversed leg ' + newId + ' from leg ' + legId
+                            + ' (“' + label + '”). Start and finish are swapped.'
+                        );
+                    } else {
+                        setLegStatus(
+                            'Copied “' + label + '” as leg ' + newId
+                            + '. Use Trim route to shorten the copy, then edit labels if needed.'
+                        );
+                    }
+                });
+            })
+            .catch(function (err) { setLegStatus(err.message || String(err), true); });
+    }
+
     function exportLeg(legId) {
         var leg = (libraryState && libraryState.legs || []).find(function (c) {
             return c.id === legId;
@@ -2732,6 +2802,24 @@
                         openLegEditor(ch);
                     })
                 );
+                if (usesOrgLegLibrary()) {
+                    actions.appendChild(
+                        ta.createIconButton('copy', 'Copy leg as new (same route and locations)', function (ev) {
+                            ev.stopPropagation();
+                            copyLeg(ch.id);
+                        })
+                    );
+                    actions.appendChild(
+                        ta.createIconButton(
+                            'reverse',
+                            'Copy leg reversed (finish becomes start, start becomes finish)',
+                            function (ev) {
+                                ev.stopPropagation();
+                                copyLeg(ch.id, { reverse: true });
+                            }
+                        )
+                    );
+                }
                 actions.appendChild(
                     ta.createIconButton('export', 'Export leg (GPX + metadata + locations)', function (ev) {
                         ev.stopPropagation();

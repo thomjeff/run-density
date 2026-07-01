@@ -266,6 +266,9 @@
         background: #e74c3c;
         border: 3px solid #922b21;
     }
+    .leg-trim-endpoint.leaflet-dragging > div {
+        cursor: grabbing;
+    }
     .leg-route-anchor-pin {
         background: transparent !important;
         border: none !important;
@@ -421,6 +424,12 @@
         width: 16px;
         height: 16px;
         pointer-events: none;
+    }
+    .course-map-action-btn--copy svg {
+        color: #5b6eae;
+    }
+    .course-map-action-btn--reverse svg {
+        color: #2a7a6f;
     }
     #segments-table td.course-map-action-cell,
     #race-config-list-table th.course-map-action-cell,

@@ -42,6 +42,7 @@ from app.core.config_package.legs import (
     update_package_leg_geometry,
 )
 from app.core.config_package.org_leg_library import (
+    copy_org_leg,
     create_org_leg,
     create_org_leg_from_coordinates,
     delete_org_leg,
@@ -52,6 +53,7 @@ from app.core.config_package.org_leg_library import (
     list_org_legs,
     publish_package_leg_to_org_library,
     update_org_leg,
+    update_org_leg_geometry,
 )
 from app.core.config_package.segment_recipes import (
     apply_package_recipes,
@@ -729,6 +731,31 @@ async def api_create_org_leg_from_draw(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
+class CopyOrgLegRequest(BaseModel):
+    """Optional overrides when duplicating an org leg."""
+
+    leg_label: str = ""
+    reverse: bool = False
+
+
+@router.post("/api/org/legs/{leg_id}/copy")
+async def api_copy_org_leg(
+    request: Request,
+    leg_id: str,
+    body: CopyOrgLegRequest = CopyOrgLegRequest(),
+) -> JSONResponse:
+    """Duplicate an org library leg (GPX, metadata, and locations) with a new id."""
+    require_auth(request)
+    try:
+        payload = body
+        state = copy_org_leg(leg_id, leg_label=payload.leg_label, reverse=payload.reverse)
+        return JSONResponse(content={"ok": True, **state})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
 @router.put("/api/org/legs/{leg_id}")
 async def api_update_org_leg(
     request: Request,
@@ -787,6 +814,23 @@ async def api_org_leg_geometry(request: Request, leg_id: str) -> JSONResponse:
     try:
         feature = get_org_leg_line_geojson(leg_id)
         return JSONResponse(content={"ok": True, "feature": feature})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.put("/api/org/legs/{leg_id}/geometry")
+async def api_update_org_leg_geometry(
+    request: Request,
+    leg_id: str,
+    body: UpdateLegGeometryRequest,
+) -> JSONResponse:
+    """Save reshaped or trimmed org leg route (GPX track from edited coordinates)."""
+    require_auth(request)
+    try:
+        state = update_org_leg_geometry(leg_id, body.coordinates)
+        return JSONResponse(content={"ok": True, **state})
     except FileNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValueError as e:

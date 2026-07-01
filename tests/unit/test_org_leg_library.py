@@ -6,6 +6,7 @@ from app.core.config_package.org_leg_library import (
     import_org_leg_to_package,
     list_org_legs,
     publish_package_leg_to_org_library,
+    update_org_leg_geometry,
 )
 from app.core.config_package.storage import create_config_package
 
@@ -200,3 +201,173 @@ def test_get_all_org_leg_line_geojson_single_manifest_read(tmp_path, monkeypatch
     single = get_org_leg_line_geojson("01")
     assert single["properties"]["leg_id"] == "01"
     assert single["geometry"]["coordinates"] == features[0]["geometry"]["coordinates"]
+
+
+def test_copy_org_leg_duplicates_gpx_metadata_and_locations(tmp_path, monkeypatch):
+    """Copy creates a new leg id with the same route, locations, and no pairing."""
+    import yaml
+
+    from app.core.config_package.org_leg_library import copy_org_leg, get_org_legs_dir
+
+    monkeypatch.setattr(
+        "app.core.config_package.org_leg_library.get_runflow_root",
+        lambda: tmp_path,
+    )
+    org_dir = tmp_path / "org" / "legs"
+    org_dir.mkdir(parents=True)
+    (org_dir / "16_trail.gpx").write_text(_GPX, encoding="utf-8")
+    (org_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "16",
+                        "file": "16_trail.gpx",
+                        "seg_label": "Station At Barker To Trail At Aberdeen",
+                        "start_label": "Barker",
+                        "end_label": "Aberdeen",
+                        "width_m": 3,
+                        "schema": "on_course_open",
+                        "direction": "uni",
+                        "flow_type": "none",
+                        "paired_with": "04",
+                        "locations": [
+                            {
+                                "loc_label": "Water 1",
+                                "loc_type": "water",
+                                "lat": 45.96,
+                                "lon": -66.64,
+                                "placement": "along",
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    state = copy_org_leg("16")
+    assert state["copied_leg_id"] == "17"
+    assert state["source_leg_id"] == "16"
+    legs = state["legs"]
+    assert len(legs) == 2
+    original = next(l for l in legs if l["id"] == "16")
+    copied = next(l for l in legs if l["id"] == "17")
+    assert copied["leg_label"].endswith("(copy)")
+    assert copied["start_label"] == "Barker"
+    assert copied["end_label"] == "Aberdeen"
+    assert copied.get("paired_with") in (None, "")
+    assert len(copied.get("locations") or []) == 1
+    assert copied["locations"][0]["loc_label"] == "Water 1"
+    assert original["paired_with"] == "04"
+
+    gpx_files = sorted(get_org_legs_dir().glob("*.gpx"))
+    assert len(gpx_files) == 2
+    assert gpx_files[0].read_bytes() == gpx_files[1].read_bytes()
+
+
+def test_copy_org_leg_reversed_swaps_geometry_and_endpoint_labels(tmp_path, monkeypatch):
+    """Reverse copy runs from source finish to source start with swapped labels."""
+    from app.core.config_package.org_leg_library import copy_org_leg, get_org_legs_dir
+    from app.core.course.segment_library import parse_leg_gpx
+
+    monkeypatch.setattr(
+        "app.core.config_package.org_leg_library.get_runflow_root",
+        lambda: tmp_path,
+    )
+    org_dir = tmp_path / "org" / "legs"
+    org_dir.mkdir(parents=True)
+    (org_dir / "23_trail.gpx").write_text(
+        """<?xml version="1.0"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>Bridge To Station</name><trkseg>
+    <trkpt lat="45.96" lon="-66.64"/>
+    <trkpt lat="45.965" lon="-66.635"/>
+    <trkpt lat="45.97" lon="-66.63"/>
+  </trkseg></trk>
+</gpx>""",
+        encoding="utf-8",
+    )
+    (org_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "23",
+                        "file": "23_trail.gpx",
+                        "seg_label": "Walking Bridge To Barker Station",
+                        "start_label": "Walking Bridge",
+                        "end_label": "Barker Station",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    source_parsed = parse_leg_gpx(org_dir / "23_trail.gpx")
+    state = copy_org_leg("23", reverse=True)
+    assert state["reversed"] is True
+    assert state["copied_leg_id"] == "24"
+    copied = next(l for l in state["legs"] if l["id"] == "24")
+    assert copied["leg_label"].endswith("(reverse)")
+    assert copied["start_label"] == "Barker Station"
+    assert copied["end_label"] == "Walking Bridge"
+
+    copied_gpx = org_dir / copied["file"]
+    copied_parsed = parse_leg_gpx(copied_gpx)
+    assert copied_parsed["coordinates"] == list(reversed(source_parsed["coordinates"]))
+    assert copied_parsed["start"] == source_parsed["end"]
+    assert copied_parsed["end"] == source_parsed["start"]
+    assert len(list(get_org_legs_dir().glob("*.gpx"))) == 2
+
+
+def test_update_org_leg_geometry(tmp_path, monkeypatch):
+    """Trim/reshape saves edited coordinates back to org leg GPX."""
+    from app.core.config_package.legs import parse_leg_gpx
+
+    monkeypatch.setattr(
+        "app.core.config_package.org_leg_library.get_runflow_root",
+        lambda: tmp_path,
+    )
+    org_dir = tmp_path / "org" / "legs"
+    org_dir.mkdir(parents=True)
+    (org_dir / "01_trail.gpx").write_text(
+        """<?xml version="1.0"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><trkseg>
+    <trkpt lat="45.96" lon="-66.64"/>
+    <trkpt lat="45.965" lon="-66.635"/>
+    <trkpt lat="45.97" lon="-66.63"/>
+  </trkseg></trk>
+</gpx>""",
+        encoding="utf-8",
+    )
+    (org_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "01",
+                        "file": "01_trail.gpx",
+                        "seg_label": "Org trail",
+                        "start_label": "Start",
+                        "end_label": "End",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    new_coords = [
+        [-66.64, 45.96],
+        [-66.638, 45.962],
+        [-66.63, 45.97],
+    ]
+    state = update_org_leg_geometry("01", new_coords)
+    leg = next(l for l in state["legs"] if l["id"] == "01")
+    assert leg["length_km"] > 0
+    parsed = parse_leg_gpx(org_dir / "01_trail.gpx")
+    assert len(parsed["coordinates"]) == 3
+    assert parsed["coordinates"][1][0] == -66.638
