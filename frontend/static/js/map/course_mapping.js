@@ -334,8 +334,16 @@ document.addEventListener('DOMContentLoaded', function () {
         };
     }
 
+    function notifyPackageResourcesUpdated(resources) {
+        document.dispatchEvent(
+            new CustomEvent('package-resources-updated', {
+                detail: { resources: resources || getPackageResources() },
+            })
+        );
+    }
+
     function persistConfigPackageResources() {
-        var pkgId = resolveConfigPackageId();
+        var pkgId = resourcesEditorPackageId || resolveConfigPackageId();
         if (!pkgId || !resourcesDirty) return Promise.resolve();
         return fetch('/api/config/packages/' + encodeURIComponent(pkgId) + '/resources', {
             method: 'PUT',
@@ -347,6 +355,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (!res.ok) throw new Error(d.detail || res.statusText);
                 window.CONFIG_PACKAGE_RESOURCES = d.resources || getPackageResources();
                 resourcesDirty = false;
+                notifyPackageResourcesUpdated(window.CONFIG_PACKAGE_RESOURCES);
                 if (currentCourse && currentCourse.locations) {
                     currentCourse.locations.forEach(syncLocationResourceCounts);
                 }
@@ -868,6 +877,7 @@ document.addEventListener('DOMContentLoaded', function () {
         return result.rationale || '';
     }
     var resourcesEditorDraft = null;
+    var resourcesEditorPackageId = null;
     var resourcesEditingIndex = null;
     var RESOURCE_CODE_MAX_LEN = 16;
 
@@ -937,17 +947,42 @@ document.addEventListener('DOMContentLoaded', function () {
         el.setAttribute('aria-hidden', 'true');
     }
 
-    function openResourcesEditorModal() {
-        if (!isConfigPackageMode() || !resolveConfigPackageId()) {
+    function openResourcesEditorModal(configIdOverride) {
+        var pkgId =
+            (configIdOverride && String(configIdOverride).trim()) || resolveConfigPackageId();
+        if (!pkgId) {
             alert('Open a config package to manage resources.');
             return;
         }
-        resourcesEditorDraft = getPackageResources().map(function (r) {
-            return { code: r.code, label: r.label || r.code.toUpperCase() };
-        });
-        resourcesEditingIndex = null;
-        renderResourcesEditorList();
-        showModal(document.getElementById('resources-editor-modal'));
+        resourcesEditorPackageId = pkgId;
+        function showEditorWithDraft(draft) {
+            resourcesEditorDraft = (draft || DEFAULT_PACKAGE_RESOURCES).map(function (r) {
+                return { code: r.code, label: r.label || r.code.toUpperCase() };
+            });
+            resourcesEditingIndex = null;
+            renderResourcesEditorList();
+            showModal(document.getElementById('resources-editor-modal'));
+        }
+        if (pkgId === resolveConfigPackageId()) {
+            showEditorWithDraft(getPackageResources());
+            return;
+        }
+        fetch('/api/config/packages/' + encodeURIComponent(pkgId), {
+            credentials: 'same-origin',
+        })
+            .then(function (res) {
+                return res.json().then(function (d) {
+                    return { ok: res.ok, data: d };
+                });
+            })
+            .then(function (payload) {
+                if (!payload.ok) throw new Error('Failed to load package resources');
+                var manifest = payload.data.manifest || {};
+                showEditorWithDraft(manifest.resources || DEFAULT_PACKAGE_RESOURCES);
+            })
+            .catch(function (err) {
+                alert(err.message || String(err));
+            });
     }
 
     function renderResourcesEditorList() {
@@ -1034,22 +1069,27 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function savePackageResources() {
-        var pkgId = resolveConfigPackageId();
+        var pkgId = resourcesEditorPackageId || resolveConfigPackageId();
         if (!pkgId || !resourcesEditorDraft) return;
         var normalized = resourcesEditorDraft.map(function (r) {
             return { code: r.code, label: r.label || r.code.toUpperCase() };
         });
+        function applySavedResources(saved) {
+            window.CONFIG_PACKAGE_RESOURCES = saved;
+            notifyPackageResourcesUpdated(saved);
+            if (currentCourse && currentCourse.locations) {
+                currentCourse.locations.forEach(syncLocationResourceCounts);
+            }
+            renderLocationsTableHeader();
+            renderLocationsList();
+        }
         if (usePackageLevelEditSave()) {
             window.CONFIG_PACKAGE_RESOURCES = normalized;
             resourcesDirty = true;
             hideModal(document.getElementById('resources-editor-modal'));
             persistConfigPackageResources()
                 .then(function () {
-                    if (currentCourse && currentCourse.locations) {
-                        currentCourse.locations.forEach(syncLocationResourceCounts);
-                    }
-                    renderLocationsTableHeader();
-                    renderLocationsList();
+                    applySavedResources(window.CONFIG_PACKAGE_RESOURCES);
                 })
                 .catch(function (e) {
                     alert('Failed to save resources: ' + (e.message || String(e)));
@@ -1064,12 +1104,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }).then(function (res) { return res.json().then(function (d) { return { ok: res.ok, data: d }; }); })
             .then(function (result) {
                 if (!result.ok) throw new Error(result.data.detail || 'Save failed');
-                window.CONFIG_PACKAGE_RESOURCES = result.data.resources || resourcesEditorDraft;
                 hideModal(document.getElementById('resources-editor-modal'));
-                if (currentCourse && currentCourse.locations) {
-                    currentCourse.locations.forEach(syncLocationResourceCounts);
-                }
-                renderLocationsList();
+                applySavedResources(result.data.resources || resourcesEditorDraft);
                 alert('Package resources saved.');
             })
             .catch(function (e) { alert('Failed to save resources: ' + (e.message || String(e))); });
@@ -4784,7 +4820,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         var btnManageRes = document.getElementById('btn-manage-resources');
-        if (btnManageRes) btnManageRes.addEventListener('click', openResourcesEditorModal);
+        if (btnManageRes) btnManageRes.addEventListener('click', function () { openResourcesEditorModal(); });
+        var btnManageResLegs = document.getElementById('btn-manage-resources-legs');
+        if (btnManageResLegs) btnManageResLegs.addEventListener('click', function () { openResourcesEditorModal(); });
         var resClose = document.getElementById('resources-editor-close');
         var resCancel = document.getElementById('resources-editor-cancel');
         if (resClose) resClose.addEventListener('click', function () { hideModal(document.getElementById('resources-editor-modal')); });
@@ -4905,7 +4943,10 @@ document.addEventListener('DOMContentLoaded', function () {
             buildLocationTooltipHtml: buildConfigLocationTooltipHtml,
             getLocationPinColor: getLocationPinColor,
             getLocationTypeLabel: getLocationTypeLabel,
-            highlightLocationInTable: highlightLocationRow
+            highlightLocationInTable: highlightLocationRow,
+            openResourcesEditor: function (configIdOverride) {
+                openResourcesEditorModal(configIdOverride);
+            },
         };
 
         document.addEventListener('segment-recipes-applied', function (ev) {

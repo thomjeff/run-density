@@ -57,6 +57,119 @@
         return found ? found.label : id.toUpperCase();
     }
 
+    const DEFAULT_PACKAGE_RESOURCES = [
+        { code: 'fpf', label: 'FPF' },
+        { code: 'yssr', label: 'YSSR' },
+        { code: 'awp', label: 'AWP' },
+        { code: 'vol', label: 'VOL' },
+    ];
+    const RESOURCE_CODE_MAX_LEN = 16;
+    let newPackageResourcesDraft = [];
+    let editPackageResourcesDraft = [];
+
+    function cloneDefaultResources() {
+        return DEFAULT_PACKAGE_RESOURCES.map(function (r) {
+            return { code: r.code, label: r.label };
+        });
+    }
+
+    function normalizeResourceCodeInput(value) {
+        let s = String(value || '')
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9_]/g, '');
+        if (s.length > RESOURCE_CODE_MAX_LEN) s = s.slice(0, RESOURCE_CODE_MAX_LEN);
+        return s;
+    }
+
+    function attachResourceCodeInput(el) {
+        if (!el) return;
+        el.setAttribute('maxlength', String(RESOURCE_CODE_MAX_LEN));
+        el.addEventListener('input', function () {
+            el.value = normalizeResourceCodeInput(el.value);
+        });
+    }
+
+    function renderModalResourcesList(listEl, draft) {
+        if (!listEl) return;
+        listEl.innerHTML = '';
+        draft.forEach(function (res, i) {
+            const chip = document.createElement('span');
+            chip.className = 'race-config-modal-resource-chip';
+            chip.appendChild(
+                document.createTextNode(
+                    (res.label || res.code.toUpperCase()) + ' (' + res.code + ')'
+                )
+            );
+            const rm = document.createElement('button');
+            rm.type = 'button';
+            rm.setAttribute('aria-label', 'Remove ' + res.code);
+            rm.textContent = '×';
+            rm.addEventListener('click', function () {
+                if (draft.length <= 1) {
+                    alert('At least one resource is required.');
+                    return;
+                }
+                draft.splice(i, 1);
+                renderModalResourcesList(listEl, draft);
+            });
+            chip.appendChild(rm);
+            listEl.appendChild(chip);
+        });
+    }
+
+    function tryAddModalResource(codeInput, labelInput, draft, listEl) {
+        const code = normalizeResourceCodeInput(codeInput && codeInput.value);
+        const label =
+            (labelInput && labelInput.value.trim()) || (code ? code.toUpperCase() : '');
+        if (!code || !/^[a-z]/.test(code)) {
+            alert(
+                'Enter a resource code (lowercase letters, optional digits/underscore, max ' +
+                    RESOURCE_CODE_MAX_LEN +
+                    ').'
+            );
+            return;
+        }
+        if (draft.some(function (r) {
+            return r.code === code;
+        })) {
+            alert('Resource code already exists.');
+            return;
+        }
+        draft.push({ code: code, label: label });
+        if (codeInput) codeInput.value = '';
+        if (labelInput) labelInput.value = '';
+        renderModalResourcesList(listEl, draft);
+    }
+
+    async function savePackageResourcesPut(configId, resources) {
+        const resp = await fetch(
+            '/api/config/packages/' + encodeURIComponent(configId) + '/resources',
+            {
+                method: 'PUT',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ resources: resources }),
+            }
+        );
+        const data = await resp.json().catch(function () {
+            return {};
+        });
+        if (!resp.ok) {
+            throw new Error((data && data.detail) || 'Failed to save resources');
+        }
+        return (data && data.resources) || resources;
+    }
+
+    function applyPackageResourcesToWorkspace(resources) {
+        window.CONFIG_PACKAGE_RESOURCES = resources || [];
+        document.dispatchEvent(
+            new CustomEvent('package-resources-updated', {
+                detail: { resources: window.CONFIG_PACKAGE_RESOURCES },
+            })
+        );
+    }
+
     function syncConfigPackagePanels(tab) {
         const legsPanel = document.getElementById('config-package-legs-panel');
         const coursePanel = document.getElementById('config-package-course-panel');
@@ -336,6 +449,18 @@
                         : 'Events were not recorded for this package.';
                 }
                 if (saveBtn) saveBtn.disabled = false;
+                editPackageResourcesDraft = (manifest.resources || cloneDefaultResources()).map(
+                    function (r) {
+                        return {
+                            code: String(r.code || '').toLowerCase(),
+                            label: r.label || String(r.code || '').toUpperCase(),
+                        };
+                    }
+                );
+                renderModalResourcesList(
+                    document.getElementById('race-config-edit-resources-list'),
+                    editPackageResourcesDraft
+                );
             }
             labelInput.focus();
         } catch (err) {
@@ -413,8 +538,15 @@
             );
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.detail || 'Failed to save');
+            const savedResources = await savePackageResourcesPut(
+                editingPackageId,
+                editPackageResourcesDraft.map(function (r) {
+                    return { code: r.code, label: r.label || r.code.toUpperCase() };
+                })
+            );
             closeEditPackageModal();
             if (currentConfigId === editingPackageId) {
+                applyPackageResourcesToWorkspace(savedResources);
                 const m = data.manifest || {};
                 const events = m.package_events || [];
                 window.CONFIG_PACKAGE_EVENTS = events;
@@ -492,6 +624,11 @@
         if (descInput) descInput.value = '';
         if (dayInput) dayInput.value = '';
         renderNewPackageEventChoices();
+        newPackageResourcesDraft = cloneDefaultResources();
+        renderModalResourcesList(
+            document.getElementById('race-config-new-resources-list'),
+            newPackageResourcesDraft
+        );
         if (modal) modal.classList.add('open');
         if (labelInput) labelInput.focus();
     }
@@ -538,6 +675,9 @@
                     description: description || '',
                     event_day: eventDay,
                     package_events: packageEvents,
+                    resources: newPackageResourcesDraft.map(function (r) {
+                        return { code: r.code, label: r.label || r.code.toUpperCase() };
+                    }),
                 }),
             });
             const data = await resp.json();
@@ -622,6 +762,31 @@
 
         const createBtn = document.getElementById('race-config-create-btn');
         if (createBtn) createBtn.addEventListener('click', createPackage);
+
+        attachResourceCodeInput(document.getElementById('race-config-new-resource-code'));
+        attachResourceCodeInput(document.getElementById('race-config-edit-resource-code'));
+        const newResAdd = document.getElementById('race-config-new-resource-add');
+        if (newResAdd) {
+            newResAdd.addEventListener('click', function () {
+                tryAddModalResource(
+                    document.getElementById('race-config-new-resource-code'),
+                    document.getElementById('race-config-new-resource-label'),
+                    newPackageResourcesDraft,
+                    document.getElementById('race-config-new-resources-list')
+                );
+            });
+        }
+        const editResAdd = document.getElementById('race-config-edit-resource-add');
+        if (editResAdd) {
+            editResAdd.addEventListener('click', function () {
+                tryAddModalResource(
+                    document.getElementById('race-config-edit-resource-code'),
+                    document.getElementById('race-config-edit-resource-label'),
+                    editPackageResourcesDraft,
+                    document.getElementById('race-config-edit-resources-list')
+                );
+            });
+        }
 
         const editCancel = document.getElementById('race-config-edit-cancel');
         if (editCancel) editCancel.addEventListener('click', closeEditPackageModal);

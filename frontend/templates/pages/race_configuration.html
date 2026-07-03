@@ -54,7 +54,17 @@
             </select>
             <p id="race-config-edit-events-note" style="font-size: 0.875rem; color: #7f8c8d; margin: 0 0 1rem 0;"></p>
             <label for="race-config-edit-description" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Description <span style="color: #95a5a6; font-weight: normal;">(optional)</span></label>
-            <textarea id="race-config-edit-description" maxlength="255" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1.25rem; box-sizing: border-box; resize: vertical; font-family: inherit;"></textarea>
+            <textarea id="race-config-edit-description" maxlength="255" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box; resize: vertical; font-family: inherit;"></textarea>
+            <div class="race-config-modal-resources">
+                <span class="race-config-modal-resources-label">Resources</span>
+                <p class="race-config-modal-resources-help">Schedulable at locations on legs (e.g. FPF, YSSR, Officials).</p>
+                <div id="race-config-edit-resources-list" class="race-config-modal-resources-list"></div>
+                <div class="race-config-modal-resources-add">
+                    <input type="text" id="race-config-edit-resource-code" placeholder="code" maxlength="16" aria-label="Resource code" />
+                    <input type="text" id="race-config-edit-resource-label" placeholder="Label" maxlength="64" aria-label="Resource label" />
+                    <button type="button" id="race-config-edit-resource-add" class="course-btn">Add resource</button>
+                </div>
+            </div>
             <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
                 <button type="button" id="race-config-edit-cancel" class="course-btn">Cancel</button>
                 <button type="button" id="race-config-edit-save" class="course-btn" style="background: #27ae60; color: #fff; border-color: #219a52; font-weight: 600;">Save</button>
@@ -77,7 +87,17 @@
             <span style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Events</span>
             <div id="race-config-new-events" class="config-package-events-grid" role="group" aria-label="Events for this configuration"></div>
             <label for="race-config-new-description" style="display: block; margin-bottom: 0.35rem; font-weight: 600;">Description <span style="color: #95a5a6; font-weight: normal;">(optional)</span></label>
-            <textarea id="race-config-new-description" placeholder="Optional notes for this configuration" maxlength="255" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1.25rem; box-sizing: border-box; resize: vertical; font-family: inherit;"></textarea>
+            <textarea id="race-config-new-description" placeholder="Optional notes for this configuration" maxlength="255" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; box-sizing: border-box; resize: vertical; font-family: inherit;"></textarea>
+            <div class="race-config-modal-resources">
+                <span class="race-config-modal-resources-label">Resources</span>
+                <p class="race-config-modal-resources-help">Schedulable at locations on legs (e.g. FPF, YSSR, Officials).</p>
+                <div id="race-config-new-resources-list" class="race-config-modal-resources-list"></div>
+                <div class="race-config-modal-resources-add">
+                    <input type="text" id="race-config-new-resource-code" placeholder="code" maxlength="16" aria-label="Resource code" />
+                    <input type="text" id="race-config-new-resource-label" placeholder="Label" maxlength="64" aria-label="Resource label" />
+                    <button type="button" id="race-config-new-resource-add" class="course-btn">Add resource</button>
+                </div>
+            </div>
             <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
                 <button type="button" id="race-config-new-cancel" class="course-btn">Cancel</button>
                 <button type="button" id="race-config-create-btn" class="course-btn" style="background: #27ae60; color: #fff; border-color: #219a52; font-weight: 600;">Create &amp; open</button>
@@ -157,8 +177,8 @@
 <script src="/static/js/map/map_bounds_table_filter.js?v=779a"></script>
 <script src="/static/js/table_actions.js?v=790r"></script>
 <script src="/static/js/map/location_grid_editor.js?v=773g"></script>
-<script src="/static/js/map/course_mapping.js?v=779b"></script>
-<script src="/static/js/map/segment_recipes.js?v=790p"></script>
+<script src="/static/js/map/course_mapping.js?v=779c"></script>
+<script src="/static/js/map/segment_recipes.js?v=792g"></script>
 <script src="/static/js/runners_baseline.js?v=756k"></script>
-<script src="/static/js/race_configuration.js?v=780b"></script>
+<script src="/static/js/race_configuration.js?v=781s"></script>
 {% endblock %}

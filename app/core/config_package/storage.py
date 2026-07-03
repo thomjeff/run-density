@@ -506,6 +506,7 @@ def create_config_package(
     *,
     event_day: str = "",
     package_events: Optional[Sequence[str]] = None,
+    resources: Optional[Sequence[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
     Create a new config package with UUID config_id.
@@ -554,7 +555,7 @@ def create_config_package(
         "created": now,
         "updated": now,
         "legacy": False,
-        "resources": normalize_resource_registry(None),
+        "resources": normalize_resource_registry(resources),
     }
     package_path.mkdir(parents=True, exist_ok=False)
     save_config_manifest(package_path, manifest)

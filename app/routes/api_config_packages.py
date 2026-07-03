@@ -73,6 +73,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["config-packages"])
 
 
+class PackageResourceEntry(BaseModel):
+    code: str = Field(..., min_length=1, max_length=16)
+    label: str = Field(..., min_length=1, max_length=64)
+
+
 class CreateConfigPackageRequest(BaseModel):
     label: str = Field(..., min_length=1, max_length=120)
     description: str = Field("", max_length=255)
@@ -82,6 +87,7 @@ class CreateConfigPackageRequest(BaseModel):
         min_length=1,
         description="Event ids for this package (e.g. full, half, 10k)",
     )
+    resources: Optional[List[PackageResourceEntry]] = None
 
 
 class UpdateConfigPackageRequest(BaseModel):
@@ -100,11 +106,6 @@ class ImportRunnersRequest(BaseModel):
 
 class SaveConfigCourseRequest(BaseModel):
     course: Dict[str, Any]
-
-
-class PackageResourceEntry(BaseModel):
-    code: str = Field(..., min_length=1, max_length=16)
-    label: str = Field(..., min_length=1, max_length=64)
 
 
 class SavePackageResourcesRequest(BaseModel):
@@ -179,11 +180,15 @@ async def api_create_config_package(
     """Create a new config package (UUID directory + config.json + course.json)."""
     require_auth(request)
     try:
+        resource_payload = (
+            [r.model_dump() for r in body.resources] if body.resources else None
+        )
         result = create_config_package(
             body.label,
             body.description,
             event_day=body.event_day,
             package_events=body.package_events,
+            resources=resource_payload,
         )
         return JSONResponse(
             status_code=status.HTTP_201_CREATED,

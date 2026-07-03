@@ -75,13 +75,28 @@ Requires `openpyxl` (`pip install openpyxl` or use the project `requirements.txt
 
 ## The Legs tab
 
+### Package resources
+
+Each config package defines which **resource types** can be scheduled at locations (default: FPF, YSSR, AWP, VOL). Add custom types such as **Officials (`ofc`)** in any of these places:
+
+| Where | How |
+|-------|-----|
+| **New configuration** dialog | Resources section — add code + label before **Create & open** |
+| **Edit configuration** dialog (list page) | Same Resources section; saved with **Save** |
+| **Legs tab** | **Manage resources…** in the organization leg library toolbar |
+| **Course tab** | **Manage resources** on the Locations (combined course) card |
+
+After saving, new resource columns appear on the leg location popup (Zone, Buffer, FPF, …). Re-open an existing location pin to set counts for a newly added resource.
+
+---
 ### Leg map
 
 Pan and zoom to filter the legs table below the map. Select a leg in the table to highlight its route (purple line). Toolbar actions:
 
 | Action | What it does |
 |--------|--------------|
-| **Trim route** | Drag the start or end of the selected leg along its route |
+| **Trim route** | Drag the start or end of the selected leg along its route to **shorten** it |
+| **Extend route** | Click the map to **lengthen** the leg at the start or end (snap to roads/trails) |
 | **Reshape route** | Simplify the route, then drag yellow anchors to nudge it |
 | **Add Locations** | Click the map to place location pins on the selected leg |
 
@@ -94,6 +109,7 @@ Legs live in the **organization library** (`runflow/org/legs/`), outside any sin
 | **Import legs…** | Import third-party GPX files (e.g. from a route planner) as new legs |
 | **Leg library…** | Browse all org legs, including ones not used by this package |
 | **Export legs…** | Download all legs (GPX + metadata + locations per leg) |
+| **Manage resources…** | Add or remove schedulable resource types for this package |
 
 The legs table shows each leg's ID, label, endpoints, length, width, schema, direction, flow type, **Pair** (corridor pairing partner), and location count. Use the **edit** action to open the leg editor.
 

@@ -246,13 +246,17 @@
     #course-mapping-map.leg-draw-mode {
         cursor: crosshair;
     }
+    #course-mapping-map.leg-extend-mode {
+        cursor: crosshair;
+    }
     .leg-trim-endpoint {
         background: transparent !important;
         border: none !important;
     }
     .leg-trim-endpoint > div {
-        width: 16px;
-        height: 16px;
+        width: 18px;
+        height: 18px;
+        margin: 5px;
         border-radius: 50%;
         box-sizing: border-box;
         cursor: grab;
@@ -472,6 +476,100 @@
         line-height: 1.45;
         min-width: 250px;
         max-width: 350px;
+    }
+    /* Leg location popup — compact ops row, scroll cap, wheel guard (Option C) */
+    .leaflet-popup.leg-location-popup .leaflet-popup-content-wrapper {
+        overflow: hidden;
+    }
+    .leaflet-popup.leg-location-popup .leaflet-popup-content {
+        margin: 10px 12px;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+    .leg-location-popup-form {
+        min-width: 260px;
+        max-width: 360px;
+    }
+    .leg-location-popup-form .leg-popup-title {
+        font-weight: 600;
+        margin: 0 0 0.5rem 0;
+        color: #2c3e50;
+        font-size: 0.95rem;
+    }
+    .leg-location-popup-form .leg-popup-hint {
+        font-size: 0.78rem;
+        color: #7f8c8d;
+        margin: 0 0 0.5rem 0;
+        line-height: 1.35;
+    }
+    .leg-location-popup-form .leg-popup-field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+        margin-bottom: 0.5rem;
+    }
+    .leg-location-popup-form .leg-popup-field label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #2c3e50;
+        margin: 0;
+    }
+    .leg-location-popup-form .leg-popup-field input,
+    .leg-location-popup-form .leg-popup-field select,
+    .leg-location-popup-form .leg-popup-field textarea {
+        width: 100%;
+        box-sizing: border-box;
+        margin: 0 !important;
+        font-size: 0.875rem !important;
+        padding: 0.35rem 0.45rem !important;
+    }
+    .leg-location-popup-form .leg-popup-notes-field textarea {
+        min-height: 2.5rem;
+        max-height: 6rem;
+        resize: vertical;
+    }
+    .leg-location-popup-form .leg-popup-ops-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem 0.55rem;
+        align-items: flex-end;
+        margin-bottom: 0.5rem;
+    }
+    .leg-location-popup-form .leg-popup-ops-field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+        min-width: 0;
+    }
+    .leg-location-popup-form .leg-popup-ops-field label {
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: #5d6d7e;
+        margin: 0;
+        white-space: nowrap;
+    }
+    .leg-location-popup-form .leg-popup-narrow-input {
+        width: 3.1rem;
+        max-width: 3.25rem;
+        min-width: 2.75rem;
+        box-sizing: border-box;
+        margin: 0 !important;
+        padding: 0.3rem 0.35rem !important;
+        font-size: 0.875rem !important;
+        text-align: center;
+    }
+    .leg-location-popup-form .leg-popup-zone-input {
+        width: 2.75rem;
+        max-width: 2.85rem;
+    }
+    .leg-location-popup-form .leg-popup-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+        margin-top: 0.35rem;
+        padding-top: 0.35rem;
+        border-top: 1px solid #ecf0f1;
     }
     .course-map-popup .popup-row { margin-bottom: 0.65rem; }
     .course-map-popup .popup-row:last-child { margin-bottom: 0; }

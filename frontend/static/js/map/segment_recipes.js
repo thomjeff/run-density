@@ -35,6 +35,8 @@
     var legTrimSavedLatLngs = null;
     var legTrimStartIdx = 0;
     var legTrimEndIdx = 0;
+    var legTrimStartOverride = null;
+    var legTrimEndOverride = null;
     var legTrimGhostLayer = null;
     var legTrimMarkerLayer = null;
     var legTrimStartMarker = null;
@@ -53,6 +55,15 @@
     var legDrawLayer = null;
     var legDrawClickHandler = null;
     var legDrawRoutingBusy = false;
+    /** Extend selected leg at start or end with snap routing. */
+    var legExtendActive = false;
+    var legExtendFromEnd = true;
+    var legExtendSavedLatLngs = null;
+    var legExtendNewCoords = [];     // [[lon, lat], ...] new vertices only (path order)
+    var legExtendClickCounts = [];   // points added per click — undo stack
+    var legExtendLayer = null;
+    var legExtendClickHandler = null;
+    var legExtendRoutingBusy = false;
     /** When false during draw mode, existing leg routes are hidden (Trace off). */
     var legDrawTraceEnabled = true;
     /** Coordinates handed to the Add-leg editor by Finish. */
@@ -789,7 +800,7 @@
     }
 
     function isLegRouteEditActive() {
-        return legReshapeActive || legTrimActive;
+        return legReshapeActive || legTrimActive || legExtendActive;
     }
 
     function updateLegActionButtons() {
@@ -803,11 +814,19 @@
         var routeEditActive = isLegRouteEditActive();
         var reshapeBtn = document.getElementById('btn-leg-reshape-route');
         var trimBtn = document.getElementById('btn-leg-trim-route');
+        var extendBtn = document.getElementById('btn-leg-extend-route');
         var addLocBtn = document.getElementById('btn-leg-add-location');
         var routeEditActions = document.getElementById('leg-route-edit-actions');
+        var extendActions = document.getElementById('leg-extend-actions');
+        var drawBtn = document.getElementById('btn-leg-draw');
+        if (drawBtn && legExtendActive) {
+            drawBtn.style.display = 'none';
+        } else if (drawBtn && !legDrawActive) {
+            drawBtn.style.display = '';
+        }
         if (reshapeBtn) {
             reshapeBtn.style.display = routeEditActive ? 'none' : '';
-            reshapeBtn.disabled = !hasLeg || !hasLine || legTrimActive;
+            reshapeBtn.disabled = !hasLeg || !hasLine || legTrimActive || legExtendActive;
             reshapeBtn.title = !hasLeg
                 ? 'Select a leg in the table first'
                 : !hasLine
@@ -816,12 +835,24 @@
         }
         if (trimBtn) {
             trimBtn.style.display = routeEditActive ? 'none' : '';
-            trimBtn.disabled = !hasLeg || !hasLine || legReshapeActive;
+            trimBtn.disabled = !hasLeg || !hasLine || legReshapeActive || legExtendActive;
             trimBtn.title = !hasLeg
                 ? 'Select a leg in the table first'
                 : !hasLine
                   ? 'Loading route on the map…'
                   : 'Drag the green or red end along the route to shorten the leg';
+        }
+        if (extendBtn) {
+            extendBtn.style.display = routeEditActive ? 'none' : '';
+            extendBtn.disabled = !hasLeg || !hasLine || legTrimActive || legReshapeActive;
+            extendBtn.title = !hasLeg
+                ? 'Select a leg in the table first'
+                : !hasLine
+                  ? 'Loading route on the map…'
+                  : 'Click the map to lengthen the route beyond the start or end (snap to roads/trails)';
+        }
+        if (extendActions) {
+            extendActions.style.display = legExtendActive ? 'inline-flex' : 'none';
         }
         if (routeEditActions) {
             routeEditActions.style.display = routeEditActive ? 'inline-flex' : 'none';
@@ -829,6 +860,7 @@
         if (addLocBtn) {
             addLocBtn.disabled = !hasLeg || routeEditActive;
         }
+        updateLegExtendButtons();
     }
 
     function copyLatLngs(latlngs) {
@@ -938,6 +970,9 @@
         if (legReshapeActive && legReshapeDraftLatLngs) {
             return legReshapeDraftLatLngs;
         }
+        if (legExtendActive && legExtendSavedLatLngs) {
+            return getLegExtendMergedLatLngs();
+        }
         return selectedLegLatLngs;
     }
 
@@ -1022,7 +1057,7 @@
                     }
                     if (legId) {
                         line.on('click', function () {
-                            if (legDrawActive) return; // drawing: let the click add a point instead
+                            if (legDrawActive || legExtendActive) return;
                             selectLegById(legId);
                         });
                     }
@@ -1177,6 +1212,7 @@
     function startLegDrawMode() {
         var map = window.courseMappingMap;
         if (!map || legDrawActive) return;
+        stopLegExtendRoute(true);
         if (!usesOrgLegLibrary()) {
             setLegStatus('Drawing a new leg requires the organization leg library.', true);
             return;
@@ -1243,7 +1279,390 @@
         openLegEditor(null);
     }
 
-    function setLegRoutePolyline(latlngs) {
+    // ——— Extend selected leg at start or end ———
+
+    function legExtendProfile() {
+        var sel = document.getElementById('leg-extend-profile');
+        return sel ? sel.value : 'foot';
+    }
+
+    function legExtendAnchorLonLat() {
+        if (!legExtendSavedLatLngs || !legExtendSavedLatLngs.length) {
+            return null;
+        }
+        if (legExtendFromEnd) {
+            var endLl = legExtendSavedLatLngs[legExtendSavedLatLngs.length - 1];
+            return [endLl[1], endLl[0]];
+        }
+        var startLl = legExtendSavedLatLngs[0];
+        return [startLl[1], startLl[0]];
+    }
+
+    function legExtendInnerAnchorLonLat() {
+        if (legExtendFromEnd) {
+            if (!legExtendNewCoords.length) {
+                return legExtendAnchorLonLat();
+            }
+            return legExtendNewCoords[legExtendNewCoords.length - 1];
+        }
+        if (!legExtendNewCoords.length) {
+            return legExtendAnchorLonLat();
+        }
+        return legExtendNewCoords[0];
+    }
+
+    function getLegExtendMergedLatLngs() {
+        var base = copyLatLngs(legExtendSavedLatLngs || []);
+        if (!legExtendNewCoords.length) {
+            return base;
+        }
+        var ext = legExtendNewCoords.map(function (c) {
+            return [c[1], c[0]];
+        });
+        if (legExtendFromEnd) {
+            return base.concat(ext);
+        }
+        return ext.concat(base);
+    }
+
+    function legExtendMergedKm() {
+        var merged = getLegExtendMergedLatLngs();
+        if (merged.length < 2) {
+            return 0;
+        }
+        var coords = merged.map(function (ll) {
+            return [ll[1], ll[0]];
+        });
+        return legDrawHaversineKm(coords);
+    }
+
+    function updateLegExtendButtons() {
+        var hasExtension = legExtendNewCoords.length > 0;
+        var undoBtn = document.getElementById('btn-leg-extend-undo');
+        var clearBtn = document.getElementById('btn-leg-extend-clear');
+        if (undoBtn) undoBtn.disabled = !legExtendClickCounts.length;
+        if (clearBtn) clearBtn.disabled = !hasExtension;
+        var distEl = document.getElementById('leg-extend-distance');
+        if (distEl) {
+            distEl.textContent =
+                legExtendActive && legExtendSavedLatLngs
+                    ? legExtendMergedKm().toFixed(2) + ' km'
+                    : '';
+        }
+        var anchorSel = document.getElementById('leg-extend-anchor');
+        if (anchorSel) {
+            anchorSel.disabled = hasExtension;
+        }
+    }
+
+    function renderLegExtend() {
+        var map = window.courseMappingMap;
+        if (!map || !legExtendActive || !legExtendSavedLatLngs) {
+            return;
+        }
+        var merged = getLegExtendMergedLatLngs();
+        selectedLegLatLngs = merged;
+        setLegRoutePolyline(merged);
+        if (legExtendLayer) {
+            map.removeLayer(legExtendLayer);
+            legExtendLayer = null;
+        }
+        if (legExtendNewCoords.length) {
+            var group = L.layerGroup();
+            var extLatLngs = legExtendNewCoords.map(function (c) {
+                return [c[1], c[0]];
+            });
+            if (extLatLngs.length >= 2) {
+                group.addLayer(
+                    L.polyline(extLatLngs, { color: '#e67e22', weight: 5, opacity: 0.92 })
+                );
+            }
+            var anchor = legExtendFromEnd
+                ? legExtendSavedLatLngs[legExtendSavedLatLngs.length - 1]
+                : legExtendSavedLatLngs[0];
+            group.addLayer(
+                L.circleMarker(anchor, {
+                    radius: 6,
+                    color: legExtendFromEnd ? '#c0392b' : '#27ae60',
+                    fillColor: legExtendFromEnd ? '#c0392b' : '#27ae60',
+                    fillOpacity: 0.9,
+                    weight: 2
+                })
+            );
+            legExtendLayer = group.addTo(map);
+        }
+        updateLegExtendButtons();
+    }
+
+    function legExtendAppendSegment(coords) {
+        if (!coords || !coords.length) {
+            return;
+        }
+        var slice = legExtendNewCoords.length ? coords.slice(1) : coords.slice(1);
+        if (!slice.length && coords.length === 1) {
+            slice = coords.slice();
+        }
+        if (!slice.length) {
+            return;
+        }
+        slice.forEach(function (p) {
+            legExtendNewCoords.push([p[0], p[1]]);
+        });
+        legExtendClickCounts.push(slice.length);
+        renderLegExtend();
+    }
+
+    function legExtendPrependSegment(coords) {
+        if (!coords || !coords.length) {
+            return;
+        }
+        var slice = coords.slice(0, -1);
+        if (!slice.length && coords.length === 1) {
+            slice = coords.slice();
+        }
+        if (!slice.length) {
+            return;
+        }
+        legExtendNewCoords = slice.concat(legExtendNewCoords);
+        legExtendClickCounts.unshift(slice.length);
+        renderLegExtend();
+    }
+
+    function onLegExtendClick(e) {
+        if (legExtendRoutingBusy) {
+            return;
+        }
+        var profile = legExtendProfile();
+        var toPoint = [e.latlng.lng, e.latlng.lat];
+        var fromPoint;
+        var routeToPoint;
+        if (legExtendFromEnd) {
+            fromPoint = legExtendInnerAnchorLonLat();
+            routeToPoint = toPoint;
+        } else {
+            fromPoint = toPoint;
+            routeToPoint = legExtendInnerAnchorLonLat();
+        }
+        if (!fromPoint || !routeToPoint) {
+            return;
+        }
+        if (profile === 'off') {
+            if (legExtendFromEnd) {
+                legExtendAppendSegment([fromPoint, routeToPoint]);
+            } else {
+                legExtendPrependSegment([fromPoint, routeToPoint]);
+            }
+            setLegStatus(
+                'Extending from ' +
+                    (legExtendFromEnd ? 'end' : 'start') +
+                    ' — click to add more, Confirm to save.'
+            );
+            return;
+        }
+        legExtendRoutingBusy = true;
+        setLegStatus('Routing…');
+        var url =
+            '/api/courses/route/segment?from_ll=' +
+            encodeURIComponent(fromPoint[0] + ',' + fromPoint[1]) +
+            '&to_ll=' +
+            encodeURIComponent(routeToPoint[0] + ',' + routeToPoint[1]) +
+            '&profile=' +
+            encodeURIComponent(profile);
+        fetch(url, { credentials: 'same-origin' })
+            .then(function (r) {
+                return r.json();
+            })
+            .then(function (data) {
+                legExtendRoutingBusy = false;
+                if (!legExtendActive) {
+                    return;
+                }
+                if (data.ok && data.coordinates && data.coordinates.length > 1) {
+                    if (legExtendFromEnd) {
+                        legExtendAppendSegment(data.coordinates);
+                    } else {
+                        legExtendPrependSegment(data.coordinates);
+                    }
+                    setLegStatus(
+                        'Extending from ' +
+                            (legExtendFromEnd ? 'end' : 'start') +
+                            ' — click to add more, Confirm to save.'
+                    );
+                } else {
+                    if (legExtendFromEnd) {
+                        legExtendAppendSegment([fromPoint, routeToPoint]);
+                    } else {
+                        legExtendPrependSegment([fromPoint, routeToPoint]);
+                    }
+                    setLegStatus('No snapped route found; added a straight segment instead.', true);
+                }
+            })
+            .catch(function () {
+                legExtendRoutingBusy = false;
+                if (!legExtendActive) {
+                    return;
+                }
+                if (legExtendFromEnd) {
+                    legExtendAppendSegment([fromPoint, routeToPoint]);
+                } else {
+                    legExtendPrependSegment([fromPoint, routeToPoint]);
+                }
+                setLegStatus('Routing unavailable; added a straight segment instead.', true);
+            });
+    }
+
+    function legExtendUndo() {
+        if (!legExtendClickCounts.length) {
+            return;
+        }
+        var count = legExtendClickCounts.pop();
+        if (legExtendFromEnd) {
+            legExtendNewCoords.length = Math.max(0, legExtendNewCoords.length - count);
+        } else {
+            legExtendNewCoords = legExtendNewCoords.slice(count);
+        }
+        renderLegExtend();
+        setLegStatus(
+            legExtendNewCoords.length
+                ? 'Extension undo — click to continue, Confirm to save.'
+                : 'Extension cleared — click the map to extend the route.'
+        );
+    }
+
+    function legExtendClearExtension() {
+        legExtendNewCoords = [];
+        legExtendClickCounts = [];
+        renderLegExtend();
+        setLegStatus('Extension cleared — click the map to extend the route.');
+    }
+
+    function stopLegExtendRoute(discard) {
+        var map = window.courseMappingMap;
+        if (!legExtendActive && !legExtendSavedLatLngs) {
+            return;
+        }
+        legExtendActive = false;
+        legExtendRoutingBusy = false;
+        if (map && legExtendClickHandler) {
+            map.off('click', legExtendClickHandler);
+        }
+        legExtendClickHandler = null;
+        if (map && legExtendLayer) {
+            map.removeLayer(legExtendLayer);
+            legExtendLayer = null;
+        }
+        if (discard && legExtendSavedLatLngs) {
+            selectedLegLatLngs = copyLatLngs(legExtendSavedLatLngs);
+            setLegRoutePolyline(selectedLegLatLngs);
+        }
+        legExtendSavedLatLngs = null;
+        legExtendNewCoords = [];
+        legExtendClickCounts = [];
+        var container = document.getElementById('course-mapping-map');
+        if (container) {
+            container.classList.remove('leg-extend-mode');
+        }
+        var extendBtn = document.getElementById('btn-leg-extend-route');
+        if (extendBtn) {
+            extendBtn.classList.remove('active');
+        }
+        updateLegActionButtons();
+    }
+
+    function startLegExtendRoute() {
+        if (!selectedLegId) {
+            setLegStatus('Select a leg in the table first.', true);
+            return;
+        }
+        if (!selectedLegLatLngs || selectedLegLatLngs.length < 2) {
+            setLegStatus('Wait for the leg route to load on the map.', true);
+            return;
+        }
+        stopLegReshapeRoute(true);
+        stopLegTrimRoute(true);
+        if (addLocationOnMap) {
+            if (!pendingLegLocations.length) {
+                stopLegLocationPinMode();
+            } else {
+                setLegStatus('Save or cancel pending locations before extending the route.', true);
+                return;
+            }
+        }
+        stopLegExtendRoute(true);
+        var anchorSel = document.getElementById('leg-extend-anchor');
+        legExtendFromEnd = !anchorSel || anchorSel.value !== 'start';
+        legExtendSavedLatLngs = copyLatLngs(selectedLegLatLngs);
+        legExtendNewCoords = [];
+        legExtendClickCounts = [];
+        legExtendActive = true;
+        var map = window.courseMappingMap;
+        var container = document.getElementById('course-mapping-map');
+        if (container) {
+            container.classList.add('leg-extend-mode');
+        }
+        legExtendClickHandler = onLegExtendClick;
+        if (map) {
+            map.on('click', legExtendClickHandler);
+        }
+        var extendBtn = document.getElementById('btn-leg-extend-route');
+        if (extendBtn) {
+            extendBtn.classList.add('active');
+        }
+        updateLegActionButtons();
+        renderLegExtend();
+        setLegStatus(
+            'Extending from ' +
+                (legExtendFromEnd ? 'end' : 'start') +
+                ' — click along roads/trails to lengthen the leg. Confirm to save, Cancel to discard.'
+        );
+    }
+
+    function confirmLegExtendRoute() {
+        if (!legExtendActive || !selectedLegId || !legExtendSavedLatLngs) {
+            return;
+        }
+        if (!legExtendClickCounts.length) {
+            setLegStatus('Click the map to extend the route, then Confirm.', true);
+            return;
+        }
+        var merged = getLegExtendMergedLatLngs();
+        if (merged.length < 2) {
+            setLegStatus('The leg must keep at least two route points.', true);
+            return;
+        }
+        var coordinates = merged.map(function (ll) {
+            return [ll[1], ll[0]];
+        });
+        setLegStatus('Saving extended route…');
+        fetch(legGeometryUrl(selectedLegId), {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ coordinates: coordinates })
+        })
+            .then(function (r) {
+                return r.json().then(function (d) {
+                    return { res: r, data: d };
+                });
+            })
+            .then(function (payload) {
+                if (!payload.res.ok) {
+                    throw new Error(formatApiError(payload.res, payload.data));
+                }
+                return refreshLibraryAfterGeometrySave(payload.data);
+            })
+            .then(function () {
+                stopLegExtendRoute(false);
+                selectLegById(selectedLegId, { preserveZoom: true, keepPinMode: true });
+                setLegStatus('Extended route saved for leg ' + selectedLegId + '.');
+            })
+            .catch(function (err) {
+                setLegStatus(err.message || String(err), true);
+            });
+    }
+
+    function setLegRoutePolyline(latlngs, opts) {
+        opts = opts || {};
         var map = window.courseMappingMap;
         if (!map || !latlngs || latlngs.length < 2) {
             return;
@@ -1254,7 +1673,8 @@
         legMapLayers.line = L.polyline(latlngs, {
             color: '#8e44ad',
             weight: 5,
-            opacity: 0.85
+            opacity: 0.85,
+            interactive: opts.interactive !== false
         }).addTo(map);
     }
 
@@ -1337,6 +1757,7 @@
             return;
         }
         stopLegTrimRoute(true);
+        stopLegExtendRoute(true);
         if (addLocationOnMap) {
             if (!pendingLegLocations.length) {
                 stopLegLocationPinMode();
@@ -1431,7 +1852,140 @@
         if (!legTrimSavedLatLngs || legTrimEndIdx < legTrimStartIdx) {
             return [];
         }
-        return legTrimSavedLatLngs.slice(legTrimStartIdx, legTrimEndIdx + 1);
+        var base = legTrimSavedLatLngs;
+        var s = legTrimStartIdx;
+        var e = legTrimEndIdx;
+        var draft;
+        if (legTrimStartOverride) {
+            draft = [[legTrimStartOverride[0], legTrimStartOverride[1]]].concat(base.slice(s + 1, e + 1));
+        } else {
+            draft = base.slice(s, e + 1);
+        }
+        if (legTrimEndOverride) {
+            if (legTrimStartOverride) {
+                draft = [[legTrimStartOverride[0], legTrimStartOverride[1]]]
+                    .concat(base.slice(s + 1, e))
+                    .concat([[legTrimEndOverride[0], legTrimEndOverride[1]]]);
+            } else {
+                draft = base.slice(s, e).concat([[legTrimEndOverride[0], legTrimEndOverride[1]]]);
+            }
+        }
+        return draft.length >= 2 ? draft : [];
+    }
+
+    var TRIM_VERTEX_EPS = 1e-6;
+
+    function findBestSegmentProjection(lat, lon, latlngs, minSegIdx, maxSegIdx) {
+        if (!latlngs || latlngs.length < 2) {
+            return null;
+        }
+        minSegIdx = Math.max(0, minSegIdx);
+        maxSegIdx = Math.min(latlngs.length - 2, maxSegIdx);
+        if (maxSegIdx < minSegIdx) {
+            return null;
+        }
+        var best = null;
+        var i;
+        for (i = minSegIdx; i <= maxSegIdx; i++) {
+            var proj = projectPointOntoSegment(
+                lat,
+                lon,
+                latlngs[i][0],
+                latlngs[i][1],
+                latlngs[i + 1][0],
+                latlngs[i + 1][1]
+            );
+            if (!best || proj.dist2 < best.dist2) {
+                best = {
+                    segIdx: i,
+                    t: proj.t,
+                    lat: proj.lat,
+                    lon: proj.lon,
+                    dist2: proj.dist2
+                };
+            }
+        }
+        return best;
+    }
+
+    function trimProjectionToEndpoint(best) {
+        if (!best) {
+            return { idx: 0, override: null };
+        }
+        if (best.t <= TRIM_VERTEX_EPS) {
+            return { idx: best.segIdx, override: null };
+        }
+        if (best.t >= 1 - TRIM_VERTEX_EPS) {
+            return { idx: best.segIdx + 1, override: null };
+        }
+        return { idx: best.segIdx, override: [best.lat, best.lon] };
+    }
+
+    function applyStartTrimDrag(lat, lon) {
+        var base = legTrimSavedLatLngs;
+        if (!base) {
+            return false;
+        }
+        var maxSeg = base.length - 2;
+        if (legTrimEndOverride) {
+            maxSeg = Math.min(maxSeg, legTrimEndIdx - 1);
+        } else {
+            maxSeg = Math.min(maxSeg, legTrimEndIdx - 2);
+        }
+        if (maxSeg < 0) {
+            return false;
+        }
+        var best = findBestSegmentProjection(lat, lon, base, 0, maxSeg);
+        var next = trimProjectionToEndpoint(best);
+        var prevStartIdx = legTrimStartIdx;
+        var prevStartOverride = legTrimStartOverride;
+        legTrimStartIdx = next.idx;
+        legTrimStartOverride = next.override;
+        if (getLegTrimDraftLatLngs().length < 2) {
+            legTrimStartIdx = prevStartIdx;
+            legTrimStartOverride = prevStartOverride;
+            return false;
+        }
+        return true;
+    }
+
+    function applyEndTrimDrag(lat, lon) {
+        var base = legTrimSavedLatLngs;
+        if (!base) {
+            return false;
+        }
+        var minSeg = legTrimStartOverride ? legTrimStartIdx : legTrimStartIdx;
+        var maxSeg = base.length - 2;
+        var best = findBestSegmentProjection(lat, lon, base, minSeg, maxSeg);
+        var next = trimProjectionToEndpoint(best);
+        var prevEndIdx = legTrimEndIdx;
+        var prevEndOverride = legTrimEndOverride;
+        legTrimEndIdx = next.idx;
+        legTrimEndOverride = next.override;
+        if (getLegTrimDraftLatLngs().length < 2) {
+            legTrimEndIdx = prevEndIdx;
+            legTrimEndOverride = prevEndOverride;
+            return false;
+        }
+        return true;
+    }
+
+    function projectPointOntoSegment(lat, lon, lat1, lon1, lat2, lon2) {
+        var dx = lon2 - lon1;
+        var dy = lat2 - lat1;
+        var len2 = dx * dx + dy * dy;
+        if (len2 < 1e-18) {
+            var dlat0 = lat - lat1;
+            var dlon0 = lon - lon1;
+            return { t: 0, lat: lat1, lon: lon1, dist2: dlat0 * dlat0 + dlon0 * dlon0 };
+        }
+        var t = ((lon - lon1) * dx + (lat - lat1) * dy) / len2;
+        t = Math.max(0, Math.min(1, t));
+        var plat = lat1 + t * dy;
+        var plon = lon1 + t * dx;
+        var dlat = lat - plat;
+        var dlon = lon - plon;
+        return { t: t, lat: plat, lon: plon, dist2: dlat * dlat + dlon * dlon };
     }
 
     function closestVertexIndexOnRoute(lat, lon, latlngs, minIdx, maxIdx) {
@@ -1509,8 +2063,8 @@
             return L.divIcon({
                 className: 'leg-trim-endpoint leg-trim-endpoint--' + role,
                 html: '<div></div>',
-                iconSize: [18, 18],
-                iconAnchor: [9, 9]
+                iconSize: [28, 28],
+                iconAnchor: [14, 14]
             });
         }
 
@@ -1518,23 +2072,15 @@
             return function (ev) {
                 var pos = ev.target.getLatLng();
                 if (role === 'start') {
-                    legTrimStartIdx = closestVertexIndexOnRoute(
-                        pos.lat,
-                        pos.lng,
-                        base,
-                        0,
-                        legTrimEndIdx - 1
-                    );
+                    applyStartTrimDrag(pos.lat, pos.lng);
                 } else {
-                    legTrimEndIdx = closestVertexIndexOnRoute(
-                        pos.lat,
-                        pos.lng,
-                        base,
-                        legTrimStartIdx + 1,
-                        base.length - 1
-                    );
+                    applyEndTrimDrag(pos.lat, pos.lng);
                 }
-                updateLegTrimDisplay({ refreshMarkers: false });
+                updateLegTrimDisplay({
+                    refreshMarkers: false,
+                    dragMarker: ev.target,
+                    dragRole: role
+                });
             };
         }
 
@@ -1544,7 +2090,7 @@
             icon: trimEndpointIcon('start'),
             draggable: true,
             autoPan: true,
-            zIndexOffset: 900
+            zIndexOffset: 2000
         });
         startMarker.on('drag', onTrimDrag('start'));
         startMarker.on('click', function (e) {
@@ -1558,7 +2104,7 @@
             icon: trimEndpointIcon('end'),
             draggable: true,
             autoPan: true,
-            zIndexOffset: 900
+            zIndexOffset: 2000
         });
         endMarker.on('drag', onTrimDrag('end'));
         endMarker.on('click', function (e) {
@@ -1576,8 +2122,10 @@
         if (!base || !legTrimStartMarker || !legTrimEndMarker) {
             return;
         }
-        legTrimStartMarker.setLatLng([base[legTrimStartIdx][0], base[legTrimStartIdx][1]]);
-        legTrimEndMarker.setLatLng([base[legTrimEndIdx][0], base[legTrimEndIdx][1]]);
+        var startLl = legTrimStartOverride || base[legTrimStartIdx];
+        var endLl = legTrimEndOverride || base[legTrimEndIdx];
+        legTrimStartMarker.setLatLng([startLl[0], startLl[1]]);
+        legTrimEndMarker.setLatLng([endLl[0], endLl[1]]);
     }
 
     function updateLegTrimDisplay(opts) {
@@ -1592,25 +2140,54 @@
             return;
         }
         selectedLegLatLngs = copyLatLngs(draft);
-        setLegRoutePolyline(draft);
+        setLegRoutePolyline(draft, { interactive: false });
         clearLegTrimGhostLayer();
-        if (legTrimStartIdx > 0 || legTrimEndIdx < base.length - 1) {
+        if (
+            legTrimStartIdx > 0 ||
+            legTrimStartOverride ||
+            legTrimEndIdx < base.length - 1 ||
+            legTrimEndOverride
+        ) {
             legTrimGhostLayer = L.layerGroup();
             var ghostStyle = {
                 color: '#7f8c8d',
                 weight: 4,
                 opacity: 0.55,
-                dashArray: '8,10'
+                dashArray: '8,10',
+                interactive: false
             };
-            if (legTrimStartIdx > 0) {
-                L.polyline(base.slice(0, legTrimStartIdx + 1), ghostStyle).addTo(legTrimGhostLayer);
+            if (legTrimStartIdx > 0 || legTrimStartOverride) {
+                var ghostStartPts = legTrimStartOverride
+                    ? base.slice(0, legTrimStartIdx).concat([legTrimStartOverride])
+                    : base.slice(0, legTrimStartIdx + 1);
+                if (legTrimStartOverride && ghostStartPts.length < 2) {
+                    ghostStartPts = [base[0]].concat([legTrimStartOverride]);
+                }
+                if (ghostStartPts.length >= 2) {
+                    L.polyline(ghostStartPts, ghostStyle).addTo(legTrimGhostLayer);
+                }
             }
-            if (legTrimEndIdx < base.length - 1) {
-                L.polyline(base.slice(legTrimEndIdx), ghostStyle).addTo(legTrimGhostLayer);
+            if (legTrimEndIdx < base.length - 1 || legTrimEndOverride) {
+                var ghostEndPts = legTrimEndOverride
+                    ? [legTrimEndOverride].concat(base.slice(legTrimEndIdx + 1))
+                    : base.slice(legTrimEndIdx);
+                if (legTrimEndOverride && ghostEndPts.length < 2) {
+                    ghostEndPts = [legTrimEndOverride].concat([base[base.length - 1]]);
+                }
+                if (ghostEndPts.length >= 2) {
+                    L.polyline(ghostEndPts, ghostStyle).addTo(legTrimGhostLayer);
+                }
             }
             legTrimGhostLayer.addTo(map);
         }
-        if (opts.refreshMarkers === false) {
+        if (opts.dragMarker && opts.dragRole) {
+            var dragDraft = getLegTrimDraftLatLngs();
+            if (opts.dragRole === 'start' && dragDraft.length) {
+                opts.dragMarker.setLatLng(dragDraft[0]);
+            } else if (opts.dragRole === 'end' && dragDraft.length) {
+                opts.dragMarker.setLatLng(dragDraft[dragDraft.length - 1]);
+            }
+        } else if (opts.refreshMarkers === false) {
             positionLegTrimEndpointMarkers();
         } else {
             drawLegTrimEndpointMarkers();
@@ -1631,6 +2208,8 @@
         legTrimSavedLatLngs = null;
         legTrimStartIdx = 0;
         legTrimEndIdx = 0;
+        legTrimStartOverride = null;
+        legTrimEndOverride = null;
         updateLegActionButtons();
         var trimBtn = document.getElementById('btn-leg-trim-route');
         if (trimBtn) {
@@ -1660,7 +2239,7 @@
         }
     }
 
-    function filterLocationsForTrim(locations, baseLatLngs, startIdx, endIdx) {
+    function filterLocationsForTrim(locations, baseLatLngs, startIdx, endIdx, startOverride, endOverride) {
         return (locations || []).filter(function (loc) {
             if (loc.lat == null || loc.lon == null) {
                 return true;
@@ -1675,7 +2254,59 @@
                 0,
                 baseLatLngs.length - 1
             );
-            return idx >= startIdx && idx <= endIdx;
+            if (startOverride) {
+                if (idx < startIdx) {
+                    return false;
+                }
+                if (idx === startIdx && startIdx < baseLatLngs.length - 1) {
+                    var startLocProj = projectPointOntoSegment(
+                        loc.lat,
+                        loc.lon,
+                        baseLatLngs[startIdx][0],
+                        baseLatLngs[startIdx][1],
+                        baseLatLngs[startIdx + 1][0],
+                        baseLatLngs[startIdx + 1][1]
+                    );
+                    var startCutProj = projectPointOntoSegment(
+                        startOverride[0],
+                        startOverride[1],
+                        baseLatLngs[startIdx][0],
+                        baseLatLngs[startIdx][1],
+                        baseLatLngs[startIdx + 1][0],
+                        baseLatLngs[startIdx + 1][1]
+                    );
+                    return startLocProj.t >= startCutProj.t - TRIM_VERTEX_EPS;
+                }
+            } else if (idx < startIdx) {
+                return false;
+            }
+            if (endOverride) {
+                if (idx > endIdx) {
+                    return false;
+                }
+                if (idx === endIdx && endIdx < baseLatLngs.length - 1) {
+                    var locProj = projectPointOntoSegment(
+                        loc.lat,
+                        loc.lon,
+                        baseLatLngs[endIdx][0],
+                        baseLatLngs[endIdx][1],
+                        baseLatLngs[endIdx + 1][0],
+                        baseLatLngs[endIdx + 1][1]
+                    );
+                    var endProj = projectPointOntoSegment(
+                        endOverride[0],
+                        endOverride[1],
+                        baseLatLngs[endIdx][0],
+                        baseLatLngs[endIdx][1],
+                        baseLatLngs[endIdx + 1][0],
+                        baseLatLngs[endIdx + 1][1]
+                    );
+                    return locProj.t <= endProj.t + TRIM_VERTEX_EPS;
+                }
+            } else if (idx > endIdx) {
+                return false;
+            }
+            return true;
         });
     }
 
@@ -1697,10 +2328,13 @@
                 return;
             }
         }
+        stopLegExtendRoute(true);
         stopLegTrimRoute(true);
         legTrimSavedLatLngs = copyLatLngs(selectedLegLatLngs);
         legTrimStartIdx = 0;
         legTrimEndIdx = legTrimSavedLatLngs.length - 1;
+        legTrimStartOverride = null;
+        legTrimEndOverride = null;
         legTrimActive = true;
         clearLegTrimEndpointMarkers();
         var trimBtn = document.getElementById('btn-leg-trim-route');
@@ -1711,6 +2345,7 @@
         updateLegTrimDisplay();
         setLegStatus(
             'Drag the green start or red end along the purple route to shorten the leg. ' +
+                'Handles snap to the route line for fine adjustments. ' +
                 'Grey dashed sections will be removed. Confirm to save, Cancel to discard.'
         );
     }
@@ -1733,7 +2368,9 @@
             priorLocations,
             legTrimSavedLatLngs,
             legTrimStartIdx,
-            legTrimEndIdx
+            legTrimEndIdx,
+            legTrimStartOverride,
+            legTrimEndOverride
         );
         var removedLocCount = priorLocations.length - filteredLocations.length;
         setLegStatus('Saving trimmed route…');
@@ -1788,6 +2425,8 @@
     function confirmLegRouteEdit() {
         if (legTrimActive) {
             confirmLegTrimRoute();
+        } else if (legExtendActive) {
+            confirmLegExtendRoute();
         } else if (legReshapeActive) {
             confirmLegReshapeRoute();
         }
@@ -1797,6 +2436,9 @@
         if (legTrimActive) {
             stopLegTrimRoute(true);
             setLegStatus('Route trim cancelled.');
+        } else if (legExtendActive) {
+            stopLegExtendRoute(true);
+            setLegStatus('Route extension cancelled.');
         } else if (legReshapeActive) {
             stopLegReshapeRoute(true);
             setLegStatus('Route reshape cancelled.');
@@ -2008,6 +2650,157 @@
         return window.confirm('Remove ' + subject + '?');
     }
 
+    var legLocationPopupWheelZoomWasEnabled = false;
+
+    function disableMapWheelForLegLocationPopup(map) {
+        if (!map || !map.scrollWheelZoom) return;
+        legLocationPopupWheelZoomWasEnabled = map.scrollWheelZoom.enabled();
+        if (legLocationPopupWheelZoomWasEnabled) {
+            map.scrollWheelZoom.disable();
+        }
+    }
+
+    function restoreMapWheelForLegLocationPopup(map) {
+        if (!map || !map.scrollWheelZoom || !legLocationPopupWheelZoomWasEnabled) return;
+        map.scrollWheelZoom.enable();
+        legLocationPopupWheelZoomWasEnabled = false;
+    }
+
+    function legLocationPopupChromeObstacles(map) {
+        var container = map.getContainer();
+        var rects = [];
+        var toolbar = document.getElementById('leg-map-toolbar');
+        if (toolbar && toolbar.offsetParent !== null) {
+            rects.push(toolbar.getBoundingClientRect());
+        }
+        var zoom = container.querySelector('.leaflet-control-zoom');
+        if (zoom) {
+            rects.push(zoom.getBoundingClientRect());
+        }
+        return rects;
+    }
+
+    function legLocationPopupAutoPanPaddingTopLeft(map) {
+        var padX = 48;
+        var padY = 56;
+        var container = map.getContainer();
+        var mapRect = container.getBoundingClientRect();
+        var toolbar = document.getElementById('leg-map-toolbar');
+        if (toolbar && toolbar.offsetParent !== null) {
+            var toolbarRect = toolbar.getBoundingClientRect();
+            padY = Math.max(padY, toolbarRect.bottom - mapRect.top + 8);
+        }
+        return L.point(padX, Math.min(padY, 120));
+    }
+
+    function legLocationPopupRectsOverlap(a, b) {
+        return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    }
+
+    function nudgeLegLocationPopupAwayFromChrome(map) {
+        if (!map || typeof L === 'undefined') return;
+        var container = map.getContainer();
+        var popupEl = container.querySelector('.leaflet-popup.leg-location-popup');
+        if (!popupEl) return;
+        var obstacles = legLocationPopupChromeObstacles(map);
+        if (!obstacles.length) return;
+        var popRect = popupEl.getBoundingClientRect();
+        var dx = 0;
+        var dy = 0;
+        var maxDy = 72;
+        var maxDx = 28;
+        obstacles.forEach(function (obs) {
+            if (!legLocationPopupRectsOverlap(popRect, obs)) return;
+            var overlapY = Math.min(popRect.bottom, obs.bottom) - Math.max(popRect.top, obs.top);
+            var overlapX = Math.min(popRect.right, obs.right) - Math.max(popRect.left, obs.left);
+            if (overlapY > 0) {
+                dy = Math.max(dy, Math.min(overlapY + 6, maxDy));
+            }
+            // Nudge right only for narrow top-left controls (zoom), not the full toolbar row.
+            var obsWidth = obs.right - obs.left;
+            if (overlapX > 0 && obsWidth <= 56) {
+                dx = Math.max(dx, Math.min(overlapX + 6, maxDx));
+            }
+        });
+        if (!dx && !dy) return;
+        var pos = L.DomUtil.getPosition(popupEl);
+        L.DomUtil.setPosition(popupEl, L.point(pos.x + dx, pos.y + dy));
+    }
+
+    function syncLegLocationPopupMaxHeight(map) {
+        if (!map || !map.getContainer) return;
+        var container = map.getContainer();
+        var wrapper = container.querySelector('.leaflet-popup.leg-location-popup .leaflet-popup-content-wrapper');
+        if (!wrapper) return;
+        var maxH = Math.max(180, container.clientHeight - 24);
+        wrapper.style.maxHeight = maxH + 'px';
+    }
+
+    function bindLegLocationPopupScrollGuard(contentEl) {
+        if (!contentEl) return;
+        contentEl.addEventListener(
+            'wheel',
+            function (e) {
+                e.stopPropagation();
+            },
+            { passive: true }
+        );
+    }
+
+    function attachLegLocationPopupMapBehavior(map, contentEl) {
+        disableMapWheelForLegLocationPopup(map);
+        bindLegLocationPopupScrollGuard(contentEl);
+        function onPopupClose() {
+            restoreMapWheelForLegLocationPopup(map);
+            map.off('popupclose', onPopupClose);
+        }
+        map.on('popupclose', onPopupClose);
+        syncLegLocationPopupMaxHeight(map);
+        window.requestAnimationFrame(function () {
+            syncLegLocationPopupMaxHeight(map);
+            nudgeLegLocationPopupAwayFromChrome(map);
+        });
+    }
+
+    function appendLegPopupField(parent, labelText, controlEl, extraClass) {
+        var wrap = document.createElement('div');
+        wrap.className = 'leg-popup-field' + (extraClass ? ' ' + extraClass : '');
+        var lab = document.createElement('label');
+        lab.textContent = labelText;
+        wrap.appendChild(lab);
+        wrap.appendChild(controlEl);
+        parent.appendChild(wrap);
+        return controlEl;
+    }
+
+    function appendLegPopupOpsField(parent, labelText, controlEl, extraClass) {
+        var wrap = document.createElement('div');
+        wrap.className = 'leg-popup-ops-field';
+        var lab = document.createElement('label');
+        lab.textContent = labelText;
+        wrap.appendChild(lab);
+        if (extraClass) controlEl.className = extraClass;
+        wrap.appendChild(controlEl);
+        parent.appendChild(wrap);
+        return controlEl;
+    }
+
+    function bindLegPopupCountInput(inputEl, maxVal) {
+        inputEl.type = 'number';
+        inputEl.min = '0';
+        inputEl.max = String(maxVal);
+        inputEl.className = 'leg-popup-narrow-input';
+        inputEl.setAttribute('inputmode', 'numeric');
+        inputEl.addEventListener('change', function () {
+            var n = parseInt(inputEl.value, 10);
+            if (isNaN(n) || n < 0) {
+                inputEl.value = '0';
+            } else if (n > maxVal) {
+                inputEl.value = String(maxVal);
+            }
+        });
+    }
+
     function openLegLocationPopup(opts) {
         opts = opts || {};
         var map = window.courseMappingMap;
@@ -2017,11 +2810,10 @@
         if (!latlng) return;
 
         var content = document.createElement('div');
-        content.className = 'course-map-popup';
-        content.style.minWidth = '200px';
+        content.className = 'course-map-popup leg-location-popup-form';
 
         var title = document.createElement('p');
-        title.style.cssText = 'font-weight:600;margin:0 0 0.65rem 0;color:#2c3e50;font-size:0.95rem;';
+        title.className = 'leg-popup-title';
         title.textContent =
             mode === 'add'
                 ? 'Add location'
@@ -2030,16 +2822,7 @@
                   : 'Edit location';
         content.appendChild(title);
 
-        var lblType = document.createElement('label');
-        lblType.textContent = 'Type';
-        lblType.style.display = 'block';
-        lblType.style.marginBottom = '0.25rem';
-        content.appendChild(lblType);
         var sel = document.createElement('select');
-        sel.style.display = 'block';
-        sel.style.width = '100%';
-        sel.style.marginBottom = '0.65rem';
-        sel.style.boxSizing = 'border-box';
         var initialType = (opts.loc && opts.loc.loc_type) || 'course';
         locationTypes().forEach(function (t) {
             var opt = document.createElement('option');
@@ -2048,10 +2831,10 @@
             if (t.value === initialType) opt.selected = true;
             sel.appendChild(opt);
         });
-        content.appendChild(sel);
+        appendLegPopupField(content, 'Type', sel);
 
         var hint = document.createElement('p');
-        hint.style.cssText = 'font-size:0.8rem;color:#7f8c8d;margin:0 0 0.65rem 0;line-height:1.35;';
+        hint.className = 'leg-popup-hint';
         function syncPopupLocTypeFromSelect() {
             var locType = sel.value || 'course';
             var target = opts.loc;
@@ -2070,92 +2853,59 @@
         sel.addEventListener('change', syncPopupLocTypeFromSelect);
         content.appendChild(hint);
 
-        var lblLabel = document.createElement('label');
-        lblLabel.textContent = 'Label';
-        lblLabel.style.display = 'block';
-        lblLabel.style.marginBottom = '0.25rem';
-        content.appendChild(lblLabel);
         var input = document.createElement('input');
         input.type = 'text';
         input.placeholder = 'e.g. Water station';
         input.value = (opts.loc && opts.loc.loc_label) || '';
-        input.style.display = 'block';
-        input.style.width = '100%';
-        input.style.marginBottom = '0.65rem';
-        input.style.boxSizing = 'border-box';
-        content.appendChild(input);
+        appendLegPopupField(content, 'Label', input);
 
-        var zoneLab = document.createElement('label');
-        zoneLab.textContent = 'Zone';
-        zoneLab.style.display = 'block';
-        zoneLab.style.marginBottom = '0.25rem';
-        content.appendChild(zoneLab);
+        var opsRow = document.createElement('div');
+        opsRow.className = 'leg-popup-ops-row';
         var zoneInput = document.createElement('input');
         zoneInput.type = 'text';
         zoneInput.value = (opts.loc && opts.loc.zone) || '';
-        zoneInput.style.cssText = 'display:block;width:100%;margin-bottom:0.65rem;box-sizing:border-box;';
-        content.appendChild(zoneInput);
+        zoneInput.className = 'leg-popup-narrow-input leg-popup-zone-input';
+        zoneInput.setAttribute('maxlength', '4');
+        appendLegPopupOpsField(opsRow, 'Zone', zoneInput);
 
-        var bufferLab = document.createElement('label');
-        bufferLab.textContent = 'Buffer (min)';
-        bufferLab.style.display = 'block';
-        bufferLab.style.marginBottom = '0.25rem';
-        content.appendChild(bufferLab);
         var bufferInput = document.createElement('input');
-        bufferInput.type = 'number';
-        bufferInput.min = '0';
         bufferInput.value = (opts.loc && opts.loc.buffer != null) ? String(opts.loc.buffer) : '10';
-        bufferInput.style.cssText = 'display:block;width:100%;margin-bottom:0.65rem;box-sizing:border-box;';
-        content.appendChild(bufferInput);
-
-        var notesLab = document.createElement('label');
-        notesLab.textContent = 'Notes';
-        notesLab.style.display = 'block';
-        notesLab.style.marginBottom = '0.25rem';
-        content.appendChild(notesLab);
-        var notesInput = document.createElement('textarea');
-        notesInput.rows = 2;
-        notesInput.value = (opts.loc && opts.loc.notes) || '';
-        notesInput.style.cssText = 'display:block;width:100%;margin-bottom:0.65rem;box-sizing:border-box;resize:vertical;';
-        content.appendChild(notesInput);
+        bindLegPopupCountInput(bufferInput, 999);
+        appendLegPopupOpsField(opsRow, 'Buffer', bufferInput);
 
         var resourceInputs = {};
         getPackageResources().forEach(function (res) {
-            var rLab = document.createElement('label');
-            rLab.textContent = (res.label || res.code) + ' count';
-            rLab.style.display = 'block';
-            rLab.style.marginBottom = '0.25rem';
-            content.appendChild(rLab);
             var rInp = document.createElement('input');
-            rInp.type = 'number';
-            rInp.min = '0';
             var existing = 0;
             if (opts.loc && opts.loc.resources && opts.loc.resources[res.code] != null) {
                 existing = parseInt(opts.loc.resources[res.code], 10) || 0;
             }
-            rInp.value = String(existing);
-            rInp.style.cssText = 'display:block;width:100%;margin-bottom:0.65rem;box-sizing:border-box;';
+            rInp.value = String(Math.min(99, Math.max(0, existing)));
+            bindLegPopupCountInput(rInp, 99);
+            appendLegPopupOpsField(opsRow, res.label || res.code.toUpperCase(), rInp);
             resourceInputs[res.code] = rInp;
-            content.appendChild(rInp);
         });
+        content.appendChild(opsRow);
+
+        var notesInput = document.createElement('textarea');
+        notesInput.rows = 2;
+        notesInput.value = (opts.loc && opts.loc.notes) || '';
+        appendLegPopupField(content, 'Notes', notesInput, 'leg-popup-notes-field');
 
         function applyOpsFields(target) {
             target.zone = zoneInput.value.trim();
             var buf = parseInt(bufferInput.value, 10);
-            target.buffer = isNaN(buf) ? 10 : Math.max(0, buf);
+            target.buffer = isNaN(buf) ? 10 : Math.max(0, Math.min(999, buf));
             target.notes = notesInput.value.trim();
             target.resources = {};
             Object.keys(resourceInputs).forEach(function (code) {
                 var n = parseInt(resourceInputs[code].value, 10);
-                target.resources[code] = isNaN(n) || n < 0 ? 0 : n;
+                target.resources[code] = isNaN(n) || n < 0 ? 0 : Math.min(99, n);
             });
         }
 
         var btnRow = document.createElement('div');
-        btnRow.style.display = 'flex';
-        btnRow.style.flexWrap = 'wrap';
-        btnRow.style.gap = '0.5rem';
-        btnRow.style.alignItems = 'center';
+        btnRow.className = 'leg-popup-actions';
 
         var btnPrimary = document.createElement('button');
         btnPrimary.type = 'button';
@@ -2183,10 +2933,17 @@
         btnRow.appendChild(btnCancel);
         content.appendChild(btnRow);
 
-        var pop = L.popup({ maxWidth: 375, className: 'location-popup' })
+        var pop = L.popup({
+            maxWidth: 380,
+            className: 'location-popup leg-location-popup',
+            autoPan: true,
+            autoPanPaddingTopLeft: legLocationPopupAutoPanPaddingTopLeft(map),
+            autoPanPaddingBottomRight: L.point(12, 12)
+        })
             .setContent(content)
-            .setLatLng(latlng)
-            .openOn(map);
+            .setLatLng(latlng);
+        attachLegLocationPopupMapBehavior(map, content);
+        pop.openOn(map);
 
         btnCancel.onclick = function () {
             map.closePopup();
@@ -2516,6 +3273,9 @@
     function selectLegById(legId, options) {
         options = options || {};
         if (legDrawActive) stopLegDrawMode();
+        if (!options.keepExtend) {
+            stopLegExtendRoute(true);
+        }
         var leg = (libraryState && libraryState.legs || []).find(function (c) {
             return c.id === legId;
         });
@@ -3923,10 +4683,54 @@
         if (trimBtn) {
             trimBtn.addEventListener('click', function (ev) {
                 if (ev.stopPropagation) ev.stopPropagation();
-                if (legTrimActive) {
+                if (isLegRouteEditActive()) {
                     return;
                 }
                 startLegTrimRoute();
+            });
+        }
+        var extendBtn = document.getElementById('btn-leg-extend-route');
+        if (extendBtn) {
+            extendBtn.addEventListener('click', function (ev) {
+                if (ev.stopPropagation) ev.stopPropagation();
+                if (legExtendActive) {
+                    return;
+                }
+                if (isLegRouteEditActive()) {
+                    return;
+                }
+                startLegExtendRoute();
+            });
+        }
+        var extendUndo = document.getElementById('btn-leg-extend-undo');
+        if (extendUndo) {
+            extendUndo.addEventListener('click', function (ev) {
+                if (ev.stopPropagation) ev.stopPropagation();
+                legExtendUndo();
+            });
+        }
+        var extendClear = document.getElementById('btn-leg-extend-clear');
+        if (extendClear) {
+            extendClear.addEventListener('click', function (ev) {
+                if (ev.stopPropagation) ev.stopPropagation();
+                legExtendClearExtension();
+            });
+        }
+        var extendAnchor = document.getElementById('leg-extend-anchor');
+        if (extendAnchor) {
+            extendAnchor.addEventListener('change', function () {
+                if (!legExtendActive) {
+                    return;
+                }
+                if (legExtendNewCoords.length) {
+                    legExtendClearExtension();
+                }
+                legExtendFromEnd = extendAnchor.value !== 'start';
+                setLegStatus(
+                    'Extending from ' +
+                        (legExtendFromEnd ? 'end' : 'start') +
+                        ' — click the map to lengthen the leg.'
+                );
             });
         }
         var routeEditConfirm = document.getElementById('btn-leg-route-edit-confirm');

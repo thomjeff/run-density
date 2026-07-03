@@ -76,6 +76,22 @@
                             <span id="leg-draw-distance" class="leg-draw-distance" aria-live="polite"></span>
                         </span>
                         <button type="button" id="btn-leg-trim-route" class="course-btn" disabled title="Select a leg, then drag start or end along the route">Trim route</button>
+                        <button type="button" id="btn-leg-extend-route" class="course-btn" disabled title="Select a leg, then click the map to lengthen the route at the start or end">Extend route</button>
+                        <span id="leg-extend-actions" class="leg-route-edit-actions" style="display: none;">
+                            <select id="leg-extend-anchor" class="course-btn" title="Extend from the leg start or end">
+                                <option value="end" selected>From end</option>
+                                <option value="start">From start</option>
+                            </select>
+                            <select id="leg-extend-profile" class="course-btn" title="Snap clicks to roads/trails using this travel mode">
+                                <option value="foot" selected>Snap: Foot</option>
+                                <option value="bike">Snap: Bike</option>
+                                <option value="car">Snap: Car</option>
+                                <option value="off">Snap: Off</option>
+                            </select>
+                            <button type="button" id="btn-leg-extend-undo" class="course-btn" disabled title="Remove the last click">Undo</button>
+                            <button type="button" id="btn-leg-extend-clear" class="course-btn" disabled title="Remove all extension clicks">Clear extension</button>
+                            <span id="leg-extend-distance" class="leg-draw-distance" aria-live="polite"></span>
+                        </span>
                         <button type="button" id="btn-leg-reshape-route" class="course-btn" disabled title="Select a leg, simplify the route, then drag yellow anchors to nudge it">Reshape route</button>
                         <span id="leg-route-edit-actions" class="leg-route-edit-actions" style="display: none;">
                             <button type="button" id="btn-leg-route-edit-confirm" class="course-btn primary">Confirm</button>
@@ -100,11 +116,13 @@
                 <button type="button" id="btn-org-leg-library" class="course-btn" title="View legs stored outside this package (runflow/org/legs)">Leg library…</button>
                 <button type="button" id="btn-export-all-legs" class="course-btn" disabled title="Download all legs (GPX + metadata + locations per leg)">Export legs…</button>
                 <button type="button" id="btn-draw-leg-map" class="course-btn" title="Draw a new leg on the map by clicking along roads and trails">Draw leg on map</button>
+                <button type="button" id="btn-manage-resources-legs" class="course-btn" title="Add or remove schedulable resources (FPF, YSSR, Officials, …)">Manage resources…</button>
                 </div>
             </div>
             <p class="card-help course-derived-empty">
                 Legs live in the <strong>organization library</strong> (outside this package). <strong>Import legs…</strong> adds GPX from a third-party tool.
                 Place locations (with resources) on each leg, then assign legs to events via <strong>Event recipes</strong>.
+                Use <strong>Manage resources…</strong> to add schedulable types (FPF, Officials, etc.) before placing counts on pins.
                 <strong>Apply recipes</strong> builds the course on the <button type="button" id="btn-go-to-recipes" class="course-link-btn">Course</button> tab.
             </p>
             <p id="course-legs-status" class="course-derived-empty" style="display: none;"></p>

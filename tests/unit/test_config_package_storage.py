@@ -73,6 +73,28 @@ def test_create_config_package_writes_manifest_and_course(tmp_path, monkeypatch)
     assert course["config_id"] == config_id
 
 
+def test_create_config_package_custom_resources(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    result = create_config_package(
+        "With OFC",
+        "",
+        event_day="sun",
+        package_events=["10k"],
+        resources=[
+            {"code": "fpf", "label": "FPF"},
+            {"code": "ofc", "label": "Officials"},
+        ],
+    )
+    manifest = json.loads((tmp_path / result["config_id"] / "config.json").read_text())
+    assert manifest["resources"] == [
+        {"code": "fpf", "label": "FPF"},
+        {"code": "ofc", "label": "Officials"},
+    ]
+
+
 def test_list_includes_legacy_folder_with_segments(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "app.core.config_package.storage.get_config_root",
