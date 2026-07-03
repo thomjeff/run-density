@@ -30,6 +30,7 @@
     var legReshapeDraftLatLngs = null;
     var legReshapeAnchorIndices = null;
     var legReshapeAnchorLayer = null;
+    var legReshapeHitLayer = null;
     var legReshapeSavedLatLngs = null;
     var legTrimActive = false;
     var legTrimSavedLatLngs = null;
@@ -872,6 +873,7 @@
     /** Douglas–Peucker tolerance (m) when entering reshape — simplify to semantic vertices. */
     var LEG_RESHAPE_SIMPLIFY_TOLERANCE_M = 5;
     var LEG_RESHAPE_SIMPLIFY_MAX_VERTICES = 96;
+    var LEG_RESHAPE_INSERT_MIN_GAP_T = 0.04;
 
     function perpendicularDistanceMeters(point, lineStart, lineEnd) {
         var midLat = (lineStart[0] + lineEnd[0]) / 2;
@@ -1678,6 +1680,114 @@
         }).addTo(map);
     }
 
+    function clearLegReshapeHitLayer() {
+        var map = window.courseMappingMap;
+        if (map && legReshapeHitLayer) {
+            map.removeLayer(legReshapeHitLayer);
+            legReshapeHitLayer = null;
+        }
+    }
+
+    function setLegReshapeMapMode(active) {
+        var container = document.getElementById('course-mapping-map');
+        if (!container) {
+            return;
+        }
+        if (active) {
+            container.classList.add('leg-reshape-mode');
+        } else {
+            container.classList.remove('leg-reshape-mode');
+        }
+    }
+
+    function insertLegReshapeAnchorAt(lat, lon) {
+        var latlngs = legReshapeDraftLatLngs;
+        if (!legReshapeActive || !latlngs || latlngs.length < 2) {
+            return false;
+        }
+        if (latlngs.length >= LEG_RESHAPE_SIMPLIFY_MAX_VERTICES) {
+            setLegStatus(
+                'Maximum ' +
+                    LEG_RESHAPE_SIMPLIFY_MAX_VERTICES +
+                    ' anchors reached. Confirm or remove a pin (Alt+click) before adding more.',
+                true
+            );
+            return false;
+        }
+        var best = findBestSegmentProjection(lat, lon, latlngs, 0, latlngs.length - 2);
+        if (
+            !best ||
+            best.t <= LEG_RESHAPE_INSERT_MIN_GAP_T ||
+            best.t >= 1 - LEG_RESHAPE_INSERT_MIN_GAP_T
+        ) {
+            return false;
+        }
+        var insertIdx = best.segIdx + 1;
+        latlngs.splice(insertIdx, 0, [
+            Math.round(best.lat * 1e6) / 1e6,
+            Math.round(best.lon * 1e6) / 1e6
+        ]);
+        legReshapeAnchorIndices = allVertexAnchorIndices(latlngs.length);
+        selectedLegLatLngs = latlngs;
+        refreshLegReshapeDisplay();
+        setLegStatus(
+            latlngs.length +
+                ' anchors — drag yellow pins to nudge, click the purple route between pins to add another, Alt+click a pin to remove it.'
+        );
+        return true;
+    }
+
+    function removeLegReshapeAnchorAt(idx) {
+        var latlngs = legReshapeDraftLatLngs;
+        if (!legReshapeActive || !latlngs || latlngs.length <= 2) {
+            return false;
+        }
+        if (idx <= 0 || idx >= latlngs.length - 1) {
+            return false;
+        }
+        latlngs.splice(idx, 1);
+        legReshapeAnchorIndices = allVertexAnchorIndices(latlngs.length);
+        selectedLegLatLngs = latlngs;
+        refreshLegReshapeDisplay();
+        setLegStatus(
+            latlngs.length +
+                ' anchors — drag yellow pins to nudge, click the purple route between pins to add another, Alt+click a pin to remove it.'
+        );
+        return true;
+    }
+
+    function onLegReshapeRouteClick(ev) {
+        L.DomEvent.stopPropagation(ev);
+        insertLegReshapeAnchorAt(ev.latlng.lat, ev.latlng.lng);
+    }
+
+    function drawLegReshapeHitTarget() {
+        var map = window.courseMappingMap;
+        var latlngs = legReshapeDraftLatLngs;
+        if (!map || !latlngs || latlngs.length < 2 || !legReshapeActive) {
+            return;
+        }
+        clearLegReshapeHitLayer();
+        legReshapeHitLayer = L.polyline(latlngs, {
+            color: '#8e44ad',
+            weight: 14,
+            opacity: 0,
+            interactive: true,
+            className: 'leg-reshape-hit-line'
+        });
+        legReshapeHitLayer.on('click', onLegReshapeRouteClick);
+        legReshapeHitLayer.addTo(map);
+    }
+
+    function refreshLegReshapeDisplay() {
+        if (!legReshapeActive || !legReshapeDraftLatLngs) {
+            return;
+        }
+        setLegRoutePolyline(legReshapeDraftLatLngs, { interactive: false });
+        drawLegReshapeHitTarget();
+        drawLegReshapeAnchors();
+    }
+
     function clearLegReshapeAnchorLayer() {
         var map = window.courseMappingMap;
         if (map && legReshapeAnchorLayer) {
@@ -1717,10 +1827,14 @@
                     Math.round(pos.lng * 1e6) / 1e6
                 ];
                 selectedLegLatLngs = legReshapeDraftLatLngs;
-                setLegRoutePolyline(legReshapeDraftLatLngs);
+                setLegRoutePolyline(legReshapeDraftLatLngs, { interactive: false });
+                drawLegReshapeHitTarget();
             });
             marker.on('click', function (e) {
                 L.DomEvent.stopPropagation(e);
+                if (e.originalEvent && e.originalEvent.altKey) {
+                    removeLegReshapeAnchorAt(idx);
+                }
             });
             marker.addTo(legReshapeAnchorLayer);
         });
@@ -1739,7 +1853,9 @@
         legReshapeDraftLatLngs = null;
         legReshapeAnchorIndices = null;
         legReshapeSavedLatLngs = null;
+        clearLegReshapeHitLayer();
         clearLegReshapeAnchorLayer();
+        setLegReshapeMapMode(false);
         updateLegActionButtons();
         var reshapeBtn = document.getElementById('btn-leg-reshape-route');
         if (reshapeBtn) {
@@ -1773,13 +1889,13 @@
         legReshapeDraftLatLngs = simplified.latlngs;
         legReshapeAnchorIndices = allVertexAnchorIndices(legReshapeDraftLatLngs.length);
         legReshapeActive = true;
-        setLegRoutePolyline(legReshapeDraftLatLngs);
+        setLegReshapeMapMode(true);
+        refreshLegReshapeDisplay();
         var reshapeBtn = document.getElementById('btn-leg-reshape-route');
         if (reshapeBtn) {
             reshapeBtn.classList.add('active');
         }
         updateLegActionButtons();
-        drawLegReshapeAnchors();
         var anchorCount = legReshapeAnchorIndices.length;
         var statusMsg =
             'Route simplified to ' +
@@ -1788,7 +1904,7 @@
             (anchorCount === 1 ? '' : 's') +
             ' (from ' +
             originalCount +
-            ' track points). Drag yellow pins to nudge; Confirm saves this shape, Cancel restores the original.';
+            ' track points). Drag yellow pins to nudge; click the purple route between pins to add another; Alt+click a pin to remove it. Confirm saves, Cancel restores the original.';
         if (originalCount > anchorCount && simplified.toleranceM > LEG_RESHAPE_SIMPLIFY_TOLERANCE_M) {
             statusMsg +=
                 ' (used ' + simplified.toleranceM + ' m simplify tolerance to keep the map usable).';
@@ -1834,7 +1950,9 @@
                 legReshapeDraftLatLngs = null;
                 legReshapeAnchorIndices = null;
                 legReshapeSavedLatLngs = null;
+                clearLegReshapeHitLayer();
                 clearLegReshapeAnchorLayer();
+                setLegReshapeMapMode(false);
                 updateLegActionButtons();
                 var reshapeBtn = document.getElementById('btn-leg-reshape-route');
                 if (reshapeBtn) {

@@ -97,7 +97,7 @@ Pan and zoom to filter the legs table below the map. Select a leg in the table t
 |--------|--------------|
 | **Trim route** | Drag the start or end of the selected leg along its route to **shorten** it |
 | **Extend route** | Click the map to **lengthen** the leg at the start or end (snap to roads/trails) |
-| **Reshape route** | Simplify the route, then drag yellow anchors to nudge it |
+| **Reshape route** | Simplify the route, drag yellow anchors to nudge it, and click the purple line between pins to add more anchors |
 | **Add Locations** | Click the map to place location pins on the selected leg |
 
 ### Organization leg library
