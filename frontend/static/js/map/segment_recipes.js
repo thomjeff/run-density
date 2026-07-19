@@ -49,6 +49,12 @@
     var allLegRoutesLayer = null;
     var allLegRoutesFetchSeq = 0;
     var ALL_LEG_ROUTES_PANE = 'all-leg-routes';
+    var allLegLocationsLayer = null;
+    var ALL_LEG_LOCATIONS_PANE = 'all-leg-locations';
+    var legLocationsBrowserShowAllPins = false;
+    var legLocationsBrowserHighlightKey = '';
+    var pendingLocationFocus = null;
+    var legLocationsBrowserFiltersBound = false;
     /** Draw-a-leg mode state (Issue #789 Create Leg). */
     var legDrawActive = false;
     var legDrawCoords = [];        // [[lon, lat], ...] full drawn polyline
@@ -123,11 +129,28 @@
         return !!resolveConfigPackageId() && !!document.getElementById('race-config-workspace');
     }
 
+    /** Global Legs hub (no package): view=legs on Race Configuration entry. */
+    function isOrgLegsHubMode() {
+        if (resolveConfigPackageId()) return false;
+        var params = new URLSearchParams(window.location.search);
+        var view = params.get('view');
+        var legsPanel = document.getElementById('config-package-legs-panel');
+        var hubLegs = document.getElementById('race-config-hub-legs');
+        if (view === 'legs') return true;
+        return !!(
+            legsPanel &&
+            hubLegs &&
+            hubLegs.style.display !== 'none' &&
+            legsPanel.offsetParent !== null
+        );
+    }
+
     function apiBase() {
         return '/api/config/packages/' + encodeURIComponent(resolveConfigPackageId());
     }
 
     function usesOrgLegLibrary() {
+        if (isOrgLegsHubMode()) return true;
         if (!libraryState) return true;
         return libraryState.leg_source === 'org';
     }
@@ -161,11 +184,79 @@
     }
 
     function getPackageResources() {
-        return (window.CONFIG_PACKAGE_RESOURCES || []).slice();
+        var r = window.CONFIG_PACKAGE_RESOURCES;
+        if (Array.isArray(r) && r.length) return r.slice();
+        return getDefaultLegResources().slice();
+    }
+
+    var DEFAULT_LEG_RESOURCES = [
+        { code: 'fpf', label: 'FPF' },
+        { code: 'yssr', label: 'YSSR' },
+        { code: 'awp', label: 'AWP' },
+        { code: 'vol', label: 'VOL' },
+    ];
+    var ORG_LEG_RESOURCES_STORAGE_KEY = 'runflow.org.legResources';
+
+    function getDefaultLegResources() {
+        return DEFAULT_LEG_RESOURCES.map(function (res) {
+            return { code: res.code, label: res.label };
+        });
+    }
+
+    function loadOrgLegResourcesFromStorage() {
+        try {
+            var raw = localStorage.getItem(ORG_LEG_RESOURCES_STORAGE_KEY);
+            if (!raw) return getDefaultLegResources();
+            var parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed) || !parsed.length) return getDefaultLegResources();
+            return parsed.map(function (r) {
+                return {
+                    code: String(r.code || '').trim(),
+                    label: String(r.label || r.code || '').trim(),
+                };
+            }).filter(function (r) { return r.code; });
+        } catch (e) {
+            return getDefaultLegResources();
+        }
+    }
+
+    function initOrgLegHubResources() {
+        window.CONFIG_PACKAGE_RESOURCES = loadOrgLegResourcesFromStorage();
+        document.dispatchEvent(
+            new CustomEvent('package-resources-updated', {
+                detail: { resources: window.CONFIG_PACKAGE_RESOURCES },
+            })
+        );
+    }
+
+    function saveOrgLegResourcesToStorage(resources) {
+        var normalized = (resources || []).map(function (r) {
+            return { code: r.code, label: r.label || r.code.toUpperCase() };
+        });
+        localStorage.setItem(ORG_LEG_RESOURCES_STORAGE_KEY, JSON.stringify(normalized));
+        window.CONFIG_PACKAGE_RESOURCES = normalized;
+        document.dispatchEvent(
+            new CustomEvent('package-resources-updated', {
+                detail: { resources: normalized },
+            })
+        );
     }
 
     function afterLegLibraryMutation(data) {
         if (usesOrgLegLibrary() || (data && data.leg_source === 'org' && !data.recipes)) {
+            if (data && Array.isArray(data.legs)) {
+                applyLibraryState({
+                    leg_source: data.leg_source || 'org',
+                    has_library: data.has_library !== false,
+                    legs: data.legs,
+                    recipes: (libraryState && libraryState.recipes) || {},
+                    order_grid: (libraryState && libraryState.order_grid) || {},
+                    package_events: (libraryState && libraryState.package_events) || [],
+                    recipe_lengths_km: (libraryState && libraryState.recipe_lengths_km) || {},
+                    stitch_warnings: (libraryState && libraryState.stitch_warnings) || [],
+                });
+                return Promise.resolve();
+            }
             return loadLibrary();
         }
         applyLibraryState(data);
@@ -205,9 +296,24 @@
     }
 
     function showPackageLegsUi(visible) {
-        if (!visible || !isConfigPackageWorkspace()) {
+        if (!visible && !isOrgLegsHubMode()) {
             clearLegMap();
         }
+        var hubMode = isOrgLegsHubMode();
+        var manageRes = document.getElementById('btn-manage-resources-legs');
+        if (manageRes) {
+            manageRes.style.display = '';
+        }
+        var orgLibBtn = document.getElementById('btn-org-leg-library');
+        if (orgLibBtn) {
+            orgLibBtn.style.display = hubMode ? 'none' : '';
+        }
+        var exportAllBtn = document.getElementById('btn-export-all-legs');
+        if (exportAllBtn) {
+            // Package zip export needs a config_id; hide on hub for now.
+            exportAllBtn.style.display = hubMode ? 'none' : '';
+        }
+        document.dispatchEvent(new CustomEvent('race-config-place-course-map'));
     }
 
     function formatApiError(res, data) {
@@ -349,6 +455,495 @@
 
     function legLocationPlacement(locType) {
         return locationTypeSnapsToLegRoute(locType) ? 'along' : 'off';
+    }
+
+    function offCourseUsesProxyTiming(locType) {
+        var t = String(locType || '').toLowerCase();
+        return t === 'traffic' || t === 'extract';
+    }
+
+    function legLocationProxyIsSet(loc) {
+        if (!loc) return false;
+        if (loc.proxy_leg_loc_key != null && String(loc.proxy_leg_loc_key).trim()) {
+            return true;
+        }
+        var p = loc.proxy_loc_id;
+        if (p == null || p === '') return false;
+        var s = String(p).trim();
+        return s !== '' && s.toLowerCase() !== 'nan';
+    }
+
+    function legLocKey(legId, index) {
+        return String(legId || '').trim() + ':' + String(index);
+    }
+
+    function collectLegProxyTimingSources(excludeKey, currentLegId) {
+        var items = [];
+        (libraryState && libraryState.legs || []).forEach(function (leg) {
+            var legId = String(leg.id || '').trim();
+            if (!legId) return;
+            (leg.locations || []).forEach(function (loc, idx) {
+                var key = legLocKey(legId, idx);
+                if (excludeKey && key === excludeKey) return;
+                if (offCourseUsesProxyTiming(loc.loc_type)) return;
+                if (legLocationProxyIsSet(loc)) return;
+                items.push({
+                    key: key,
+                    legId: legId,
+                    label: (loc.loc_label || '').trim() || 'Untitled',
+                    loc_type: loc.loc_type || 'course',
+                });
+            });
+        });
+        var currentLeg = String(currentLegId || '').trim();
+        items.sort(function (a, b) {
+            var aSame = currentLeg && a.legId === currentLeg ? 0 : 1;
+            var bSame = currentLeg && b.legId === currentLeg ? 0 : 1;
+            if (aSame !== bSame) return aSame - bSame;
+            if (a.legId !== b.legId) return a.legId.localeCompare(b.legId, undefined, { numeric: true });
+            return a.key.localeCompare(b.key, undefined, { numeric: true });
+        });
+        return items;
+    }
+
+    function appendLegProxyTimingOptions(sel, items) {
+        items.forEach(function (item) {
+            var opt = document.createElement('option');
+            opt.value = item.key;
+            opt.textContent =
+                item.key +
+                ' — ' +
+                item.label +
+                (item.loc_type ? ' (' + item.loc_type + ')' : '');
+            sel.appendChild(opt);
+        });
+    }
+
+    function buildLegProxyTimingSelect(loc, excludeKey, currentLegId) {
+        var sel = document.createElement('select');
+        var none = document.createElement('option');
+        none.value = '';
+        none.textContent = '— None —';
+        sel.appendChild(none);
+        var currentLeg = String(currentLegId || '').trim();
+        var sources = collectLegProxyTimingSources(excludeKey, currentLeg);
+        var sameLeg = sources.filter(function (item) {
+            return currentLeg && item.legId === currentLeg;
+        });
+        var otherLegs = sources.filter(function (item) {
+            return !currentLeg || item.legId !== currentLeg;
+        });
+        if (sameLeg.length) {
+            var sameGroup = document.createElement('optgroup');
+            sameGroup.label = currentLeg ? 'Leg ' + currentLeg : 'This leg';
+            appendLegProxyTimingOptions(sameGroup, sameLeg);
+            sel.appendChild(sameGroup);
+        }
+        if (otherLegs.length) {
+            var otherGroup = document.createElement('optgroup');
+            otherGroup.label = 'Other legs';
+            appendLegProxyTimingOptions(otherGroup, otherLegs);
+            sel.appendChild(otherGroup);
+        }
+        if (!sameLeg.length && !otherLegs.length) {
+            appendLegProxyTimingOptions(sel, sources);
+        }
+        var current =
+            loc && loc.proxy_leg_loc_key != null && String(loc.proxy_leg_loc_key).trim()
+                ? String(loc.proxy_leg_loc_key).trim()
+                : '';
+        if (current) {
+            sel.value = current;
+            if (sel.value !== current) {
+                var stale = document.createElement('option');
+                stale.value = current;
+                stale.textContent = current + ' — (location not found)';
+                sel.appendChild(stale);
+                sel.value = current;
+            }
+        }
+        return sel;
+    }
+
+    function collectAllLegLocationRows() {
+        var rows = [];
+        (libraryState && libraryState.legs || []).forEach(function (leg) {
+            var legId = String(leg.id || '').trim();
+            if (!legId) return;
+            var legLabel = (leg.leg_label || leg.seg_label || legId).trim() || legId;
+            (leg.locations || []).forEach(function (loc, idx) {
+                if (!loc || loc.lat == null || loc.lon == null) return;
+                rows.push({
+                    legId: legId,
+                    legLabel: legLabel,
+                    locIndex: idx,
+                    key: legLocKey(legId, idx),
+                    loc: loc
+                });
+            });
+        });
+        return rows;
+    }
+
+    function formatLegLocationProxyDisplay(loc) {
+        if (!loc) return '—';
+        if (loc.proxy_leg_loc_key != null && String(loc.proxy_leg_loc_key).trim()) {
+            return String(loc.proxy_leg_loc_key).trim();
+        }
+        var p = loc.proxy_loc_id;
+        if (p == null || p === '') return '—';
+        var s = String(p).trim();
+        return s && s.toLowerCase() !== 'nan' ? s : '—';
+    }
+
+    function legLocationResourceCount(loc, code) {
+        if (!loc) return 0;
+        if (loc.resources && loc.resources[code] != null) {
+            var n = parseInt(loc.resources[code], 10);
+            return isNaN(n) ? 0 : Math.max(0, n);
+        }
+        var legacy = loc[code + '_count'];
+        if (legacy == null || legacy === '') return 0;
+        var n2 = parseInt(legacy, 10);
+        return isNaN(n2) ? 0 : Math.max(0, n2);
+    }
+
+    function renderLegLocationsBrowserHeader() {
+        var row = document.getElementById('leg-locations-browser-thead-row');
+        if (!row) return;
+        row.innerHTML = '';
+        ['Leg #', 'ID', 'Label', 'Type', 'Proxy'].forEach(function (text) {
+            var th = document.createElement('th');
+            th.textContent = text;
+            row.appendChild(th);
+        });
+        getPackageResources().forEach(function (res) {
+            var th = document.createElement('th');
+            th.textContent = String(res.code || '').toUpperCase();
+            th.title = (res.label || res.code) + ' (' + res.code + '_count)';
+            row.appendChild(th);
+        });
+        var actionTh = document.createElement('th');
+        actionTh.className = 'course-map-action-cell';
+        actionTh.textContent = 'Actions';
+        row.appendChild(actionTh);
+    }
+
+    function scrollLegMapIntoView() {
+        var el =
+            document.querySelector('#config-package-legs-panel .config-legs-map-region') ||
+            document.getElementById('course-map-container');
+        if (el && el.scrollIntoView) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
+    function navigateToLegLocation(legId, locIndex, opts) {
+        opts = opts || {};
+        legId = String(legId || '').trim();
+        if (!legId || locIndex == null) return;
+        var idx = parseInt(locIndex, 10);
+        if (isNaN(idx) || idx < 0) return;
+        pendingLocationFocus = { legId: legId, locIndex: idx };
+        legLocationsBrowserHighlightKey = legLocKey(legId, idx);
+        var legSel = document.getElementById('leg-locations-filter-leg');
+        if (legSel) legSel.value = legId;
+        if (!isOrgLegsHubMode()) {
+            var url = new URL(window.location.href);
+            url.searchParams.delete('id');
+            url.searchParams.set('view', 'legs');
+            window.history.pushState({}, '', url.toString());
+            document.dispatchEvent(
+                new CustomEvent('race-config-show-legs-hub', {
+                    detail: { legId: legId, locIndex: idx },
+                })
+            );
+            return;
+        }
+        renderLegLocationsBrowser();
+        if (opts.scroll !== false) scrollLegMapIntoView();
+        focusLegLocation(legId, idx);
+    }
+
+    function getLegLocationsBrowserFilters() {
+        var legSel = document.getElementById('leg-locations-filter-leg');
+        var typeSel = document.getElementById('leg-locations-filter-type');
+        var searchInp = document.getElementById('leg-locations-filter-search');
+        return {
+            legId: legSel ? String(legSel.value || '').trim() : '',
+            type: typeSel ? String(typeSel.value || '').trim().toLowerCase() : '',
+            query: searchInp ? String(searchInp.value || '').trim().toLowerCase() : ''
+        };
+    }
+
+    function legLocationRowMatchesFilters(row, filters) {
+        if (!row || !row.loc) return false;
+        if (filters.legId && row.legId !== filters.legId) return false;
+        var locType = String(row.loc.loc_type || 'course').toLowerCase();
+        if (filters.type && locType !== filters.type) return false;
+        if (filters.query) {
+            var label = String(row.loc.loc_label || '').toLowerCase();
+            if (label.indexOf(filters.query) < 0) return false;
+        }
+        return true;
+    }
+
+    function ensureAllLegLocationsPane(map) {
+        if (!map.getPane(ALL_LEG_LOCATIONS_PANE)) {
+            var pane = map.createPane(ALL_LEG_LOCATIONS_PANE);
+            pane.style.zIndex = 390;
+        }
+    }
+
+    function removeAllLegLocationsLayer() {
+        var map = window.courseMappingMap;
+        if (map && allLegLocationsLayer) {
+            map.removeLayer(allLegLocationsLayer);
+        }
+        allLegLocationsLayer = null;
+    }
+
+    function syncLegLocationsShowAllPinsButton() {
+        var btn = document.getElementById('btn-leg-locations-show-all-pins');
+        if (!btn) return;
+        btn.classList.toggle('active', !!legLocationsBrowserShowAllPins);
+        btn.textContent = legLocationsBrowserShowAllPins ? 'Hide all pins' : 'Show all pins';
+    }
+
+    function renderAllLegLocationsMapLayer() {
+        var map = window.courseMappingMap;
+        if (!map || !legLocationsBrowserShowAllPins || !isOrgLegsHubMode()) {
+            removeAllLegLocationsLayer();
+            return;
+        }
+        ensureAllLegLocationsPane(map);
+        removeAllLegLocationsLayer();
+        var filters = getLegLocationsBrowserFilters();
+        var rows = collectAllLegLocationRows().filter(function (row) {
+            return legLocationRowMatchesFilters(row, filters);
+        });
+        if (!rows.length) return;
+        var group = L.layerGroup();
+        rows.forEach(function (row) {
+            var loc = row.loc;
+            var fill = legLocationColor(loc.loc_type || 'course');
+            var highlight = legLocationsBrowserHighlightKey && row.key === legLocationsBrowserHighlightKey;
+            var marker = L.marker([loc.lat, loc.lon], {
+                pane: ALL_LEG_LOCATIONS_PANE,
+                icon: L.divIcon({
+                    className:
+                        'leg-location-pin leg-location-pin-all-legs' +
+                        (highlight ? ' leg-location-pin-all-legs-highlight' : ''),
+                    html:
+                        '<div style="width:' +
+                        (highlight ? 12 : 10) +
+                        'px;height:' +
+                        (highlight ? 12 : 10) +
+                        'px;background:' +
+                        fill +
+                        ';border:2px solid ' +
+                        (highlight ? '#2c3e50' : '#fff') +
+                        ';border-radius:50%;box-sizing:border-box;"></div>',
+                    iconSize: [highlight ? 12 : 10, highlight ? 12 : 10],
+                    iconAnchor: [highlight ? 6 : 5, highlight ? 6 : 5]
+                }),
+                interactive: false
+            });
+            marker.bindTooltip(
+                row.legId +
+                    ':' +
+                    row.locIndex +
+                    ' — ' +
+                    (loc.loc_label || 'Location') +
+                    ' (' +
+                    (loc.loc_type || 'course') +
+                    ')',
+                { sticky: true }
+            );
+            group.addLayer(marker);
+        });
+        allLegLocationsLayer = group.addTo(map);
+    }
+
+    function populateLegLocationsBrowserFilters() {
+        var legSel = document.getElementById('leg-locations-filter-leg');
+        var typeSel = document.getElementById('leg-locations-filter-type');
+        if (!legSel || !typeSel) return;
+        var prevLeg = legSel.value;
+        var prevType = typeSel.value;
+        legSel.innerHTML = '';
+        var allLeg = document.createElement('option');
+        allLeg.value = '';
+        allLeg.textContent = 'All legs';
+        legSel.appendChild(allLeg);
+        (libraryState && libraryState.legs || []).forEach(function (leg) {
+            var opt = document.createElement('option');
+            opt.value = leg.id;
+            opt.textContent = leg.id + ' — ' + ((leg.leg_label || '').slice(0, 36) || leg.id);
+            legSel.appendChild(opt);
+        });
+        if (prevLeg && legSel.querySelector('option[value="' + prevLeg + '"]')) {
+            legSel.value = prevLeg;
+        }
+        typeSel.innerHTML = '';
+        var allType = document.createElement('option');
+        allType.value = '';
+        allType.textContent = 'All types';
+        typeSel.appendChild(allType);
+        locationTypes().forEach(function (t) {
+            var opt = document.createElement('option');
+            opt.value = t.value;
+            opt.textContent = t.label;
+            typeSel.appendChild(opt);
+        });
+        if (prevType) typeSel.value = prevType;
+    }
+
+    function renderLegLocationsBrowser() {
+        var card = document.getElementById('leg-locations-browser-card');
+        var tbody = document.getElementById('leg-locations-browser-tbody');
+        var wrap = document.getElementById('leg-locations-browser-wrap');
+        var empty = document.getElementById('leg-locations-browser-empty');
+        var statusEl = document.getElementById('leg-locations-browser-status');
+        if (!card || !tbody) return;
+        var showBrowser = isOrgLegsHubMode() && libraryState && libraryState.legs && libraryState.legs.length;
+        if (!showBrowser) {
+            card.style.display = 'none';
+            removeAllLegLocationsLayer();
+            return;
+        }
+        card.style.display = '';
+        populateLegLocationsBrowserFilters();
+        var allRows = collectAllLegLocationRows();
+        var filters = getLegLocationsBrowserFilters();
+        var rows = allRows.filter(function (row) {
+            return legLocationRowMatchesFilters(row, filters);
+        });
+        if (statusEl) {
+            statusEl.textContent =
+                rows.length +
+                ' of ' +
+                allRows.length +
+                ' location' +
+                (allRows.length === 1 ? '' : 's') +
+                ' shown. Use the view action to edit on the map.';
+        }
+        renderLegLocationsBrowserHeader();
+        tbody.innerHTML = '';
+        if (!rows.length) {
+            if (wrap) wrap.style.display = 'none';
+            if (empty) empty.style.display = 'block';
+            renderAllLegLocationsMapLayer();
+            return;
+        }
+        if (empty) empty.style.display = 'none';
+        if (wrap) wrap.style.display = 'block';
+        rows.forEach(function (row) {
+            var tr = document.createElement('tr');
+            tr.dataset.legId = row.legId;
+            tr.dataset.locIndex = String(row.locIndex);
+            tr.dataset.locKey = row.key;
+            if (row.legId === selectedLegId) tr.classList.add('selected');
+            if (legLocationsBrowserHighlightKey && row.key === legLocationsBrowserHighlightKey) {
+                tr.classList.add('leg-locations-browser-row-highlight');
+            }
+            [
+                row.legId,
+                String(row.locIndex),
+                (row.loc.loc_label || '').slice(0, 48),
+                row.loc.loc_type || 'course',
+                formatLegLocationProxyDisplay(row.loc),
+            ].forEach(function (text) {
+                var td = document.createElement('td');
+                td.textContent = text;
+                tr.appendChild(td);
+            });
+            getPackageResources().forEach(function (res) {
+                var resTd = document.createElement('td');
+                resTd.textContent = String(legLocationResourceCount(row.loc, res.code));
+                tr.appendChild(resTd);
+            });
+            var actionTd = document.createElement('td');
+            actionTd.className = 'course-map-action-cell';
+            var ta = window.TableActions;
+            if (ta) {
+                actionTd.appendChild(
+                    ta.createIconButton('view', 'View on map and edit location', function (ev) {
+                        if (ev.stopPropagation) ev.stopPropagation();
+                        navigateToLegLocation(row.legId, row.locIndex);
+                    })
+                );
+            }
+            tr.appendChild(actionTd);
+            tr.addEventListener('click', function () {
+                legLocationsBrowserHighlightKey = row.key;
+                renderLegLocationsBrowser();
+            });
+            tbody.appendChild(tr);
+        });
+        renderAllLegLocationsMapLayer();
+    }
+
+    function tryOpenPendingLocationFocus() {
+        if (!pendingLocationFocus) return;
+        var map = window.courseMappingMap;
+        var legId = pendingLocationFocus.legId;
+        var locIndex = pendingLocationFocus.locIndex;
+        pendingLocationFocus = null;
+        if (!map || selectedLegId !== legId) return;
+        var leg = getSelectedLeg();
+        if (!leg || !leg.locations || locIndex < 0 || locIndex >= leg.locations.length) return;
+        var loc = leg.locations[locIndex];
+        if (loc.lat == null || loc.lon == null) return;
+        map.setView([loc.lat, loc.lon], Math.max(map.getZoom(), 15));
+        openLegLocationPopup({
+            mode: 'edit-saved',
+            loc: loc,
+            locIndex: locIndex,
+            latlng: L.latLng(loc.lat, loc.lon)
+        });
+    }
+
+    function focusLegLocation(legId, locIndex) {
+        legId = String(legId || '').trim();
+        if (!legId || locIndex == null) return;
+        pendingLocationFocus = { legId: legId, locIndex: locIndex };
+        if (selectedLegId === legId && selectedLegLatLngs && selectedLegLatLngs.length >= 2) {
+            tryOpenPendingLocationFocus();
+            return;
+        }
+        selectLegById(legId, { preserveZoom: false, keepPinMode: true });
+    }
+
+    function bindLegLocationsBrowserUi() {
+        if (legLocationsBrowserFiltersBound) return;
+        legLocationsBrowserFiltersBound = true;
+        var showBtn = document.getElementById('btn-leg-locations-show-all-pins');
+        if (showBtn) {
+            showBtn.addEventListener('click', function () {
+                legLocationsBrowserShowAllPins = !legLocationsBrowserShowAllPins;
+                syncLegLocationsShowAllPinsButton();
+                renderAllLegLocationsMapLayer();
+            });
+        }
+        ['leg-locations-filter-leg', 'leg-locations-filter-type'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('change', function () {
+                    renderLegLocationsBrowser();
+                });
+            }
+        });
+        var searchInp = document.getElementById('leg-locations-filter-search');
+        if (searchInp) {
+            searchInp.addEventListener('input', function () {
+                renderLegLocationsBrowser();
+            });
+        }
+        document.addEventListener('package-resources-updated', function () {
+            if (isOrgLegsHubMode()) renderLegLocationsBrowser();
+        });
+        syncLegLocationsShowAllPinsButton();
     }
 
     function legLocationColor(locType) {
@@ -757,6 +1352,7 @@
         libraryState = data;
         orderGrid = data.order_grid || {};
         renderLegsTable();
+        renderLegLocationsBrowser();
         updateLegActionButtons();
         syncLegsTableBoundsFilterItems();
         renderAllLegRoutes();
@@ -766,7 +1362,7 @@
         if (selectedLegId) {
             var still = (data.legs || []).some(function (c) { return c.id === selectedLegId; });
             if (still) {
-                refreshSelectedLegMap({ preserveZoom: true });
+                refreshSelectedLegMap({ preserveZoom: true, keepPinMode: true });
             } else {
                 clearLegMap();
             }
@@ -1011,7 +1607,8 @@
     /** Draw every leg route as a muted background line so the full network is visible without a selection. */
     function renderAllLegRoutes() {
         var map = window.courseMappingMap;
-        if (!map || !isConfigPackageWorkspace()) return;
+        var hubMode = isOrgLegsHubMode();
+        if (!map || (!isConfigPackageWorkspace() && !hubMode)) return;
         if (!shouldShowLegRoutesWhileDrawing()) {
             removeAllLegRoutesLayer();
             return;
@@ -1023,7 +1620,11 @@
         }
         allLegRoutesFetchSeq += 1;
         var seq = allLegRoutesFetchSeq;
-        fetch(apiBase() + '/segment-library/leg-geometries', { credentials: 'same-origin' })
+        var geomUrl =
+            hubMode || usesOrgLegLibrary()
+                ? '/api/org/legs/geometries'
+                : apiBase() + '/segment-library/leg-geometries';
+        fetch(geomUrl, { credentials: 'same-origin' })
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (data) {
                 if (seq !== allLegRoutesFetchSeq || !data) return;
@@ -2951,6 +3552,16 @@
         });
         appendLegPopupField(content, 'Type', sel);
 
+        var excludeProxyKey =
+            mode === 'edit-saved' && selectedLegId && opts.locIndex != null
+                ? legLocKey(selectedLegId, opts.locIndex)
+                : '';
+        var proxyWrap = document.createElement('div');
+        proxyWrap.className = 'leg-popup-field leg-popup-proxy-field';
+        var proxySel = buildLegProxyTimingSelect(opts.loc || {}, excludeProxyKey, selectedLegId);
+        appendLegPopupField(proxyWrap, 'Proxy timing source', proxySel);
+        content.appendChild(proxyWrap);
+
         var hint = document.createElement('p');
         hint.className = 'leg-popup-hint';
         function syncPopupLocTypeFromSelect() {
@@ -2963,9 +3574,13 @@
             updatePlacementHint();
         }
         function updatePlacementHint() {
+            var usesProxy = offCourseUsesProxyTiming(sel.value);
+            proxyWrap.style.display = usesProxy ? '' : 'none';
             hint.textContent = locationTypeSnapsToLegRoute(sel.value)
-                ? 'Snaps to the purple route when saved. Set seg_id on the Course tab if needed.'
-                : 'Stays at your click (off-course). Set Proxy loc ID on the Course tab for timing.';
+                ? 'Snaps to the purple route when saved. Runner times come from the mapped segment at export.'
+                : usesProxy
+                  ? 'Stays at your click (off-course). Prefer a proxy on this leg (listed first); other legs are allowed for paired corridors.'
+                  : 'Stays at your click (off-course).';
         }
         syncPopupLocTypeFromSelect();
         sel.addEventListener('change', syncPopupLocTypeFromSelect);
@@ -3020,6 +3635,16 @@
                 var n = parseInt(resourceInputs[code].value, 10);
                 target.resources[code] = isNaN(n) || n < 0 ? 0 : Math.min(99, n);
             });
+            if (offCourseUsesProxyTiming(target.loc_type)) {
+                var proxyKey = (proxySel.value || '').trim();
+                if (proxyKey) {
+                    target.proxy_leg_loc_key = proxyKey;
+                } else {
+                    delete target.proxy_leg_loc_key;
+                }
+            } else {
+                delete target.proxy_leg_loc_key;
+            }
         }
 
         var btnRow = document.createElement('div');
@@ -3260,6 +3885,7 @@
         if (selectedLegLatLngs && selectedLegLatLngs.length >= 2 && legMapLayers.line) {
             redrawLegLocationMarkers(leg);
             updateLegActionButtons();
+            tryOpenPendingLocationFocus();
             if (!options.preserveZoom) {
                 fitLegMapBounds(leg);
             }
@@ -3457,6 +4083,8 @@
                 }
                 redrawLegLocationMarkers(currentLeg);
                 updateLegActionButtons();
+                tryOpenPendingLocationFocus();
+                renderLegLocationsBrowser();
                 if (!options.preserveZoom) {
                     fitLegMapBounds(currentLeg);
                 }
@@ -3637,6 +4265,61 @@
             .catch(function (err) { setLegStatus(err.message || String(err), true); });
     }
 
+    function copyLegLocationsFrom(targetLegId, sourceLegId) {
+        if (!usesOrgLegLibrary()) {
+            setLegStatus('Copy locations is only available for the organization leg library.', true);
+            return;
+        }
+        targetLegId = String(targetLegId || '').trim();
+        sourceLegId = String(sourceLegId || '').trim();
+        if (!targetLegId || !sourceLegId) return;
+        var targetLeg = (libraryState && libraryState.legs || []).find(function (c) {
+            return c.id === targetLegId;
+        });
+        var sourceLeg = (libraryState && libraryState.legs || []).find(function (c) {
+            return c.id === sourceLegId;
+        });
+        var targetCount = targetLeg
+            ? (targetLeg.locations || []).length
+            : (targetLeg && targetLeg.location_count) || 0;
+        if (targetCount > 0) {
+            if (
+                !window.confirm(
+                    'Leg ' + targetLegId + ' already has ' + targetCount
+                    + ' location(s). Replace them with copies from leg ' + sourceLegId + '?'
+                )
+            ) {
+                return;
+            }
+        }
+        var sourceCount = sourceLeg
+            ? (sourceLeg.locations || []).length
+            : 0;
+        if (!sourceCount) {
+            setLegStatus('Leg ' + sourceLegId + ' has no locations to copy.', true);
+            return;
+        }
+        setLegStatus('Copying ' + sourceCount + ' location(s) from leg ' + sourceLegId + ' to leg ' + targetLegId + '…');
+        fetch('/api/org/legs/' + encodeURIComponent(targetLegId) + '/copy-locations', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source_leg_id: sourceLegId, replace: true })
+        })
+            .then(function (r) { return r.json().then(function (d) { return { res: r, data: d }; }); })
+            .then(function (payload) {
+                if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
+                return afterLegLibraryMutation(payload.data).then(function () {
+                    selectLegById(targetLegId);
+                    setLegStatus(
+                        'Copied ' + (payload.data.location_count || sourceCount)
+                        + ' location(s) from leg ' + sourceLegId + ' to leg ' + targetLegId + '.'
+                    );
+                });
+            })
+            .catch(function (err) { setLegStatus(err.message || String(err), true); });
+    }
+
     function exportLeg(legId) {
         var leg = (libraryState && libraryState.legs || []).find(function (c) {
             return c.id === legId;
@@ -3770,6 +4453,27 @@
                             }
                         )
                     );
+                    if (ch.paired_with) {
+                        var pairedId = String(ch.paired_with).trim();
+                        var pairedLeg = (libraryState && libraryState.legs || []).find(function (l) {
+                            return l.id === pairedId;
+                        });
+                        var pairedLocCount = pairedLeg
+                            ? (pairedLeg.locations || []).length
+                            : (pairedLeg && pairedLeg.location_count) || 0;
+                        if (pairedLocCount > 0) {
+                            actions.appendChild(
+                                ta.createIconButton(
+                                    'locations',
+                                    'Copy locations from paired leg ' + pairedId,
+                                    function (ev) {
+                                        ev.stopPropagation();
+                                        copyLegLocationsFrom(ch.id, pairedId);
+                                    }
+                                )
+                            );
+                        }
+                    }
                 }
                 actions.appendChild(
                     ta.createIconButton('export', 'Export leg (GPX + metadata + locations)', function (ev) {
@@ -4251,7 +4955,41 @@
         }
     }
 
+    function loadOrgLibrary() {
+        showPackageLegsUi(true);
+        return fetch('/api/org/legs/state', { credentials: 'same-origin' })
+            .then(function (r) {
+                return r.json().then(function (d) {
+                    return { res: r, data: d };
+                });
+            })
+            .then(function (payload) {
+                if (!payload.res.ok) throw new Error(formatApiError(payload.res, payload.data));
+                var data = payload.data || {};
+                applyLibraryState({
+                    leg_source: 'org',
+                    has_library: !!data.has_library,
+                    legs: data.legs || [],
+                    recipes: {},
+                    order_grid: {},
+                    package_events: [],
+                    recipe_lengths_km: {},
+                    stitch_warnings: [],
+                });
+                setLegStatus('');
+                bindLegMapControls();
+                attachLegsTableBoundsFilter();
+                fitLegMapToAllLegs();
+            })
+            .catch(function (err) {
+                setLegStatus(err.message || String(err), true);
+            });
+    }
+
     function loadLibrary() {
+        if (isOrgLegsHubMode()) {
+            return loadOrgLibrary();
+        }
         if (!isConfigPackageWorkspace()) {
             showPackageLegsUi(false);
             return Promise.resolve();
@@ -4724,6 +5462,7 @@
     }
 
     function bindUi() {
+        bindLegLocationsBrowserUi();
         var drawToolbarBtn = document.getElementById('btn-leg-draw');
         if (drawToolbarBtn) {
             drawToolbarBtn.addEventListener('click', function () {
@@ -4938,6 +5677,33 @@
     window.segmentRecipes = {
         load: loadLibrary,
         refresh: loadLibrary,
+        loadOrgLibrary: loadOrgLibrary,
+        onOrgLegsHubShown: function () {
+            initOrgLegHubResources();
+            bindLegLocationsBrowserUi();
+            if (window.configPackageCourse && window.configPackageCourse.removeLocationPins) {
+                window.configPackageCourse.removeLocationPins();
+            }
+            loadOrgLibrary().then(function () {
+                bindLegMapControls();
+                attachLegsTableBoundsFilter();
+                if (pendingLocationFocus) {
+                    renderLegLocationsBrowser();
+                    scrollLegMapIntoView();
+                    focusLegLocation(
+                        pendingLocationFocus.legId,
+                        pendingLocationFocus.locIndex
+                    );
+                }
+                if (window.courseMappingMap) {
+                    setTimeout(function () {
+                        window.courseMappingMap.invalidateSize();
+                        bindLegMapControls();
+                        attachLegsTableBoundsFilter();
+                    }, 100);
+                }
+            });
+        },
         onCourseTabShown: onCourseTabShown,
         syncCoursePanelUi: syncCoursePanelUi,
         renderCoursePreviewLocations: renderCoursePreviewLocations,
@@ -4945,24 +5711,17 @@
         closeRecipesModal: closeRecipesModal,
         resolveLegLabelsForSegment: resolveLegLabelsForSegment,
         onLegsTabShown: function () {
-            // Drop course-level location pins left over from the Course tab;
-            // the Legs tab draws its own editable pins for the same locations.
-            if (window.configPackageCourse && window.configPackageCourse.removeLocationPins) {
-                window.configPackageCourse.removeLocationPins();
-            }
-            bindLegMapControls();
-            attachLegsTableBoundsFilter();
-            if (!allLegRoutesLayer) renderAllLegRoutes();
-            if (window.courseMappingMap) {
-                setTimeout(function () {
-                    window.courseMappingMap.invalidateSize();
-                    bindLegMapControls();
-                    attachLegsTableBoundsFilter();
-                }, 100);
+            if (window.segmentRecipes.onOrgLegsHubShown) {
+                window.segmentRecipes.onOrgLegsHubShown();
             }
         },
         attachLegsTableBoundsFilter: attachLegsTableBoundsFilter,
         attachCoursePreviewBoundsFilter: attachCoursePreviewBoundsFilter,
-        syncCoursePreviewBoundsFilterItems: syncCoursePreviewBoundsFilterItems
+        syncCoursePreviewBoundsFilterItems: syncCoursePreviewBoundsFilterItems,
+        initOrgLegHubResources: initOrgLegHubResources,
+        saveOrgLegHubResources: saveOrgLegResourcesToStorage,
+        getLegResources: getPackageResources,
+        focusLegLocation: focusLegLocation,
+        navigateToLegLocation: navigateToLegLocation,
     };
 })();

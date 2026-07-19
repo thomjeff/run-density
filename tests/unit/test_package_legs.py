@@ -20,9 +20,11 @@ from app.core.config_package.legs import (
     sync_leg_segment_labels_into_course,
     update_package_leg,
     update_package_leg_geometry,
+    validate_locations_for_export,
     _normalize_flow_notes,
     _normalize_flow_type,
     _normalize_locations,
+    _RACE_EXPORT_PRESERVE_FIELDS,
 )
 from app.core.course.segment_library import (
     build_course_segments_from_library,
@@ -313,6 +315,149 @@ def test_merge_leg_locations_sets_seg_id_from_leg(tmp_path, monkeypatch):
     assert leg_locs[0]["leg_loc_key"] == "01:0"
     assert leg_locs[0]["full"] == "y"
     assert leg_locs[0]["half"] == "n"
+
+
+def test_merge_leg_locations_resolves_proxy_leg_loc_key(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    result = create_config_package(
+        "Proxy merge", "", event_day="sun", package_events=["10k"]
+    )
+    config_id = result["config_id"]
+    package_path = tmp_path / config_id
+    lib_dir = package_path / "segment_library"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    manifest = {
+        "legs": [
+            {
+                "id": "33",
+                "seg_label": "University",
+                "file": "33.gpx",
+                "locations": [
+                    {
+                        "loc_label": "Trail crossing",
+                        "loc_type": "official",
+                        "lat": 45.95,
+                        "lon": -66.64,
+                        "placement": "along",
+                    },
+                    {
+                        "loc_label": "University at George",
+                        "loc_type": "traffic",
+                        "lat": 45.955,
+                        "lon": -66.634,
+                        "placement": "off",
+                        "proxy_leg_loc_key": "33:0",
+                    },
+                ],
+            }
+        ],
+        "recipes": {"10k": ["33"]},
+    }
+    import yaml
+
+    (lib_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(manifest), encoding="utf-8"
+    )
+    course_path = package_path / "course.json"
+    course = json.loads(course_path.read_text())
+    course["segment_library_applied"] = True
+    course["segments"] = [
+        {
+            "seg_id": "S25",
+            "leg_id": "33",
+            "events": ["10k"],
+            "from_km": 0,
+            "to_km": 1.5,
+        }
+    ]
+    course_path.write_text(json.dumps(course, indent=2))
+
+    merge_leg_locations_into_course(config_id)
+    merged = load_config_course(config_id)
+    by_label = {loc["loc_label"]: loc for loc in merged["locations"]}
+    source = by_label["Trail crossing"]
+    traffic = by_label["University at George"]
+    assert source.get("seg_id") == "S25"
+    assert traffic.get("seg_id") == ""
+    assert int(traffic.get("proxy_loc_id")) == source["id"]
+    assert traffic.get("proxy_leg_loc_key") == "33:0"
+
+
+def test_merge_clears_stale_proxy_on_on_course_locations(tmp_path, monkeypatch):
+    """Course-type leg rows must not keep package proxy_loc_id from a prior merge."""
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path,
+    )
+    result = create_config_package(
+        "Proxy sanitize", "", event_day="sun", package_events=["10k"]
+    )
+    config_id = result["config_id"]
+    package_path = tmp_path / config_id
+    lib_dir = package_path / "segment_library"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    import yaml
+
+    (lib_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "12",
+                        "seg_label": "St John",
+                        "file": "12.gpx",
+                        "locations": [
+                            {
+                                "loc_label": "St John at McLeod",
+                                "loc_type": "course",
+                                "lat": 45.954494,
+                                "lon": -66.641406,
+                                "placement": "along",
+                            }
+                        ],
+                    }
+                ],
+                "recipes": {"10k": ["12"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    course_path = package_path / "course.json"
+    course = json.loads(course_path.read_text())
+    course["segment_library_applied"] = True
+    course["segments"] = [
+        {"seg_id": "S1", "leg_id": "12", "events": ["10k"], "from_km": 0, "to_km": 1.0}
+    ]
+    course["locations"] = [
+        {
+            "id": 62,
+            "loc_label": "St John at McLeod",
+            "loc_type": "course",
+            "lat": 45.954494,
+            "lon": -66.641406,
+            "leg_id": "12",
+            "leg_loc_key": "12:0",
+            "source": "leg",
+            "seg_id": "S1",
+            "proxy_loc_id": "91",
+            "10k": "y",
+        }
+    ]
+    course_path.write_text(json.dumps(course, indent=2))
+
+    merge_leg_locations_into_course(
+        config_id,
+        preserve_from_course=_RACE_EXPORT_PRESERVE_FIELDS,
+    )
+    merged = load_config_course(config_id)
+    loc = merged["locations"][0]
+    assert loc["loc_type"] == "course"
+    assert loc.get("seg_id") == "S1"
+    assert not loc.get("proxy_loc_id")
+    assert not validate_locations_for_export(merged)
 
 
 def test_merge_leg_locations_assigns_unique_ids(tmp_path, monkeypatch):

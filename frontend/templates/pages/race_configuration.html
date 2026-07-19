@@ -11,32 +11,161 @@
 <div class="race-config-page">
     <div class="page-header">
         <h2 id="race-config-page-title">Race Configuration</h2>
+        <p id="race-config-page-lead" class="race-config-page-lead">
+            Build global <strong>Legs</strong> and named <strong>Courses</strong>, then assemble them into race <strong>Packages</strong>.
+        </p>
     </div>
 
     <div id="race-config-entry" class="page-shell page-shell--entry">
-        <div class="content-card">
-            <div class="card-header">
-                <h3 class="card-title">Select a configuration</h3>
-                <div class="card-actions">
-                    <button type="button" id="race-config-new-btn">New configuration</button>
+        <div class="content-card race-config-hub-shell">
+            <div class="race-config-hub-tabs" role="tablist" aria-label="Race configuration library">
+                <button type="button" class="race-config-hub-tab active" data-hub-view="packages" role="tab" aria-selected="true">Packages</button>
+                <button type="button" class="race-config-hub-tab" data-hub-view="legs" role="tab" aria-selected="false">Legs</button>
+                <button type="button" class="race-config-hub-tab" data-hub-view="courses" role="tab" aria-selected="false">Courses</button>
+            </div>
+
+            <div class="race-config-hub-body">
+                <div id="race-config-hub-packages" class="race-config-hub-panel">
+                    <div class="card-header">
+                        <h3 class="card-title">Packages</h3>
+                        <div class="card-actions">
+                            <button type="button" id="race-config-new-btn" class="course-btn primary">New package</button>
+                        </div>
+                    </div>
+                    <p class="card-help">Each package assigns one course per distance (Full / Half / 10K) and holds runner files for multi-distance analysis.</p>
+                    <div class="scrollable-table-container">
+                        <table id="race-config-list-table" class="table-sticky-header">
+                            <thead>
+                                <tr>
+                                    <th class="table-sortable" data-sort="label">Name <span class="table-sortable-indicator">↕</span></th>
+                                    <th class="table-sortable" data-sort="description">Description <span class="table-sortable-indicator">↕</span></th>
+                                    <th class="table-sortable" data-sort="updated">Saved On <span class="table-sortable-indicator">↕</span></th>
+                                    <th class="course-map-action-cell" style="width: 5.5rem;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="race-config-list-tbody">
+                                <tr><td colspan="4" class="placeholder">Loading packages…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="card-help" style="margin-bottom: 0;">Click a row to assign courses and runners.</p>
+                </div>
+
+                <div id="race-config-hub-legs" class="race-config-hub-panel" style="display: none;">
+                    <p class="card-help race-config-hub-lead">
+                        Legs are shared routes and locations (<code>runflow/org/legs/</code>).
+                        Edit them here, then freeze distance recipes on the <strong>Courses</strong> tab.
+                    </p>
+                    <div id="race-config-hub-legs-slot" class="race-config-hub-legs-slot"></div>
+                </div>
+
+                <div id="race-config-hub-courses" class="race-config-hub-panel" style="display: none;">
+                    <div class="card-header">
+                        <h3 class="card-title">Courses</h3>
+                        <div class="card-actions">
+                            <button type="button" id="btn-save-named-course" class="course-btn primary" title="Compose a course from org legs and freeze exports">New course</button>
+                        </div>
+                    </div>
+                    <p class="card-help">
+                        A course is a named frozen snapshot for one distance (e.g. 10K University).
+                        Stored under <code>runflow/org/courses/</code> and assigned to packages by distance.
+                    </p>
+                    <p id="saved-courses-status" class="course-derived-empty" style="display: none;"></p>
+                    <div id="saved-courses-table-wrap" style="display: none;">
+                        <div class="scrollable-table-container">
+                            <table id="saved-courses-table" class="table-sticky-header" style="width: 100%; font-size: 0.875rem;">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Name</th>
+                                        <th>Distance</th>
+                                        <th>Length</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="saved-courses-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <p id="saved-courses-empty" class="course-derived-empty">
+                        No courses yet. Click <strong>New course</strong> to compose a recipe from Legs
+                        (or build Legs first if the library is empty).
+                    </p>
+                    <div id="org-course-preview-section" class="org-course-preview-section" style="display: none;">
+                        <div class="card-header" style="margin-top: 1.25rem;">
+                            <h4 class="card-title">Course map</h4>
+                        </div>
+                        <p id="org-course-preview-meta" class="card-help" style="margin-bottom: 0.5rem;"></p>
+                        <div id="org-course-preview-map-wrap" class="config-course-preview-map-wrap">
+                            <div id="org-course-preview-map" aria-label="Saved course route preview"></div>
+                        </div>
+                        <div id="org-course-preview-recipe-wrap" class="org-course-preview-recipe-wrap" style="display: none;">
+                            <h4 class="card-title" style="margin: 1rem 0 0.5rem 0;">Recipe</h4>
+                            <div class="scrollable-table-container">
+                                <table id="org-course-preview-recipe-table" class="table-sticky-header course-planner-table" style="width: 100%; font-size: 0.875rem;">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Leg</th>
+                                            <th>Label</th>
+                                            <th>Start</th>
+                                            <th>End</th>
+                                            <th>Length</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="org-course-preview-recipe-tbody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="scrollable-table-container">
-                <table id="race-config-list-table" class="table-sticky-header">
-                    <thead>
-                        <tr>
-                            <th class="table-sortable" data-sort="label">Name <span class="table-sortable-indicator">↕</span></th>
-                            <th class="table-sortable" data-sort="description">Description <span class="table-sortable-indicator">↕</span></th>
-                            <th class="table-sortable" data-sort="updated">Saved On <span class="table-sortable-indicator">↕</span></th>
-                            <th class="course-map-action-cell" style="width: 5.5rem;">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="race-config-list-tbody">
-                        <tr><td colspan="4" class="placeholder">Loading configurations…</td></tr>
-                    </tbody>
-                </table>
+        </div>
+    </div>
+
+    <div id="saved-course-modal" class="course-location-modal" hidden aria-hidden="true">
+        <div class="course-location-modal-backdrop"></div>
+        <div class="course-location-modal-panel segment-recipes-modal-panel" role="dialog" aria-labelledby="saved-course-modal-title">
+            <div class="course-location-modal-header">
+                <h4 id="saved-course-modal-title" class="course-derived-heading" style="margin: 0;">New course</h4>
+                <button type="button" id="saved-course-modal-close" aria-label="Close">&times;</button>
             </div>
-            <p class="card-help" style="margin-bottom: 0;">Click a row to open a package. Use the edit icon to change name, day, or description; the delete icon permanently removes a package (with confirmation). Packages live under <code>runflow/config/{config_id}/</code>.</p>
+            <div class="course-location-modal-body">
+                <p class="course-derived-empty" style="margin: 0 0 0.75rem 0;">
+                    Compose a recipe from org legs and freeze read-only exports under
+                    <code>runflow/org/courses/{id}/</code> (segments, flow, locations, GPX).
+                    Later leg edits do not change this snapshot until you save again.
+                </p>
+                <p id="saved-course-edit-note" class="course-derived-empty" style="display: none; margin: 0 0 0.75rem 0;">
+                    Updating the recipe rebuilds segments, flow, locations, and GPX for this course id.
+                </p>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.75rem;">
+                    <label style="flex: 1; min-width: 12rem;">
+                        <span class="course-label">Course name</span>
+                        <input type="text" id="saved-course-name" class="config-package-input" maxlength="120" placeholder="e.g. 10K University" style="width: 100%; margin-top: 0.25rem;" />
+                    </label>
+                    <label style="min-width: 8rem;">
+                        <span class="course-label">Distance</span>
+                        <select id="saved-course-distance" class="course-btn" style="width: 100%; margin-top: 0.25rem;"></select>
+                    </label>
+                    <label id="saved-course-id-wrap" style="min-width: 12rem; display: none;">
+                        <span class="course-label">Course id</span>
+                        <input type="text" id="saved-course-id" class="config-package-input" readonly style="width: 100%; margin-top: 0.25rem; background: #f5f7f9;" />
+                    </label>
+                </div>
+                <div class="scrollable-table-container course-derived-table-scroll course-derived-table-scroll--modal">
+                    <table class="table-sticky-header course-planner-table" style="width: 100%; font-size: 0.875rem;">
+                        <thead>
+                            <tr id="saved-course-recipe-thead"></tr>
+                        </thead>
+                        <tbody id="saved-course-recipe-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="course-location-modal-footer">
+                <button type="button" id="btn-saved-course-save" class="course-btn primary">Save course snapshot</button>
+                <button type="button" id="saved-course-modal-cancel" class="course-btn">Cancel</button>
+            </div>
         </div>
     </div>
 
@@ -142,8 +271,7 @@
                 </div>
             </div>
             <nav class="subnav-tabs" role="tablist" aria-label="Package authoring">
-                <button type="button" class="subnav-tab active" data-tab="legs" role="tab" aria-selected="true">Legs</button>
-                <button type="button" class="subnav-tab" data-tab="course" role="tab" aria-selected="false">Course</button>
+                <button type="button" class="subnav-tab active" data-tab="course" role="tab" aria-selected="true">Courses</button>
                 <button type="button" class="subnav-tab" data-tab="runners" role="tab" aria-selected="false">Runners</button>
             </nav>
         </div>
@@ -175,10 +303,11 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/js/map/base_map.js"></script>
 <script src="/static/js/map/map_bounds_table_filter.js?v=779a"></script>
-<script src="/static/js/table_actions.js?v=790r"></script>
+<script src="/static/js/table_actions.js?v=799e"></script>
 <script src="/static/js/map/location_grid_editor.js?v=773g"></script>
-<script src="/static/js/map/course_mapping.js?v=779c"></script>
-<script src="/static/js/map/segment_recipes.js?v=792h"></script>
+<script src="/static/js/map/course_mapping.js?v=795b"></script>
+<script src="/static/js/map/segment_recipes.js?v=799e"></script>
+<script src="/static/js/map/saved_courses.js?v=799a"></script>
 <script src="/static/js/runners_baseline.js?v=756k"></script>
-<script src="/static/js/race_configuration.js?v=781s"></script>
+<script src="/static/js/race_configuration.js?v=795a"></script>
 {% endblock %}

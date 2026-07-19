@@ -119,11 +119,9 @@
                 <button type="button" id="btn-manage-resources-legs" class="course-btn" title="Add or remove schedulable resources (FPF, YSSR, Officials, …)">Manage resources…</button>
                 </div>
             </div>
-            <p class="card-help course-derived-empty">
-                Legs live in the <strong>organization library</strong> (outside this package). <strong>Import legs…</strong> adds GPX from a third-party tool.
-                Place locations (with resources) on each leg, then assign legs to events via <strong>Event recipes</strong>.
-                Use <strong>Manage resources…</strong> to add schedulable types (FPF, Officials, etc.) before placing counts on pins.
-                <strong>Apply recipes</strong> builds the course on the <button type="button" id="btn-go-to-recipes" class="course-link-btn">Course</button> tab.
+            <p class="card-help course-derived-empty" id="course-legs-help">
+                Legs are <strong>global</strong> (<code>runflow/org/legs/</code>). <strong>Import legs…</strong> or <strong>Draw leg</strong> to add routes.
+                Place locations on each leg, then open <strong>Courses → New course</strong> to freeze a named distance snapshot.
             </p>
             <p id="course-legs-status" class="course-derived-empty" style="display: none;"></p>
             <div id="course-legs-table-wrap" class="config-legs-table-region" style="display: none;">
@@ -151,9 +149,67 @@
             </div>
             <p id="course-legs-empty" class="course-derived-empty">No legs yet. Use <strong>Import GPX</strong> to add one or more route files.</p>
         </section>
+        <section class="content-card course-derived-section" id="leg-locations-browser-card" style="display: none;">
+            <div class="card-header">
+                <h4 class="card-title">All leg locations</h4>
+                <div class="card-actions">
+                    <button type="button" id="btn-leg-locations-show-all-pins" class="course-btn" title="Show every location pin on the map (muted); selected leg pins stay on top">Show all pins</button>
+                </div>
+            </div>
+            <p class="card-help course-derived-empty">
+                Every location across the org leg library. Use the view action to select the leg on the map and open the location editor.
+                Zone is set on the package <strong>Courses</strong> tab after build.
+            </p>
+            <div class="leg-locations-browser-filters">
+                <label>
+                    <span class="course-label">Leg</span>
+                    <select id="leg-locations-filter-leg" class="course-btn leg-locations-filter-control"></select>
+                </label>
+                <label>
+                    <span class="course-label">Type</span>
+                    <select id="leg-locations-filter-type" class="course-btn leg-locations-filter-control"></select>
+                </label>
+                <label class="leg-locations-filter-search-wrap">
+                    <span class="course-label">Search label</span>
+                    <input type="search" id="leg-locations-filter-search" class="config-package-input leg-locations-filter-control" placeholder="e.g. University" />
+                </label>
+            </div>
+            <p id="leg-locations-browser-status" class="course-derived-empty" style="margin: 0.5rem 0;"></p>
+            <div id="leg-locations-browser-wrap" class="scrollable-table-container config-legs-table-scroll" style="display: none;">
+                <table id="leg-locations-browser-table" class="table-sticky-header course-planner-table">
+                    <thead>
+                        <tr id="leg-locations-browser-thead-row">
+                            <th>Leg #</th>
+                            <th>ID</th>
+                            <th>Label</th>
+                            <th>Type</th>
+                            <th>Proxy</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leg-locations-browser-tbody"></tbody>
+                </table>
+            </div>
+            <p id="leg-locations-browser-empty" class="course-derived-empty" style="display: none;">No locations match the current filters.</p>
+        </section>
     </div>
 
     <div id="config-package-course-panel" class="config-package-panel" style="display: none;">
+        <section class="content-card course-derived-section" id="assign-courses-card">
+            <div class="card-header">
+                <h4 class="card-title">Assign courses</h4>
+                <div class="card-actions">
+                    <button type="button" id="btn-build-race-exports" class="course-btn primary" title="Merge assigned courses into package-root exports for multi-distance analysis">Build race exports</button>
+                    <button type="button" id="btn-run-package-analysis" class="course-btn" disabled title="Run v2 analysis — enter start times for each event">Run analysis</button>
+                </div>
+            </div>
+            <p class="card-help course-derived-empty">
+                Pick one <strong>global course</strong> per distance. Create courses under Race Configuration → <strong>Courses</strong>.
+                Then <strong>Build race exports</strong> to write combined <code>segments.csv</code>, <code>flow.csv</code>, locations, and GPX at the package root for analysis.
+            </p>
+            <p id="assign-courses-status" class="course-derived-empty" style="display: none;"></p>
+            <div id="assign-courses-form" class="assign-courses-form"></div>
+            <p id="assign-courses-data-dir" class="course-derived-empty" style="display: none; margin-top: 0.75rem;"></p>
+        </section>
         <section class="content-card course-derived-section" id="course-preview-section" style="display: none;">
             <div class="card-header">
                 <h4 class="card-title">Course preview</h4>
@@ -173,10 +229,10 @@
             <div class="card-header">
                 <h4 class="card-title">Segments (combined course)</h4>
                 <div class="card-actions">
-                    <button type="button" id="btn-edit-event-recipes" class="course-map-action-text-btn" style="display: none;" title="Change leg order per event and re-export segments">Edit event recipes</button>
+                    <button type="button" id="btn-edit-event-recipes" class="course-map-action-text-btn" style="display: none;" title="Legacy recipe editor (prefer Assign courses + Build race exports)">Edit event recipes</button>
                 </div>
             </div>
-            <p id="segments-empty" class="card-help course-derived-empty">Build the combined course from your legs using <strong>event recipes</strong> (set leg order per distance, then export). Pan/zoom the preview map to filter segments and locations tables.</p>
+            <p id="segments-empty" class="card-help course-derived-empty">Assign global courses above, then <strong>Build race exports</strong>. Pan/zoom the preview map to filter segments and locations tables.</p>
             <div id="segments-table-wrap" style="display: none;">
                 <div class="scrollable-table-container course-derived-table-scroll">
                     <table id="segments-table" class="table-sticky-header" style="width: 100%; font-size: 0.875rem;">
@@ -197,7 +253,7 @@
                     <button type="button" id="btn-manage-resources" class="course-map-action-text-btn" title="Define schedulable resources">Manage resources</button>
                 </div>
             </div>
-            <p id="locations-empty" class="card-help course-derived-empty">Locations appear here after you apply event recipes. Leg placements sync from the Legs tab. <strong>ID</strong> is the crew-facing <code>loc_id</code> in exports; <strong>Key</strong> is a stable internal reference that keeps the same ID when you re-apply recipes.</p>
+            <p id="locations-empty" class="card-help course-derived-empty">Locations appear after <strong>Build race exports</strong> (from assigned course snapshots). <strong>ID</strong> is the crew-facing <code>loc_id</code>; <strong>Key</strong> is a stable internal reference.</p>
             <div id="locations-table-wrap" style="display: none;">
                 <div class="scrollable-table-container course-derived-table-scroll">
                     <table id="locations-table" class="table-sticky-header" style="width: 100%; font-size: 0.875rem;">
@@ -251,16 +307,16 @@
 </div>
 
 <div id="leg-editor-modal" class="course-location-modal" hidden aria-hidden="true">
-        <div class="course-location-modal-backdrop"></div>
-        <div class="course-location-modal-panel course-location-modal-panel-narrow" role="dialog" aria-labelledby="leg-editor-title">
-            <div class="course-location-modal-header">
-                <h4 id="leg-editor-title">Leg</h4>
-                <button type="button" id="leg-editor-close" aria-label="Close">&times;</button>
-            </div>
-            <div class="course-location-modal-body" id="leg-editor-body"></div>
-            <div class="course-location-modal-footer" id="leg-editor-footer"></div>
+    <div class="course-location-modal-backdrop"></div>
+    <div class="course-location-modal-panel course-location-modal-panel-narrow" role="dialog" aria-labelledby="leg-editor-title">
+        <div class="course-location-modal-header">
+            <h4 id="leg-editor-title">Leg</h4>
+            <button type="button" id="leg-editor-close" aria-label="Close">&times;</button>
         </div>
+        <div class="course-location-modal-body" id="leg-editor-body"></div>
+        <div class="course-location-modal-footer" id="leg-editor-footer"></div>
     </div>
+</div>
 
 </div>
 
@@ -347,6 +403,40 @@
             <button type="button" id="location-grid-unsaved-cancel" class="course-btn">Cancel</button>
             <button type="button" id="location-grid-unsaved-discard" class="course-btn">Discard changes</button>
             <button type="button" id="location-grid-unsaved-save-close" class="course-btn primary">Save &amp; close</button>
+        </div>
+    </div>
+</div>
+
+<div id="run-analysis-modal" class="course-location-modal" hidden aria-hidden="true">
+    <div class="course-location-modal-backdrop"></div>
+    <div class="course-location-modal-panel segment-recipes-modal-panel" role="dialog" aria-labelledby="run-analysis-modal-title">
+        <div class="course-location-modal-header">
+            <h4 id="run-analysis-modal-title" class="course-derived-heading" style="margin: 0;">Run analysis</h4>
+            <button type="button" id="run-analysis-modal-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="course-location-modal-body">
+            <p class="course-derived-empty" style="margin: 0 0 0.75rem 0;">
+                Enter a <strong>start time</strong> (HH:MM, 05:00–20:00) and <strong>duration</strong> (minutes) for each event.
+                Analysis uses files in this package folder as <code>data_dir</code>.
+            </p>
+            <p id="run-analysis-event-day" class="course-derived-empty" style="margin: 0 0 0.75rem 0;"></p>
+            <div class="scrollable-table-container course-derived-table-scroll course-derived-table-scroll--modal">
+                <table class="table-sticky-header course-planner-table" style="width: 100%; font-size: 0.875rem;">
+                    <thead>
+                        <tr>
+                            <th>Event</th>
+                            <th>Start</th>
+                            <th>Duration (min)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="run-analysis-events-tbody"></tbody>
+                </table>
+            </div>
+            <p id="run-analysis-modal-error" class="course-derived-empty" style="display: none; color: #c0392b; margin: 0.75rem 0 0 0;"></p>
+        </div>
+        <div class="course-location-modal-footer">
+            <button type="button" id="btn-run-analysis-submit" class="course-btn primary">Start analysis</button>
+            <button type="button" id="run-analysis-modal-cancel" class="course-btn">Cancel</button>
         </div>
     </div>
 </div>

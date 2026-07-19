@@ -83,12 +83,18 @@ def test_validate_pairings_clean():
     assert warnings == []
 
 
-def test_validate_pairings_inactive_when_leg_unused():
+def test_validate_pairings_partial_use_is_ok():
+    """One leg of a corridor pair in a single-distance recipe is expected."""
     warnings = validate_corridor_pairings(_legs_by_id(), {"full": ["09"]})
-    assert any("inactive" in w and "13" in w for w in warnings)
+    assert warnings == []
 
 
-def test_validate_pairings_flags_non_reversed_geometry():
+def test_validate_pairings_unused_when_neither_in_recipe():
+    warnings = validate_corridor_pairings(_legs_by_id(), {"full": ["01"]})
+    assert any("unused" in w and "09" in w for w in warnings)
+
+
+def test_validate_pairings_flags_dangling_reference():
     warnings = validate_corridor_pairings(
         _legs_by_id(reverse_geometry=False), {"full": ["09", "13"]}
     )

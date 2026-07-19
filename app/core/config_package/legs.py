@@ -69,6 +69,7 @@ _LEG_LOC_PRESERVE_FIELDS = (
     "equipment",
     "contact",
     "proxy_loc_id",
+    "proxy_leg_loc_key",
     "day",
     "onepage",
     "resources",
@@ -78,6 +79,22 @@ _LEG_LOC_PRESERVE_FIELDS = (
 # the leg manifest, never preserve stale course.json copies (pin moves were
 # silently ignored otherwise).
 _LEG_OWNED_PLACEMENT_FIELDS = ("lat", "lon", "placement")
+
+# Assigned-course race builds use saved course leg snapshots as source of truth
+# for labels/types/placement; only operational fields stay on the package row.
+_RACE_EXPORT_PRESERVE_FIELDS = (
+    "notes",
+    "buffer",
+    "interval",
+    "zone",
+    "equipment",
+    "contact",
+    "proxy_loc_id",
+    "proxy_leg_loc_key",
+    "day",
+    "onepage",
+    "resources",
+)
 
 _LEG_LOC_EXPORT_FIELDS = _LEG_LOC_PRESERVE_FIELDS
 
@@ -201,6 +218,18 @@ def _slugify(text: str) -> str:
     return slug[:48] or "leg"
 
 
+def _sanitize_location_proxy_timing(loc: Dict[str, Any]) -> None:
+    """On-course rows use seg_id only; off-course rows use proxy timing only (Issue #751)."""
+    if not isinstance(loc, dict):
+        return
+    loc_type = str(loc.get("loc_type") or "").strip().lower()
+    if loc_type in ON_COURSE_LOCATION_TYPES:
+        loc.pop("proxy_loc_id", None)
+        loc.pop("proxy_leg_loc_key", None)
+    elif loc_type in OFF_COURSE_LOCATION_TYPES:
+        loc["seg_id"] = ""
+
+
 def _normalize_locations(
     raw: Any,
     *,
@@ -254,6 +283,7 @@ def _normalize_locations(
             row[field] = val
         if assign_keys:
             ensure_location_key(row, used_keys)
+        _sanitize_location_proxy_timing(row)
         out.append(row)
     return out
 
@@ -1090,13 +1120,23 @@ def _event_flags_for_segment(
     return flags
 
 
-def merge_leg_locations_into_course(config_id: str) -> None:
+def merge_leg_locations_into_course(
+    config_id: str,
+    *,
+    leg_manifest: Optional[Dict[str, Any]] = None,
+    preserve_from_course: Optional[Sequence[str]] = None,
+) -> None:
     """
     Copy leg-scoped placements from the segment library into course.json.
 
     Replaces prior ``source=leg`` rows. Preserves Course-tab edits (resources,
-  notes, etc.) matched by ``leg_loc_key``. Sets ``seg_id`` from the combined
+    notes, etc.) matched by ``leg_loc_key``. Sets ``seg_id`` from the combined
     segment whose ``leg_id`` matches the leg.
+
+    ``leg_manifest`` overrides the org/package library (e.g. merged saved-course
+    snapshots during Build race exports). ``preserve_from_course`` controls which
+    fields are kept from existing course rows; race builds use
+    ``_RACE_EXPORT_PRESERVE_FIELDS`` so saved course snapshots win for type/label.
     """
     from app.core.config_package.leg_library_resolver import (
         recipe_leg_ids_from_package,
@@ -1104,7 +1144,15 @@ def merge_leg_locations_into_course(config_id: str) -> None:
     )
 
     cid = validate_config_id(config_id)
-    _lib_dir, manifest, _leg_source, _pkg_manifest = resolve_leg_library(cid)
+    preserve_fields = (
+        tuple(preserve_from_course)
+        if preserve_from_course is not None
+        else _LEG_LOC_PRESERVE_FIELDS
+    )
+    if leg_manifest is not None:
+        manifest = leg_manifest
+    else:
+        _lib_dir, manifest, _leg_source, _pkg_manifest = resolve_leg_library(cid)
     recipe_ids = recipe_leg_ids_from_package(cid)
     course = load_config_course(cid)
     segments = [
@@ -1182,7 +1230,9 @@ def merge_leg_locations_into_course(config_id: str) -> None:
             for ev in COURSE_EVENT_IDS:
                 row.setdefault(ev, "n")
 
-            for field in _LEG_LOC_PRESERVE_FIELDS:
+            for field in preserve_fields:
+                if on_course and field in ("proxy_loc_id", "proxy_leg_loc_key"):
+                    continue
                 if field in row and row[field] not in (None, ""):
                     continue
                 val = loc.get(field)
@@ -1200,8 +1250,10 @@ def merge_leg_locations_into_course(config_id: str) -> None:
                     used_ids.add(prev_id)
                 else:
                     row["id"] = allocate_location_id(used_ids)
-                for field in _LEG_LOC_PRESERVE_FIELDS:
+                for field in preserve_fields:
                     if field in _LEG_OWNED_PLACEMENT_FIELDS:
+                        continue
+                    if on_course and field in ("proxy_loc_id", "proxy_leg_loc_key"):
                         continue
                     if field not in prev:
                         continue
@@ -1214,11 +1266,37 @@ def merge_leg_locations_into_course(config_id: str) -> None:
                         row[field] = val
             else:
                 row["id"] = allocate_location_id(used_ids)
+            _sanitize_location_proxy_timing(row)
             locations.append(row)
 
     assign_unique_location_ids(locations)
+    _resolve_location_proxy_leg_keys(locations)
+    for loc in locations:
+        _sanitize_location_proxy_timing(loc)
     course["locations"] = locations
     save_config_course(cid, course)
+
+
+def _resolve_location_proxy_leg_keys(locations: Sequence[Dict[str, Any]]) -> None:
+    """Map leg-local proxy keys (e.g. 33:0) to exported loc_id for timing (Issue #751)."""
+    by_key: Dict[str, int] = {}
+    for loc in locations:
+        if not isinstance(loc, dict):
+            continue
+        key = str(loc.get("leg_loc_key") or "").strip()
+        lid = parse_location_id(loc.get("id", loc.get("loc_id")))
+        if key and lid is not None and lid > 0:
+            by_key[key] = lid
+    for loc in locations:
+        if not isinstance(loc, dict):
+            continue
+        proxy_key = str(loc.get("proxy_leg_loc_key") or "").strip()
+        if not proxy_key:
+            continue
+        target_id = by_key.get(proxy_key)
+        if target_id is None:
+            continue
+        loc["proxy_loc_id"] = target_id
 
 
 def _should_sync_leg_metadata_to_course(
@@ -1513,7 +1591,10 @@ def reconcile_leg_locations_to_course(config_id: str) -> bool:
 def sync_leg_locations_if_applied(config_id: str) -> bool:
     """Merge leg placements and segment metadata into course.json when recipes applied."""
     cid = validate_config_id(config_id)
-    course = load_config_course(cid)
+    try:
+        course = load_config_course(cid)
+    except FileNotFoundError:
+        return False
     try:
         manifest = load_package_segment_manifest(cid)
     except FileNotFoundError:

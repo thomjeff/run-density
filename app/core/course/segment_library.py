@@ -163,11 +163,10 @@ def validate_corridor_pairings(
         if key in checked:
             continue
         checked.add(key)
-        if leg_id not in used_legs or mate_id not in used_legs:
-            unused = [x for x in key if x not in used_legs]
+        if leg_id not in used_legs and mate_id not in used_legs:
             warnings.append(
-                f"Corridor pairing {key[0]}/{key[1]} is inactive: "
-                f"leg(s) {', '.join(unused)} not used in any event recipe"
+                f"Corridor pairing {key[0]}/{key[1]} is unused: "
+                f"neither leg appears in any event recipe"
             )
         # Paired legs should be approximate reverses: A start ≈ B end, A end ≈ B start.
         try:

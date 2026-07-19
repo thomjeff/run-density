@@ -9,7 +9,7 @@ Issue #758: Export segments.csv from course.json into config package.
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
@@ -44,10 +44,12 @@ from app.core.config_package.legs import (
 )
 from app.core.config_package.org_leg_library import (
     copy_org_leg,
+    copy_org_leg_locations,
     create_org_leg,
     create_org_leg_from_coordinates,
     delete_org_leg,
     get_all_org_leg_line_geojson,
+    get_org_leg_library_state,
     get_org_leg_line_geojson,
     import_gpx_files_to_org_library,
     import_org_leg_to_package,
@@ -55,6 +57,16 @@ from app.core.config_package.org_leg_library import (
     publish_package_leg_to_org_library,
     update_org_leg,
     update_org_leg_geometry,
+)
+from app.core.config_package.saved_courses import (
+    build_package_race_exports,
+    delete_org_course,
+    get_org_course_route_preview,
+    get_package_course_assignments,
+    list_org_courses,
+    save_org_course,
+    set_package_course_assignments,
+    update_org_course,
 )
 from app.core.config_package.segment_recipes import (
     apply_package_recipes,
@@ -154,6 +166,50 @@ class SaveSegmentRecipesRequest(BaseModel):
     export_csv: bool = Field(
         True,
         description="After save, apply recipes to course.json and write segments.csv",
+    )
+
+
+class SaveNamedCourseRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    distance: str = Field(..., min_length=1, max_length=16)
+    recipe: List[str] = Field(..., min_length=1)
+    course_id: Optional[str] = Field(
+        None,
+        max_length=64,
+        description="Optional slug; default is {distance}-{name}",
+    )
+    overwrite: bool = Field(
+        False,
+        description="Replace an existing course with the same course_id",
+    )
+
+
+class UpdateOrgCourseRequest(BaseModel):
+    recipe: List[str] = Field(..., min_length=1)
+    name: Optional[str] = Field(None, min_length=1, max_length=120)
+
+
+class AssignPackageCoursesRequest(BaseModel):
+    assigned_courses: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Map of distance -> org course_id (e.g. 10k -> 10k-university)",
+    )
+
+
+class RunPackageAnalysisEventSchedule(BaseModel):
+    name: str = Field(..., min_length=1)
+    start_time: int = Field(..., ge=300, le=1200)
+    event_duration_minutes: int = Field(..., ge=1, le=500)
+    day: Optional[str] = Field(None, min_length=3, max_length=3)
+
+
+class RunPackageAnalysisRequest(BaseModel):
+    description: Optional[str] = Field(None, max_length=254)
+    enable_audit: str = Field("n", pattern="^[yn]$")
+    events: List[RunPackageAnalysisEventSchedule] = Field(
+        ...,
+        min_length=1,
+        description="Start time and duration for each package event",
     )
 
 
@@ -636,8 +692,146 @@ async def api_list_org_legs(request: Request) -> JSONResponse:
     try:
         legs = list_org_legs()
         return JSONResponse(content={"ok": True, "legs": legs, "leg_source": "org"})
+    except Exception as e:
+        logger.exception("Failed to list org legs")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list org legs: {e}",
+        )
+
+
+@router.get("/api/org/legs/state")
+async def api_org_legs_state(request: Request) -> JSONResponse:
+    """Full org leg library state for the global Legs hub UI."""
+    require_auth(request)
+    try:
+        state = get_org_leg_library_state()
+        return JSONResponse(content={"ok": True, **state})
+    except Exception as e:
+        logger.exception("Failed to load org leg library state")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load org legs: {e}",
+        )
+
+
+@router.get("/api/org/legs/geometries")
+async def api_org_legs_geometries(request: Request) -> JSONResponse:
+    """GeoJSON features for every org leg (map background layer)."""
+    require_auth(request)
+    try:
+        features = get_all_org_leg_line_geojson()
+        return JSONResponse(content={"ok": True, "features": features})
+    except Exception as e:
+        logger.exception("Failed to load org leg geometries")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load geometries: {e}",
+        )
+
+
+@router.get("/api/org/courses")
+async def api_list_org_courses(
+    request: Request,
+    distance: Optional[str] = Query(None),
+) -> JSONResponse:
+    """List global named courses (runflow/org/courses/)."""
+    require_auth(request)
+    try:
+        courses = list_org_courses(distance=distance)
+        return JSONResponse(content={"ok": True, "courses": courses})
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/api/org/courses")
+async def api_save_org_course(
+    request: Request,
+    body: SaveNamedCourseRequest,
+) -> JSONResponse:
+    """Save a global named course (snapshot org legs + frozen exports)."""
+    require_auth(request)
+    try:
+        result = save_org_course(
+            name=body.name,
+            distance=body.distance,
+            recipe=body.recipe,
+            course_id=body.course_id,
+            overwrite=body.overwrite,
+        )
+        return JSONResponse(content=result)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to save org course")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save course: {e}",
+        )
+
+
+@router.put("/api/org/courses/{course_id}")
+async def api_update_org_course(
+    request: Request,
+    course_id: str,
+    body: UpdateOrgCourseRequest,
+) -> JSONResponse:
+    """Update a saved org course recipe and rebuild frozen exports."""
+    require_auth(request)
+    try:
+        result = update_org_course(
+            course_id,
+            recipe=body.recipe,
+            name=body.name,
+        )
+        return JSONResponse(content=result)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to update org course")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update course: {e}",
+        )
+
+
+@router.delete("/api/org/courses/{course_id}")
+async def api_delete_org_course(request: Request, course_id: str) -> JSONResponse:
+    """Delete a global named course."""
+    require_auth(request)
+    try:
+        result = delete_org_course(course_id)
+        return JSONResponse(content=result)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/api/org/courses/{course_id}/preview")
+async def api_org_course_route_preview(
+    request: Request,
+    course_id: str,
+) -> JSONResponse:
+    """Stitched GPX route for a saved org course (Courses hub map preview)."""
+    require_auth(request)
+    try:
+        preview = get_org_course_route_preview(course_id)
+        return JSONResponse(content={"ok": True, **preview})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to load org course route preview")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load course preview: {e}",
+        )
 
 
 @router.post("/api/org/legs/upload")
@@ -748,6 +942,13 @@ class CopyOrgLegRequest(BaseModel):
     reverse: bool = False
 
 
+class CopyOrgLegLocationsRequest(BaseModel):
+    """Copy location pins from another org leg."""
+
+    source_leg_id: str
+    replace: bool = True
+
+
 @router.post("/api/org/legs/{leg_id}/copy")
 async def api_copy_org_leg(
     request: Request,
@@ -762,6 +963,25 @@ async def api_copy_org_leg(
         return JSONResponse(content={"ok": True, **state})
     except FileNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/api/org/legs/{leg_id}/copy-locations")
+async def api_copy_org_leg_locations(
+    request: Request,
+    leg_id: str,
+    body: CopyOrgLegLocationsRequest,
+) -> JSONResponse:
+    """Copy location pins from another org library leg onto this leg."""
+    require_auth(request)
+    try:
+        state = copy_org_leg_locations(
+            leg_id,
+            body.source_leg_id,
+            replace=body.replace,
+        )
+        return JSONResponse(content={"ok": True, **state})
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -969,6 +1189,122 @@ async def api_apply_segment_recipes(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to apply recipes: {e}",
+        )
+
+
+@router.get("/api/config/packages/{config_id}/assigned-courses")
+async def api_get_package_assigned_courses(
+    request: Request,
+    config_id: str,
+) -> JSONResponse:
+    """Get which global courses are assigned to each package distance."""
+    require_auth(request)
+    try:
+        result = get_package_course_assignments(config_id)
+        return JSONResponse(content={"ok": True, **result})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.put("/api/config/packages/{config_id}/assigned-courses")
+async def api_set_package_assigned_courses(
+    request: Request,
+    config_id: str,
+    body: AssignPackageCoursesRequest,
+) -> JSONResponse:
+    """Assign one global course per distance for this race configuration."""
+    require_auth(request)
+    try:
+        result = set_package_course_assignments(config_id, body.assigned_courses)
+        return JSONResponse(content={"ok": True, **result})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/api/config/packages/{config_id}/build-race-exports")
+async def api_build_package_race_exports(
+    request: Request,
+    config_id: str,
+) -> JSONResponse:
+    """
+    Build multi-distance package-root exports from assigned global courses
+    (segments.csv, flow.csv, locations.csv, event GPX) for v2 analyze.
+    """
+    require_auth(request)
+    try:
+        result = build_package_race_exports(config_id)
+        return JSONResponse(content=result)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to build race exports")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to build race exports: {e}",
+        )
+
+
+@router.get("/api/config/packages/{config_id}/analyze-setup")
+async def api_get_package_analyze_setup(
+    request: Request,
+    config_id: str,
+) -> JSONResponse:
+    """Package events and suggested start times for the run-analysis dialog."""
+    require_auth(request)
+    from app.core.config_package.package_analysis import get_package_analyze_setup
+
+    try:
+        setup = get_package_analyze_setup(config_id)
+        return JSONResponse(content={"ok": True, **setup})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/api/config/packages/{config_id}/run-analysis")
+async def api_run_package_analysis(
+    request: Request,
+    config_id: str,
+    background_tasks: BackgroundTasks,
+    body: RunPackageAnalysisRequest,
+) -> JSONResponse:
+    """
+    Start v2 analysis using this package folder as data_dir.
+
+    Requires explicit start times and durations for every package event.
+    """
+    require_auth(request)
+    from app.core.config_package.package_analysis import build_package_analyze_payload
+    from app.core.v2.analysis_submit import submit_v2_analysis
+
+    try:
+        event_schedules = [ev.model_dump() for ev in body.events]
+        payload = build_package_analyze_payload(
+            config_id,
+            event_schedules=event_schedules,
+            description=body.description,
+            enable_audit=body.enable_audit,
+        )
+        result = submit_v2_analysis(payload, background_tasks)
+        if isinstance(result, JSONResponse):
+            return result
+        return JSONResponse(content={"ok": True, **result.model_dump(), "payload": payload})
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to start package analysis")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start analysis: {e}",
         )
 
 

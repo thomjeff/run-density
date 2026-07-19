@@ -16,10 +16,11 @@
         return new URLSearchParams(window.location.search);
     }
 
-    function buildConfigUrl(configId, tab) {
+    function buildConfigUrl(configId, tab, hubView) {
         const params = new URLSearchParams();
         if (configId) params.set('config_id', configId);
         if (tab) params.set('tab', tab);
+        if (!configId && hubView) params.set('view', hubView);
         const qs = params.toString();
         return CONFIG_PATH_PREFIX + (qs ? '?' + qs : '');
     }
@@ -29,11 +30,17 @@
         return raw ? raw.trim() : null;
     }
 
+    function getHubView() {
+        const raw = getQuery().get('view');
+        if (raw === 'legs' || raw === 'courses' || raw === 'packages') return raw;
+        return 'packages';
+    }
+
     function getTab() {
         const raw = getQuery().get('tab');
         if (raw === 'runners') return 'runners';
-        if (raw === 'course') return 'course';
-        return 'legs';
+        if (raw === 'legs') return 'course'; // Legs moved to global hub
+        return 'course';
     }
 
     function eventChoiceList() {
@@ -170,38 +177,78 @@
         );
     }
 
-    function syncConfigPackagePanels(tab) {
+    function placeLegsPanelInHub() {
         const legsPanel = document.getElementById('config-package-legs-panel');
+        const slot = document.getElementById('race-config-hub-legs-slot');
+        if (legsPanel && slot && legsPanel.parentElement !== slot) {
+            slot.appendChild(legsPanel);
+        }
+    }
+
+    /** Modals live under the package workspace; reparent so hub Legs/Courses can open them. */
+    function ensureHubModalsOnBody() {
+        ['leg-editor-modal', 'saved-course-modal', 'resources-editor-modal', 'run-analysis-modal'].forEach(function (id) {
+            const el = document.getElementById(id);
+            if (el && el.parentElement !== document.body) {
+                document.body.appendChild(el);
+            }
+        });
+    }
+
+    function showHubView(view) {
+        const packagesPanel = document.getElementById('race-config-hub-packages');
+        const legsPanel = document.getElementById('race-config-hub-legs');
+        const coursesPanel = document.getElementById('race-config-hub-courses');
+        document.querySelectorAll('.race-config-hub-tab').forEach(function (btn) {
+            const isActive = btn.getAttribute('data-hub-view') === view;
+            btn.classList.toggle('active', isActive);
+            btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+        if (packagesPanel) packagesPanel.style.display = view === 'packages' ? 'block' : 'none';
+        if (legsPanel) legsPanel.style.display = view === 'legs' ? 'block' : 'none';
+        if (coursesPanel) coursesPanel.style.display = view === 'courses' ? 'block' : 'none';
+
+        if (view === 'legs') {
+            placeLegsPanelInHub();
+            const legsUi = document.getElementById('config-package-legs-panel');
+            if (legsUi) legsUi.style.display = 'block';
+            const mapContainer = document.getElementById('course-map-container');
+            if (mapContainer) mapContainer.style.display = 'block';
+            document.dispatchEvent(new CustomEvent('race-config-place-course-map'));
+            if (window.segmentRecipes && window.segmentRecipes.onOrgLegsHubShown) {
+                window.segmentRecipes.onOrgLegsHubShown();
+            } else if (window.segmentRecipes && window.segmentRecipes.loadOrgLibrary) {
+                window.segmentRecipes.loadOrgLibrary();
+            }
+            if (window.courseMappingMap) {
+                setTimeout(function () {
+                    window.courseMappingMap.invalidateSize();
+                }, 120);
+            }
+        }
+        if (view === 'courses') {
+            document.dispatchEvent(new CustomEvent('race-config-hub-courses-shown'));
+        }
+    }
+
+    function syncConfigPackagePanels(tab) {
         const coursePanel = document.getElementById('config-package-course-panel');
-        const mapContainer = document.getElementById('course-map-container');
+        const legsPanel = document.getElementById('config-package-legs-panel');
         const legacyHeader = document.getElementById('course-legacy-draw-header');
         const isPackage = !!document.getElementById('race-config-workspace');
         if (!isPackage) return;
         if (legacyHeader) legacyHeader.style.display = 'none';
-        const showLegs = tab === 'legs';
+        // Legs live in the global hub — never show under a package.
+        if (legsPanel) legsPanel.style.display = 'none';
         const showCourse = tab === 'course';
-        if (legsPanel) legsPanel.style.display = showLegs ? 'block' : 'none';
         if (coursePanel) coursePanel.style.display = showCourse ? 'block' : 'none';
-        if (mapContainer) mapContainer.style.display = showLegs ? 'block' : 'none';
-        if (showLegs && window.courseMappingMap) {
-            setTimeout(function () {
-                window.courseMappingMap.invalidateSize();
-            }, 120);
-        }
-        if (showLegs && window.segmentRecipes && window.segmentRecipes.onLegsTabShown) {
-            window.segmentRecipes.onLegsTabShown();
-        }
         if (showCourse) {
             if (window.segmentRecipes && window.segmentRecipes.onCourseTabShown) {
                 window.segmentRecipes.onCourseTabShown();
             } else if (window.segmentRecipes && window.segmentRecipes.load) {
                 window.segmentRecipes.load();
             }
-        }
-        if (showCourse && window.courseMappingMap) {
-            setTimeout(function () {
-                window.courseMappingMap.invalidateSize();
-            }, 120);
+            document.dispatchEvent(new CustomEvent('race-config-course-tab-shown'));
         }
     }
 
@@ -247,6 +294,11 @@
         if (workspace) workspace.style.display = 'none';
         if (pageHeader) pageHeader.style.display = '';
         setPageTitle('Race Configuration');
+        const lead = document.getElementById('race-config-page-lead');
+        if (lead) lead.style.display = '';
+        ensureHubModalsOnBody();
+        placeLegsPanelInHub();
+        showHubView(getHubView());
     }
 
     function isPackageWorkspaceDirty() {
@@ -262,6 +314,8 @@
         if (entry) entry.style.display = 'none';
         if (workspace) workspace.style.display = 'block';
         if (pageHeader) pageHeader.style.display = 'none';
+        const lead = document.getElementById('race-config-page-lead');
+        if (lead) lead.style.display = 'none';
 
         const label = (manifest && manifest.label) || configId;
         setPageTitle(label);
@@ -294,21 +348,17 @@
             );
             delete window.PENDING_PACKAGE_META;
         }
-        syncConfigPackagePanels(getTab());
-        if (window.segmentRecipes && window.segmentRecipes.load) {
-            window.segmentRecipes.load();
-        }
     }
 
     function setActiveTab(tab) {
-        document.querySelectorAll('.race-config-page .subnav-tab').forEach(function (btn) {
+        document.querySelectorAll('#config-package-details-card .subnav-tab').forEach(function (btn) {
             const isActive = btn.getAttribute('data-tab') === tab;
             btn.classList.toggle('active', isActive);
             btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
         });
         const workspacePanel = document.getElementById('race-config-tab-workspace');
         const runnersPanel = document.getElementById('race-config-tab-runners');
-        const isWorkspace = tab === 'legs' || tab === 'course';
+        const isWorkspace = tab === 'course';
         if (workspacePanel) workspacePanel.style.display = isWorkspace ? 'block' : 'none';
         if (runnersPanel) runnersPanel.style.display = tab === 'runners' ? 'block' : 'none';
         syncConfigPackagePanels(tab);
@@ -349,7 +399,7 @@
         const sorted = sortPackages(packagesListData);
         if (sorted.length === 0) {
             tbody.innerHTML =
-                '<tr><td colspan="4" class="placeholder">No configurations yet. Click <strong>New configuration</strong> to create one.</td></tr>';
+                '<tr><td colspan="4" class="placeholder">No packages yet. Click <strong>New package</strong> to create one.</td></tr>';
             return;
         }
 
@@ -396,7 +446,7 @@
                 );
             }
             tr.addEventListener('click', function () {
-                window.location.href = buildConfigUrl(pkg.config_id, 'legs');
+                window.location.href = buildConfigUrl(pkg.config_id, 'course');
             });
             tbody.appendChild(tr);
         });
@@ -579,7 +629,7 @@
         const tbody = document.getElementById('race-config-list-tbody');
         if (tbody) {
             tbody.innerHTML =
-                '<tr><td colspan="4" class="placeholder">Loading configurations…</td></tr>';
+                '<tr><td colspan="4" class="placeholder">Loading packages…</td></tr>';
         }
         try {
             const resp = await fetch('/api/config/packages', { credentials: 'same-origin' });
@@ -592,7 +642,7 @@
             packagesListData = [];
             if (tbody) {
                 tbody.innerHTML =
-                    '<tr><td colspan="4" class="placeholder">Failed to load configurations.</td></tr>';
+                    '<tr><td colspan="4" class="placeholder">Failed to load packages.</td></tr>';
             }
         }
     }
@@ -685,7 +735,7 @@
                 throw new Error(data.detail || 'Failed to create package');
             }
             closeNewModal();
-            window.location.href = buildConfigUrl(data.config_id, 'legs');
+            window.location.href = buildConfigUrl(data.config_id, 'course');
         } catch (err) {
             alert(err.message || String(err));
         } finally {
@@ -736,6 +786,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
+        ensureHubModalsOnBody();
         renderNewPackageEventChoices();
         bindTableSort();
 
@@ -804,11 +855,24 @@
             setActiveTab(tab);
         }
 
-        document.querySelectorAll('.race-config-page .subnav-tab').forEach(function (btn) {
+        document.querySelectorAll('.race-config-hub-tab').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const view = btn.getAttribute('data-hub-view');
+                if (!view) return;
+                window.history.pushState({}, '', buildConfigUrl(null, null, view));
+                showHubView(view);
+            });
+        });
+
+        document.addEventListener('race-config-show-legs-hub', function () {
+            showHubView('legs');
+        });
+
+        document.querySelectorAll('#config-package-details-card .subnav-tab').forEach(function (btn) {
             btn.addEventListener('click', function (e) {
                 const tab = btn.getAttribute('data-tab');
                 const cid = getConfigId();
-                if (!cid) return;
+                if (!cid || !tab) return;
                 if (tab === getTab()) return;
                 e.preventDefault();
                 if (isPackageWorkspaceDirty() && window.configPackageCourse && window.configPackageCourse.saveAll) {
@@ -831,7 +895,11 @@
 
         window.addEventListener('popstate', function () {
             const cid = getConfigId();
-            if (!cid || !document.getElementById('race-config-workspace')) return;
+            if (!cid) {
+                showEntryOnly();
+                return;
+            }
+            if (!document.getElementById('race-config-workspace')) return;
             setActiveTab(getTab());
         });
     });

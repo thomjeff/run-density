@@ -93,7 +93,15 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('config-legs-map-slot') ||
             document.querySelector('#config-package-legs-panel .config-legs-map-region');
         var legacySlot = document.getElementById('course-map-legacy-slot');
-        var parent = usePackageLevelEditSave() && packageSlot ? packageSlot : legacySlot;
+        var hubSlot = document.getElementById('race-config-hub-legs-slot');
+        var legsPanel = document.getElementById('config-package-legs-panel');
+        var inHub =
+            !!(hubSlot && legsPanel && hubSlot.contains(legsPanel)) ||
+            !!(document.getElementById('race-config-hub-legs') &&
+                document.getElementById('race-config-hub-legs').style.display !== 'none' &&
+                !resolveConfigPackageId());
+        var parent =
+            (usePackageLevelEditSave() || inHub) && packageSlot ? packageSlot : legacySlot;
         if (parent && container.parentNode !== parent) {
             parent.appendChild(container);
         }
@@ -106,18 +114,16 @@ document.addEventListener('DOMContentLoaded', function () {
         var btnNew = document.getElementById('btn-new-course');
         if (btnNew) btnNew.style.display = 'none';
         var legacyHeader = document.getElementById('course-legacy-draw-header');
-        var legsPanel = document.getElementById('config-package-legs-panel');
         var coursePanel = document.getElementById('config-package-course-panel');
         var pkgCard = document.getElementById('config-package-details-card');
+        // Legs panel visibility is owned by race_configuration (hub Legs vs package Courses).
         if (usePackageLevelEditSave()) {
             if (legacyHeader) legacyHeader.style.display = 'none';
             if (pkgCard) pkgCard.style.display = 'block';
             moveWorkspaceActionButtons();
-            if (legsPanel) legsPanel.style.display = 'block';
             if (coursePanel) coursePanel.style.display = 'none';
         } else {
             if (legacyHeader) legacyHeader.style.display = '';
-            if (legsPanel) legsPanel.style.display = 'none';
             if (coursePanel) coursePanel.style.display = 'none';
             if (pkgCard) pkgCard.style.display = 'none';
         }
@@ -878,6 +884,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     var resourcesEditorDraft = null;
     var resourcesEditorPackageId = null;
+    var resourcesEditorOrgHub = false;
     var resourcesEditingIndex = null;
     var RESOURCE_CODE_MAX_LEN = 16;
 
@@ -947,9 +954,33 @@ document.addEventListener('DOMContentLoaded', function () {
         el.setAttribute('aria-hidden', 'true');
     }
 
+    function isOrgLegsHubResourcesContext() {
+        if (resolveConfigPackageId()) return false;
+        var hub = document.getElementById('race-config-hub-legs');
+        return !!(hub && hub.style.display !== 'none');
+    }
+
     function openResourcesEditorModal(configIdOverride) {
         var pkgId =
             (configIdOverride && String(configIdOverride).trim()) || resolveConfigPackageId();
+        if (!pkgId && isOrgLegsHubResourcesContext()) {
+            resourcesEditorPackageId = null;
+            resourcesEditorOrgHub = true;
+            if (window.segmentRecipes && window.segmentRecipes.initOrgLegHubResources) {
+                window.segmentRecipes.initOrgLegHubResources();
+            }
+            function showEditorWithDraft(draft) {
+                resourcesEditorDraft = (draft || DEFAULT_PACKAGE_RESOURCES).map(function (r) {
+                    return { code: r.code, label: r.label || r.code.toUpperCase() };
+                });
+                resourcesEditingIndex = null;
+                renderResourcesEditorList();
+                showModal(document.getElementById('resources-editor-modal'));
+            }
+            showEditorWithDraft(getPackageResources());
+            return;
+        }
+        resourcesEditorOrgHub = false;
         if (!pkgId) {
             alert('Open a config package to manage resources.');
             return;
@@ -1069,6 +1100,20 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function savePackageResources() {
+        if (resourcesEditorOrgHub && resourcesEditorDraft) {
+            var orgNormalized = resourcesEditorDraft.map(function (r) {
+                return { code: r.code, label: r.label || r.code.toUpperCase() };
+            });
+            if (window.segmentRecipes && window.segmentRecipes.saveOrgLegHubResources) {
+                window.segmentRecipes.saveOrgLegHubResources(orgNormalized);
+            } else {
+                window.CONFIG_PACKAGE_RESOURCES = orgNormalized;
+                notifyPackageResourcesUpdated(orgNormalized);
+            }
+            hideModal(document.getElementById('resources-editor-modal'));
+            resourcesEditorOrgHub = false;
+            return;
+        }
         var pkgId = resourcesEditorPackageId || resolveConfigPackageId();
         if (!pkgId || !resourcesEditorDraft) return;
         var normalized = resourcesEditorDraft.map(function (r) {
@@ -4957,12 +5002,28 @@ document.addEventListener('DOMContentLoaded', function () {
             renderLocationsList();
         });
 
+        document.addEventListener('race-config-place-course-map', function () {
+            placeCourseMapContainer();
+            if (window.courseMappingMap) {
+                setTimeout(function () {
+                    window.courseMappingMap.invalidateSize();
+                }, 100);
+            }
+        });
+
         if (isConfigPackageMode()) {
             applyConfigPackageUIMode();
-            loadConfigPackageCourse();
-            if (window.segmentRecipes && window.segmentRecipes.load) {
-                window.segmentRecipes.load();
+            // Race Configuration page loads the package via initWorkspace → setActiveTab.
+            if (!document.getElementById('race-config-workspace')) {
+                loadConfigPackageCourse();
+                if (window.segmentRecipes && window.segmentRecipes.load) {
+                    window.segmentRecipes.load();
+                }
             }
+        } else if (document.getElementById('race-config-entry')) {
+            // Race Configuration hub: legs map lives in hub Legs view (no package yet).
+            placeCourseMapContainer();
+            setCourse(null, blankCourse());
         } else {
             setCourse(null, blankCourse());
             loadCourseList();

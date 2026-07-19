@@ -6,8 +6,10 @@ from app.core.config_package.org_leg_library import (
     import_org_leg_to_package,
     list_org_legs,
     publish_package_leg_to_org_library,
+    update_org_leg,
     update_org_leg_geometry,
 )
+from app.core.config_package.segment_recipes import save_package_segment_manifest
 from app.core.config_package.storage import create_config_package
 
 _GPX = """<?xml version="1.0"?>
@@ -323,6 +325,63 @@ def test_copy_org_leg_reversed_swaps_geometry_and_endpoint_labels(tmp_path, monk
     assert len(list(get_org_legs_dir().glob("*.gpx"))) == 2
 
 
+def test_copy_org_leg_locations_from_paired_leg(tmp_path, monkeypatch):
+    """Copy locations onto an existing leg without duplicating the route."""
+    import yaml
+
+    from app.core.config_package.org_leg_library import copy_org_leg_locations, get_org_legs_dir
+
+    monkeypatch.setattr(
+        "app.core.config_package.org_leg_library.get_runflow_root",
+        lambda: tmp_path,
+    )
+    org_dir = tmp_path / "org" / "legs"
+    org_dir.mkdir(parents=True)
+    (org_dir / "36_trail.gpx").write_text(_GPX, encoding="utf-8")
+    (org_dir / "37_trail.gpx").write_text(_GPX, encoding="utf-8")
+    (org_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "36",
+                        "file": "36_trail.gpx",
+                        "seg_label": "George to Aberdeen via Trail",
+                        "locations": [
+                            {
+                                "loc_label": "Trail at Charlotte",
+                                "loc_type": "traffic",
+                                "lat": 45.96,
+                                "lon": -66.64,
+                                "resources": {"yssr": 2},
+                            }
+                        ],
+                        "paired_with": "37",
+                    },
+                    {
+                        "id": "37",
+                        "file": "37_trail.gpx",
+                        "seg_label": "George to Aberdeen via Trail (reverse)",
+                        "locations": [],
+                        "paired_with": "36",
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    state = copy_org_leg_locations("37", "36")
+    assert state["target_leg_id"] == "37"
+    assert state["source_leg_id"] == "36"
+    assert state["location_count"] == 1
+    copied = next(l for l in state["legs"] if l["id"] == "37")
+    assert len(copied.get("locations") or []) == 1
+    assert copied["locations"][0]["loc_label"] == "Trail at Charlotte"
+    assert copied["locations"][0]["resources"]["yssr"] == 2
+    assert len(list(get_org_legs_dir().glob("*.gpx"))) == 2
+
+
 def test_update_org_leg_geometry(tmp_path, monkeypatch):
     """Trim/reshape saves edited coordinates back to org leg GPX."""
     from app.core.config_package.legs import parse_leg_gpx
@@ -371,3 +430,76 @@ def test_update_org_leg_geometry(tmp_path, monkeypatch):
     parsed = parse_leg_gpx(org_dir / "01_trail.gpx")
     assert len(parsed["coordinates"]) == 3
     assert parsed["coordinates"][1][0] == -66.638
+
+
+def test_update_org_leg_locations_skips_packages_without_course_json(
+    tmp_path, monkeypatch
+):
+    """Org leg saves must not fail when legacy packages lack course.json."""
+    monkeypatch.setattr(
+        "app.core.config_package.storage.get_config_root",
+        lambda: tmp_path / "config",
+    )
+    monkeypatch.setattr(
+        "app.core.config_package.org_leg_library.get_runflow_root",
+        lambda: tmp_path,
+    )
+
+    org_dir = tmp_path / "org" / "legs"
+    org_dir.mkdir(parents=True)
+    (org_dir / "33_university.gpx").write_text(_GPX, encoding="utf-8")
+    (org_dir / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "legs": [
+                    {
+                        "id": "33",
+                        "file": "33_university.gpx",
+                        "seg_label": "Forest Hill to George",
+                        "locations": [
+                            {
+                                "loc_label": "University at George",
+                                "loc_type": "traffic",
+                                "lat": 45.955372,
+                                "lon": -66.634182,
+                                "placement": "off",
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    legacy = create_config_package(
+        "Legacy runners", "", event_day="sun", package_events=["10k"]
+    )
+    legacy_id = legacy["config_id"]
+    save_package_segment_manifest(
+        legacy_id,
+        {
+            "version": 1,
+            "leg_source": "org",
+            "legs": [],
+            "recipes": {},
+        },
+    )
+    (tmp_path / "config" / legacy_id / "course.json").unlink()
+
+    state = update_org_leg(
+        "33",
+        {
+            "locations": [
+                {
+                    "loc_label": "University at George",
+                    "loc_type": "course",
+                    "lat": 45.955372,
+                    "lon": -66.634182,
+                    "placement": "along",
+                }
+            ]
+        },
+    )
+    leg = next(l for l in state["legs"] if l["id"] == "33")
+    assert leg["locations"][0]["loc_type"] == "course"

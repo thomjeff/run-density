@@ -32,6 +32,16 @@
         '<polyline points="7 13 3 17 7 21"/>' +
         '<line x1="3" y1="17" x2="15" y2="17"/>' +
         '</svg>';
+    var LOCATIONS_ICON_SVG =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>' +
+        '<circle cx="12" cy="10" r="3"/>' +
+        '</svg>';
+    var VIEW_ICON_SVG =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>' +
+        '<circle cx="12" cy="12" r="3"/>' +
+        '</svg>';
 
     function createIconButton(kind, title, onClick) {
         var btn = document.createElement('button');
@@ -48,6 +58,8 @@
         else if (kind === 'export') btn.innerHTML = EXPORT_ICON_SVG;
         else if (kind === 'copy') btn.innerHTML = COPY_ICON_SVG;
         else if (kind === 'reverse') btn.innerHTML = REVERSE_ICON_SVG;
+        else if (kind === 'locations') btn.innerHTML = LOCATIONS_ICON_SVG;
+        else if (kind === 'view') btn.innerHTML = VIEW_ICON_SVG;
         else btn.innerHTML = EDIT_ICON_SVG;
         if (onClick) {
             btn.addEventListener('click', onClick);

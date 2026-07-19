@@ -85,6 +85,13 @@ def load_org_leg_manifest() -> Dict[str, Any]:
     return data
 
 
+def _leg_id_sort_key(leg_id: str) -> tuple:
+    text = str(leg_id or "").strip()
+    if text.isdigit():
+        return (0, int(text))
+    return (1, text.lower())
+
+
 def list_org_legs() -> List[Dict[str, Any]]:
     """Summarize org library legs for picker UI."""
     manifest = load_org_leg_manifest()
@@ -109,6 +116,7 @@ def list_org_legs() -> List[Dict[str, Any]]:
         row = leg_row_from_entry(entry, loaded)
         row["org_leg_id"] = leg_id
         rows.append(row)
+    rows.sort(key=lambda r: _leg_id_sort_key(str(r.get("id", ""))))
     return rows
 
 
@@ -492,6 +500,62 @@ def copy_org_leg(
     }
 
 
+def copy_org_leg_locations(
+    target_leg_id: str,
+    source_leg_id: str,
+    *,
+    replace: bool = True,
+) -> Dict[str, Any]:
+    """
+    Copy location pins from one org leg onto another.
+
+    Uses the same clone/normalize path as ``copy_org_leg`` (fresh keys, same
+    lat/lon and resource counts). Typical use: a reversed corridor pair where
+    the reverse leg was created before locations were placed on the source leg.
+    """
+    from app.core.config_package.legs import _find_leg_index, _normalize_locations
+
+    target_leg_id = str(target_leg_id).strip()
+    source_leg_id = str(source_leg_id).strip()
+    if not target_leg_id or not source_leg_id:
+        raise ValueError("Source and target leg ids are required")
+    if target_leg_id == source_leg_id:
+        raise ValueError("Source and target leg must differ")
+
+    manifest = load_org_leg_manifest()
+    legs: List[Dict[str, Any]] = list(manifest_legs(manifest))
+    target_idx = _find_leg_index(legs, target_leg_id)
+    source_idx = _find_leg_index(legs, source_leg_id)
+    if target_idx < 0:
+        raise ValueError(f"Leg not found: {target_leg_id}")
+    if source_idx < 0:
+        raise ValueError(f"Leg not found: {source_leg_id}")
+
+    cloned = _clone_leg_locations(legs[source_idx].get("locations"))
+    if not cloned:
+        raise ValueError(f"Leg {source_leg_id} has no locations to copy")
+
+    entry = dict(legs[target_idx])
+    if replace:
+        entry["locations"] = cloned
+    else:
+        existing = entry.get("locations") or []
+        entry["locations"] = _normalize_locations(list(existing) + cloned)
+
+    legs[target_idx] = entry
+    set_manifest_legs(manifest, legs)
+    save_org_leg_manifest(manifest)
+    sync_org_leg_changes_into_packages()
+
+    return {
+        **get_org_leg_library_state(),
+        "target_leg_id": target_leg_id,
+        "source_leg_id": source_leg_id,
+        "location_count": len(cloned),
+        "replaced": bool(replace),
+    }
+
+
 def get_org_leg_library_state() -> Dict[str, Any]:
     """API state for org leg library management UI."""
     legs = list_org_legs()
@@ -665,7 +729,11 @@ def sync_org_leg_changes_into_packages() -> None:
         effective_leg_source,
     )
     from app.core.config_package.legs import sync_leg_locations_if_applied
-    from app.core.config_package.storage import list_config_packages
+    from app.core.config_package.storage import (
+        COURSE_WORKSPACE_NAME,
+        list_config_packages,
+        resolve_config_package_path,
+    )
 
     for pkg in list_config_packages():
         cid = str(pkg.get("config_id") or "").strip()
@@ -676,6 +744,12 @@ def sync_org_leg_changes_into_packages() -> None:
         except (FileNotFoundError, ValueError):
             continue
         if effective_leg_source(pkg_manifest) != LEG_SOURCE_ORG:
+            continue
+        try:
+            course_path = resolve_config_package_path(cid) / COURSE_WORKSPACE_NAME
+        except ValueError:
+            continue
+        if not course_path.is_file():
             continue
         try:
             sync_leg_locations_if_applied(cid)

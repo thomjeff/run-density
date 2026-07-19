@@ -19,6 +19,96 @@
         font-weight: 700;
         line-height: 1.2;
     }
+    .race-config-page .race-config-page-lead {
+        margin: 0.45rem 0 0;
+        max-width: 42rem;
+        font-size: 0.95rem;
+        color: #5f6f7a;
+        line-height: 1.45;
+    }
+
+    /* Hub tabs: same underline pattern as package tabs (avoid global <nav> chrome) */
+    .race-config-page .race-config-hub-shell {
+        padding: 0;
+        overflow: hidden;
+    }
+    .race-config-page .race-config-hub-tabs {
+        display: flex;
+        align-items: flex-end;
+        gap: 0;
+        margin: 0;
+        padding: 0 0.75rem;
+        background: #f7f9fb;
+        border-bottom: 1px solid #d9e0e6;
+    }
+    .race-config-page .race-config-hub-tab {
+        padding: 12px 18px;
+        background: transparent;
+        border: 0;
+        border-bottom: 3px solid transparent;
+        margin-bottom: -1px;
+        color: #5f6f7a;
+        font: inherit;
+        font-weight: 500;
+        font-size: 0.95rem;
+        cursor: pointer;
+        border-radius: 0;
+    }
+    .race-config-page .race-config-hub-tab.active {
+        color: #243746;
+        font-weight: 700;
+        border-bottom-color: #2f9bd3;
+        background: #fff;
+    }
+    .race-config-page .race-config-hub-tab:hover {
+        color: #243746;
+        background: #eef3f7;
+    }
+    .race-config-page .race-config-hub-body {
+        padding: 1.25rem 1.5rem;
+    }
+    .race-config-page .race-config-hub-lead {
+        margin-bottom: 1rem;
+    }
+    .race-config-page .race-config-hub-legs-slot .content-card {
+        border: 1px solid #ecf0f1;
+        box-shadow: none;
+    }
+    .race-config-page #saved-courses-table tbody tr.org-course-row {
+        cursor: pointer;
+    }
+    .race-config-page #saved-courses-table tbody tr.org-course-row.selected {
+        background: #e8f4fc;
+    }
+    .race-config-page .org-course-preview-section .config-course-preview-map-wrap {
+        margin-top: 0;
+    }
+    .race-config-page #org-course-preview-map {
+        height: 360px;
+        width: 100%;
+        border-radius: 4px;
+        border: 1px solid #dce3e8;
+    }
+    .race-config-page .org-course-preview-recipe-wrap {
+        margin-top: 0.75rem;
+    }
+    .race-config-page .org-course-preview-recipe-wrap .card-title {
+        font-size: 0.95rem;
+        color: #2c3e50;
+    }
+    .race-config-page .card-actions .course-btn.primary,
+    .race-config-page .card-actions #btn-save-named-course,
+    .race-config-page .card-actions #race-config-new-btn.primary {
+        background: #3498db;
+        color: #fff;
+        border-color: #2980b9;
+        font-weight: 600;
+    }
+    .race-config-page .card-actions .course-btn.primary:hover:not(:disabled),
+    .race-config-page .card-actions #btn-save-named-course:hover:not(:disabled),
+    .race-config-page .card-actions #race-config-new-btn.primary:hover:not(:disabled) {
+        background: #2980b9;
+    }
 
     .race-config-page .content-card {
         background: #fff;
