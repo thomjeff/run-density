@@ -1,11 +1,10 @@
 {#
-  Run Context Partial
+  Results chrome (Issue #791 Phase 1)
 
-  Shows the selected run's ID, description, and date under the page heading
-  on Results pages (Segments, Density, Flow, Locations, Reports).
+  Shared sub-nav + run context banner on Results pages
+  (Segments, Density, Flow, Locations, Reports). Not used on Runs.
 
-  When no run is selected, shows a CTA to choose a run on the Runs page
-  (Issue #791 Phase 0).
+  When no run is selected, shows a CTA to choose a run on the Runs page.
 
   Resolves the run client-side (URL ?run_id= → window.runflowDay → localStorage)
   and looks up description/date from /api/runs/list.
@@ -13,33 +12,37 @@
   Usage in templates (place right after the .page-header div):
     {% include "partials/run_context.html" %}
 #}
-<div id="run-context-missing" class="run-context-missing" style="display: none;" role="status">
-    <strong>No analysis run selected.</strong>
-    Choose a run to view Segments, Density, Flow, Locations, and Reports.
-    <a id="run-context-choose-link" href="/dashboard">Choose a run</a>
+<div id="rf-results-chrome" class="rf-results-chrome">
+    <nav class="rf-results-subnav" aria-label="Results views">
+        <a href="/segments" data-results-path="/segments">Segments</a>
+        <a href="/density" data-results-path="/density">Density</a>
+        <a href="/flow" data-results-path="/flow">Flow</a>
+        <a href="/locations" data-results-path="/locations">Locations</a>
+        <a href="/reports" data-results-path="/reports">Reports</a>
+    </nav>
+
+    <div id="run-context-missing" class="run-context-missing" style="display: none;" role="status">
+        <strong>No analysis run selected.</strong>
+        Choose a run to view Segments, Density, Flow, Locations, and Reports.
+        <a id="run-context-choose-link" href="/dashboard">Choose a run</a>
+    </div>
+
+    <div id="run-context" class="rf-results-banner" style="display: none;" role="status">
+        <div class="rf-results-banner-meta">
+            <span><strong>ID:</strong> <span id="run-context-id"></span></span>
+            <span><strong>Description:</strong> <span id="run-context-desc"></span></span>
+            <span><strong>Date:</strong> <span id="run-context-date"></span></span>
+            <span id="run-context-day-wrap" style="display: none;">
+                <strong>Day:</strong> <span id="run-context-day"></span>
+            </span>
+        </div>
+        <div class="rf-results-actions">
+            <a id="run-context-open-reports" href="/reports">Open reports</a>
+            <a id="run-context-open-package" href="/config" style="display: none;">Open package</a>
+            <a id="run-context-change-run" href="/dashboard">Change run</a>
+        </div>
+    </div>
 </div>
-<div id="run-context" style="display: none; margin: -1rem 0 1.5rem; color: #555; font-size: 0.9rem; line-height: 1.5;">
-    <div><strong>ID:</strong> <span id="run-context-id"></span></div>
-    <div><strong>Description:</strong> <span id="run-context-desc"></span></div>
-    <div><strong>Date:</strong> <span id="run-context-date"></span></div>
-</div>
-<style>
-    .run-context-missing {
-        margin: -0.5rem 0 1.5rem;
-        padding: 0.85rem 1rem;
-        background: #eef5fb;
-        border: 1px solid #c5d9ea;
-        border-radius: 4px;
-        color: #2c3e50;
-        font-size: 0.95rem;
-        line-height: 1.45;
-    }
-    .run-context-missing a {
-        margin-left: 0.35rem;
-        font-weight: 600;
-        color: #2980b9;
-    }
-</style>
 <script>
 (function () {
     var resolved = false;
@@ -52,17 +55,117 @@
         return (localStorage.getItem('selected_run_id') || '').trim();
     }
 
+    function resolveDay() {
+        var params = new URLSearchParams(window.location.search);
+        var fromUrl = (params.get('day') || '').trim().toLowerCase();
+        if (fromUrl) return fromUrl;
+        if (window.runflowDay && window.runflowDay.selected) return String(window.runflowDay.selected).toLowerCase();
+        return (localStorage.getItem('selected_day') || '').trim().toLowerCase();
+    }
+
+    function resultsHref(path, runId, day) {
+        var url = path;
+        var qs = [];
+        if (runId) qs.push('run_id=' + encodeURIComponent(runId));
+        if (day) qs.push('day=' + encodeURIComponent(day));
+        if (qs.length) url += '?' + qs.join('&');
+        return url;
+    }
+
+    function updateResultsSubnav(runId, day) {
+        var path = window.location.pathname || '';
+        document.querySelectorAll('.rf-results-subnav a[data-results-path]').forEach(function (a) {
+            var p = a.getAttribute('data-results-path');
+            a.href = resultsHref(p, runId, day);
+            if (path === p || path.indexOf(p + '/') === 0) {
+                a.classList.add('active');
+                a.setAttribute('aria-current', 'page');
+            } else {
+                a.classList.remove('active');
+                a.removeAttribute('aria-current');
+            }
+        });
+    }
+
+    function configIdFromDataDir(dataDir) {
+        if (!dataDir) return '';
+        var normalized = String(dataDir).replace(/\\/g, '/').replace(/\/+$/, '');
+        var marker = '/config/';
+        var idx = normalized.lastIndexOf(marker);
+        if (idx < 0) return '';
+        var rest = normalized.slice(idx + marker.length);
+        var id = rest.split('/')[0];
+        return id || '';
+    }
+
     function showMissingRunCta() {
         var missing = document.getElementById('run-context-missing');
         var ctx = document.getElementById('run-context');
         if (ctx) ctx.style.display = 'none';
         if (!missing) return;
         var link = document.getElementById('run-context-choose-link');
+        var day = resolveDay();
         if (link) {
-            var day = (localStorage.getItem('selected_day') || '').trim();
             link.href = day ? ('/dashboard?day=' + encodeURIComponent(day)) : '/dashboard';
         }
+        updateResultsSubnav(null, day);
         missing.style.display = 'block';
+    }
+
+    function fillBanner(runId, run) {
+        var day = resolveDay();
+        var multiDay = window.runflowDay && Array.isArray(window.runflowDay.available) &&
+            window.runflowDay.available.length > 1;
+
+        document.getElementById('run-context-id').textContent = runId;
+        document.getElementById('run-context-desc').textContent = (run && run.description) || '—';
+        document.getElementById('run-context-date').textContent =
+            (run && (run.formatted_date || run.created_at)) || '—';
+
+        var dayWrap = document.getElementById('run-context-day-wrap');
+        var dayEl = document.getElementById('run-context-day');
+        if (dayWrap && dayEl) {
+            if (multiDay && day) {
+                dayEl.textContent = day.toUpperCase();
+                dayWrap.style.display = '';
+            } else {
+                dayWrap.style.display = 'none';
+            }
+        }
+
+        var reports = document.getElementById('run-context-open-reports');
+        if (reports) reports.href = resultsHref('/reports', runId, day);
+        var change = document.getElementById('run-context-change-run');
+        if (change) {
+            change.href = day
+                ? ('/dashboard?day=' + encodeURIComponent(day) + '&run_id=' + encodeURIComponent(runId))
+                : ('/dashboard?run_id=' + encodeURIComponent(runId));
+        }
+
+        updateResultsSubnav(runId, day);
+        document.getElementById('run-context').style.display = 'block';
+        var missing = document.getElementById('run-context-missing');
+        if (missing) missing.style.display = 'none';
+    }
+
+    function resolveOpenPackage(runId) {
+        var pkgLink = document.getElementById('run-context-open-package');
+        if (!pkgLink) return;
+        fetch('/api/analysis/' + encodeURIComponent(runId) + '/config', { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (cfg) {
+                var configId = configIdFromDataDir(cfg && cfg.data_dir);
+                if (!configId) {
+                    pkgLink.style.display = 'none';
+                    return;
+                }
+                pkgLink.href = '/config?config_id=' + encodeURIComponent(configId);
+                pkgLink.style.display = '';
+                pkgLink.title = 'Open package ' + configId;
+            })
+            .catch(function () {
+                pkgLink.style.display = 'none';
+            });
     }
 
     function showRunContext(runId) {
@@ -70,26 +173,19 @@
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (data) {
                 var run = data && (data.runs || []).find(function (x) { return x.run_id === runId; });
-                document.getElementById('run-context-id').textContent = runId;
-                document.getElementById('run-context-desc').textContent = (run && run.description) || '—';
-                document.getElementById('run-context-date').textContent = (run && (run.formatted_date || run.created_at)) || '—';
-                document.getElementById('run-context').style.display = 'block';
-                var missing = document.getElementById('run-context-missing');
-                if (missing) missing.style.display = 'none';
+                fillBanner(runId, run || null);
+                resolveOpenPackage(runId);
             })
             .catch(function () {
-                document.getElementById('run-context-id').textContent = runId;
-                document.getElementById('run-context-desc').textContent = '—';
-                document.getElementById('run-context-date').textContent = '—';
-                document.getElementById('run-context').style.display = 'block';
-                var missing = document.getElementById('run-context-missing');
-                if (missing) missing.style.display = 'none';
+                fillBanner(runId, null);
+                resolveOpenPackage(runId);
             });
     }
 
     function refreshRunContext() {
         if (resolved) return;
         var runId = resolveRunContextRunId();
+        updateResultsSubnav(runId || null, resolveDay());
         if (!runId) {
             showMissingRunCta();
             return;
@@ -99,7 +195,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
-        // Prefer day/run init signal from base.html (Issue #791); fallback if it never fires
+        updateResultsSubnav(resolveRunContextRunId() || null, resolveDay());
         window.addEventListener('runflow:context-ready', function () {
             refreshRunContext();
         });
