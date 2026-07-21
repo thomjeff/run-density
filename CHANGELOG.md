@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Issue #791 Phase 3 — Frontend design-system consolidation
+- Unified table/sort/action button styles in `common.css`; migrated Flow, Locations, and Density off forked sort CSS
+- Documented the frontend UI contract (`docs/dev-guides/frontend-ui.md`); Tabler admin template deferred pending a dedicated spike
+- Corrected Developer Guide styling note (hand-rolled `common.css`, not Tailwind)
+
 ## [v2.0.8] - 2026-06-10
 
 ### Summary
