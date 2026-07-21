@@ -46,7 +46,7 @@
         el.style.color = isError ? '#c0392b' : '#7f8c8d';
     }
 
-    function setAssignStatus(msg, isError) {
+    function setAssignStatus(msg, isError, asHtml) {
         var el = document.getElementById('assign-courses-status');
         if (!el) return;
         if (!msg) {
@@ -55,7 +55,11 @@
             return;
         }
         el.style.display = 'block';
-        el.textContent = msg;
+        if (asHtml) {
+            el.innerHTML = msg;
+        } else {
+            el.textContent = msg;
+        }
         el.style.color = isError ? '#c0392b' : '#7f8c8d';
     }
 
@@ -758,6 +762,7 @@
                     '</code>';
             }
             refreshPackageReadiness();
+            refreshPackageLatestRuns();
         });
     }
 
@@ -830,6 +835,96 @@
             .catch(function () {
                 syncRunAnalysisButton(null);
                 return null;
+            });
+    }
+
+    function packageIdFromDataDir(dataDir) {
+        if (!dataDir) return '';
+        var normalized = String(dataDir).replace(/\\/g, '/').replace(/\/+$/, '');
+        var marker = '/config/';
+        var idx = normalized.lastIndexOf(marker);
+        if (idx < 0) return '';
+        return (normalized.slice(idx + marker.length).split('/')[0] || '').trim();
+    }
+
+    function refreshPackageLatestRuns() {
+        var wrap = document.getElementById('package-latest-runs');
+        var list = document.getElementById('package-latest-runs-list');
+        var empty = document.getElementById('package-latest-runs-empty');
+        var pkgId = configId();
+        if (!wrap || !list || !empty || !pkgId) {
+            if (wrap) wrap.style.display = 'none';
+            return Promise.resolve();
+        }
+        wrap.style.display = 'block';
+        list.innerHTML = '';
+        empty.style.display = 'none';
+        empty.textContent = 'Loading recent runs…';
+        empty.style.display = 'block';
+
+        return fetch('/api/runs/list', { credentials: 'same-origin' })
+            .then(function (r) {
+                return r.ok ? r.json() : null;
+            })
+            .then(function (data) {
+                var runs = (data && data.runs) || [];
+                // Newest first; only probe a small recent window (client-side, zero new API)
+                var candidates = runs.slice(0, 20);
+                return Promise.all(
+                    candidates.map(function (run) {
+                        return fetch(
+                            '/api/analysis/' + encodeURIComponent(run.run_id) + '/config',
+                            { credentials: 'same-origin' }
+                        )
+                            .then(function (r) {
+                                return r.ok ? r.json() : null;
+                            })
+                            .then(function (cfg) {
+                                var matched = packageIdFromDataDir(cfg && cfg.data_dir) === pkgId;
+                                return matched
+                                    ? {
+                                          run_id: run.run_id,
+                                          description: run.description || '',
+                                          date: run.formatted_date || run.created_at || '',
+                                      }
+                                    : null;
+                            })
+                            .catch(function () {
+                                return null;
+                            });
+                    })
+                );
+            })
+            .then(function (matched) {
+                var hits = (matched || []).filter(Boolean).slice(0, 5);
+                list.innerHTML = '';
+                if (!hits.length) {
+                    empty.textContent = 'No analysis runs found for this package yet.';
+                    empty.style.display = 'block';
+                    return;
+                }
+                empty.style.display = 'none';
+                hits.forEach(function (hit) {
+                    var li = document.createElement('li');
+                    li.style.marginBottom = '0.25rem';
+                    var a = document.createElement('a');
+                    a.href = '/density?run_id=' + encodeURIComponent(hit.run_id);
+                    a.textContent = hit.description || hit.run_id;
+                    a.title = hit.run_id;
+                    li.appendChild(a);
+                    if (hit.date) {
+                        var span = document.createElement('span');
+                        span.style.color = '#7f8c8d';
+                        span.style.marginLeft = '0.4rem';
+                        span.textContent = '(' + hit.date + ')';
+                        li.appendChild(span);
+                    }
+                    list.appendChild(li);
+                });
+            })
+            .catch(function () {
+                empty.textContent = 'Could not load latest runs.';
+                empty.style.display = 'block';
             });
     }
 
@@ -1024,13 +1119,37 @@
                     );
                 }
                 var runId = payload.data.run_id;
+                var eventDay = (
+                    (runAnalysisSetup && runAnalysisSetup.event_day) ||
+                    ''
+                )
+                    .toLowerCase()
+                    .trim();
+                if (runId) {
+                    localStorage.setItem('selected_run_id', runId);
+                    if (eventDay) localStorage.setItem('selected_day', eventDay);
+                }
                 var msg =
                     'Analysis started. Run ID: ' +
                     runId +
-                    '. Results appear on the Dashboard in a few minutes.';
-                setAssignStatus(msg, false);
-                if (runId && window.confirm(msg + '\n\nOpen Dashboard now?')) {
-                    window.location.href = '/dashboard?run_id=' + encodeURIComponent(runId);
+                    '. Results will appear under Results in a few minutes.';
+                setAssignStatus(
+                    msg +
+                        ' <a href="/density?run_id=' +
+                        encodeURIComponent(runId) +
+                        (eventDay ? '&day=' + encodeURIComponent(eventDay) : '') +
+                        '">Open Density</a> · <a href="/dashboard?run_id=' +
+                        encodeURIComponent(runId) +
+                        '">Runs</a>',
+                    false,
+                    true
+                );
+                refreshPackageLatestRuns();
+                if (runId && window.confirm(msg + '\n\nOpen Density results now?')) {
+                    var dest =
+                        '/density?run_id=' + encodeURIComponent(runId);
+                    if (eventDay) dest += '&day=' + encodeURIComponent(eventDay);
+                    window.location.href = dest;
                 }
             })
             .catch(function (err) {

@@ -249,3 +249,89 @@
 .leaflet-popup.location-popup .leaflet-popup-content {
     font-size: 0.875rem;
 }
+
+/* ============================================
+   Results chrome (Issue #791 Phase 1)
+   Shared sub-nav + run context on Results pages
+   ============================================ */
+.rf-results-chrome {
+    margin: -0.5rem 0 1.5rem;
+}
+
+.rf-results-subnav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    border-bottom: 1px solid #e0e0e0;
+    margin-bottom: 0.75rem;
+}
+
+.rf-results-subnav a {
+    display: inline-block;
+    padding: 0.5rem 0.9rem;
+    color: #5f6f7a;
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 0.9rem;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -1px;
+}
+
+.rf-results-subnav a:hover {
+    color: #2c3e50;
+    background: #f4f7f9;
+}
+
+.rf-results-subnav a.active {
+    color: #2c3e50;
+    font-weight: 700;
+    border-bottom-color: #2980b9;
+}
+
+.rf-results-banner {
+    color: #555;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    padding: 0.65rem 0.85rem;
+    background: #f8fafb;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+}
+
+.rf-results-banner-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 1.25rem;
+}
+
+.rf-results-actions {
+    margin-top: 0.45rem;
+}
+
+.rf-results-actions a {
+    margin-right: 0.9rem;
+    color: #2980b9;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.rf-results-actions a:hover {
+    text-decoration: underline;
+}
+
+.run-context-missing {
+    margin: 0;
+    padding: 0.85rem 1rem;
+    background: #eef5fb;
+    border: 1px solid #c5d9ea;
+    border-radius: 4px;
+    color: #2c3e50;
+    font-size: 0.95rem;
+    line-height: 1.45;
+}
+
+.run-context-missing a {
+    margin-left: 0.35rem;
+    font-weight: 600;
+    color: #2980b9;
+}
