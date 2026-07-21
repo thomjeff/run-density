@@ -33,7 +33,7 @@
     function getHubView() {
         const raw = getQuery().get('view');
         if (raw === 'legs' || raw === 'courses' || raw === 'packages') return raw;
-        return 'packages';
+        return 'legs';
     }
 
     function getTab() {
@@ -448,6 +448,12 @@
             tr.addEventListener('click', function () {
                 window.location.href = buildConfigUrl(pkg.config_id, 'course');
             });
+            if (pkg.legacy) {
+                const nameCell = tr.firstElementChild;
+                if (nameCell) {
+                    nameCell.title = 'Older package folder without modern config.json';
+                }
+            }
             tbody.appendChild(tr);
         });
     }
@@ -528,9 +534,9 @@
             !ta.doubleConfirmDelete({
                 subject: subject,
                 detail:
-                    'All legs, course data, runners, and files under runflow/config/' +
+                    'All legs, course data, runners, and files for this package will be removed (' +
                     pkg.config_id +
-                    '/ will be removed.',
+                    ').',
             })
         ) {
             return;

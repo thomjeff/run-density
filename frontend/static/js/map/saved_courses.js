@@ -446,7 +446,7 @@
                         if (
                             !ta.doubleConfirmDelete({
                                 subject: 'course ' + sc.id + ' (“' + (sc.name || sc.id) + '”)',
-                                detail: 'Frozen exports under runflow/org/courses/' + sc.id + '/ will be removed.',
+                                detail: 'This frozen course snapshot and its exports will be removed (' + sc.id + ').',
                             })
                         ) {
                             return;
@@ -756,10 +756,9 @@
             var dirEl = document.getElementById('assign-courses-data-dir');
             if (dirEl) {
                 dirEl.style.display = 'block';
-                dirEl.innerHTML =
-                    'After <strong>Build race exports</strong>, use <strong>Run analysis</strong> or analyze with <code>data_dir</code>: <code>runflow/config/' +
-                    configId() +
-                    '</code>';
+                dirEl.title = 'Package folder: runflow/config/' + configId();
+                dirEl.textContent =
+                    'After Build race exports, use Run analysis to launch a Results run from this package.';
             }
             refreshPackageReadiness();
             refreshPackageLatestRuns();
@@ -802,19 +801,70 @@
         var ready = !!(readiness && readiness.analyze_ready);
         btn.disabled = !ready || !configId();
         if (ready) {
-            btn.title =
-                'Run v2 analysis using runflow/config/' +
-                configId() +
-                ' (you will enter start times for each event)';
+            btn.title = 'Enter start times for each event and start analysis for this package';
         } else {
             var missing = (readiness && readiness.missing) || [];
             var extras = [];
-            if (readiness && !readiness.has_runners) extras.push('*_runners.csv');
-            if (readiness && !readiness.has_gpx) extras.push('*.gpx');
+            if (readiness && !readiness.has_runners) extras.push('runner files');
+            if (readiness && !readiness.has_gpx) extras.push('course GPX');
             btn.title =
                 'Analysis not ready — missing: ' +
                 (missing.concat(extras).join(', ') || 'required files');
         }
+        renderPackageReadinessChecklist(readiness);
+    }
+
+    function renderPackageReadinessChecklist(readiness) {
+        var wrap = document.getElementById('package-readiness-checklist');
+        var list = document.getElementById('package-readiness-list');
+        if (!wrap || !list) return;
+        if (!configId()) {
+            wrap.style.display = 'none';
+            list.innerHTML = '';
+            return;
+        }
+        wrap.style.display = 'block';
+        var missing = (readiness && readiness.missing) || [];
+        var items = [
+            {
+                label: 'Course segments',
+                ok: readiness ? missing.indexOf('segments.csv') < 0 : false,
+                tip: 'segments.csv from Build race exports',
+            },
+            {
+                label: 'Flow',
+                ok: readiness ? missing.indexOf('flow.csv') < 0 : false,
+                tip: 'flow.csv from Build race exports',
+            },
+            {
+                label: 'Locations',
+                ok: readiness ? missing.indexOf('locations.csv') < 0 : false,
+                tip: 'locations.csv (recommended; not required to start analysis)',
+                soft: true,
+            },
+            {
+                label: 'Runner files',
+                ok: !!(readiness && readiness.has_runners),
+                tip: '*_runners.csv in this package',
+            },
+            {
+                label: 'Course GPX',
+                ok: !!(readiness && readiness.has_gpx),
+                tip: '*.gpx in this package',
+            },
+        ];
+        list.innerHTML = '';
+        items.forEach(function (item) {
+            var li = document.createElement('li');
+            li.className = item.ok
+                ? 'package-readiness-ok'
+                : item.soft
+                  ? 'package-readiness-soft'
+                  : 'package-readiness-missing';
+            li.title = item.tip;
+            li.textContent = (item.ok ? '✓ ' : '○ ') + item.label;
+            list.appendChild(li);
+        });
     }
 
     function refreshPackageReadiness() {
@@ -1183,10 +1233,7 @@
             .then(function (payload) {
                 if (!payload.ok) throw new Error(payload.data.detail || 'Build failed');
                 var warnings = payload.data.stitch_warnings || [];
-                var msg =
-                    'Race exports ready at ' +
-                    (payload.data.analysis_data_dir || 'package root') +
-                    '.';
+                var msg = 'Race exports built. You can run analysis when readiness is complete.';
                 if (warnings.length) msg += ' Warnings: ' + warnings.join(' · ');
                 setAssignStatus(msg, warnings.length > 0);
                 syncRunAnalysisButton(payload.data.readiness || null);

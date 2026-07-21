@@ -335,3 +335,50 @@
     font-weight: 600;
     color: #2980b9;
 }
+
+/* Package readiness checklist (Issue #791 Phase 2) */
+.package-readiness-checklist {
+    margin: 0.65rem 0 0.85rem;
+    padding: 0.65rem 0.85rem;
+    background: #f8fafb;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+}
+
+.package-readiness-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 1rem;
+    font-size: 0.875rem;
+}
+
+.package-readiness-ok {
+    color: #1e7e34;
+    font-weight: 600;
+}
+
+.package-readiness-missing {
+    color: #c0392b;
+    font-weight: 600;
+}
+
+.package-readiness-soft {
+    color: #b9770e;
+    font-weight: 500;
+}
+
+.legacy-event-recipes-details {
+    display: inline-block;
+}
+
+.legacy-event-recipes-details summary {
+    display: inline;
+}
+
+.legacy-event-recipes-details[open] #btn-edit-event-recipes {
+    display: inline-block;
+    margin-left: 0.5rem;
+}
