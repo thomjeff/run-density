@@ -35,6 +35,7 @@ This documentation is organized by audience and topic for easy navigation.
 | Document | Purpose |
 |----------|---------|
 | [Developer Guide](dev-guides/developer-guide.md) | **START HERE** - Complete v2 developer guide |
+| [Frontend UI Contract](dev-guides/frontend-ui.md) | Tables, sort, actions, Results chrome (Issue #791) |
 | [Docker Development](dev-guides/docker-dev.md) | Docker development workflow |
 | [Leg Library & Corridor Pairing](dev-guides/segment-library-2027.md) | Leg platform internals (org library, recipes, pairing, sync) |
 | [Quick Reference](reference/quick-reference.md) | Variable names, terminology, standards (v2.0.2+) |

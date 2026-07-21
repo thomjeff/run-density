@@ -156,13 +156,13 @@
         <table id="locations-table" class="table-sticky-header">
             <thead>
                 <tr>
-                    <th class="sortable" data-sort="loc_id">ID <span class="sort-indicator"></span></th>
+                    <th class="table-sortable" data-sort="loc_id">ID <span class="table-sortable-indicator"></span></th>
                     <th>Location</th>
-                    <th class="sortable" data-sort="loc_type">Type <span class="sort-indicator"></span></th>
-                    <th class="sortable" data-sort="zone">Zone <span class="sort-indicator"></span></th>
-                    <th class="sortable" data-sort="flag">Flag <span class="sort-indicator"></span></th>
+                    <th class="table-sortable" data-sort="loc_type">Type <span class="table-sortable-indicator"></span></th>
+                    <th class="table-sortable" data-sort="zone">Zone <span class="table-sortable-indicator"></span></th>
+                    <th class="table-sortable" data-sort="flag">Flag <span class="table-sortable-indicator"></span></th>
                     <th>Operational Window</th>
-                    <th class="sortable" data-sort="first_runner">First/Last Runner <span class="sort-indicator"></span></th>
+                    <th class="table-sortable" data-sort="first_runner">First/Last Runner <span class="table-sortable-indicator"></span></th>
                     <th>Peak Window</th>
                 </tr>
             </thead>
@@ -1018,7 +1018,7 @@
      * Initialize sorting functionality (Issue #483)
      */
     function initializeSorting() {
-        const sortableHeaders = document.querySelectorAll('#locations-table th.sortable');
+        const sortableHeaders = document.querySelectorAll('#locations-table th.table-sortable');
         sortableHeaders.forEach(header => {
             header.style.cursor = 'pointer';
             header.addEventListener('click', function() {
@@ -1046,9 +1046,9 @@
      * Update sort indicators in table headers
      */
     function updateSortIndicators() {
-        const sortableHeaders = document.querySelectorAll('#locations-table th.sortable');
+        const sortableHeaders = document.querySelectorAll('#locations-table th.table-sortable');
         sortableHeaders.forEach(header => {
-            const indicator = header.querySelector('.sort-indicator');
+            const indicator = header.querySelector('.table-sortable-indicator');
             const column = header.getAttribute('data-sort');
             
             if (indicator) {
@@ -1237,47 +1237,4 @@
 </style>
 {% endblock %}
 
-{% block extra_styles %}
-<style>
-    #locations-table {
-        width: 100%;
-        border-collapse: separate;
-        border-spacing: 0;
-    }
-    
-    /* Match base template styling for consistency with Flow table */
-    #locations-table th,
-    #locations-table td {
-        padding: 0.875rem 1rem;  /* Match base template: px-4 py-3 equivalent */
-        text-align: left;
-        border-bottom: 1px solid #e0e0e0;  /* Match base template border color */
-    }
-    
-    #locations-table th {
-        background: #f8f9fa;
-        font-weight: 600;
-        color: #2c3e50;
-    }
-    
-    #locations-table tbody tr:hover {
-        background: #f8f9fa;
-    }
-    
-    /* Sortable column styling (Issue #483) */
-    #locations-table th.sortable {
-        cursor: pointer;
-        user-select: none;
-    }
-    
-    #locations-table th.sortable:hover {
-        background: #e9ecef;
-    }
-    
-    #locations-table th.sortable .sort-indicator {
-        color: #007bff;
-        font-size: 0.75rem;
-        margin-left: 0.25rem;
-    }
-</style>
-{% endblock %}
 

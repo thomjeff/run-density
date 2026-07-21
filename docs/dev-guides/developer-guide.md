@@ -60,7 +60,7 @@ The application uses server-side rendering with Jinja2 templates and vanilla Jav
 - **Templates:** Jinja2 templates in `frontend/templates/pages/`
 - **JavaScript:** Vanilla JavaScript in `frontend/static/js/`
 - **Mapping:** Leaflet (via CDN: `https://unpkg.com/leaflet@1.9.4/`)
-- **Styling:** Tailwind CSS
+- **Styling:** Hand-rolled CSS — shared contract in `frontend/static/css/common.css` (see [Frontend UI Contract](frontend-ui.md))
 - **No Build Tooling:** No webpack, vite, or npm dependencies
 
 ### Implementation Guidelines
@@ -71,6 +71,7 @@ The application uses server-side rendering with Jinja2 templates and vanilla Jav
 - Use Leaflet for mapping (not react-leaflet)
 - Fetch data via FastAPI endpoints (`/api/*`)
 - Extract shared JS to reusable modules (e.g., `base_map.js`)
+- Use the shared table/sort/action classes from `common.css` (see [Frontend UI Contract](frontend-ui.md))
 
 **❌ DON'T:**
 - Add React, Vue, Svelte, or any SPA framework
@@ -78,6 +79,7 @@ The application uses server-side rendering with Jinja2 templates and vanilla Jav
 - Reference TypeScript (.tsx) files
 - Use build tools (webpack, vite, rollup)
 - Suggest `pnpm dev` or `npm start` commands
+- Invent new inline table/sort CSS on Results pages
 
 ### Code Organization
 

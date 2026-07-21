@@ -166,11 +166,11 @@
                     <table id="bin-details-table" class="table-sticky-header">
                         <thead>
                             <tr>
-                                <th class="sortable" data-sort="start_km">KM (START/END)</th>
-                                <th class="sortable text-center" data-sort="t_start">TIME (START/END)</th>
-                                <th class="sortable text-right" data-sort="density">Density (p/m²)</th>
-                                <th class="sortable text-right" data-sort="rate">Rate (vph)</th>
-                                <th class="sortable text-center" data-sort="los_class">LOS</th>
+                                <th class="table-sortable" data-sort="start_km">KM (START/END) <span class="table-sortable-indicator">↕</span></th>
+                                <th class="table-sortable text-center" data-sort="t_start">TIME (START/END) <span class="table-sortable-indicator">↕</span></th>
+                                <th class="table-sortable text-right" data-sort="density">Density (p/m²) <span class="table-sortable-indicator">↕</span></th>
+                                <th class="table-sortable text-right" data-sort="rate">Rate (vph) <span class="table-sortable-indicator">↕</span></th>
+                                <th class="table-sortable text-center" data-sort="los_class">LOS <span class="table-sortable-indicator">↕</span></th>
                             </tr>
                         </thead>
                         <tbody id="bin-details-table-body">
@@ -234,39 +234,8 @@
 
 {% block extra_head %}
 <style>
-    /* Issue #374: Bin details table styling */
-    #bin-details-table th.sortable {
-        cursor: pointer;
-        user-select: none;
-        position: relative;
-        padding: 0.75rem;
-        background: #f8f9fa;
-        border-bottom: 2px solid #dee2e6;
-        font-weight: 600;
-    }
-    
-    #bin-details-table th.sortable:hover {
-        background: #e9ecef;
-    }
-    
-    #bin-details-table th.sortable::after {
-        content: ' ↕';
-        opacity: 0.5;
-        font-size: 0.8em;
-    }
-    
-    #bin-details-table th.sort-asc::after {
-        content: ' ↑';
-        opacity: 1;
-        color: #007bff;
-    }
-    
-    #bin-details-table th.sort-desc::after {
-        content: ' ↓';
-        opacity: 1;
-        color: #007bff;
-    }
-    
+    /* Bin-details sort SSOT: common.css .table-sortable + .table-sortable-indicator */
+
     #bin-details-table td {
         padding: 0.75rem;
         border-bottom: 1px solid #dee2e6;
@@ -604,7 +573,7 @@
         // Issue #652: Removed pagination button handlers - pagination no longer used
         
         // Setup column sorting
-        const sortableHeaders = document.querySelectorAll('#bin-details-table th.sortable');
+        const sortableHeaders = document.querySelectorAll('#bin-details-table th.table-sortable');
         sortableHeaders.forEach(header => {
             header.addEventListener('click', () => {
                 const column = header.dataset.sort;
@@ -725,11 +694,14 @@
             currentBinSort.direction = 'asc';
         }
         
-        // Update header classes
-        document.querySelectorAll('#bin-details-table th.sortable').forEach(th => {
-            th.classList.remove('sort-asc', 'sort-desc');
+        // Update sort indicators (Issue #791 Phase 3 — shared contract)
+        document.querySelectorAll('#bin-details-table th.table-sortable').forEach(th => {
+            const indicator = th.querySelector('.table-sortable-indicator');
+            if (!indicator) return;
             if (th.dataset.sort === column) {
-                th.classList.add(`sort-${currentBinSort.direction}`);
+                indicator.textContent = currentBinSort.direction === 'asc' ? '▲' : '▼';
+            } else {
+                indicator.textContent = '↕';
             }
         });
         

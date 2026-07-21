@@ -73,9 +73,9 @@
                     <th>NAME</th>
                     <th>EVENT</th>
                     <th>WORST ZONE</th>
-                    <th class="sortable" data-sort="overtaking">OVERTAKING <span class="sort-indicator"></span></th>
+                    <th class="table-sortable" data-sort="overtaking">OVERTAKING <span class="table-sortable-indicator"></span></th>
                     <th>PCT</th>
-                    <th class="sortable" data-sort="copresence">CO-PRESENCE <span class="sort-indicator"></span></th>
+                    <th class="table-sortable" data-sort="copresence">CO-PRESENCE <span class="table-sortable-indicator"></span></th>
                 </tr>
             </thead>
             <tbody id="flow-tbody">
@@ -307,14 +307,14 @@
         let html = '<div style="margin-bottom: 1rem;"><h4 style="margin: 0 0 0.75rem 0;">Zone-Level Details</h4></div>';
         html += '<div style="overflow-x: auto;"><table id="zone-table-' + segment.seg_id + '-' + segment.event_a + '-' + segment.event_b + '" class="zone-table">';
         html += '<thead><tr>';
-        html += '<th class="sortable" data-sort="zone_index">Zone <span class="sort-indicator"></span></th>';
-        html += '<th class="sortable" data-sort="cp_km">Distance <span class="sort-indicator"></span></th>';
-        html += '<th class="sortable" data-sort="overtaking_a">Overtaking <span class="sort-indicator"></span></th>';
-        html += '<th class="sortable" data-sort="overtaken_a">Overtaken <span class="sort-indicator"></span></th>';
-        html += '<th class="sortable" data-sort="copresence_a">Co-presence <span class="sort-indicator"></span></th>';
-        html += '<th class="sortable" data-sort="unique_encounters">Unique Encounters <span class="sort-indicator"></span></th>';
-        html += '<th class="sortable" data-sort="participants_involved">Participants <span class="sort-indicator"></span></th>';
-        html += '<th class="sortable" data-sort="multi_category_runners">Multi-category <span class="sort-indicator"></span></th>';
+        html += '<th class="table-sortable" data-sort="zone_index">Zone <span class="table-sortable-indicator"></span></th>';
+        html += '<th class="table-sortable" data-sort="cp_km">Distance <span class="table-sortable-indicator"></span></th>';
+        html += '<th class="table-sortable" data-sort="overtaking_a">Overtaking <span class="table-sortable-indicator"></span></th>';
+        html += '<th class="table-sortable" data-sort="overtaken_a">Overtaken <span class="table-sortable-indicator"></span></th>';
+        html += '<th class="table-sortable" data-sort="copresence_a">Co-presence <span class="table-sortable-indicator"></span></th>';
+        html += '<th class="table-sortable" data-sort="unique_encounters">Unique Encounters <span class="table-sortable-indicator"></span></th>';
+        html += '<th class="table-sortable" data-sort="participants_involved">Participants <span class="table-sortable-indicator"></span></th>';
+        html += '<th class="table-sortable" data-sort="multi_category_runners">Multi-category <span class="table-sortable-indicator"></span></th>';
         html += '</tr></thead><tbody>';
         
         sortedZones.forEach(zone => {
@@ -392,7 +392,7 @@
     }
     
     function initializeSorting() {
-        const sortableHeaders = document.querySelectorAll('#flow-table th.sortable');
+        const sortableHeaders = document.querySelectorAll('#flow-table th.table-sortable');
         sortableHeaders.forEach(header => {
             header.style.cursor = 'pointer';
             header.addEventListener('click', function() {
@@ -416,9 +416,9 @@
     }
     
     function updateSortIndicators() {
-        const sortableHeaders = document.querySelectorAll('#flow-table th.sortable');
+        const sortableHeaders = document.querySelectorAll('#flow-table th.table-sortable');
         sortableHeaders.forEach(header => {
-            const indicator = header.querySelector('.sort-indicator');
+            const indicator = header.querySelector('.table-sortable-indicator');
             const column = header.getAttribute('data-sort');
             
             if (indicator) {
@@ -676,45 +676,9 @@
 
 {% block extra_styles %}
 <style>
-    #flow-table th.sortable {
-        cursor: pointer;
-        user-select: none;
-        position: relative;
-    }
-    
-    #flow-table th.sortable:hover {
-        background: #e9ecef;
-    }
-    
-    #flow-table th.sortable .sort-indicator {
-        color: #007bff;
-        font-size: 0.75rem;
-        margin-left: 0.25rem;
-    }
-    
-    #flow-table {
-        width: 100%;
-        border-collapse: collapse;
-    }
-    
-    /* Match base template styling for consistency with Segments table */
-    #flow-table th,
-    #flow-table td {
-        padding: 0.875rem 1rem;  /* Match base template: px-4 py-3 equivalent */
-        text-align: left;
-        border-bottom: 1px solid #e0e0e0;  /* Match base template border color */
-    }
-    
-    #flow-table th {
-        background: #f8f9fa;
-        font-weight: 600;
-        color: #2c3e50;
-    }
-    
-    #flow-table tbody tr:hover {
-        background: #f8f9fa;
-    }
-    
+    /* Table/sort SSOT: common.css (.scrollable-table-container, .table-sortable)
+       Keep Flow-specific accordion / zone / pair cell styles below. */
+
     /* Styling for merged A/B columns */
     td.numeric-pair {
         text-align: right;
@@ -773,15 +737,6 @@
         padding: 0.5rem 0.75rem;
         text-align: left;
         border-bottom: 2px solid #dee2e6;
-    }
-    
-    .zone-table th.sortable {
-        cursor: pointer;
-        user-select: none;
-    }
-    
-    .zone-table th.sortable:hover {
-        background: #dee2e6;
     }
     
     .zone-table td {
