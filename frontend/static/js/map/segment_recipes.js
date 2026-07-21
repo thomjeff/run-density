@@ -4939,8 +4939,11 @@
     function syncCoursePanelUi(options) {
         options = options || {};
         var editBtn = document.getElementById('btn-edit-event-recipes');
+        var legacyWrap = document.getElementById('legacy-event-recipes-details');
         var hasCourse = hasCombinedCourse();
-        if (editBtn) {
+        if (legacyWrap) {
+            legacyWrap.style.display = hasCourse ? '' : 'none';
+        } else if (editBtn) {
             editBtn.style.display = hasCourse ? '' : 'none';
         }
         syncCoursePreviewUi();

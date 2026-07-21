@@ -113,14 +113,14 @@
                 <div class="card-actions course-planner-toolbar config-legs-table-toolbar">
                 <input type="file" id="segment-library-gpx-input" accept=".gpx,.json" multiple style="display: none;" />
                 <button type="button" id="btn-import-gpx" class="course-btn" title="Import third-party GPX (+ optional leg export JSON) into the organization leg library">Import legs…</button>
-                <button type="button" id="btn-org-leg-library" class="course-btn" title="View legs stored outside this package (runflow/org/legs)">Leg library…</button>
+                <button type="button" id="btn-org-leg-library" class="course-btn" title="Browse the shared organization leg library">Leg library…</button>
                 <button type="button" id="btn-export-all-legs" class="course-btn" disabled title="Download all legs (GPX + metadata + locations per leg)">Export legs…</button>
                 <button type="button" id="btn-draw-leg-map" class="course-btn" title="Draw a new leg on the map by clicking along roads and trails">Draw leg on map</button>
                 <button type="button" id="btn-manage-resources-legs" class="course-btn" title="Add or remove schedulable resources (FPF, YSSR, Officials, …)">Manage resources…</button>
                 </div>
             </div>
-            <p class="card-help course-derived-empty" id="course-legs-help">
-                Legs are <strong>global</strong> (<code>runflow/org/legs/</code>). <strong>Import legs…</strong> or <strong>Draw leg</strong> to add routes.
+            <p class="card-help course-derived-empty" id="course-legs-help" title="Shared organization leg library">
+                Legs are <strong>shared across all packages</strong>. <strong>Import legs…</strong> or <strong>Draw leg</strong> to add routes.
                 Place locations on each leg, then open <strong>Courses → New course</strong> to freeze a named distance snapshot.
             </p>
             <p id="course-legs-status" class="course-derived-empty" style="display: none;"></p>
@@ -203,15 +203,19 @@
                 </div>
             </div>
             <p class="card-help course-derived-empty">
-                Pick one <strong>global course</strong> per distance. Create courses under Race Configuration → <strong>Courses</strong>.
-                Then <strong>Build race exports</strong> to write combined <code>segments.csv</code>, <code>flow.csv</code>, locations, and GPX at the package root for analysis.
+                Pick one <strong>global course</strong> per distance. Create courses under Build → <strong>Courses</strong>.
+                Then <strong>Build race exports</strong> to combine them for multi-distance analysis.
             </p>
+            <div id="package-readiness-checklist" class="package-readiness-checklist" style="display: none;" aria-live="polite">
+                <h5 class="course-derived-heading" style="margin: 0 0 0.35rem 0; font-size: 0.9rem;">Analysis readiness</h5>
+                <ul id="package-readiness-list" class="package-readiness-list"></ul>
+            </div>
             <p id="assign-courses-status" class="course-derived-empty" style="display: none;"></p>
             <div id="assign-courses-form" class="assign-courses-form"></div>
             <p id="assign-courses-data-dir" class="course-derived-empty" style="display: none; margin-top: 0.75rem;"></p>
             <div id="package-latest-runs" class="package-latest-runs" style="display: none; margin-top: 1rem;">
                 <h5 class="course-derived-heading" style="margin: 0 0 0.4rem 0; font-size: 0.95rem;">Latest analysis runs</h5>
-                <p class="course-derived-empty" style="margin: 0 0 0.5rem 0;">Recent runs that used this package as <code>data_dir</code>.</p>
+                <p class="course-derived-empty" style="margin: 0 0 0.5rem 0;">Recent runs launched from this package.</p>
                 <ul id="package-latest-runs-list" class="package-latest-runs-list" style="margin: 0; padding-left: 1.15rem;"></ul>
                 <p id="package-latest-runs-empty" class="course-derived-empty" style="display: none; margin: 0;">No analysis runs found for this package yet.</p>
             </div>
@@ -235,7 +239,10 @@
             <div class="card-header">
                 <h4 class="card-title">Segments (combined course)</h4>
                 <div class="card-actions">
-                    <button type="button" id="btn-edit-event-recipes" class="course-map-action-text-btn" style="display: none;" title="Legacy recipe editor (prefer Assign courses + Build race exports)">Edit event recipes</button>
+                    <details id="legacy-event-recipes-details" class="legacy-event-recipes-details" style="display: none;">
+                        <summary class="course-map-action-text-btn" style="cursor: pointer; list-style: none;">Advanced</summary>
+                        <button type="button" id="btn-edit-event-recipes" class="course-map-action-text-btn" title="Legacy per-event recipe editor — prefer Assign courses + Build race exports">Edit event recipes</button>
+                    </details>
                 </div>
             </div>
             <p id="segments-empty" class="card-help course-derived-empty">Assign global courses above, then <strong>Build race exports</strong>. Pan/zoom the preview map to filter segments and locations tables.</p>
@@ -423,7 +430,7 @@
         <div class="course-location-modal-body">
             <p class="course-derived-empty" style="margin: 0 0 0.75rem 0;">
                 Enter a <strong>start time</strong> (HH:MM, 05:00–20:00) and <strong>duration</strong> (minutes) for each event.
-                Analysis uses files in this package folder as <code>data_dir</code>.
+                Analysis uses the exports built for this package.
             </p>
             <p id="run-analysis-event-day" class="course-derived-empty" style="margin: 0 0 0.75rem 0;"></p>
             <div class="scrollable-table-container course-derived-table-scroll course-derived-table-scroll--modal">
@@ -478,8 +485,8 @@
             <button type="button" id="org-leg-library-close" aria-label="Close">&times;</button>
         </div>
         <div class="course-location-modal-body">
-            <p class="course-derived-empty" style="margin: 0 0 0.75rem 0;">
-                Legs are stored at <code>runflow/org/legs/</code> and shared across all config packages.
+            <p class="course-derived-empty" style="margin: 0 0 0.75rem 0;" title="Organization leg library">
+                Legs are shared across all packages.
                 Use <strong>Import legs…</strong> on the Legs tab to add GPX files here.
             </p>
             <p id="org-leg-library-status" class="course-derived-empty" style="display: none;"></p>
