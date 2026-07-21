@@ -283,7 +283,7 @@
 
     function setPageTitle(text) {
         const el = document.getElementById('race-config-page-title');
-        if (el) el.textContent = text || 'Race Configuration';
+        if (el) el.textContent = text || 'Build';
     }
 
     function showEntryOnly() {
@@ -293,7 +293,7 @@
         if (entry) entry.style.display = 'block';
         if (workspace) workspace.style.display = 'none';
         if (pageHeader) pageHeader.style.display = '';
-        setPageTitle('Race Configuration');
+        setPageTitle('Build');
         const lead = document.getElementById('race-config-page-lead');
         if (lead) lead.style.display = '';
         ensureHubModalsOnBody();
