@@ -2,7 +2,10 @@
   Run Context Partial
 
   Shows the selected run's ID, description, and date under the page heading
-  on report pages (Segments, Density, Flow, Locations).
+  on Results pages (Segments, Density, Flow, Locations, Reports).
+
+  When no run is selected, shows a CTA to choose a run on the Runs page
+  (Issue #791 Phase 0).
 
   Resolves the run client-side (URL ?run_id= → window.runflowDay → localStorage)
   and looks up description/date from /api/runs/list.
@@ -10,13 +13,37 @@
   Usage in templates (place right after the .page-header div):
     {% include "partials/run_context.html" %}
 #}
+<div id="run-context-missing" class="run-context-missing" style="display: none;" role="status">
+    <strong>No analysis run selected.</strong>
+    Choose a run to view Segments, Density, Flow, Locations, and Reports.
+    <a id="run-context-choose-link" href="/dashboard">Choose a run</a>
+</div>
 <div id="run-context" style="display: none; margin: -1rem 0 1.5rem; color: #555; font-size: 0.9rem; line-height: 1.5;">
     <div><strong>ID:</strong> <span id="run-context-id"></span></div>
     <div><strong>Description:</strong> <span id="run-context-desc"></span></div>
     <div><strong>Date:</strong> <span id="run-context-date"></span></div>
 </div>
+<style>
+    .run-context-missing {
+        margin: -0.5rem 0 1.5rem;
+        padding: 0.85rem 1rem;
+        background: #eef5fb;
+        border: 1px solid #c5d9ea;
+        border-radius: 4px;
+        color: #2c3e50;
+        font-size: 0.95rem;
+        line-height: 1.45;
+    }
+    .run-context-missing a {
+        margin-left: 0.35rem;
+        font-weight: 600;
+        color: #2980b9;
+    }
+</style>
 <script>
 (function () {
+    var resolved = false;
+
     function resolveRunContextRunId() {
         var params = new URLSearchParams(window.location.search);
         var fromUrl = (params.get('run_id') || '').trim();
@@ -24,9 +51,21 @@
         if (window.runflowDay && window.runflowDay.run_id) return window.runflowDay.run_id;
         return (localStorage.getItem('selected_run_id') || '').trim();
     }
-    document.addEventListener('DOMContentLoaded', function () {
-        var runId = resolveRunContextRunId();
-        if (!runId) return;
+
+    function showMissingRunCta() {
+        var missing = document.getElementById('run-context-missing');
+        var ctx = document.getElementById('run-context');
+        if (ctx) ctx.style.display = 'none';
+        if (!missing) return;
+        var link = document.getElementById('run-context-choose-link');
+        if (link) {
+            var day = (localStorage.getItem('selected_day') || '').trim();
+            link.href = day ? ('/dashboard?day=' + encodeURIComponent(day)) : '/dashboard';
+        }
+        missing.style.display = 'block';
+    }
+
+    function showRunContext(runId) {
         fetch('/api/runs/list', { credentials: 'same-origin' })
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (data) {
@@ -35,8 +74,38 @@
                 document.getElementById('run-context-desc').textContent = (run && run.description) || '—';
                 document.getElementById('run-context-date').textContent = (run && (run.formatted_date || run.created_at)) || '—';
                 document.getElementById('run-context').style.display = 'block';
+                var missing = document.getElementById('run-context-missing');
+                if (missing) missing.style.display = 'none';
             })
-            .catch(function () { /* context line is best-effort */ });
+            .catch(function () {
+                document.getElementById('run-context-id').textContent = runId;
+                document.getElementById('run-context-desc').textContent = '—';
+                document.getElementById('run-context-date').textContent = '—';
+                document.getElementById('run-context').style.display = 'block';
+                var missing = document.getElementById('run-context-missing');
+                if (missing) missing.style.display = 'none';
+            });
+    }
+
+    function refreshRunContext() {
+        if (resolved) return;
+        var runId = resolveRunContextRunId();
+        if (!runId) {
+            showMissingRunCta();
+            return;
+        }
+        resolved = true;
+        showRunContext(runId);
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        // Prefer day/run init signal from base.html (Issue #791); fallback if it never fires
+        window.addEventListener('runflow:context-ready', function () {
+            refreshRunContext();
+        });
+        setTimeout(function () {
+            refreshRunContext();
+        }, 1500);
     });
 })();
 </script>

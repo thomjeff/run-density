@@ -51,15 +51,38 @@
             display: flex;
             flex-wrap: wrap;
             gap: 0;
+            align-items: stretch;
         }
         
         nav li {
             margin: 0;
         }
+
+        nav li.nav-group-label {
+            display: flex;
+            align-items: center;
+            padding: 0.875rem 0.65rem 0.875rem 1.1rem;
+            color: #95a5a6;
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+            pointer-events: none;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        nav li.nav-build-sep {
+            width: 1px;
+            align-self: stretch;
+            background: #2c3e50;
+            margin: 0.55rem 0.35rem;
+            pointer-events: none;
+        }
         
         nav a {
             display: block;
-            padding: 0.875rem 1.5rem;
+            padding: 0.875rem 1.25rem;
             color: #ecf0f1;
             text-decoration: none;
             font-weight: 500;
@@ -298,24 +321,27 @@
     <nav>
         <ul>
             {% if cloud_mode %}
-            <li><a href="/dashboard" {% if request.url and request.url.path == "/dashboard" %}class="active"{% endif %}>Dashboard</a></li>
+            <li class="nav-group-label" aria-hidden="true">Results</li>
+            <li><a href="/dashboard" {% if request.url and request.url.path == "/dashboard" %}class="active"{% endif %}>Runs</a></li>
             <li><a href="/locations" {% if request.url and request.url.path == "/locations" %}class="active"{% endif %}>Locations</a></li>
             {# Loc Sheets (/locsheets) hidden from nav; one-pagers linked from Locations UI — route kept for now #}
             <li><a href="/logout" style="color: #e74c3c;">Logout</a></li>
             {% else %}
-            <li><a href="/dashboard" {% if request.url and request.url.path == "/dashboard" %}class="active"{% endif %}>Dashboard</a></li>
+            <li class="nav-group-label" aria-hidden="true">Results</li>
+            <li><a href="/dashboard" {% if request.url and request.url.path == "/dashboard" %}class="active"{% endif %}>Runs</a></li>
             <li><a href="/segments" {% if request.url and request.url.path == "/segments" %}class="active"{% endif %}>Segments</a></li>
             <li><a href="/density" {% if request.url and request.url.path == "/density" %}class="active"{% endif %}>Density</a></li>
             <li><a href="/flow" {% if request.url and request.url.path == "/flow" %}class="active"{% endif %}>Flow</a></li>
             <li><a href="/locations" {% if request.url and request.url.path == "/locations" %}class="active"{% endif %}>Locations</a></li>
             {# Loc Sheets (/locsheets) hidden from nav; one-pagers linked from Locations UI — route kept for now #}
             <li><a href="/reports" {% if request.url and request.url.path == "/reports" %}class="active"{% endif %}>Reports</a></li>
-            <li><a href="/analysis" {% if request.url and request.url.path == "/analysis" %}class="active"{% endif %}>Analysis</a></li>
-            <li><a href="/config" {% if request.url and request.url.path == "/config" %}class="active"{% endif %}>Race Configuration</a></li>
+            {# Analysis (/analysis) hidden from nav; primary path is Package → Run analysis — route kept (Issue #791) #}
+            <li class="nav-build-sep" aria-hidden="true"></li>
+            <li><a href="/config" {% if request.url and (request.url.path == "/config" or request.url.path.startswith("/race-configuration")) %}class="active"{% endif %} title="Legs, Courses, and Packages">Build</a></li>
             {# Course Mapping (/course-mapping) hidden from nav; superseded by Race Configuration — route kept for now #}
-            <li><a href="/health-check" {% if request.url and request.url.path == "/health-check" %}class="active"{% endif %}>Health</a></li>
+            {# Health (/health-check) hidden from nav; ops utility — route kept (Issue #791) #}
             {% endif %}
-            <li id="day-selector-wrap" style="margin-left:auto; padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.5rem;">
+            <li id="day-selector-wrap" style="margin-left:auto; padding: 0.5rem 1rem; display: none; align-items: center; gap: 0.5rem;" aria-hidden="true">
                 <label for="day-selector" style="color:#ecf0f1; font-weight:600;">Day</label>
                 <select id="day-selector" style="padding: 0.35rem 0.5rem; border-radius: 4px; border: 1px solid #2c3e50; background: #fff; color: #2c3e50; min-width: 90px;">
                     <option value="">—</option>
@@ -403,18 +429,44 @@
             return u.pathname + (u.search ? u.search : "");
         }
 
-        const CONFIG_ROUTE_PREFIXES = ["/config"];
+        const CONFIG_ROUTE_PREFIXES = ["/config", "/race-configuration"];
+        const RESULTS_ROUTE_PATHS = [
+            "/dashboard",
+            "/segments",
+            "/density",
+            "/flow",
+            "/locations",
+            "/reports",
+        ];
 
         function isConfigRoutePath(pathname) {
             return CONFIG_ROUTE_PREFIXES.some(p => pathname === p || pathname.startsWith(p + "/"));
         }
 
+        function isResultsRoutePath(pathname) {
+            return RESULTS_ROUTE_PATHS.some(p => pathname === p || pathname.startsWith(p + "/"));
+        }
+
         function isAnalysisRoutePath(pathname) {
             if (isConfigRoutePath(pathname)) return false;
-            if (pathname === "/course-mapping" || pathname === "/health-check" || pathname === "/logout") {
+            if (pathname === "/course-mapping" || pathname === "/health-check" || pathname === "/logout" || pathname === "/analysis") {
                 return false;
             }
-            return true;
+            return isResultsRoutePath(pathname);
+        }
+
+        function setDaySelectorVisible(visible) {
+            const wrap = document.getElementById("day-selector-wrap");
+            if (!wrap) return;
+            wrap.style.display = visible ? "flex" : "none";
+            wrap.setAttribute("aria-hidden", visible ? "false" : "true");
+        }
+
+        function announceRunflowContextReady(runId, day) {
+            // Issue #791: Results pages (run_context) wait for day/run init before empty CTA
+            window.dispatchEvent(new CustomEvent("runflow:context-ready", {
+                detail: { run_id: runId || null, day: day || null },
+            }));
         }
 
         function updateNavLinks(day, runId) {
@@ -460,8 +512,7 @@
         }
 
         function initConfigPageNav() {
-            const wrap = document.getElementById("day-selector-wrap");
-            if (wrap) wrap.style.display = "none";
+            setDaySelectorVisible(false);
 
             const params = new URLSearchParams(window.location.search);
             let changed = false;
@@ -490,11 +541,24 @@
 
             if (isConfigRoutePath(window.location.pathname)) {
                 initConfigPageNav();
+                announceRunflowContextReady(
+                    (localStorage.getItem("selected_run_id") || "").trim() || null,
+                    (localStorage.getItem("selected_day") || "").toLowerCase().trim() || null
+                );
                 return;
             }
 
-            const wrap = document.getElementById("day-selector-wrap");
-            if (wrap) wrap.style.display = "flex";
+            // Day chrome belongs on Results routes only (Issue #791 Phase 0)
+            if (!isResultsRoutePath(window.location.pathname)) {
+                setDaySelectorVisible(false);
+                const day = (localStorage.getItem("selected_day") || "").toLowerCase().trim() || null;
+                const storedRun = (localStorage.getItem("selected_run_id") || "").trim() || null;
+                updateNavLinks(day, storedRun);
+                announceRunflowContextReady(storedRun, day);
+                return;
+            }
+
+            setDaySelectorVisible(false); // show only after we know multi-day
 
             const params = new URLSearchParams(window.location.search);
             const urlDayRaw = params.get("day");
@@ -555,21 +619,19 @@
                 }
             }
 
-            const DEFAULT_ORDER = ["fri","sat","sun","mon"];
-
             // Issue #565: If run_id is set, only use available_days from API (don't add invalid days)
-            // If no run_id, fallback to defaults
+            // If no run_id, keep empty — do not invent fri/sat/sun/mon
             if (!availableDays.length) {
-                if (runId) {
-                    // Run_id exists but no available_days - this shouldn't happen, but handle gracefully
-                    availableDays = selectedDay ? [selectedDay] : [];
+                if (runId && selectedDay) {
+                    availableDays = [selectedDay];
+                } else if (!runId && selectedDay) {
+                    availableDays = [selectedDay];
                 } else {
-                    // No run_id - use defaults
-                    availableDays = selectedDay ? [selectedDay] : DEFAULT_ORDER;
+                    availableDays = [];
                 }
             } else if (selectedDay && !availableDays.includes(selectedDay)) {
                 // URL has a day that's not available for this run_id - remove it and use first available
-                selectedDay = availableDays[0];
+                selectedDay = availableDays[0] || null;
                 // Update URL to remove invalid day or set to first available
                 const params = new URLSearchParams(window.location.search);
                 if (selectedDay) {
@@ -609,6 +671,9 @@
                 }
             }
 
+            // Show Day control only when the selected run has more than one day
+            setDaySelectorVisible(availableDays.length > 1);
+
             if (CLOUD_MODE) {
                 // Force canonical run_id and day in URL for cloud mode
                 const params = new URLSearchParams(window.location.search);
@@ -625,9 +690,10 @@
             if (runId) localStorage.setItem("selected_run_id", runId);
             updateNavLinks(selectedDay, runId);
             window.runflowDay = { selected: selectedDay, available: availableDays, run_id: runId };
+            announceRunflowContextReady(runId, selectedDay);
 
             select.addEventListener("change", (e) => {
-                if (isConfigRoutePath(window.location.pathname)) {
+                if (isConfigRoutePath(window.location.pathname) || !isResultsRoutePath(window.location.pathname)) {
                     return;
                 }
                 const day = (e.target.value || "").toLowerCase().trim();
