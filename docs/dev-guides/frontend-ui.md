@@ -52,8 +52,43 @@ On Segments / Density / Flow / Locations / Reports (not Runs):
 
 Provides Results sub-nav + run banner / empty CTA. Styles: `.rf-results-*` in `common.css`.
 
-## Tabler / admin template (deferred)
+## Tabler UI (Issue #796) — third-party admin chrome
 
-**Selected for a future spike:** [Tabler](https://github.com/tabler/tabler) (MIT, Bootstrap 5). AdminLTE 4 remains the fallback.
+**[Tabler](https://tabler.io/)** (`@tabler/core`) is an open-source admin dashboard UI kit (MIT License). Runflow loads it **opt-in only** from the jsDelivr CDN — there is still no npm/webpack step.
 
-**Not adopted in Phase 3.** Loading Bootstrap/Tabler beside today’s hand-rolled `base.html` + `common.css` risks cascade collisions. Revisit only after this SSOT is stable, ideally as an isolated chrome spike (one Build page + one Results page) behind an explicit decision.
+### How to enable
+
+Append `?ui=tabler` (or `&ui=tabler`) to any authenticated page URL. Use **Classic UI** in the top bar (or drop `ui=tabler`) to leave the preview. Default chrome is unchanged when the query param is absent.
+
+### What we load
+
+| Asset | Source |
+|-------|--------|
+| CSS | `https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css` |
+| JS | `https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/js/tabler.min.js` |
+| Runflow overrides | `frontend/static/css/tabler_spike.css` (linked only when `ui=tabler`) |
+
+Wired from `frontend/templates/base.html` when Jinja sets `tabler_ui` from the query string.
+
+### UX model (horizontal light shell)
+
+- Top bar: **Runflow** | **Runs ▾** | Overview · Segments · Density · Flow · Locations · Reports | **Build** | Day (multi-day) | Classic UI | Logout
+- **Runs ▾:** up to 10 recent runs (label primary, short id secondary) + **View all runs…** → `/dashboard?ui=tabler`
+- Picking a run opens **`/overview?run_id=&day=&ui=tabler`** (Analysis Inputs + Analysis Outputs)
+- Context strip: Active run · label · short id · day · **Package**
+- Runs catalog under Tabler is history-only
+- Build hub uses Tabler **card-header-tabs** for Legs / Courses / Packages
+- Nav preserves `ui=tabler` via `updateNavLinks` / Results `resultsHref` / Build handoffs
+
+### Attribution & license
+
+- Project: [tabler/tabler](https://github.com/tabler/tabler) / [tabler.io](https://tabler.io/)
+- License: **MIT** — free to use in Runflow; keep copyright notice when redistributing Tabler sources
+- We consume the published CDN build; we do not vendor a fork in-repo
+- See also [Developer Guide → Frontend Architecture](developer-guide.md#frontend-architecture)
+
+### Guidelines
+
+- Do **not** load Tabler CSS/JS on Classic UI pages
+- Prefer Tabler primitives (`navbar`, `card`, `nav-tabs` / `card-header-tabs`, `dropdown`, `btn`) under `html.rf-tabler`, remapped in `tabler_spike.css`
+- Keep Classic markup paths working; dual chrome is gated by `{% if tabler_ui %}`

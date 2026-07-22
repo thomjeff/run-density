@@ -1,13 +1,22 @@
 <!DOCTYPE html>
-<html lang="en">
+{# Issue #796: opt-in Tabler chrome spike via ?ui=tabler (default UI unchanged) #}
+{% set tabler_ui = request is defined and request.query_params.get('ui') == 'tabler' %}
+<html lang="en" class="{% if tabler_ui %}rf-tabler{% endif %}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Runflow{% endblock %} - Race Density & Flow Intelligence</title>
     
+{% if tabler_ui %}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css" />
+    <link rel="stylesheet" href="/static/css/common.css?v=791p3">
+    <link rel="stylesheet" href="/static/css/tabler_spike.css?v=796k">
+{% else %}
     <!-- Issue #652: Shared CSS for UI consistency -->
     <link rel="stylesheet" href="/static/css/common.css?v=791p3">
+{% endif %}
     
+{% if not tabler_ui %}
     <style>
         /* Reset and Base Styles */
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -308,11 +317,98 @@
         
     </style>
     
+{% endif %}
+    
     {% block extra_styles %}{% endblock %}
     
     {% block extra_head %}{% endblock %}
 </head>
-<body>
+<body{% if tabler_ui %} class="layout-fluid"{% endif %}>
+{% if tabler_ui %}
+    <div class="page">
+        {# Light horizontal Tabler chrome (Issue #796) — full-width content #}
+        <header class="navbar navbar-expand-md d-print-none">
+            <div class="container-xl">
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#rf-tabler-menu" aria-controls="rf-tabler-menu" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <h1 class="navbar-brand navbar-brand-autodark d-none-navbar-horizontal pe-0 pe-md-3 mb-0">
+                    <a href="/overview?ui=tabler" class="text-decoration-none text-reset">
+                        <span class="rf-tabler-brand">Runflow</span>
+                    </a>
+                </h1>
+                <div class="navbar-nav flex-row order-md-last align-items-center gap-1">
+                    <div id="day-selector-wrap" class="nav-item rf-tabler-day" style="display:none;" aria-hidden="true">
+                        <label for="day-selector" class="form-label mb-0 me-1 visually-hidden">Day</label>
+                        <select id="day-selector" class="form-select form-select-sm" style="min-width:88px;">
+                            <option value="">—</option>
+                        </select>
+                    </div>
+                    <a id="rf-tabler-exit" class="nav-link px-2" href="?" title="Leave Tabler preview">Classic UI</a>
+                    <a class="nav-link px-2 text-danger" href="/logout">Logout</a>
+                </div>
+                <div class="collapse navbar-collapse" id="rf-tabler-menu">
+                    <ul class="navbar-nav">
+                        {% if cloud_mode %}
+                        <li class="nav-item">
+                            <a class="nav-link{% if request.url and request.url.path == '/dashboard' %} active{% endif %}" href="/dashboard?ui=tabler">Runs</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link{% if request.url and request.url.path == '/locations' %} active{% endif %}" href="/locations?ui=tabler">Locations</a>
+                        </li>
+                        {% else %}
+                        <li class="nav-item dropdown" id="rf-runs-dropdown">
+                            <a class="nav-link dropdown-toggle{% if request.url and request.url.path == '/dashboard' %} active{% endif %}" href="#" id="rf-runs-dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                                <span id="rf-runs-trigger-label">Runs</span>
+                            </a>
+                            <div class="dropdown-menu" id="rf-runs-dropdown-menu">
+                                <div class="dropdown-header">Recent runs</div>
+                                <div id="rf-runs-dropdown-list">
+                                    <span class="dropdown-item disabled">Loading…</span>
+                                </div>
+                                <div class="dropdown-divider"></div>
+                                <a class="dropdown-item" id="rf-runs-view-all" href="/dashboard?ui=tabler">View all runs…</a>
+                            </div>
+                        </li>
+                        <li class="nav-item rf-tabler-run-view-link" hidden>
+                            <a class="nav-link{% if request.url and request.url.path == '/overview' %} active{% endif %}" href="/overview?ui=tabler" data-rf-run-view="1">Overview</a>
+                        </li>
+                        <li class="nav-item rf-tabler-run-view-link" hidden>
+                            <a class="nav-link{% if request.url and request.url.path == '/segments' %} active{% endif %}" href="/segments?ui=tabler" data-rf-run-view="1">Segments</a>
+                        </li>
+                        <li class="nav-item rf-tabler-run-view-link" hidden>
+                            <a class="nav-link{% if request.url and request.url.path == '/density' %} active{% endif %}" href="/density?ui=tabler" data-rf-run-view="1">Density</a>
+                        </li>
+                        <li class="nav-item rf-tabler-run-view-link" hidden>
+                            <a class="nav-link{% if request.url and request.url.path == '/flow' %} active{% endif %}" href="/flow?ui=tabler" data-rf-run-view="1">Flow</a>
+                        </li>
+                        <li class="nav-item rf-tabler-run-view-link" hidden>
+                            <a class="nav-link{% if request.url and request.url.path == '/locations' %} active{% endif %}" href="/locations?ui=tabler" data-rf-run-view="1">Locations</a>
+                        </li>
+                        <li class="nav-item rf-tabler-run-view-link" hidden>
+                            <a class="nav-link{% if request.url and request.url.path == '/reports' %} active{% endif %}" href="/reports?ui=tabler" data-rf-run-view="1">Reports</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link{% if request.url and (request.url.path == '/config' or request.url.path.startswith('/race-configuration')) %} active{% endif %}" href="/config?ui=tabler" title="Legs, Courses, and Packages">Build</a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </div>
+        </header>
+        <div id="rf-tabler-context-strip" class="rf-tabler-context-strip" hidden>
+            <div class="container-xl rf-tabler-context-inner">
+                <span class="rf-tabler-context-pill">Active run</span>
+                <span id="rf-tabler-context-label" class="rf-tabler-context-label">—</span>
+                <span id="rf-tabler-context-id" class="rf-tabler-context-id"></span>
+                <span id="rf-tabler-context-day" class="rf-tabler-context-day" hidden></span>
+                <a id="rf-tabler-open-package" class="rf-tabler-context-pkg" href="/config?ui=tabler" hidden>Package</a>
+            </div>
+        </div>
+        <div class="page-wrapper">
+            <div class="page-body">
+                <div class="container-xl rf-tabler-content">
+{% else %}
     <header>
         <h1>Runflow</h1>
         <div class="tagline">Race Density & Flow Intelligence</div>
@@ -354,12 +450,26 @@
     </nav>
     
     <main>
+{% endif %}
         {% block content %}{% endblock %}
+{% if tabler_ui %}
+                </div>
+            </div>
+            <footer class="footer footer-transparent d-print-none">
+                <div class="container-xl">
+                    <p class="text-secondary m-0">&copy; 2025 Runflow - Race Density &amp; Flow Intelligence System</p>
+                </div>
+            </footer>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/js/tabler.min.js"></script>
+{% else %}
     </main>
     
     <footer>
         <p>&copy; 2025 Runflow - Race Density & Flow Intelligence System</p>
     </footer>
+{% endif %}
     
     {% block extra_scripts %}{% endblock %}
     
@@ -432,6 +542,7 @@
         const CONFIG_ROUTE_PREFIXES = ["/config", "/race-configuration"];
         const RESULTS_ROUTE_PATHS = [
             "/dashboard",
+            "/overview",
             "/segments",
             "/density",
             "/flow",
@@ -469,12 +580,193 @@
             }));
         }
 
+        function shortRunId(runId) {
+            const id = String(runId || "");
+            return id.length > 10 ? id.slice(0, 8) + "…" : id;
+        }
+
+        function syncTablerRunNav(runId, day) {
+            if (!document.documentElement.classList.contains("rf-tabler")) return;
+            const hasRun = !!(runId && String(runId).trim());
+            document.querySelectorAll(".rf-tabler-run-view-link").forEach(function (li) {
+                li.hidden = !hasRun;
+            });
+
+            const strip = document.getElementById("rf-tabler-context-strip");
+            const labelEl = document.getElementById("rf-tabler-context-label");
+            const idEl = document.getElementById("rf-tabler-context-id");
+            const dayEl = document.getElementById("rf-tabler-context-day");
+            const trigger = document.getElementById("rf-runs-trigger-label");
+
+            if (!hasRun) {
+                if (strip) strip.hidden = true;
+                if (trigger) trigger.textContent = "Runs";
+                syncTablerPackageLink(null);
+                refreshRunsDropdown(null);
+                return;
+            }
+
+            const id = String(runId).trim();
+            let label = id;
+            try {
+                const cached = sessionStorage.getItem("rf_run_label_" + id);
+                if (cached) label = cached;
+            } catch (e) { /* ignore */ }
+
+            if (strip) strip.hidden = false;
+            if (labelEl) labelEl.textContent = label;
+            if (idEl) {
+                idEl.textContent = shortRunId(id);
+                idEl.title = id;
+            }
+            if (dayEl) {
+                const multi = window.runflowDay && Array.isArray(window.runflowDay.available)
+                    && window.runflowDay.available.length > 1;
+                if (multi && day) {
+                    dayEl.textContent = "· " + String(day).toUpperCase();
+                    dayEl.hidden = false;
+                } else {
+                    dayEl.hidden = true;
+                }
+            }
+            if (trigger) {
+                const trunc = label.length > 28 ? label.slice(0, 26) + "…" : label;
+                trigger.textContent = trunc + " · " + shortRunId(id);
+            }
+            syncTablerPackageLink(id);
+            refreshRunsDropdown(id);
+        }
+
+        function configIdFromDataDir(dataDir) {
+            if (!dataDir) return "";
+            const normalized = String(dataDir).replace(/\\/g, "/").replace(/\/+$/, "");
+            const marker = "/config/";
+            const idx = normalized.lastIndexOf(marker);
+            if (idx < 0) return "";
+            const rest = normalized.slice(idx + marker.length);
+            return (rest.split("/")[0] || "");
+        }
+
+        function syncTablerPackageLink(runId) {
+            const link = document.getElementById("rf-tabler-open-package");
+            if (!link) return;
+            if (!runId) {
+                link.hidden = true;
+                return;
+            }
+            fetch("/api/analysis/" + encodeURIComponent(runId) + "/config", { credentials: "same-origin" })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (cfg) {
+                    const configId = configIdFromDataDir(cfg && cfg.data_dir);
+                    if (!configId) {
+                        link.hidden = true;
+                        return;
+                    }
+                    localStorage.setItem("selected_config_id", configId);
+                    link.href = "/config?config_id=" + encodeURIComponent(configId) + "&ui=tabler";
+                    link.title = "Open package " + configId;
+                    link.hidden = false;
+                })
+                .catch(function () {
+                    link.hidden = true;
+                });
+        }
+
+        function refreshRunsDropdown(activeRunId) {
+            const list = document.getElementById("rf-runs-dropdown-list");
+            if (!list) return;
+            if (list.dataset.fetched === "1") {
+                list.querySelectorAll(".rf-runs-pick").forEach(function (a) {
+                    a.classList.toggle("active", a.dataset.runId === activeRunId);
+                });
+                return;
+            }
+            if (list.dataset.loading === "1") return;
+            list.dataset.loading = "1";
+            fetch("/api/runs/list", { credentials: "same-origin" })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) {
+                    list.dataset.loading = "0";
+                    list.dataset.fetched = "1";
+                    const runs = (data && data.runs) || [];
+                    const top = runs.slice(0, 10);
+                    if (!top.length) {
+                        list.innerHTML = '<span class="dropdown-item disabled">No runs yet</span>';
+                        return;
+                    }
+                    list.innerHTML = "";
+                    top.forEach(function (run) {
+                        const id = run.run_id;
+                        const label = (run.description || "").trim() || id;
+                        try { sessionStorage.setItem("rf_run_label_" + id, label); } catch (e) { /* ignore */ }
+                        const a = document.createElement("a");
+                        a.className = "dropdown-item rf-runs-pick" + (id === activeRunId ? " active" : "");
+                        a.href = "#";
+                        a.dataset.runId = id;
+                        a.innerHTML = '<span class="rf-runs-pick-label"></span>'
+                            + '<span class="rf-runs-pick-meta"></span>';
+                        a.querySelector(".rf-runs-pick-label").textContent = label;
+                        a.querySelector(".rf-runs-pick-meta").textContent =
+                            shortRunId(id) + (run.formatted_date ? " · " + run.formatted_date : "");
+                        a.addEventListener("click", function (ev) {
+                            ev.preventDefault();
+                            pickTablerRun(id, label);
+                        });
+                        list.appendChild(a);
+                    });
+                    if (activeRunId) {
+                        const labelEl = document.getElementById("rf-tabler-context-label");
+                        const trigger = document.getElementById("rf-runs-trigger-label");
+                        try {
+                            const cached = sessionStorage.getItem("rf_run_label_" + activeRunId);
+                            if (cached && labelEl) labelEl.textContent = cached;
+                            if (cached && trigger) {
+                                const trunc = cached.length > 28 ? cached.slice(0, 26) + "…" : cached;
+                                trigger.textContent = trunc + " · " + shortRunId(activeRunId);
+                            }
+                        } catch (e) { /* ignore */ }
+                    }
+                })
+                .catch(function () {
+                    list.dataset.loading = "0";
+                    list.innerHTML = '<span class="dropdown-item disabled">Could not load runs</span>';
+                });
+        }
+
+        function pickTablerRun(runId, label) {
+            if (label) {
+                try { sessionStorage.setItem("rf_run_label_" + runId, label); } catch (e) { /* ignore */ }
+            }
+            localStorage.setItem("selected_run_id", runId);
+            fetch("/api/runs/" + encodeURIComponent(runId) + "/summary", { credentials: "same-origin" })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) {
+                    const days = (data && data.days) || [];
+                    let day = (localStorage.getItem("selected_day") || "").trim().toLowerCase();
+                    if (day && days.length && days.indexOf(day) < 0) day = days[0];
+                    else if (!day && days.length) day = days[0];
+                    if (day) localStorage.setItem("selected_day", day);
+                    const params = new URLSearchParams();
+                    params.set("run_id", runId);
+                    if (day) params.set("day", day);
+                    params.set("ui", "tabler");
+                    window.location.href = "/overview?" + params.toString();
+                })
+                .catch(function () {
+                    window.location.href = "/overview?run_id=" + encodeURIComponent(runId) + "&ui=tabler";
+                });
+        }
+
         function updateNavLinks(day, runId) {
-            const onConfigPage = isConfigRoutePath(window.location.pathname);
-            document.querySelectorAll("nav a").forEach(a => {
+            const tablerUi = document.documentElement.classList.contains("rf-tabler");
+            document.querySelectorAll("nav a, .navbar-nav a, .navbar-brand a").forEach(a => {
                 const href = a.getAttribute("href");
-                if (!href || href === "/logout" || href === "/health-check") return;
+                if (!href || href === "/logout" || href === "/health-check" || href === "#") return;
+                if (a.id === "rf-tabler-exit") return;
+                if (a.id === "rf-tabler-open-package" || a.getAttribute("data-rf-package-link") === "1") return;
+                if (a.classList.contains("dropdown-toggle") || a.classList.contains("dropdown-item")) return;
                 const linkPath = href.split("?")[0];
+                if (!linkPath) return;
                 let newHref = href.split("?")[0];
                 if (isConfigRoutePath(linkPath)) {
                     if (linkPath === "/config") {
@@ -487,20 +779,45 @@
                     }
                     newHref = setQueryParam(newHref, "run_id", null);
                     newHref = setQueryParam(newHref, "day", null);
-                } else if (isAnalysisRoutePath(linkPath) && !onConfigPage) {
+                } else if (isAnalysisRoutePath(linkPath)) {
                     if (day) newHref = setQueryParam(newHref, "day", day);
                     if (runId) newHref = setQueryParam(newHref, "run_id", runId);
+                    // Catalog page should not require a run in the URL
+                    if (linkPath === "/dashboard") {
+                        newHref = setQueryParam(newHref, "run_id", null);
+                        newHref = setQueryParam(newHref, "day", null);
+                    }
                     newHref = setQueryParam(newHref, "config_id", null);
+                }
+                if (tablerUi) {
+                    newHref = setQueryParam(newHref, "ui", "tabler");
+                } else {
+                    newHref = setQueryParam(newHref, "ui", null);
                 }
                 a.setAttribute("href", newHref);
             });
+            const exit = document.getElementById("rf-tabler-exit");
+            if (exit) {
+                const exitParams = new URLSearchParams(window.location.search);
+                exitParams.delete("ui");
+                const qs = exitParams.toString();
+                exit.setAttribute("href", window.location.pathname + (qs ? "?" + qs : ""));
+            }
+            const viewAll = document.getElementById("rf-runs-view-all");
+            if (viewAll && tablerUi) {
+                viewAll.setAttribute("href", "/dashboard?ui=tabler");
+            }
+            syncTablerRunNav(runId, day);
         }
 
         window.updateConfigNavLinks = function(configId) {
             if (configId) {
                 localStorage.setItem("selected_config_id", configId);
             }
-            updateNavLinks(null, null);
+            // Keep Results nest visible while on Build/Package (Issue #796)
+            const storedRun = (localStorage.getItem("selected_run_id") || "").trim() || null;
+            const storedDay = (localStorage.getItem("selected_day") || "").trim() || null;
+            updateNavLinks(storedDay, storedRun);
         };
 
         // Make updateNavLinks globally accessible for dashboard.html
@@ -532,7 +849,18 @@
             if (changed && newUrl !== window.location.pathname + window.location.search) {
                 window.history.replaceState({}, "", newUrl);
             }
-            updateNavLinks(null, null);
+            // Preserve Tabler spike flag if present
+            if (document.documentElement.classList.contains("rf-tabler")) {
+                const p2 = new URLSearchParams(window.location.search);
+                if (p2.get("ui") !== "tabler") {
+                    p2.set("ui", "tabler");
+                    window.history.replaceState({}, "", window.location.pathname + "?" + p2.toString());
+                }
+            }
+            // Keep last Results run in top-bar views while authoring
+            const storedRun = (localStorage.getItem("selected_run_id") || "").trim() || null;
+            const storedDay = (localStorage.getItem("selected_day") || "").trim() || null;
+            updateNavLinks(storedDay, storedRun);
         }
 
         async function initDaySelector() {

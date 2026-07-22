@@ -5,9 +5,20 @@
 {% block content %}
 <div class="page-header">
     <h2>Runs</h2>
+    <p class="rf-tabler-runs-lead" style="display:none; margin:0.35rem 0 0; color:#667382; font-size:0.9rem;">
+        Pick a run to open its Overview. Use the top bar for Segments, Density, Flow, Locations, and Reports.
+    </p>
     <div style="display: flex; align-items: center; gap: 1rem;">
     </div>
 </div>
+<script>
+(function () {
+    if (document.documentElement.classList.contains('rf-tabler')) {
+        var lead = document.querySelector('.rf-tabler-runs-lead');
+        if (lead) lead.style.display = 'block';
+    }
+})();
+</script>
 
 <!-- Run History Table Section (Issue #565) -->
 <div class="card" style="margin-bottom: 2rem;">
@@ -66,6 +77,8 @@
     </div>
 </div>
 
+<!-- Classic dashboard panels (hidden under Tabler — Overview owns this UX) -->
+<div class="rf-classic-dashboard-panels">
 <!-- Analysis Inputs (Issue #739): day windows + per-event timings from metadata.json / API -->
 <div id="analysis-inputs-section" class="card" style="display: none; margin-bottom: 2rem;">
     <h3 style="margin-bottom: 1rem; color: #2c3e50;">Analysis Inputs</h3>
@@ -89,6 +102,7 @@
             <div id="data-missing-message" style="font-size: 0.875rem; color: #856404;">Data not found for one or more inputs (meta.json, metrics, or flags). Showing placeholders.</div>
         </div>
     </div>
+</div>
 </div>
 
 
@@ -243,9 +257,9 @@
                 filteredRuns = [...runsList];
                 renderRunHistoryTable();
                 
-                // Auto-select most recent run if none selected
+                // Auto-select most recent run if none selected (stay on catalog; do not enter workspace)
                 if (!selectedRunId && runsList.length > 0) {
-                    selectRun(runsList[0].run_id);
+                    selectRun(runsList[0].run_id, false);
                 }
             })
             .catch(error => {
@@ -301,7 +315,7 @@
             const rowStyle = isSelected ? 'background: #e3f2fd; font-weight: 600;' : '';
             
             return `
-                <tr data-run-id="${run.run_id}" style="${rowStyle} cursor: pointer;" onclick="selectRun('${run.run_id}')">
+                <tr data-run-id="${run.run_id}" style="${rowStyle} cursor: pointer;" onclick="selectRun('${run.run_id}', true)" title="Open Overview for this run">
                     <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6;" title="${run.run_id}">${runIdShort}</td>
                     <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6;" title="${run.description || ''}">${description}</td>
                     <td style="padding: 0.75rem; border-bottom: 1px solid #dee2e6;">${run.formatted_date || run.created_at}</td>
@@ -431,7 +445,7 @@
                     selectedRunId = null;
                     localStorage.removeItem('selected_run_id');
                     if (runsList.length > 0) {
-                        selectRun(runsList[0].run_id);
+                        selectRun(runsList[0].run_id, false);
                     }
                 }
             })
@@ -559,7 +573,7 @@
         });
     }
     
-    function selectRun(runId) {
+    function selectRun(runId, enterWorkspace) {
         selectedRunId = runId;
         localStorage.setItem('selected_run_id', runId);
         
@@ -577,6 +591,19 @@
                 dayToUse = availableDays[0];
             }
             
+            // Tabler spike (#796): explicit catalog click enters Overview
+            if (enterWorkspace && document.documentElement.classList.contains('rf-tabler')) {
+                const params = new URLSearchParams();
+                params.set('run_id', runId);
+                if (dayToUse) params.set('day', dayToUse);
+                params.set('ui', 'tabler');
+                if (data.description) {
+                    try { sessionStorage.setItem('rf_run_label_' + runId, data.description); } catch (e) {}
+                }
+                window.location.href = '/overview?' + params.toString();
+                return;
+            }
+
             // Update URL
             const url = new URL(window.location);
             url.searchParams.set('run_id', runId);
@@ -584,6 +611,9 @@
                 url.searchParams.set('day', dayToUse);
             } else {
                 url.searchParams.delete('day');
+            }
+            if (document.documentElement.classList.contains('rf-tabler')) {
+                url.searchParams.set('ui', 'tabler');
             }
             window.history.pushState({}, '', url);
             
