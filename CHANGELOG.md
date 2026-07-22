@@ -2,10 +2,33 @@
 
 ## [Unreleased]
 
-### Issue #791 Phase 3 — Frontend design-system consolidation
-- Unified table/sort/action button styles in `common.css`; migrated Flow, Locations, and Density off forked sort CSS
-- Documented the frontend UI contract (`docs/dev-guides/frontend-ui.md`); Tabler admin template deferred pending a dedicated spike
-- Corrected Developer Guide styling note (hand-rolled `common.css`, not Tailwind)
+## [v2.0.11] - 2026-07-22
+
+### Summary
+- **Issue #796 — Tabler chrome spike (opt-in):** light horizontal admin shell powered by open-source [Tabler](https://tabler.io/) (`@tabler/core` MIT), loaded from CDN only when `?ui=tabler`
+- New **Overview** Results destination; Runs catalog vs run workspace hierarchy; Build hub card-header tabs
+- Flow / Reports page title and lead copy polish
+- Documented Tabler as a third-party frontend dependency (Developer Guide + Frontend UI contract)
+
+### New Features
+
+#### Opt-in Tabler UI (Issue #796)
+- Append `?ui=tabler` to preview; **Classic UI** control exits the spike (default UI unchanged)
+- Horizontal top bar: Runs ▾ · Overview · Segments · Density · Flow · Locations · Reports · Build · Day · Classic UI · Logout
+- Runs dropdown (label + short id) opens `/overview`; catalog at `/dashboard?ui=tabler` is history-only
+- Active-run context strip with Package link; Build Legs/Courses/Packages use Tabler card-header-tabs
+- Runflow overrides: `frontend/static/css/tabler_spike.css`
+
+### UI Changes
+- Flow page title: **Flow Analysis** (removed “Temporal”)
+- Reports page title: **Reports**; lead copy moved under the page header (removed duplicate card heading)
+
+### Documentation
+- `docs/dev-guides/frontend-ui.md` — Tabler enablement, CDN assets, MIT attribution, UX model
+- `docs/dev-guides/developer-guide.md` — Tabler listed under Frontend Architecture stack components
+
+### Third-party notice
+- **Tabler** ([tabler/tabler](https://github.com/tabler/tabler), MIT License) via `cdn.jsdelivr.net/npm/@tabler/core@1.4.0`
 
 ## [v2.0.8] - 2026-06-10
 

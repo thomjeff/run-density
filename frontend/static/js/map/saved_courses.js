@@ -958,7 +958,13 @@
                     var li = document.createElement('li');
                     li.style.marginBottom = '0.25rem';
                     var a = document.createElement('a');
-                    a.href = '/density?run_id=' + encodeURIComponent(hit.run_id);
+                    var uiQ = document.documentElement.classList.contains('rf-tabler')
+                        ? '?ui=tabler&'
+                        : '?';
+                    var resultsPath = document.documentElement.classList.contains('rf-tabler')
+                        ? '/overview'
+                        : '/density';
+                    a.href = resultsPath + uiQ + 'run_id=' + encodeURIComponent(hit.run_id);
                     a.textContent = hit.description || hit.run_id;
                     a.title = hit.run_id;
                     li.appendChild(a);
@@ -1179,26 +1185,41 @@
                     localStorage.setItem('selected_run_id', runId);
                     if (eventDay) localStorage.setItem('selected_day', eventDay);
                 }
+                var uiQ = document.documentElement.classList.contains('rf-tabler')
+                    ? '&ui=tabler'
+                    : '';
+                var resultsPath = document.documentElement.classList.contains('rf-tabler')
+                    ? '/overview'
+                    : '/density';
                 var msg =
                     'Analysis started. Run ID: ' +
                     runId +
                     '. Results will appear under Results in a few minutes.';
                 setAssignStatus(
                     msg +
-                        ' <a href="/density?run_id=' +
+                        ' <a href="' +
+                        resultsPath +
+                        '?run_id=' +
                         encodeURIComponent(runId) +
                         (eventDay ? '&day=' + encodeURIComponent(eventDay) : '') +
-                        '">Open Density</a> · <a href="/dashboard?run_id=' +
+                        uiQ +
+                        '">Open ' +
+                        (resultsPath === '/overview' ? 'Overview' : 'Density') +
+                        '</a> · <a href="/dashboard?run_id=' +
                         encodeURIComponent(runId) +
+                        uiQ +
                         '">Runs</a>',
                     false,
                     true
                 );
                 refreshPackageLatestRuns();
-                if (runId && window.confirm(msg + '\n\nOpen Density results now?')) {
+                if (runId && window.confirm(msg + '\n\nOpen results now?')) {
                     var dest =
-                        '/density?run_id=' + encodeURIComponent(runId);
+                        resultsPath +
+                        '?run_id=' +
+                        encodeURIComponent(runId);
                     if (eventDay) dest += '&day=' + encodeURIComponent(eventDay);
+                    if (uiQ) dest += uiQ;
                     window.location.href = dest;
                 }
             })

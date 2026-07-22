@@ -63,11 +63,26 @@
         return (localStorage.getItem('selected_day') || '').trim().toLowerCase();
     }
 
+    function isTablerUi() {
+        return new URLSearchParams(window.location.search).get('ui') === 'tabler'
+            || document.documentElement.classList.contains('rf-tabler');
+    }
+
+    function withTablerUi(url) {
+        if (!isTablerUi()) return url;
+        var parts = String(url).split('?');
+        var path = parts[0];
+        var params = new URLSearchParams(parts[1] || '');
+        params.set('ui', 'tabler');
+        return path + '?' + params.toString();
+    }
+
     function resultsHref(path, runId, day) {
         var url = path;
         var qs = [];
         if (runId) qs.push('run_id=' + encodeURIComponent(runId));
         if (day) qs.push('day=' + encodeURIComponent(day));
+        if (isTablerUi()) qs.push('ui=tabler');
         if (qs.length) url += '?' + qs.join('&');
         return url;
     }
@@ -106,7 +121,7 @@
         var link = document.getElementById('run-context-choose-link');
         var day = resolveDay();
         if (link) {
-            link.href = day ? ('/dashboard?day=' + encodeURIComponent(day)) : '/dashboard';
+            link.href = withTablerUi(day ? ('/dashboard?day=' + encodeURIComponent(day)) : '/dashboard');
         }
         updateResultsSubnav(null, day);
         missing.style.display = 'block';
@@ -137,9 +152,9 @@
         if (reports) reports.href = resultsHref('/reports', runId, day);
         var change = document.getElementById('run-context-change-run');
         if (change) {
-            change.href = day
+            change.href = withTablerUi(day
                 ? ('/dashboard?day=' + encodeURIComponent(day) + '&run_id=' + encodeURIComponent(runId))
-                : ('/dashboard?run_id=' + encodeURIComponent(runId));
+                : ('/dashboard?run_id=' + encodeURIComponent(runId)));
         }
 
         updateResultsSubnav(runId, day);
@@ -159,7 +174,7 @@
                     pkgLink.style.display = 'none';
                     return;
                 }
-                pkgLink.href = '/config?config_id=' + encodeURIComponent(configId);
+                pkgLink.href = withTablerUi('/config?config_id=' + encodeURIComponent(configId));
                 pkgLink.style.display = '';
                 pkgLink.title = 'Open package ' + configId;
             })

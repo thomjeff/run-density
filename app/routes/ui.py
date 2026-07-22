@@ -134,6 +134,38 @@ async def logout(request: Request):
     return clear_session_response("/", request)
 
 
+@router.get("/overview", response_class=HTMLResponse)
+async def overview(request: Request):
+    """
+    Results Overview — analysis inputs + run KPIs before deep views (Issue #796).
+    """
+    auth_redirect = require_auth(request)
+    if auth_redirect:
+        return auth_redirect
+    meta = get_stub_meta()
+    try:
+        reporting_config = load_reporting()
+        los_colors = reporting_config.get("reporting", {}).get("los_colors", {})
+    except Exception:
+        los_colors = {
+            "A": "#4CAF50",
+            "B": "#8BC34A",
+            "C": "#FFC107",
+            "D": "#FF9800",
+            "E": "#FF5722",
+            "F": "#F44336",
+        }
+    return templates.TemplateResponse(
+        request=request,
+        name="pages/overview.html",
+        context={
+            "request": request,
+            "meta": meta,
+            "los_colors": los_colors,
+        },
+    )
+
+
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
     """

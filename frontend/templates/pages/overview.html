@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Overview{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Overview</h2>
+    <p id="rf-overview-lead" class="rf-overview-lead">
+        Summary of the selected analysis run — inputs and key metrics before Segments, Density, and Flow.
+    </p>
+</div>
+
+{% include "partials/run_context.html" %}
+
+<div id="rf-overview-empty" class="card" style="display: none;">
+    <p><strong>No analysis run selected.</strong></p>
+    <p>Choose a run from the <strong>Runs</strong> menu, or open the full catalog.</p>
+    <p>
+        <a id="rf-overview-choose" class="btn btn-primary" href="/dashboard">View all runs</a>
+    </p>
+</div>
+
+<div id="rf-overview-body" style="display: none;">
+    <div id="analysis-inputs-section" class="card" style="display: none; margin-bottom: 1.25rem;">
+        <h3 style="margin-bottom: 1rem;">Analysis Inputs</h3>
+        <div id="analysis-inputs-content"></div>
+    </div>
+
+    <div id="run-detail-section" class="card" style="display: none; margin-bottom: 1.25rem;">
+        <h3 style="margin-bottom: 1rem;">Analysis Outputs</h3>
+        <div id="run-detail-content"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+.badge-los {
+    display: inline-block;
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #fff;
+}
+.badge-A { background: {{ los_colors.get('A', '#4CAF50') }}; }
+.badge-B { background: {{ los_colors.get('B', '#8BC34A') }}; }
+.badge-C { background: {{ los_colors.get('C', '#FFC107') }}; color: #333; }
+.badge-D { background: {{ los_colors.get('D', '#FF9800') }}; }
+.badge-E { background: {{ los_colors.get('E', '#FF5722') }}; }
+.badge-F { background: {{ los_colors.get('F', '#F44336') }}; }
+.rf-overview-lead { margin: 0.35rem 0 0; color: #667382; font-size: 0.9rem; max-width: 40rem; }
+.rf-overview-meta { margin-bottom: 1rem; }
+.rf-overview-subhead { margin: 1rem 0 0.5rem; font-size: 1rem; color: #34495e; }
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="/static/js/run_overview.js?v=796h"></script>
+<script>
+(function () {
+    var tabler = document.documentElement.classList.contains('rf-tabler');
+
+    function fetchJson(url) {
+        return fetch(url, { credentials: 'same-origin' }).then(function (r) {
+            if (r.status === 401) {
+                window.location.href = '/';
+                return Promise.reject(new Error('unauthorized'));
+            }
+            if (!r.ok) return Promise.reject(new Error('HTTP ' + r.status));
+            return r.json();
+        });
+    }
+
+    function withUi(path) {
+        return tabler ? path + '?ui=tabler' : path;
+    }
+
+    function resolveRunId() {
+        var params = new URLSearchParams(window.location.search);
+        return (params.get('run_id') || localStorage.getItem('selected_run_id') || '').trim();
+    }
+
+    function resolveDay() {
+        var params = new URLSearchParams(window.location.search);
+        var fromUrl = (params.get('day') || '').trim().toLowerCase();
+        if (fromUrl) return fromUrl;
+        if (window.runflowDay && window.runflowDay.selected) return String(window.runflowDay.selected).toLowerCase();
+        return (localStorage.getItem('selected_day') || '').trim().toLowerCase();
+    }
+
+    function wireEmptyLink() {
+        var choose = document.getElementById('rf-overview-choose');
+        if (choose) choose.href = withUi('/dashboard');
+    }
+
+    function showEmpty() {
+        document.getElementById('rf-overview-empty').style.display = 'block';
+        document.getElementById('rf-overview-body').style.display = 'none';
+        wireEmptyLink();
+    }
+
+    function showBody() {
+        document.getElementById('rf-overview-empty').style.display = 'none';
+        document.getElementById('rf-overview-body').style.display = 'block';
+    }
+
+    function boot(runId) {
+        document.getElementById('rf-overview-body').dataset.booted = '1';
+        if (!runId) {
+            showEmpty();
+            return;
+        }
+        localStorage.setItem('selected_run_id', runId);
+        showBody();
+        window.RunOverview.loadRunSummary(runId, fetchJson)
+            .then(function (data) {
+                var days = data.days || [];
+                var day = resolveDay();
+                if (day && days.length && days.indexOf(day) < 0) day = days[0];
+                else if (!day && days.length) day = days[0];
+                if (day) localStorage.setItem('selected_day', day);
+                if (window.updateNavLinks) window.updateNavLinks(day, runId);
+            })
+            .catch(function () {
+                showBody();
+            });
+    }
+
+    function onReady() {
+        boot(resolveRunId());
+    }
+
+    // Prefer URL/localStorage immediately; refresh when base day/run init finishes.
+    document.addEventListener('DOMContentLoaded', onReady);
+    window.addEventListener('runflow:context-ready', function (ev) {
+        var id = (ev.detail && ev.detail.run_id) || resolveRunId();
+        if (id && document.getElementById('rf-overview-body').dataset.booted !== '1') {
+            boot(id);
+            return;
+        }
+        if (id && id !== resolveRunId()) {
+            boot(id);
+        }
+    });
+})();
+</script>
+{% endblock %}
