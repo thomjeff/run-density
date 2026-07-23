@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Issue #798 Phase 0 — Canonical paths & deprecation ledger
+- Added `docs/architecture/canonical-paths.md` (v2 analysis, density/flow report graphs, HTTP composition, frontend/Build)
+- Added `docs/architecture/deprecation-ledger.md` with dispositions for `new_*`, shims, host paths, Classic UI, etc.
+- Stub `docs/architecture/domain-glossary.md` (Runflow vs run-density; core nouns)
+- Indexed architecture docs from `docs/README.md`
+
 ## [v2.0.11] - 2026-07-22
 
 ### Summary
