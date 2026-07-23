@@ -37,8 +37,8 @@ Update this file in the same PR that changes disposition or removes a module.
 | `app/routes/api_flow.py` | ~~Wildcard re-export~~ **REMOVED** | — | **remove** ✓ | Phase 1 | `main` imports `app.api.flow` | Phase 1 |
 | `app/routes/api_bidirectional.py` | ~~Wildcard re-export~~ **REMOVED** | — | **remove** ✓ | Phase 1 | `main` imports `app.api.bidirectional` | Phase 1 |
 | `app/core/flow/flow.py` `_ShardWriter` | ~~Unused~~ **REMOVED** | — | **remove** ✓ | Phase 1 | Also `_write_index_csv`, `_write_topk_csv` | Phase 1 |
-| `app/utils/constants.py` `EVENT_DURATION_MINUTES` | Deprecated dict; capitalized dupes | v1 compatibility risk | **investigate** → remove or v1-only adapter | Phase 8 | Confirm v1 endpoint retirement | TBD |
-| `HOTSPOT_SEGMENTS` / map center constants | Sample-race / city defaults | bin generation / maps | **rename/move** to template data | Phase 8 | Not universal domain law | — |
+| `app/utils/constants.py` `EVENT_DURATION_MINUTES` | ~~Deprecated dict~~ **templated** | v1 adapter via `race_templates` | **shim** via constants re-export | Phase 8 ✓ | Prefer analysis.json for v2 | when v1 gone |
+| `HOTSPOT_SEGMENTS` / map center constants | ~~Sample-race globals~~ **templated** | `race_templates.sample_fredericton` | **keep** as template data | Phase 8 ✓ | Override via `RACE_TEMPLATE` | — |
 | Classic UI chrome (`base.html` else branch) | ~~Dual chrome~~ **FIXED/removed** | — | **remove** ✓ | Phase 7 | Tabler-only in `base.html`; Git for rollback | Phase 7 |
 | Course-mapping legacy DOM (`course-legacy-*`, hidden recipes) | Partially hidden | `course_mapping.js`, `segment_recipes.js` | **investigate** | Phase 9 | Smoke preferred Build workflow first | TBD |
 | Host path `/Users/jthompson/Documents/runflow` | ~~Duplicated~~ **FIXED** | `path_mapper` + `RUNFLOW_ROOT` | **keep** env contract | Phase 4 ✓ | Compose `.env` / `.env.example` | — |

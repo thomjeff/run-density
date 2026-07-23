@@ -3,7 +3,16 @@ Application Constants
 
 This module contains all application-wide constants to avoid magic numbers
 and improve maintainability.
+
+Issue #798 Phase 8: race-specific schedules/hotspots/map center come from
+``app.core.race_templates`` (not treated as universal algorithm law).
 """
+
+from app.core.race_templates import (
+    get_hotspot_segments,
+    get_map_center,
+    get_v1_event_duration_minutes,
+)
 
 # Time conversion constants
 SECONDS_PER_MINUTE = 60.0
@@ -80,24 +89,8 @@ DISTANCE_BIN_SIZE_KM = 0.1  # 100m distance bins
 # Day short codes for v2 (Issue #495)
 DAY_SHORT_CODES = ['fri', 'sat', 'sun', 'mon']
 
-# Event durations in minutes (DEPRECATED - Issue #553 Phase 4.3)
-# Event durations now come from analysis.json per-event configuration.
-# This constant is kept for backward compatibility with v1 API only.
-# v2 API uses event_duration_minutes from request payload → analysis.json.
-# TODO: Remove after v1 API is fully deprecated.
-EVENT_DURATION_MINUTES = {
-    "elite": 45,   # Elite marathon ~45 minutes
-    "open": 75,   # Open marathon ~75 minutes
-    "10k": 120,   # 10K race ~2 hours
-    "half": 180,  # Half marathon ~3 hours
-    "full": 390,  # Full marathon ~6.5 hours
-    # Support both lowercase (v2) and capitalized (v1) keys
-    "Elite": 45,
-    "Open": 75,
-    "10K": 120,
-    "Half": 180,
-    "Full": 390,
-}
+# Issue #798 Phase 8: race-specific durations live in race templates (v1 adapter only).
+EVENT_DURATION_MINUTES = dict(get_v1_event_duration_minutes())
 
 # Mapping event names to day of the week (REMOVED - Issue #553 Phase 4.1)
 # v2 uses Event.day property and analysis.json instead of these constants.
@@ -123,18 +116,9 @@ MAX_BIN_GENERATION_TIME_SECONDS = 120  # P95 target per ChatGPT performance plan
 BIN_HARD_LIMIT_SECONDS = 180  # Absolute ceiling before failover per ChatGPT
 BIN_SCHEMA_VERSION = "1.0.0"  # Schema version for validation (updated per ChatGPT)
 
-# Hotspot preservation for bin dataset generation (ChatGPT final optimizations)
-HOTSPOT_SEGMENTS = {
-    "F1",   # Bridge approaches - critical for reopening decisions
-    "H1",   # Trail/Aberdeen critical counterflow area
-    "J1", "J4", "J5",  # Bridge/Mill complex - high traffic convergence
-    "K1",   # Bridge/Mill to Station - major throughput area
-    "L1"    # Trail/Aberdeen counterflow - operational decisions
-}
-
-# Map center coordinates (Fredericton, NB)
-MAP_CENTER_LAT = 45.9620
-MAP_CENTER_LON = -66.6500
+# Issue #798 Phase 8: hotspot IDs + map center from active race template (not universal law).
+HOTSPOT_SEGMENTS = get_hotspot_segments()
+MAP_CENTER_LAT, MAP_CENTER_LON = get_map_center()
 MAP_DEFAULT_ZOOM = 14
 
 # Map tile provider
