@@ -29,7 +29,7 @@
 | `window_seconds` | bare `window_s` at core boundaries (adapters may alias) |
 | `event_duration_minutes` | bare `event_duration` when unit unclear |
 | `step_km` / `bin_km` | mix without documenting which is spatial resolution |
-| `start_time` minutes after midnight | document range once (Phase 2: **300–1200** operating hours) |
+| `start_time` | Minutes after midnight; **canonical range 300–1200** (05:00–20:00). SSOT: `app.core.v2.start_time` |
 
 ## ID pairs (not always synonyms)
 

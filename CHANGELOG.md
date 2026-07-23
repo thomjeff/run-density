@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Issue #798 Phase 2 — Canonical start-time contract
+- Added `app/core/v2/start_time.py` (300–1200 operating hours, 05:00–20:00)
+- Wired validators / Pydantic models / package analysis / `Event` to the shared helper
+- Fixed tests that incorrectly accepted 0–1439; regression: `tests/unit/test_issue798_phase2_start_time.py`
+
 ### Issue #798 Phase 1 — Dead routers & unused flow audit helpers
 - Compose flow/bidirectional routers from `app.api.*` (deleted wildcard shims)
 - Removed empty `app/routes/reports.py` registration

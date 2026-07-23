@@ -12,6 +12,12 @@ from app.core.config_package.storage import (
     resolve_config_package_path,
     validate_config_id,
 )
+from app.core.v2.start_time import (
+    START_TIME_MAX_MINUTES,
+    START_TIME_MIN_MINUTES,
+    StartTimeValidationError,
+    validate_start_minute,
+)
 
 # UI-only suggestions when opening the run-analysis dialog (not applied server-side).
 SUGGESTED_EVENT_SCHEDULE: Dict[str, Dict[str, int]] = {
@@ -132,8 +138,13 @@ def build_package_analyze_payload(
             raise ValueError(f"Event '{name}' requires start_time and event_duration_minutes")
         start_time = int(start_time)
         duration = int(duration)
-        if start_time < 300 or start_time > 1200:
-            raise ValueError(f"Event '{name}' start_time must be between 300 and 1200 minutes")
+        try:
+            start_time = validate_start_minute(start_time, event_name=name)
+        except StartTimeValidationError as e:
+            raise ValueError(
+                f"Event '{name}' start_time must be between "
+                f"{START_TIME_MIN_MINUTES} and {START_TIME_MAX_MINUTES} minutes"
+            ) from e
         if duration < 1 or duration > 500:
             raise ValueError(
                 f"Event '{name}' event_duration_minutes must be between 1 and 500"

@@ -13,6 +13,7 @@ from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
+from app.core.v2.start_time import START_TIME_MAX_MINUTES, START_TIME_MIN_MINUTES
 from app.core.config_package import (
     create_config_package,
     delete_config_package,
@@ -198,7 +199,7 @@ class AssignPackageCoursesRequest(BaseModel):
 
 class RunPackageAnalysisEventSchedule(BaseModel):
     name: str = Field(..., min_length=1)
-    start_time: int = Field(..., ge=300, le=1200)
+    start_time: int = Field(..., ge=START_TIME_MIN_MINUTES, le=START_TIME_MAX_MINUTES)
     event_duration_minutes: int = Field(..., ge=1, le=500)
     day: Optional[str] = Field(None, min_length=3, max_length=3)
 

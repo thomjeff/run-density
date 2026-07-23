@@ -138,7 +138,7 @@ Legacy course-mapping routes may still exist for compatibility; Race Configurati
 - Relying on module names containing `new_`, `legacy`, or `old` to decide delete vs keep.
 - Fabricated report metadata (`window_s = 30`, `bin_km = 0.2` TODOs in `new_density_report.py`) — fix in Phase 5.
 - Host-specific absolute paths (`/Users/.../runflow`) duplicated in code — Phase 4.
-- Multiple conflicting start-time ranges in docs/tests vs validators — Phase 2.
+- Start-time contract unified in `app.core.v2.start_time` (300–1200) — Phase 2 ✓.
 
 ---
 
