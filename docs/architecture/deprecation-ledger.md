@@ -32,10 +32,10 @@ Update this file in the same PR that changes disposition or removes a module.
 | `app/new_flagging.py` | **LIVE** | `new_density_report`, `save_bins.apply_new_flagging` | **rename** | Phase 6 | Rulebook flagging is canonical behavior | with above |
 | `app/density_report.py` | **LIVE** façade + legacy helpers | v2 reports, bins, `main.py` legacy endpoints | **keep** then thin after Phase 6 | Phase 6 / 9 | Large module; soft LOC split later | — |
 | `app/flow_report.py` | **LIVE** | v2 `generate_flow_report_v2` | **keep** | — | Flow.md path deprecated; CSV kept | — |
-| `app/routes/reports.py` | Empty router, still registered | `main.py` `include_router` | **remove** | Phase 1 | Frontend uses `api_reports` | with Phase 1 merge |
-| `app/routes/api_flow.py` | Wildcard re-export | `main.py` | **remove** shim; import `app.api.flow` | Phase 1 | Add `noqa` only if temporary | Phase 1 |
-| `app/routes/api_bidirectional.py` | Wildcard re-export | `main.py` | **remove** shim; import `app.api.bidirectional` | Phase 1 | | Phase 1 |
-| `app/core/flow/flow.py` `_ShardWriter` | Unused (Parquet migration) | definitions only | **remove** | Phase 1 | Also `_write_index_csv`, `_write_topk_csv` | Phase 1 |
+| `app/routes/reports.py` | ~~Empty router~~ **REMOVED** | — | **remove** ✓ | Phase 1 | Frontend uses `api_reports` | Phase 1 |
+| `app/routes/api_flow.py` | ~~Wildcard re-export~~ **REMOVED** | — | **remove** ✓ | Phase 1 | `main` imports `app.api.flow` | Phase 1 |
+| `app/routes/api_bidirectional.py` | ~~Wildcard re-export~~ **REMOVED** | — | **remove** ✓ | Phase 1 | `main` imports `app.api.bidirectional` | Phase 1 |
+| `app/core/flow/flow.py` `_ShardWriter` | ~~Unused~~ **REMOVED** | — | **remove** ✓ | Phase 1 | Also `_write_index_csv`, `_write_topk_csv` | Phase 1 |
 | `app/utils/constants.py` `EVENT_DURATION_MINUTES` | Deprecated dict; capitalized dupes | v1 compatibility risk | **investigate** → remove or v1-only adapter | Phase 8 | Confirm v1 endpoint retirement | TBD |
 | `HOTSPOT_SEGMENTS` / map center constants | Sample-race / city defaults | bin generation / maps | **rename/move** to template data | Phase 8 | Not universal domain law | — |
 | Classic UI chrome (`base.html` else branch) | Dual chrome with Tabler | all pages without `ui=tabler` | **remove** | Phase 7 | Product: Tabler-only; Git for rollback | Phase 7 |
@@ -48,7 +48,12 @@ Update this file in the same PR that changes disposition or removes a module.
 
 ## Completed
 
-_None yet — Phase 0 establishes this ledger._
+| Module / symbol | Removed in | Notes |
+|-----------------|------------|-------|
+| `app/routes/reports.py` | Phase 1 | Empty `/reports` router |
+| `app/routes/api_flow.py` | Phase 1 | Wildcard shim → `app.api.flow` |
+| `app/routes/api_bidirectional.py` | Phase 1 | Wildcard shim → `app.api.bidirectional` |
+| `flow._ShardWriter`, `_write_index_csv`, `_write_topk_csv` | Phase 1 | Dead CSV audit helpers post-Parquet |
 
 ---
 

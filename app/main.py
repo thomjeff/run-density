@@ -22,14 +22,13 @@ from app.core.density.compute import analyze_density_segments
 # from app.api.report import generate_combined_report, generate_combined_narrative
 from app.core.flow.flow import analyze_temporal_flow_segments, generate_temporal_flow_narrative
 from app.api.map import router as map_router
-from app.routes.reports import router as reports_router
 from app.routes.ui import router as ui_router
 from app.routes.api_segments import router as api_segments_router
 from app.routes.api_dashboard import router as api_dashboard_router
 from app.routes.api_health import router as api_health_router
 from app.routes.api_density import router as api_density_router
-from app.routes.api_flow import router as api_flow_router
-from app.routes.api_bidirectional import router as api_bidirectional_router
+from app.api.flow import router as api_flow_router
+from app.api.bidirectional import router as api_bidirectional_router
 from app.routes.api_reports import router as api_reports_router
 from app.routes.api_bins import router as api_bins_router
 # Phase 3 cleanup: Removed api_heatmaps_router import (endpoint unused)
@@ -138,7 +137,6 @@ logging.getLogger().info("BOOT_ENV %s", BOOT_ENV)
 # Include API routers
 # app.api.density router removed in Phase 3 - was disabled, endpoints unused
 app.include_router(map_router)
-app.include_router(reports_router)
 app.include_router(ui_router)
 app.include_router(api_segments_router)
 app.include_router(api_dashboard_router)
