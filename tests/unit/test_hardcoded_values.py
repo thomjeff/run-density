@@ -72,18 +72,26 @@ class TestStartTimeValidation:
         assert exc_info.value.code == 400
         assert "start_time" in exc_info.value.message.lower()
     
-    def test_validate_start_times_accepts_arbitrary_times(self):
-        """Test that arbitrary start times are accepted."""
+    def test_validate_start_times_accepts_operating_hours(self):
+        """Test that start times within 300–1200 (05:00–20:00) are accepted."""
         events = [
-            {"name": "custom1", "day": "sat", "start_time": 300},  # 05:00
+            {"name": "custom1", "day": "sat", "start_time": 300},  # 05:00 boundary
             {"name": "custom2", "day": "sat", "start_time": 900},  # 15:00
-            {"name": "custom3", "day": "sun", "start_time": 0},    # 00:00
-            {"name": "custom4", "day": "sun", "start_time": 1439}, # 23:59
+            {"name": "custom3", "day": "sun", "start_time": 1200},  # 20:00 boundary
         ]
-        
+
         # Should not raise
         validate_start_times(events)
-    
+
+    def test_validate_start_times_rejects_outside_operating_hours(self):
+        """Test that times outside 300–1200 are rejected (incl. midnight / end of day)."""
+        for bad in (-1, 0, 299, 1201, 1439, 1440):
+            events = [{"name": "invalid", "day": "sun", "start_time": bad}]
+            with pytest.raises(ValidationError) as exc_info:
+                validate_start_times(events)
+            assert exc_info.value.code == 400
+            assert "300" in exc_info.value.message and "1200" in exc_info.value.message
+
     def test_validate_start_times_rejects_invalid_range(self):
         """Test that out-of-range start times are rejected."""
         events = [

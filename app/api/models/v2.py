@@ -10,12 +10,19 @@ Phase 2: API Route (Issue #496)
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, field_validator
 
+from app.core.v2.start_time import (
+    START_TIME_MAX_MINUTES,
+    START_TIME_MIN_MINUTES,
+    START_TIME_RANGE_DESCRIPTION,
+)
+
 
 class V2EventRequest(BaseModel):
     """
     Event request model matching api_v2.md event structure.
     
     Issue #553: Extended to include event_duration_minutes and updated start_time range.
+    Issue #798 Phase 2: start_time bounds from app.core.v2.start_time.
     
     Attributes:
         name: Event name (lowercase, e.g., "full", "half", "10k")
@@ -27,7 +34,12 @@ class V2EventRequest(BaseModel):
     """
     name: str = Field(..., description="Event name (lowercase)")
     day: str = Field(..., description="Day code (fri, sat, sun, mon)")
-    start_time: int = Field(..., ge=300, le=1200, description="Start time in minutes after midnight (300-1200)")
+    start_time: int = Field(
+        ...,
+        ge=START_TIME_MIN_MINUTES,
+        le=START_TIME_MAX_MINUTES,
+        description=START_TIME_RANGE_DESCRIPTION,
+    )
     event_duration_minutes: int = Field(..., ge=1, le=500, description="Event duration in minutes (1-500)")
     runners_file: str = Field(..., description="Name of runners CSV file")
     gpx_file: str = Field(..., description="Name of GPX file")

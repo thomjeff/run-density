@@ -42,7 +42,7 @@ Update this file in the same PR that changes disposition or removes a module.
 | Course-mapping legacy DOM (`course-legacy-*`, hidden recipes) | Partially hidden | `course_mapping.js`, `segment_recipes.js` | **investigate** | Phase 9 | Smoke preferred Build workflow first | TBD |
 | Host path `/Users/jthompson/Documents/runflow` | Duplicated rewrite sites | constants, `analysis_submit`, `ui.py`, scripts, compose | **remove** literals | Phase 4 | Typed settings + PathMapper | Phase 4 |
 | Hardcoded `window_s=30` / `bin_km=0.2` in `new_density_report` | Fabricated metadata | density MD context | **remove** fallback or fail-fast | Phase 5 | Provenance from analysis.json | Phase 5 |
-| Start-time docs/tests claiming 0–1439 | Conflict with live 300–1200 | `models.Event` docstring, `test_hardcoded_values` | **fix** to one contract | Phase 2 | Operating hours 300–1200 is current product rule | Phase 2 |
+| Start-time docs/tests claiming 0–1439 | ~~Conflict~~ **FIXED** | `app.core.v2.start_time` is SSOT | **keep** contract | Phase 2 ✓ | Operating hours 300–1200 | — |
 
 ---
 
@@ -50,6 +50,7 @@ Update this file in the same PR that changes disposition or removes a module.
 
 | Module / symbol | Removed in | Notes |
 |-----------------|------------|-------|
+| Conflicting 0–1439 start-time docs/tests | Phase 2 | Canonical module `app.core.v2.start_time` (300–1200) |
 | `app/routes/reports.py` | Phase 1 | Empty `/reports` router |
 | `app/routes/api_flow.py` | Phase 1 | Wildcard shim → `app.api.flow` |
 | `app/routes/api_bidirectional.py` | Phase 1 | Wildcard shim → `app.api.bidirectional` |

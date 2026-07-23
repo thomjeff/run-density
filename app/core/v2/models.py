@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional
 
+from app.core.v2.start_time import validate_start_minute
+
 
 class Day(str, Enum):
     """
@@ -93,7 +95,7 @@ class Event:
     Attributes:
         name: Event name (normalized to lowercase, e.g., "full", "half", "10k")
         day: Day enumeration (fri, sat, sun, mon)
-        start_time: Start time in minutes after midnight (0-1439)
+        start_time: Start time in minutes after midnight (300-1200, 05:00–20:00)
         gpx_file: Path to GPX file defining this event's course
         runners_file: Path to CSV file containing runners for this event
         seg_ids: List of segment IDs used by this event (references, not copies)
@@ -101,15 +103,16 @@ class Event:
     """
     name: str
     day: Day
-    start_time: int  # minutes after midnight (0-1439)
+    start_time: int  # minutes after midnight (300-1200 operating hours; see app.core.v2.start_time)
     gpx_file: str
     runners_file: str
     seg_ids: List[str] = field(default_factory=list)
     runners: List[Runner] = field(default_factory=list)
     
     def __post_init__(self):
-        """Normalize event name to lowercase."""
+        """Normalize event name to lowercase; enforce canonical start_time range."""
         self.name = self.name.lower()
+        self.start_time = validate_start_minute(self.start_time, event_name=self.name)
     
     def __hash__(self) -> int:
         """Make Event hashable for use in sets/dicts."""

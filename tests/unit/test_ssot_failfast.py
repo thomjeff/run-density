@@ -52,8 +52,8 @@ def test_flow_segments_require_flow_type() -> None:
             "direction": ["uni"],
         }
     )
-    event_a = Event(name="full", day=Day.SUN, start_time=0, gpx_file="full.gpx", runners_file="full.csv")
-    event_b = Event(name="half", day=Day.SUN, start_time=0, gpx_file="half.gpx", runners_file="half.csv")
+    event_a = Event(name="full", day=Day.SUN, start_time=420, gpx_file="full.gpx", runners_file="full.csv")
+    event_b = Event(name="half", day=Day.SUN, start_time=440, gpx_file="half.gpx", runners_file="half.csv")
 
     with pytest.raises(ValueError, match="flow_type is required"):
         create_flow_segments_from_flow_csv(flow_rows, event_a, event_b, segments_df)

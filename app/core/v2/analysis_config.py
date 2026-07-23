@@ -9,12 +9,20 @@ Phase 2: analysis.json Creation (Single Source of Truth)
 """
 
 import json
-import os
-from pathlib import Path
-from typing import Dict, List, Any, Optional
-from datetime import datetime, timezone
-import pandas as pd
 import logging
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import pandas as pd
+
+from app.core.v2.start_time import (
+    START_TIME_MAX_MINUTES,
+    START_TIME_MIN_MINUTES,
+    StartTimeValidationError,
+    validate_start_minute,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -481,11 +489,13 @@ def get_start_time(
                     raise ValueError(
                         f"Event '{event_name}' found in analysis.json but missing 'start_time' field"
                     )
-                if not isinstance(start_time, int) or not (300 <= start_time <= 1200):
+                try:
+                    return validate_start_minute(start_time, event_name=event_name)
+                except StartTimeValidationError as e:
                     raise ValueError(
-                        f"Event '{event_name}' has invalid start_time: {start_time} (must be integer 300-1200)"
-                    )
-                return start_time
+                        f"Event '{event_name}' has invalid start_time: {start_time} "
+                        f"(must be integer {START_TIME_MIN_MINUTES}-{START_TIME_MAX_MINUTES})"
+                    ) from e
         
         # Event not found - fail fast per Issue #553 requirements
         available_events = [e.get("name", "unknown") for e in events]
@@ -495,12 +505,13 @@ def get_start_time(
         )
     
     # Validate start_time
-    if not isinstance(start_time, int) or not (300 <= start_time <= 1200):
+    try:
+        return validate_start_minute(start_time, event_name=event_name)
+    except StartTimeValidationError as e:
         raise ValueError(
-            f"Event '{event_name}' has invalid start_time: {start_time} (must be integer 300-1200)"
-        )
-    
-    return start_time
+            f"Event '{event_name}' has invalid start_time: {start_time} "
+            f"(must be integer {START_TIME_MIN_MINUTES}-{START_TIME_MAX_MINUTES})"
+        ) from e
 
 
 def get_all_start_times(

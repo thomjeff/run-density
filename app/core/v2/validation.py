@@ -13,6 +13,7 @@ from typing import Dict, List, Optional, Tuple, Any
 import pandas as pd
 
 from app.core.v2.models import Day, Event
+from app.core.v2.start_time import StartTimeValidationError, validate_start_minute
 
 
 class ValidationError(Exception):
@@ -54,37 +55,16 @@ def validate_day_codes(events: List[Dict[str, Any]]) -> None:
 
 def validate_start_times(events: List[Dict[str, Any]]) -> None:
     """
-    Validate start_time is integer between 300 and 1200 (inclusive).
-    
-    Issue #553: Updated range to 300-1200 (5:00 AM to 8:00 PM).
-    
-    Args:
-        events: List of event dictionaries from API payload
-        
-    Raises:
-        ValidationError (400): If any start_time is out of range or not an integer
+    Validate start_time is integer in the canonical operating-hours range.
+
+    Issue #553 / #798 Phase 2: single contract via app.core.v2.start_time.
     """
     for event in events:
-        start_time = event.get("start_time")
         event_name = event.get("name", "unknown")
-        
-        if start_time is None:
-            raise ValidationError(
-                f"Missing required field 'start_time' for event '{event_name}'",
-                code=400
-            )
-        
-        if not isinstance(start_time, int):
-            raise ValidationError(
-                f"start_time must be an integer for event '{event_name}', got {type(start_time).__name__}",
-                code=400
-            )
-        
-        if start_time < 300 or start_time > 1200:
-            raise ValidationError(
-                f"start_time {start_time} for event '{event_name}' must be between 300 and 1200 (5:00 AM to 8:00 PM)",
-                code=400
-            )
+        try:
+            validate_start_minute(event.get("start_time"), event_name=event_name)
+        except StartTimeValidationError as e:
+            raise ValidationError(e.message, code=e.code) from e
 
 
 def validate_event_names(events: List[Dict[str, Any]]) -> None:
