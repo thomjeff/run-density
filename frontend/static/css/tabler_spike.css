@@ -1,6 +1,6 @@
 /**
- * Tabler chrome spike — light horizontal shell (Issue #796).
- * Opt-in via ?ui=tabler. Default (classic) UI unchanged.
+ * Tabler chrome remaps — sole admin shell (Issue #796 / #798 Phase 7).
+ * Always loaded from base.html with html.rf-tabler. Classic dual-chrome removed.
  */
 
 html.rf-tabler,

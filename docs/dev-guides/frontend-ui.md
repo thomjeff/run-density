@@ -55,7 +55,7 @@ Provides Results sub-nav + run banner / empty CTA. Styles: `.rf-results-*` in `c
 
 ## Tabler UI (Issue #798 Phase 7) — sole admin chrome
 
-**[Tabler](https://tabler.io/)** (`@tabler/core`) is an open-source admin dashboard UI kit (MIT License). Runflow loads it **always** from the jsDelivr CDN on pages that extend `base.html` — there is still no npm/webpack step. Classic dual-chrome was removed in Issue #798 Phase 7; `?ui=tabler` is no longer required (JS may still append it for back-compat).
+**[Tabler](https://tabler.io/)** (`@tabler/core`) is an open-source admin dashboard UI kit (MIT License). Runflow loads it **always** from the jsDelivr CDN on pages that extend `base.html` — there is still no npm/webpack step. Classic dual-chrome was removed in Issue #798 Phase 7; `?ui=tabler` is not required and should not be reintroduced as a chrome gate.
 
 ### What we load
 

@@ -301,7 +301,7 @@
                         return;
                     }
                     localStorage.setItem("selected_config_id", configId);
-                    link.href = "/config?config_id=" + encodeURIComponent(configId) + "&ui=tabler";
+                    link.href = "/config?config_id=" + encodeURIComponent(configId);
                     link.title = "Open package " + configId;
                     link.hidden = false;
                 })
@@ -387,16 +387,14 @@
                     const params = new URLSearchParams();
                     params.set("run_id", runId);
                     if (day) params.set("day", day);
-                    params.set("ui", "tabler");
                     window.location.href = "/overview?" + params.toString();
                 })
                 .catch(function () {
-                    window.location.href = "/overview?run_id=" + encodeURIComponent(runId) + "&ui=tabler";
+                    window.location.href = "/overview?run_id=" + encodeURIComponent(runId);
                 });
         }
 
         function updateNavLinks(day, runId) {
-            const tablerUi = document.documentElement.classList.contains("rf-tabler");
             document.querySelectorAll("nav a, .navbar-nav a, .navbar-brand a").forEach(a => {
                 const href = a.getAttribute("href");
                 if (!href || href === "/logout" || href === "/health-check" || href === "#") return;
@@ -426,16 +424,13 @@
                     }
                     newHref = setQueryParam(newHref, "config_id", null);
                 }
-                if (tablerUi) {
-                    newHref = setQueryParam(newHref, "ui", "tabler");
-                } else {
-                    newHref = setQueryParam(newHref, "ui", null);
-                }
+                // Drop legacy chrome gate if present in stored/copied links
+                newHref = setQueryParam(newHref, "ui", null);
                 a.setAttribute("href", newHref);
             });
             const viewAll = document.getElementById("rf-runs-view-all");
-            if (viewAll && tablerUi) {
-                viewAll.setAttribute("href", "/dashboard?ui=tabler");
+            if (viewAll) {
+                viewAll.setAttribute("href", "/dashboard");
             }
             syncTablerRunNav(runId, day);
         }
@@ -479,13 +474,12 @@
             if (changed && newUrl !== window.location.pathname + window.location.search) {
                 window.history.replaceState({}, "", newUrl);
             }
-            // Back-compat: keep ui=tabler in URL if already Tabler (always-on chrome)
-            if (document.documentElement.classList.contains("rf-tabler")) {
-                const p2 = new URLSearchParams(window.location.search);
-                if (p2.get("ui") !== "tabler") {
-                    p2.set("ui", "tabler");
-                    window.history.replaceState({}, "", window.location.pathname + "?" + p2.toString());
-                }
+            // Strip legacy ?ui=tabler chrome gate from Build URLs
+            const p2 = new URLSearchParams(window.location.search);
+            if (p2.has("ui")) {
+                p2.delete("ui");
+                const qs = p2.toString();
+                window.history.replaceState({}, "", window.location.pathname + (qs ? "?" + qs : ""));
             }
             // Keep last Results run in top-bar views while authoring
             const storedRun = (localStorage.getItem("selected_run_id") || "").trim() || null;
