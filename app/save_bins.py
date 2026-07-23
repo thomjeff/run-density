@@ -274,7 +274,7 @@ def _apply_flagging_to_rows(rows: t.List[JsonDict], segments_df: t.Optional[pd.D
         logger: Optional logger instance
     """
     try:
-        from app.new_flagging import apply_new_flagging
+        from app.core.reports.density.flagging import apply_flagging
         from app.io.loader import load_segments
         
         # Convert rows to DataFrame for flagging
@@ -307,7 +307,7 @@ def _apply_flagging_to_rows(rows: t.List[JsonDict], segments_df: t.Optional[pd.D
                     logger.warning("Continuing flagging without segments_df - flagging may be inaccurate")
         
         # Apply rulebook-based flagging (no config needed - thresholds from YAML)
-        flagged_df = apply_new_flagging(bins_df, segments_df=segments_df)
+        flagged_df = apply_flagging(bins_df, segments_df=segments_df)
         
         # Convert back to rows with new columns
         flagged_rows = flagged_df.to_dict('records')

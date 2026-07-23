@@ -367,7 +367,7 @@ def generate_density_report_v2(
     """
     Generate day-scoped density report (Density.md).
     
-    Uses generate_new_density_report_issue246 for Schema 1.0.0 format.
+    Uses generate_density_report_markdown for Schema 1.0.0 format.
     Filters segments, bins, and segment_windows by day/events before report generation.
     
     Args:
@@ -384,7 +384,7 @@ def generate_density_report_v2(
     try:
         import pandas as pd
         from pathlib import Path as PathType
-        from app.density_report import generate_new_density_report_issue246
+        from app.density_report import generate_density_report_markdown
         from app.core.v2.bins import filter_segments_by_events
         from app.utils.run_id import get_runflow_root
         from app.utils.metadata import get_app_version
@@ -449,7 +449,7 @@ def generate_density_report_v2(
                     f"⚠️ Expected segments missing from bins for day {day.value}: {missing_segments}"
                 )
         
-        # Save filtered segments to reports directory (for generate_new_density_report_issue246)
+        # Save filtered segments to reports directory (for generate_density_report_markdown)
         segments_parquet = reports_path / "segments.parquet"
         # Ensure seg_id column exists (may be renamed to segment_id in some contexts)
         segments_for_report = segments_df.copy()
@@ -516,8 +516,8 @@ def generate_density_report_v2(
             
             logger.info(f"Issue #600: Using segment_metrics.json as SSOT: {segment_metrics_json_path}")
             
-            logger.info(f"Calling generate_new_density_report_issue246 for day {day.value}...")
-            results = generate_new_density_report_issue246(
+            logger.info(f"Calling generate_density_report_markdown for day {day.value}...")
+            results = generate_density_report_markdown(
                 reports_dir=str(reports_path),
                 segment_metrics_path=str(segment_metrics_json_path),  # Issue #600: Pass segment_metrics.json path (required)
                 output_path=str(reports_path / "Density.md"),
@@ -526,7 +526,7 @@ def generate_density_report_v2(
                 event_groups_res=event_groups_res,  # Issue #573: Pass RES data for Executive Summary
                 bins_dir=str(bins_dir)  # Issue #519/542: Pass bins_dir to avoid duplicate files
             )
-            logger.info(f"generate_new_density_report_issue246 returned for day {day.value}, success={results.get('success', False)}")
+            logger.info(f"generate_density_report_markdown returned for day {day.value}, success={results.get('success', False)}")
             
             if results.get('success'):
                 density_path = reports_path / "Density.md"

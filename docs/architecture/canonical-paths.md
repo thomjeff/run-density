@@ -39,7 +39,7 @@ app/core/v2/pipeline.py
 
 ## 2. Density report generation — live call graph
 
-Despite “DEPRECATED” banners on `new_*` modules, **production density Markdown still flows through them**:
+Canonical package after Issue #798 Phase 6 (`app.new_*` are DeprecationWarning shims only):
 
 ```text
 app/core/v2/reports.py
@@ -47,20 +47,18 @@ app/core/v2/reports.py
         │
         ▼
 app/density_report.py
-  generate_new_density_report_issue246(...)
+  generate_density_report_markdown(...)   # alias: generate_new_density_report_issue246
         │
         ▼
-app/new_density_report.py
-  generate_new_density_report(...)
+app/core/reports/density/report.py
+  generate_density_report(...)
         │
-        ├─ app/new_flagging.py          (also used from app/save_bins.py)
-        └─ app/new_density_template_engine.py
-             NewDensityTemplateEngine
+        ├─ app/core/reports/density/flagging.py          (also used from app/save_bins.py)
+        └─ app/core/reports/density/template_engine.py
+             DensityReportTemplateEngine
 ```
 
-**Disposition (Phase 6):** rename/move to a canonical package (e.g. `app/core/reports/density/`). Do **not** delete `new_*` until callers are retargeted and ledger removal gates pass.
-
-Related: bin flagging during save uses `app/new_flagging.apply_new_flagging` from `app/save_bins.py`.
+Related: bin flagging during save uses `app.core.reports.density.flagging.apply_flagging` from `app/save_bins.py`.
 
 ---
 
@@ -136,9 +134,10 @@ Legacy course-mapping routes may still exist for compatibility; Race Configurati
 ## 7. What is *not* canonical
 
 - Relying on module names containing `new_`, `legacy`, or `old` to decide delete vs keep.
-- Fabricated report metadata (`window_s = 30`, `bin_km = 0.2` TODOs in `new_density_report.py`) — fix in Phase 5.
+- Fabricated report metadata (`window_s` / `bin_km`) — resolved via `app.core.bin.provenance` (Phase 5 ✓).
 - Host/container path rewrite unified in `app.utils.path_mapper` — Phase 4 ✓.
 - Start-time contract unified in `app.core.v2.start_time` (300–1200) — Phase 2 ✓.
+- Misleading live `new_*` density modules — renamed under `app.core.reports.density` (Phase 6 ✓; shims remain).
 
 ---
 

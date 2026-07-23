@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Issue #798 Phase 6 — Normalize live density report package
+- Moved live stack to `app/core/reports/density/` (`report`, `flagging`, `template_engine`)
+- Renamed public APIs (`generate_density_report`, `apply_flagging`, `DensityReportTemplateEngine`, …)
+- Left `app/new_*` as DeprecationWarning re-export shims; façade alias retained
+- Regression: `tests/unit/test_issue798_phase6_density_report_rename.py`
+
 ### Issue #798 Phase 5 — Report configuration provenance
 - Density report `window_s` / `bin_km` resolved from `bins.parquet` (`app.core.bin.provenance`)
 - Removed fabricated `30` / `0.2` TODOs from `new_density_report` / template defaults
