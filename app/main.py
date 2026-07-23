@@ -113,7 +113,7 @@ class FlowAuditRequest(BaseModel):
 
 # Issue #550: Dynamic version from git tag with fallback
 APP_VERSION = get_version()
-app = FastAPI(title="run-density", version=APP_VERSION)
+app = FastAPI(title="Runflow", version=APP_VERSION)
 GIT_SHA = os.getenv("GIT_SHA", "local")
 BUILD_AT = os.getenv("BUILD_AT", datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z")
 

@@ -22,6 +22,9 @@ This guide consolidates essential reference information for developers working w
 
 ## Variable Naming
 
+Canonical product vocabulary (course / leg / segment / aliases): see
+[`docs/architecture/domain-glossary.md`](../architecture/domain-glossary.md) (Issue #798 Phase 3).
+
 ### Critical Naming Rules
 
 **Always use these exact field names to avoid bugs:**
@@ -57,7 +60,7 @@ This guide consolidates essential reference information for developers working w
 
 | Field | Units | Example | Source |
 |-------|-------|---------|--------|
-| `start_time` | minutes from midnight | `420` (7:00 AM), `480` (8:00 AM) | API request → `analysis.json` |
+| `start_time` | minutes from midnight (**300–1200** operating hours; see `app.core.v2.start_time`) | `420` (7:00 AM), `480` (8:00 AM) | API request → `analysis.json` |
 | `start_times` | dict | `{'elite': 480, 'open': 510}` | `analysis.json` → `get_all_start_times()` |
 | `start_offset` | seconds | `30.0` | Runner data |
 | `pace` | minutes per km | `5.5` | Runner data |

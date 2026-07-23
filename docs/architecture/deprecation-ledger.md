@@ -51,6 +51,7 @@ Update this file in the same PR that changes disposition or removes a module.
 | Module / symbol | Removed in | Notes |
 |-----------------|------------|-------|
 | Conflicting 0–1439 start-time docs/tests | Phase 2 | Canonical module `app.core.v2.start_time` (300–1200) |
+| Domain glossary stub | Phase 3 | Expanded field alias map + agent guidance; FastAPI title → Runflow |
 | `app/routes/reports.py` | Phase 1 | Empty `/reports` router |
 | `app/routes/api_flow.py` | Phase 1 | Wildcard shim → `app.api.flow` |
 | `app/routes/api_bidirectional.py` | Phase 1 | Wildcard shim → `app.api.bidirectional` |
