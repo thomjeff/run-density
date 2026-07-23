@@ -27,10 +27,11 @@ Update this file in the same PR that changes disposition or removes a module.
 
 | Module / symbol | Status today | Callers (summary) | Disposition | Target phase | Owner notes | Removal version |
 |-----------------|--------------|-------------------|-------------|--------------|-------------|-----------------|
-| `app/new_density_report.py` | **LIVE** (banner says deprecated) | `density_report.generate_new_density_report_issue246` → v2 `reports.generate_density_report_v2` | **rename** → `app/core/reports/density/` (name TBD) | Phase 6 | Keep until rename + provenance (Phase 5) | After Phase 6 + one release if forwarding |
-| `app/new_density_template_engine.py` | **LIVE** | `new_density_report` | **rename** with density report package | Phase 6 | Drop `New` prefix | with above |
-| `app/new_flagging.py` | **LIVE** | `new_density_report`, `save_bins.apply_new_flagging` | **rename** | Phase 6 | Rulebook flagging is canonical behavior | with above |
-| `app/density_report.py` | **LIVE** façade + legacy helpers | v2 reports, bins, `main.py` legacy endpoints | **keep** then thin after Phase 6 | Phase 6 / 9 | Large module; soft LOC split later | — |
+| `app/new_density_report.py` | **shim** | → `app.core.reports.density.report` | **shim** | Phase 6 ✓ | Remove after one release | next release |
+| `app/new_density_template_engine.py` | **shim** | → `…density.template_engine` | **shim** | Phase 6 ✓ | Remove after one release | next release |
+| `app/new_flagging.py` | **shim** | → `…density.flagging` | **shim** | Phase 6 ✓ | Remove after one release | next release |
+| `app/core/reports/density/*` | **LIVE** canonical | v2 reports, `save_bins`, façade | **keep** | Phase 6 ✓ | Public API in package `__init__` | — |
+| `app/density_report.py` | **LIVE** façade + legacy helpers | v2 reports, bins, `main.py` legacy endpoints | **keep** then thin | Phase 6 / 9 | `generate_density_report_markdown` (+ alias) | — |
 | `app/flow_report.py` | **LIVE** | v2 `generate_flow_report_v2` | **keep** | — | Flow.md path deprecated; CSV kept | — |
 | `app/routes/reports.py` | ~~Empty router~~ **REMOVED** | — | **remove** ✓ | Phase 1 | Frontend uses `api_reports` | Phase 1 |
 | `app/routes/api_flow.py` | ~~Wildcard re-export~~ **REMOVED** | — | **remove** ✓ | Phase 1 | `main` imports `app.api.flow` | Phase 1 |
@@ -54,6 +55,7 @@ Update this file in the same PR that changes disposition or removes a module.
 | Domain glossary stub | Phase 3 | Expanded field alias map + agent guidance; FastAPI title → Runflow |
 | Host `/Users/.../runflow` literals | Phase 4 | `app.utils.path_mapper` + `RUNFLOW_ROOT` env; compose `.env.example` |
 | Fabricated report `window_s`/`bin_km` | Phase 5 | Resolved from `bins.parquet` via `app.core.bin.provenance` |
+| Live `new_*` density stack moved | Phase 6 | Canonical under `app/core/reports/density/`; old paths are shims |
 | `app/routes/reports.py` | Phase 1 | Empty `/reports` router |
 | `app/routes/api_flow.py` | Phase 1 | Wildcard shim → `app.api.flow` |
 | `app/routes/api_bidirectional.py` | Phase 1 | Wildcard shim → `app.api.bidirectional` |

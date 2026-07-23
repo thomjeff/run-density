@@ -3551,7 +3551,7 @@ def save_bin_dataset(bin_data: Dict[str, Any], output_dir: str) -> str:
     return geojson_path
 
 
-def generate_new_density_report_issue246(
+def generate_density_report_markdown(
     reports_dir: str,
     segment_metrics_path: str,  # Issue #600: Path to segment_metrics.json (SSOT - required)
     output_path: Optional[str] = None,
@@ -3582,7 +3582,7 @@ def generate_new_density_report_issue246(
     import logging
     logger = logging.getLogger(__name__)
     
-    from app.new_density_report import generate_new_density_report
+    from app.core.reports.density.report import generate_density_report
     from pathlib import Path
     
     # Convert string paths to Path objects
@@ -3590,7 +3590,7 @@ def generate_new_density_report_issue246(
     output_path_obj = Path(output_path) if output_path else None
     bins_path = Path(bins_dir) if bins_dir else None
     
-    logger.info(f"generate_new_density_report_issue246: Calling generate_new_density_report with reports_dir={reports_path}, bins_dir={bins_path}, output_path={output_path_obj}")
+    logger.info(f"generate_density_report_markdown: Calling generate_density_report with reports_dir={reports_path}, bins_dir={bins_path}, output_path={output_path_obj}")
     
     # Issue #600: Convert segment_metrics_path string to Path if provided
     segment_metrics_path_obj = None
@@ -3600,8 +3600,8 @@ def generate_new_density_report_issue246(
     # Issue #600: Convert segment_metrics_path string to Path (required)
     segment_metrics_path_obj = Path(segment_metrics_path)
     
-    # Generate the new report
-    results = generate_new_density_report(
+    # Generate the density Markdown report
+    results = generate_density_report(
         reports_path,
         segment_metrics_path_obj,  # Issue #600: Pass segment_metrics.json path (required)
         output_path_obj, 
@@ -3611,7 +3611,7 @@ def generate_new_density_report_issue246(
         bins_dir=bins_path  # Issue #519/542: Pass bins_dir to avoid duplicate files
     )
     
-    logger.info(f"generate_new_density_report_issue246: generate_new_density_report returned, success={results.get('success', False)}")
+    logger.info(f"generate_density_report_markdown: generate_density_report returned, success={results.get('success', False)}")
     
     # Return in the format expected by the existing API
     return {
@@ -3624,3 +3624,7 @@ def generate_new_density_report_issue246(
         'success': True,
         'message': 'New density report generated successfully'
     }
+
+
+# Issue #798 Phase 6: temporary alias for callers still using the Issue #246 name
+generate_new_density_report_issue246 = generate_density_report_markdown

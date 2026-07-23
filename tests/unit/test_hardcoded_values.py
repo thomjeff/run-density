@@ -179,9 +179,9 @@ class TestFlowOrderingUsesFlowCsv:
 class TestNoHardcodedRunnerCounts:
     """Test that runner counts are not hardcoded."""
     
-    def test_new_density_report_no_hardcoded_counts(self):
-        """Verify new_density_report.py does not have hardcoded runner counts."""
-        import app.new_density_report as module
+    def test_density_report_module_no_hardcoded_counts(self):
+        """Verify density report module does not have hardcoded runner counts."""
+        import app.core.reports.density.report as module
         
         # Check source code for hardcoded runner counts
         source_file = Path(module.__file__)

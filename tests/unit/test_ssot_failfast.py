@@ -3,7 +3,7 @@ import pytest
 
 from app.core.v2.flow import create_flow_segments_from_flow_csv
 from app.core.v2.models import Day, Event
-from app.new_flagging import _load_and_apply_segment_metadata
+from app.core.reports.density.flagging import _load_and_apply_segment_metadata
 from app.rulebook import get_thresholds
 
 
@@ -12,7 +12,7 @@ def test_rulebook_missing_schema_raises() -> None:
         get_thresholds("unknown")
 
 
-def test_new_flagging_requires_width_m() -> None:
+def test_density_flagging_requires_width_m() -> None:
     result_df = pd.DataFrame(
         {
             "segment_id": ["A1"],

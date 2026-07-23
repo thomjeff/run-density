@@ -54,7 +54,7 @@ def test_resolve_rejects_empty_and_missing_columns():
 
 def test_new_density_report_context_uses_artifact_values(tmp_path, monkeypatch):
     """Context must not invent 30s / 0.2km when bins say otherwise."""
-    from app import new_density_report as ndr
+    from app.core.reports.density import report as ndr
 
     bins_df = _sample_bins(bin_km=0.15, window_s=90)
     bins_df["flag_severity"] = "none"
@@ -96,7 +96,7 @@ def test_new_density_report_context_uses_artifact_values(tmp_path, monkeypatch):
             assert context["window_seconds"] == 90
             return "# report"
 
-    monkeypatch.setattr(ndr, "NewDensityTemplateEngine", _FakeEngine)
+    monkeypatch.setattr(ndr, "DensityReportTemplateEngine", _FakeEngine)
     monkeypatch.setattr(ndr, "load_density_rulebook", lambda: {})
     monkeypatch.setattr(
         ndr,
@@ -106,7 +106,7 @@ def test_new_density_report_context_uses_artifact_values(tmp_path, monkeypatch):
 
     metrics = tmp_path / "segment_metrics.json"
     metrics.write_text("{}")
-    results = ndr.generate_new_density_report(
+    results = ndr.generate_density_report(
         reports_dir=tmp_path,
         segment_metrics_path=metrics,
         app_version="test",
@@ -115,10 +115,10 @@ def test_new_density_report_context_uses_artifact_values(tmp_path, monkeypatch):
     assert results["context"]["bin_km"] == 0.15
 
 
-def test_no_fabricated_window_bin_literals_in_new_density_report():
+def test_no_fabricated_window_bin_literals_in_density_report():
     from pathlib import Path
 
-    text = Path("app/new_density_report.py").read_text(encoding="utf-8")
+    text = Path("app/core/reports/density/report.py").read_text(encoding="utf-8")
     assert "window_s': 30" not in text
     assert 'window_s": 30' not in text
     assert "bin_km': 0.2" not in text
