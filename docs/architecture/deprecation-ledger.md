@@ -39,7 +39,7 @@ Update this file in the same PR that changes disposition or removes a module.
 | `app/core/flow/flow.py` `_ShardWriter` | ~~Unused~~ **REMOVED** | — | **remove** ✓ | Phase 1 | Also `_write_index_csv`, `_write_topk_csv` | Phase 1 |
 | `app/utils/constants.py` `EVENT_DURATION_MINUTES` | Deprecated dict; capitalized dupes | v1 compatibility risk | **investigate** → remove or v1-only adapter | Phase 8 | Confirm v1 endpoint retirement | TBD |
 | `HOTSPOT_SEGMENTS` / map center constants | Sample-race / city defaults | bin generation / maps | **rename/move** to template data | Phase 8 | Not universal domain law | — |
-| Classic UI chrome (`base.html` else branch) | Dual chrome with Tabler | all pages without `ui=tabler` | **remove** | Phase 7 | Product: Tabler-only; Git for rollback | Phase 7 |
+| Classic UI chrome (`base.html` else branch) | ~~Dual chrome~~ **FIXED/removed** | — | **remove** ✓ | Phase 7 | Tabler-only in `base.html`; Git for rollback | Phase 7 |
 | Course-mapping legacy DOM (`course-legacy-*`, hidden recipes) | Partially hidden | `course_mapping.js`, `segment_recipes.js` | **investigate** | Phase 9 | Smoke preferred Build workflow first | TBD |
 | Host path `/Users/jthompson/Documents/runflow` | ~~Duplicated~~ **FIXED** | `path_mapper` + `RUNFLOW_ROOT` | **keep** env contract | Phase 4 ✓ | Compose `.env` / `.env.example` | — |
 | Hardcoded `window_s=30` / `bin_km=0.2` in `new_density_report` | ~~Fabricated~~ **FIXED** | `app.core.bin.provenance` | **keep** artifact-backed | Phase 5 ✓ | Fail-fast if bins lack columns | — |
@@ -55,6 +55,7 @@ Update this file in the same PR that changes disposition or removes a module.
 | Domain glossary stub | Phase 3 | Expanded field alias map + agent guidance; FastAPI title → Runflow |
 | Host `/Users/.../runflow` literals | Phase 4 | `app.utils.path_mapper` + `RUNFLOW_ROOT` env; compose `.env.example` |
 | Fabricated report `window_s`/`bin_km` | Phase 5 | Resolved from `bins.parquet` via `app.core.bin.provenance` |
+| Classic UI chrome (`base.html` else branch) | Phase 7 | Tabler-only cutover; opt-in `?ui=tabler` no longer required |
 | Live `new_*` density stack moved | Phase 6 | Canonical under `app/core/reports/density/`; old paths are shims |
 | `app/routes/reports.py` | Phase 1 | Empty `/reports` router |
 | `app/routes/api_flow.py` | Phase 1 | Wildcard shim → `app.api.flow` |
