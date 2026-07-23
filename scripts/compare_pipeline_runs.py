@@ -13,13 +13,13 @@ Usage:
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 
 # Default reference run
 DEFAULT_REFERENCE_RUN = "YREtByZhLnG6GjCmUxMSkd"
-RUNFLOW_ROOT = Path("/Users/jthompson/Documents/runflow")
 
 # Expected values from reference run YREtByZhLnG6GjCmUxMSkd (extracted once, never changes)
 EXPECTED_VALUES = {
@@ -377,10 +377,19 @@ def main():
         default=DEFAULT_REFERENCE_RUN,
         help=f'Reference run ID (default: {DEFAULT_REFERENCE_RUN})'
     )
+    parser.add_argument(
+        '--runflow-root',
+        default=os.getenv("RUNFLOW_ROOT", "./runflow"),
+        help='Runflow data root (default: env RUNFLOW_ROOT or ./runflow)',
+    )
     
     args = parser.parse_args()
     
-    test_run_path = RUNFLOW_ROOT / args.test_run_id
+    runflow_root = Path(args.runflow_root).expanduser()
+    test_run_path = runflow_root / "analysis" / args.test_run_id
+    if not test_run_path.exists():
+        # Legacy layout fallback
+        test_run_path = runflow_root / args.test_run_id
     
     if not test_run_path.exists():
         print(f"❌ Test run not found: {test_run_path}", file=sys.stderr)

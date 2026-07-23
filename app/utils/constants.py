@@ -183,9 +183,20 @@ MAP_ZONE_COLORS = {
 # GCS bucket names (configurable via environment variables)
 GCS_BUCKET_RUNFLOW = "runflow"  # New UUID-based structure
 
-# Storage root directories
-RUNFLOW_ROOT_LOCAL = "/Users/jthompson/Documents/runflow"  # Must match docker-compose.yml volume mount
-RUNFLOW_ROOT_CONTAINER = "/app/runflow"
+# Storage root directories (Issue #798 Phase 4: env-backed; no machine-specific defaults)
+# Prefer app.utils.path_mapper.resolve_runflow_root / to_runtime_path for new code.
+from app.utils.path_mapper import (
+    DEFAULT_RUNFLOW_ROOT,
+    DEFAULT_RUNFLOW_ROOT_CONTAINER,
+    get_container_runflow_root,
+    get_host_runflow_root,
+)
+
+RUNFLOW_ROOT_LOCAL = str(get_host_runflow_root())
+RUNFLOW_ROOT_CONTAINER = str(get_container_runflow_root())
+# Re-export defaults for docs/tests
+_RUNFLOW_ROOT_DEFAULT = DEFAULT_RUNFLOW_ROOT
+_RUNFLOW_ROOT_CONTAINER_DEFAULT = DEFAULT_RUNFLOW_ROOT_CONTAINER
 
 # Reports subdirectories
 REPORTS_OVERLAPS_DIRNAME = "overlaps"

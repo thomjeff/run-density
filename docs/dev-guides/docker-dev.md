@@ -212,8 +212,12 @@ The container automatically mounts these directories:
 | `./app` | `/app/app` | Application code (hot-reload) |
 | `./data` | `/app/data` | Input CSV and GPX files |
 | `./config` | `/app/config` | YAML configuration files |
-| `./runflow` | `/app/runflow` | All run outputs (reports, bins, UI artifacts) |
+| `${RUNFLOW_ROOT:-./runflow}` (from host `.env`) | `/app/runflow` | All run outputs (reports, bins, UI artifacts) |
 | `./tests` | `/app/tests` | Test suite (including v2 E2E tests) |
+
+Copy `.env.example` → `.env` and set `RUNFLOW_ROOT` to your host Runflow data directory
+(Issue #798 Phase 4). Compose uses that value for the volume mount and for
+`RUNFLOW_ROOT_HOST` path rewrite inside the container.
 
 ### Hot Reload Behavior
 

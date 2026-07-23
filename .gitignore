@@ -26,3 +26,6 @@ runflow/
 # Cloud (skinny UI) local artifacts
 .cloud-build/
 cloud.env
+
+# Compose host path overrides (Issue #798 Phase 4) — see .env.example
+.env

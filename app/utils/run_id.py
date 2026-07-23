@@ -136,25 +136,12 @@ def is_legacy_date_format(run_id: str) -> bool:
 def get_runflow_root() -> Path:
     """
     Get the runflow root directory path for local filesystem.
-    
-    Issue #466 Step 1: Centralized path resolution for local-only architecture.
-    Detects if running in Docker container vs native host.
-    
-    Returns:
-        Path to runflow root directory
-    
-    Examples:
-        >>> root = get_runflow_root()
-        >>> # In Docker: Path("/app/runflow")
-        >>> # On host: Path("/Users/username/Documents/runflow")
+
+    Issue #466 Step 1 / #798 Phase 4: centralized, env-backed path resolution.
     """
-    from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER
-    
-    # Prefer container path if it exists (running in Docker)
-    if Path(RUNFLOW_ROOT_CONTAINER).exists():
-        return Path(RUNFLOW_ROOT_CONTAINER)
-    else:
-        return Path(RUNFLOW_ROOT_LOCAL)
+    from app.utils.path_mapper import resolve_runflow_root
+
+    return resolve_runflow_root()
 
 
 def get_latest_run_id() -> str:

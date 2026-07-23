@@ -644,17 +644,14 @@ async def get_data_files(
         if not data_dir:
             data_dir = get_data_directory()
         
-        # Issue #680: Map host paths to container paths when running in Docker
-        # docker-compose.yml mounts /Users/jthompson/Documents/runflow:/app/runflow
-        # So we need to convert host paths to container paths
-        is_docker = os.path.exists("/.dockerenv") or os.path.exists("/app/.dockerenv")
-        if is_docker and data_dir:
-            # Map known host paths to container paths
-            if data_dir.startswith("/Users/jthompson/Documents/runflow"):
-                # Replace host path with container path
-                container_path = data_dir.replace("/Users/jthompson/Documents/runflow", "/app/runflow", 1)
-                data_dir = container_path
-                logger.info(f"Mapped host path to container path: {data_dir}")
+        # Issue #680 / #798 Phase 4: Map host paths to container paths via path_mapper
+        if data_dir:
+            from app.utils.path_mapper import to_runtime_path
+
+            mapped = to_runtime_path(data_dir)
+            if mapped != data_dir:
+                logger.info("Mapped host path to container path: %s -> %s", data_dir, mapped)
+            data_dir = mapped
         
         # Resolve the path (handles both absolute and relative paths)
         data_path = Path(data_dir).resolve()
