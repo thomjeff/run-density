@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Issue #798 Phase 9 — Large-module decomposition (stretch)
+- Extracted bin hotspot coarsening helpers to `app/core/bin/hotspots.py`
+- `app.density_report` re-exports the same callables (no behavior change)
+- Regression: `tests/unit/test_issue798_phase9_hotspots_extract.py`
+
 ### Issue #798 Phase 8 — Race defaults → package templates
 - Added `app/core/race_templates/` (`sample_fredericton` + `RACE_TEMPLATE` env)
 - Moved suggested schedules, hotspot segment IDs, map center, and v1 durations out of “universal” constants semantics

@@ -6,5 +6,6 @@ Contains bin-level analysis, geometry processing, and flagging logic.
 Modules:
 - summary.py - Bin summary generation
 - geometry.py - Bin polygon generation
-- flags.py - Bin flagging logic
+- provenance.py - Report window/bin metadata from bins artifacts
+- hotspots.py - Hotspot preservation / coarsening policy (Issue #798 Phase 9)
 """
