@@ -39,6 +39,7 @@ This documentation is organized by audience and topic for easy navigation.
 | [Canonical paths](architecture/canonical-paths.md) | Supported API → pipeline → report call graphs (Issue #798) |
 | [Deprecation ledger](architecture/deprecation-ledger.md) | Live vs remove vs rename dispositions (Issue #798) |
 | [Domain glossary](architecture/domain-glossary.md) | Runflow vocabulary (Issue #798) |
+| [Race templates](architecture/race-templates.md) | Sample-race defaults vs algorithm constants (Issue #798 Phase 8) |
 | [Docker Development](dev-guides/docker-dev.md) | Docker development workflow |
 | [Leg Library & Corridor Pairing](dev-guides/segment-library-2027.md) | Leg platform internals (org library, recipes, pairing, sync) |
 | [Quick Reference](reference/quick-reference.md) | Variable names, terminology, standards (v2.0.2+) |

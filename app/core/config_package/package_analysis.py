@@ -20,13 +20,10 @@ from app.core.v2.start_time import (
 )
 
 # UI-only suggestions when opening the run-analysis dialog (not applied server-side).
-SUGGESTED_EVENT_SCHEDULE: Dict[str, Dict[str, int]] = {
-    "full": {"start_time": 420, "event_duration_minutes": 390},
-    "half": {"start_time": 440, "event_duration_minutes": 180},
-    "10k": {"start_time": 460, "event_duration_minutes": 120},
-    "elite": {"start_time": 480, "event_duration_minutes": 45},
-    "open": {"start_time": 510, "event_duration_minutes": 75},
-}
+# Issue #798 Phase 8: from race template (override via RACE_TEMPLATE env).
+from app.core.race_templates import get_suggested_event_schedule
+
+SUGGESTED_EVENT_SCHEDULE: Dict[str, Dict[str, int]] = dict(get_suggested_event_schedule())
 
 
 def _format_start_time(minutes: int) -> str:

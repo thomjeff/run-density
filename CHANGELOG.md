@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Issue #798 Phase 8 — Race defaults → package templates
+- Added `app/core/race_templates/` (`sample_fredericton` + `RACE_TEMPLATE` env)
+- Moved suggested schedules, hotspot segment IDs, map center, and v1 durations out of “universal” constants semantics
+- Doc: `docs/architecture/race-templates.md`
+- Regression: `tests/unit/test_issue798_phase8_race_templates.py`
+
 ### Issue #798 Phase 7 — Tabler-only frontend chrome
 - `frontend/templates/base.html` always loads Tabler CDN CSS/JS + `common.css` + `tabler_spike.css` (`html.rf-tabler`)
 - Removed Classic dual-chrome branch (inline classic styles, classic header/nav/main/footer) and the Classic UI exit control
