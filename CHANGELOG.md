@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Issue #798 Phase 1 — Dead routers & unused flow audit helpers
+- Compose flow/bidirectional routers from `app.api.*` (deleted wildcard shims)
+- Removed empty `app/routes/reports.py` registration
+- Removed unused `_ShardWriter` / `_write_index_csv` / `_write_topk_csv` from `flow.py`
+- Regression tests: `tests/unit/test_issue798_phase1_routers.py`
+- Updated deprecation ledger completed rows
+
 ### Issue #798 Phase 0 — Canonical paths & deprecation ledger
 - Added `docs/architecture/canonical-paths.md` (v2 analysis, density/flow report graphs, HTTP composition, frontend/Build)
 - Added `docs/architecture/deprecation-ledger.md` with dispositions for `new_*`, shims, host paths, Classic UI, etc.

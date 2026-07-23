@@ -90,9 +90,9 @@ Issue #600: **Flow.csv** is the operator artifact; Flow.md generation is depreca
 | App entry (cloud skinny) | `app/cloud_app.py` | Read-oriented subset |
 | v2 analyze | `app/routes/v2/analyze.py` | Prefix `/runflow/v2` |
 | Reports list/download UI API | `app/routes/api_reports.py` | Used by frontend |
-| Empty `/reports` shim | `app/routes/reports.py` | **Remove in Phase 1** — no routes |
-| Flow API | Prefer `app/api/flow.py` | `app/routes/api_flow.py` is wildcard re-export (**Phase 1**) |
-| Bidirectional API | Prefer `app/api/bidirectional.py` | `app/routes/api_bidirectional.py` is wildcard re-export (**Phase 1**) |
+| Empty `/reports` shim | ~~removed~~ | Phase 1 deleted empty router |
+| Flow API | `app/api/flow.py` | Composed directly from `main.py` (Phase 1) |
+| Bidirectional API | `app/api/bidirectional.py` | Composed directly from `main.py` (Phase 1) |
 | Build / packages | `app/routes/api_config_packages.py` | Large surface; org legs + packages |
 | Results UI pages | `app/routes/ui.py` | Jinja pages |
 

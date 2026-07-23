@@ -1970,65 +1970,6 @@ def _build_overlap_row(
     return row
 
 
-class _ShardWriter:
-    """
-    Helper class to manage shard file writing with row capping.
-    
-    DEPRECATED (Issue #607): This class is no longer used after refactoring audit
-    output to Parquet format. Kept for reference but should not be used in new code.
-    """
-    def __init__(self, audit_dir: str, seg_id: str, event_a_name: str, event_b_name: str, 
-                 pair_base_cols: List[str], row_cap_per_shard: int):
-        self.audit_dir = audit_dir
-        self.seg_id = seg_id
-        self.event_a_name = event_a_name
-        self.event_b_name = event_b_name
-        self.pair_base_cols = pair_base_cols
-        self.row_cap_per_shard = row_cap_per_shard
-        self.shard_writers = {}
-        self.shard_counts = {}
-        self.current_shard_part = {}
-    
-    def _open_shard(self, shard_key: str, part_idx: int) -> Tuple[str, Any, Any]:
-        """Open a new shard file and return path, file handle, and writer."""
-        import csv, os
-        
-        shard_name = f"{self.seg_id}_{self.event_a_name}-{self.event_b_name}_{shard_key}_p{part_idx}.csv"
-        shard_path = os.path.join(self.audit_dir, shard_name)
-        f = open(shard_path, "w", newline="")
-        w = csv.DictWriter(f, fieldnames=self.pair_base_cols)
-        w.writeheader()
-        return shard_path, f, w
-    
-    def write_pair(self, shard_key: str, row: Dict[str, Any]) -> str:
-        """Write pair to appropriate shard, creating new shard if needed."""
-        if shard_key not in self.shard_writers:
-            path, fh, wr = self._open_shard(shard_key, 1)
-            self.shard_writers[shard_key] = (path, fh, wr)
-            self.shard_counts[shard_key] = 0
-            self.current_shard_part[shard_key] = 1
-        
-        path, fh, wr = self.shard_writers[shard_key]
-        if self.shard_counts[shard_key] >= self.row_cap_per_shard:
-            fh.close()
-            self.current_shard_part[shard_key] += 1
-            path, fh, wr = self._open_shard(shard_key, self.current_shard_part[shard_key])
-            self.shard_writers[shard_key] = (path, fh, wr)
-            self.shard_counts[shard_key] = 0
-        
-        wr.writerow(row)
-        self.shard_counts[shard_key] += 1
-        return path
-    
-    def close_all(self) -> List[str]:
-        """Close all shard files and return list of paths."""
-        shard_paths = []
-        for key, (path, fh, wr) in self.shard_writers.items():
-            fh.close()
-            shard_paths.append(path)
-        return shard_paths
-
-
 def _process_two_pointer_sweep(
     A: List[Dict[str, Any]],
     B: List[Dict[str, Any]],
@@ -2053,7 +1994,7 @@ def _process_two_pointer_sweep(
     """
     Process two-pointer sweep algorithm for temporal interval join.
 
-    Issue #607: Refactored to collect rows in a list instead of writing via _ShardWriter.
+    Issue #607: Collects overlap rows in memory for Parquet audit output.
     """
     j = 0
     total_pairs = 0
@@ -2102,75 +2043,6 @@ def _process_two_pointer_sweep(
             k += 1
     
     return total_pairs, overlapped_pairs, raw_pass, strict_pass
-
-
-def _write_index_csv(
-    audit_dir: str,
-    seg_id: str,
-    event_a_name: str,
-    event_b_name: str,
-    run_id: str,
-    total_pairs: int,
-    overlapped_pairs: int,
-    raw_pass: int,
-    strict_pass: int,
-    shard_paths: List[str]
-) -> str:
-    """
-    Write index CSV with audit summary statistics.
-    
-    DEPRECATED (Issue #607): This function is no longer used after refactoring audit
-    output to Parquet format. Index/TopK summaries can be generated on-demand from
-    Parquet files using DuckDB or Pandas. Kept for reference but should not be used.
-    """
-    import csv, os
-    
-    index_path = os.path.join(audit_dir, f"{seg_id}_{event_a_name}-{event_b_name}_index.csv")
-    with open(index_path, "w", newline="") as f:
-        idx_cols = ["run_id","seg_id","event_a","event_b","n_pairs_total","n_pairs_overlapped","n_pass_raw","n_pass_strict","shards"]
-        w = csv.DictWriter(f, fieldnames=idx_cols)
-        w.writeheader()
-        w.writerow({
-            "run_id": run_id,
-            "seg_id": seg_id,
-            "event_a": event_a_name,
-            "event_b": event_b_name,
-            "n_pairs_total": total_pairs,
-            "n_pairs_overlapped": overlapped_pairs,
-            "n_pass_raw": raw_pass,
-            "n_pass_strict": strict_pass,
-            "shards": ";".join(os.path.basename(p) for p in sorted(shard_paths))
-        })
-    
-    return index_path
-
-
-def _write_topk_csv(
-    audit_dir: str,
-    seg_id: str,
-    event_a_name: str,
-    event_b_name: str,
-    topk: List[Tuple[float, Dict[str, Any]]],
-    pair_base_cols: List[str]
-) -> str:
-    """
-    Write TopK CSV with highest dwell time overlaps.
-    
-    DEPRECATED (Issue #607): This function is no longer used after refactoring audit
-    output to Parquet format. TopK summaries can be generated on-demand from Parquet
-    files using DuckDB or Pandas. Kept for reference but should not be used.
-    """
-    import csv, os
-    
-    topk_path = os.path.join(audit_dir, f"{seg_id}_{event_a_name}-{event_b_name}_TopK.csv")
-    with open(topk_path, "w", newline="") as f:
-        cols = list(topk[0][1].keys()) if topk else pair_base_cols
-        w = csv.DictWriter(f, fieldnames=cols)
-        w.writeheader()
-        for _, row in sorted(topk, key=lambda x: x[0], reverse=True):
-            w.writerow(row)
-    
-    return topk_path
 
 
 def emit_runner_audit(
