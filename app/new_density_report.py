@@ -542,17 +542,21 @@ def generate_new_density_report(
     }
     logger.info(f"✅ Statistics computed: {stats.get('flagged_bins', 0)}/{stats.get('total_bins', 0)} flagged")
     
-    # Create report context
-    # Issue #600: Always load rulebook for context (needed for threshold display)
+    # Create report context — Issue #798 Phase 5: bin/window from bins artifacts only
+    from app.core.bin.provenance import resolve_bin_report_params
+
     rulebook = load_density_rulebook()
     flagging_config = create_flagging_config(rulebook, bins_df)
+    bin_params = resolve_bin_report_params(bins_df)
     
     context = {
         'schema_version': '1.0.0',
         'report_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         'app_version': app_version,
-        'window_s': 30,  # TODO: Get from actual data
-        'bin_km': 0.2,   # TODO: Get from actual data
+        'window_s': bin_params['window_s'],
+        'window_seconds': bin_params['window_seconds'],
+        'bin_km': bin_params['bin_km'],
+        'step_km': bin_params['step_km'],
         'rulebook': rulebook,
         'rate_warn_threshold': flagging_config.rate_warn_threshold,
         'rate_critical_threshold': flagging_config.rate_critical_threshold,

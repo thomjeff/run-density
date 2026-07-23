@@ -250,9 +250,14 @@ class NewDensityTemplateEngine:
     
     def _generate_methodology_inputs(self, context: Dict[str, Any]) -> str:
         """Generate methodology and inputs section."""
+        if "window_s" not in context or "bin_km" not in context:
+            raise KeyError(
+                "Report context missing window_s/bin_km; resolve from bins artifacts "
+                "(app.core.bin.provenance) before rendering"
+            )
         lines = [
             "## Methodology & Inputs",
-            f"- **Window Size:** {context.get('window_s', 30)} s; **Bin Size:** {context.get('bin_km', 0.2)} km",
+            f"- **Window Size:** {context['window_s']} s; **Bin Size:** {context['bin_km']} km",
             "",
             "### LOS and Rate Triggers (from Rulebook)",
             "- **LOS thresholds** define crowding levels based on density (p/m²) only (rate does not affect LOS):",

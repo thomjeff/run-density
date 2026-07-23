@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Issue #798 Phase 5 — Report configuration provenance
+- Density report `window_s` / `bin_km` resolved from `bins.parquet` (`app.core.bin.provenance`)
+- Removed fabricated `30` / `0.2` TODOs from `new_density_report` / template defaults
+- Regression: `tests/unit/test_issue798_phase5_bin_provenance.py`
+
 ### Issue #798 Phase 4 — Typed path / deployment settings
 - Added `app.utils.path_mapper` (env-backed `RUNFLOW_ROOT` / `RUNFLOW_ROOT_HOST` / `RUNFLOW_ROOT_CONTAINER`)
 - Removed machine-specific `/Users/.../runflow` literals from app, Makefile, compose, and scripts
