@@ -127,53 +127,51 @@ class TestStartTimeValidation:
 
 class TestFlowOrderingUsesFlowCsv:
     """Test that flow ordering comes from flow.csv, not start_time."""
-    
+
     def test_flow_csv_is_authoritative_for_ordering(self):
         """Verify that flow.csv ordering is preserved, not start_time ordering."""
         from app.core.v2.flow import load_flow_csv, extract_event_pairs_from_flow_csv
-        
-        # Load flow.csv
+
         flow_df = load_flow_csv("data/flow.csv")
-        
-        # Extract pairs from flow.csv
-        pairs = extract_event_pairs_from_flow_csv(flow_df)
-        
-        # Verify pairs preserve flow.csv ordering (not start_time)
-        # This is tested by ensuring the function doesn't reorder based on start_time
-        assert len(pairs) > 0, "flow.csv should contain event pairs"
-        
-        # Check that pairs match flow.csv event_a/event_b ordering
-        for event_a, event_b in pairs:
-            # Find matching rows in flow.csv
-            matching_rows = flow_df[
-                (flow_df['event_a'].str.lower() == event_a.name.lower()) &
-                (flow_df['event_b'].str.lower() == event_b.name.lower())
-            ]
-            
-            # If found in flow.csv, ordering should match
-            if not matching_rows.empty:
-                # The pair should exist in flow.csv with this exact ordering
-                assert len(matching_rows) > 0, \
-                    f"Pair ({event_a.name}, {event_b.name}) should be in flow.csv"
-    
-    def test_fallback_logs_warning(self):
-        """Test that fallback to start_time ordering logs a warning."""
-        import logging
-        from app.core.v2.flow import generate_event_pairs_fallback
-        
-        # Create events with different start times
+
+        # Build Event objects for every name referenced in flow.csv
+        names = sorted(
+            {
+                str(n).strip().lower()
+                for col in ("event_a", "event_b")
+                for n in flow_df[col].dropna().tolist()
+                if str(n).strip()
+            }
+        )
+        # Valid operating-hours start times (ordering must still follow flow.csv)
         events = [
-            Event(name="late", day=Day.SUN, start_time=500),
-            Event(name="early", day=Day.SUN, start_time=400),
+            Event(
+                name=name,
+                day=Day.SUN,
+                start_time=420 + (i * 20),
+                gpx_file=f"{name}.gpx",
+                runners_file=f"{name}_runners.csv",
+            )
+            for i, name in enumerate(names)
         ]
-        
-        # Capture log messages
-        with pytest.LogCapture() as log:
-            pairs = generate_event_pairs_fallback(events)
-            
-            # Verify warning is logged
-            assert len(pairs) > 0
-            # Note: Actual warning is logged in analyze_temporal_flow_segments_v2 when fallback is used
+
+        pairs = extract_event_pairs_from_flow_csv(flow_df, events)
+        assert len(pairs) > 0, "flow.csv should contain event pairs"
+
+        for event_a, event_b in pairs:
+            matching_rows = flow_df[
+                (flow_df["event_a"].str.lower() == event_a.name.lower())
+                & (flow_df["event_b"].str.lower() == event_b.name.lower())
+            ]
+            assert not matching_rows.empty, (
+                f"Pair ({event_a.name}, {event_b.name}) should be in flow.csv"
+            )
+
+    def test_no_start_time_pair_fallback_helper(self):
+        """Issue #553 / #798: flow processing is fail-fast — no generated pair fallback."""
+        import app.core.v2.flow as flow_mod
+
+        assert not hasattr(flow_mod, "generate_event_pairs_fallback")
 
 
 class TestNoHardcodedRunnerCounts:

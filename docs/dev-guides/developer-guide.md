@@ -60,9 +60,9 @@ The application uses server-side rendering with Jinja2 templates and vanilla Jav
 - **Templates:** Jinja2 templates in `frontend/templates/pages/`
 - **JavaScript:** Vanilla JavaScript in `frontend/static/js/`
 - **Mapping:** Leaflet (via CDN: `https://unpkg.com/leaflet@1.9.4/`)
-- **Admin chrome (opt-in):** [Tabler](https://tabler.io/) `@tabler/core@1.4.0` (MIT, open source) via jsDelivr CDN when `?ui=tabler` — see [Frontend UI Contract → Tabler](frontend-ui.md#tabler-ui-issue-796--third-party-admin-chrome)
+- **Admin chrome:** [Tabler](https://tabler.io/) `@tabler/core@1.4.0` (MIT, open source) via jsDelivr CDN — sole shell on pages that extend `base.html` (`html.rf-tabler`). See [Frontend UI Contract → Tabler](frontend-ui.md#tabler-ui-issue-798-phase-7--sole-admin-chrome)
 - **Styling:** Hand-rolled CSS — shared contract in `frontend/static/css/common.css` (see [Frontend UI Contract](frontend-ui.md)); Tabler remaps in `frontend/static/css/tabler_spike.css`
-- **No Build Tooling:** No webpack, vite, or npm dependencies (CDN only for Leaflet + optional Tabler)
+- **No Build Tooling:** No webpack, vite, or npm dependencies (CDN only for Leaflet + Tabler)
 
 ### Implementation Guidelines
 

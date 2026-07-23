@@ -31,6 +31,8 @@ def test_base_html_always_tabler_no_classic(base_source: str):
     assert "Race Density & Flow Intelligence</div>" not in base_source  # classic tagline
     assert "{% if not tabler_ui %}" not in base_source
     assert 'href="/overview?ui=tabler"' not in base_source
+    assert 'params.set("ui", "tabler")' not in base_source
+    assert "Opt-in via ?ui=tabler" not in base_source
 
 
 def test_base_html_jinja_render_smoke():

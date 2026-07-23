@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Issue #798 closeout — tests & Tabler docs
+- Fix Phase 1 router test: allow legitimate `GET /reports` UI page; walk nested FastAPI routers
+- Update obsolete flow ordering tests to the fail-fast `events` contract (no pair-fallback helper)
+- Align developer guide + `tabler_spike.css` with Tabler-only chrome; stop appending `?ui=tabler`
+
 ### Issue #798 Phase 9 — Large-module decomposition (stretch)
 - Extracted bin hotspot coarsening helpers to `app/core/bin/hotspots.py`
 - `app.density_report` re-exports the same callables (no behavior change)
