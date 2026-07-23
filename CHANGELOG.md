@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Issue #798 Phase 7 — Tabler-only frontend chrome
+- `frontend/templates/base.html` always loads Tabler CDN CSS/JS + `common.css` + `tabler_spike.css` (`html.rf-tabler`)
+- Removed Classic dual-chrome branch (inline classic styles, classic header/nav/main/footer) and the Classic UI exit control
+- Nav hrefs no longer require `?ui=tabler`; pages work without the query param
+- Docs: `docs/dev-guides/frontend-ui.md`; deprecation ledger Classic UI row FIXED/removed
+- Regression: `tests/unit/test_issue798_phase7_tabler_only.py`
+
 ### Issue #798 Phase 6 — Normalize live density report package
 - Moved live stack to `app/core/reports/density/` (`report`, `flagging`, `template_engine`)
 - Renamed public APIs (`generate_density_report`, `apply_flagging`, `DensityReportTemplateEngine`, …)

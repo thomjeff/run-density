@@ -100,12 +100,12 @@ Issue #600: **Flow.csv** is the operator artifact; Flow.md generation is depreca
 
 | Path | Status |
 |------|--------|
-| Classic header/nav in `base.html` | **To be removed** — Tabler-only cutover (Phase 7) |
-| Tabler shell (`?ui=tabler` today) | **Adopt as sole UI** (Phase 7 makes default; drop Classic) |
+| Classic header/nav in `base.html` | **REMOVED** (Phase 7) |
+| Tabler shell | **Sole UI** — always on via `html.rf-tabler` in `base.html` |
 | Results pages | Shared templates; chrome from `base.html` + `run_context.html` |
 | Build hub | `race_configuration.html` + map/recipe JS modules |
 
-Until Phase 7, preview remains opt-in via `?ui=tabler` (Issue #796 / v2.0.11).
+Tabler is the only chrome as of Issue #798 Phase 7 (was opt-in `?ui=tabler` in Issue #796 / v2.0.11).
 
 ---
 

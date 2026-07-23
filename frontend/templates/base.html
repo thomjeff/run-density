@@ -1,339 +1,29 @@
 <!DOCTYPE html>
-{# Issue #796: opt-in Tabler chrome spike via ?ui=tabler (default UI unchanged) #}
-{% set tabler_ui = request is defined and request.query_params.get('ui') == 'tabler' %}
-<html lang="en" class="{% if tabler_ui %}rf-tabler{% endif %}">
+{# Issue #798 Phase 7: Tabler is the sole admin chrome (classic branch removed) #}
+<html lang="en" class="rf-tabler">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Runflow{% endblock %} - Race Density & Flow Intelligence</title>
     
-{% if tabler_ui %}
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css" />
     <link rel="stylesheet" href="/static/css/common.css?v=791p3">
     <link rel="stylesheet" href="/static/css/tabler_spike.css?v=796k">
-{% else %}
-    <!-- Issue #652: Shared CSS for UI consistency -->
-    <link rel="stylesheet" href="/static/css/common.css?v=791p3">
-{% endif %}
-    
-{% if not tabler_ui %}
-    <style>
-        /* Reset and Base Styles */
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background: #f8f9fa;
-        }
-        
-        /* Header */
-        header {
-            background: #2c3e50;
-            color: white;
-            padding: 1rem 2rem;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        header h1 {
-            font-size: 1.5rem;
-            font-weight: 600;
-            margin-bottom: 0.25rem;
-        }
-        
-        header .tagline {
-            font-size: 0.875rem;
-            opacity: 0.9;
-            color: #ecf0f1;
-        }
-        
-        /* Navigation */
-        nav {
-            background: #34495e;
-            padding: 0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        nav ul {
-            list-style: none;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0;
-            align-items: stretch;
-        }
-        
-        nav li {
-            margin: 0;
-        }
-
-        nav li.nav-group-label {
-            display: flex;
-            align-items: center;
-            padding: 0.875rem 0.65rem 0.875rem 1.1rem;
-            color: #95a5a6;
-            font-size: 0.68rem;
-            font-weight: 700;
-            letter-spacing: 0.07em;
-            text-transform: uppercase;
-            pointer-events: none;
-            user-select: none;
-            white-space: nowrap;
-        }
-
-        nav li.nav-build-sep {
-            width: 1px;
-            align-self: stretch;
-            background: #2c3e50;
-            margin: 0.55rem 0.35rem;
-            pointer-events: none;
-        }
-        
-        nav a {
-            display: block;
-            padding: 0.875rem 1.25rem;
-            color: #ecf0f1;
-            text-decoration: none;
-            font-weight: 500;
-            transition: background 0.2s;
-            border-bottom: 3px solid transparent;
-        }
-        
-        nav a:hover {
-            background: #2c3e50;
-            border-bottom-color: #3498db;
-        }
-        
-        nav a.active {
-            background: #2c3e50;
-            border-bottom-color: #2ecc71;
-        }
-        
-        /* Main Content */
-        main {
-            max-width: 1400px;
-            margin: 2rem auto;
-            padding: 0 2rem;
-        }
-        
-        /* Page Header */
-        .page-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 2rem;
-            padding-bottom: 1rem;
-            border-bottom: 2px solid #e0e0e0;
-        }
-        
-        .page-header h2 {
-            font-size: 2rem;
-            color: #2c3e50;
-        }
-        
-        /* Provenance Badge */
-        .provenance {
-            font-size: 0.875rem;
-            color: #666;
-            padding: 0.5rem 1rem;
-            background: #f0f0f0;
-            border-radius: 4px;
-            opacity: 0.9;
-        }
-        
-        /* Footer */
-        footer {
-            background: #2c3e50;
-            color: #ecf0f1;
-            text-align: center;
-            padding: 2rem;
-            margin-top: 4rem;
-            font-size: 0.875rem;
-        }
-        
-        footer a {
-            color: #3498db;
-            text-decoration: none;
-        }
-        
-        footer a:hover {
-            text-decoration: underline;
-        }
-        
-        /* LOS Badge Styles */
-        .badge-los {
-            display: inline-block;
-            padding: 0.25rem 0.625rem;
-            border-radius: 4px;
-            font-weight: 600;
-            font-size: 0.875rem;
-            text-align: center;
-            min-width: 32px;
-        }
-        
-        /* LOS Colors from reporting.yml */
-        .badge-los.badge-A { background: #4CAF50; color: white; }
-        .badge-los.badge-B { background: #8BC34A; color: white; }
-        .badge-los.badge-C { background: #FFC107; color: #333; }
-        .badge-los.badge-D { background: #FF9800; color: white; }
-        .badge-los.badge-E { background: #FF5722; color: white; }
-        .badge-los.badge-F { background: #F44336; color: white; }
-        
-        /* Additional LOS Badge Classes for Reference Panel */
-        .badge.los-a { background: #e8f5e8; color: #166534; }
-        .badge.los-b { background: #dbeafe; color: #1e40af; }
-        .badge.los-c { background: #fef3c7; color: #92400e; }
-        .badge.los-d { background: #fed7aa; color: #c2410c; }
-        .badge.los-e { background: #fecaca; color: #dc2626; }
-        .badge.los-f { background: #fca5a5; color: #b91c1c; }
-        
-        /* Cards and KPI Tiles */
-        .card {
-            background: white;
-            border-radius: 8px;
-            padding: 1.5rem;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            margin-bottom: 1.5rem;
-        }
-        
-        .kpi {
-            background: white;
-            border-radius: 8px;
-            padding: 1.5rem;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-        
-        .kpi-value {
-            font-size: 2rem;
-            font-weight: 600;
-            line-height: 1.2;
-            color: #1f2937;
-            text-align: center;
-            margin-bottom: 0.5rem;
-        }
-        
-        .kpi-label {
-            font-size: 0.875rem;
-            color: #7f8c8d;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        /* Event Card Styling — Issue #305-C Extended */
-        .event-card {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 0.25rem;
-            padding: 0.5rem 0;
-        }
-        
-        .event-card .kpi-label {
-            font-size: 0.8rem;
-            font-weight: 600;
-            color: #7f8c8d;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            text-align: center;
-        }
-        
-        .event-card .kpi-value {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #2c3e50;
-            line-height: 1.1;
-            text-align: center;
-            margin: 4px 0;
-        }
-        
-        .event-card .kpi-subtext {
-            font-size: 0.8rem;
-            font-weight: 600;
-            color: #7f8c8d;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            text-align: center;
-        }
-        
-        /* Tables */
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: white;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        
-        th, td {
-            padding: 0.875rem 1rem;
-            text-align: left;
-            border-bottom: 1px solid #e0e0e0;
-        }
-        
-        th {
-            background: #f8f9fa;
-            font-weight: 600;
-            color: #2c3e50;
-            font-size: 0.875rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        tr:hover {
-            background: #f8f9fa;
-        }
-        
-        /* Placeholders */
-        .placeholder {
-            padding: 3rem;
-            text-align: center;
-            color: #95a5a6;
-            font-style: italic;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border: 2px dashed #ddd;
-        }
-        
-        /* Responsive */
-        @media (max-width: 768px) {
-            main {
-                padding: 0 1rem;
-                margin: 1rem auto;
-            }
-            
-            nav ul {
-                flex-direction: column;
-            }
-            
-            .page-header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 1rem;
-            }
-        }
-        
-    </style>
-    
-{% endif %}
     
     {% block extra_styles %}{% endblock %}
     
     {% block extra_head %}{% endblock %}
 </head>
-<body{% if tabler_ui %} class="layout-fluid"{% endif %}>
-{% if tabler_ui %}
+<body class="layout-fluid">
     <div class="page">
-        {# Light horizontal Tabler chrome (Issue #796) — full-width content #}
+        {# Light horizontal Tabler chrome (Issue #796 / #798 Phase 7) — full-width content #}
         <header class="navbar navbar-expand-md d-print-none">
             <div class="container-xl">
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#rf-tabler-menu" aria-controls="rf-tabler-menu" aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
                 </button>
                 <h1 class="navbar-brand navbar-brand-autodark d-none-navbar-horizontal pe-0 pe-md-3 mb-0">
-                    <a href="/overview?ui=tabler" class="text-decoration-none text-reset">
+                    <a href="/overview" class="text-decoration-none text-reset">
                         <span class="rf-tabler-brand">Runflow</span>
                     </a>
                 </h1>
@@ -344,17 +34,16 @@
                             <option value="">—</option>
                         </select>
                     </div>
-                    <a id="rf-tabler-exit" class="nav-link px-2" href="?" title="Leave Tabler preview">Classic UI</a>
                     <a class="nav-link px-2 text-danger" href="/logout">Logout</a>
                 </div>
                 <div class="collapse navbar-collapse" id="rf-tabler-menu">
                     <ul class="navbar-nav">
                         {% if cloud_mode %}
                         <li class="nav-item">
-                            <a class="nav-link{% if request.url and request.url.path == '/dashboard' %} active{% endif %}" href="/dashboard?ui=tabler">Runs</a>
+                            <a class="nav-link{% if request.url and request.url.path == '/dashboard' %} active{% endif %}" href="/dashboard">Runs</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link{% if request.url and request.url.path == '/locations' %} active{% endif %}" href="/locations?ui=tabler">Locations</a>
+                            <a class="nav-link{% if request.url and request.url.path == '/locations' %} active{% endif %}" href="/locations">Locations</a>
                         </li>
                         {% else %}
                         <li class="nav-item dropdown" id="rf-runs-dropdown">
@@ -367,29 +56,29 @@
                                     <span class="dropdown-item disabled">Loading…</span>
                                 </div>
                                 <div class="dropdown-divider"></div>
-                                <a class="dropdown-item" id="rf-runs-view-all" href="/dashboard?ui=tabler">View all runs…</a>
+                                <a class="dropdown-item" id="rf-runs-view-all" href="/dashboard">View all runs…</a>
                             </div>
                         </li>
                         <li class="nav-item rf-tabler-run-view-link" hidden>
-                            <a class="nav-link{% if request.url and request.url.path == '/overview' %} active{% endif %}" href="/overview?ui=tabler" data-rf-run-view="1">Overview</a>
+                            <a class="nav-link{% if request.url and request.url.path == '/overview' %} active{% endif %}" href="/overview" data-rf-run-view="1">Overview</a>
                         </li>
                         <li class="nav-item rf-tabler-run-view-link" hidden>
-                            <a class="nav-link{% if request.url and request.url.path == '/segments' %} active{% endif %}" href="/segments?ui=tabler" data-rf-run-view="1">Segments</a>
+                            <a class="nav-link{% if request.url and request.url.path == '/segments' %} active{% endif %}" href="/segments" data-rf-run-view="1">Segments</a>
                         </li>
                         <li class="nav-item rf-tabler-run-view-link" hidden>
-                            <a class="nav-link{% if request.url and request.url.path == '/density' %} active{% endif %}" href="/density?ui=tabler" data-rf-run-view="1">Density</a>
+                            <a class="nav-link{% if request.url and request.url.path == '/density' %} active{% endif %}" href="/density" data-rf-run-view="1">Density</a>
                         </li>
                         <li class="nav-item rf-tabler-run-view-link" hidden>
-                            <a class="nav-link{% if request.url and request.url.path == '/flow' %} active{% endif %}" href="/flow?ui=tabler" data-rf-run-view="1">Flow</a>
+                            <a class="nav-link{% if request.url and request.url.path == '/flow' %} active{% endif %}" href="/flow" data-rf-run-view="1">Flow</a>
                         </li>
                         <li class="nav-item rf-tabler-run-view-link" hidden>
-                            <a class="nav-link{% if request.url and request.url.path == '/locations' %} active{% endif %}" href="/locations?ui=tabler" data-rf-run-view="1">Locations</a>
+                            <a class="nav-link{% if request.url and request.url.path == '/locations' %} active{% endif %}" href="/locations" data-rf-run-view="1">Locations</a>
                         </li>
                         <li class="nav-item rf-tabler-run-view-link" hidden>
-                            <a class="nav-link{% if request.url and request.url.path == '/reports' %} active{% endif %}" href="/reports?ui=tabler" data-rf-run-view="1">Reports</a>
+                            <a class="nav-link{% if request.url and request.url.path == '/reports' %} active{% endif %}" href="/reports" data-rf-run-view="1">Reports</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link{% if request.url and (request.url.path == '/config' or request.url.path.startswith('/race-configuration')) %} active{% endif %}" href="/config?ui=tabler" title="Legs, Courses, and Packages">Build</a>
+                            <a class="nav-link{% if request.url and (request.url.path == '/config' or request.url.path.startswith('/race-configuration')) %} active{% endif %}" href="/config" title="Legs, Courses, and Packages">Build</a>
                         </li>
                         {% endif %}
                     </ul>
@@ -402,57 +91,13 @@
                 <span id="rf-tabler-context-label" class="rf-tabler-context-label">—</span>
                 <span id="rf-tabler-context-id" class="rf-tabler-context-id"></span>
                 <span id="rf-tabler-context-day" class="rf-tabler-context-day" hidden></span>
-                <a id="rf-tabler-open-package" class="rf-tabler-context-pkg" href="/config?ui=tabler" hidden>Package</a>
+                <a id="rf-tabler-open-package" class="rf-tabler-context-pkg" href="/config" hidden>Package</a>
             </div>
         </div>
         <div class="page-wrapper">
             <div class="page-body">
                 <div class="container-xl rf-tabler-content">
-{% else %}
-    <header>
-        <h1>Runflow</h1>
-        <div class="tagline">Race Density & Flow Intelligence</div>
-    </header>
-    
-    <nav>
-        <ul>
-            {% if cloud_mode %}
-            <li class="nav-group-label" aria-hidden="true">Results</li>
-            <li><a href="/dashboard" {% if request.url and request.url.path == "/dashboard" %}class="active"{% endif %}>Runs</a></li>
-            <li><a href="/locations" {% if request.url and request.url.path == "/locations" %}class="active"{% endif %}>Locations</a></li>
-            {# Loc Sheets (/locsheets) hidden from nav; one-pagers linked from Locations UI — route kept for now #}
-            <li><a href="/logout" style="color: #e74c3c;">Logout</a></li>
-            {% else %}
-            <li class="nav-group-label" aria-hidden="true">Results</li>
-            <li><a href="/dashboard" {% if request.url and request.url.path == "/dashboard" %}class="active"{% endif %}>Runs</a></li>
-            <li><a href="/segments" {% if request.url and request.url.path == "/segments" %}class="active"{% endif %}>Segments</a></li>
-            <li><a href="/density" {% if request.url and request.url.path == "/density" %}class="active"{% endif %}>Density</a></li>
-            <li><a href="/flow" {% if request.url and request.url.path == "/flow" %}class="active"{% endif %}>Flow</a></li>
-            <li><a href="/locations" {% if request.url and request.url.path == "/locations" %}class="active"{% endif %}>Locations</a></li>
-            {# Loc Sheets (/locsheets) hidden from nav; one-pagers linked from Locations UI — route kept for now #}
-            <li><a href="/reports" {% if request.url and request.url.path == "/reports" %}class="active"{% endif %}>Reports</a></li>
-            {# Analysis (/analysis) hidden from nav; primary path is Package → Run analysis — route kept (Issue #791) #}
-            <li class="nav-build-sep" aria-hidden="true"></li>
-            <li><a href="/config" {% if request.url and (request.url.path == "/config" or request.url.path.startswith("/race-configuration")) %}class="active"{% endif %} title="Legs, Courses, and Packages">Build</a></li>
-            {# Course Mapping (/course-mapping) hidden from nav; superseded by Race Configuration — route kept for now #}
-            {# Health (/health-check) hidden from nav; ops utility — route kept (Issue #791) #}
-            {% endif %}
-            <li id="day-selector-wrap" style="margin-left:auto; padding: 0.5rem 1rem; display: none; align-items: center; gap: 0.5rem;" aria-hidden="true">
-                <label for="day-selector" style="color:#ecf0f1; font-weight:600;">Day</label>
-                <select id="day-selector" style="padding: 0.35rem 0.5rem; border-radius: 4px; border: 1px solid #2c3e50; background: #fff; color: #2c3e50; min-width: 90px;">
-                    <option value="">—</option>
-                </select>
-            </li>
-            {% if not cloud_mode %}
-            <li><a href="/logout" style="color: #e74c3c;">Logout</a></li>
-            {% endif %}
-        </ul>
-    </nav>
-    
-    <main>
-{% endif %}
         {% block content %}{% endblock %}
-{% if tabler_ui %}
                 </div>
             </div>
             <footer class="footer footer-transparent d-print-none">
@@ -463,13 +108,6 @@
         </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/js/tabler.min.js"></script>
-{% else %}
-    </main>
-    
-    <footer>
-        <p>&copy; 2025 Runflow - Race Density & Flow Intelligence System</p>
-    </footer>
-{% endif %}
     
     {% block extra_scripts %}{% endblock %}
     
@@ -762,7 +400,6 @@
             document.querySelectorAll("nav a, .navbar-nav a, .navbar-brand a").forEach(a => {
                 const href = a.getAttribute("href");
                 if (!href || href === "/logout" || href === "/health-check" || href === "#") return;
-                if (a.id === "rf-tabler-exit") return;
                 if (a.id === "rf-tabler-open-package" || a.getAttribute("data-rf-package-link") === "1") return;
                 if (a.classList.contains("dropdown-toggle") || a.classList.contains("dropdown-item")) return;
                 const linkPath = href.split("?")[0];
@@ -796,13 +433,6 @@
                 }
                 a.setAttribute("href", newHref);
             });
-            const exit = document.getElementById("rf-tabler-exit");
-            if (exit) {
-                const exitParams = new URLSearchParams(window.location.search);
-                exitParams.delete("ui");
-                const qs = exitParams.toString();
-                exit.setAttribute("href", window.location.pathname + (qs ? "?" + qs : ""));
-            }
             const viewAll = document.getElementById("rf-runs-view-all");
             if (viewAll && tablerUi) {
                 viewAll.setAttribute("href", "/dashboard?ui=tabler");
@@ -849,7 +479,7 @@
             if (changed && newUrl !== window.location.pathname + window.location.search) {
                 window.history.replaceState({}, "", newUrl);
             }
-            // Preserve Tabler spike flag if present
+            // Back-compat: keep ui=tabler in URL if already Tabler (always-on chrome)
             if (document.documentElement.classList.contains("rf-tabler")) {
                 const p2 = new URLSearchParams(window.location.search);
                 if (p2.get("ui") !== "tabler") {
