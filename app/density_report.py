@@ -78,30 +78,8 @@ def check_time_budget(start_time: float, budget_s: int = 60) -> None:
     if time.monotonic() - start_time > budget_s:
         raise TimeoutError("bin_generation_budget_exceeded")
 
-def is_hotspot(seg_id: str, peak_los: str = None) -> bool:
-    """Determine if segment is a hotspot requiring preserved resolution per ChatGPT specification."""
-    
-    # Static hotspot list (fastest to implement)
-    if seg_id in HOTSPOT_SEGMENTS:
-        return True
-    
-    # Dynamic hotspot detection based on LOS
-    if peak_los and peak_los >= 'D':
-        return True
-        
-    return False
-
-def coarsen_plan(seg_id: str, current_bin_km: float, current_dt_s: int, peak_los: str = None) -> tuple[float, int]:
-    """Determine coarsening strategy per ChatGPT hotspot preservation policy."""
-    if is_hotspot(seg_id, peak_los):
-        # Keep hotspots at high resolution
-        return current_bin_km, current_dt_s
-    
-    # Non-hotspot coarsening policy: temporal first, then spatial
-    coarsened_dt = max(current_dt_s, 120)  # Widen time windows first
-    coarsened_bin = max(current_bin_km, 0.2)  # Then spatial if needed
-    
-    return coarsened_bin, coarsened_dt
+# Issue #798 Phase 9: hotspot helpers live in app.core.bin.hotspots
+from app.core.bin.hotspots import coarsen_plan, is_hotspot  # noqa: E402,F401
 
 # Import storage service for persistent file storage
 # Issue #466 Step 2: Storage consolidated to app.storage

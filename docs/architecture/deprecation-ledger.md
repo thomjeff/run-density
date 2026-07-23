@@ -31,7 +31,7 @@ Update this file in the same PR that changes disposition or removes a module.
 | `app/new_density_template_engine.py` | **shim** | → `…density.template_engine` | **shim** | Phase 6 ✓ | Remove after one release | next release |
 | `app/new_flagging.py` | **shim** | → `…density.flagging` | **shim** | Phase 6 ✓ | Remove after one release | next release |
 | `app/core/reports/density/*` | **LIVE** canonical | v2 reports, `save_bins`, façade | **keep** | Phase 6 ✓ | Public API in package `__init__` | — |
-| `app/density_report.py` | **LIVE** façade + legacy helpers | v2 reports, bins, `main.py` legacy endpoints | **keep** then thin | Phase 6 / 9 | `generate_density_report_markdown` (+ alias) | — |
+| `app/density_report.py` | **LIVE** façade + legacy helpers | v2 reports, bins, `main.py` legacy endpoints | **keep** then thin | Phase 6 / 9 ✓ | Hotspot helpers → `app.core.bin.hotspots` | — |
 | `app/flow_report.py` | **LIVE** | v2 `generate_flow_report_v2` | **keep** | — | Flow.md path deprecated; CSV kept | — |
 | `app/routes/reports.py` | ~~Empty router~~ **REMOVED** | — | **remove** ✓ | Phase 1 | Frontend uses `api_reports` | Phase 1 |
 | `app/routes/api_flow.py` | ~~Wildcard re-export~~ **REMOVED** | — | **remove** ✓ | Phase 1 | `main` imports `app.api.flow` | Phase 1 |
@@ -57,6 +57,8 @@ Update this file in the same PR that changes disposition or removes a module.
 | Fabricated report `window_s`/`bin_km` | Phase 5 | Resolved from `bins.parquet` via `app.core.bin.provenance` |
 | Classic UI chrome (`base.html` else branch) | Phase 7 | Tabler-only cutover; opt-in `?ui=tabler` no longer required |
 | Live `new_*` density stack moved | Phase 6 | Canonical under `app/core/reports/density/`; old paths are shims |
+| Race schedules / hotspots / map center as globals | Phase 8 | `app/core/race_templates/` + `docs/architecture/race-templates.md` |
+| Bin hotspot coarsening helpers | Phase 9 | Extracted to `app/core/bin/hotspots.py` (density_report re-exports) |
 | `app/routes/reports.py` | Phase 1 | Empty `/reports` router |
 | `app/routes/api_flow.py` | Phase 1 | Wildcard shim → `app.api.flow` |
 | `app/routes/api_bidirectional.py` | Phase 1 | Wildcard shim → `app.api.bidirectional` |
