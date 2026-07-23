@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Issue #798 Phase 3 — Domain glossary & naming alignment
+- Expanded `docs/architecture/domain-glossary.md` with field alias map and agent guidance
+- FastAPI app title set to **Runflow** (stop new `run-density` runtime identity)
+- Light regression: `tests/unit/test_issue798_phase3_glossary.py`
+
 ### Issue #798 Phase 2 — Canonical start-time contract
 - Added `app/core/v2/start_time.py` (300–1200 operating hours, 05:00–20:00)
 - Wired validators / Pydantic models / package analysis / `Event` to the shared helper
