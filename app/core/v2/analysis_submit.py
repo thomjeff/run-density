@@ -25,12 +25,9 @@ logger = logging.getLogger(__name__)
 
 def map_data_dir_for_runtime(data_dir: str) -> str:
     """Map host runflow paths to container paths when running in Docker."""
-    if not data_dir:
-        return data_dir
-    is_docker = os.path.exists("/.dockerenv") or os.path.exists("/app/.dockerenv")
-    if is_docker and data_dir.startswith("/Users/jthompson/Documents/runflow"):
-        return data_dir.replace("/Users/jthompson/Documents/runflow", "/app/runflow", 1)
-    return data_dir
+    from app.utils.path_mapper import to_runtime_path
+
+    return to_runtime_path(data_dir)
 
 
 def run_analysis_background(

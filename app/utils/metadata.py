@@ -323,18 +323,14 @@ def update_latest_pointer(run_id: str) -> None:
     Issue #682: Moved from runflow/latest.json to runflow/analysis/latest.json
     """
     # Issue #466 Step 4 Cleanup: Removed GCS imports (local-only)
-    from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER
+    from app.utils.run_id import get_runflow_root
     import tempfile
     import shutil
     
     # Issue #466 Step 4 Cleanup: Local-only, dead GCS branch removed
     latest_data = {"run_id": run_id}
     
-    # Use container root if in Docker, otherwise use local root
-    if Path(RUNFLOW_ROOT_CONTAINER).exists():
-        runflow_root = Path(RUNFLOW_ROOT_CONTAINER)
-    else:
-        runflow_root = Path(RUNFLOW_ROOT_LOCAL)
+    runflow_root = get_runflow_root()
     # Issue #682: Create analysis subdirectory
     analysis_dir = runflow_root / "analysis"
     analysis_dir.mkdir(parents=True, exist_ok=True)
@@ -372,16 +368,13 @@ def append_to_run_index(metadata: Dict[str, Any]) -> None:
         ]
     """
     # Issue #466 Step 4 Cleanup: Local-only, dead GCS branch removed
-    from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER
+    from app.utils.run_id import get_runflow_root
     
     run_id = metadata.get("run_id")
     
     # Issue #566: Load event_summary from analysis.json
     event_summary = None
-    if Path(RUNFLOW_ROOT_CONTAINER).exists():
-        runflow_root = Path(RUNFLOW_ROOT_CONTAINER)
-    else:
-        runflow_root = Path(RUNFLOW_ROOT_LOCAL)
+    runflow_root = get_runflow_root()
     
     # Issue #682: Update analysis.json path to use new structure
     analysis_json_path = runflow_root / "analysis" / run_id / "analysis.json"
@@ -489,17 +482,13 @@ def get_run_index() -> List[Dict[str, Any]]:
     Issue #682: Moved from runflow/index.json to runflow/analysis/index.json
     """
     # Issue #466 Step 4 Cleanup: Local-only, dead GCS branch removed
-    from app.utils.constants import RUNFLOW_ROOT_LOCAL, RUNFLOW_ROOT_CONTAINER
+    from app.utils.run_id import get_runflow_root
     import logging
     
     logger = logging.getLogger(__name__)
     
     try:
-        # Use container root if in Docker, otherwise use local root
-        if Path(RUNFLOW_ROOT_CONTAINER).exists():
-            runflow_root = Path(RUNFLOW_ROOT_CONTAINER)
-        else:
-            runflow_root = Path(RUNFLOW_ROOT_LOCAL)
+        runflow_root = get_runflow_root()
         
         # Issue #682: Update to use analysis subdirectory
         index_path = runflow_root / "analysis" / "index.json"

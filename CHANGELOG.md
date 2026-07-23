@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Issue #798 Phase 4 — Typed path / deployment settings
+- Added `app.utils.path_mapper` (env-backed `RUNFLOW_ROOT` / `RUNFLOW_ROOT_HOST` / `RUNFLOW_ROOT_CONTAINER`)
+- Removed machine-specific `/Users/.../runflow` literals from app, Makefile, compose, and scripts
+- Compose volume + rewrite use `${RUNFLOW_ROOT}` (see `.env.example`); local `.env` is gitignored
+- Regression: `tests/unit/test_issue798_phase4_path_mapper.py`
+
 ### Issue #798 Phase 3 — Domain glossary & naming alignment
 - Expanded `docs/architecture/domain-glossary.md` with field alias map and agent guidance
 - FastAPI app title set to **Runflow** (stop new `run-density` runtime identity)

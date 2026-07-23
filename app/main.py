@@ -195,10 +195,10 @@ if os.path.exists("artifacts"):
 else:
     print("Info: Artifacts directory not found - heatmaps served from runflow/")
 
-# Issue #460 Phase 5: Mount runflow directory for local development
-# Heatmaps are now at /heatmaps/<run_id>/<seg_id>.png
-from app.utils.constants import RUNFLOW_ROOT_CONTAINER, RUNFLOW_ROOT_LOCAL
-runflow_root = RUNFLOW_ROOT_CONTAINER if os.path.exists(RUNFLOW_ROOT_CONTAINER) else RUNFLOW_ROOT_LOCAL
+# Issue #460 Phase 5 / #798 Phase 4: Mount runflow directory for local development
+from app.utils.path_mapper import resolve_runflow_root
+
+runflow_root = str(resolve_runflow_root())
 if os.path.exists(runflow_root):
     try:
         app.mount("/heatmaps", StaticFiles(directory=runflow_root), name="heatmaps")

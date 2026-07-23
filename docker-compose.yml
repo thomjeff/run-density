@@ -29,8 +29,8 @@ services:
       # Issue #470: Legacy artifacts/ and reports/ mounts removed - using runflow/ structure exclusively
       # Issue #465: GCS keys mount disabled during Phase 0 (local-only mode)
       # - ./keys:/tmp/keys:ro
-      # Issue #455: Mount local runflow directory for Run ID storage
-      - /Users/jthompson/Documents/runflow:/app/runflow
+      # Issue #455 / #798 Phase 4: Mount Runflow data root (set RUNFLOW_ROOT in .env)
+      - ${RUNFLOW_ROOT:-./runflow}:/app/runflow
     # Phase 2: Use env_file instead of mounting .env
     # Environment variables from dev.env are injected into container
     env_file:
@@ -41,6 +41,9 @@ services:
       - PYTHONPATH=/app
       - COVERAGE_PROCESS_START=/app/coverage.rc
       - MPLBACKEND=Agg
+      # Issue #798 Phase 4: host prefix for path rewrite inside the container
+      - RUNFLOW_ROOT_HOST=${RUNFLOW_ROOT:-./runflow}
+      - RUNFLOW_ROOT_CONTAINER=/app/runflow
       # Issue #465: GCS environment overrides disabled during Phase 0 (local-only mode)
       # - GCS_UPLOAD=${GCS_UPLOAD}
       # - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}

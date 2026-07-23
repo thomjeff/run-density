@@ -14,7 +14,6 @@ from typing import Tuple
 from pathlib import Path
 
 from app.paths import get_analysis_dir
-from app.utils.constants import RUNFLOW_ROOT_CONTAINER, RUNFLOW_ROOT_LOCAL
 
 
 def get_date_folder_path(base_path: str = "reports") -> Tuple[str, str]:
@@ -139,21 +138,12 @@ def format_decimal_places(value: float, places: int = 2) -> float:
 def get_runflow_root() -> str:
     """
     Get the runflow root directory based on environment.
-    
-    Returns:
-        Path to runflow root directory
-    
-    Examples:
-        In Docker container: /runflow
-        Local development: /users/jthompson/documents/runflow
-    
-    Issue #455: Adapted from commit c8cfb3e (Epic #444 Phase 3)
+
+    Issue #455 / #798 Phase 4: delegates to path_mapper.resolve_runflow_root.
     """
-    # Check if running in container (has /app directory)
-    if Path("/app").exists():
-        return RUNFLOW_ROOT_CONTAINER
-    else:
-        return RUNFLOW_ROOT_LOCAL
+    from app.utils.path_mapper import resolve_runflow_root
+
+    return str(resolve_runflow_root())
 
 
 def get_run_folder_path(run_id: str) -> str:
