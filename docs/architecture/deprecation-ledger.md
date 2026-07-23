@@ -1,0 +1,60 @@
+# Deprecation ledger (Issue #798)
+
+Track modules that look transitional or dead. **Do not delete from name alone.**  
+Update this file in the same PR that changes disposition or removes a module.
+
+**Legend**
+
+| Disposition | Meaning |
+|-------------|---------|
+| **rename** | Live; name/location wrong — move/rename (do not delete first) |
+| **remove** | Proven unused after gates — delete in listed phase |
+| **shim** | Temporary re-export; dated removal |
+| **keep** | Supported as-is |
+| **investigate** | Callers or external use unclear |
+
+**Removal gates (all required for `remove`):**
+
+1. No internal callers after canonical imports  
+2. No registered route / background entry  
+3. No documented external compatibility promise (or shim expired)  
+4. Route/artifact contract tests pass  
+5. CHANGELOG + this ledger updated  
+
+---
+
+## Active ledger
+
+| Module / symbol | Status today | Callers (summary) | Disposition | Target phase | Owner notes | Removal version |
+|-----------------|--------------|-------------------|-------------|--------------|-------------|-----------------|
+| `app/new_density_report.py` | **LIVE** (banner says deprecated) | `density_report.generate_new_density_report_issue246` → v2 `reports.generate_density_report_v2` | **rename** → `app/core/reports/density/` (name TBD) | Phase 6 | Keep until rename + provenance (Phase 5) | After Phase 6 + one release if forwarding |
+| `app/new_density_template_engine.py` | **LIVE** | `new_density_report` | **rename** with density report package | Phase 6 | Drop `New` prefix | with above |
+| `app/new_flagging.py` | **LIVE** | `new_density_report`, `save_bins.apply_new_flagging` | **rename** | Phase 6 | Rulebook flagging is canonical behavior | with above |
+| `app/density_report.py` | **LIVE** façade + legacy helpers | v2 reports, bins, `main.py` legacy endpoints | **keep** then thin after Phase 6 | Phase 6 / 9 | Large module; soft LOC split later | — |
+| `app/flow_report.py` | **LIVE** | v2 `generate_flow_report_v2` | **keep** | — | Flow.md path deprecated; CSV kept | — |
+| `app/routes/reports.py` | Empty router, still registered | `main.py` `include_router` | **remove** | Phase 1 | Frontend uses `api_reports` | with Phase 1 merge |
+| `app/routes/api_flow.py` | Wildcard re-export | `main.py` | **remove** shim; import `app.api.flow` | Phase 1 | Add `noqa` only if temporary | Phase 1 |
+| `app/routes/api_bidirectional.py` | Wildcard re-export | `main.py` | **remove** shim; import `app.api.bidirectional` | Phase 1 | | Phase 1 |
+| `app/core/flow/flow.py` `_ShardWriter` | Unused (Parquet migration) | definitions only | **remove** | Phase 1 | Also `_write_index_csv`, `_write_topk_csv` | Phase 1 |
+| `app/utils/constants.py` `EVENT_DURATION_MINUTES` | Deprecated dict; capitalized dupes | v1 compatibility risk | **investigate** → remove or v1-only adapter | Phase 8 | Confirm v1 endpoint retirement | TBD |
+| `HOTSPOT_SEGMENTS` / map center constants | Sample-race / city defaults | bin generation / maps | **rename/move** to template data | Phase 8 | Not universal domain law | — |
+| Classic UI chrome (`base.html` else branch) | Dual chrome with Tabler | all pages without `ui=tabler` | **remove** | Phase 7 | Product: Tabler-only; Git for rollback | Phase 7 |
+| Course-mapping legacy DOM (`course-legacy-*`, hidden recipes) | Partially hidden | `course_mapping.js`, `segment_recipes.js` | **investigate** | Phase 9 | Smoke preferred Build workflow first | TBD |
+| Host path `/Users/jthompson/Documents/runflow` | Duplicated rewrite sites | constants, `analysis_submit`, `ui.py`, scripts, compose | **remove** literals | Phase 4 | Typed settings + PathMapper | Phase 4 |
+| Hardcoded `window_s=30` / `bin_km=0.2` in `new_density_report` | Fabricated metadata | density MD context | **remove** fallback or fail-fast | Phase 5 | Provenance from analysis.json | Phase 5 |
+| Start-time docs/tests claiming 0–1439 | Conflict with live 300–1200 | `models.Event` docstring, `test_hardcoded_values` | **fix** to one contract | Phase 2 | Operating hours 300–1200 is current product rule | Phase 2 |
+
+---
+
+## Completed
+
+_None yet — Phase 0 establishes this ledger._
+
+---
+
+## How to use (agents)
+
+1. Before deleting anything named `new_` / `legacy` / `old`, read this table.  
+2. Prefer **rename while live** for reporting stacks.  
+3. Record the PR that changes a row’s disposition.  
+4. See [canonical-paths.md](canonical-paths.md) for the supported call graphs.
