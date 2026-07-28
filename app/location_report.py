@@ -817,8 +817,20 @@ def generate_location_report(
         # Issue #589: Field order matches loc_expected.csv specification
         # Issue #749: day column after loc_label (explicit when CSV opened standalone)
         # Issue #598: Add flag fields for flag propagation
+        # Locations fixes: include stable location_key for paired-leg / cross-distance identity
+        location_key = ""
+        for field in ("location_key", "leg_loc_key"):
+            raw_key = location.get(field)
+            if raw_key is None or (isinstance(raw_key, float) and pd.isna(raw_key)):
+                continue
+            text = str(raw_key).strip()
+            if text and text.lower() != "nan":
+                location_key = text
+                break
+
         report_row = {
             "loc_id": loc_id,
+            "location_key": location_key,
             "loc_label": loc_label,
             "day": day or "",
             "loc_type": loc_type,
@@ -1234,8 +1246,9 @@ def generate_location_report(
     
     # Issue #589: Reorder columns to match expected order
     # Base fields (in order from loc_expected.csv)
+    # Locations fixes: location_key after loc_id for paired-leg identity in the CSV
     base_fields = [
-        "loc_id", "loc_label", "day", "loc_type", "loc_direction",
+        "loc_id", "location_key", "loc_label", "day", "loc_type", "loc_direction",
         "lat", "lon", "zone",
         "buffer", "interval",
         "first_runner", "peak_start", "peak_end", "last_runner",

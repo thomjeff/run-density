@@ -157,6 +157,7 @@
             <thead>
                 <tr>
                     <th class="table-sortable" data-sort="loc_id">ID <span class="table-sortable-indicator"></span></th>
+                    <th class="table-sortable" data-sort="location_key">Key <span class="table-sortable-indicator"></span></th>
                     <th>Location</th>
                     <th class="table-sortable" data-sort="loc_type">Type <span class="table-sortable-indicator"></span></th>
                     <th class="table-sortable" data-sort="zone">Zone <span class="table-sortable-indicator"></span></th>
@@ -168,7 +169,7 @@
             </thead>
             <tbody id="locations-tbody">
                 <tr>
-                    <td colspan="8" class="placeholder">Loading locations data...</td>
+                    <td colspan="9" class="placeholder">Loading locations data...</td>
                 </tr>
             </tbody>
         </table>
@@ -189,6 +190,10 @@
             </tr>
         </thead>
         <tbody>
+            <tr>
+                <td><strong>Key</strong></td>
+                <td>Stable authoring key for the location (<code>location_key</code>). Use it to match the same physical place when multiple <em>ID</em> rows exist (e.g. paired reverse legs).</td>
+            </tr>
             <tr>
                 <td><strong>Location</strong></td>
                 <td>The name or label of the location (e.g., "Regent & McLeod").</td>
@@ -225,7 +230,7 @@
 
 <!-- External JavaScript modules -->
 <script src="/static/js/map/base_map.js"></script>
-<script src="/static/js/map/locations.js?v=2026-05-03T747Z-extract"></script>
+<script src="/static/js/map/locations.js?v=2026-07-28-location-key"></script>
 
 <!-- Table interaction script -->
 <script>
@@ -334,6 +339,7 @@
         const locations = features.map(feature => {
             const location = {
                 loc_id: feature.properties.loc_id,
+                location_key: feature.properties.location_key,
                 loc_label: feature.properties.loc_label,
                 loc_type: feature.properties.loc_type,
                 zone: feature.properties.zone,
@@ -390,6 +396,7 @@
         const locations = features.map(feature => {
             const location = {
                 loc_id: feature.properties.loc_id,
+                location_key: feature.properties.location_key,
                 loc_label: feature.properties.loc_label,
                 loc_type: feature.properties.loc_type,
                 zone: feature.properties.zone,
@@ -894,6 +901,10 @@
                     aVal = a.loc_id != null && a.loc_id !== undefined ? Number(a.loc_id) : Infinity;
                     bVal = b.loc_id != null && b.loc_id !== undefined ? Number(b.loc_id) : Infinity;
                     break;
+                case 'location_key':
+                    aVal = (a.location_key && a.location_key !== "NA") ? String(a.location_key).toLowerCase() : '';
+                    bVal = (b.location_key && b.location_key !== "NA") ? String(b.location_key).toLowerCase() : '';
+                    break;
                 case 'loc_type':
                     aVal = (a.loc_type && a.loc_type !== "NA") ? a.loc_type.toLowerCase() : '';
                     bVal = (b.loc_type && b.loc_type !== "NA") ? b.loc_type.toLowerCase() : '';
@@ -1111,7 +1122,7 @@
         tbody.innerHTML = '';
         
         if (!locations || locations.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="placeholder">No locations data available</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="placeholder">No locations data available</td></tr>';
             return;
         }
         
@@ -1137,6 +1148,11 @@
             
             // Get loc_id
             const locId = location.loc_id !== null && location.loc_id !== undefined ? location.loc_id : "—";
+
+            const locKeyRaw = location.location_key;
+            const locKey = (locKeyRaw != null && locKeyRaw !== "" && locKeyRaw !== "NA" && String(locKeyRaw).toLowerCase() !== "null")
+                ? String(locKeyRaw).trim()
+                : "—";
             
             // Format zone
             const zone = location.zone && location.zone !== "NA" && location.zone !== "" ? location.zone : "—";
@@ -1162,10 +1178,10 @@
             const flagValue = location.flag === true || location.flag === "true" || location.flag === "Y" ? "Y" : "N";
             const flagDisplay = flagValue;
             
-            // Updated table structure - includes Type column, Flag column, combined First/Last Runner
-            // Column order: ID, Location, Type, Zone, Flag, Operational Window, First/Last Runner, Peak Window
+            // Column order: ID, Key, Location, Type, Zone, Flag, Operational Window, First/Last Runner, Peak Window
             row.innerHTML = `
                 <td>${locId}</td>
+                <td>${escapeHtml(locKey)}</td>
                 <td>${formatLocationCellHtml(location)}</td>
                 <td>${locType}</td>
                 <td>${zone}</td>
@@ -1212,7 +1228,7 @@
     
     function showLocationsError(message) {
         const tbody = document.getElementById('locations-tbody');
-        tbody.innerHTML = `<tr><td colspan="8" class="placeholder">${message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="placeholder">${message}</td></tr>`;
     }
     
     // Make updateLocationsTable globally available for locations.js

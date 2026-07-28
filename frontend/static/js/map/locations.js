@@ -30,6 +30,7 @@ function convertToGeoJSON(locations) {
             // Issue #598: Include flag fields
             const properties = {
                 loc_id: loc.loc_id,
+                location_key: loc.location_key,
                 loc_label: loc.loc_label || 'Unknown',
                 loc_type: loc.loc_type || 'unknown',
                 loc_start: loc.loc_start,

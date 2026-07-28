@@ -400,11 +400,17 @@ runner_id,event,pace,distance,start_offset,day
 
 **Required Columns**:
 - `loc_id`: Location identifier
+- `location_key`: Optional but recommended stable authoring key; exported from config packages when present (immediately after `loc_id` in package `locations.csv` and in `Locations.csv` reports)
 - `loc_label`: Human-readable label
 - `loc_type`: Location category; allowed values are **`LOCATION_TYPE_CHOICES`** in `app/utils/constants.py` (SSOT for Course Mapping and Locations UI).
 - `seg_id`: Associated segment ID(s); may be empty for off-course or proxy-only timing rows. After leg recipe changes, re-apply recipes so segment IDs stay aligned with `segments.csv` (Issue #774).
 - `proxy_loc_id`: Optional **integer** `loc_id` of another location (timing source). In config package authoring (#775), operators pick the source from a dropdown; export writes the numeric id at snapshot time. When set with **empty** `seg_id`, the locations report copies **operational** timing (`loc_end`, `duration`) from that `loc_id` for **all** `loc_type` values (`timing_source` becomes `proxy:<id>` in output). Issue #751. Alphanumeric proxy values are not supported in the analysis pipeline.
 - `timing_source`: Optional advanced override (e.g. `proxy:n`) when present in input
+
+**Optional authoring columns** (passed through to the Locations report when present):
+- `location_key`: Stable 5-character key shared across paired reverse legs / course snapshots (helps match duplicate `loc_id`s for the same physical place)
+
+**Locations report (`Locations.csv`)**: includes `location_key` immediately after `loc_id` when generating from package/input locations (empty string if the input row has no key).
 
 **Issue #751 — `proxy_loc_id` vs `seg_id` (locations report)**:
 - **`proxy_loc_id` set, `seg_id` empty:** skip runner arrival modeling for that row; apply operational window from the proxy location (same idea as former traffic-only behavior, now config-driven for every type).

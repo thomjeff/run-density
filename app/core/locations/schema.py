@@ -24,6 +24,7 @@ _RESOURCE_CODE_RE = re.compile(r"^[a-z][a-z0-9_]{0,15}$")
 
 LOCATIONS_CSV_PREFIX_COLUMNS: List[str] = [
     "loc_id",
+    "location_key",
     "loc_label",
     "loc_type",
     "lat",
@@ -164,6 +165,18 @@ def _sync_resources_dict(
     return resources
 
 
+def _export_location_key(normalized: Dict[str, Any]) -> str:
+    """Stable authoring key for pipeline CSV (falls back to leg_loc_key)."""
+    for field in ("location_key", "leg_loc_key"):
+        raw = normalized.get(field)
+        if raw is None or raw == "":
+            continue
+        text = str(raw).strip()
+        if text and text.lower() != "nan":
+            return text
+    return ""
+
+
 def normalize_location_record(
     loc: Dict[str, Any],
     resource_codes: Sequence[str],
@@ -233,6 +246,7 @@ def location_to_csv_row(
     normalized = normalize_location_record(loc, resource_codes)
     row: Dict[str, Any] = {
         "loc_id": normalized["id"],
+        "location_key": _export_location_key(normalized),
         "loc_label": normalized.get("loc_label", ""),
         "loc_type": normalized.get("loc_type", "course"),
         "lat": normalized.get("lat", ""),

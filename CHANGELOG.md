@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Locations report — include `location_key`
+- `Locations.csv` now includes `location_key` immediately after `loc_id` (falls back to `leg_loc_key` when needed)
+- Package export `locations.csv` includes `location_key` from course snapshots (same fallback)
+- Locations UI table shows **Key** between **ID** and **Location** (from report/API data)
+- Helps identify paired reverse-leg duplicates that share the same authoring key
+
 ### Issue #798 closeout — tests & Tabler docs
 - Fix Phase 1 router test: allow legitimate `GET /reports` UI page; walk nested FastAPI routers
 - Update obsolete flow ordering tests to the fail-fast `events` contract (no pair-fallback helper)
