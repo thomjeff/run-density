@@ -33,6 +33,17 @@ _GPX = """<?xml version="1.0"?>
 </gpx>"""
 
 
+def _gpx_leg(lon0: float, lon1: float, *, lat: float = 45.96) -> str:
+    """Two-point GPX with distinct endpoints so stitch contributions are non-zero."""
+    return f"""<?xml version="1.0"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>leg</name><trkseg>
+    <trkpt lat="{lat}" lon="{lon0}"/>
+    <trkpt lat="{lat}" lon="{lon1}"/>
+  </trkseg></trk>
+</gpx>"""
+
+
 def _seed_org_leg(tmp_path, *, legs=None):
     org_dir = tmp_path / "org" / "legs"
     org_dir.mkdir(parents=True)
@@ -236,17 +247,17 @@ def test_apply_preserves_half_recipe_km_order(tmp_path, monkeypatch):
     _patch_roots(tmp_path, monkeypatch)
     org_dir = tmp_path / "org" / "legs"
     org_dir.mkdir(parents=True)
-    gpx = _GPX
+    # Distinct geometries so post-stitch km windows advance (#786).
     legs_spec = [
-        ("12", "start.gpx", 2.71),
-        ("06", "mid.gpx", 2.32),
-        ("13", "connector.gpx", 0.03),
-        ("09", "long.gpx", 5.77),
-        ("14", "finish.gpx", 0.2),
+        ("12", "start.gpx", -66.64, -66.63),
+        ("06", "mid.gpx", -66.63, -66.62),
+        ("13", "connector.gpx", -66.62, -66.619),
+        ("09", "long.gpx", -66.619, -66.55),
+        ("14", "finish.gpx", -66.55, -66.548),
     ]
     manifest_legs_list = []
-    for leg_id, fname, _km in legs_spec:
-        (org_dir / fname).write_text(gpx, encoding="utf-8")
+    for leg_id, fname, lon0, lon1 in legs_spec:
+        (org_dir / fname).write_text(_gpx_leg(lon0, lon1), encoding="utf-8")
         manifest_legs_list.append(
             {"id": leg_id, "file": fname, "seg_label": f"Leg {leg_id}"}
         )

@@ -2,7 +2,7 @@
 
 **Status:** Implemented (org-primary since #780/#783; corridor pairing since #785)
 **Last updated:** 2026-06
-**Epics/issues:** #755 (library), #780 (org-primary), #785 (corridor pairing), #786 (km drift — open)
+**Epics/issues:** #755 (library), #780 (org-primary), #785 (corridor pairing), #786 (km drift — fixed: post-stitch traced kms)
 **User guide:** [Race Configuration](../user-guide/race-configuration.md)
 
 ---
@@ -78,7 +78,7 @@ Two copies of leg data exist: the leg manifest (authoring) and the package `cour
 - **Leg-owned:** `lat`, `lon`, `placement` (`_LEG_OWNED_PLACEMENT_FIELDS`) — pin moves on the Legs tab always win; stale course copies never override them.
 - **Course-owned (preserved):** crew-facing `id` (`loc_id`), resources, zone, notes, buffer, interval, contact, proxy settings, etc. (`_LEG_LOC_PRESERVE_FIELDS` minus placement). Identity is matched by `location_key` / `leg_loc_key`.
 
-**Server-owned recipe kms:** `_preserve_recipe_segment_kms()` (`storage.py::save_config_course`) prevents stale client saves from overwriting recipe-applied per-event `from_km`/`to_km` and the `segment_library_applied` flag.
+**Server-owned recipe kms:** `_preserve_recipe_segment_kms()` (`storage.py::save_config_course`) prevents stale client saves from overwriting recipe-applied per-event `from_km`/`to_km` and the `segment_library_applied` flag. Those kms are measured along the stitched event polyline (`_build_event_occurrence_km` / `concat_recipe_coordinates`), rounded to 3 decimals (1 m), so they match GPX slicing in location reports (#786).
 
 **UI note:** the Legs and Course tabs share one Leaflet map. Course-level location pins are removed while the Legs tab is active (`removeLocationPins` in `course_mapping.js`, called from `onLegsTabShown`) to avoid duplicate-pin confusion.
 
@@ -93,7 +93,7 @@ Two copies of leg data exist: the leg manifest (authoring) and the package `cour
 | `LOCATION_SNAP_THRESHOLD_M` | 50 | Max pin → segment-centerline distance for projection and for `find_nearest_segment` discovery |
 | `LOCATION_SEGMENT_CLAMP_M` | 50 | Boundary pins projecting metres past a segment end are clamped into bounds instead of falling back to midpoint |
 
-Known limitation: recipe-bookkept kms vs stitched-GPX traced distance drift up to ~110 m mid-course, which can still fail projection for pins at turn points — see **#786** for the planned reconciliation (record traced kms at export).
+Per-event `from_km`/`to_km` are reconciled to the stitched course at apply/export (#786), so snap/clamp can stay tight at 50 m for boundary pins.
 
 ---
 

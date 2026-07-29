@@ -230,7 +230,7 @@ The following constants have been **removed** - values now come from API request
 
 **Location projection (`app/utils/constants.py`):**
 - `LOCATION_SNAP_THRESHOLD_M` (50 m): max pin → segment-centerline distance for projection and nearest-segment discovery
-- `LOCATION_SEGMENT_CLAMP_M` (50 m): boundary pins projecting metres past a segment end are clamped into bounds instead of falling back to segment-midpoint timing (see issue #786 for the km-drift limitation)
+- `LOCATION_SEGMENT_CLAMP_M` (50 m): boundary pins projecting metres past a segment end are clamped into bounds instead of falling back to segment-midpoint timing
 
 **Density:**
 - LOS thresholds: See `config/density_rulebook.yml`
