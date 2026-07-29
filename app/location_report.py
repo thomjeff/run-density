@@ -126,7 +126,7 @@ def seg_id_effectively_empty(seg_id_value: Any) -> bool:
 
 
 def proxy_loc_id_is_set(proxy_val: Any) -> bool:
-    """Issue #751: True when ``proxy_loc_id`` should be treated as present."""
+    """Issue #751: True when ``proxy_pass_id`` / legacy ``proxy_loc_id`` is present."""
     if proxy_val is None:
         return False
     if pd.isna(proxy_val):
@@ -138,11 +138,12 @@ def proxy_loc_id_is_set(proxy_val: Any) -> bool:
 
 def location_has_proxy_and_seg_conflict(location: pd.Series) -> bool:
     """
-    Issue #751: Both ``proxy_loc_id`` and ``seg_id`` are set — ambiguous configuration.
-
-    Caller must not apply proxy timing or segment modeling without explicit resolution.
+    Issue #751: Both ``proxy_pass_id`` (or legacy ``proxy_loc_id``) and ``seg_id`` are set.
     """
-    if not proxy_loc_id_is_set(location.get("proxy_loc_id")):
+    proxy = location.get("proxy_pass_id")
+    if not proxy_loc_id_is_set(proxy):
+        proxy = location.get("proxy_loc_id")
+    if not proxy_loc_id_is_set(proxy):
         return False
     return not seg_id_effectively_empty(location.get("seg_id"))
 
@@ -807,27 +808,41 @@ def generate_location_report(
     locations_by_id = {}
     
     for _, location in locations_df.iterrows():
-        loc_id = location.get("loc_id")
+        pass_id = location.get("pass_id")
+        if pass_id is None or (isinstance(pass_id, float) and pd.isna(pass_id)):
+            pass_id = location.get("loc_id")
+        human_loc_id = location.get("loc_id")
         loc_label = location.get("loc_label", "")
         loc_type = location.get("loc_type", "").lower()
         
-        logger.info(f"Processing location {loc_id}: {loc_label}")
+        logger.info(f"Processing pass {pass_id} (loc_id={human_loc_id}): {loc_label}")
         
         # Initialize report row
-        # Issue #589: Field order matches loc_expected.csv specification
-        # Issue #749: day column after loc_label (explicit when CSV opened standalone)
-        # Issue #598: Add flag fields for flag propagation
+        # 2027: pass_id = timed instance; loc_id = human Location; pass_key = opaque unifier
+        pass_key = ""
+        for field in ("pass_key", "location_key", "leg_loc_key"):
+            raw_key = location.get(field)
+            if raw_key is None or (isinstance(raw_key, float) and pd.isna(raw_key)):
+                continue
+            text = str(raw_key).strip()
+            if text and text.lower() != "nan":
+                pass_key = text
+                break
+
         report_row = {
-            "loc_id": loc_id,
+            "pass_id": pass_id,
+            "loc_id": human_loc_id,
+            "pass_key": pass_key,
+            "location_key": pass_key,  # legacy alias
             "loc_label": loc_label,
             "day": day or "",
             "loc_type": loc_type,
-            "loc_direction": location.get("loc_direction", ""),  # Issue #589: Add this
+            "loc_direction": location.get("loc_direction", ""),
             "lat": location.get("lat"),
             "lon": location.get("lon"),
             "zone": location.get("zone", ""),
-            "buffer": location.get("buffer", 0),  # Issue #589: Add to output (already used in calculation)
-            "interval": location.get("interval", 5),  # Issue #589: Add to output (already used in calculation)
+            "buffer": location.get("buffer", 0),
+            "interval": location.get("interval", 5),
             "first_runner": None,
             "peak_start": None,
             "peak_end": None,
@@ -835,10 +850,8 @@ def generate_location_report(
             "loc_start": format_time_hhmmss(loc_start_base_sec),
             "loc_end": None,
             "duration": None,
-            "timing_source": "modeled",  # Default to modeled, will be updated for proxy-based traffic locations
-            # Issue #589: Resource counts and minutes will be added dynamically below
+            "timing_source": "modeled",
             "notes": location.get("notes", ""),
-            # Issue #598: Flag propagation fields
             "flag": False,
             "flagged_seg_id": None,
             "flag_severity": None,
@@ -846,25 +859,27 @@ def generate_location_report(
             "flag_note": None
         }
         
-        # Issue #751: proxy_loc_id + seg_id both set — ambiguous; fail this row for timing
+        # Issue #751: proxy_pass_id + seg_id both set — ambiguous; fail this row for timing
         if location_has_proxy_and_seg_conflict(location):
             report_row["timing_source"] = "error:proxy_and_seg"
-            extra = "Issue #751: set only proxy_loc_id or seg_id, not both."
+            extra = "Issue #751: set only proxy_pass_id or seg_id, not both."
             base_notes = location.get("notes", "")
             if base_notes and str(base_notes).strip():
                 report_row["notes"] = f"{base_notes} ({extra})"
             else:
                 report_row["notes"] = extra
             logger.error(
-                "Location %s (%s): proxy_loc_id and seg_id are both set; ambiguous configuration (Issue #751).",
-                loc_id,
+                "Pass %s (%s): proxy_pass_id and seg_id are both set; ambiguous configuration (Issue #751).",
+                pass_id,
                 loc_label,
             )
             report_rows.append(report_row)
-            locations_by_id[loc_id] = report_row
+            locations_by_id[pass_id] = report_row
             continue
         
         # Check if timing_source is set to proxy:n in input locations.csv
+        # (keep using pass_id as loc_id alias in nested code via binding)
+        loc_id = pass_id
         # This handles locations that should copy timing from another location
         timing_source = location.get("timing_source", "")
         if pd.notna(timing_source) and isinstance(timing_source, str) and timing_source.startswith("proxy:"):
@@ -911,25 +926,28 @@ def generate_location_report(
                 )
                 report_row["timing_source"] = "error:invalid_proxy_format"
         
-        proxy_loc_id = location.get("proxy_loc_id")
+        proxy_loc_id = location.get("proxy_pass_id")
+        if proxy_loc_id is None or (isinstance(proxy_loc_id, float) and pd.isna(proxy_loc_id)) or proxy_loc_id == "":
+            proxy_loc_id = location.get("proxy_loc_id")
         
         # Issue #598: Propagate flags from segments
         # 1. Get seg_id(s) for this location (direct or via proxy)
         location_seg_ids = []
         seg_id_value = location.get("seg_id")
+        pass_lookup_col = "pass_id" if "pass_id" in locations_df.columns else "loc_id"
         
         if pd.notna(seg_id_value) and seg_id_value != "":
             # Direct seg_id match
             location_seg_ids = parse_segment_ids(seg_id_value)
         elif pd.notna(proxy_loc_id) and proxy_loc_id != "":
-            # Proxy location: use proxy location's seg_id
-            proxy_location_row = locations_df[locations_df['loc_id'] == proxy_loc_id]
+            # Proxy pass: use proxy pass's seg_id
+            proxy_location_row = locations_df[locations_df[pass_lookup_col] == proxy_loc_id]
             if not proxy_location_row.empty:
                 proxy_seg_id = proxy_location_row.iloc[0].get("seg_id")
                 if pd.notna(proxy_seg_id) and proxy_seg_id != "":
                     location_seg_ids = parse_segment_ids(proxy_seg_id)
                     logger.debug(
-                        f"Location {loc_id} ({loc_label}): Using proxy location {proxy_loc_id}'s seg_id: {location_seg_ids}"
+                        f"Location {loc_id} ({loc_label}): Using proxy pass {proxy_loc_id}'s seg_id: {location_seg_ids}"
                     )
         
         # 2. Check if ANY of the location's segment IDs are flagged
@@ -986,7 +1004,7 @@ def generate_location_report(
         )
         
         if not arrival_times:
-            loc_row = locations_df[locations_df['loc_id'] == loc_id]
+            loc_row = locations_df[locations_df['pass_id' if 'pass_id' in locations_df.columns else 'loc_id'] == loc_id]
             if not loc_row.empty:
                 loc = loc_row.iloc[0]
                 logger.warning(
@@ -1041,7 +1059,7 @@ def generate_location_report(
     # This ensures proxy locations are available when needed
     for i, report_row in enumerate(report_rows):
         loc_id = report_row["loc_id"]
-        location_row = locations_df[locations_df['loc_id'] == loc_id]
+        location_row = locations_df[locations_df['pass_id' if 'pass_id' in locations_df.columns else 'loc_id'] == loc_id]
         
         if location_row.empty:
             continue
@@ -1092,25 +1110,27 @@ def generate_location_report(
                 )
                 report_row["timing_source"] = "error:invalid_proxy_format"
     
-    # Issue #751 / #479: Process proxy_loc_id when seg_id is empty (all loc_types)
-    # Build lookup dictionary for all processed locations (refresh after second pass)
-    locations_by_id = {row["loc_id"]: row for row in report_rows}
+    # Issue #751 / #479: Process proxy_pass_id when seg_id is empty (all loc_types)
+    # Build lookup dictionary for all processed passes (refresh after second pass)
+    locations_by_id = {row["pass_id"]: row for row in report_rows}
     
     for report_row in report_rows:
         if report_row.get("timing_source") == "error:proxy_and_seg":
             continue
         
-        loc_id = report_row["loc_id"]
-        location_row = locations_df[locations_df['loc_id'] == loc_id]
+        loc_id = report_row["pass_id"]
+        location_row = locations_df[locations_df['pass_id' if 'pass_id' in locations_df.columns else 'loc_id'] == loc_id]
         
         if location_row.empty:
             continue
         
         location = location_row.iloc[0]
-        proxy_loc_id = location.get("proxy_loc_id")
+        proxy_loc_id = location.get("proxy_pass_id")
+        if not proxy_loc_id_is_set(proxy_loc_id):
+            proxy_loc_id = location.get("proxy_loc_id")
         
         logger.debug(
-            "Location %s: proxy_loc_id=%s, type=%s, isna=%s",
+            "Pass %s: proxy_pass_id=%s, type=%s, isna=%s",
             loc_id,
             proxy_loc_id,
             type(proxy_loc_id),
@@ -1119,7 +1139,7 @@ def generate_location_report(
         
         if not proxy_loc_id_is_set(proxy_loc_id):
             logger.debug(
-                "Location %s: No proxy_loc_id, keeping timing_source as modeled",
+                "Pass %s: No proxy_pass_id, keeping timing_source as modeled",
                 loc_id,
             )
             continue
@@ -1207,9 +1227,9 @@ def generate_location_report(
             
             # Add each resource count field
             for count_col in count_columns:
-                # Get count value from original location data
-                loc_id = report_row["loc_id"]
-                location_row = locations_df[locations_df['loc_id'] == loc_id]
+                # Get count value from original pass data
+                loc_id = report_row.get("pass_id", report_row.get("loc_id"))
+                location_row = locations_df[locations_df['pass_id' if 'pass_id' in locations_df.columns else 'loc_id'] == loc_id]
                 
                 if not location_row.empty:
                     location = location_row.iloc[0]
@@ -1229,46 +1249,74 @@ def generate_location_report(
                 mins_value = count_value * duration_minutes
                 report_row[mins_col] = int(mins_value) if mins_value >= 0 else 0
     
-    # Create DataFrame and save
+    # Annotate paired passes; write Passes.csv (instance) + Locations.csv (consolidated)
+    from app.core.locations.pairing import (
+        annotate_location_passes,
+        consolidate_location_rows,
+    )
+
+    annotate_location_passes(report_rows)
+
     report_df = pd.DataFrame(report_rows)
-    
-    # Issue #589: Reorder columns to match expected order
-    # Base fields (in order from loc_expected.csv)
+
     base_fields = [
-        "loc_id", "loc_label", "day", "loc_type", "loc_direction",
+        "pass_id", "loc_id", "pass_key", "pass", "same_pass_as",
+        "loc_label", "day",
+        "loc_type", "loc_direction",
         "lat", "lon", "zone",
         "buffer", "interval",
         "first_runner", "peak_start", "peak_end", "last_runner",
         "loc_start", "loc_end", "duration",
-        "timing_source"
+        "timing_source",
+        # legacy aliases kept at end of base for importers mid-cutover
+        "location_key", "same_location_as",
     ]
-    
-    # Dynamically detect all *_count and *_mins fields (in alphabetical order for consistency)
+
     count_fields = sorted([col for col in report_df.columns if col.endswith("_count")])
     mins_fields = sorted([col for col in report_df.columns if col.endswith("_mins")])
-    
-    # Build final column order: base fields, then all *_count, then all *_mins, then notes
-    expected_columns = base_fields + count_fields + mins_fields + ["notes"]
-    
-    # Reorder DataFrame (only include columns that exist)
+
+    expected_columns = base_fields + count_fields + mins_fields + [
+        "notes", "flag", "flagged_seg_id", "flag_severity", "flag_worst_los", "flag_note"
+    ]
+
     final_columns = [col for col in expected_columns if col in report_df.columns]
-    # Add any remaining columns that weren't in expected list (for backward compatibility)
     remaining_cols = [col for col in report_df.columns if col not in final_columns]
     final_columns = final_columns + remaining_cols
-    
+
     report_df = report_df[final_columns]
-    
-    # Get output path
+
+    # Passes.csv — bottom-up timed instances (agencies / YSSR)
+    passes_full, passes_rel = get_report_paths("Passes", "csv", output_dir)
+    Path(passes_full).parent.mkdir(parents=True, exist_ok=True)
+    report_df.to_csv(passes_full, index=False)
+    logger.info(f"Passes report saved to: {passes_full}")
+
+    # Locations.csv — consolidated Location view (UI mirror)
+    location_rows = consolidate_location_rows(report_df.to_dict(orient="records"))
+    locations_df_out = pd.DataFrame(location_rows)
+    loc_base = [
+        "loc_id", "pass_key", "pass_ids", "pass_count", "loc_label", "day",
+        "loc_type", "lat", "lon", "zone",
+        "first_runner", "last_runner", "loc_start", "loc_end",
+        "peak_start", "peak_end", "flag", "onepage", "notes",
+    ]
+    loc_counts = sorted([c for c in locations_df_out.columns if c.endswith("_count") or c.endswith("_mins")])
+    loc_cols = [c for c in loc_base + loc_counts if c in locations_df_out.columns]
+    loc_cols += [c for c in locations_df_out.columns if c not in loc_cols]
+    locations_df_out = locations_df_out[loc_cols]
+
     full_path, relative_path = get_report_paths("Locations", "csv", output_dir)
     Path(full_path).parent.mkdir(parents=True, exist_ok=True)
-    
-    report_df.to_csv(full_path, index=False)
-    logger.info(f"Location report saved to: {full_path}")
-    
+    locations_df_out.to_csv(full_path, index=False)
+    logger.info(f"Locations report saved to: {full_path}")
+
     return {
         "ok": True,
         "file_path": full_path,
         "relative_path": relative_path,
+        "passes_path": passes_full,
+        "passes_relative_path": passes_rel,
         "locations_processed": len(report_df),
+        "locations_consolidated": len(locations_df_out),
         "timestamp": datetime.now().isoformat()
     }

@@ -65,9 +65,20 @@ def generate_location_onepagers(
     """
     Generate one-pager PDFs for locations flagged onepage='y'.
 
+    Issue #810: paired reverse-leg locations (shared location_key) produce one
+    sheet with Outbound + Return runner timings. HTML is written for each
+    loc_id in the group so existing /locsheets/.../{loc_id} URLs keep working.
+
     Returns:
-        Number of PDFs generated.
+        Number of Location sheets generated (paired counts as one).
     """
+    from app.core.locations.pairing import (
+        effective_location_key,
+        max_time_str,
+        min_time_str,
+        time_to_seconds,
+    )
+
     locations_data = _load_locations_results(locations_results_json_path)
     if not locations_data:
         logger.warning(
@@ -75,10 +86,10 @@ def generate_location_onepagers(
         )
         return 0
 
-    report_lookup = _load_locations_report(locations_report_csv_path)
+    report_lookup = _load_pass_timings_report(locations_report_csv_path)
     if not report_lookup:
         logger.warning(
-            f"Issue #702: Locations report not found or empty at {locations_report_csv_path}"
+            f"Issue #702: Passes/Locations report not found or empty at {locations_report_csv_path}"
         )
         return 0
 
@@ -89,23 +100,92 @@ def generate_location_onepagers(
     pdf_dir.mkdir(parents=True, exist_ok=True)
     html_dir.mkdir(parents=True, exist_ok=True)
 
-    count = 0
+    # Keys / ids that should emit a sheet (any pass with onepage=y)
+    sheet_keys: set[str] = set()
+    sheet_solo_ids: set[int] = set()
+    by_key: Dict[str, List[Dict[str, Any]]] = {}
+    by_id: Dict[int, Dict[str, Any]] = {}
+
     for location in locations_data:
-        if not _is_onepager_location(location, day):
+        loc_day = str(location.get("day", "")).strip().lower()
+        if loc_day and loc_day != str(day).strip().lower():
             continue
-
-        loc_id = location.get("loc_id")
-        if loc_id is None:
-            logger.warning("Issue #702: Skipping location with missing loc_id")
+        pid = _pass_instance_id(location)
+        if pid is None:
             continue
+        by_id[pid] = location
+        key = effective_location_key(location)
+        if key:
+            by_key.setdefault(key, []).append(location)
+        if _is_onepager_location(location, day):
+            if key:
+                sheet_keys.add(key)
+            else:
+                sheet_solo_ids.add(pid)
 
-        report_row = report_lookup.get(int(loc_id))
-        if not report_row:
-            logger.warning(
-                f"Issue #702: No Locations.csv row found for loc_id={loc_id}, skipping one-pager"
+    sheet_specs: List[Dict[str, Any]] = []
+
+    for key in sorted(sheet_keys):
+        members = by_key.get(key) or []
+        passes: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
+        for loc in members:
+            pid = _pass_instance_id(loc)
+            if pid is None:
+                continue
+            report_row = report_lookup.get(pid)
+            if not report_row:
+                continue
+            passes.append((loc, report_row))
+        if not passes:
+            continue
+        passes.sort(
+            key=lambda pair: (
+                time_to_seconds(pair[1].get("first_runner"))
+                if time_to_seconds(pair[1].get("first_runner")) is not None
+                else 10**9,
+                _pass_instance_id(pair[0]) or 10**9,
             )
-            continue
+        )
+        primary_loc, primary_report = passes[0]
+        combined = dict(primary_report)
+        combined["loc_start"] = min_time_str(r.get("loc_start") for _, r in passes)
+        combined["loc_end"] = max_time_str(r.get("loc_end") for _, r in passes)
+        combined["first_runner"] = min_time_str(r.get("first_runner") for _, r in passes)
+        combined["last_runner"] = max_time_str(r.get("last_runner") for _, r in passes)
+        human_loc_id = _human_location_id(primary_loc, primary_report)
+        sheet_specs.append(
+            {
+                "location": {**primary_loc, "loc_id": human_loc_id},
+                "report_row": {**combined, "loc_id": human_loc_id},
+                "passes": passes,
+                "paired": len(passes) > 1,
+                "sheet_loc_id": human_loc_id,
+                "all_loc_ids": [human_loc_id],
+            }
+        )
 
+    for pid in sorted(sheet_solo_ids):
+        location = by_id.get(pid)
+        report_row = report_lookup.get(pid)
+        if not location or not report_row:
+            continue
+        human_loc_id = _human_location_id(location, report_row)
+        sheet_specs.append(
+            {
+                "location": {**location, "loc_id": human_loc_id},
+                "report_row": {**report_row, "loc_id": human_loc_id},
+                "passes": [(location, report_row)],
+                "paired": False,
+                "sheet_loc_id": human_loc_id,
+                "all_loc_ids": [human_loc_id],
+            }
+        )
+
+    count = 0
+    for spec in sheet_specs:
+        location = spec["location"]
+        report_row = spec["report_row"]
+        loc_id = spec["sheet_loc_id"]
         map_path = _build_map_path(maps_dir, location)
         try:
             _create_map_snapshot(location, map_path, radius_m=radius_m)
@@ -117,13 +197,66 @@ def generate_location_onepagers(
             _write_map_placeholder(map_path)
 
         pdf_path = _build_pdf_path(pdf_dir, location)
-        _render_onepager_pdf(location, report_row, map_path, pdf_path, day=day)
+        _render_onepager_pdf(
+            location,
+            report_row,
+            map_path,
+            pdf_path,
+            day=day,
+            passes=spec["passes"] if spec["paired"] else None,
+        )
+        # One HTML per human Location id (volunteer-facing)
         html_path = html_dir / f"{loc_id}.html"
-        _render_onepager_html(location, report_row, map_path, html_path, day=day)
+        _render_onepager_html(
+            location,
+            report_row,
+            map_path,
+            html_path,
+            day=day,
+            passes=spec["passes"] if spec["paired"] else None,
+            sheet_loc_ids=spec["all_loc_ids"],
+        )
         count += 1
 
     logger.info(f"Issue #702/#735: Generated {count} one-pagers (PDF + HTML) for day {day}")
     return count
+
+
+def _pass_instance_id(location: Dict[str, Any]) -> Optional[int]:
+    for field in ("pass_id", "id"):
+        raw = location.get(field)
+        if raw is None or raw == "":
+            continue
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            continue
+    raw = location.get("loc_id")
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _human_location_id(
+    location: Dict[str, Any], report_row: Optional[Dict[str, Any]] = None
+) -> int:
+    for source in (location, report_row or {}):
+        raw = source.get("loc_id")
+        pid = source.get("pass_id")
+        try:
+            lid = int(raw)
+        except (TypeError, ValueError):
+            continue
+        try:
+            if pid is not None and int(pid) != lid:
+                return lid
+        except (TypeError, ValueError):
+            return lid
+        # If only loc_id present, treat as human id (already consolidated) or legacy pass
+        return lid
+    pid = _pass_instance_id(location)
+    return pid if pid is not None else 0
 
 
 def _load_locations_results(path: Path) -> List[Dict[str, Any]]:
@@ -136,28 +269,45 @@ def _load_locations_results(path: Path) -> List[Dict[str, Any]]:
     return data.get("locations", []) if isinstance(data, dict) else []
 
 
+def _load_pass_timings_report(path: Path) -> Dict[int, Dict[str, Any]]:
+    """Prefer Passes.csv (keyed by pass_id); fall back to Locations.csv / legacy loc_id."""
+    candidates = []
+    if path.name.lower() == "locations.csv":
+        candidates.append(path.parent / "Passes.csv")
+        candidates.append(path.parent / "passes.csv")
+    candidates.append(path)
+    if path.name.lower() == "passes.csv":
+        candidates.append(path.parent / "Locations.csv")
+
+    for candidate in candidates:
+        if not candidate.exists():
+            continue
+        try:
+            df = pd.read_csv(candidate)
+        except Exception as exc:
+            logger.warning(f"Issue #702: Failed to read {candidate}: {exc}")
+            continue
+        if df.empty:
+            continue
+        id_col = "pass_id" if "pass_id" in df.columns else "loc_id"
+        if id_col not in df.columns:
+            continue
+        df = df.replace([math.inf, -math.inf], None)
+        df[id_col] = pd.to_numeric(df[id_col], errors="coerce")
+        df = df.dropna(subset=[id_col])
+        df[id_col] = df[id_col].astype(int)
+        return df.set_index(id_col).to_dict("index")
+    return {}
+
+
 def _load_locations_report(path: Path) -> Dict[int, Dict[str, Any]]:
-    if not path.exists():
-        return {}
-
-    try:
-        df = pd.read_csv(path)
-    except Exception as exc:
-        logger.warning(f"Issue #702: Failed to read Locations.csv: {exc}")
-        return {}
-
-    if df.empty or "loc_id" not in df.columns:
-        return {}
-
-    df = df.replace([math.inf, -math.inf], None)
-    df["loc_id"] = pd.to_numeric(df["loc_id"], errors="coerce")
-    df = df.dropna(subset=["loc_id"])
-    df["loc_id"] = df["loc_id"].astype(int)
-    return df.set_index("loc_id").to_dict("index")
+    return _load_pass_timings_report(path)
 
 
 def _is_onepager_location(location: Dict[str, Any], day: str) -> bool:
-    loc_day = str(location.get("day", "")).strip().lower()
+    loc_day = str(location.get("day", "") or "").strip().lower()
+    if loc_day in ("", "nan", "none", "null"):
+        loc_day = ""
     if loc_day and loc_day != str(day).strip().lower():
         return False
 
@@ -303,6 +453,7 @@ def _render_onepager_pdf(
     map_path: Path,
     output_path: Path,
     day: str = "",
+    passes: Optional[List[Tuple[Dict[str, Any], Dict[str, Any]]]] = None,
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     c = canvas.Canvas(str(output_path), pagesize=_PAGE_SIZE)
@@ -313,7 +464,11 @@ def _render_onepager_pdf(
 
     loc_id = location.get("loc_id", "")
     loc_label = location.get("loc_label", "")
-    title = f"LOCATION: {loc_id} - {loc_label}"
+    if passes and len(passes) > 1:
+        ids = " / ".join(str(p[0].get("loc_id")) for p in passes)
+        title = f"LOCATION: {loc_label} ({ids})"
+    else:
+        title = f"LOCATION: {loc_id} - {loc_label}"
     y = _draw_text_block(c, title, font_bold, 16, _MARGIN, y, page_w - 2 * _MARGIN)
 
     loc_type = location.get("loc_type", "")
@@ -384,14 +539,37 @@ def _render_onepager_pdf(
             y - 2,
             page_w - 2 * _MARGIN,
         )
-        timings_lines = [
-            f"First: {_format_time(report_row.get('first_runner'))}",
-            f"Peak Start: {_format_time(report_row.get('peak_start'))}",
-            f"Peak End: {_format_time(report_row.get('peak_end'))}",
-            f"Last: {_format_time(report_row.get('last_runner'))}",
-        ]
-        for line in timings_lines:
-            y = _draw_text_block(c, f"- {line}", font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
+        if passes and len(passes) > 1:
+            for idx, (_loc, prow) in enumerate(passes):
+                role = "Outbound" if idx == 0 else "Return"
+                pid = _loc.get("loc_id")
+                y = _draw_text_block(
+                    c,
+                    f"{role} (ID {pid}):",
+                    font_bold,
+                    12,
+                    _MARGIN + 16,
+                    y - 4,
+                    page_w - 2 * _MARGIN,
+                )
+                for line in (
+                    f"First: {_format_time(prow.get('first_runner'))}",
+                    f"Peak Start: {_format_time(prow.get('peak_start'))}",
+                    f"Peak End: {_format_time(prow.get('peak_end'))}",
+                    f"Last: {_format_time(prow.get('last_runner'))}",
+                ):
+                    y = _draw_text_block(
+                        c, f"- {line}", font_body, 12, _MARGIN + 28, y - 2, page_w - 2 * _MARGIN
+                    )
+        else:
+            timings_lines = [
+                f"First: {_format_time(report_row.get('first_runner'))}",
+                f"Peak Start: {_format_time(report_row.get('peak_start'))}",
+                f"Peak End: {_format_time(report_row.get('peak_end'))}",
+                f"Last: {_format_time(report_row.get('last_runner'))}",
+            ]
+            for line in timings_lines:
+                y = _draw_text_block(c, f"- {line}", font_body, 12, _MARGIN + 16, y - 2, page_w - 2 * _MARGIN)
 
     y = _draw_text_block(c, "EVENTS:", font_bold, 14, _MARGIN, y - _SECTION_GAP, page_w - 2 * _MARGIN)
     if is_proxy:
@@ -455,11 +633,17 @@ def _render_onepager_html(
     map_path: Path,
     output_path: Path,
     day: str = "",
+    passes: Optional[List[Tuple[Dict[str, Any], Dict[str, Any]]]] = None,
+    sheet_loc_ids: Optional[List[Any]] = None,
 ) -> None:
-    """Render one-pager as self-contained HTML (Issue #735)."""
+    """Render one-pager as self-contained HTML (Issue #735 / #810)."""
     loc_id = location.get("loc_id", "")
     loc_label = location.get("loc_label", "")
-    title = f"LOCATION: {loc_id} - {loc_label}"
+    if passes and len(passes) > 1:
+        ids = " / ".join(str(p[0].get("loc_id")) for p in passes)
+        title = f"LOCATION: {loc_label} ({ids})"
+    else:
+        title = f"LOCATION: {loc_id} - {loc_label}"
     loc_type = html.escape(str(location.get("loc_type", "")))
     resources = _extract_resources(location)
     lat = location.get("lat", "")
@@ -487,6 +671,24 @@ def _render_onepager_html(
 
     if is_proxy:
         runner_timings_html = "<p>This location is near the course, but not directly on one or more events' course.</p>"
+    elif passes and len(passes) > 1:
+        blocks = [
+            "<p>The predicted timing for the first and last runner to arrive at and depart from this location. "
+            "Outbound and Return are separate passes on paired reverse legs.</p>"
+        ]
+        for idx, (_loc, prow) in enumerate(passes):
+            role = "Outbound" if idx == 0 else "Return"
+            pid = html.escape(str(_loc.get("loc_id")))
+            blocks.append(f"<h3>{role} (ID {pid})</h3>")
+            blocks.append(
+                "<ul>"
+                f"<li>First: {html.escape(_format_time(prow.get('first_runner')))}</li>"
+                f"<li>Peak Start: {html.escape(_format_time(prow.get('peak_start')))}</li>"
+                f"<li>Peak End: {html.escape(_format_time(prow.get('peak_end')))}</li>"
+                f"<li>Last: {html.escape(_format_time(prow.get('last_runner')))}</li>"
+                "</ul>"
+            )
+        runner_timings_html = "\n".join(blocks)
     else:
         runner_timings_html = """
         <p>The predicted timing for the first and last runner to arrive at and depart from this location.
@@ -514,6 +716,7 @@ def _render_onepager_html(
         body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 1rem 2rem; }}
         h1 {{ font-size: 1.25rem; margin-bottom: 0.5rem; }}
         h2 {{ font-size: 1rem; margin-top: 1rem; margin-bottom: 0.25rem; }}
+        h3 {{ font-size: 0.95rem; margin-top: 0.75rem; margin-bottom: 0.25rem; }}
         p, ul {{ margin: 0.25rem 0; }}
         ul {{ padding-left: 1.5rem; }}
         .map {{ max-width: 100%; height: auto; margin: 0.5rem 0; border: 1px solid #ddd; }}

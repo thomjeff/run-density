@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### 2027 location / pass identity
+- **`loc_id`**: short human Location number (phone / UI / one-pager)
+- **`pass_id`**: timed instance (outbound/return and unpaired rows)
+- **`pass_key`**: opaque Crockford unifier (system join; not volunteer-facing)
+- Package pipeline input: **`passes.csv`** (replaces package `locations.csv`)
+- Analysis reports: **`Passes.csv`** (one row per pass) + **`Locations.csv`** (consolidated earliest/latest per Location)
+- One-pager HTML: `/{loc_id}.html` (human Location id)
+
+### Issue #810 — paired reverse-leg Locations
+- One Location in map + Course Resource Timing table when rows share `pass_key` / legacy `location_key` (Outbound + Return times)
+- Loc sheets: one sheet per Location with Outbound/Return sections
+- Leg map Add/Edit location popup: **Create One-Pager** checkbox (`onepage` y/n); Save closes popup immediately
+- `ensure_location_key` preserves intentional shared keys on paired reverse legs (no longer re-keys the second pin)
+- Loc sheet generation treats blank/`nan` `day` as matching the selected day (so onepage=y rows are not skipped)
+- Build race exports / location merge stamps package `event_day` onto course locations (org legs stay day-agnostic)
+- Package export includes `pass_key` / `loc_id` / `pass_id` on pass rows
+
+### Locations report — include `location_key`
+- (Superseded by 2027 identity: prefer `pass_key` + human `loc_id`; legacy `location_key` still accepted on read)
+
 ### Issue #798 closeout — tests & Tabler docs
 - Fix Phase 1 router test: allow legitimate `GET /reports` UI page; walk nested FastAPI routers
 - Update obsolete flow ordering tests to the fail-fast `events` contract (no pair-fallback helper)

@@ -485,12 +485,13 @@
             { key: '_expand', label: '', width: 36 },
             { key: '_select', label: '', width: 40 },
             { key: 'id', label: 'ID', width: 48 },
-            { key: 'location_key', label: 'Key', width: 56 },
+            { key: 'loc_id', label: 'Loc', width: 44 },
+            { key: 'pass_key', label: 'Key', width: 56 },
             { key: 'loc_label', label: 'Label', width: 140 },
             { key: 'loc_type', label: 'Type', width: 88 },
             { key: 'zone', label: 'Zone', width: 72 },
             { key: 'seg_id', label: 'Seg ID', width: 64 },
-            { key: 'proxy_loc_id', label: 'Proxy ID', width: 72 },
+            { key: 'proxy_loc_id', label: 'Proxy', width: 72 },
             { key: 'resources', label: 'Resources', width: 200 }
         ];
         headers.forEach(function (col) {
@@ -568,11 +569,19 @@
             idTd.textContent = String(locationId(loc, rowIndex));
             tr.appendChild(idTd);
 
+            var humanTd = document.createElement('td');
+            humanTd.className = 'location-grid-readonly';
+            humanTd.textContent = (loc.loc_id != null && String(loc.loc_id).trim() !== '')
+                ? String(loc.loc_id).trim()
+                : '—';
+            tr.appendChild(humanTd);
+
             var keyTd = document.createElement('td');
             keyTd.className = 'location-grid-readonly';
-            keyTd.textContent = (loc.location_key && String(loc.location_key).trim())
-                ? String(loc.location_key).trim()
-                : '—';
+            var keyVal = (loc.pass_key && String(loc.pass_key).trim())
+                || (loc.location_key && String(loc.location_key).trim())
+                || '';
+            keyTd.textContent = keyVal || '—';
             tr.appendChild(keyTd);
 
             var labelTd = document.createElement('td');

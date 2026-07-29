@@ -142,7 +142,7 @@ document.addEventListener('DOMContentLoaded', function () {
             btnExport.disabled = false;
             btnExport.title = usePackageLevelEditSave()
                 ? 'Export segments, locations, and related files for this package'
-                : 'Write segments.csv, flow.csv, locations.csv, GPX to course folder';
+                : 'Write segments.csv, flow.csv, passes.csv, GPX to course folder';
         }
     }
 
@@ -1588,8 +1588,9 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!row) return;
         row.innerHTML = '';
         [
-            { text: 'ID', title: 'Crew-facing loc_id (stable across re-apply)' },
-            { text: 'Key', title: 'Stable internal location_key' },
+            { text: 'ID', title: 'Pass instance id (pass_id / course id)' },
+            { text: 'Loc', title: 'Human Location id (loc_id)' },
+            { text: 'Key', title: 'Internal pass_key (not for volunteers)' },
             'Type',
             'Label',
             'Zone'
@@ -3885,11 +3886,19 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             idCell.appendChild(idBtn);
             tr.appendChild(idCell);
-            var keyTd = document.createElement('td');
-            keyTd.textContent = (loc.location_key && String(loc.location_key).trim())
-                ? String(loc.location_key).trim()
+            var humanLocTd = document.createElement('td');
+            var humanLoc = loc.loc_id != null && String(loc.loc_id).trim() !== ''
+                ? String(loc.loc_id).trim()
                 : '—';
-            keyTd.title = 'Stable authoring key (internal)';
+            humanLocTd.textContent = humanLoc;
+            humanLocTd.title = 'Human Location id';
+            tr.appendChild(humanLocTd);
+            var keyTd = document.createElement('td');
+            var keyVal = (loc.pass_key && String(loc.pass_key).trim())
+                || (loc.location_key && String(loc.location_key).trim())
+                || '';
+            keyTd.textContent = keyVal || '—';
+            keyTd.title = 'Internal pass_key';
             tr.appendChild(keyTd);
             tr.appendChild(document.createElement('td')).textContent = typeLabel;
             tr.appendChild(document.createElement('td')).textContent = loc.loc_label || '';
@@ -4838,7 +4847,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         var data = await res.json();
                         if (!res.ok) throw new Error(data.detail || res.statusText);
                         var msg = 'Exported to config package: segments.csv';
-                        if (data.location_count != null) msg += ', locations.csv (' + data.location_count + ' rows)';
+                        if (data.location_count != null) msg += ', passes.csv (' + data.location_count + ' rows)';
                         if (data.flow_path) msg += ', flow.csv';
                         if (data.gpx_files && data.gpx_files.length) {
                             msg += ', ' + data.gpx_files.length + ' event GPX file(s)';
@@ -4849,7 +4858,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             msg += ' — still missing: ' + data.readiness.missing.join(', ');
                         }
                         if (data.segments_backup_path) msg += ' (segments.csv backed up)';
-                        if (data.locations_backup_path) msg += ' (locations.csv backed up)';
+                        if (data.locations_backup_path) msg += ' (passes.csv backed up)';
                         alert(msg);
                     } catch (e) {
                         alert('Export failed: ' + (e.message || String(e)));

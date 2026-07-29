@@ -75,6 +75,40 @@ def test_wrong_day_excluded(tmp_path: Path) -> None:
     assert len(out) == 0
 
 
+def test_paired_location_key_one_index_entry(tmp_path: Path) -> None:
+    """Issue #810: shared location_key with onepage on either pass → one index row."""
+    day = "sun"
+    comp = tmp_path / day / "computation"
+    comp.mkdir(parents=True)
+    (comp / "locations_results.json").write_text(
+        json.dumps(
+            {
+                "locations": [
+                    {
+                        "loc_id": 129,
+                        "location_key": "J6NJY",
+                        "loc_label": "University at George",
+                        "day": "sun",
+                        "onepage": "n",
+                    },
+                    {
+                        "loc_id": 117,
+                        "location_key": "J6NJY",
+                        "loc_label": "University at George",
+                        "day": "sun",
+                        "onepage": "y",
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = build_loc_sheet_entries(tmp_path, day)
+    assert len(out) == 1
+    assert out[0]["loc_id"] == 117
+    assert out[0]["loc_ids"] == [117, 129]
+
+
 def test_fallback_html_on_disk(tmp_path: Path) -> None:
     day = "sun"
     comp = tmp_path / day / "computation"

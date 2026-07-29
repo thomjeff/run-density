@@ -22,13 +22,16 @@ DEFAULT_PACKAGE_RESOURCES: List[Dict[str, str]] = [
 
 _RESOURCE_CODE_RE = re.compile(r"^[a-z][a-z0-9_]{0,15}$")
 
-LOCATIONS_CSV_PREFIX_COLUMNS: List[str] = [
+# Package / pipeline pass-level CSV (one row per timed pass).
+PASSES_CSV_PREFIX_COLUMNS: List[str] = [
+    "pass_id",
     "loc_id",
+    "pass_key",
     "loc_label",
     "loc_type",
     "lat",
     "lon",
-    "proxy_loc_id",
+    "proxy_pass_id",
     "seg_id",
     "day",
     "zone",
@@ -40,6 +43,9 @@ LOCATIONS_CSV_PREFIX_COLUMNS: List[str] = [
     "buffer",
     "interval",
 ]
+
+# Back-compat alias used by older call sites during cutover.
+LOCATIONS_CSV_PREFIX_COLUMNS: List[str] = PASSES_CSV_PREFIX_COLUMNS
 
 LOCATIONS_CSV_SUFFIX_COLUMNS: List[str] = [
     "onepage",
@@ -95,14 +101,19 @@ def ensure_manifest_resources(manifest: Dict[str, Any]) -> List[Dict[str, str]]:
     return registry
 
 
-def locations_csv_columns(resource_codes: Sequence[str]) -> List[str]:
+def passes_csv_columns(resource_codes: Sequence[str]) -> List[str]:
     codes = [normalize_resource_code(c) for c in resource_codes]
     count_cols = [count_column(c) for c in codes]
     return (
-        list(LOCATIONS_CSV_PREFIX_COLUMNS)
+        list(PASSES_CSV_PREFIX_COLUMNS)
         + count_cols
         + list(LOCATIONS_CSV_SUFFIX_COLUMNS)
     )
+
+
+def locations_csv_columns(resource_codes: Sequence[str]) -> List[str]:
+    """Alias: package pipeline CSV is pass-level (see passes_csv_columns)."""
+    return passes_csv_columns(resource_codes)
 
 
 def _yn(value: Any, default: str = "n") -> str:
@@ -122,7 +133,12 @@ def _default_location_fields() -> Dict[str, Any]:
         "loc_type": "course",
         "lat": "",
         "lon": "",
-        "proxy_loc_id": "",
+        "proxy_pass_id": "",
+        "proxy_loc_id": "",  # legacy alias of proxy_pass_id
+        "pass_key": "",
+        "location_key": "",  # legacy alias of pass_key
+        "loc_id": "",
+        "pass_id": "",
         "seg_id": "",
         "day": "",
         "zone": "",
@@ -164,25 +180,56 @@ def _sync_resources_dict(
     return resources
 
 
+def _export_pass_key(normalized: Dict[str, Any]) -> str:
+    """Opaque pass_key for pipeline CSV (falls back to legacy location_key / leg_loc_key)."""
+    for field in ("pass_key", "location_key", "leg_loc_key"):
+        raw = normalized.get(field)
+        if raw is None or raw == "":
+            continue
+        text = str(raw).strip()
+        if text and text.lower() != "nan":
+            return text
+    return ""
+
+
 def normalize_location_record(
     loc: Dict[str, Any],
     resource_codes: Sequence[str],
     *,
     index: int = 0,
 ) -> Dict[str, Any]:
-    """Normalize a course.json location object for editor + export."""
+    """Normalize a course.json location (pass) object for editor + export."""
     if not isinstance(loc, dict):
         raise ValueError("location must be an object")
+
+    from app.core.locations.identity import (
+        effective_pass_key,
+        get_loc_id,
+        get_pass_id,
+        migrate_pass_key_fields,
+        migrate_proxy_pass_fields,
+    )
 
     defaults = _default_location_fields()
     out: Dict[str, Any] = dict(defaults)
     out.update(loc)
+    migrate_pass_key_fields(out)
+    migrate_proxy_pass_fields(out)
 
-    loc_id = out.get("id", out.get("loc_id", index + 1))
-    try:
-        out["id"] = int(loc_id)
-    except (TypeError, ValueError):
-        out["id"] = index + 1
+    pass_id = get_pass_id(out)
+    if pass_id is None:
+        pass_id = index + 1
+    out["id"] = pass_id
+    out["pass_id"] = pass_id
+
+    human_loc = get_loc_id(out)
+    if human_loc is not None:
+        out["loc_id"] = human_loc
+
+    pk = effective_pass_key(out)
+    if pk:
+        out["pass_key"] = pk
+        out["location_key"] = pk
 
     if out.get("loc_description") and not out.get("notes"):
         out["notes"] = str(out.pop("loc_description")).strip()
@@ -200,6 +247,7 @@ def normalize_location_record(
             out[key] = defaults[key]
 
     for key in (
+        "proxy_pass_id",
         "proxy_loc_id",
         "seg_id",
         "day",
@@ -208,6 +256,7 @@ def normalize_location_record(
         "contact",
         "notes",
         "loc_label",
+        "pass_key",
         "location_key",
         "leg_loc_key",
         "leg_id",
@@ -219,6 +268,11 @@ def normalize_location_record(
         else:
             out[key] = str(out[key]).strip() if key != "loc_label" else str(out[key])
 
+    if out.get("proxy_pass_id") and not out.get("proxy_loc_id"):
+        out["proxy_loc_id"] = out["proxy_pass_id"]
+    if out.get("proxy_loc_id") and not out.get("proxy_pass_id"):
+        out["proxy_pass_id"] = out["proxy_loc_id"]
+
     if not out.get("loc_type"):
         out["loc_type"] = "course"
 
@@ -229,15 +283,20 @@ def normalize_location_record(
 def location_to_csv_row(
     loc: Dict[str, Any], resource_codes: Sequence[str]
 ) -> Dict[str, Any]:
-    """Build a dict keyed by locations.csv column names."""
+    """Build a dict keyed by passes.csv column names (pass-level pipeline input)."""
     normalized = normalize_location_record(loc, resource_codes)
+    pass_id = normalized.get("pass_id") or normalized.get("id")
+    human_loc = normalized.get("loc_id", "")
+    proxy = normalized.get("proxy_pass_id") or normalized.get("proxy_loc_id") or ""
     row: Dict[str, Any] = {
-        "loc_id": normalized["id"],
+        "pass_id": pass_id,
+        "loc_id": human_loc,
+        "pass_key": _export_pass_key(normalized),
         "loc_label": normalized.get("loc_label", ""),
         "loc_type": normalized.get("loc_type", "course"),
         "lat": normalized.get("lat", ""),
         "lon": normalized.get("lon", ""),
-        "proxy_loc_id": normalized.get("proxy_loc_id", ""),
+        "proxy_pass_id": proxy,
         "seg_id": normalized.get("seg_id", ""),
         "day": normalized.get("day", ""),
         "zone": normalized.get("zone", ""),
@@ -254,3 +313,7 @@ def location_to_csv_row(
     for code in resource_codes:
         row[count_column(code)] = resources.get(code, 0)
     return row
+
+
+# Back-compat name
+pass_to_csv_row = location_to_csv_row
